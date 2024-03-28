@@ -12,7 +12,7 @@ onMounted(() => {
   const OneSignal = window.OneSignal || [];
   OneSignal.push(() => {
     OneSignal.init({
-      appId: "c9aceaa3-3b9b-453c-a3e3-e28dcea47b48",
+      appId: "65d866ad-f59c-4557-9d75-4ccf7fe60a47",
       safari_web_id: "web.onesignal.auto.599df49f-4478-46e8-9089-3c95d63b63cf",
       notifyButton: {
         enable: true,
