@@ -1,25 +1,37 @@
 <!DOCTYPE html>
 <html lang="">
-  <head>
+<head>
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
     <link rel="icon" href="<%= BASE_URL %>favicon.ico">
     <title><%= htmlWebpackPlugin.options.title %></title>
-      <script type="text/javascript">
-          (function(d, t) {
-              var g = d.createElement(t),
-                  s = d.getElementsByTagName(t)[0];
-              g.src = "https://cdn.inwebr.com/inwebr_c000e2b142ad07f98f37ac16ac72d3ba.js";
-              s.parentNode.insertBefore(g, s);
-          }(document, "script"));
-      </script>
-  </head>
-  <body>
-    <noscript>
-      <strong>We're sorry but <%= htmlWebpackPlugin.options.title %> doesn't work properly without JavaScript enabled. Please enable it to continue.</strong>
-    </noscript>
-    <div id="app"></div>
-    <!-- built files will be auto injected -->
-  </body>
+    <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+    <script>
+        window.OneSignalDeferred = window.OneSignalDeferred || [];
+        OneSignalDeferred.push(function(OneSignal) {
+            OneSignal.init({
+                appId: "c9aceaa3-3b9b-453c-a3e3-e28dcea47b48",
+            });
+        });
+    </script>
+</head>
+<body>
+<noscript>
+    <strong>We're sorry but <%= htmlWebpackPlugin.options.title %> doesn't work properly without JavaScript enabled. Please enable it to continue.</strong>
+</noscript>
+<div id="app"></div>
+<script>
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('/OneSignalSDKWorker.js').then(registration => {
+                console.log('ServiceWorker registration successful with scope: ', registration.scope);
+            }, err => {
+                console.error('ServiceWorker registration failed: ', err);
+            });
+        });
+    }
+</script>
+<!-- built files will be auto injected -->
+</body>
 </html>
