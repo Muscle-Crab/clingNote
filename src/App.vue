@@ -1,5 +1,6 @@
 <template>
-  <button @click="sendNotification">Send Notification</button>
+
+  <button @click="sendNotification"> Notification</button>
 </template>
 
 <script>
