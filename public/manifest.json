@@ -1,9 +1,7 @@
 {
-  "$schema": "https://json.schemastore.org/web-manifest-combined.json",
-  "display": "standalone",
-  "start_url": "/",
-  "name": "OneSignal Manifest Example",
-  "short_name": "OS Manifest",
+  "name": "ClingNote",
+  "short_name": "ClingNote",
+  "description": "Description of your web app",
   "icons": [
     {
       "src": "https://cdn.pixabay.com/photo/2024/02/21/06/02/women-8586791_640.png",
@@ -12,18 +10,14 @@
     },
     {
       "src": "https://cdn.pixabay.com/photo/2024/02/21/06/02/women-8586791_640.png",
-      "sizes": "256x256",
-      "type": "image/png"
-    },
-    {
-      "src": "https://cdn.pixabay.com/photo/2024/02/21/06/02/women-8586791_640.png",
-      "sizes": "384x384",
-      "type": "image/png"
-    },
-    {
-      "src": "https://cdn.pixabay.com/photo/2024/02/21/06/02/women-8586791_640.png",
       "sizes": "512x512",
       "type": "image/png"
     }
-  ]
+  ],
+  "theme_color": "#ffffff",
+  "background_color": "#ffffff",
+  "display": "standalone",
+  "start_url": "/index.html",
+  "scope": "/",
+  "orientation": "any"
 }
