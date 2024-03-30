@@ -1,6 +1,6 @@
 <template>
 
-  <button @click="sendNotification"> Notification</button>
+  <button @click="sendNotification"> Notification with One Signal</button>
 </template>
 
 <script>

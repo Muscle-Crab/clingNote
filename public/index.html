@@ -7,38 +7,38 @@
     <link rel="icon" href="<%= BASE_URL %>favicon.ico">
     <link rel="manifest" href="/manifest.json">
     <!-- Initialize PushAlert SDK -->
-    <script type="text/javascript">
-        (function(d, t) {
-            var g = d.createElement(t),
-                s = d.getElementsByTagName(t)[0];
-            g.src = "https://cdn.pushalert.co/integrate_c01e733e69329e2d521a22070d81d645.js";
-            s.parentNode.insertBefore(g, s);
-        }(document, "script"));
-    </script>
+<!--    <script type="text/javascript">-->
+<!--        (function(d, t) {-->
+<!--            var g = d.createElement(t),-->
+<!--                s = d.getElementsByTagName(t)[0];-->
+<!--            g.src = "https://cdn.pushalert.co/integrate_c01e733e69329e2d521a22070d81d645.js";-->
+<!--            s.parentNode.insertBefore(g, s);-->
+<!--        }(document, "script"));-->
+<!--    </script>-->
 
-    <!-- Register Service Worker -->
-    <script type="text/javascript">
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', function() {
-                navigator.serviceWorker.register('/sw.js').then(function(registration) {
-                    console.log('ServiceWorker registration successful with scope: ', registration.scope);
-                }, function(err) {
-                    console.log('ServiceWorker registration failed: ', err);
-                });
-            });
-        }
-    </script>
+<!--    &lt;!&ndash; Register Service Worker &ndash;&gt;-->
+<!--    <script type="text/javascript">-->
+<!--        if ('serviceWorker' in navigator) {-->
+<!--            window.addEventListener('load', function() {-->
+<!--                navigator.serviceWorker.register('/sw.js').then(function(registration) {-->
+<!--                    console.log('ServiceWorker registration successful with scope: ', registration.scope);-->
+<!--                }, function(err) {-->
+<!--                    console.log('ServiceWorker registration failed: ', err);-->
+<!--                });-->
+<!--            });-->
+<!--        }-->
+<!--    </script>-->
     <title><%= htmlWebpackPlugin.options.title %></title>
 
-<!--    <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>-->
-<!--    <script>-->
-<!--        window.OneSignalDeferred = window.OneSignalDeferred || [];-->
-<!--        OneSignalDeferred.push(function(OneSignal) {-->
-<!--            OneSignal.init({-->
-<!--                appId: "65d866ad-f59c-4557-9d75-4ccf7fe60a47",-->
-<!--            });-->
-<!--        });-->
-<!--    </script>-->
+    <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+    <script>
+        window.OneSignalDeferred = window.OneSignalDeferred || [];
+        OneSignalDeferred.push(function(OneSignal) {
+            OneSignal.init({
+                appId: "65d866ad-f59c-4557-9d75-4ccf7fe60a47",
+            });
+        });
+    </script>
 </head>
 <body>
 <noscript>
