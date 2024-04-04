@@ -1,0 +1,119 @@
+{
+  "weeklyRoutines": [
+    {
+      "day": "Monday",
+      "tasks": [
+        {"title": "Wake up", "time": "6:00 AM", "completed": false},
+        {"title": "Brush teeth", "time": "6:15 AM", "completed": false},
+        {"title": "Have bath", "time": "6:30 AM", "completed": false},
+        {"title": "Make breakfast", "time": "7:00 AM", "completed": false},
+        {"title": "Gather stuff for work", "time": "7:30 AM", "completed": false},
+        {"title": "Go to work for 7 hours", "time": "8:00 AM", "completed": false},
+        {"title": "Bathe", "time": "5:00 PM", "completed": false},
+        {"title": "Work on project", "time": "6:00 PM", "completed": false},
+        {"title": "Learn Spanish", "time": "7:00 PM", "completed": false},
+        {"title": "Learn something in programming", "time": "8:00 PM", "completed": false}
+      ]
+    },
+    {
+      "day": "Tuesday",
+      "tasks": [
+        {"title": "Wake up", "time": "6:00 AM", "completed": false},
+        {"title": "Brush teeth", "time": "6:15 AM", "completed": false},
+        {"title": "Have bath", "time": "6:30 AM", "completed": false},
+        {"title": "Make breakfast", "time": "7:00 AM", "completed": false},
+        {"title": "Gather stuff for work", "time": "7:30 AM", "completed": false},
+        {"title": "Go to work for 7 hours", "time": "8:00 AM", "completed": false},
+        {"title": "Bathe", "time": "5:00 PM", "completed": false},
+        {"title": "Work on project", "time": "6:00 PM", "completed": false},
+        {"title": "Learn Spanish", "time": "7:00 PM", "completed": false},
+        {"title": "Learn something in programming", "time": "8:00 PM", "completed": false}
+      ]
+    },
+    {
+      "day": "Wednesday",
+      "tasks": [
+        {"title": "Wake up", "time": "6:00 AM", "completed": false},
+        {"title": "Brush teeth", "time": "6:15 AM", "completed": false},
+        {"title": "Have bath", "time": "6:30 AM", "completed": false},
+        {"title": "Make breakfast", "time": "7:00 AM", "completed": false},
+        {"title": "Gather stuff for work", "time": "7:30 AM", "completed": false},
+        {"title": "Go to work for 7 hours", "time": "8:00 AM", "completed": false},
+        {"title": "Bathe", "time": "5:00 PM", "completed": false},
+        {"title": "Work on project", "time": "6:00 PM", "completed": false},
+        {"title": "Learn Spanish", "time": "7:00 PM", "completed": false},
+        {"title": "Learn something in programming", "time": "8:00 PM", "completed": false}
+      ]
+    },
+    {
+      "day": "Thursday",
+      "tasks": [
+        {"title": "Wake up", "time": "6:00 AM", "completed": false},
+        {"title": "Brush teeth", "time": "6:15 AM", "completed": false},
+        {"title": "Have bath", "time": "6:30 AM", "completed": false},
+        {"title": "Make breakfast", "time": "7:00 AM", "completed": false},
+        {"title": "Gather stuff for work", "time": "7:30 AM", "completed": false},
+        {"title": "Go to work for 7 hours", "time": "8:00 AM", "completed": false},
+        {"title": "Bathe", "time": "5:00 PM", "completed": false},
+        {"title": "Work on project", "time": "6:00 PM", "completed": false},
+        {"title": "Learn Spanish", "time": "7:00 PM", "completed": false},
+        {"title": "Learn something in programming", "time": "8:00 PM", "completed": false}
+      ]
+    },
+    {
+      "day": "Friday",
+      "tasks": [
+        {"title": "Wake up", "time": "6:00 AM", "completed": false},
+        {"title": "Brush teeth", "time": "6:15 AM", "completed": false},
+        {"title": "Have bath", "time": "6:30 AM", "completed": false},
+        {"title": "Make breakfast", "time": "7:00 AM", "completed": false},
+        {"title": "Gather stuff for work", "time": "7:30 AM", "completed": false},
+        {"title": "Go to work for 7 hours", "time": "8:00 AM", "completed": false},
+        {"title": "Bathe", "time": "5:00 PM", "completed": false},
+        {"title": "Work on project", "time": "6:00 PM", "completed": false},
+        {"title": "Learn Spanish", "time": "7:00 PM", "completed": false},
+        {"title": "Learn something in programming", "time": "8:00 PM", "completed": false}
+      ]
+    },
+    {
+      "day": "Saturday",
+      "tasks": [
+        {"title": "Wake up", "time": "6:00 AM", "completed": false},
+        {"title": "Brush teeth", "time": "6:15 AM", "completed": false},
+        {"title": "Have bath", "time": "6:30 AM", "completed": false},
+        {"title": "Make breakfast", "time": "7:00 AM", "completed": false},
+        {"title": "Gather stuff for work", "time": "7:30 AM", "completed": false},
+        {"title": "Go to work for 7 hours", "time": "8:00 AM", "completed": false},
+        {"title": "Bathe", "time": "5:00 PM", "completed": false},
+        {"title": "Work on project", "time": "6:00 PM", "completed": false},
+        {"title": "Learn Spanish", "time": "7:00 PM", "completed": false},
+        {"title": "Learn something in programming", "time": "8:00 PM", "completed": false}
+      ]
+    },
+    {
+      "day": "Sunday",
+      "tasks": [
+        {"title": "Wake up", "time": "6:00 AM", "completed": false},
+        {"title": "Brush teeth", "time": "6:15 AM", "completed": false},
+        {"title": "Have bath", "time": "6:30 AM", "completed": false},
+        {"title": "Make breakfast", "time": "7:00 AM", "completed": false},
+        {"title": "Gather stuff for work", "time": "7:30 AM", "completed": false},
+        {"title": "Go to work for 7 hours", "time": "8:00 AM", "completed": false},
+        {"title": "Bathe", "time": "5:00 PM", "completed": false},
+        {"title": "Work on project", "time": "6:00 PM", "completed": false},
+        {"title": "Learn Spanish", "time": "7:00 PM", "completed": false},
+        {"title": "Learn something in programming", "time": "8:00 PM", "completed": false}
+      ]
+    }
+  ]
+,
+  "days": [
+    { "day": "Sun", "date": "" },
+    { "day": "Mon", "date": "" },
+    { "day": "Tue", "date": "" },
+    { "day": "Wed", "date": "" },
+    { "day": "Thu", "date": "" },
+    { "day": "Fri", "date": "" },
+    { "day": "Sat", "date": "" }
+  ]
+}

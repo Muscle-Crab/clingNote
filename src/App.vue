@@ -1,61 +1,88 @@
 <template>
-  <div>
-    <h2>Send Push Notification</h2>
-    <form @submit.prevent="sendNotification">
-      <label for="title">Title:</label>
-      <input type="text" id="title" v-model="title" required>
-      <label for="message">Message:</label>
-      <input type="text" id="message" v-model="message" required>
-      <label for="icon">Icon:</label>
-      <input type="text" id="icon" v-model="icon" required>
-      <label for="url">URL:</label>
-      <input type="text" id="url" v-model="url" required>
-      <button type="submit">Send Notification</button>
-    </form>
-    <div v-if="notificationId">
-      {{ notificationId }}
+  <div class="container bg-gray-100 min-h-screen p-4">
+    <!-- Calendar display -->
+    <div class="calendar bg-white rounded-md shadow-md mb-6 p-3">
+      <div class="current-date text-2xl font-bold mb-4">{{ currentDate }}</div>
+      <div class="grid grid-cols-7 gap-2">
+        <div v-for="(day, index) in days" :key="index" class="day-container flex flex-col items-center justify-center" :class="{ 'bg-gray-200': isToday(index), 'bg-blue-200': isSelected(index) }" @click="selectDate(index)">
+          <div class="font-semibold">{{ day.day }}</div>
+          <div>{{ day.date }}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Daily routine tasks -->
+    <div class="daily-routine">
+      <h2 class="text-2xl font-bold mb-4">Daily Routine</h2>
+      <div v-if="selectedDayRoutine.length === 0" class="text-gray-500">No tasks for selected day.</div>
+      <div v-else>
+        <div v-for="(task, index) in selectedDayRoutine" :key="index" class="task-card bg-white rounded-lg shadow-md p-4 mb-4">
+          <div class="flex items-center mb-2">
+            <div :style="{ backgroundColor: generateRandomColor() }" class="w-8 h-8 rounded-full flex items-center justify-center mr-2">
+              <i class="fas fa-check text-white"></i>
+            </div>
+            <div>
+              <div class="text-lg font-semibold" :class="{ 'line-through': task.completed }">{{ task.title }}</div>
+              <div class="text-sm text-gray-500">{{ task.time }}</div>
+            </div>
+          </div>
+          <button @click="toggleTaskCompletion(index)"  class="text-blue-500">Mark Completed</button>
+        </div>
+      </div>
     </div>
   </div>
 </template>
 
-<script>
-export default {
-  data() {
-    return {
-      title: 'Notification Title',
-      message: 'Notification Message',
-      icon: 'https://yourwebsite.com/icon.png',
-      url: 'https://yourwebsite.com/',
-      apiKey: 'YOUR_API_KEY',
-      notificationId: null
-    };
-  },
-  methods: {
-    async sendNotification() {
-      try {
-        const response = await fetch('https://api.pushalert.co/rest/v1/send', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-            'Authorization': 'api_key=' + this.apiKey
-          },
-          body: new URLSearchParams({
-            title: this.title,
-            message: this.message,
-            icon: this.icon,
-            url: this.url
-          })
-        });
-        const data = await response.json();
-        if (data.success) {
-          this.notificationId = data.id;
-        } else {
-          console.error('Failed to send notification');
-        }
-      } catch (error) {
-        console.error('Error sending notification:', error);
-      }
-    }
-  }
+<script setup>
+import { ref } from 'vue';
+import data from '@/data.json';
+
+const selectedDayIndex = ref(-1);
+
+const generateRandomColor = () => {
+  // Generate a random color code
+  return '#' + Math.floor(Math.random()*16777215).toString(16);
+};
+// Get current date in 'Day, Month Date, Year' format
+const getCurrentDate = () => {
+  const options = { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' };
+  return new Date().toLocaleDateString('en-US', options);
+};
+
+const currentDate = ref(getCurrentDate());
+
+const weeklyRoutines = data.weeklyRoutines;
+const days = data.days;
+
+// Function to check if a day is today
+const isToday = (index) => {
+  return index === new Date().getDay();
+};
+
+// Function to select a date
+const selectDate = (index) => {
+  selectedDayIndex.value = index;
+  updateRoutine();
+};
+
+// Function to check if a date is selected
+const isSelected = (index) => {
+  return index === selectedDayIndex.value;
+};
+
+// Function to get routine for selected day
+const getSelectedDayRoutine = () => {
+  return selectedDayIndex.value !== -1 ? weeklyRoutines[selectedDayIndex.value].tasks : [];
+};
+
+const selectedDayRoutine = ref([]);
+
+// Watch for changes in selected date and update routine accordingly
+const updateRoutine = () => {
+  selectedDayRoutine.value = getSelectedDayRoutine();
+};
+
+const toggleTaskCompletion = (index) => {
+  selectedDayRoutine.value[index].completed = !selectedDayRoutine.value[index].completed;
 };
 </script>
