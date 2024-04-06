@@ -197,7 +197,7 @@ const addNewTask = () => {
   newTask.value = {
     title: '',
     time: ''
-  }; // Clear the input fields
+  };
   error.value = ''; // Clear the error message
 
   // Show the notification
