@@ -217,7 +217,7 @@ const formatTime = (time) => {
 
 </script>
 <style scoped>
-/* Your existing styles */
+
 .notification-popup {
   transition: opacity 0.5s ease-in-out;
 }
