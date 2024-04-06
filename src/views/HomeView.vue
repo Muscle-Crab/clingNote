@@ -24,32 +24,34 @@
       <h2 class="text-2xl font-bold mb-4">Daily Routine</h2>
       <div v-if="selectedDayRoutine.length === 0" class="text-gray-500">No tasks for selected day.</div>
       <div v-else>
-        <div v-for="(task, index) in sortedSelectedDayRoutine" :key="index" class="task-card bg-white rounded-lg shadow-md p-4 mb-4">
-          <div class="flex items-center mb-2">
-            <div :style="{ backgroundColor: generateRandomColor() }" class="w-8 h-8 rounded-full flex items-center justify-center mr-2">
-              <i class="fas fa-check text-white"></i>
+        <draggable v-model="selectedDayRoutine" tag="div" class="tasks-list">
+          <template #item="{ element: task, index }">
+            <div class="task-card bg-white rounded-lg shadow-md p-4 mb-4">
+              <div class="flex items-center mb-2">
+                <div :style="{ backgroundColor: generateRandomColor() }" class="w-8 h-8 rounded-full flex items-center justify-center mr-2">
+                  <i class="fas fa-check text-white"></i>
+                </div>
+                <div>
+                  <div class="text-lg font-semibold" :class="{ 'line-through': task.completed }">{{ task.title }}</div>
+                  <div class="text-sm text-gray-500">{{ task.time }}</div>
+                </div>
+              </div>
+              <div class="flex justify-end items-center">
+                <button @click="toggleTaskCompletion(index)" class="text-blue-500 mr-2">
+                  <i class="fas fa-check"></i>
+                </button>
+                <button @click="deleteTask(index)" class="text-red-500">
+                  <i class="fas fa-trash-alt"></i>
+                </button>
+              </div>
+              <div v-if="showNotification" class="notification-popup bg-green-500 text-white px-4 py-2 rounded-md absolute top-4 right-4">
+                Create successfully
+              </div>
             </div>
-            <div>
-              <div class="text-lg font-semibold" :class="{ 'line-through': task.completed }">{{ task.title }}</div>
-              <div class="text-sm text-gray-500">{{ task.time }}</div>
-            </div>
-          </div>
-          <div class="flex justify-end items-center">
-            <button @click="toggleTaskCompletion(index)" class="text-blue-500 mr-2">
-              <i class="fas fa-check"></i>
-            </button>
-            <button @click="deleteTask(index)" class="text-red-500">
-              <i class="fas fa-trash-alt"></i>
-            </button>
-          </div>
-          <div v-if="showNotification" class="notification-popup bg-green-500 text-white px-4 py-2 rounded-md absolute top-4 right-4">
-            Create successfully
-          </div>
-        </div>
+          </template>
+        </draggable>
       </div>
     </div>
-
-
   </div>
 </template>
 
@@ -57,6 +59,7 @@
 import { ref, onMounted, computed } from 'vue';
 import axios from 'axios';
 import data from '@/data.json';
+import draggable from "vuedraggable";
 
 const selectedDayIndex = ref(-1);
 const newTask = ref({
@@ -217,5 +220,8 @@ const formatTime = (time) => {
 /* Your existing styles */
 .notification-popup {
   transition: opacity 0.5s ease-in-out;
+}
+.tasks-list {
+  cursor: move; /* Show cursor as pointer to indicate draggable */
 }
 </style>

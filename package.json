@@ -16,11 +16,13 @@
     "npm": "^10.5.1",
     "onesignal-node": "^3.4.0",
     "vue": "^3.2.13",
+    "vue-draggable-next": "^2.2.1",
     "vue-router": "^4.0.3",
     "vue-speech": "^0.1.0",
     "vue-toastification": "^1.7.14",
     "vue3-calendar": "^0.1.2",
     "vue3-datepicker": "^0.4.0",
+    "vuedraggable": "^4.1.0",
     "vuex": "^4.0.0"
   },
   "devDependencies": {
