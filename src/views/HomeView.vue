@@ -10,13 +10,21 @@
         </div>
       </div>
     </div>
-
+    <!-- Add new task form -->
+    <form @submit.prevent="addNewTask" class="mt-4">
+      <label for="newTask" class="block mb-2">Task Name:</label>
+      <input type="text" v-model="newTask.title" id="newTask" class="w-full border-gray-300 rounded-md px-4 py-2 mb-2" placeholder="Enter task name" required>
+      <label for="newTaskTime" class="block mb-2">Task Time:</label>
+      <input type="time" v-model="newTask.time" id="newTaskTime" class="w-full border-gray-300 rounded-md px-4 py-2 mb-2" required>
+      <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded-md">Add Task</button>
+      <div v-if="error" class="text-red-500 mt-2">{{ error }}</div>
+    </form>
     <!-- Daily routine tasks -->
     <div class="daily-routine">
       <h2 class="text-2xl font-bold mb-4">Daily Routine</h2>
       <div v-if="selectedDayRoutine.length === 0" class="text-gray-500">No tasks for selected day.</div>
       <div v-else>
-        <div v-for="(task, index) in selectedDayRoutine" :key="index" class="task-card bg-white rounded-lg shadow-md p-4 mb-4">
+        <div v-for="(task, index) in sortedSelectedDayRoutine" :key="index" class="task-card bg-white rounded-lg shadow-md p-4 mb-4">
           <div class="flex items-center mb-2">
             <div :style="{ backgroundColor: generateRandomColor() }" class="w-8 h-8 rounded-full flex items-center justify-center mr-2">
               <i class="fas fa-check text-white"></i>
@@ -34,18 +42,28 @@
               <i class="fas fa-trash-alt"></i>
             </button>
           </div>
+          <div v-if="showNotification" class="notification-popup bg-green-500 text-white px-4 py-2 rounded-md absolute top-4 right-4">
+            Create successfully
+          </div>
         </div>
       </div>
     </div>
+
+
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import axios from 'axios';
 import data from '@/data.json';
 
 const selectedDayIndex = ref(-1);
+const newTask = ref({
+  title: '',
+  time: ''
+});
+const error = ref('');
 
 const generateRandomColor = () => {
   // Generate a random color code
@@ -84,10 +102,18 @@ const selectedDayRoutine = ref([]);
 const updateRoutine = () => {
   selectedDayRoutine.value = getSelectedDayRoutine();
 };
+
+const sortedSelectedDayRoutine = computed(() => {
+  return selectedDayRoutine.value.slice().sort((a, b) => {
+    return new Date('1970/01/01 ' + a.time) - new Date('1970/01/01 ' + b.time);
+  });
+});
+
 const deleteTask = (index) => {
   // Remove the task at the specified index
   selectedDayRoutine.value.splice(index, 1);
 };
+
 const toggleTaskCompletion = async (index) => {
   const task = selectedDayRoutine.value[index];
   task.completed = !task.completed;
@@ -145,4 +171,51 @@ onMounted(() => {
   }
 });
 
+const showNotification = ref(false);
+
+// Modify the addNewTask method to show the notification
+const addNewTask = () => {
+  if (newTask.value.title.trim() === '') {
+    error.value = 'Task name cannot be empty';
+    return;
+  }
+
+  const task = {
+    title: newTask.value.title.trim(),
+    completed: false,
+    time: formatTime(newTask.value.time)
+  };
+
+  selectedDayRoutine.value.push(task);
+  selectedDayRoutine.value.sort((a, b) => {
+    return new Date('1970/01/01 ' + a.time) - new Date('1970/01/01 ' + b.time);
+  });
+
+  newTask.value = {
+    title: '',
+    time: ''
+  }; // Clear the input fields
+  error.value = ''; // Clear the error message
+
+  // Show the notification
+  showNotification.value = true;
+  // Hide the notification after 3 seconds
+  setTimeout(() => {
+    showNotification.value = false;
+  }, 3000);
+};
+
+const formatTime = (time) => {
+  const [hours, minutes] = time.split(':');
+  const amPm = parseInt(hours) >= 12 ? 'PM' : 'AM';
+  const formattedHours = parseInt(hours) % 12 || 12;
+  return `${formattedHours}:${minutes} ${amPm}`;
+};
+
 </script>
+<style scoped>
+/* Your existing styles */
+.notification-popup {
+  transition: opacity 0.5s ease-in-out;
+}
+</style>
