@@ -1,5 +1,5 @@
 <template>
-  <div ref="scrollContainer" class="container bg-gray-100 min-h-screen p-4" @touchstart="onTouchStart" @touchmove="onTouchMove" @touchend="onTouchEnd">
+  <div ref="scrollContainer" class="container bg-gray-100 min-h-screen p-4" >
     <!-- Calendar display -->
     <div class="calendar bg-white rounded-md shadow-md mb-6 p-3">
       <div class="current-date text-2xl font-bold mb-4">{{ currentDate }}</div>
@@ -217,28 +217,7 @@ const formatTime = (time) => {
   return `${formattedHours}:${minutes} ${amPm}`;
 };
 
-// Touch event handlers for tasks list
-let taskTouchTimer = null;
-let taskIsDragging = false;
 
-const onTaskTouchStart = () => {
-  taskTouchTimer = setTimeout(() => {
-    taskIsDragging = true;
-  }, 3000); // Hold time before drag (in milliseconds)
-};
-
-const onTaskTouchMove = () => {
-  if (!taskIsDragging) {
-    return false;
-  }
-};
-
-const onTaskTouchEnd = () => {
-  if (!taskIsDragging && taskTouchTimer !== null) {
-    clearTimeout(taskTouchTimer);
-  }
-  taskIsDragging = false;
-};
 
 </script>
 
