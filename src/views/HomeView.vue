@@ -1,5 +1,5 @@
 <template>
-  <div class="container bg-gray-100 min-h-screen p-4">
+  <div ref="scrollContainer" class="container bg-gray-100 min-h-screen p-4" @touchstart="onTouchStart" @touchmove="onTouchMove" @touchend="onTouchEnd">
     <!-- Calendar display -->
     <div class="calendar bg-white rounded-md shadow-md mb-6 p-3">
       <div class="current-date text-2xl font-bold mb-4">{{ currentDate }}</div>
@@ -24,32 +24,34 @@
       <h2 class="text-2xl font-bold mb-4">Daily Routine</h2>
       <div v-if="selectedDayRoutine.length === 0" class="text-gray-500">No tasks for selected day.</div>
       <div v-else>
-        <draggable v-model="selectedDayRoutine" tag="div" class="tasks-list">
-          <template #item="{ element: task, index }">
-            <div class="task-card bg-white rounded-lg shadow-md p-4 mb-4">
-              <div class="flex items-center mb-2">
-                <div :style="{ backgroundColor: generateRandomColor() }" class="w-8 h-8 rounded-full flex items-center justify-center mr-2">
-                  <i class="fas fa-check text-white"></i>
+        <div class="scroll-container" @touchstart="onTaskTouchStart" @touchmove="onTaskTouchMove" @touchend="onTaskTouchEnd">
+          <draggable v-model="selectedDayRoutine" tag="div" class="tasks-list">
+            <template #item="{ element: task, index }">
+              <div class="task-card bg-white rounded-lg shadow-md p-4 mb-4" :class="{ 'draggable': taskIsDragging }">
+                <div class="flex items-center mb-2" @touchstart.stop @touchmove.stop>
+                  <div :style="{ backgroundColor: generateRandomColor() }" class="w-8 h-8 rounded-full flex items-center justify-center mr-2">
+                    <i class="fas fa-check text-white"></i>
+                  </div>
+                  <div>
+                    <div class="text-lg font-semibold" :class="{ 'line-through': task.completed }">{{ task.title }}</div>
+                    <div class="text-sm text-gray-500">{{ task.time }}</div>
+                  </div>
                 </div>
-                <div>
-                  <div class="text-lg font-semibold" :class="{ 'line-through': task.completed }">{{ task.title }}</div>
-                  <div class="text-sm text-gray-500">{{ task.time }}</div>
+                <div class="flex justify-end items-center">
+                  <button @click="toggleTaskCompletion(index)" class="text-blue-500 mr-2">
+                    <i class="fas fa-check"></i>
+                  </button>
+                  <button @click="deleteTask(index)" class="text-red-500">
+                    <i class="fas fa-trash-alt"></i>
+                  </button>
+                </div>
+                <div v-if="showNotification" class="notification-popup bg-green-500 text-white px-4 py-2 rounded-md absolute top-4 right-4">
+                  Create successfully
                 </div>
               </div>
-              <div class="flex justify-end items-center">
-                <button @click="toggleTaskCompletion(index)" class="text-blue-500 mr-2">
-                  <i class="fas fa-check"></i>
-                </button>
-                <button @click="deleteTask(index)" class="text-red-500">
-                  <i class="fas fa-trash-alt"></i>
-                </button>
-              </div>
-              <div v-if="showNotification" class="notification-popup bg-green-500 text-white px-4 py-2 rounded-md absolute top-4 right-4">
-                Create successfully
-              </div>
-            </div>
-          </template>
-        </draggable>
+            </template>
+          </draggable>
+        </div>
       </div>
     </div>
   </div>
@@ -215,7 +217,31 @@ const formatTime = (time) => {
   return `${formattedHours}:${minutes} ${amPm}`;
 };
 
+// Touch event handlers for tasks list
+let taskTouchTimer = null;
+let taskIsDragging = false;
+
+const onTaskTouchStart = () => {
+  taskTouchTimer = setTimeout(() => {
+    taskIsDragging = true;
+  }, 3000); // Hold time before drag (in milliseconds)
+};
+
+const onTaskTouchMove = () => {
+  if (!taskIsDragging) {
+    return false;
+  }
+};
+
+const onTaskTouchEnd = () => {
+  if (!taskIsDragging && taskTouchTimer !== null) {
+    clearTimeout(taskTouchTimer);
+  }
+  taskIsDragging = false;
+};
+
 </script>
+
 <style scoped>
 
 .notification-popup {
@@ -224,4 +250,9 @@ const formatTime = (time) => {
 .tasks-list {
   cursor: move; /* Show cursor as pointer to indicate draggable */
 }
+
+.draggable {
+  cursor: grab; /* Show cursor as grab while dragging */
+}
+
 </style>
