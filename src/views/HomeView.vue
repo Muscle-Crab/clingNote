@@ -57,6 +57,7 @@
   </div>
 </template>
 
+
 <script setup>
 import { ref, onMounted, computed } from 'vue';
 import axios from 'axios';
@@ -233,5 +234,8 @@ const formatTime = (time) => {
 .draggable {
   cursor: grab; /* Show cursor as grab while dragging */
 }
-
+.task-card {
+  border-left: 3px solid red;
+  border-right: 3px solid blue;
+}
 </style>
