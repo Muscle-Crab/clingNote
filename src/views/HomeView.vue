@@ -24,8 +24,8 @@
       <h2 class="text-2xl font-bold mb-4">Daily Routine</h2>
       <div v-if="selectedDayRoutine.length === 0" class="text-gray-500">No tasks for selected day.</div>
       <div v-else>
-        <div class="scroll-container" @touchstart="onTaskTouchStart" @touchmove="onTaskTouchMove" @touchend="onTaskTouchEnd">
-          <draggable v-model="selectedDayRoutine" tag="div" class="tasks-list">
+        <div class="scroll-container" >
+          <draggable v-model="selectedDayRoutine" tag="div" class="tasks-list" ghost-class="ghost">
             <template #item="{ element: task, index }">
               <div class="task-card bg-white rounded-lg shadow-md p-4 mb-4" :class="{ 'draggable': taskIsDragging }">
                 <div class="flex items-center mb-2" @touchstart.stop @touchmove.stop>
@@ -229,6 +229,9 @@ const formatTime = (time) => {
 }
 .tasks-list {
   cursor: move; /* Show cursor as pointer to indicate draggable */
+}
+.ghost {
+  visibility: hidden;
 }
 
 .draggable {
