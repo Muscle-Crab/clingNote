@@ -25,12 +25,16 @@
       <div v-if="selectedDayRoutine.length === 0" class="text-gray-500">No tasks for selected day.</div>
       <div v-else>
         <div class="scroll-container" >
-          <draggable v-model="selectedDayRoutine" tag="div" class="tasks-list" ghost-class="ghost" drag-class="drag" :delay="2000">
+          <draggable handle=".drag-handle" :animation="150" v-model="selectedDayRoutine" tag="div" class="tasks-list" ghost-class="ghost" drag-class="drag" >
             <template #item="{ element: task, index }">
               <div class="task-card bg-white rounded-lg shadow-md p-4 mb-4" :class="{ 'draggable': taskIsDragging }">
-                <div class="flex items-center mb-2" @touchstart.stop @touchmove.stop>
-                  <div :style="{ backgroundColor: generateRandomColor() }" class="w-8 h-8 rounded-full flex items-center justify-center mr-2">
-                    <i class="fas fa-check text-white"></i>
+                <div class="flex items-center mb-2" >
+                  <!-- Use a handle for dragging -->
+                  <div  >
+                    <div :style="{ backgroundColor: generateRandomColor() }" class="w-8 h-8 rounded-full flex items-center justify-center mr-2">
+                      <i class="fas fa-arrows-alt text-white drag-handle"></i>
+
+                    </div>
                   </div>
                   <div>
                     <div class="text-lg font-semibold" :class="{ 'line-through': task.completed }">{{ task.title }}</div>
