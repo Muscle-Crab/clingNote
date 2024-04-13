@@ -33,13 +33,16 @@
       <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded-md">Save Changes</button>
     </form>
 
+    <!-- Search input field -->
+    <input type="text" v-model="searchQuery" class="w-full border-gray-300 rounded-md px-4 py-2 mb-2" placeholder="Search tasks">
+
     <!-- Daily routine tasks -->
     <div class="daily-routine">
       <h2 class="text-2xl font-bold mb-4">Daily Routine</h2>
-      <div v-if="selectedDayRoutine.length === 0" class="text-gray-500">No tasks for selected day.</div>
+      <div v-if="filteredTasks.length === 0" class="text-gray-500">No tasks match your search.</div>
       <div v-else>
         <div class="scroll-container">
-          <draggable handle=".drag-handle" :animation="150" v-model="selectedDayRoutine" tag="div" class="tasks-list" ghost-class="ghost" drag-class="drag">
+          <draggable handle=".drag-handle" :animation="150" v-model="filteredTasks" tag="div" class="tasks-list" ghost-class="ghost" drag-class="drag">
             <template #item="{ element: task, index }">
               <div class="task-card bg-white rounded-lg shadow-md p-4 mb-4" :class="{ 'draggable': taskIsDragging }">
                 <div class="flex items-center mb-2">
@@ -51,14 +54,12 @@
                   <div>
                     <div class="text-lg font-semibold" :class="{ 'line-through': task.completed }">{{ task.title }}</div>
                     <div class="text-sm text-gray-500">{{ task.time }}</div>
-
                   </div>
                 </div>
                 <div class="text-sm text-gray-500">
-
-                      <span class="inline-block bg-gray-200 rounded-full px-2 py-1 text-xs font-semibold text-gray-700 mr-2 mb-2" v-for="(label, index) in task.labels" :key="index">
-                         {{ label }}
-                     </span>
+                  <span class="inline-block bg-gray-200 rounded-full px-2 py-1 text-xs font-semibold text-gray-700 mr-2 mb-2" v-for="(label, index) in task.labels" :key="index">
+                    {{ label }}
+                  </span>
                 </div>
                 <div class="flex justify-end items-center">
                   <button @click="toggleTaskCompletion(index)" class="text-blue-500 mr-2">
@@ -99,6 +100,7 @@ const newTask = ref({
 const error = ref('');
 const editingTask = ref(null); // Track the index of the task being edited
 const editedTask = ref({ title: '', time: '', labels: [] }); // Store the edited task's data
+const searchQuery = ref('');
 
 const generateRandomColor = () => {
   // Generate a random color code
@@ -272,6 +274,19 @@ const updateTask = () => {
   editedTask.value = { title: '', time: '', labels: [] };
   error.value = '';
 };
+
+const filteredTasks = computed(() => {
+  if (!searchQuery.value.trim()) {
+    return selectedDayRoutine.value;
+  } else {
+    const query = searchQuery.value.trim().toLowerCase();
+    return selectedDayRoutine.value.filter(task => {
+      return task.title.toLowerCase().includes(query) ||
+          task.time.toLowerCase().includes(query) ||
+          task.labels.some(label => label.toLowerCase().includes(query));
+    });
+  }
+});
 
 </script>
 
