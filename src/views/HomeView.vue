@@ -1,5 +1,5 @@
 <template>
-  <div ref="scrollContainer" class="container bg-gray-100 min-h-screen p-4" >
+  <div ref="scrollContainer" class="container bg-gray-100 min-h-screen p-4">
     <!-- Calendar display -->
     <div class="calendar bg-white rounded-md shadow-md mb-6 p-3">
       <div class="current-date text-2xl font-bold mb-4">{{ currentDate }}</div>
@@ -19,18 +19,25 @@
       <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded-md">Add Task</button>
       <div v-if="error" class="text-red-500 mt-2">{{ error }}</div>
     </form>
+    <!-- Edit task form -->
+    <form v-if="editingTask !== null" @submit.prevent="updateTask" class="mt-4">
+      <label for="editTask" class="block mb-2">Edit Task Name:</label>
+      <input type="text" v-model="editedTask.title" id="editTask" class="w-full border-gray-300 rounded-md px-4 py-2 mb-2" required>
+      <label for="editTaskTime" class="block mb-2">Edit Task Time:</label>
+      <input type="time" v-model="editedTask.time" id="editTaskTime" class="w-full border-gray-300 rounded-md px-4 py-2 mb-2" required>
+      <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded-md">Save Changes</button>
+    </form>
     <!-- Daily routine tasks -->
     <div class="daily-routine">
       <h2 class="text-2xl font-bold mb-4">Daily Routine</h2>
       <div v-if="selectedDayRoutine.length === 0" class="text-gray-500">No tasks for selected day.</div>
       <div v-else>
-        <div class="scroll-container" >
-          <draggable handle=".drag-handle" :animation="150" v-model="selectedDayRoutine" tag="div" class="tasks-list" ghost-class="ghost" drag-class="drag" >
+        <div class="scroll-container">
+          <draggable handle=".drag-handle" :animation="150" v-model="selectedDayRoutine" tag="div" class="tasks-list" ghost-class="ghost" drag-class="drag">
             <template #item="{ element: task, index }">
               <div class="task-card bg-white rounded-lg shadow-md p-4 mb-4" :class="{ 'draggable': taskIsDragging }">
-                <div class="flex items-center mb-2" >
-                  <!-- Use a handle for dragging -->
-                  <div  >
+                <div class="flex items-center mb-2">
+                  <div>
                     <div :style="{ backgroundColor: generateRandomColor() }" class="w-8 h-8 rounded-full flex items-center justify-center mr-2">
                       <i class="fas fa-arrows-alt text-white drag-handle"></i>
 
@@ -48,6 +55,10 @@
                   <button @click="deleteTask(index)" class="text-red-500">
                     <i class="fas fa-trash-alt"></i>
                   </button>
+                  <!-- Add an edit button -->
+                  <button @click="startEditingTask(index)" class="text-yellow-500 ml-2">
+                    <i class="fas fa-edit"></i>
+                  </button>
                 </div>
                 <div v-if="showNotification" class="notification-popup bg-green-500 text-white px-4 py-2 rounded-md absolute top-4 right-4">
                   Create successfully
@@ -61,7 +72,6 @@
   </div>
 </template>
 
-
 <script setup>
 import { ref, onMounted, computed } from 'vue';
 import axios from 'axios';
@@ -74,6 +84,8 @@ const newTask = ref({
   time: ''
 });
 const error = ref('');
+const editingTask = ref(null); // Track the index of the task being edited
+const editedTask = ref({ title: '', time: '' }); // Store the edited task's data
 
 const generateRandomColor = () => {
   // Generate a random color code
@@ -183,7 +195,6 @@ onMounted(() => {
 
 const showNotification = ref(false);
 
-// Modify the addNewTask method to show the notification
 const addNewTask = () => {
   if (newTask.value.title.trim() === '') {
     error.value = 'Task name cannot be empty';
@@ -205,7 +216,7 @@ const addNewTask = () => {
     title: '',
     time: ''
   };
-  error.value = ''; // Clear the error message
+  error.value = '';
 
   // Show the notification
   showNotification.value = true;
@@ -222,7 +233,28 @@ const formatTime = (time) => {
   return `${formattedHours}:${minutes} ${amPm}`;
 };
 
+const startEditingTask = (index) => {
+  editingTask.value = index;
+  // Populate the edit form with the task's current data
+  editedTask.value.title = selectedDayRoutine.value[index].title;
+  editedTask.value.time = selectedDayRoutine.value[index].time;
+};
 
+const updateTask = () => {
+  if (editedTask.value.title.trim() === '') {
+    error.value = 'Task name cannot be empty';
+    return;
+  }
+
+  // Update the task with the edited information
+  selectedDayRoutine.value[editingTask.value].title = editedTask.value.title.trim();
+  selectedDayRoutine.value[editingTask.value].time = formatTime(editedTask.value.time);
+
+  // Clear the edit form and error message
+  editingTask.value = null;
+  editedTask.value = { title: '', time: '' };
+  error.value = '';
+};
 
 </script>
 
