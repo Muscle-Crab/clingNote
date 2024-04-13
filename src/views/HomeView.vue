@@ -16,17 +16,23 @@
       <input type="text" v-model="newTask.title" id="newTask" class="w-full border-gray-300 rounded-md px-4 py-2 mb-2" placeholder="Enter task name" required>
       <label for="newTaskTime" class="block mb-2">Task Time:</label>
       <input type="time" v-model="newTask.time" id="newTaskTime" class="w-full border-gray-300 rounded-md px-4 py-2 mb-2" required>
+      <label for="newTaskLabels" class="block mb-2">Task Labels:</label>
+      <input type="text" v-model="newTask.labels" id="newTaskLabels" class="w-full border-gray-300 rounded-md px-4 py-2 mb-2" placeholder="Enter task labels (comma-separated)">
       <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded-md">Add Task</button>
       <div v-if="error" class="text-red-500 mt-2">{{ error }}</div>
     </form>
+
     <!-- Edit task form -->
     <form v-if="editingTask !== null" @submit.prevent="updateTask" class="mt-4">
       <label for="editTask" class="block mb-2">Edit Task Name:</label>
       <input type="text" v-model="editedTask.title" id="editTask" class="w-full border-gray-300 rounded-md px-4 py-2 mb-2" required>
       <label for="editTaskTime" class="block mb-2">Edit Task Time:</label>
       <input type="time" v-model="editedTask.time" id="editTaskTime" class="w-full border-gray-300 rounded-md px-4 py-2 mb-2" required>
+      <label for="editTaskLabels" class="block mb-2">Edit Task Labels:</label>
+      <input type="text" v-model="editedTask.labels" id="editTaskLabels" class="w-full border-gray-300 rounded-md px-4 py-2 mb-2" placeholder="Enter task labels (comma-separated)">
       <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded-md">Save Changes</button>
     </form>
+
     <!-- Daily routine tasks -->
     <div class="daily-routine">
       <h2 class="text-2xl font-bold mb-4">Daily Routine</h2>
@@ -40,13 +46,19 @@
                   <div>
                     <div :style="{ backgroundColor: generateRandomColor() }" class="w-8 h-8 rounded-full flex items-center justify-center mr-2">
                       <i class="fas fa-arrows-alt text-white drag-handle"></i>
-
                     </div>
                   </div>
                   <div>
                     <div class="text-lg font-semibold" :class="{ 'line-through': task.completed }">{{ task.title }}</div>
                     <div class="text-sm text-gray-500">{{ task.time }}</div>
+
                   </div>
+                </div>
+                <div class="text-sm text-gray-500">
+
+                      <span class="inline-block bg-gray-200 rounded-full px-2 py-1 text-xs font-semibold text-gray-700 mr-2 mb-2" v-for="(label, index) in task.labels" :key="index">
+                         {{ label }}
+                     </span>
                 </div>
                 <div class="flex justify-end items-center">
                   <button @click="toggleTaskCompletion(index)" class="text-blue-500 mr-2">
@@ -81,11 +93,12 @@ import draggable from "vuedraggable";
 const selectedDayIndex = ref(-1);
 const newTask = ref({
   title: '',
-  time: ''
+  time: '',
+  labels: []
 });
 const error = ref('');
 const editingTask = ref(null); // Track the index of the task being edited
-const editedTask = ref({ title: '', time: '' }); // Store the edited task's data
+const editedTask = ref({ title: '', time: '', labels: [] }); // Store the edited task's data
 
 const generateRandomColor = () => {
   // Generate a random color code
@@ -204,7 +217,8 @@ const addNewTask = () => {
   const task = {
     title: newTask.value.title.trim(),
     completed: false,
-    time: formatTime(newTask.value.time)
+    time: formatTime(newTask.value.time),
+    labels: newTask.value.labels.split(',').map(label => label.trim()) // Parse labels from input string
   };
 
   selectedDayRoutine.value.push(task);
@@ -214,7 +228,8 @@ const addNewTask = () => {
 
   newTask.value = {
     title: '',
-    time: ''
+    time: '',
+    labels: []
   };
   error.value = '';
 
@@ -238,6 +253,7 @@ const startEditingTask = (index) => {
   // Populate the edit form with the task's current data
   editedTask.value.title = selectedDayRoutine.value[index].title;
   editedTask.value.time = selectedDayRoutine.value[index].time;
+  editedTask.value.labels = selectedDayRoutine.value[index].labels.join(', '); // Join labels into a string
 };
 
 const updateTask = () => {
@@ -249,10 +265,11 @@ const updateTask = () => {
   // Update the task with the edited information
   selectedDayRoutine.value[editingTask.value].title = editedTask.value.title.trim();
   selectedDayRoutine.value[editingTask.value].time = formatTime(editedTask.value.time);
+  selectedDayRoutine.value[editingTask.value].labels = editedTask.value.labels.split(',').map(label => label.trim()); // Parse labels from input string
 
   // Clear the edit form and error message
   editingTask.value = null;
-  editedTask.value = { title: '', time: '' };
+  editedTask.value = { title: '', time: '', labels: [] };
   error.value = '';
 };
 
