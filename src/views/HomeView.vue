@@ -192,28 +192,28 @@ const toggleTaskCompletion = async (index) => {
       const nextTask = selectedDayRoutine.value[nextTaskIndex];
       const completionMessage = `Task ${task.title} completed. It's time to begin the next task, ${nextTask.title}.`;
       speak(completionMessage);
-
-      try {
-        await axios.post(
-            'https://onesignal.com/api/v1/notifications',
-            {
-              app_id: '65d866ad-f59c-4557-9d75-4ccf7fe60a47',
-              included_segments: ['All'],
-              data: { foo: 'bar' },
-              contents: { en: nextTask.title }
-            },
-            {
-              headers: {
-                Authorization: 'Bearer ZWY3MWJhMDUtNTU1Yi00NGViLThmNjItNDNhZTY0YzMwOGRh',
-                'Content-Type': 'application/json'
-              }
-            }
-        );
-
-        console.log('Notification sent for task:', nextTask.title);
-      } catch (error) {
-        console.error('Error sending notification for task:', nextTask.title, error);
-      }
+      showNotification.value = true;
+      // try {
+      //   await axios.post(
+      //       'https://onesignal.com/api/v1/notifications',
+      //       {
+      //         app_id: '65d866ad-f59c-4557-9d75-4ccf7fe60a47',
+      //         included_segments: ['All'],
+      //         data: { foo: 'bar' },
+      //         contents: { en: nextTask.title }
+      //       },
+      //       {
+      //         headers: {
+      //           Authorization: 'Bearer ZWY3MWJhMDUtNTU1Yi00NGViLThmNjItNDNhZTY0YzMwOGRh',
+      //           'Content-Type': 'application/json'
+      //         }
+      //       }
+      //   );
+      //
+      //   console.log('Notification sent for task:', nextTask.title);
+      // } catch (error) {
+      //   console.error('Error sending notification for task:', nextTask.title, error);
+      // }
     }
   }
 };
