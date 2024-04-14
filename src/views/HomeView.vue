@@ -16,8 +16,16 @@
       <input type="text" v-model="newTask.title" id="newTask" class="w-full border-gray-300 rounded-md px-4 py-2 mb-2" placeholder="Enter task name" required>
       <label for="newTaskTime" class="block mb-2">Task Time:</label>
       <input type="time" v-model="newTask.time" id="newTaskTime" class="w-full border-gray-300 rounded-md px-4 py-2 mb-2" required>
+      <label for="newTaskPriority" class="block mb-2">Task Priority:</label>
+      <select v-model="newTask.priority" id="newTaskPriority" class="w-full border-gray-300 rounded-md px-4 py-2 mb-2">
+        <option value="low">Low</option>
+        <option value="medium">Medium</option>
+        <option value="high">High</option>
+      </select>
       <label for="newTaskLabels" class="block mb-2">Task Labels:</label>
       <input type="text" v-model="newTask.labels" id="newTaskLabels" class="w-full border-gray-300 rounded-md px-4 py-2 mb-2" placeholder="Enter task labels (comma-separated)">
+      <label for="newTaskNotes" class="block mb-2">Task Notes:</label>
+      <textarea v-model="newTask.notes" id="newTaskNotes" class="w-full border-gray-300 rounded-md px-4 py-2 mb-2" placeholder="Enter task notes"></textarea>
       <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded-md">Add Task</button>
       <div v-if="error" class="text-red-500 mt-2">{{ error }}</div>
     </form>
@@ -28,8 +36,16 @@
       <input type="text" v-model="editedTask.title" id="editTask" class="w-full border-gray-300 rounded-md px-4 py-2 mb-2" required>
       <label for="editTaskTime" class="block mb-2">Edit Task Time:</label>
       <input type="time" v-model="editedTask.time" id="editTaskTime" class="w-full border-gray-300 rounded-md px-4 py-2 mb-2" required>
+      <label for="editTaskPriority" class="block mb-2">Edit Task Priority:</label>
+      <select v-model="editedTask.priority" id="editTaskPriority" class="w-full border-gray-300 rounded-md px-4 py-2 mb-2">
+        <option value="low">Low</option>
+        <option value="medium">Medium</option>
+        <option value="high">High</option>
+      </select>
       <label for="editTaskLabels" class="block mb-2">Edit Task Labels:</label>
       <input type="text" v-model="editedTask.labels" id="editTaskLabels" class="w-full border-gray-300 rounded-md px-4 py-2 mb-2" placeholder="Enter task labels (comma-separated)">
+      <label for="editTaskNotes" class="block mb-2">Edit Task Notes:</label>
+      <textarea v-model="editedTask.notes" id="editTaskNotes" class="w-full border-gray-300 rounded-md px-4 py-2 mb-2" placeholder="Enter task notes"></textarea>
       <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded-md">Save Changes</button>
     </form>
 
@@ -54,8 +70,22 @@
                   <div>
                     <div class="text-lg font-semibold" :class="{ 'line-through': task.completed }">{{ task.title }}</div>
                     <div class="text-sm text-gray-500">{{ task.time }}</div>
+
                   </div>
                 </div>
+                <div class="flex items-center">
+                  <svg v-if="task.priority === 'high'" class="h-5 w-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 11l7-7 7 7M5 19l7-7 7 7"></path>
+                  </svg>
+                  <svg v-else-if="task.priority === 'medium'" class="h-5 w-5 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 11l7-7 7 7M5 19l7-7 7 7"></path>
+                  </svg>
+                  <svg v-else-if="task.priority === 'low'" class="h-5 w-5 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 11l7-7 7 7M5 19l7-7 7 7"></path>
+                  </svg>
+
+                </div>
+                <div class="text-sm text-gray-500">{{ task.notes }}</div>
                 <div class="text-sm text-gray-500">
                   <span class="inline-block bg-gray-200 rounded-full px-2 py-1 text-xs font-semibold text-gray-700 mr-2 mb-2" v-for="(label, index) in task.labels" :key="index">
                     {{ label }}
@@ -95,15 +125,16 @@ const selectedDayIndex = ref(-1);
 const newTask = ref({
   title: '',
   time: '',
-  labels: []
+  priority: 'low',
+  labels: [],
+  notes: ''
 });
 const error = ref('');
-const editingTask = ref(null); // Track the index of the task being edited
-const editedTask = ref({ title: '', time: '', labels: [] }); // Store the edited task's data
+const editingTask = ref(null);
+const editedTask = ref({ title: '', time: '', priority: 'low', labels: [], notes: '' });
 const searchQuery = ref('');
 
 const generateRandomColor = () => {
-  // Generate a random color code
   return '#' + Math.floor(Math.random()*16777215).toString(16);
 };
 
@@ -147,7 +178,6 @@ const sortedSelectedDayRoutine = computed(() => {
 });
 
 const deleteTask = (index) => {
-  // Remove the task at the specified index
   selectedDayRoutine.value.splice(index, 1);
 };
 
@@ -156,17 +186,13 @@ const toggleTaskCompletion = async (index) => {
   task.completed = !task.completed;
 
   if (task.completed) {
-    // Find the next incomplete task
     const nextTaskIndex = selectedDayRoutine.value.findIndex(t => !t.completed && t.title !== task.title);
 
     if (nextTaskIndex !== -1) {
       const nextTask = selectedDayRoutine.value[nextTaskIndex];
-
-      // Speech synthesis for task completion
       const completionMessage = `Task ${task.title} completed. It's time to begin the next task, ${nextTask.title}.`;
       speak(completionMessage);
 
-      // Send notification for the next incomplete task
       try {
         await axios.post(
             'https://onesignal.com/api/v1/notifications',
@@ -174,7 +200,7 @@ const toggleTaskCompletion = async (index) => {
               app_id: '65d866ad-f59c-4557-9d75-4ccf7fe60a47',
               included_segments: ['All'],
               data: { foo: 'bar' },
-              contents: { en: nextTask.title } // Use next task title for notification content
+              contents: { en: nextTask.title }
             },
             {
               headers: {
@@ -197,11 +223,8 @@ const speak = (text) => {
   window.speechSynthesis.speak(message);
 };
 
-// Call updateRoutine when the component is mounted
 onMounted(() => {
-  // Get the index of the current day
   const todayIndex = new Date().getDay();
-  // If todayIndex is not -1, set the selectedDayIndex to todayIndex
   if (todayIndex !== -1) {
     selectedDayIndex.value = todayIndex;
     updateRoutine();
@@ -220,7 +243,9 @@ const addNewTask = () => {
     title: newTask.value.title.trim(),
     completed: false,
     time: formatTime(newTask.value.time),
-    labels: newTask.value.labels.split(',').map(label => label.trim()) // Parse labels from input string
+    priority: newTask.value.priority,
+    labels: newTask.value.labels.split(',').map(label => label.trim()),
+    notes: newTask.value.notes
   };
 
   selectedDayRoutine.value.push(task);
@@ -231,13 +256,13 @@ const addNewTask = () => {
   newTask.value = {
     title: '',
     time: '',
-    labels: []
+    priority: 'low',
+    labels: [],
+    notes: ''
   };
   error.value = '';
 
-  // Show the notification
   showNotification.value = true;
-  // Hide the notification after 3 seconds
   setTimeout(() => {
     showNotification.value = false;
   }, 3000);
@@ -252,10 +277,12 @@ const formatTime = (time) => {
 
 const startEditingTask = (index) => {
   editingTask.value = index;
-  // Populate the edit form with the task's current data
-  editedTask.value.title = selectedDayRoutine.value[index].title;
-  editedTask.value.time = selectedDayRoutine.value[index].time;
-  editedTask.value.labels = selectedDayRoutine.value[index].labels.join(', '); // Join labels into a string
+  const task = selectedDayRoutine.value[index];
+  editedTask.value.title = task.title;
+  editedTask.value.time = task.time;
+  editedTask.value.priority = task.priority;
+  editedTask.value.labels = task.labels.join(', ');
+  editedTask.value.notes = task.notes;
 };
 
 const updateTask = () => {
@@ -264,14 +291,21 @@ const updateTask = () => {
     return;
   }
 
-  // Update the task with the edited information
-  selectedDayRoutine.value[editingTask.value].title = editedTask.value.title.trim();
-  selectedDayRoutine.value[editingTask.value].time = formatTime(editedTask.value.time);
-  selectedDayRoutine.value[editingTask.value].labels = editedTask.value.labels.split(',').map(label => label.trim()); // Parse labels from input string
+  const index = editingTask.value;
+  selectedDayRoutine.value[index].title = editedTask.value.title.trim();
+  selectedDayRoutine.value[index].time = formatTime(editedTask.value.time);
+  selectedDayRoutine.value[index].priority = editedTask.value.priority;
+  selectedDayRoutine.value[index].labels = editedTask.value.labels.split(',').map(label => label.trim());
+  selectedDayRoutine.value[index].notes = editedTask.value.notes;
 
-  // Clear the edit form and error message
   editingTask.value = null;
-  editedTask.value = { title: '', time: '', labels: [] };
+  editedTask.value = {
+    title: '',
+    time: '',
+    priority: 'low',
+    labels: [],
+    notes: ''
+  };
   error.value = '';
 };
 
@@ -283,11 +317,24 @@ const filteredTasks = computed(() => {
     return selectedDayRoutine.value.filter(task => {
       return task.title.toLowerCase().includes(query) ||
           task.time.toLowerCase().includes(query) ||
-          task.labels.some(label => label.toLowerCase().includes(query));
+          task.priority.toLowerCase().includes(query) ||
+          task.labels.some(label => label.toLowerCase().includes(query)) ||
+          task.notes.toLowerCase().includes(query);
     });
   }
 });
-
+const priorityClass = (priority) => {
+  switch (priority) {
+    case 'high':
+      return 'text-red-500 font-bold';
+    case 'medium':
+      return 'text-yellow-500';
+    case 'low':
+      return 'text-gray-500';
+    default:
+      return '';
+  }
+};
 </script>
 
 <style scoped>
@@ -296,14 +343,13 @@ const filteredTasks = computed(() => {
   transition: opacity 0.5s ease-in-out;
 }
 .tasks-list {
-  cursor: move; /* Show cursor as pointer to indicate draggable */
+  cursor: move;
 }
 .ghost {
   visibility: hidden;
 }
-
 .draggable {
-  cursor: grab; /* Show cursor as grab while dragging */
+  cursor: grab;
 }
 .task-card {
   border-left: 3px solid red;

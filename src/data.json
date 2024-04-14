@@ -1,118 +1,118 @@
 {
   "weeklyRoutines": [
     {
+      "day": "Sunday",
+      "tasks": [
+        {"title": "Wake Update", "time": "6:00 AM", "completed": false, "labels": ["morning"], "priority": "low", "notes": "fdfdfdfdf"},
+        {"title": "Brush teeth", "time": "6:15 AM", "completed": false, "labels": ["morning", "hygiene"], "priority": "low", "notes": ""},
+        {"title": "Have bath", "time": "6:30 AM", "completed": false, "labels": ["morning", "hygiene"], "priority": "low", "notes": ""},
+        {"title": "Make breakfast", "time": "7:00 AM", "completed": false, "labels": ["morning", "food"], "priority": "low", "notes": ""},
+        {"title": "Gather stuff for work", "time": "7:30 AM", "completed": false, "labels": ["morning", "work"], "priority": "low", "notes": ""},
+        {"title": "Go to work for 7 hours", "time": "8:00 AM", "completed": false, "labels": ["work"], "priority": "low", "notes": ""},
+        {"title": "Bathe", "time": "5:00 PM", "completed": false, "labels": ["evening", "hygiene"], "priority": "low", "notes": ""},
+        {"title": "Work on project", "time": "6:00 PM", "completed": false, "labels": ["evening", "work"], "priority": "low", "notes": ""},
+        {"title": "Learn Spanish", "time": "7:00 PM", "completed": false, "labels": ["evening", "learning"], "priority": "low", "notes": ""},
+        {"title": "Learn something in programming", "time": "8:00 PM", "completed": false, "labels": ["evening", "learning"], "priority": "low", "notes": ""}
+      ]
+    },
+    {
       "day": "Monday",
       "tasks": [
-        {"title": "Wake up", "time": "6:00 AM", "completed": false, "labels": ["morning"]},
-        {"title": "Brush teeth", "time": "6:15 AM", "completed": false, "labels": ["morning", "hygiene"]},
-        {"title": "Have bath", "time": "6:30 AM", "completed": false, "labels": ["morning", "hygiene"]},
-        {"title": "Make breakfast", "time": "7:00 AM", "completed": false, "labels": ["morning", "food"]},
-        {"title": "Gather stuff for work", "time": "7:30 AM", "completed": false, "labels": ["morning", "work"]},
-        {"title": "Go to work for 7 hours", "time": "8:00 AM", "completed": false, "labels": ["work"]},
-        {"title": "Bathe", "time": "5:00 PM", "completed": false, "labels": ["evening", "hygiene"]},
-        {"title": "Work on project", "time": "6:00 PM", "completed": false, "labels": ["evening", "work"]},
-        {"title": "Learn Spanish", "time": "7:00 PM", "completed": false, "labels": ["evening", "learning"]},
-        {"title": "Learn something in programming", "time": "8:00 PM", "completed": false, "labels": ["evening", "learning"]}
+        {"title": "Wake Up", "time": "6:00 AM", "completed": false, "labels": ["morning"], "priority": "low", "notes": ""},
+        {"title": "Brush teeth", "time": "6:15 AM", "completed": false, "labels": ["morning", "hygiene"], "priority": "low", "notes": ""},
+        {"title": "Have bath", "time": "6:30 AM", "completed": false, "labels": ["morning", "hygiene"], "priority": "low", "notes": ""},
+        {"title": "Make breakfast", "time": "7:00 AM", "completed": false, "labels": ["morning", "food"], "priority": "low", "notes": ""},
+        {"title": "Gather stuff for work", "time": "7:30 AM", "completed": false, "labels": ["morning", "work"], "priority": "low", "notes": ""},
+        {"title": "Go to work for 7 hours", "time": "8:00 AM", "completed": false, "labels": ["work"], "priority": "low", "notes": ""},
+        {"title": "Bathe", "time": "5:00 PM", "completed": false, "labels": ["evening", "hygiene"], "priority": "low", "notes": ""},
+        {"title": "Work on project", "time": "6:00 PM", "completed": false, "labels": ["evening", "work"], "priority": "low", "notes": ""},
+        {"title": "Learn Spanish", "time": "7:00 PM", "completed": false, "labels": ["evening", "learning"], "priority": "low", "notes": ""},
+        {"title": "Learn something in programming", "time": "8:00 PM", "completed": false, "labels": ["evening", "learning"], "priority": "low", "notes": ""}
       ]
     },
     {
       "day": "Tuesday",
       "tasks": [
-        {"title": "Wake up", "time": "6:00 AM", "completed": false, "labels": ["morning"]},
-        {"title": "Brush teeth", "time": "6:15 AM", "completed": false, "labels": ["morning", "hygiene"]},
-        {"title": "Have bath", "time": "6:30 AM", "completed": false, "labels": ["morning", "hygiene"]},
-        {"title": "Make breakfast", "time": "7:00 AM", "completed": false, "labels": ["morning", "food"]},
-        {"title": "Gather stuff for work", "time": "7:30 AM", "completed": false, "labels": ["morning", "work"]},
-        {"title": "Go to work for 7 hours", "time": "8:00 AM", "completed": false, "labels": ["work"]},
-        {"title": "Bathe", "time": "5:00 PM", "completed": false, "labels": ["evening", "hygiene"]},
-        {"title": "Work on project", "time": "6:00 PM", "completed": false, "labels": ["evening", "work"]},
-        {"title": "Learn Spanish", "time": "7:00 PM", "completed": false, "labels": ["evening", "learning"]},
-        {"title": "Learn something in programming", "time": "8:00 PM", "completed": false, "labels": ["evening", "learning"]}
+        {"title": "Wake Up", "time": "6:00 AM", "completed": false, "labels": ["morning"], "priority": "low", "notes": ""},
+        {"title": "Brush teeth", "time": "6:15 AM", "completed": false, "labels": ["morning", "hygiene"], "priority": "low", "notes": ""},
+        {"title": "Have bath", "time": "6:30 AM", "completed": false, "labels": ["morning", "hygiene"], "priority": "low", "notes": ""},
+        {"title": "Make breakfast", "time": "7:00 AM", "completed": false, "labels": ["morning", "food"], "priority": "low", "notes": ""},
+        {"title": "Gather stuff for work", "time": "7:30 AM", "completed": false, "labels": ["morning", "work"], "priority": "low", "notes": ""},
+        {"title": "Go to work for 7 hours", "time": "8:00 AM", "completed": false, "labels": ["work"], "priority": "low", "notes": ""},
+        {"title": "Bathe", "time": "5:00 PM", "completed": false, "labels": ["evening", "hygiene"], "priority": "low", "notes": ""},
+        {"title": "Work on project", "time": "6:00 PM", "completed": false, "labels": ["evening", "work"], "priority": "low", "notes": ""},
+        {"title": "Learn Spanish", "time": "7:00 PM", "completed": false, "labels": ["evening", "learning"], "priority": "low", "notes": ""},
+        {"title": "Learn something in programming", "time": "8:00 PM", "completed": false, "labels": ["evening", "learning"], "priority": "low", "notes": ""}
       ]
     },
     {
       "day": "Wednesday",
       "tasks": [
-        {"title": "Wake up", "time": "6:00 AM", "completed": false, "labels": ["morning"]},
-        {"title": "Brush teeth", "time": "6:15 AM", "completed": false, "labels": ["morning", "hygiene"]},
-        {"title": "Have bath", "time": "6:30 AM", "completed": false, "labels": ["morning", "hygiene"]},
-        {"title": "Make breakfast", "time": "7:00 AM", "completed": false, "labels": ["morning", "food"]},
-        {"title": "Gather stuff for work", "time": "7:30 AM", "completed": false, "labels": ["morning", "work"]},
-        {"title": "Go to work for 7 hours", "time": "8:00 AM", "completed": false, "labels": ["work"]},
-        {"title": "Bathe", "time": "5:00 PM", "completed": false, "labels": ["evening", "hygiene"]},
-        {"title": "Work on project", "time": "6:00 PM", "completed": false, "labels": ["evening", "work"]},
-        {"title": "Learn Spanish", "time": "7:00 PM", "completed": false, "labels": ["evening", "learning"]},
-        {"title": "Learn something in programming", "time": "8:00 PM", "completed": false, "labels": ["evening", "learning"]}
+        {"title": "Wake Up", "time": "6:00 AM", "completed": false, "labels": ["morning"], "priority": "low", "notes": ""},
+        {"title": "Brush teeth", "time": "6:15 AM", "completed": false, "labels": ["morning", "hygiene"], "priority": "low", "notes": ""},
+        {"title": "Have bath", "time": "6:30 AM", "completed": false, "labels": ["morning", "hygiene"], "priority": "low", "notes": ""},
+        {"title": "Make breakfast", "time": "7:00 AM", "completed": false, "labels": ["morning", "food"], "priority": "low", "notes": ""},
+        {"title": "Gather stuff for work", "time": "7:30 AM", "completed": false, "labels": ["morning", "work"], "priority": "low", "notes": ""},
+        {"title": "Go to work for 7 hours", "time": "8:00 AM", "completed": false, "labels": ["work"], "priority": "low", "notes": ""},
+        {"title": "Bathe", "time": "5:00 PM", "completed": false, "labels": ["evening", "hygiene"], "priority": "low", "notes": ""},
+        {"title": "Work on project", "time": "6:00 PM", "completed": false, "labels": ["evening", "work"], "priority": "low", "notes": ""},
+        {"title": "Learn Spanish", "time": "7:00 PM", "completed": false, "labels": ["evening", "learning"], "priority": "low", "notes": ""},
+        {"title": "Learn something in programming", "time": "8:00 PM", "completed": false, "labels": ["evening", "learning"], "priority": "low", "notes": ""}
       ]
     },
     {
       "day": "Thursday",
       "tasks": [
-        {"title": "Wake up", "time": "6:00 AM", "completed": false, "labels": ["morning"]},
-        {"title": "Brush teeth", "time": "6:15 AM", "completed": false, "labels": ["morning", "hygiene"]},
-        {"title": "Have bath", "time": "6:30 AM", "completed": false, "labels": ["morning", "hygiene"]},
-        {"title": "Make breakfast", "time": "7:00 AM", "completed": false, "labels": ["morning", "food"]},
-        {"title": "Gather stuff for work", "time": "7:30 AM", "completed": false, "labels": ["morning", "work"]},
-        {"title": "Go to work for 7 hours", "time": "8:00 AM", "completed": false, "labels": ["work"]},
-        {"title": "Bathe", "time": "5:00 PM", "completed": false, "labels": ["evening", "hygiene"]},
-        {"title": "Work on project", "time": "6:00 PM", "completed": false, "labels": ["evening", "work"]},
-        {"title": "Learn Spanish", "time": "7:00 PM", "completed": false, "labels": ["evening", "learning"]},
-        {"title": "Learn something in programming", "time": "8:00 PM", "completed": false, "labels": ["evening", "learning"]}
+        {"title": "", "time": "6:00 AM", "completed": false, "labels": ["morning"], "priority": "low", "notes": ""},
+        {"title": "Brush teeth", "time": "6:15 AM", "completed": false, "labels": ["morning", "hygiene"], "priority": "low", "notes": ""},
+        {"title": "Have bath", "time": "6:30 AM", "completed": false, "labels": ["morning", "hygiene"], "priority": "low", "notes": ""},
+        {"title": "Make breakfast", "time": "7:00 AM", "completed": false, "labels": ["morning", "food"], "priority": "low", "notes": ""},
+        {"title": "Gather stuff for work", "time": "7:30 AM", "completed": false, "labels": ["morning", "work"], "priority": "low", "notes": ""},
+        {"title": "Go to work for 7 hours", "time": "8:00 AM", "completed": false, "labels": ["work"], "priority": "low", "notes": ""},
+        {"title": "Bathe", "time": "5:00 PM", "completed": false, "labels": ["evening", "hygiene"], "priority": "low", "notes": ""},
+        {"title": "Work on project", "time": "6:00 PM", "completed": false, "labels": ["evening", "work"], "priority": "low", "notes": ""},
+        {"title": "Learn Spanish", "time": "7:00 PM", "completed": false, "labels": ["evening", "learning"], "priority": "low", "notes": ""},
+        {"title": "Learn something in programming", "time": "8:00 PM", "completed": false, "labels": ["evening", "learning"], "priority": "low", "notes": ""}
       ]
     },
     {
       "day": "Friday",
       "tasks": [
-        {"title": "Wake up", "time": "6:00 AM", "completed": false, "labels": ["morning"]},
-        {"title": "Brush teeth", "time": "6:15 AM", "completed": false, "labels": ["morning", "hygiene"]},
-        {"title": "Have bath", "time": "6:30 AM", "completed": false, "labels": ["morning", "hygiene"]},
-        {"title": "Make breakfast", "time": "7:00 AM", "completed": false, "labels": ["morning", "food"]},
-        {"title": "Gather stuff for work", "time": "7:30 AM", "completed": false, "labels": ["morning", "work"]},
-        {"title": "Go to work for 7 hours", "time": "8:00 AM", "completed": false, "labels": ["work"]},
-        {"title": "Bathe", "time": "5:00 PM", "completed": false, "labels": ["evening", "hygiene"]},
-        {"title": "Work on project", "time": "6:00 PM", "completed": false, "labels": ["evening", "work"]},
-        {"title": "Learn Spanish", "time": "7:00 PM", "completed": false, "labels": ["evening", "learning"]},
-        {"title": "Learn something in programming", "time": "8:00 PM", "completed": false, "labels": ["evening", "learning"]}
+        {"title": "Wake Up", "time": "6:00 AM", "completed": false, "labels": ["morning"], "priority": "low", "notes": "The is not for the same thing that you are thing "},
+        {"title": "Brush teeth", "time": "6:15 AM", "completed": false, "labels": ["morning", "hygiene"], "priority": "low", "notes": ""},
+        {"title": "Have bath", "time": "6:30 AM", "completed": false, "labels": ["morning", "hygiene"], "priority": "low", "notes": ""},
+        {"title": "Make breakfast", "time": "7:00 AM", "completed": false, "labels": ["morning", "food"], "priority": "low", "notes": ""},
+        {"title": "Gather stuff for work", "time": "7:30 AM", "completed": false, "labels": ["morning", "work"], "priority": "low", "notes": ""},
+        {"title": "Go to work for 7 hours", "time": "8:00 AM", "completed": false, "labels": ["work"], "priority": "low", "notes": ""},
+        {"title": "Bathe", "time": "5:00 PM", "completed": false, "labels": ["evening", "hygiene"], "priority": "low", "notes": ""},
+        {"title": "Work on project", "time": "6:00 PM", "completed": false, "labels": ["evening", "work"], "priority": "low", "notes": ""},
+        {"title": "Learn Spanish", "time": "7:00 PM", "completed": false, "labels": ["evening", "learning"], "priority": "low", "notes": ""},
+        {"title": "Learn something in programming", "time": "8:00 PM", "completed": false, "labels": ["evening", "learning"], "priority": "low", "notes": "The is not for the same thing that you are thing "}
       ]
     },
     {
       "day": "Saturday",
       "tasks": [
-        {"title": "Wake up", "time": "6:00 AM", "completed": false, "labels": ["morning"]},
-        {"title": "Brush teeth", "time": "6:15 AM", "completed": false, "labels": ["morning", "hygiene"]},
-        {"title": "Have bath", "time": "6:30 AM", "completed": false, "labels": ["morning", "hygiene"]},
-        {"title": "Make breakfast", "time": "7:00 AM", "completed": false, "labels": ["morning", "food"]},
-        {"title": "Gather stuff for work", "time": "7:30 AM", "completed": false, "labels": ["morning", "work"]},
-        {"title": "Go to work for 7 hours", "time": "8:00 AM", "completed": false, "labels": ["work"]},
-        {"title": "Bathe", "time": "5:00 PM", "completed": false, "labels": ["evening", "hygiene"]},
-        {"title": "Work on project", "time": "6:00 PM", "completed": false, "labels": ["evening", "work"]},
-        {"title": "Learn Spanish", "time": "7:00 PM", "completed": false, "labels": ["evening", "learning"]},
-        {"title": "Learn something in programming", "time": "8:00 PM", "completed": false, "labels": ["evening", "learning"]}
-      ]
-    },
-    {
-      "day": "Sunday",
-      "tasks": [
-        {"title": "Wake up", "time": "6:00 AM", "completed": false, "labels": ["morning"]},
-        {"title": "Brush teeth", "time": "6:15 AM", "completed": false, "labels": ["morning", "hygiene"]},
-        {"title": "Have bath", "time": "6:30 AM", "completed": false, "labels": ["morning", "hygiene"]},
-        {"title": "Make breakfast", "time": "7:00 AM", "completed": false, "labels": ["morning", "food"]},
-        {"title": "Gather stuff for work", "time": "7:30 AM", "completed": false, "labels": ["morning", "work"]},
-        {"title": "Go to work for 7 hours", "time": "8:00 AM", "completed": false, "labels": ["work"]},
-        {"title": "Bathe", "time": "5:00 PM", "completed": false, "labels": ["evening", "hygiene"]},
-        {"title": "Work on project", "time": "6:00 PM", "completed": false, "labels": ["evening", "work"]},
-        {"title": "Learn Spanish", "time": "7:00 PM", "completed": false, "labels": ["evening", "learning"]},
-        {"title": "Learn something in programming", "time": "8:00 PM", "completed": false, "labels": ["evening", "learning"]}
+        {"title": "Wake Up", "time": "6:00 AM", "completed": false, "labels": ["morning"], "priority": "low", "notes": "This is the notes for Saturday and we will think... "},
+        {"title": "Brush teeth", "time": "6:15 AM", "completed": false, "labels": ["morning", "hygiene"], "priority": "medium", "notes": ""},
+        {"title": "Have bath", "time": "6:30 AM", "completed": false, "labels": ["morning", "hygiene"], "priority": "high", "notes": ""},
+        {"title": "Make breakfast", "time": "7:00 AM", "completed": false, "labels": ["morning", "food"], "priority": "low", "notes": ""},
+        {"title": "Gather stuff for work", "time": "7:30 AM", "completed": false, "labels": ["morning", "work"], "priority": "low", "notes": ""},
+        {"title": "Go to work for 7 hours", "time": "8:00 AM", "completed": false, "labels": ["work"], "priority": "low", "notes": ""},
+        {"title": "Bathe", "time": "5:00 PM", "completed": false, "labels": ["evening", "hygiene"], "priority": "low", "notes": ""},
+        {"title": "Work on project", "time": "6:00 PM", "completed": false, "labels": ["evening", "work"], "priority": "low", "notes": ""},
+        {"title": "Learn Spanish", "time": "7:00 PM", "completed": false, "labels": ["evening", "learning"], "priority": "low", "notes": ""},
+        {"title": "Learn something in programming", "time": "8:00 PM", "completed": false, "labels": ["evening", "learning"], "priority": "low", "notes": ""}
       ]
     }
   ],
   "days": [
-    { "day": "Sun", "date": "" },
-    { "day": "Mon", "date": "" },
-    { "day": "Tue", "date": "" },
-    { "day": "Wed", "date": "" },
-    { "day": "Thu", "date": "" },
-    { "day": "Fri", "date": "" },
-    { "day": "Sat", "date": "" }
+    {"day": "Sun", "date": ""},
+    {"day": "Mon", "date": ""},
+    {"day": "Tue", "date": ""},
+    {"day": "Wed", "date": ""},
+    {"day": "Thu", "date": ""},
+    {"day": "Fri", "date": ""},
+    {"day": "Sat", "date": ""}
   ]
 }
