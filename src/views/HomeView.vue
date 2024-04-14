@@ -60,7 +60,7 @@
         <div class="scroll-container">
           <draggable handle=".drag-handle" :animation="150" v-model="filteredTasks" tag="div" class="tasks-list" ghost-class="ghost" drag-class="drag">
             <template #item="{ element: task, index }">
-              <div class="task-card bg-white rounded-lg shadow-md p-4 mb-4" :class="{ 'draggable': taskIsDragging }">
+              <div class="task-card bg-white rounded-lg shadow-md p-4 mb-2" :class="{ 'draggable': taskIsDragging }">
                 <div class="flex items-center mb-2">
                   <div>
                     <div :style="{ backgroundColor: generateRandomColor() }" class="w-8 h-8 rounded-full flex items-center justify-center mr-2">
