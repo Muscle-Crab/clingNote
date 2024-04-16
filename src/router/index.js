@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import HomeView from '../views/HomeView.vue'
-
+import RegisterPage from '../views/UserRegistrationForm.vue'
+import Login from '../views/Login.vue'
 const routes = [
   {
     path: '/',
@@ -10,11 +11,24 @@ const routes = [
   {
     path: '/about',
     name: 'about',
-    // route level code-splitting
-    // this generates a separate chunk (about.[hash].js) for this route
-    // which is lazy-loaded when the route is visited.
     component: () => import(/* webpackChunkName: "about" */ '../views/AboutView.vue')
-  }
+  },
+  {
+    path: '/profile/:userId',
+    name: 'Profile',
+    component: () => import('@/views/Profile.vue'), // Assuming your profile page component is named Profile.vue
+    props: true
+  },
+  {
+    path: '/Login',
+    name: 'Login',
+    component: Login
+  },
+  {
+    path: '/Register',
+    name: 'Register',
+    component: RegisterPage
+  },
 ]
 
 const router = createRouter({

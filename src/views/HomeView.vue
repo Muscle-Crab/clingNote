@@ -1,6 +1,9 @@
 <template>
   <div ref="scrollContainer" class="container bg-gray-100 min-h-screen p-4">
+
+     <navi/>
     <!-- Calendar display -->
+
     <div class="calendar bg-white rounded-md shadow-md mb-6 p-3">
       <div class="current-date text-2xl font-bold mb-4">{{ currentDate }}</div>
       <div class="grid grid-cols-7 gap-2">
@@ -70,7 +73,6 @@
                   <div>
                     <div class="text-lg font-semibold" :class="{ 'line-through': task.completed }">{{ task.title }}</div>
                     <div class="text-sm text-gray-500">{{ task.time }}</div>
-
                   </div>
                 </div>
                 <div class="flex items-center">
@@ -83,7 +85,6 @@
                   <svg v-else-if="task.priority === 'low'" class="h-5 w-5 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 11l7-7 7 7M5 19l7-7 7 7"></path>
                   </svg>
-
                 </div>
                 <div class="text-sm text-gray-500">{{ task.notes }}</div>
                 <div class="text-sm text-gray-500">
@@ -117,7 +118,8 @@
 
 <script setup>
 import { ref, onMounted, computed } from 'vue';
-import axios from 'axios';
+import axios from 'axios'
+import navi from '@/components/nav.vue'
 import data from '@/data.json';
 import draggable from "vuedraggable";
 
@@ -193,27 +195,6 @@ const toggleTaskCompletion = async (index) => {
       const completionMessage = `Task ${task.title} completed. It's time to begin the next task, ${nextTask.title}.`;
       speak(completionMessage);
       showNotification.value = true;
-      // try {
-      //   await axios.post(
-      //       'https://onesignal.com/api/v1/notifications',
-      //       {
-      //         app_id: '65d866ad-f59c-4557-9d75-4ccf7fe60a47',
-      //         included_segments: ['All'],
-      //         data: { foo: 'bar' },
-      //         contents: { en: nextTask.title }
-      //       },
-      //       {
-      //         headers: {
-      //           Authorization: 'Bearer ZWY3MWJhMDUtNTU1Yi00NGViLThmNjItNDNhZTY0YzMwOGRh',
-      //           'Content-Type': 'application/json'
-      //         }
-      //       }
-      //   );
-      //
-      //   console.log('Notification sent for task:', nextTask.title);
-      // } catch (error) {
-      //   console.error('Error sending notification for task:', nextTask.title, error);
-      // }
     }
   }
 };
@@ -333,12 +314,11 @@ const priorityClass = (priority) => {
       return 'text-gray-500';
     default:
       return '';
-  }
+r  }
 };
 </script>
 
 <style scoped>
-
 .notification-popup {
   transition: opacity 0.5s ease-in-out;
 }
