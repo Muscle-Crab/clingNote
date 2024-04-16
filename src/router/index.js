@@ -9,7 +9,7 @@ const routes = [
     path: '/',
     name: 'home',
     component: HomeView,
-    meta: { requiresAuth: true } // Add meta field to indicate authentication requirement
+    meta: { requiresAuth: true }
   },
   {
     path: '/about',
@@ -21,7 +21,7 @@ const routes = [
     name: 'Profile',
     component: () => import('@/views/Profile.vue'),
     props: true,
-    meta: { requiresAuth: true } // Add meta field to indicate authentication requirement
+    meta: { requiresAuth: true }
   },
   {
     path: '/login',
@@ -41,15 +41,27 @@ const router = createRouter({
 });
 
 // Route guard to check if the user is authenticated
-router.beforeEach((to, from, next) => {
+router.beforeEach(async (to, from, next) => {
   const requiresAuth = to.matched.some(record => record.meta.requiresAuth);
-  const currentUser = auth.currentUser; // Get the current user from Firebase authentication
+  const currentUser = auth.currentUser;
 
-  if (requiresAuth && !currentUser) {
-    next('/login'); // Redirect to login page if authentication is required but user is not logged in
-  } else {
-    next(); // Proceed to the requested route
+  if (requiresAuth) {
+    if (!currentUser) {
+      // If authentication state is not persisted, wait for it to initialize
+      await new Promise((resolve) => {
+        const unsubscribe = auth.onAuthStateChanged(user => {
+          if (user) {
+            unsubscribe();
+            resolve();
+          } else {
+            next('/login');
+          }
+        });
+      });
+    }
   }
+
+  next();
 });
 
 export default router;
