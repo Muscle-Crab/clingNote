@@ -41,7 +41,8 @@
           </li>
 
           <li>
-            <a href="#" class="text-gray-800 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-500 font-medium">Logout</a>
+            <!-- Add logout functionality -->
+            <button @click="logout" class="text-gray-800 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-500 font-medium">Logout</button>
           </li>
         </ul>
       </nav>
@@ -51,9 +52,24 @@
 </template>
 
 <script setup>
-import {ref, onMounted} from 'vue';
+import { ref, onMounted } from 'vue';
+import { auth } from '@/firebaseConfig'; // Import Firebase authentication
+import { useRouter } from 'vue-router';
 
+const router = useRouter();
+const logout = async () => {
+
+  try {
+    await auth.signOut(); // Sign the user out
+    console.log('logged out')
+    router.push('/login');
+
+  } catch (error) {
+    console.error('Error logging out:', error.message);
+  }
+};
 const sidebarOpen = ref(false);
+
 
 const toggleSidebar = () => {
   sidebarOpen.value = !sidebarOpen.value;
@@ -62,6 +78,8 @@ const toggleSidebar = () => {
 const closeSidebar = () => {
   sidebarOpen.value = false;
 };
+
+
 
 onMounted(() => {
   // Check window width on mount and open sidebar by default in desktop view
