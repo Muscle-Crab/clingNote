@@ -58,7 +58,7 @@
     <!-- Daily routine tasks -->
     <div class="daily-routine">
       <h2 class="text-2xl font-bold mb-4">Daily Routine</h2>
-      <div v-if="filteredTasks.length === 0" class="text-gray-500">No tasks match your search.</div>
+      <div v-if="filteredTasks?.length === 0" class="text-gray-500">No tasks match your search.</div>
       <div v-else>
         <div class="scroll-container">
           <draggable handle=".drag-handle" :animation="150" v-model="filteredTasks" tag="div" class="tasks-list" ghost-class="ghost" drag-class="drag">
@@ -122,6 +122,9 @@ import axios from 'axios'
 import navi from '@/components/nav.vue'
 import data from '@/data.json';
 import draggable from "vuedraggable";
+import { db } from '@/firebaseConfig'; // Assuming you have imported the Firebase setup file and exported the db instance
+import { collection, doc, setDoc, serverTimestamp, getDoc, updateDoc} from 'firebase/firestore';
+
 
 const selectedDayIndex = ref(-1);
 const newTask = ref({
@@ -147,7 +150,23 @@ const getCurrentDate = () => {
 
 const currentDate = ref(getCurrentDate());
 
-const weeklyRoutines = data.weeklyRoutines;
+let weeklyRoutines = [];
+
+const fetchSelectedDayRoutine = async () => {
+  try {
+    if (selectedDayIndex.value !== -1) {
+      const selectedDayDocRef = doc(db, 'weeklyRoutines', days[selectedDayIndex.value].day);
+      const selectedDayDocSnapshot = await getDoc(selectedDayDocRef);
+      if (selectedDayDocSnapshot.exists()) {
+        selectedDayRoutine.value = selectedDayDocSnapshot.data().tasks;
+      } else {
+        selectedDayRoutine.value = []; // No tasks for this day
+      }
+    }
+  } catch (error) {
+    console.error('Error fetching selected day routine:', error);
+  }
+};
 const days = data.days;
 
 const isToday = (index) => {
@@ -157,6 +176,7 @@ const isToday = (index) => {
 const selectDate = (index) => {
   selectedDayIndex.value = index;
   updateRoutine();
+  fetchSelectedDayRoutine();
 };
 
 const isSelected = (index) => {
@@ -164,13 +184,15 @@ const isSelected = (index) => {
 };
 
 const getSelectedDayRoutine = () => {
-  return selectedDayIndex.value !== -1 ? weeklyRoutines[selectedDayIndex.value].tasks : [];
+  return selectedDayIndex.value !== -1 ? weeklyRoutines?.tasks : [];
 };
 
 const selectedDayRoutine = ref([]);
 
 const updateRoutine = () => {
   selectedDayRoutine.value = getSelectedDayRoutine();
+  fetchSelectedDayRoutine();
+
 };
 
 const sortedSelectedDayRoutine = computed(() => {
@@ -209,12 +231,13 @@ onMounted(() => {
   if (todayIndex !== -1) {
     selectedDayIndex.value = todayIndex;
     updateRoutine();
+    fetchSelectedDayRoutine();
   }
 });
 
 const showNotification = ref(false);
 
-const addNewTask = () => {
+const addNewTask = async () => {
   if (newTask.value.title.trim() === '') {
     error.value = 'Task name cannot be empty';
     return;
@@ -229,24 +252,45 @@ const addNewTask = () => {
     notes: newTask.value.notes
   };
 
-  selectedDayRoutine.value.push(task);
-  selectedDayRoutine.value.sort((a, b) => {
-    return new Date('1970/01/01 ' + a.time) - new Date('1970/01/01 ' + b.time);
-  });
+  try {
+    const selectedDayDocRef = doc(db, 'weeklyRoutines', days[selectedDayIndex.value].day);
+    const selectedDayDocSnapshot = await getDoc(selectedDayDocRef);
 
-  newTask.value = {
-    title: '',
-    time: '',
-    priority: 'low',
-    labels: [],
-    notes: ''
-  };
-  error.value = '';
+    if (selectedDayDocSnapshot.exists()) {
+      await updateDoc(selectedDayDocRef, {
+        tasks: [...selectedDayDocSnapshot.data().tasks, task],
+        updatedAt: serverTimestamp()
+      });
+    } else {
+      await setDoc(selectedDayDocRef, {
+        day: days[selectedDayIndex.value].day,
+        tasks: [task],
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+    }
 
-  showNotification.value = true;
-  setTimeout(() => {
-    showNotification.value = false;
-  }, 3000);
+    selectedDayRoutine.value.push(task);
+    selectedDayRoutine.value.sort((a, b) => {
+      return new Date('1970/01/01 ' + a.time) - new Date('1970/01/01 ' + b.time);
+    });
+
+    newTask.value = {
+      title: '',
+      time: '',
+      priority: 'low',
+      labels: [],
+      notes: ''
+    };
+    error.value = '';
+
+    showNotification.value = true;
+    setTimeout(() => {
+      showNotification.value = false;
+    }, 3000);
+  } catch (error) {
+    console.error('Error adding task to Firestore:', error);
+  }
 };
 
 const formatTime = (time) => {
@@ -314,9 +358,10 @@ const priorityClass = (priority) => {
       return 'text-gray-500';
     default:
       return '';
-r  }
+  }
 };
 </script>
+
 
 <style scoped>
 .notification-popup {
