@@ -1,5 +1,5 @@
 <template>
-  <div ref="scrollContainer" class="container bg-gray-100 min-h-screen p-4">
+  <div ref="scrollContainer" class="p-4 h-[100vh]  overflow-auto" style="background: teal">
 
      <navi/>
     <!-- Calendar display -->
@@ -52,8 +52,8 @@
       <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded-md">Save Changes</button>
     </form>
 
-    <!-- Search input field -->
-    <input type="text" v-model="searchQuery" class="w-full border-gray-300 rounded-md px-4 py-2 mb-2" placeholder="Search tasks">
+<!--    &lt;!&ndash; Search input field &ndash;&gt;-->
+<!--    <input type="text" v-model="searchQuery" class="w-full border-gray-300 rounded-md px-4 py-2 mb-2" placeholder="Search tasks">-->
 
     <!-- Daily routine tasks -->
     <div class="daily-routine">
@@ -61,7 +61,7 @@
       <div v-if="filteredTasks?.length === 0" class="text-gray-500">No tasks match your search.</div>
       <div v-else>
         <div class="scroll-container">
-          <draggable handle=".drag-handle" :animation="150" v-model="filteredTasks" tag="div" class="tasks-list" ghost-class="ghost" drag-class="drag">
+          <draggable handle=".drag-handle" :animation="150" v-model="selectedDayRoutine" tag="div" class="tasks-list" ghost-class="ghost" drag-class="drag">
             <template #item="{ element: task, index }">
               <div class="task-card bg-white rounded-lg shadow-md p-4 mb-2" :class="{ 'draggable': taskIsDragging }">
                 <div class="flex items-center mb-2">
@@ -335,9 +335,9 @@ const updateTask = () => {
 };
 
 const filteredTasks = computed(() => {
-  if (!searchQuery.value.trim()) {
-    return selectedDayRoutine.value;
-  } else {
+  let tasksToFilter = selectedDayRoutine.value;
+
+  if (searchQuery.value.trim()) {
     const query = searchQuery.value.trim().toLowerCase();
     return selectedDayRoutine.value.filter(task => {
       return task.title.toLowerCase().includes(query) ||
