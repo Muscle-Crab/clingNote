@@ -31,13 +31,13 @@
             <a href="#" class="text-gray-800 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-500 font-medium">Home</a>
           </li>
           <li>
-            <a href="#" class="text-gray-800 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-500 font-medium">About</a>
+            <a href="#" class="text-gray-800 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-500 font-medium"><router-link to="/about">about</router-link></a>
           </li>
           <li>
             <a href="#" class="text-gray-800 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-500 font-medium">Services</a>
           </li>
           <li>
-            <a href="#" class="text-gray-800 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-500 font-medium">Contact</a>
+            <a href="#" class="text-gray-800 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-500 font-medium"></a>
           </li>
 
           <li>
