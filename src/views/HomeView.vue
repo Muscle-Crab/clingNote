@@ -103,6 +103,10 @@
                   <button @click="startEditingTask(index)" class="text-yellow-500 ml-2">
                     <i class="fas fa-edit"></i>
                   </button>
+                  <!-- Add a play button -->
+                  <button  class="text-green-500 ml-2">
+                    <i class="fas fa-play"></i>
+                  </button>
                 </div>
                 <div v-if="showNotification" class="notification-popup bg-green-500 text-white px-4 py-2 rounded-md absolute top-4 right-4">
                   Create successfully
@@ -122,8 +126,8 @@ import axios from 'axios'
 import navi from '@/components/nav.vue'
 import data from '@/data.json';
 import draggable from "vuedraggable";
-import { db } from '@/firebaseConfig'; // Assuming you have imported the Firebase setup file and exported the db instance
-import { collection, doc, setDoc, serverTimestamp, getDoc, updateDoc} from 'firebase/firestore';
+import {db} from '@/firebaseConfig'; // Assuming you have imported the Firebase setup file and exported the db instance
+import {collection, doc, setDoc, serverTimestamp, getDoc, updateDoc} from 'firebase/firestore';
 
 
 const selectedDayIndex = ref(-1);
@@ -136,15 +140,15 @@ const newTask = ref({
 });
 const error = ref('');
 const editingTask = ref(null);
-const editedTask = ref({ title: '', time: '', priority: 'low', labels: [], notes: '' });
+const editedTask = ref({title: '', time: '', priority: 'low', labels: [], notes: ''});
 const searchQuery = ref('');
 
 const generateRandomColor = () => {
-  return '#' + Math.floor(Math.random()*16777215).toString(16);
+  return '#' + Math.floor(Math.random() * 16777215).toString(16);
 };
 
 const getCurrentDate = () => {
-  const options = { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' };
+  const options = {weekday: 'long', month: 'long', day: 'numeric', year: 'numeric'};
   return new Date().toLocaleDateString('en-US', options);
 };
 
@@ -201,8 +205,28 @@ const sortedSelectedDayRoutine = computed(() => {
   });
 });
 
-const deleteTask = (index) => {
-  selectedDayRoutine.value.splice(index, 1);
+const deleteTask = async (index) => {
+  try {
+    // Get the reference to the document containing the tasks for the selected day
+    const selectedDayDocRef = doc(db, 'weeklyRoutines', days[selectedDayIndex.value].day);
+
+    // Fetch the document snapshot
+    const selectedDayDocSnapshot = await getDoc(selectedDayDocRef);
+
+    // Check if the document exists
+    if (selectedDayDocSnapshot.exists()) {
+      // Remove the task from the array in memory
+      selectedDayRoutine.value.splice(index, 1);
+
+      // Update the tasks in the Firestore document
+      await updateDoc(selectedDayDocRef, {
+        tasks: selectedDayRoutine.value,
+        updatedAt: serverTimestamp()
+      });
+    }
+  } catch (error) {
+    console.error('Error deleting task:', error);
+  }
 };
 
 const toggleTaskCompletion = async (index) => {
@@ -310,28 +334,51 @@ const startEditingTask = (index) => {
   editedTask.value.notes = task.notes;
 };
 
-const updateTask = () => {
+const updateTask = async () => {
   if (editedTask.value.title.trim() === '') {
     error.value = 'Task name cannot be empty';
     return;
   }
 
   const index = editingTask.value;
-  selectedDayRoutine.value[index].title = editedTask.value.title.trim();
-  selectedDayRoutine.value[index].time = formatTime(editedTask.value.time);
-  selectedDayRoutine.value[index].priority = editedTask.value.priority;
-  selectedDayRoutine.value[index].labels = editedTask.value.labels.split(',').map(label => label.trim());
-  selectedDayRoutine.value[index].notes = editedTask.value.notes;
 
-  editingTask.value = null;
-  editedTask.value = {
-    title: '',
-    time: '',
-    priority: 'low',
-    labels: [],
-    notes: ''
-  };
-  error.value = '';
+  try {
+    // Get the reference to the document containing the tasks for the selected day
+    const selectedDayDocRef = doc(db, 'weeklyRoutines', days[selectedDayIndex.value].day);
+
+    // Fetch the document snapshot
+    const selectedDayDocSnapshot = await getDoc(selectedDayDocRef);
+
+    // Check if the document exists
+    if (selectedDayDocSnapshot.exists()) {
+      // Update the task in the array in memory
+      selectedDayRoutine.value[index].title = editedTask.value.title.trim();
+      selectedDayRoutine.value[index].time = formatTime(editedTask.value.time);
+      selectedDayRoutine.value[index].priority = editedTask.value.priority;
+      selectedDayRoutine.value[index].labels = editedTask.value.labels.split(',').map(label => label.trim());
+      selectedDayRoutine.value[index].notes = editedTask.value.notes;
+
+      // Update the tasks in the Firestore document
+      await updateDoc(selectedDayDocRef, {
+        tasks: selectedDayRoutine.value,
+        updatedAt: serverTimestamp()
+      });
+
+      // Reset editingTask and editedTask
+      editingTask.value = null;
+      editedTask.value = {
+        title: '',
+        time: '',
+        priority: 'low',
+        labels: [],
+        notes: ''
+      };
+
+      error.value = ''; // Reset error message
+    }
+  } catch (error) {
+    console.error('Error updating task:', error);
+  }
 };
 
 const filteredTasks = computed(() => {
@@ -367,12 +414,15 @@ const priorityClass = (priority) => {
 .notification-popup {
   transition: opacity 0.5s ease-in-out;
 }
+
 .tasks-list {
   cursor: move;
 }
+
 .ghost {
   visibility: hidden;
 }
+
 .draggable {
   cursor: grab;
 }
