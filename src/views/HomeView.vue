@@ -89,7 +89,7 @@
       <div v-if="filteredTasks?.length === 0" class="text-gray-500">No tasks match your search.</div>
       <div v-else>
         <div class="scroll-container">
-          <draggable handle=".drag-handle" :animation="150" v-model="selectedDayRoutine" tag="div" class="tasks-list" ghost-class="ghost" drag-class="drag">
+          <draggable handle=".drag-handle" :animation="150" v-model="selectedDayRoutine" tag="div" class="tasks-list" ghost-class="ghost" drag-class="drag" @end="handleDragEnd">
             <template #item="{ element: task, index }">
               <div class="task-card bg-white rounded-lg shadow-md p-4 mb-2" :class="{ 'draggable': taskIsDragging }">
                 <div class="flex items-center mb-2">
@@ -280,7 +280,21 @@ const toggleTaskCompletion = async (index) => {
     }
   }
 };
+const handleDragEnd = async () => {
+  try {
+    const selectedDayDocRef = doc(db, 'weeklyRoutines', days[selectedDayIndex.value].day);
+    const selectedDayDocSnapshot = await getDoc(selectedDayDocRef);
 
+    if (selectedDayDocSnapshot.exists()) {
+      await updateDoc(selectedDayDocRef, {
+        tasks: selectedDayRoutine.value,
+        updatedAt: serverTimestamp()
+      });
+    }
+  } catch (error) {
+    console.error('Error updating task order:', error);
+  }
+};
 const speak = (text) => {
   const message = new SpeechSynthesisUtterance(text);
   window.speechSynthesis.speak(message);
