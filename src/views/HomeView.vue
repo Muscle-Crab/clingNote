@@ -13,25 +13,53 @@
         </div>
       </div>
     </div>
-    <!-- Add new task form -->
-    <form @submit.prevent="addNewTask" class="mt-4">
-      <label for="newTask" class="block mb-2">Task Name:</label>
-      <input type="text" v-model="newTask.title" id="newTask" class="w-full border-gray-300 rounded-md px-4 py-2 mb-2" placeholder="Enter task name" required>
-      <label for="newTaskTime" class="block mb-2">Task Time:</label>
-      <input type="time" v-model="newTask.time" id="newTaskTime" class="w-full border-gray-300 rounded-md px-4 py-2 mb-2" required>
-      <label for="newTaskPriority" class="block mb-2">Task Priority:</label>
-      <select v-model="newTask.priority" id="newTaskPriority" class="w-full border-gray-300 rounded-md px-4 py-2 mb-2">
-        <option value="low">Low</option>
-        <option value="medium">Medium</option>
-        <option value="high">High</option>
-      </select>
-      <label for="newTaskLabels" class="block mb-2">Task Labels:</label>
-      <input type="text" v-model="newTask.labels" id="newTaskLabels" class="w-full border-gray-300 rounded-md px-4 py-2 mb-2" placeholder="Enter task labels (comma-separated)">
-      <label for="newTaskNotes" class="block mb-2">Task Notes:</label>
-      <textarea v-model="newTask.notes" id="newTaskNotes" class="w-full border-gray-300 rounded-md px-4 py-2 mb-2" placeholder="Enter task notes"></textarea>
-      <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded-md">Add Task</button>
-      <div v-if="error" class="text-red-500 mt-2">{{ error }}</div>
-    </form>
+    <!-- Modal toggle button -->
+    <div class="fixed bottom-12 right-5">
+      <button @click="openModal" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+        <i class="fas fa-plus"></i> <!-- Font Awesome plus icon -->
+      </button>
+    </div>
+
+
+    <!-- Main modal -->
+    <div :class="{ 'hidden': !modalOpen }" @keydown.escape="closeModal" tabindex="-1" aria-hidden="true" class="overflow-y-auto overflow-x-hidden fixed top-0 right-0 left-0 z-50 justify-center items-center w-full md:inset-0 h-modal md:h-full">
+      <!-- Modal content -->
+      <div class="relative p-4 w-full max-w-2xl h-full md:h-auto">
+        <div class="relative p-4 bg-white rounded-lg shadow dark:bg-gray-800 sm:p-5">
+          <!-- Modal header -->
+          <div class="flex justify-between items-center pb-4 mb-4 rounded-t border-b sm:mb-5 dark:border-gray-600">
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
+              Add Task
+            </h3>
+            <button @click="closeModal" type="button" class="text-gray-400 bg-transparent hover:bg-gray-200 hover:text-gray-900 rounded-lg text-sm p-1.5 ml-auto inline-flex items-center dark:hover:bg-gray-600 dark:hover:text-white">
+              <svg aria-hidden="true" class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path>
+              </svg>
+              <span class="sr-only">Close modal</span>
+            </button>
+          </div>
+          <!-- Modal body -->
+          <form @submit.prevent="addNewTask">
+            <label for="newTask" class="block mb-2">Task Name:</label>
+            <input type="text" v-model="newTask.title" id="newTask" class="w-full border-gray-300 rounded-md px-4 py-2 mb-2" placeholder="Enter task name" required>
+            <label for="newTaskTime" class="block mb-2">Task Time:</label>
+            <input type="time" v-model="newTask.time" id="newTaskTime" class="w-full border-gray-300 rounded-md px-4 py-2 mb-2" required>
+            <label for="newTaskPriority" class="block mb-2">Task Priority:</label>
+            <select v-model="newTask.priority" id="newTaskPriority" class="w-full border-gray-300 rounded-md px-4 py-2 mb-2">
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+            </select>
+            <label for="newTaskLabels" class="block mb-2">Task Labels:</label>
+            <input type="text" v-model="newTask.labels" id="newTaskLabels" class="w-full border-gray-300 rounded-md px-4 py-2 mb-2" placeholder="Enter task labels (comma-separated)">
+            <label for="newTaskNotes" class="block mb-2">Task Notes:</label>
+            <textarea v-model="newTask.notes" id="newTaskNotes" class="w-full border-gray-300 rounded-md px-4 py-2 mb-2" placeholder="Enter task notes"></textarea>
+            <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded-md">Add Task</button>
+            <div v-if="error" class="text-red-500 mt-2">{{ error }}</div>
+          </form>
+        </div>
+      </div>
+    </div>
 
     <!-- Edit task form -->
     <form v-if="editingTask !== null" @submit.prevent="updateTask" class="mt-4">
@@ -128,8 +156,16 @@ import data from '@/data.json';
 import draggable from "vuedraggable";
 import {db} from '@/firebaseConfig'; // Assuming you have imported the Firebase setup file and exported the db instance
 import {collection, doc, setDoc, serverTimestamp, getDoc, updateDoc} from 'firebase/firestore';
+const modalOpen = ref(false);
 
 
+const openModal = () => {
+  modalOpen.value = true;
+};
+
+const closeModal = () => {
+  modalOpen.value = false;
+};
 const selectedDayIndex = ref(-1);
 const newTask = ref({
   title: '',
