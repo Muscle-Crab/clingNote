@@ -19,7 +19,14 @@
         <i class="fas fa-plus"></i> <!-- Font Awesome plus icon -->
       </button>
     </div>
-
+    <div class="task-card bg-white rounded-lg shadow-md p-4 mb-2" :class="{ 'draggable': taskIsDragging }">
+      <!-- Existing code... -->
+      <div class="text-sm text-gray-500 mb-2">Completion: {{ calculateCompletionPercentage(task) }}%</div>
+      <div class="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700">
+        <div class="bg-blue-600 h-2.5 rounded-full" :style="{ width: calculateCompletionPercentage(task) + '%' }"></div>
+      </div>
+      <!-- Existing code... -->
+    </div>
 
     <!-- Main modal -->
     <div :class="{ 'hidden': !modalOpen }" @keydown.escape="closeModal" tabindex="-1" aria-hidden="true" class="overflow-y-auto overflow-x-hidden fixed top-0 right-0 left-0 z-50 justify-center items-center w-full md:inset-0 h-modal md:h-full">
@@ -326,7 +333,7 @@ const toggleTaskCompletion = async (index) => {
     if (nextTaskIndex !== -1) {
       const nextTask = selectedDayRoutine.value[nextTaskIndex];
       const completionMessage = `Task ${task.title} completed. It's time to begin the next task, ${nextTask.title}.`;
-      speak(completionMessage);
+      // speak(completionMessage);
       showNotification.value = true;
     }
   }
@@ -496,6 +503,15 @@ const filteredTasks = computed(() => {
     });
   }
 });
+const calculateCompletionPercentage = (task) => {
+  if (!selectedDayRoutine.value) {
+    return 0; // Return 0 if selectedDayRoutine is not yet defined
+  }
+
+  const completedTasks = selectedDayRoutine.value.filter(t => t.completed).length;
+  const totalTasks = selectedDayRoutine.value.length;
+  return totalTasks === 0 ? 0 : Math.round((completedTasks / totalTasks) * 100);
+};
 const priorityClass = (priority) => {
   switch (priority) {
     case 'high':
