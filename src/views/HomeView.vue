@@ -221,6 +221,9 @@ const stopTimer = (index) => {
     currentTime.value[index] = 0;
   }
 };
+const openModal = () => {
+  modalOpen.value = true;
+};
 const closeModal = () => {
   modalOpen.value = false;
 };
