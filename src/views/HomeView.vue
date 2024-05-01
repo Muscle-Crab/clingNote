@@ -333,7 +333,7 @@ const toggleTaskCompletion = async (index) => {
     if (nextTaskIndex !== -1) {
       const nextTask = selectedDayRoutine.value[nextTaskIndex];
       const completionMessage = `Task ${task.title} completed. It's time to begin the next task, ${nextTask.title}.`;
-      // speak(completionMessage);
+      speak(completionMessage);
       showNotification.value = true;
     }
   }
