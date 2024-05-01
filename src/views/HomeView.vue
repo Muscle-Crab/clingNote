@@ -103,6 +103,8 @@
                     <div class="text-sm text-gray-500">{{ task.time }}</div>
                   </div>
                 </div>
+                <h2>{{ formatTimes(index)}}</h2>
+
                 <div class="flex items-center">
                   <svg v-if="task.priority === 'high'" class="h-5 w-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 11l7-7 7 7M5 19l7-7 7 7"></path>
@@ -132,10 +134,15 @@
                     <i class="fas fa-edit"></i>
                   </button>
                   <!-- Add a play button -->
-                  <button  class="text-green-500 ml-2">
+                  <button @click="startTimer(index)" v-if="!isRunning[index]" class="text-green-500 ml-2">
                     <i class="fas fa-play"></i>
                   </button>
+                  <!-- Stop timer button -->
+                  <button @click="stopTimer(index)" v-if="isRunning[index]" class="text-red-500 ml-2">
+                    <i class="fas fa-stop"></i>
+                  </button>
                 </div>
+
                 <div v-if="showNotification" class="notification-popup bg-green-500 text-white px-4 py-2 rounded-md absolute top-4 right-4">
                   Create successfully
                 </div>
@@ -149,7 +156,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, reactive } from 'vue';
 import axios from 'axios'
 import navi from '@/components/nav.vue'
 import data from '@/data.json';
@@ -159,10 +166,54 @@ import {collection, doc, setDoc, serverTimestamp, getDoc, updateDoc} from 'fireb
 const modalOpen = ref(false);
 
 
-const openModal = () => {
-  modalOpen.value = true;
+// Define reactive state
+const isRunning = ref([]);
+const currentTime = ref([]);
+const duration = ref(60); // Duration in seconds
+const timers = [];
+
+// Define function to format time
+const formatTimes = (index) => {
+  // Ensure currentTime[index] is defined and not NaN
+  if (typeof currentTime.value[index] === 'undefined' || isNaN(currentTime.value[index])) {
+    return '00:00';
+  }
+
+  // Format remaining time as MM:SS
+  const minutes = Math.floor(currentTime.value[index] / 60);
+  const seconds = currentTime.value[index] % 60;
+  return `${minutes < 10 ? '0' : ''}${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
 };
 
+// Define function to start timer
+const startTimer = (index) => {
+  // If the timer is already running, pause it
+  if (isRunning.value[index]) {
+    pauseTimer(index);
+    return;
+  }
+
+  // Start the timer
+  isRunning.value[index] = true;
+  timers[index] = setInterval(() => {
+    if (currentTime.value[index] < duration.value) {
+      currentTime.value[index]++;
+
+    } else {
+      stopTimer(index);
+    }
+  }, 1000);
+};
+
+
+// Define function to stop timer
+const stopTimer = (index) => {
+  if (isRunning.value[index]) {
+    clearInterval(timers[index]);
+    isRunning.value[index] = false;
+    currentTime.value[index] = 0;
+  }
+};
 const closeModal = () => {
   modalOpen.value = false;
 };
