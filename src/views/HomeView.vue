@@ -176,7 +176,7 @@ const modalOpen = ref(false);
 // Define reactive state
 const isRunning = ref([]);
 const currentTime = ref([]);
-const duration = ref(60); // Duration in seconds
+const duration = ref(60 * 60); // Duration in seconds
 const timers = [];
 
 // Define function to format time
