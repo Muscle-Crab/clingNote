@@ -278,19 +278,22 @@ const createNewPost = async () => {
   };
   selectedRoom.value.posts.push(newPostData);
   closeModal();
-  await sendNotification('A new post has been created.');
+  const userName = getParticipantName(newPostData.userId);
+  await sendNotification('created a new post.', userName);
 };
-const sendNotification = async (message) => {
+const sendNotification = async (message, userName) => {
   const headers = {
     'Authorization': 'Bearer token="ZWY3MWJhMDUtNTU1Yi00NGViLThmNjItNDNhZTY0YzMwOGRh"',
     'Content-Type': 'application/json'
   };
 
+  const notificationMessage = `${userName} ${message}`;
+
   const data = {
     "app_id": "65d866ad-f59c-4557-9d75-4ccf7fe60a47",
     "included_segments": ["All"],
     "data": {"foo": "bar"},
-    "contents": {"en": message}
+    "contents": {"en": notificationMessage}
   };
 
   try {
@@ -300,6 +303,7 @@ const sendNotification = async (message) => {
     console.error('Error sending notification:', error);
   }
 };
+
 const updatePost = () => {
   if (editingPost.value) {
     editingPost.value.topic = newPost.value.topic;
@@ -319,7 +323,8 @@ const addComment = async (post) => {
   };
   post.comments.push(comment);
   commentInput.value[post.id] = '';
-  await sendNotification('A new comment has been added.');
+  const userName = getParticipantName(userId);
+  await sendNotification('commented on a post.', userName);
 };
 const editComment = (commentId) => {
   editingCommentId.value = commentId;
