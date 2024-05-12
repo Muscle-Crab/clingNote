@@ -50,7 +50,7 @@
             <label for="newTask" class="block mb-2">Task Name:</label>
             <input type="text" v-model="newTask.title" id="newTask" class="w-full border-gray-300 rounded-md px-4 py-2 mb-2" placeholder="Enter task name" required>
             <label for="newTaskTime" class="block mb-2">Task Time:</label>
-            <input type="time" v-model="newTask.time" id="newTaskTime" class="w-full border-gray-300 rounded-md px-4 py-2 mb-2" required>
+            <input type="time" v-model="newTask.time" id="newTaskTime" class="w-full border-gray-300 rounded-md px-4 py-2 mb-2" >
             <label for="newTaskPriority" class="block mb-2">Task Priority:</label>
             <select v-model="newTask.priority" id="newTaskPriority" class="w-full border-gray-300 rounded-md px-4 py-2 mb-2">
               <option value="low">Low</option>
@@ -378,12 +378,14 @@ const addNewTask = async () => {
     return;
   }
 
+  const labels = typeof newTask.value.labels === 'string' ? newTask?.value?.labels.split(',').map(label => label.trim()) : [];
+
   const task = {
     title: newTask.value.title.trim(),
     completed: false,
     time: formatTime(newTask.value.time),
     priority: newTask.value.priority,
-    labels: newTask.value.labels.split(',').map(label => label.trim()),
+    labels: labels,
     notes: newTask.value.notes
   };
 
@@ -427,6 +429,7 @@ const addNewTask = async () => {
     console.error('Error adding task to Firestore:', error);
   }
 };
+
 
 const formatTime = (time) => {
   const [hours, minutes] = time.split(':');
