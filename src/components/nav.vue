@@ -13,10 +13,13 @@
     <!-- Sidebar -->
     <aside :class="{ 'hidden': !sidebarOpen, 'block': sidebarOpen }" class="fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-gray-200 dark:bg-gray-800 dark:border-gray-700">
       <div class="flex items-center justify-between p-4">
-        <a href="https://flowbite.com/" class="flex items-center space-x-3 rtl:space-x-reverse">
-          <img src="@/assets/logo.png" class="h-8" alt="Flowbite Logo" />
-          <span class="self-center text-2xl font-semibold whitespace-nowrap dark:text-white">Cling Note</span>
-        </a>
+        <router-link to="/">
+          <a href="#" class="flex items-center space-x-3 rtl:space-x-reverse">
+            <img src="@/assets/logo.png" class="h-8" alt="Flowbite Logo" />
+            <span class="self-center text-2xl font-semibold whitespace-nowrap dark:text-white">Cling Note</span>
+          </a>
+        </router-link>
+
         <button @click="closeSidebar" type="button" class="text-gray-500 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 focus:outline-none">
           <span class="sr-only">Close sidebar</span>
           <svg class="w-6 h-6" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20">
@@ -28,17 +31,9 @@
       <nav class="px-4 py-8">
         <ul class="space-y-4">
           <li>
-            <a href="#" class="text-gray-800 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-500 font-medium">Home</a>
+            <a href="#" class="text-gray-800 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-500 font-medium"><router-link to="/tasks">My Routine</router-link></a>
           </li>
-          <li>
-            <a href="#" class="text-gray-800 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-500 font-medium"><router-link to="/about">about</router-link></a>
-          </li>
-          <li>
-            <a href="#" class="text-gray-800 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-500 font-medium">Services</a>
-          </li>
-          <li>
-            <a href="#" class="text-gray-800 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-500 font-medium"></a>
-          </li>
+
 
           <li>
             <!-- Add logout functionality -->
