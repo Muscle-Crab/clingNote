@@ -95,16 +95,43 @@
 
 
 
-            <!-- Reaction emojis -->
-            <div class="flex items-center mb-4 mt-5">
-              <span class="mr-2">React:</span>
-              <!-- Emojis -->
-              <button @click="addReaction(post, 'like')" class="text-lg mr-2">👍</button>
-              <button @click="addReaction(post, 'love')" class="text-lg mr-2">❤️</button>
-              <button @click="addReaction(post, 'laugh')" class="text-lg mr-2">😂</button>
-              <button @click="addReaction(post, 'surprised')" class="text-lg mr-2">😮</button>
-              <button @click="addReaction(post, 'sad')" class="text-lg mr-2">😢</button>
+            <!-- Inside the loop for each post -->
+            <div class="flex items-center mb-4 mt-5 space-x-4">
+
+
+              <!-- Like reaction -->
+              <button @click="toggleReaction(post, 'like')" class="reaction-button relative" :class="{ 'active': hasReaction(post, 'like') }">
+                <span class="reaction-icon">👍</span>
+                <span class="reaction-count absolute top-0 right-0 -mt-1 -mr-2 bg-blue-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center">{{ getReactionCount(post, 'like') }}</span>
+              </button>
+
+              <!-- Love reaction -->
+              <button @click="toggleReaction(post, 'love')" class="reaction-button relative" :class="{ 'active': hasReaction(post, 'love') }">
+                <span class="reaction-icon">❤️</span>
+                <span class="reaction-count absolute top-0 right-0 -mt-1 -mr-2 bg-red-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center">{{ getReactionCount(post, 'love') }}</span>
+              </button>
+
+              <!-- Laugh reaction -->
+              <button @click="toggleReaction(post, 'laugh')" class="reaction-button relative" :class="{ 'active': hasReaction(post, 'laugh') }">
+                <span class="reaction-icon">😂</span>
+                <span class="reaction-count absolute top-0 right-0 -mt-1 -mr-2 bg-yellow-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center">{{ getReactionCount(post, 'laugh') }}</span>
+              </button>
+
+              <!-- Surprised reaction -->
+              <button @click="toggleReaction(post, 'surprised')" class="reaction-button relative" :class="{ 'active': hasReaction(post, 'surprised') }">
+                <span class="reaction-icon">😮</span>
+                <span class="reaction-count absolute top-0 right-0 -mt-1 -mr-2 bg-green-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center">{{ getReactionCount(post, 'surprised') }}</span>
+              </button>
+
+              <!-- Sad reaction -->
+              <button @click="toggleReaction(post, 'sad')" class="reaction-button relative" :class="{ 'active': hasReaction(post, 'sad') }">
+                <span class="reaction-icon">😢</span>
+                <span class="reaction-count absolute top-0 right-0 -mt-1 -mr-2 bg-purple-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center">{{ getReactionCount(post, 'sad') }}</span>
+              </button>
             </div>
+
+
+
 
             <!-- Edit button -->
             <div class="mb-4">
@@ -294,9 +321,44 @@ const toggleCommentSection = (item) => {
   item.showComments = !item.showComments;
 };
 
-const addReaction = (post, reaction) => {
-  console.log(`Added ${reaction} reaction to post: ${post.topic}`);
+const toggleReaction = async (post, reaction) => {
+  try {
+    const postRef = doc(db, 'posts', post.id);
+    const postSnapshot = await getDoc(postRef);
+    const postReactions = postSnapshot.data().reactions || {};
+
+    // Toggle the reaction for the current user
+    if (postReactions[currentUser.value.uid] === reaction) {
+      delete postReactions[currentUser.value.uid]; // Remove reaction
+    } else {
+      postReactions[currentUser.value.uid] = reaction; // Add reaction
+    }
+
+    // Update the reactions in the database
+    await updateDoc(postRef, { reactions: postReactions });
+
+    // Optionally, update the local post object with the updated reactions
+    post.reactions = postReactions;
+  } catch (error) {
+    console.error('Error toggling reaction: ', error);
+  }
 };
+
+const hasReaction = (post, reaction) => {
+  // const postReactions = post.reactions || {};
+  // if(currentUser.value.uid){
+  //   return postReactions[currentUser.value.uid] === reaction;
+  // }
+
+};
+
+const getReactionCount = (post, reaction) => {
+  const postReactions = post.reactions || {};
+  const reactionCount = Object.values(postReactions).filter(r => r === reaction).length;
+  return reactionCount;
+};
+
+
 
 const showCreatePostModal = (post = null) => {
   showModal.value = true;
@@ -449,5 +511,6 @@ const getPostCommentsCount = (post) => {
 
 // Flatten comments to a single array for easier access
 const allComments = selectedRoom.value.posts.reduce((acc, post) => acc.concat(post.comments), []);
+
 
 </script>
