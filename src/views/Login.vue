@@ -21,7 +21,11 @@
             <span>Login</span>
           </button>
         </div>
+        <div v-if="errorMessage" class="text-red-500 text-sm">{{ errorMessage }}</div>
       </form>
+      <div class="mt-4 text-sm text-center">
+        Don't have an account? <a href="/register" class="text-indigo-600 hover:underline">Register here</a>
+      </div>
     </div>
   </div>
 </template>
@@ -37,6 +41,7 @@ const router = useRouter();
 const email = ref('');
 const password = ref('');
 const isSubmitting = ref(false);
+const errorMessage = ref('');
 
 const loginUser = async () => {
   try {
@@ -51,6 +56,7 @@ const loginUser = async () => {
     router.push('/');
   } catch (error) {
     console.error('Login failed:', error.message);
+    errorMessage.value = "Invalid Credentials";
   } finally {
     isSubmitting.value = false;
   }

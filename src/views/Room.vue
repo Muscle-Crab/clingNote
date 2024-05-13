@@ -21,11 +21,11 @@
       </div>
 
       <!-- Main Content: Posts -->
-      <div class="col-span-2  p-6">
+      <div class="col-span-2 grid grid-cols-1 gap-8">
         <!-- Title for posts section -->
-        <h2 class="text-2xl font-semibold text-gray-800 mb-8">Podcast Topics</h2>
+
         <!-- Loop through each post -->
-        <div v-for="post in selectedRoom.posts" :key="post.id" class="mb-8">
+        <div v-for="post in selectedRoom.posts" :key="post.id" class="md:min-w-[320px] mb-4">
           <!-- Post -->
           <div class="min-w-sm p-6 bg-white border border-gray-200 rounded-lg shadow dark:bg-gray-800 dark:border-gray-700">
             <!-- Post author and timestamp -->
