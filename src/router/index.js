@@ -6,7 +6,7 @@ import { auth } from '../firebaseConfig'; // Import your Firebase authentication
 import Room from '../views/Room.vue';
 const routes = [
   {
-    path: '/',
+    path: '/tasks',
     name: 'home',
     component: HomeView,
     meta: { requiresAuth: true }
@@ -23,7 +23,7 @@ const routes = [
     props: true,
     meta: { requiresAuth: true }
   },{
-    path: '/dis',
+    path: '/',
     name: 'Discussion',
     component: () => import('@/views/Discussion.vue'),
     props: true,
