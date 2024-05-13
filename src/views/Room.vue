@@ -84,7 +84,8 @@
                     </div>
                     <div>
                       <!-- Edit and Save Buttons -->
-                      <button v-if="editingCommentId !== comment.id && currentUser && currentUser.uid === comment.userId" @click="editComment(comment)" class="text-blue-500 focus:outline-none">Edit</button>
+                      <button v-if="editingCommentId !== comment.id && currentUser && currentUser.uid === comment.userId" @click="editComment(comment)" class="text-blue-500 focus:outline-none">Edit</button> |
+                      <button v-if="editingCommentId !== comment.id && currentUser && currentUser.uid === comment.userId" @click="deleteComment(post, comment.id)" class="text-red-500 focus:outline-none">Delete</button>
                       <button v-if="editingCommentId === comment.id" @click="saveComment(post, comment)" class="text-green-500 focus:outline-none">Save</button>
                     </div>
                   </footer>
@@ -164,6 +165,9 @@ import { db, auth} from '@/firebaseConfig';
 import { formatDistanceToNow } from 'date-fns';
 import { collection, getDoc, onSnapshot, getDocs, addDoc,serverTimestamp, deleteDoc, doc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { useRoute } from 'vue-router';
+const generateUniqueId = () => {
+  return Math.random().toString(36).substr(2, 9);
+};
 
 const route = useRoute();
 const room_id = ref(route.params.id);
@@ -231,16 +235,20 @@ onMounted(() => {
 });
 
 
-const deleteComment = async (postId, commentId) => {
+const deleteComment = async (post, commentId) => {
   try {
-    // await updateDoc(doc(db, 'posts', postId), {
-    //   comments: arrayRemove(commentId)
-    // });
-    console.log('Comment deleted successfully!');
-  } catch (e) {
-    console.error('Error deleting comment: ', e);
+    const postRef = doc(db, 'posts', post.id);
+    const postSnapshot = await getDoc(postRef);
+    const postComments = postSnapshot.data().comments;
+
+    const filteredComments = postComments.filter(c => c.id !== commentId);
+
+    await updateDoc(postRef, { comments: filteredComments });
+  } catch (error) {
+    console.error('Error deleting comment: ', error);
   }
 };
+
 
 const leaveRoom = () => {
   console.log('Left the room');
@@ -403,7 +411,8 @@ const addComment = async (post) => {
   const comment = {
     userId: userId,
     message: commentInput.value[post.id],
-    timestamp: new Date().toLocaleTimeString()
+    timestamp: new Date().toLocaleTimeString(),
+    id: generateUniqueId() // Function to generate a unique ID
   };
 
   try {

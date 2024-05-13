@@ -1,7 +1,7 @@
 <template>
   <div ref="scrollContainer" class="p-4 h-[100vh]  overflow-auto" style="background: teal">
 
-     <navi/>
+
     <!-- Calendar display -->
 
     <div class="calendar bg-white rounded-md shadow-md mb-6 p-3">
