@@ -66,6 +66,7 @@
             </div>
 
             <!-- Comments Section -->
+            <!-- Comments Section -->
             <section v-if="post.showComments" class="bg-white dark:bg-gray-900 antialiased">
               <div class="">
                 <!-- Loop through comments -->
@@ -75,15 +76,18 @@
                       <img class="w-8 h-8  md:w-12 md:h-12 rounded-full mr-3" :src="getParticipantAvatar(comment.userId)" :alt="getParticipantName(comment.userId)">
                       <div>
                         <p class="text-sm text-gray-900 dark:text-white font-semibold">{{ getParticipantName(comment.userId) }}</p>
-                        <p class="text-gray-500 dark:text-gray-400">{{ comment.message }}</p>
-                        <!--                        <p class="text-xs text-gray-600 dark:text-gray-400"><time :datetime="comment.timestamp" :title="new Date(comment.timestamp).toDateString()">{{ new Date(comment.timestamp).toLocaleDateString('en', { month: 'short', day: 'numeric', year: 'numeric' }) }}</time></p>-->
+                        <!-- Editable comment input -->
+                        <textarea v-if="editingCommentId === comment.id" v-model="editedComment" class="mt-1 block w-full text-sm text-gray-900 border-0 focus:ring-0 focus:outline-none dark:text-white dark:placeholder-gray-400 dark:bg-gray-800" required>{{ comment.message }}</textarea>
+                        <!-- Display the comment text if not in edit mode -->
+                        <p v-else class="text-gray-500 dark:text-gray-400">{{ comment.message }}</p>
                       </div>
                     </div>
-
-
+                    <div>
+                      <!-- Edit and Save Buttons -->
+                      <button v-if="editingCommentId !== comment.id && currentUser && currentUser.uid === comment.userId" @click="editComment(comment)" class="text-blue-500 focus:outline-none">Edit</button>
+                      <button v-if="editingCommentId === comment.id" @click="saveComment(post, comment)" class="text-green-500 focus:outline-none">Save</button>
+                    </div>
                   </footer>
-
-
                 </article>
               </div>
             </section>
@@ -91,7 +95,7 @@
 
 
             <!-- Reaction emojis -->
-            <div class="flex items-center mb-4">
+            <div class="flex items-center mb-4 mt-5">
               <span class="mr-2">React:</span>
               <!-- Emojis -->
               <button @click="addReaction(post, 'like')" class="text-lg mr-2">👍</button>
@@ -158,7 +162,7 @@ import { ref,onMounted } from 'vue';
 import axios from 'axios';
 import { db, auth} from '@/firebaseConfig';
 import { formatDistanceToNow } from 'date-fns';
-import { collection, onSnapshot, getDocs, addDoc,serverTimestamp, deleteDoc, doc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { collection, getDoc, onSnapshot, getDocs, addDoc,serverTimestamp, deleteDoc, doc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { useRoute } from 'vue-router';
 
 const route = useRoute();
@@ -254,7 +258,30 @@ const toggleLike = (item) => {
     item.likes--;
   }
 };
+// Add/Edit Comment Functions
+const editComment = (comment) => {
+  editingCommentId.value = comment.id;
+  editedComment.value = comment.message;
+};
 
+
+const saveComment = async (post, comment) => {
+  try {
+    const postRef = doc(db, 'posts', post.id);
+    const postSnapshot = await getDoc(postRef);
+    const postComments = postSnapshot.data().comments;
+
+    const editedIndex = postComments.findIndex(c => c.id === comment.id);
+    if (editedIndex !== -1) {
+      postComments[editedIndex].message = editedComment.value;
+      await updateDoc(postRef, { comments: postComments });
+      editingCommentId.value = null;
+      editedComment.value = '';
+    }
+  } catch (error) {
+    console.error('Error updating comment: ', error);
+  }
+};
 const toggleCommentSection = (item) => {
   item.showComments = !item.showComments;
 };
@@ -391,27 +418,7 @@ const addComment = async (post) => {
     console.error('Error adding comment: ', e);
   }
 };
-const editComment = (commentId) => {
-  editingCommentId.value = commentId;
-  const comment = allComments.find(comment => comment.id === commentId);
-  if (comment) {
-    editedComment.value = comment.message;
-  }
-};
 
-const saveEditedComment = (postId, commentId) => {
-  const comment = allComments.find(comment => comment.id === commentId);
-  if (comment) {
-    comment.message = editedComment.value;
-    editedComment.value = '';
-    editingCommentId.value = null;
-  }
-};
-
-const cancelEditComment = () => {
-  editedComment.value = '';
-  editingCommentId.value = null;
-};
 
 const getParticipantAvatar = (userId) => {
   const participant = selectedRoom.value.participants.find(participant => participant.id === userId);
