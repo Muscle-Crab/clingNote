@@ -2,7 +2,7 @@
   <!-- Container for the entire room -->
   <div class="container mx-auto px-4 py-8">
     <!-- Room title -->
-    <h1 class="text-3xl font-bold text-gray-800 mb-12">Room: {{ selectedRoom.title }}</h1>
+    <h1 class="text-3xl font-bold text-gray-800 mb-8 md:mb-12">Room: {{ selectedRoom.title }}</h1>
 
     <!-- Grid layout for different sections -->
     <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
@@ -21,70 +21,77 @@
       </div>
 
       <!-- Main Content: Posts -->
-      <div class="col-span-2 bg-white rounded-lg shadow-md p-6">
+      <div class="col-span-2  p-6">
         <!-- Title for posts section -->
-        <h2 class="text-xl font-semibold text-gray-800 mb-4">Podcast Topics</h2>
+        <h2 class="text-2xl font-semibold text-gray-800 mb-8">Podcast Topics</h2>
         <!-- Loop through each post -->
         <div v-for="post in selectedRoom.posts" :key="post.id" class="mb-8">
           <!-- Post -->
-          <div class="bg-gray-100 rounded-lg p-4 mb-4">
+          <div class="min-w-sm p-6 bg-white border border-gray-200 rounded-lg shadow dark:bg-gray-800 dark:border-gray-700">
             <!-- Post author and timestamp -->
-            <div class="flex items-center justify-between">
+            <div class="flex items-center justify-between mb-4">
               <div class="flex items-center">
                 <img :src="getParticipantAvatar(post.userId)" alt="User" class="w-8 h-8 rounded-full mr-2">
                 <span class="font-semibold text-gray-800">{{ getParticipantName(post.userId) }}</span>
               </div>
-              <span class="text-gray-600">{{ post.timestamp }}</span>
+              <span class="text-gray-600">{{ formatTimestampToAgo(post.timestamp) }}</span>
             </div>
             <!-- Post topic and message -->
-            <h3 class="text-lg font-semibold text-gray-800 mt-2">{{ post.topic }}</h3>
+            <a href="#">
+              <h5 class="mb-2 text-2xl font-bold tracking-tight text-gray-900 dark:text-white">{{post.topic}}</h5>
+            </a>
+            <p class="text-gray-700 mb-4">{{ post.message }}</p>
+
             <!-- Like and Comment Section -->
-            <div class="flex justify-between mt-4 items-center">
+            <!-- Like and Comment Section -->
+            <div class="flex justify-between items-center ">
               <!-- Like button -->
               <div>
-                <button @click="toggleLike(post)" class="text-blue-500 focus:outline-none">{{ post.liked ? 'Unlike' : 'Like' }}</button>
-                <span class="text-gray-600 ml-2">{{ post.likes }} Likes</span>
-              </div>
-              <!-- Delete button -->
-              <div class="flex justify-end mt-2">
-                <button @click="deletePost(post.id)" class="text-red-500 hover:text-red-700 focus:outline-none">Delete</button>
+                <button @click="toggleLike(post)" class="flex items-center text-blue-500 focus:outline-none">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path>
+                  </svg>
+                  <span>{{ post.likes }}</span>
+                </button>
               </div>
               <!-- Comment button -->
               <div>
-                <button @click="toggleCommentSection(post)" class="text-blue-500 focus:outline-none">{{ post.showComments ? 'Hide Comments' : 'Show Comments' }}</button>
-                <span class="text-gray-600 ml-2">{{ post.comments.length }} Comments</span>
+                <button @click="toggleCommentSection(post)" class="flex items-center text-blue-500 focus:outline-none">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                  </svg>
+                  <span>{{ post.comments.length }}</span>
+                </button>
               </div>
             </div>
+
             <!-- Comments Section -->
-            <div v-if="post.showComments" class="mt-4">
-              <div v-for="comment in post.comments" :key="comment.id" class="bg-gray-200 rounded-lg p-2 mb-2">
-                <!-- Comment author and timestamp -->
-                <div class="flex items-center justify-between">
-                  <div class="flex items-center">
-                    <img :src="getParticipantAvatar(comment.userId)" alt="User" class="w-6 h-6 rounded-full mr-2">
-                    <span class="font-semibold text-gray-800">{{ getParticipantName(comment.userId) }}</span>
-                  </div>
-                  <span class="text-gray-600">{{ comment.timestamp }}</span>
-                </div>
-                <!-- Comment message -->
-                <p class="text-gray-700" v-if="comment.id !== editingCommentId">{{ comment.message }}</p>
-                <div v-else>
-                  <!-- Edit mode for comment -->
-                  <input type="text" v-model="editedComment" class="w-full rounded border-gray-300 focus:border-indigo-500 focus:ring-indigo-500">
-                  <div class="flex justify-end mt-1">
-                    <button @click="cancelEditComment" class="text-gray-500 focus:outline-none mr-2">Cancel</button>
-                    <button @click="saveEditedComment(post.id, comment.id)" class="bg-green-500 hover:bg-green-600 text-white font-bold py-1 px-3 rounded focus:outline-none">Save</button>
-                  </div>
-                </div>
-                <!-- Edit and Delete buttons for comments -->
-                <div v-if="comment.userId === 1 && comment.id !== editingCommentId" class="mt-1 flex justify-end">
-                  <button @click="editComment(comment.id)" class="text-blue-500 focus:outline-none mr-2">Edit</button>
-                  <button @click="deleteComment(post.id, comment.id)" class="text-red-500 hover:text-red-700 focus:outline-none">Delete</button>
-                </div>
+            <section v-if="post.showComments" class="bg-white dark:bg-gray-900 antialiased">
+              <div class="">
+                <!-- Loop through comments -->
+                <article v-for="comment in post.comments" :key="comment.id" class="pt-4 md:p-4  text-base bg-white ">
+                  <footer class="flex flex-col md:flex-row justify-between   ">
+                    <div class="flex   ">
+                      <img class="w-8 h-8  md:w-12 md:h-12 rounded-full mr-3" :src="getParticipantAvatar(comment.userId)" :alt="getParticipantName(comment.userId)">
+                      <div>
+                        <p class="text-sm text-gray-900 dark:text-white font-semibold">{{ getParticipantName(comment.userId) }}</p>
+                        <p class="text-gray-500 dark:text-gray-400">{{ comment.message }}</p>
+                        <!--                        <p class="text-xs text-gray-600 dark:text-gray-400"><time :datetime="comment.timestamp" :title="new Date(comment.timestamp).toDateString()">{{ new Date(comment.timestamp).toLocaleDateString('en', { month: 'short', day: 'numeric', year: 'numeric' }) }}</time></p>-->
+                      </div>
+                    </div>
+
+
+                  </footer>
+
+
+                </article>
               </div>
-            </div>
+            </section>
+
+
+
             <!-- Reaction emojis -->
-            <div class="flex items-center mt-4">
+            <div class="flex items-center mb-4">
               <span class="mr-2">React:</span>
               <!-- Emojis -->
               <button @click="addReaction(post, 'like')" class="text-lg mr-2">👍</button>
@@ -93,14 +100,16 @@
               <button @click="addReaction(post, 'surprised')" class="text-lg mr-2">😮</button>
               <button @click="addReaction(post, 'sad')" class="text-lg mr-2">😢</button>
             </div>
+
             <!-- Edit button -->
-            <div class="mt-4">
+            <div class="mb-4">
               <button @click="showCreatePostModal(post)" class="text-blue-500 focus:outline-none">Edit Post</button>
             </div>
+
             <!-- Add Comment Section -->
-            <div class="mt-4">
-              <input v-model="commentInput[post.id]" type="text" placeholder="Add a comment..." class="w-full rounded border-gray-300 focus:border-indigo-500 focus:ring-indigo-500">
-              <button @click="addComment(post)" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline mt-2">Add Comment</button>
+            <div class="flex items-center border-t border-gray-200 py-2">
+              <input v-model="commentInput[post.id]" type="text" placeholder="Add a comment..." class="flex-1 rounded-full py-2 px-4 mr-2 border border-gray-300 focus:border-indigo-500 focus:ring-indigo-500">
+              <button @click="addComment(post)" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-full focus:outline-none focus:shadow-outline">Post</button>
             </div>
           </div>
         </div>
@@ -113,10 +122,9 @@
         <!-- Leave Room button -->
         <button @click="leaveRoom" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline mb-4">Leave Room</button>
         <!-- Share Room button -->
-        <button @click="shareRoom" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">Share Room</button>
-
+        <button @click="shareRoom" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline mb-4">Share Room</button>
         <!-- Button to trigger modal for creating or editing a post -->
-        <button @click="showCreatePostModal()" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline mt-4">Create New Post</button>
+        <button @click="showCreatePostModal()" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">Create New Post</button>
       </div>
     </div>
   </div>
@@ -124,19 +132,15 @@
   <!-- Modal for creating or editing a post -->
   <div v-if="showModal" class="fixed inset-0 overflow-y-auto flex justify-center items-center">
     <div class="fixed inset-0 bg-black opacity-50"></div>
-    <div class="relative bg-white rounded-lg shadow-lg p-6 w-96">
-      <h2 class="text-xl font-semibold mb-4">{{ editingPost ? 'Edit Post' : 'Create New Post' }}</h2>
+    <div class="relative bg-white rounded-lg shadow-lg p-6 max-w-lg w-full">
+      <h2 class="text-2xl font-semibold mb-4">{{ editingPost ? 'Edit Post' : 'Create New Post' }}</h2>
       <form @submit.prevent="editingPost ? updatePost() : createNewPost()">
         <!-- Post topic -->
-        <div class="mb-4">
-          <label for="postTopic" class="block text-sm font-medium text-gray-700">Topic</label>
-          <input type="text" id="postTopic" v-model="newPost.topic" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
-        </div>
-        <!-- Post message -->
-        <div class="mb-4">
+        <div class="py-2 px-4 mb-4 bg-white rounded-lg rounded-t-lg border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
           <label for="postMessage" class="block text-sm font-medium text-gray-700">Message</label>
-          <textarea id="postMessage" v-model="newPost.message" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"></textarea>
+          <textarea id="postMessage" v-model="newPost.topic" rows="6" class="mt-1 block w-full text-sm text-gray-900 border-0 focus:ring-0 focus:outline-none dark:text-white dark:placeholder-gray-400 dark:bg-gray-800" placeholder="choose a topic to discuss" required></textarea>
         </div>
+
         <div class="flex justify-end">
           <button type="submit" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">{{ editingPost ? 'Update' : 'Create' }}</button>
           <button @click="closeModal" type="button" class="ml-2 bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">Cancel</button>
@@ -146,51 +150,45 @@
   </div>
 </template>
 
+
+
+
 <script setup>
-import { ref } from 'vue';
+import { ref,onMounted } from 'vue';
 import axios from 'axios';
+import { db, auth} from '@/firebaseConfig';
+import { formatDistanceToNow } from 'date-fns';
+import { collection, onSnapshot, getDocs, addDoc,serverTimestamp, deleteDoc, doc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { useRoute } from 'vue-router';
+
+const route = useRoute();
+const room_id = ref(route.params.id);
 const selectedRoom = ref({
   title: 'Travel Enthusiasts',
-  participants: [
-    { id: 1, name: 'John Doe', avatar: 'https://via.placeholder.com/50' },
-    { id: 2, name: 'Jane Smith', avatar: 'https://via.placeholder.com/50' },
-    { id: 3, name: 'Alex Johnson', avatar: 'https://via.placeholder.com/50' }
-  ],
-  posts: [
-    {
-      id: 1,
-      userId: 1,
-      topic: 'Should a woman pay 50/50 if she works the same or more than a man?',
-      message: 'What are your thoughts on this topic?',
-      timestamp: '10:00 AM',
-      liked: false,
-      likes: 0,
-      showComments: false,
-      comments: [
-        { id: 1, userId: 2, message: 'I think it depends on the situation.', timestamp: '10:05 AM' },
-        { id: 2, userId: 3, message: 'Equality should prevail regardless of gender.', timestamp: '10:10 AM' }
-      ]
-    },
-    {
-      id: 2,
-      userId: 3,
-      topic: 'If our relationship was a movie, what would it be?',
-      message: 'Let\'s imagine our relationship as a movie. What genre would it be, and why?',
-      timestamp: '10:30 AM',
-      liked: false,
-      likes: 0,
-      showComments: false,
-      comments: [
-        { id: 3, userId: 2, message: 'Romantic comedy because of all the funny moments we share.', timestamp: '10:35 AM' }
-      ]
-    }
-  ]
+  participants: [],
+  posts: []
 });
-
+onMounted(async () => {
+  try {
+    const querySnapshot = await getDocs(collection(db, 'users'));
+    querySnapshot.forEach(doc => {
+      // Push each user document to the participants array
+      selectedRoom.value.participants.push(doc.data());
+    });
+  } catch (error) {
+    console.error('Error fetching participants:', error);
+  }
+});
 const showModal = ref(false);
 const editedComment = ref('');
 const editingCommentId = ref(null);
-
+// Function to format Firestore Timestamp to JavaScript Date
+const formatTimestampToAgo = (timestamp) => {
+  if (!timestamp) return null;
+  const date = timestamp.toDate();
+  const timeAgo = formatDistanceToNow(date, { addSuffix: true, includeSeconds: true });
+  return timeAgo.replace('about ', '');
+};
 const newPost = ref({
   topic: '',
   message: ''
@@ -200,20 +198,43 @@ const editingPost = ref(null);
 
 const commentInput = ref({});
 
-const deletePost = (postId) => {
-  const index = selectedRoom.value.posts.findIndex(post => post.id === postId);
-  if (index !== -1) {
-    selectedRoom.value.posts.splice(index, 1);
+const deletePost = async (postId) => {
+  try {
+    await deleteDoc(doc(db, 'posts', postId));
+    const index = selectedRoom.value.posts.findIndex(post => post.id === postId);
+    if (index !== -1) {
+      selectedRoom.value.posts.splice(index, 1);
+    }
+  } catch (error) {
+    console.error('Error deleting post from Firestore: ', error);
   }
 };
+onMounted(() => {
+  // Listen for changes to the 'posts' collection in Firestore
+  const unsubscribe = onSnapshot(collection(db, 'posts'), snapshot => {
+    const posts = [];
+    snapshot.forEach(doc => {
+      const postData = { ...doc.data(), id: doc.id };
+      if (postData.room_id === room_id.value) {
+        posts.push(postData);
+      }
+    });
+    selectedRoom.value.posts = posts;
+  });
 
-const deleteComment = (postId, commentId) => {
-  const post = selectedRoom.value.posts.find(post => post.id === postId);
-  if (post) {
-    const commentIndex = post.comments.findIndex(comment => comment.id === commentId);
-    if (commentIndex !== -1) {
-      post.comments.splice(commentIndex, 1);
-    }
+  // Unsubscribe from the snapshot listener when the component is unmounted
+  return unsubscribe;
+});
+
+
+const deleteComment = async (postId, commentId) => {
+  try {
+    // await updateDoc(doc(db, 'posts', postId), {
+    //   comments: arrayRemove(commentId)
+    // });
+    console.log('Comment deleted successfully!');
+  } catch (e) {
+    console.error('Error deleting comment: ', e);
   }
 };
 
@@ -263,23 +284,58 @@ const closeModal = () => {
   };
   editingPost.value = null;
 };
+const currentUser = ref(null);
 
+// Listen for changes to the user authentication state
+onMounted(() => {
+  auth.onAuthStateChanged((user) => {
+    if (user) {
+      // User is signed in.
+      console.log(user)
+      currentUser.value = user;
+    } else {
+      // No user is signed in.
+      currentUser.value = null;
+    }
+  });
+});
+
+
+// Function to create a new post
 const createNewPost = async () => {
+  const userId = currentUser.value ? currentUser.value.uid : null;
+  console.log(room_id.value)
+  if (!userId) {
+    // User is not signed in
+    console.error('User is not signed in');
+    return;
+  }
   const newPostData = {
-    id: selectedRoom.value.posts.length + 1,
-    userId: 1,
+
+    userId: userId, // Assuming the user ID is hardcoded for simplicity
+    room_id:room_id.value,
     topic: newPost.value.topic,
     message: newPost.value.message,
-    timestamp: new Date().toLocaleTimeString(),
+    timestamp: serverTimestamp(),
     liked: false,
     likes: 0,
     showComments: false,
     comments: []
   };
-  selectedRoom.value.posts.push(newPostData);
-  closeModal();
-  const userName = getParticipantName(newPostData.userId);
-  await sendNotification('created a new post.', userName);
+
+  try {
+    // Add the new post data to the "posts" collection in Firestore
+    const docRef = await addDoc(collection(db, 'posts'), newPostData);
+
+    // Close the modal and clear the new post form fields
+    closeModal();
+
+    // Notify the user about the new post
+    const userName = getParticipantName(newPostData.userId);
+    // await sendNotification('created a new post.', userName);
+  } catch (error) {
+    console.error('Error adding new post to Firestore: ', error);
+  }
 };
 const sendNotification = async (message, userName) => {
   const headers = {
@@ -304,27 +360,36 @@ const sendNotification = async (message, userName) => {
   }
 };
 
-const updatePost = () => {
+const updatePost = async () => {
   if (editingPost.value) {
-    editingPost.value.topic = newPost.value.topic;
-    editingPost.value.message = newPost.value.message;
+    const postRef = doc(db, 'posts', editingPost.value.id);
+    await updateDoc(postRef, {
+      topic: newPost.value.topic,
+      message: newPost.value.message
+    });
   }
   closeModal();
 };
 
 const addComment = async (post) => {
-  const userId = 1; // Assuming the user is always the same for simplicity
-  const commentId = post.comments.length + 1;
+  const userId = currentUser.value ? currentUser.value.uid : null;
   const comment = {
-    id: commentId,
     userId: userId,
     message: commentInput.value[post.id],
     timestamp: new Date().toLocaleTimeString()
   };
-  post.comments.push(comment);
-  commentInput.value[post.id] = '';
-  const userName = getParticipantName(userId);
-  await sendNotification('commented on a post.', userName);
+
+  try {
+    await updateDoc(doc(db, 'posts', post.id), {
+      comments: arrayUnion(comment)
+    });
+    console.log('Comment added successfully!');
+    commentInput.value[post.id] = '';
+    const userName = getParticipantName(userId);
+    // await sendNotification('commented on a post.', userName);
+  } catch (e) {
+    console.error('Error adding comment: ', e);
+  }
 };
 const editComment = (commentId) => {
   editingCommentId.value = commentId;

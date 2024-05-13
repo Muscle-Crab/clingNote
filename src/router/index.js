@@ -3,7 +3,7 @@ import HomeView from '../views/HomeView.vue';
 import RegisterPage from '../views/UserRegistrationForm.vue';
 import Login from '../views/Login.vue';
 import { auth } from '../firebaseConfig'; // Import your Firebase authentication instance
-
+import Room from '../views/Room.vue';
 const routes = [
   {
     path: '/',
@@ -22,6 +22,18 @@ const routes = [
     component: () => import('@/views/Profile.vue'),
     props: true,
     meta: { requiresAuth: true }
+  },{
+    path: '/dis',
+    name: 'Discussion',
+    component: () => import('@/views/Discussion.vue'),
+    props: true,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/room/:id',
+    name: 'RoomInterior',
+    component: Room,
+    props: true // Pass route params as props to the component
   },
   {
     path: '/login',
