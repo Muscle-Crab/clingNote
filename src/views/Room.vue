@@ -2,7 +2,7 @@
   <!-- Container for the entire room -->
   <div class="container mx-auto px-4 py-8">
     <!-- Room title -->
-    <h1 class="text-3xl font-bold text-gray-800 mb-8 md:mb-12">Room: {{ selectedRoom.title }}</h1>
+<!--    <h1 class="text-3xl font-bold text-gray-800 mb-8 md:mb-12">Room: {{ selectedRoom.title }}</h1>-->
 
     <!-- Grid layout for different sections -->
     <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
@@ -429,7 +429,7 @@ const createNewPost = async () => {
 
     // Notify the user about the new post
     const userName = getParticipantName(newPostData.userId);
-    // await sendNotification('created a new post.', userName);
+    await sendNotification('created a new post.', userName);
   } catch (error) {
     console.error('Error adding new post to Firestore: ', error);
   }
@@ -484,7 +484,7 @@ const addComment = async (post) => {
     console.log('Comment added successfully!');
     commentInput.value[post.id] = '';
     const userName = getParticipantName(userId);
-    // await sendNotification('commented on a post.', userName);
+    await sendNotification('commented on a post.', userName);
   } catch (e) {
     console.error('Error adding comment: ', e);
   }

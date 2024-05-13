@@ -24,7 +24,7 @@
         <div v-if="errorMessage" class="text-red-500 text-sm">{{ errorMessage }}</div>
       </form>
       <div class="mt-4 text-sm text-center">
-        Don't have an account? <a href="/register" class="text-indigo-600 hover:underline">Register here</a>
+        Don't have an account? <a href="#" class="text-indigo-600 hover:underline"><router-link to="/register">Register</router-link></a>
       </div>
     </div>
   </div>
