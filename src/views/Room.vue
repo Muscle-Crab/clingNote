@@ -34,11 +34,11 @@
                 <img :src="getParticipantAvatar(post.userId)" alt="User" class="w-8 h-8 rounded-full mr-2">
                 <span class="font-semibold text-gray-800">{{ getParticipantName(post.userId) }}</span>
               </div>
-              <span class="text-gray-600">{{ formatTimestampToAgo(post.timestamp) }}</span>
+<!--              <span class="text-gray-600">{{ formatTimestampToAgo(post.timestamp) }}</span>-->
             </div>
             <!-- Post topic and message -->
             <a href="#">
-              <h5 class="mb-2 text-2xl font-bold tracking-tight text-gray-900 dark:text-white">{{post.topic}}</h5>
+              <h5 class="mb-2  font-bold tracking-tight text-gray-900 dark:text-white">{{post.topic}}</h5>
             </a>
             <p class="text-gray-700 mb-4">{{ post.message }}</p>
 
@@ -109,7 +109,7 @@
             <!-- Add Comment Section -->
             <div class="flex items-center border-t border-gray-200 py-2">
               <input v-model="commentInput[post.id]" type="text" placeholder="Add a comment..." class="flex-1 rounded-full py-2 px-4 mr-2 border border-gray-300 focus:border-indigo-500 focus:ring-indigo-500">
-              <button @click="addComment(post)" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-full focus:outline-none focus:shadow-outline">Post</button>
+              <button @click="addComment(post)" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-full focus:outline-none focus:shadow-outline"><i class="fa fa-comment"></i></button>
             </div>
           </div>
         </div>

@@ -10,9 +10,14 @@
             <button class="block w-full mt-4 bg-gradient-to-r from-green-400 to-blue-500 hover:bg-gradient-to-l text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline" @click="joinRoom(room.roomId)">
               Join Room
             </button>
-            <button class="block w-full mt-4 bg-yellow-400 hover:bg-yellow-500 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline" @click="editRoom(room)">
-              Edit Room
-            </button>
+            <template v-if="isCreator(room.user_id)">
+              <button class="block w-full mt-4 bg-yellow-400 hover:bg-yellow-500 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline" @click="editRoom(room)">
+                Edit Room
+              </button>
+              <button class="block w-full mt-4 bg-red-400 hover:bg-red-500 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline" @click="deleteRoom(room.roomId)">
+                Delete Room
+              </button>
+            </template>
           </div>
         </div>
       </div>
@@ -68,7 +73,7 @@
 <script setup>
 import { db, auth } from '@/firebaseConfig.js';
 import { ref, reactive, onMounted } from 'vue';
-import { addDoc, getDocs, collection, serverTimestamp, updateDoc, doc } from 'firebase/firestore';
+import { addDoc, getDocs, collection, serverTimestamp, updateDoc, doc, deleteDoc, getDoc } from 'firebase/firestore';
 import { useRouter } from 'vue-router';
 
 const router = useRouter();
@@ -158,7 +163,16 @@ const updateRoom = async () => {
       return;
     }
 
-    await updateDoc(doc(db, 'rooms', id), {
+    const currentUser = auth.currentUser;
+    const roomRef = doc(db, 'rooms', id);
+    const roomSnapshot = await getDoc(roomRef);
+    const roomData = roomSnapshot.data();
+    if (!currentUser || roomData.user_id !== currentUser.uid) {
+      console.error('You are not authorized to update this room');
+      return;
+    }
+
+    await updateDoc(roomRef, {
       title,
       description
     });
@@ -169,6 +183,29 @@ const updateRoom = async () => {
   } catch (error) {
     console.error('Error updating room:', error);
   }
+};
+
+
+const deleteRoom = async (roomId) => {
+  try {
+    const currentUser = auth.currentUser;
+    const roomRef = doc(db, 'rooms', roomId);
+    const roomSnapshot = await getDoc(roomRef);
+    const roomData = roomSnapshot.data();
+    if (!currentUser || roomData.user_id !== currentUser.uid) {
+      console.error('You are not authorized to delete this room');
+      return;
+    }
+    await deleteDoc(roomRef);
+    console.log('Room deleted successfully');
+    await loadRooms();
+  } catch (error) {
+    console.error('Error deleting room:', error);
+  }
+};
+const isCreator = (userId) => {
+  const currentUser = auth.currentUser;
+  return currentUser && currentUser.uid === userId;
 };
 
 onMounted(loadRooms);
