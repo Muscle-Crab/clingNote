@@ -83,9 +83,12 @@
                       </div>
                     </div>
                     <div>
+                      <div v-if="editingCommentId !== comment.id && currentUser && currentUser.uid === comment.userId">
+                        <button  @click="editComment(comment)" class="text-blue-500 focus:outline-none">Edit</button> |
+                        <button  @click="deleteComment(post, comment.id)" class="text-red-500 focus:outline-none">Delete</button>
+                      </div>
                       <!-- Edit and Save Buttons -->
-                      <button v-if="editingCommentId !== comment.id && currentUser && currentUser.uid === comment.userId" @click="editComment(comment)" class="text-blue-500 focus:outline-none">Edit</button> |
-                      <button v-if="editingCommentId !== comment.id && currentUser && currentUser.uid === comment.userId" @click="deleteComment(post, comment.id)" class="text-red-500 focus:outline-none">Delete</button>
+
                       <button v-if="editingCommentId === comment.id" @click="saveComment(post, comment)" class="text-green-500 focus:outline-none">Save</button>
                     </div>
                   </footer>
