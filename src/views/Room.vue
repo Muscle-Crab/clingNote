@@ -1,6 +1,6 @@
 <template>
   <!-- Container for the entire room -->
-  <div class="container mx-auto px-4 py-8">
+  <div class="container mx-auto px-4 py-1">
     <!-- Room title -->
 <!--    <h1 class="text-3xl font-bold text-gray-800 mb-8 md:mb-12">Room: {{ selectedRoom.title }}</h1>-->
 
@@ -25,7 +25,7 @@
         <!-- Title for posts section -->
 
         <!-- Loop through each post -->
-        <div v-for="post in selectedRoom.posts" :key="post.id" class="md:min-w-[320px] mb-4">
+        <div v-for="post in selectedRoom.posts" :key="post.id" class="md:min-w-[320px] ">
           <!-- Post -->
           <div class="min-w-sm p-6 bg-white border border-gray-200 rounded-lg shadow dark:bg-gray-800 dark:border-gray-700">
             <!-- Post author and timestamp -->
@@ -58,8 +58,10 @@
               <div>
                 <button @click="toggleCommentSection(post)" class="flex items-center text-blue-500 focus:outline-none">
                   <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                    <!-- Comment icon -->
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l3 3m-3-3l-3 3m3-3H3a2 2 0 01-2-2V5a2 2 0 012-2h18a2 2 0 012 2v10a2 2 0 01-2 2h-8l-3 3z"></path>
                   </svg>
+
                   <span>{{ post.comments.length }}</span>
                 </button>
               </div>
