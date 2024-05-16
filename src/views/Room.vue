@@ -14,7 +14,7 @@
         <ul class="space-y-4">
           <!-- Displaying each participant -->
           <li v-for="participant in selectedRoom.participants" :key="participant.id" class="flex items-center">
-            <img :src="participant.avatar" alt="Participant" class="w-10 h-10 rounded-full mr-4">
+            <img :src="participant.avatar" alt="Participant" class="w-12 h-12 rounded-full mr-4">
             <span class="text-gray-800">{{ participant.name }}</span>
           </li>
         </ul>
@@ -31,7 +31,7 @@
             <!-- Post author and timestamp -->
             <div class="flex items-center justify-between mb-4">
               <div class="flex items-center">
-                <img :src="getParticipantAvatar(post.userId)" alt="User" class="w-8 h-8 rounded-full mr-2">
+                <img :src="getParticipantAvatar(post.userId)" alt="User" class="w-12 h-12 rounded-full mr-2">
                 <span class="font-semibold text-gray-800">{{ getParticipantName(post.userId) }}</span>
               </div>
 <!--              <span class="text-gray-600">{{ formatTimestampToAgo(post.timestamp) }}</span>-->
@@ -75,7 +75,7 @@
                 <article v-for="comment in post.comments" :key="comment.id" class="pt-4 md:p-4  text-base bg-white ">
                   <footer class="flex flex-col md:flex-row justify-between   ">
                     <div class="flex   ">
-                      <img class="w-8 h-8  md:w-12 md:h-12 rounded-full mr-3" :src="getParticipantAvatar(comment.userId)" :alt="getParticipantName(comment.userId)">
+                      <img class="w-12 h-12  md:w-12 md:h-12 rounded-full mr-3" :src="getParticipantAvatar(comment.userId)" :alt="getParticipantName(comment.userId)">
                       <div>
                         <p class="text-sm text-gray-900 dark:text-white font-semibold">{{ getParticipantName(comment.userId) }}</p>
                         <!-- Editable comment input -->
