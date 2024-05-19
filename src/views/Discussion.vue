@@ -1,8 +1,28 @@
 <template>
   <div class="bg-gray-100">
-    <div class="container mx-auto px-4 py-8 ">
-      <h1 class="text-3xl font-bold  mb-12">Explore Rooms</h1>
-      <div class="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+    <div class="container mx-auto px-4 py-8">
+      <h1 class="text-3xl font-bold mb-12">Explore Rooms</h1>
+
+      <!-- Skeleton Loader -->
+      <div v-if="loading" role="status" class="space-y-8 animate-pulse md:space-y-0 md:space-x-8 rtl:space-x-reverse md:flex md:items-center">
+        <div class="flex items-center justify-center w-full h-48 bg-gray-300 rounded sm:w-96 dark:bg-gray-700">
+          <svg class="w-10 h-10 text-gray-200 dark:text-gray-600" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 20 18">
+            <path d="M18 0H2a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2Zm-5.5 4a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Zm4.376 10.481A1 1 0 0 1 16 15H4a1 1 0 0 1-.895-1.447l3.5-7A1 1 0 0 1 7.468 6a.965.965 0 0 1 .9.5l2.775 4.757 1.546-1.887a1 1 0 0 1 1.618.1l2.541 4a1 1 0 0 1 .028 1.011Z"/>
+          </svg>
+        </div>
+        <div class="w-full">
+          <div class="h-2.5 bg-gray-200 rounded-full dark:bg-gray-700 w-48 mb-4"></div>
+          <div class="h-2 bg-gray-200 rounded-full dark:bg-gray-700 max-w-[480px] mb-2.5"></div>
+          <div class="h-2 bg-gray-200 rounded-full dark:bg-gray-700 mb-2.5"></div>
+          <div class="h-2 bg-gray-200 rounded-full dark:bg-gray-700 max-w-[440px] mb-2.5"></div>
+          <div class="h-2 bg-gray-200 rounded-full dark:bg-gray-700 max-w-[460px] mb-2.5"></div>
+          <div class="h-2 bg-gray-200 rounded-full dark:bg-gray-700 max-w-[360px]"></div>
+        </div>
+        <span class="sr-only">Loading...</span>
+      </div>
+
+      <!-- Actual Content -->
+      <div v-else class="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         <div v-for="room in rooms" :key="room.roomId" class="rounded-2xl overflow-hidden shadow-md hover:shadow-xl transition duration-500">
           <div class="p-8 bg-white">
             <h5 class="text-xl font-bold text-black">{{ room.title }}</h5>
@@ -21,7 +41,9 @@
           </div>
         </div>
       </div>
+
       <button @click="openModal" class="block w-full mt-8 bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">Create New Room</button>
+
       <div id="authentication-modal" tabindex="-1" aria-hidden="true" class="hidden overflow-y-auto overflow-x-hidden fixed top-0 right-0 left-0 z-50 justify-center items-center w-full md:inset-0 h-[calc(100%-1rem)] max-h-full">
         <div class="relative p-4 w-full max-w-md max-h-full">
           <div class="relative bg-white rounded-lg shadow dark:bg-gray-700">
@@ -79,6 +101,7 @@ import { useRouter } from 'vue-router';
 const router = useRouter();
 
 const rooms = ref([]);
+const loading = ref(true);
 const newRoom = reactive({
   title: '',
   description: ''
@@ -105,8 +128,10 @@ const loadRooms = async () => {
   try {
     const querySnapshot = await getDocs(collection(db, 'rooms'));
     rooms.value = querySnapshot.docs.map(doc => doc.data());
+    loading.value = false;
   } catch (error) {
     console.error('Error loading rooms:', error);
+    loading.value = false;
   }
 };
 
@@ -185,7 +210,6 @@ const updateRoom = async () => {
   }
 };
 
-
 const deleteRoom = async (roomId) => {
   try {
     const currentUser = auth.currentUser;
@@ -203,6 +227,7 @@ const deleteRoom = async (roomId) => {
     console.error('Error deleting room:', error);
   }
 };
+
 const isCreator = (userId) => {
   const currentUser = auth.currentUser;
   return currentUser && currentUser.uid === userId;
