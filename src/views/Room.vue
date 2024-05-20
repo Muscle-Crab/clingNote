@@ -1,183 +1,186 @@
 <template>
-  <!-- Container for the entire room -->
-  <div class="container mx-auto px-4 py-1">
-    <!-- Grid layout for different sections -->
-    <div v-if="loading" class="animate-pulse">
-      <!-- Skeleton Loader for Participants -->
-      <div class="col-span-1 bg-white rounded-lg shadow-md p-6 mb-8">
-        <h2 class="text-xl font-semibold text-gray-800 mb-4">Participants</h2>
-        <ul class="space-y-4">
-          <li class="flex items-center">
-            <div class="w-12 h-12 bg-gray-300 rounded-full mr-4"></div>
-            <div class="h-4 bg-gray-300 rounded w-24"></div>
-          </li>
-          <li class="flex items-center">
-            <div class="w-12 h-12 bg-gray-300 rounded-full mr-4"></div>
-            <div class="h-4 bg-gray-300 rounded w-24"></div>
-          </li>
-          <li class="flex items-center">
-            <div class="w-12 h-12 bg-gray-300 rounded-full mr-4"></div>
-            <div class="h-4 bg-gray-300 rounded w-24"></div>
-          </li>
-        </ul>
-      </div>
+  <!-- Main wrapper for the entire app -->
+  <div class="min-h-screen bg-gray-900 dark:bg-[#1c1c1e]">
+    <!-- Container for the entire room -->
+    <div class="container mx-auto px-4 py-1 pt-10">
+      <!-- Grid layout for different sections -->
+      <div v-if="loading" class="animate-pulse">
+        <!-- Skeleton Loader for Participants -->
+        <div class="col-span-1 bg-gray-800 rounded-lg shadow-md p-6 mb-8 dark:bg-gray-800">
+          <h2 class="text-xl font-semibold text-gray-200 mb-4">Participants</h2>
+          <ul class="space-y-4">
+            <li class="flex items-center">
+              <div class="w-12 h-12 bg-gray-600 rounded-full mr-4"></div>
+              <div class="h-4 bg-gray-600 rounded w-24"></div>
+            </li>
+            <li class="flex items-center">
+              <div class="w-12 h-12 bg-gray-600 rounded-full mr-4"></div>
+              <div class="h-4 bg-gray-600 rounded w-24"></div>
+            </li>
+            <li class="flex items-center">
+              <div class="w-12 h-12 bg-gray-600 rounded-full mr-4"></div>
+              <div class="h-4 bg-gray-600 rounded w-24"></div>
+            </li>
+          </ul>
+        </div>
 
-      <!-- Skeleton Loader for Posts -->
-      <div class="col-span-2 grid grid-cols-1 gap-8">
-        <div class="md:min-w-[320px]">
-          <div class="min-w-sm p-6 bg-gray-300 border border-gray-200 rounded-lg shadow">
-            <div class="flex items-center justify-between mb-4">
-              <div class="flex items-center">
-                <div class="w-12 h-12 bg-gray-300 rounded-full mr-2"></div>
-                <div class="h-4 bg-gray-300 rounded w-24"></div>
+        <!-- Skeleton Loader for Posts -->
+        <div class="col-span-2 grid grid-cols-1 gap-8">
+          <div class="md:min-w-[320px]">
+            <div class="min-w-sm p-6 bg-gray-600 border border-gray-500 rounded-lg shadow dark:bg-gray-800">
+              <div class="flex items-center justify-between mb-4">
+                <div class="flex items-center">
+                  <div class="w-12 h-12 bg-gray-600 rounded-full mr-2"></div>
+                  <div class="h-4 bg-gray-600 rounded w-24"></div>
+                </div>
               </div>
-            </div>
-            <div class="h-4 bg-gray-300 rounded mb-2"></div>
-            <div class="h-4 bg-gray-300 rounded mb-2"></div>
-            <div class="h-4 bg-gray-300 rounded mb-4"></div>
-            <div class="flex justify-between items-center">
-              <div class="h-6 bg-gray-300 rounded w-12"></div>
-              <div class="h-6 bg-gray-300 rounded w-12"></div>
+              <div class="h-4 bg-gray-600 rounded mb-2"></div>
+              <div class="h-4 bg-gray-600 rounded mb-2"></div>
+              <div class="h-4 bg-gray-600 rounded mb-4"></div>
+              <div class="flex justify-between items-center">
+                <div class="h-6 bg-gray-600 rounded w-12"></div>
+                <div class="h-6 bg-gray-600 rounded w-12"></div>
+              </div>
             </div>
           </div>
         </div>
+
+        <!-- Skeleton Loader for Actions -->
+        <div class="col-span-1 bg-gray-800 rounded-lg shadow-md p-6 dark:bg-gray-800">
+          <h2 class="text-xl font-semibold text-gray-200 mb-4">Actions</h2>
+          <div class="h-12 bg-gray-600 rounded mb-4"></div>
+          <div class="h-12 bg-gray-600 rounded mb-4"></div>
+          <div class="h-12 bg-gray-600 rounded mb-4"></div>
+        </div>
       </div>
 
-      <!-- Skeleton Loader for Actions -->
-      <div class="col-span-1 bg-white rounded-lg shadow-md p-6">
-        <h2 class="text-xl font-semibold text-gray-800 mb-4">Actions</h2>
-        <div class="h-12 bg-gray-300 rounded mb-4"></div>
-        <div class="h-12 bg-gray-300 rounded mb-4"></div>
-        <div class="h-12 bg-gray-300 rounded mb-4"></div>
-      </div>
-    </div>
+      <!-- Actual Content -->
+      <div v-else class="grid grid-cols-1 md:grid-cols-3 gap-8">
+        <!-- Left Sidebar: Participants -->
+        <div class="col-span-1 bg-gray-800 rounded-lg shadow-md p-6 dark:bg-gray-800">
+          <h2 class="text-xl font-semibold text-gray-200 mb-4">Participants</h2>
+          <ul class="space-y-4">
+            <li v-for="participant in selectedRoom.participants" :key="participant.id" class="flex items-center">
+              <img :src="participant.avatar" alt="Participant" class="w-12 h-12 rounded-full mr-4">
+              <span class="text-gray-200">{{ participant.name }}</span>
+            </li>
+          </ul>
+        </div>
 
-    <!-- Actual Content -->
-    <div v-else class="grid grid-cols-1 md:grid-cols-3 gap-8">
-      <!-- Left Sidebar: Participants -->
-      <div class="col-span-1 bg-white rounded-lg shadow-md p-6">
-        <h2 class="text-xl font-semibold text-gray-800 mb-4">Participants</h2>
-        <ul class="space-y-4">
-          <li v-for="participant in selectedRoom.participants" :key="participant.id" class="flex items-center">
-            <img :src="participant.avatar" alt="Participant" class="w-12 h-12 rounded-full mr-4">
-            <span class="text-gray-800">{{ participant.name }}</span>
-          </li>
-        </ul>
-      </div>
-
-      <!-- Main Content: Posts -->
-      <div class="col-span-2 grid grid-cols-1 gap-8">
-        <div v-for="post in selectedRoom.posts" :key="post.id" class="md:min-w-[320px]">
-          <div class="min-w-sm p-6 bg-white border border-gray-200 rounded-lg shadow dark:bg-gray-800 dark:border-gray-700">
-            <div class="flex items-center justify-between mb-4">
-              <div class="flex items-center">
-                <img :src="getParticipantAvatar(post.userId)" alt="User" class="w-12 h-12 rounded-full mr-2">
-                <span class="font-semibold text-gray-800">{{ getParticipantName(post.userId) }}</span>
+        <!-- Main Content: Posts -->
+        <div class="col-span-2 grid grid-cols-1 gap-8">
+          <div v-for="post in selectedRoom.posts" :key="post.id" :id="'post-' + post.id" class="md:min-w-[320px]">
+            <div class="min-w-sm p-6 bg-gray-800 border border-gray-700 rounded-lg shadow dark:bg-gray-800 dark:border-gray-700">
+              <div class="flex items-center justify-between mb-4">
+                <div class="flex items-center">
+                  <img :src="getParticipantAvatar(post.userId)" alt="User" class="w-12 h-12 rounded-full mr-2">
+                  <span class="font-semibold text-gray-200">{{ getParticipantName(post.userId) }}</span>
+                </div>
               </div>
-            </div>
-            <a href="#">
-              <h5 class="mb-2 font-bold tracking-tight text-gray-900 dark:text-white">{{ post.topic }}</h5>
-            </a>
-            <p class="text-gray-700 mb-4">{{ post.message }}</p>
-            <div class="flex justify-between items-center">
-              <div>
-                <button @click="toggleLike(post)" class="flex items-center text-blue-500 focus:outline-none">
-                  <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path>
-                  </svg>
-                  <span>{{ post.likes }}</span>
-                </button>
+              <a href="#">
+                <h5 class="mb-2 font-bold tracking-tight text-gray-200 dark:text-white">{{ post.topic }}</h5>
+              </a>
+              <p class="text-gray-400 mb-4">{{ post.message }}</p>
+              <div class="flex justify-between items-center">
+                <div>
+                  <button @click="toggleLike(post)" class="flex items-center text-blue-400 focus:outline-none">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path>
+                    </svg>
+                    <span>{{ post.likes }}</span>
+                  </button>
+                </div>
+                <div>
+                  <button @click="toggleCommentSection(post)" class="flex items-center text-blue-400 focus:outline-none">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l3 3m-3-3l-3 3m3-3H3a2 2 0 01-2-2V5a2 2 0 012-2h18a2 2 0 012 2v10a2 2 0 01-2 2h-8l-3 3z"></path>
+                    </svg>
+                    <span>{{ post.comments.length }}</span>
+                  </button>
+                </div>
               </div>
-              <div>
-                <button @click="toggleCommentSection(post)" class="flex items-center text-blue-500 focus:outline-none">
-                  <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l3 3m-3-3l-3 3m3-3H3a2 2 0 01-2-2V5a2 2 0 012-2h18a2 2 0 012 2v10a2 2 0 01-2 2h-8l-3 3z"></path>
-                  </svg>
-                  <span>{{ post.comments.length }}</span>
-                </button>
-              </div>
-            </div>
-            <section v-if="post.showComments" class="bg-white dark:bg-gray-900 antialiased">
-              <div>
-                <article v-for="comment in post.comments" :key="comment.id" class="pt-4 md:p-4 text-base bg-white">
-                  <footer class="flex flex-col md:flex-row justify-between">
-                    <div class="flex">
-                      <img class="w-12 h-12 md:w-12 md:h-12 rounded-full mr-3" :src="getParticipantAvatar(comment.userId)" :alt="getParticipantName(comment.userId)">
+              <section v-if="post.showComments" class="bg-gray-800 dark:bg-gray-900 antialiased">
+                <div>
+                  <article v-for="comment in post.comments" :key="comment.id" :id="'comment-' + comment.id" class="pt-4 md:p-4 text-base bg-gray-800 dark:bg-gray-900">
+                    <footer class="flex flex-col md:flex-row justify-between">
+                      <div class="flex">
+                        <img class="w-12 h-12 md:w-12 md:h-12 rounded-full mr-3" :src="getParticipantAvatar(comment.userId)" :alt="getParticipantName(comment.userId)">
+                        <div>
+                          <p class="text-sm text-gray-200 dark:text-white font-semibold">{{ getParticipantName(comment.userId) }}</p>
+                          <textarea v-if="editingCommentId === comment.id" v-model="editedComment" class="mt-1 block w-full text-sm text-gray-200 border-0 focus:ring-0 focus:outline-none dark:text-white dark:placeholder-gray-400 dark:bg-gray-900" required>{{ comment.message }}</textarea>
+                          <p v-else class="text-gray-400 dark:text-gray-400">{{ comment.message }}</p>
+                        </div>
+                      </div>
                       <div>
-                        <p class="text-sm text-gray-900 dark:text-white font-semibold">{{ getParticipantName(comment.userId) }}</p>
-                        <textarea v-if="editingCommentId === comment.id" v-model="editedComment" class="mt-1 block w-full text-sm text-gray-900 border-0 focus:ring-0 focus:outline-none dark:text-white dark:placeholder-gray-400 dark:bg-gray-800" required>{{ comment.message }}</textarea>
-                        <p v-else class="text-gray-500 dark:text-gray-400">{{ comment.message }}</p>
+                        <div v-if="editingCommentId !== comment.id && currentUser && currentUser.uid === comment.userId">
+                          <button @click="editComment(comment)" class="text-blue-400 focus:outline-none">Edit</button> |
+                          <button @click="deleteComment(post, comment.id)" class="text-red-400 focus:outline-none">Delete</button>
+                        </div>
+                        <button v-if="editingCommentId === comment.id" @click="saveComment(post, comment)" class="text-green-400 focus:outline-none">Save</button>
                       </div>
-                    </div>
-                    <div>
-                      <div v-if="editingCommentId !== comment.id && currentUser && currentUser.uid === comment.userId">
-                        <button @click="editComment(comment)" class="text-blue-500 focus:outline-none">Edit</button> |
-                        <button @click="deleteComment(post, comment.id)" class="text-red-500 focus:outline-none">Delete</button>
-                      </div>
-                      <button v-if="editingCommentId === comment.id" @click="saveComment(post, comment)" class="text-green-500 focus:outline-none">Save</button>
-                    </div>
-                  </footer>
-                </article>
+                    </footer>
+                  </article>
+                </div>
+              </section>
+              <div class="flex items-center mb-4 mt-5 space-x-4">
+                <button @click="toggleReaction(post, 'like')" class="reaction-button relative" :class="{ 'active': hasReaction(post, 'like') }">
+                  <span class="reaction-icon">👍</span>
+                  <span class="reaction-count absolute top-0 right-0 -mt-1 -mr-2 bg-blue-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center">{{ getReactionCount(post, 'like') }}</span>
+                </button>
+                <button @click="toggleReaction(post, 'love')" class="reaction-button relative" :class="{ 'active': hasReaction(post, 'love') }">
+                  <span class="reaction-icon">❤️</span>
+                  <span class="reaction-count absolute top-0 right-0 -mt-1 -mr-2 bg-red-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center">{{ getReactionCount(post, 'love') }}</span>
+                </button>
+                <button @click="toggleReaction(post, 'laugh')" class="reaction-button relative" :class="{ 'active': hasReaction(post, 'laugh') }">
+                  <span class="reaction-icon">😂</span>
+                  <span class="reaction-count absolute top-0 right-0 -mt-1 -mr-2 bg-yellow-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center">{{ getReactionCount(post, 'laugh') }}</span>
+                </button>
+                <button @click="toggleReaction(post, 'surprised')" class="reaction-button relative" :class="{ 'active': hasReaction(post, 'surprised') }">
+                  <span class="reaction-icon">😮</span>
+                  <span class="reaction-count absolute top-0 right-0 -mt-1 -mr-2 bg-green-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center">{{ getReactionCount(post, 'surprised') }}</span>
+                </button>
+                <button @click="toggleReaction(post, 'sad')" class="reaction-button relative" :class="{ 'active': hasReaction(post, 'sad') }">
+                  <span class="reaction-icon">😢</span>
+                  <span class="reaction-count absolute top-0 right-0 -mt-1 -mr-2 bg-purple-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center">{{ getReactionCount(post, 'sad') }}</span>
+                </button>
               </div>
-            </section>
-            <div class="flex items-center mb-4 mt-5 space-x-4">
-              <button @click="toggleReaction(post, 'like')" class="reaction-button relative" :class="{ 'active': hasReaction(post, 'like') }">
-                <span class="reaction-icon">👍</span>
-                <span class="reaction-count absolute top-0 right-0 -mt-1 -mr-2 bg-blue-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center">{{ getReactionCount(post, 'like') }}</span>
-              </button>
-              <button @click="toggleReaction(post, 'love')" class="reaction-button relative" :class="{ 'active': hasReaction(post, 'love') }">
-                <span class="reaction-icon">❤️</span>
-                <span class="reaction-count absolute top-0 right-0 -mt-1 -mr-2 bg-red-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center">{{ getReactionCount(post, 'love') }}</span>
-              </button>
-              <button @click="toggleReaction(post, 'laugh')" class="reaction-button relative" :class="{ 'active': hasReaction(post, 'laugh') }">
-                <span class="reaction-icon">😂</span>
-                <span class="reaction-count absolute top-0 right-0 -mt-1 -mr-2 bg-yellow-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center">{{ getReactionCount(post, 'laugh') }}</span>
-              </button>
-              <button @click="toggleReaction(post, 'surprised')" class="reaction-button relative" :class="{ 'active': hasReaction(post, 'surprised') }">
-                <span class="reaction-icon">😮</span>
-                <span class="reaction-count absolute top-0 right-0 -mt-1 -mr-2 bg-green-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center">{{ getReactionCount(post, 'surprised') }}</span>
-              </button>
-              <button @click="toggleReaction(post, 'sad')" class="reaction-button relative" :class="{ 'active': hasReaction(post, 'sad') }">
-                <span class="reaction-icon">😢</span>
-                <span class="reaction-count absolute top-0 right-0 -mt-1 -mr-2 bg-purple-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center">{{ getReactionCount(post, 'sad') }}</span>
-              </button>
-            </div>
-            <div class="mb-4">
-              <button @click="showCreatePostModal(post)" class="text-blue-500 focus:outline-none">Edit Post</button>
-            </div>
-            <div class="flex items-center border-t border-gray-200 py-2">
-              <input v-model="commentInput[post.id]" type="text" placeholder="Add a comment..." class="flex-1 rounded-full py-2 px-4 mr-2 border border-gray-300 focus:border-indigo-500 focus:ring-indigo-500">
-              <button @click="addComment(post)" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-full focus:outline-none focus:shadow-outline"><i class="fa fa-comment"></i></button>
+              <div class="mb-4">
+                <button @click="showCreatePostModal(post)" class="text-blue-400 focus:outline-none">Edit Post</button>
+              </div>
+              <div class="flex items-center border-t border-gray-700 py-2">
+                <input v-model="commentInput[post.id]" type="text" placeholder="Add a comment..." class="flex-1 rounded-full py-2 px-4 mr-2 border border-gray-600 focus:border-indigo-500 focus:ring-indigo-500">
+                <button @click="addComment(post)" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-full focus:outline-none focus:shadow-outline"><i class="fa fa-comment"></i></button>
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      <!-- Right Sidebar: Actions -->
-      <div class="col-span-1 bg-white rounded-lg shadow-md p-6">
-        <h2 class="text-xl font-semibold text-gray-800 mb-4">Actions</h2>
-        <button @click="leaveRoom" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline mb-4">Leave Room</button>
-        <button @click="shareRoom" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline mb-4">Share Room</button>
-        <button @click="showCreatePostModal()" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">Create New Post</button>
+        <!-- Right Sidebar: Actions -->
+        <div class="col-span-1 bg-gray-800 rounded-lg shadow-md p-6 dark:bg-gray-800">
+          <h2 class="text-xl font-semibold text-gray-200 mb-4">Actions</h2>
+          <button @click="leaveRoom" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline mb-4">Leave Room</button>
+          <button @click="shareRoom" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline mb-4">Share Room</button>
+          <button @click="showCreatePostModal()" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">Create New Post</button>
+        </div>
       </div>
     </div>
-  </div>
 
-  <!-- Modal for creating or editing a post -->
-  <div v-if="showModal" class="fixed inset-0 overflow-y-auto flex justify-center items-center">
-    <div class="fixed inset-0 bg-black opacity-50"></div>
-    <div class="relative bg-white rounded-lg shadow-lg p-6 max-w-lg w-full">
-      <h2 class="text-2xl font-semibold mb-4">{{ editingPost ? 'Edit Post' : 'Create New Post' }}</h2>
-      <form @submit.prevent="editingPost ? updatePost() : createNewPost()">
-        <div class="py-2 px-4 mb-4 bg-white rounded-lg rounded-t-lg border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
-          <label for="postMessage" class="block text-sm font-medium text-gray-700">Message</label>
-          <textarea id="postMessage" v-model="newPost.topic" rows="6" class="mt-1 block w-full text-sm text-gray-900 border-0 focus:ring-0 focus:outline-none dark:text-white dark:placeholder-gray-400 dark:bg-gray-800" placeholder="choose a topic to discuss" required></textarea>
-        </div>
-        <div class="flex justify-end">
-          <button type="submit" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">{{ editingPost ? 'Update' : 'Create' }}</button>
-          <button @click="closeModal" type="button" class="ml-2 bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">Cancel</button>
-        </div>
-      </form>
+    <!-- Modal for creating or editing a post -->
+    <div v-if="showModal" class="fixed inset-0 overflow-y-auto flex justify-center items-center">
+      <div class="fixed inset-0 bg-black opacity-50"></div>
+      <div class="relative bg-gray-800 rounded-lg shadow-lg p-6 max-w-lg w-full dark:bg-gray-800 dark:text-gray-200">
+        <h2 class="text-2xl font-semibold mb-4">{{ editingPost ? 'Edit Post' : 'Create New Post' }}</h2>
+        <form @submit.prevent="editingPost ? updatePost() : createNewPost()">
+          <div class="py-2 px-4 mb-4 bg-gray-800 rounded-lg rounded-t-lg border border-gray-700 dark:bg-gray-800 dark:border-gray-700">
+            <label for="postMessage" class="block text-sm font-medium text-gray-200">Message</label>
+            <textarea id="postMessage" v-model="newPost.topic" rows="6" class="mt-1 block w-full text-sm text-gray-200 border-0 focus:ring-0 focus:outline-none dark:text-white dark:placeholder-gray-400 dark:bg-gray-800" placeholder="choose a topic to discuss" required></textarea>
+          </div>
+          <div class="flex justify-end">
+            <button type="submit" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">{{ editingPost ? 'Update' : 'Create' }}</button>
+            <button @click="closeModal" type="button" class="ml-2 bg-gray-500 hover:bg-gray-600 text-gray-200 font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">Cancel</button>
+          </div>
+        </form>
+      </div>
     </div>
   </div>
 </template>
@@ -372,7 +375,14 @@ const createNewPost = async () => {
     const docRef = await addDoc(collection(db, 'posts'), newPostData);
     closeModal();
     const userName = getParticipantName(newPostData.userId);
-    await sendNotification('created a new post.', userName);
+    await sendNotification('created a new post.', userName, docRef.id);
+    // Scroll to the new post
+    setTimeout(() => {
+      const postElement = document.getElementById(`post-${docRef.id}`);
+      if (postElement) {
+        postElement.scrollIntoView({ behavior: 'smooth' });
+      }
+    }, 500);
   } catch (error) {
     console.error('Error adding new post to Firestore: ', error);
   }
@@ -423,7 +433,14 @@ const addComment = async (post) => {
     await updateDoc(doc(db, 'posts', post.id), { comments: arrayUnion(comment) });
     commentInput.value[post.id] = '';
     const userName = getParticipantName(userId);
-    await sendNotification('commented on a post.', userName);
+    await sendNotification('commented on a post.', userName, post.id, comment.id);
+    // Scroll to the new comment
+    setTimeout(() => {
+      const commentElement = document.getElementById(`comment-${comment.id}`);
+      if (commentElement) {
+        commentElement.scrollIntoView({ behavior: 'smooth' });
+      }
+    }, 500);
   } catch (e) {
     console.error('Error adding comment: ', e);
   }
