@@ -4,7 +4,6 @@ import RegisterPage from '../views/UserRegistrationForm.vue';
 import Login from '../views/Login.vue';
 import { auth } from '../firebaseConfig'; // Import your Firebase authentication instance
 import Room from '../views/Room.vue';
-
 const routes = [
   {
     path: '/tasks',
@@ -23,8 +22,7 @@ const routes = [
     component: () => import('@/views/Profile.vue'),
     props: true,
     meta: { requiresAuth: true }
-  },
-  {
+  },{
     path: '/',
     name: 'Discussion',
     component: () => import('@/views/Discussion.vue'),
@@ -66,24 +64,17 @@ router.beforeEach(async (to, from, next) => {
         const unsubscribe = auth.onAuthStateChanged(user => {
           if (user) {
             unsubscribe();
-            if (['ds7513635@gmail.com', 'lacherylthompson2@gmail.com'].includes(user.email)) {
-              next('/');
-            } else {
-              next();
-            }
+            resolve();
           } else {
             next('/login');
           }
         });
       });
-    } else if (['ds7513635@gmail.com', 'lacherylthompson2@gmail.com'].includes(currentUser.email)) {
-      next('/');
-    } else {
-      next();
     }
-  } else {
-    next();
   }
+
+  next();
 });
 
 export default router;
+
