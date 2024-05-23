@@ -30,6 +30,9 @@
             <button v-if="!room.private || isApproved(room) || isCreator(room.user_id)" class="block w-full mt-4 bg-gradient-to-r from-green-400 to-blue-500 hover:bg-gradient-to-l text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline" @click="joinRoom(room.roomId)">
               Join Room
             </button>
+            <button v-else-if="hasRequestedAccess(room)" class="block w-full mt-4 bg-yellow-400 hover:bg-yellow-500 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline" disabled>
+              Requested
+            </button>
             <button v-else class="block w-full mt-4 bg-yellow-400 hover:bg-yellow-500 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline" @click="requestAccess(room.roomId)">
               Request Access
             </button>
@@ -276,6 +279,7 @@ const requestAccess = async (roomId) => {
       requests: arrayUnion(requestData)
     });
     console.log('Request access successful');
+    await loadRooms(); // Refresh the room data to update the UI
   } catch (error) {
     console.error('Error requesting access:', error);
   }
@@ -314,6 +318,11 @@ const rejectRequest = async (roomId, userId) => {
   } catch (error) {
     console.error('Error rejecting request:', error);
   }
+};
+
+const hasRequestedAccess = (room) => {
+  const currentUser = auth.currentUser;
+  return room.requests.some(request => request.uid === currentUser.uid);
 };
 
 const isCreator = (userId) => {
