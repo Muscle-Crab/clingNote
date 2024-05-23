@@ -15,8 +15,6 @@
           <label for="password" class="sr-only">Password</label>
           <input id="password" name="password" type="password" v-model="password" required placeholder="Password" class="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm">
         </div>
-
-
         <div>
           <label for="dob" class="sr-only">Date of Birth</label>
           <input id="dob" name="dob" type="date" v-model="dob" required placeholder="Date of Birth" class="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm">
@@ -30,10 +28,6 @@
             <option value="other">Other</option>
           </select>
         </div>
-<!--        <div>-->
-<!--          <label for="avatar" class="sr-only">Avatar</label>-->
-<!--          <input id="avatar" name="avatar" type="file" accept="image/*" @change="handleAvatarChange" class="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm">-->
-<!--        </div>-->
         <div>
           <button type="submit" :disabled="isSubmitting" class="w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
             <span class="mr-2">
@@ -61,7 +55,6 @@ const router = useRouter();
 const email = ref('');
 const password = ref('');
 const name = ref('');
-
 const dob = ref('');
 const gender = ref('');
 const avatar = ref(null);
@@ -79,12 +72,12 @@ const registerUser = async () => {
     const user = userCredential.user;
 
     const userData = {
+      id: user.uid, // Adding the id field
       email: user.email,
       name: name.value,
-
       dob: dob.value,
-      gender: gender.value
-      // You might need to save the avatar URL to the user's profile if you plan to store it in a storage bucket
+      gender: gender.value,
+      // avatarURL: if you have an avatar URL
     };
 
     // If avatar is selected, upload it to a storage bucket and get the URL
@@ -101,7 +94,6 @@ const registerUser = async () => {
     email.value = '';
     password.value = '';
     name.value = '';
-
     dob.value = '';
     gender.value = '';
     avatar.value = null;
