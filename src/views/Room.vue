@@ -6,7 +6,7 @@
       <!-- Grid layout for different sections -->
       <div v-if="loading" class="animate-pulse">
         <!-- Skeleton Loader for Participants -->
-        <div class="col-span-1 bg-gray-800 rounded-lg shadow-md p-6 mb-8 dark:bg-gray-800">
+        <div class="col-span-1 bg-gray-800 rounded-lg shadow-md p-6 mb-8 dark:bg-gray-800 item-start">
           <h2 class="text-xl font-semibold text-gray-200 mb-4">Participants</h2>
           <ul class="space-y-4">
             <li class="flex items-center">
@@ -148,7 +148,12 @@
                 <button @click="showCreatePostModal(post)" class="text-blue-400 focus:outline-none">Edit Post</button>
               </div>
               <div class="flex items-center border-t border-gray-700 py-2">
-                <input v-model="commentInput[post.id]" type="text" placeholder="Add a comment..." class="flex-1 rounded-full py-2 px-4 mr-2 border border-gray-600 focus:border-indigo-500 focus:ring-indigo-500">
+                <input
+                    v-model="commentInput[post.id]"
+                    type="text"
+                    placeholder="Add a comment..."
+                    class="flex-1 rounded-full py-2 px-4 mr-2 border border-gray-600 focus:border-indigo-500 focus:ring-indigo-500 bg-gray-800 text-white placeholder-gray-500"
+                />
                 <button @click="addComment(post)" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-full focus:outline-none focus:shadow-outline"><i class="fa fa-comment"></i></button>
               </div>
             </div>
