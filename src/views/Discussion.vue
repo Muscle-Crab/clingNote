@@ -43,10 +43,10 @@
               <div v-if="room.requests && room.requests.length > 0" class="mt-4">
                 <h5 class="text-xl font-bold">Join Requests</h5>
                 <ul>
-                  <li v-for="request in room.requests" :key="request">
-                    {{ request }}
-                    <button @click="approveRequest(room.roomId, request)" class="ml-2 bg-green-400 hover:bg-green-500 text-white font-bold py-1 px-2 rounded">Approve</button>
-                    <button @click="rejectRequest(room.roomId, request)" class="ml-2 bg-red-400 hover:bg-red-500 text-white font-bold py-1 px-2 rounded">Reject</button>
+                  <li v-for="request in room.requests" :key="request.uid">
+                    {{ request.name }}
+                    <button @click="approveRequest(room.roomId, request.uid)" class="ml-2 bg-green-400 hover:bg-green-500 text-white font-bold py-1 px-2 rounded">Approve</button>
+                    <button @click="rejectRequest(room.roomId, request.uid)" class="ml-2 bg-red-400 hover:bg-red-500 text-white font-bold py-1 px-2 rounded">Reject</button>
                   </li>
                 </ul>
               </div>
@@ -114,21 +114,10 @@
 </template>
 
 <script setup>
-import {db, auth} from '@/firebaseConfig.js';
-import {ref, reactive, onMounted} from 'vue';
-import {
-  addDoc,
-  getDocs,
-  collection,
-  serverTimestamp,
-  updateDoc,
-  doc,
-  deleteDoc,
-  getDoc,
-  arrayUnion,
-  arrayRemove
-} from 'firebase/firestore';
-import {useRouter} from 'vue-router';
+import { db, auth } from '@/firebaseConfig.js';
+import { ref, reactive, onMounted } from 'vue';
+import { addDoc, getDocs, collection, serverTimestamp, updateDoc, doc, deleteDoc, getDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { useRouter } from 'vue-router';
 
 const router = useRouter();
 
@@ -161,7 +150,7 @@ const closeModal = () => {
 const loadRooms = async () => {
   try {
     const querySnapshot = await getDocs(collection(db, 'rooms'));
-    rooms.value = querySnapshot.docs.map(doc => ({id: doc.id, ...doc.data()}));
+    rooms.value = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     loading.value = false;
   } catch (error) {
     console.error('Error loading rooms:', error);
@@ -175,7 +164,7 @@ const joinRoom = (roomId) => {
 
 const createNewRoom = async () => {
   try {
-    const {title, description, private: isPrivate} = newRoom;
+    const { title, description, private: isPrivate } = newRoom;
     if (!title || !description) {
       console.error('Title and description are required');
       return;
@@ -200,7 +189,7 @@ const createNewRoom = async () => {
     const docRef = await addDoc(collection(db, 'rooms'), newRoomData);
     const roomId = docRef.id;
     console.log('New room added successfully with ID:', roomId);
-    await updateDoc(doc(db, 'rooms', docRef.id), {roomId});
+    await updateDoc(doc(db, 'rooms', docRef.id), { roomId });
     newRoom.title = '';
     newRoom.description = '';
     newRoom.private = false;
@@ -221,7 +210,7 @@ const editRoom = (room) => {
 
 const updateRoom = async () => {
   try {
-    const {id, title, description, private: isPrivate} = editedRoom;
+    const { id, title, description, private: isPrivate } = editedRoom;
     if (!title || !description) {
       console.error('Title and description are required');
       return;
@@ -270,9 +259,21 @@ const deleteRoom = async (roomId) => {
 
 const requestAccess = async (roomId) => {
   try {
+    const currentUser = auth.currentUser;
+    if (!currentUser) {
+      console.error('No user is currently signed in');
+      return;
+    }
+
+    const userName = currentUser.displayName || currentUser.email;
+    const requestData = {
+      uid: currentUser.uid,
+      name: userName
+    };
+
     const roomRef = doc(db, 'rooms', roomId);
     await updateDoc(roomRef, {
-      requests: arrayUnion(auth.currentUser.uid)
+      requests: arrayUnion(requestData)
     });
     console.log('Request access successful');
   } catch (error) {
@@ -283,11 +284,16 @@ const requestAccess = async (roomId) => {
 const approveRequest = async (roomId, userId) => {
   try {
     const roomRef = doc(db, 'rooms', roomId);
+    const roomSnapshot = await getDoc(roomRef);
+    const roomData = roomSnapshot.data();
+    const updatedRequests = roomData.requests.filter(request => request.uid !== userId);
+
     await updateDoc(roomRef, {
-      requests: arrayRemove(userId),
+      requests: updatedRequests,
       approvedUsers: arrayUnion(userId)
     });
     console.log('Request approved');
+    await loadRooms(); // Refresh the room data to update the UI
   } catch (error) {
     console.error('Error approving request:', error);
   }
@@ -296,15 +302,19 @@ const approveRequest = async (roomId, userId) => {
 const rejectRequest = async (roomId, userId) => {
   try {
     const roomRef = doc(db, 'rooms', roomId);
+    const roomSnapshot = await getDoc(roomRef);
+    const roomData = roomSnapshot.data();
+    const updatedRequests = roomData.requests.filter(request => request.uid !== userId);
+
     await updateDoc(roomRef, {
-      requests: arrayRemove(userId)
+      requests: updatedRequests
     });
     console.log('Request rejected');
+    await loadRooms(); // Refresh the room data to update the UI
   } catch (error) {
     console.error('Error rejecting request:', error);
   }
 };
-
 
 const isCreator = (userId) => {
   const currentUser = auth.currentUser;
