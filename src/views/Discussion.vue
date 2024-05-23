@@ -117,10 +117,22 @@
 </template>
 
 <script setup>
-import { db, auth } from '@/firebaseConfig.js';
-import { ref, reactive, onMounted } from 'vue';
-import { addDoc, getDocs, collection, serverTimestamp, updateDoc, doc, deleteDoc, getDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
-import { useRouter } from 'vue-router';
+import {db, auth} from '@/firebaseConfig.js';
+import {ref, reactive, onMounted} from 'vue';
+import {
+  addDoc,
+  getDocs,
+  collection,
+  serverTimestamp,
+  updateDoc,
+  doc,
+  deleteDoc,
+  getDoc,
+  arrayUnion,
+  arrayRemove
+} from 'firebase/firestore';
+import {useRouter} from 'vue-router';
+import axios from 'axios';
 
 const router = useRouter();
 
@@ -153,7 +165,7 @@ const closeModal = () => {
 const loadRooms = async () => {
   try {
     const querySnapshot = await getDocs(collection(db, 'rooms'));
-    rooms.value = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    rooms.value = querySnapshot.docs.map(doc => ({id: doc.id, ...doc.data()}));
     loading.value = false;
   } catch (error) {
     console.error('Error loading rooms:', error);
@@ -167,7 +179,7 @@ const joinRoom = (roomId) => {
 
 const createNewRoom = async () => {
   try {
-    const { title, description, private: isPrivate } = newRoom;
+    const {title, description, private: isPrivate} = newRoom;
     if (!title || !description) {
       console.error('Title and description are required');
       return;
@@ -192,7 +204,7 @@ const createNewRoom = async () => {
     const docRef = await addDoc(collection(db, 'rooms'), newRoomData);
     const roomId = docRef.id;
     console.log('New room added successfully with ID:', roomId);
-    await updateDoc(doc(db, 'rooms', docRef.id), { roomId });
+    await updateDoc(doc(db, 'rooms', docRef.id), {roomId});
     newRoom.title = '';
     newRoom.description = '';
     newRoom.private = false;
@@ -213,7 +225,7 @@ const editRoom = (room) => {
 
 const updateRoom = async () => {
   try {
-    const { id, title, description, private: isPrivate } = editedRoom;
+    const {id, title, description, private: isPrivate} = editedRoom;
     if (!title || !description) {
       console.error('Title and description are required');
       return;
@@ -280,6 +292,10 @@ const requestAccess = async (roomId) => {
     });
     console.log('Request access successful');
     await loadRooms(); // Refresh the room data to update the UI
+
+    // Send notification to the room creator
+    const roomData = (await getDoc(roomRef)).data();
+    sendNotification('has requested to join your room.', roomData.user_id);
   } catch (error) {
     console.error('Error requesting access:', error);
   }
@@ -298,6 +314,10 @@ const approveRequest = async (roomId, userId) => {
     });
     console.log('Request approved');
     await loadRooms(); // Refresh the room data to update the UI
+
+    // Send notification to the approved user
+    const user = (await getDoc(doc(db, 'users', userId))).data();
+    sendNotification('your request to join the room has been approved.', user.email);
   } catch (error) {
     console.error('Error approving request:', error);
   }
@@ -333,6 +353,28 @@ const isCreator = (userId) => {
 const isApproved = (room) => {
   const currentUser = auth.currentUser;
   return room.approvedUsers.includes(currentUser.uid);
+};
+
+const sendNotification = async (message, userId) => {
+  const headers = {
+    'Authorization': 'Bearer token="ZWY3MWJhMDUtNTU1Yi00NGViLThmNjItNDNhZTY0YzMwOGRh"',
+    'Content-Type': 'application/json'
+  };
+  const userName = auth.currentUser.displayName || auth.currentUser.email;
+  const notificationMessage = `${userName} ${message}`;
+  const data = {
+    "app_id": "65d866ad-f59c-4557-9d75-4ccf7fe60a47",
+    "included_segments": ["All"],
+    "data": {"foo": "bar"},
+    "contents": {"en": notificationMessage}
+  };
+
+  try {
+    const response = await axios.post('https://onesignal.com/api/v1/notifications', data, {headers});
+    console.log('Notification sent:', response.data);
+  } catch (error) {
+    console.error('Error sending notification:', error);
+  }
 };
 
 onMounted(loadRooms);
