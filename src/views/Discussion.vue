@@ -27,8 +27,11 @@
           <div class="p-8 bg-white">
             <h5 class="text-xl font-bold text-black">{{ room.title }}</h5>
             <p class="text-gray-700">{{ room.description }}</p>
-            <button class="block w-full mt-4 bg-gradient-to-r from-green-400 to-blue-500 hover:bg-gradient-to-l text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline" @click="joinRoom(room.roomId)">
+            <button v-if="!room.private || isApproved(room) || isCreator(room.user_id)" class="block w-full mt-4 bg-gradient-to-r from-green-400 to-blue-500 hover:bg-gradient-to-l text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline" @click="joinRoom(room.roomId)">
               Join Room
+            </button>
+            <button v-else class="block w-full mt-4 bg-yellow-400 hover:bg-yellow-500 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline" @click="requestAccess(room.roomId)">
+              Request Access
             </button>
             <template v-if="isCreator(room.user_id)">
               <button class="block w-full mt-4 bg-yellow-400 hover:bg-yellow-500 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline" @click="editRoom(room)">
@@ -37,6 +40,16 @@
               <button class="block w-full mt-4 bg-red-400 hover:bg-red-500 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline" @click="deleteRoom(room.roomId)">
                 Delete Room
               </button>
+              <div v-if="room.requests && room.requests.length > 0" class="mt-4">
+                <h5 class="text-xl font-bold">Join Requests</h5>
+                <ul>
+                  <li v-for="request in room.requests" :key="request">
+                    {{ request }}
+                    <button @click="approveRequest(room.roomId, request)" class="ml-2 bg-green-400 hover:bg-green-500 text-white font-bold py-1 px-2 rounded">Approve</button>
+                    <button @click="rejectRequest(room.roomId, request)" class="ml-2 bg-red-400 hover:bg-red-500 text-white font-bold py-1 px-2 rounded">Reject</button>
+                  </li>
+                </ul>
+              </div>
             </template>
           </div>
         </div>
@@ -56,7 +69,7 @@
               </h3>
               <button @click="closeModal" type="button" class="end-2.5 text-gray-400 bg-transparent hover:bg-gray-200 hover:text-gray-900 rounded-lg text-sm w-8 h-8 ms-auto inline-flex justify-center items-center dark:hover:bg-gray-600 dark:hover:text-white">
                 <svg class="w-3 h-3" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 14 14">
-                  <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m1 1 6 6m0 0 6 6M7 7l6-6M7 7l-6 6"/>
+                  <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M1 1l6 6m0 0l6 6M7 7l6-6M7 7l-6 6"/>
                 </svg>
                 <span class="sr-only">Close modal</span>
               </button>
@@ -71,6 +84,10 @@
                   <label for="newRoomDescription" class="block text-sm font-medium text-gray-700">Description</label>
                   <textarea id="newRoomDescription" v-model="newRoom.description" rows="3" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"></textarea>
                 </div>
+                <div class="mb-4">
+                  <label for="roomPrivate" class="block text-sm font-medium text-gray-700">Private Room</label>
+                  <input type="checkbox" id="roomPrivate" v-model="newRoom.private" class="mt-1">
+                </div>
                 <button type="submit" class="w-full text-white bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:outline-none focus:ring-blue-300 font-medium rounded-lg text-sm px-5 py-2.5 text-center dark:bg-blue-600 dark:hover:bg-blue-700 dark:focus:ring-blue-800">Create Room</button>
               </form>
               <form v-else @submit.prevent="updateRoom" class="space-y-4" action="#">
@@ -81,6 +98,10 @@
                 <div class="mb-4">
                   <label for="editedRoomDescription" class="block text-sm font-medium text-gray-700">Description</label>
                   <textarea id="editedRoomDescription" v-model="editedRoom.description" rows="3" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"></textarea>
+                </div>
+                <div class="mb-4">
+                  <label for="roomPrivateEdit" class="block text-sm font-medium text-gray-700">Private Room</label>
+                  <input type="checkbox" id="roomPrivateEdit" v-model="editedRoom.private" class="mt-1">
                 </div>
                 <button type="submit" class="w-full text-white bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:outline-none focus:ring-blue-300 font-medium rounded-lg text-sm px-5 py-2.5 text-center dark:bg-blue-600 dark:hover:bg-blue-700 dark:focus:ring-blue-800">Update Room</button>
               </form>
@@ -93,10 +114,21 @@
 </template>
 
 <script setup>
-import { db, auth } from '@/firebaseConfig.js';
-import { ref, reactive, onMounted } from 'vue';
-import { addDoc, getDocs, collection, serverTimestamp, updateDoc, doc, deleteDoc, getDoc } from 'firebase/firestore';
-import { useRouter } from 'vue-router';
+import {db, auth} from '@/firebaseConfig.js';
+import {ref, reactive, onMounted} from 'vue';
+import {
+  addDoc,
+  getDocs,
+  collection,
+  serverTimestamp,
+  updateDoc,
+  doc,
+  deleteDoc,
+  getDoc,
+  arrayUnion,
+  arrayRemove
+} from 'firebase/firestore';
+import {useRouter} from 'vue-router';
 
 const router = useRouter();
 
@@ -104,12 +136,14 @@ const rooms = ref([]);
 const loading = ref(true);
 const newRoom = reactive({
   title: '',
-  description: ''
+  description: '',
+  private: false
 });
 const editedRoom = reactive({
   id: '',
   title: '',
-  description: ''
+  description: '',
+  private: false
 });
 
 const openModal = () => {
@@ -127,7 +161,7 @@ const closeModal = () => {
 const loadRooms = async () => {
   try {
     const querySnapshot = await getDocs(collection(db, 'rooms'));
-    rooms.value = querySnapshot.docs.map(doc => doc.data());
+    rooms.value = querySnapshot.docs.map(doc => ({id: doc.id, ...doc.data()}));
     loading.value = false;
   } catch (error) {
     console.error('Error loading rooms:', error);
@@ -141,7 +175,7 @@ const joinRoom = (roomId) => {
 
 const createNewRoom = async () => {
   try {
-    const { title, description } = newRoom;
+    const {title, description, private: isPrivate} = newRoom;
     if (!title || !description) {
       console.error('Title and description are required');
       return;
@@ -158,14 +192,18 @@ const createNewRoom = async () => {
       title,
       description,
       user_id: userId,
+      private: isPrivate,
+      requests: [],
+      approvedUsers: [],
       timestamp: serverTimestamp()
     };
     const docRef = await addDoc(collection(db, 'rooms'), newRoomData);
     const roomId = docRef.id;
     console.log('New room added successfully with ID:', roomId);
-    await updateDoc(doc(db, 'rooms', docRef.id), { roomId });
+    await updateDoc(doc(db, 'rooms', docRef.id), {roomId});
     newRoom.title = '';
     newRoom.description = '';
+    newRoom.private = false;
     await loadRooms();
     closeModal(); // Close modal after creating the room
   } catch (error) {
@@ -177,12 +215,13 @@ const editRoom = (room) => {
   editedRoom.id = room.roomId;
   editedRoom.title = room.title;
   editedRoom.description = room.description;
+  editedRoom.private = room.private;
   openModal();
 };
 
 const updateRoom = async () => {
   try {
-    const { id, title, description } = editedRoom;
+    const {id, title, description, private: isPrivate} = editedRoom;
     if (!title || !description) {
       console.error('Title and description are required');
       return;
@@ -199,7 +238,8 @@ const updateRoom = async () => {
 
     await updateDoc(roomRef, {
       title,
-      description
+      description,
+      private: isPrivate
     });
 
     console.log('Room updated successfully');
@@ -228,9 +268,52 @@ const deleteRoom = async (roomId) => {
   }
 };
 
+const requestAccess = async (roomId) => {
+  try {
+    const roomRef = doc(db, 'rooms', roomId);
+    await updateDoc(roomRef, {
+      requests: arrayUnion(auth.currentUser.uid)
+    });
+    console.log('Request access successful');
+  } catch (error) {
+    console.error('Error requesting access:', error);
+  }
+};
+
+const approveRequest = async (roomId, userId) => {
+  try {
+    const roomRef = doc(db, 'rooms', roomId);
+    await updateDoc(roomRef, {
+      requests: arrayRemove(userId),
+      approvedUsers: arrayUnion(userId)
+    });
+    console.log('Request approved');
+  } catch (error) {
+    console.error('Error approving request:', error);
+  }
+};
+
+const rejectRequest = async (roomId, userId) => {
+  try {
+    const roomRef = doc(db, 'rooms', roomId);
+    await updateDoc(roomRef, {
+      requests: arrayRemove(userId)
+    });
+    console.log('Request rejected');
+  } catch (error) {
+    console.error('Error rejecting request:', error);
+  }
+};
+
+
 const isCreator = (userId) => {
   const currentUser = auth.currentUser;
   return currentUser && currentUser.uid === userId;
+};
+
+const isApproved = (room) => {
+  const currentUser = auth.currentUser;
+  return room.approvedUsers.includes(currentUser.uid);
 };
 
 onMounted(loadRooms);
