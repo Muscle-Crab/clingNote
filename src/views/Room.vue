@@ -61,7 +61,10 @@
           <h2 class="text-xl font-semibold text-gray-200 mb-4">Participants</h2>
           <ul class="space-y-4">
             <li v-for="participant in selectedRoom.participants" :key="participant.id" class="flex items-center">
-              <img :src="participant.avatar" alt="Participant" class="w-12 h-12 rounded-full mr-4">
+              <div class="w-12 h-12 rounded-full mr-4 flex items-center justify-center bg-gray-700 text-white text-xl">
+                <img v-if="participant.avatar" :src="participant.avatar" alt="Participant" class="rounded-full w-full h-full">
+                <span v-else>{{ participant.name.charAt(0).toUpperCase() }}</span>
+              </div>
               <span class="text-gray-200">{{ participant.name }}</span>
             </li>
           </ul>
@@ -73,7 +76,10 @@
             <div class="min-w-sm p-6 bg-gray-800 border border-gray-700 rounded-lg shadow dark:bg-gray-800 dark:border-gray-700">
               <div class="flex items-center justify-between mb-4">
                 <div class="flex items-center">
-                  <img :src="getParticipantAvatar(post.userId)" alt="User" class="w-12 h-12 rounded-full mr-2">
+                  <div class="w-12 h-12 rounded-full mr-2 flex items-center justify-center bg-gray-700 text-white text-xl">
+                    <img v-if="getParticipantAvatar(post.userId)" :src="getParticipantAvatar(post.userId)" alt="User" class="rounded-full w-full h-full">
+                    <span v-else>{{ getParticipantName(post.userId).charAt(0).toUpperCase() }}</span>
+                  </div>
                   <span class="font-semibold text-gray-200">{{ getParticipantName(post.userId) }}</span>
                 </div>
               </div>
@@ -104,7 +110,10 @@
                   <article v-for="comment in post.comments" :key="comment.id" :id="'comment-' + comment.id" class="pt-4 md:p-4 text-base bg-gray-800 dark:bg-gray-900">
                     <footer class="flex flex-col md:flex-row justify-between">
                       <div class="flex">
-                        <img class="w-12 h-12 md:w-12 md:h-12 rounded-full mr-3" :src="getParticipantAvatar(comment.userId)" :alt="getParticipantName(comment.userId)">
+                        <div class="w-12 h-12 md:w-12 md:h-12 rounded-full mr-3 flex items-center justify-center bg-gray-700 text-white text-xl">
+                          <img v-if="getParticipantAvatar(comment.userId)" :src="getParticipantAvatar(comment.userId)" :alt="getParticipantName(comment.userId)" class="rounded-full w-full h-full">
+                          <span v-else>{{ getParticipantName(comment.userId).charAt(0).toUpperCase() }}</span>
+                        </div>
                         <div>
                           <p class="text-sm text-gray-200 dark:text-white font-semibold">{{ getParticipantName(comment.userId) }}</p>
                           <textarea v-if="editingCommentId === comment.id" v-model="editedComment" class="mt-1 block w-full text-sm text-gray-200 border-0 focus:ring-0 focus:outline-none dark:text-white dark:placeholder-gray-400 dark:bg-gray-900" required>{{ comment.message }}</textarea>
@@ -227,7 +236,7 @@ const editingCommentId = ref(null);
 const formatTimestampToAgo = (timestamp) => {
   if (!timestamp) return null;
   const date = timestamp.toDate();
-  return formatDistanceToNow(date, { addSuffix: true, includeSeconds: true }).replace('about ', '');
+  return formatDistanceToNow(date, {addSuffix: true, includeSeconds: true}).replace('about ', '');
 };
 const newPost = ref({
   topic: '',
@@ -240,7 +249,7 @@ onMounted(() => {
   const unsubscribe = onSnapshot(collection(db, 'posts'), snapshot => {
     const posts = [];
     snapshot.forEach(doc => {
-      const postData = { ...doc.data(), id: doc.id };
+      const postData = {...doc.data(), id: doc.id};
       if (postData.room_id === room_id.value) {
         posts.push(postData);
       }
@@ -256,7 +265,7 @@ const deleteComment = async (post, commentId) => {
     const postSnapshot = await getDoc(postRef);
     const postComments = postSnapshot.data().comments;
     const filteredComments = postComments.filter(c => c.id !== commentId);
-    await updateDoc(postRef, { comments: filteredComments });
+    await updateDoc(postRef, {comments: filteredComments});
   } catch (error) {
     console.error('Error deleting comment: ', error);
   }
@@ -288,7 +297,7 @@ const saveComment = async (post, comment) => {
     const editedIndex = postComments.findIndex(c => c.id === comment.id);
     if (editedIndex !== -1) {
       postComments[editedIndex].message = editedComment.value;
-      await updateDoc(postRef, { comments: postComments });
+      await updateDoc(postRef, {comments: postComments});
       editingCommentId.value = null;
       editedComment.value = '';
     }
@@ -311,7 +320,7 @@ const toggleReaction = async (post, reaction) => {
     } else {
       postReactions[currentUser.value.uid] = reaction;
     }
-    await updateDoc(postRef, { reactions: postReactions });
+    await updateDoc(postRef, {reactions: postReactions});
     post.reactions = postReactions;
   } catch (error) {
     console.error('Error toggling reaction: ', error);
@@ -343,7 +352,7 @@ const showCreatePostModal = (post = null) => {
 
 const closeModal = () => {
   showModal.value = false;
-  newPost.value = { topic: '', message: '' };
+  newPost.value = {topic: '', message: ''};
   editingPost.value = null;
 };
 const currentUser = ref(null);
@@ -385,7 +394,7 @@ const createNewPost = async () => {
     setTimeout(() => {
       const postElement = document.getElementById(`post-${docRef.id}`);
       if (postElement) {
-        postElement.scrollIntoView({ behavior: 'smooth' });
+        postElement.scrollIntoView({behavior: 'smooth'});
       }
     }, 500);
   } catch (error) {
@@ -402,12 +411,12 @@ const sendNotification = async (message, userName) => {
   const data = {
     "app_id": "65d866ad-f59c-4557-9d75-4ccf7fe60a47",
     "included_segments": ["All"],
-    "data": { "foo": "bar" },
-    "contents": { "en": notificationMessage }
+    "data": {"foo": "bar"},
+    "contents": {"en": notificationMessage}
   };
 
   try {
-    const response = await axios.post('https://onesignal.com/api/v1/notifications', data, { headers });
+    const response = await axios.post('https://onesignal.com/api/v1/notifications', data, {headers});
     console.log('Notification sent:', response.data);
   } catch (error) {
     console.error('Error sending notification:', error);
@@ -435,7 +444,7 @@ const addComment = async (post) => {
   };
 
   try {
-    await updateDoc(doc(db, 'posts', post.id), { comments: arrayUnion(comment) });
+    await updateDoc(doc(db, 'posts', post.id), {comments: arrayUnion(comment)});
     commentInput.value[post.id] = '';
     const userName = getParticipantName(userId);
     await sendNotification('commented on a post.', userName, post.id, comment.id);
@@ -443,7 +452,7 @@ const addComment = async (post) => {
     setTimeout(() => {
       const commentElement = document.getElementById(`comment-${comment.id}`);
       if (commentElement) {
-        commentElement.scrollIntoView({ behavior: 'smooth' });
+        commentElement.scrollIntoView({behavior: 'smooth'});
       }
     }, 500);
   } catch (e) {
