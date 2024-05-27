@@ -543,7 +543,7 @@ const addComment = async (post) => {
     await updateDoc(doc(db, 'posts', post.id), {comments: arrayUnion(comment)});
     commentInput.value[post.id] = '';
     const userName = getParticipantName(userId);
-    // await sendNotification('commented on a post.', userName, post.id, comment.id);
+    await sendNotification('commented on a post.', userName, post.id, comment.id);
     // Scroll to the new comment
     setTimeout(() => {
       const commentElement = document.getElementById(`comment-${comment.id}`);
