@@ -17,7 +17,7 @@
         <h2 class="text-2xl font-bold mb-4 text-white">Example Posts</h2>
         <div class="mb-6">
           <div class="flex space-x-2 overflow-x-auto">
-            <div v-for="story in stories" :key="story.id" class="relative bg-gray-800 dark:bg-gray-800 rounded-lg shadow-lg w-40 h-32 flex-shrink-0 flex items-center justify-center p-1 border-2 border-green-500">
+            <div v-for="story in stories" :key="story.id" class="relative bg-gray-800 dark:bg-gray-800 rounded-lg shadow-lg w-40 h-32 flex-shrink-0 flex items-center justify-center p-1 border-2 border-indigo-500">
               <div class="text-gray-200 text-sm text-center">
                 {{ story.text }}
               </div>
@@ -146,7 +146,12 @@
                           <p v-else class="text-gray-400 dark:text-gray-400">{{ comment.message }}</p>
                         </div>
                       </div>
-                      <div>
+                      <div class="flex items-center space-x-2">
+                        <button @click="speakText(comment.message)" class="text-gray-400 hover:text-indigo-400 focus:outline-none">
+                          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                            <path d="M10 3a1 1 0 01.993.883L11 4v12a1 1 0 01-1.993.117L9 16V4a1 1 0 011-1zm5.707 2.293a1 1 0 011.5 1.32l-.083.094-3.25 3.25a1 1 0 01-1.32.083l-.094-.083-3.25-3.25a1 1 0 011.32-1.497l.094.083L12 7.086l3.207-3.293z" />
+                          </svg>
+                        </button>
                         <div v-if="editingCommentId !== comment.id && currentUser && currentUser.uid === comment.userId">
                           <button @click="editComment(comment)" class="text-blue-400 focus:outline-none">Edit</button> |
                           <button @click="deleteComment(post, comment.id)" class="text-red-400 focus:outline-none">Delete</button>
@@ -525,7 +530,14 @@ const addComment = async (post) => {
     console.error('Error adding comment: ', e);
   }
 };
-
+const speakText = (text) => {
+  if ('speechSynthesis' in window) {
+    const utterance = new SpeechSynthesisUtterance(text);
+    window.speechSynthesis.speak(utterance);
+  } else {
+    console.warn('Text-to-speech not supported in this browser.');
+  }
+};
 const getParticipantAvatar = (userId) => {
   const participant = selectedRoom.value.participants.find(p => p.id === userId);
   return participant ? participant.avatar : '';
