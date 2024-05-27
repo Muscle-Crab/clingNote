@@ -125,13 +125,16 @@
                     <span>{{ post.likes }}</span>
                   </button>
                 </div>
-                <div>
+                <div class="relative">
                   <button @click="toggleCommentSection(post)" class="flex items-center text-blue-400 focus:outline-none">
                     <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l3 3m-3-3l-3 3m3-3H3a2 2 0 01-2-2V5a2 2 0 012-2h18a2 2 0 012 2v10a2 2 0 01-2 2h-8l-3 3z"></path>
                     </svg>
                     <span>{{ post.comments.length }}</span>
                   </button>
+                  <span v-if="unreadCommentsCount(post) > 0" class="absolute top-0 right-0 -mt-2 -mr-2 bg-red-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center">
+                  {{ unreadCommentsCount(post) }}
+                 </span>
                 </div>
               </div>
               <section v-if="post.showComments" class="bg-gray-800 dark:bg-gray-900 antialiased">
@@ -343,13 +346,7 @@ const deleteComment = async (post, commentId) => {
   }
 };
 
-const leaveRoom = () => {
-  console.log('Left the room');
-};
 
-const shareRoom = () => {
-  console.log('Shared the room');
-};
 
 const toggleLike = (item) => {
   item.liked = !item.liked;
@@ -359,6 +356,13 @@ const toggleLike = (item) => {
 const editComment = (comment) => {
   editingCommentId.value = comment.id;
   editedComment.value = comment.message;
+};
+const unreadCommentsCount = (post) => {
+  if (!currentUser.value) return 0;
+
+  const totalComments = post.comments.length;
+  const readComments = post.readComments?.[currentUser.value.uid] || [];
+  return totalComments - readComments.length;
 };
 
 const saveComment = async (post, comment) => {
@@ -378,8 +382,28 @@ const saveComment = async (post, comment) => {
   }
 };
 
-const toggleCommentSection = (item) => {
-  item.showComments = !item.showComments;
+const toggleCommentSection = async (post) => {
+  post.showComments = !post.showComments;
+  if (post.showComments && currentUser.value) {
+    try {
+      const postRef = doc(db, 'posts', post.id);
+      const postSnapshot = await getDoc(postRef);
+      const postReadComments = postSnapshot.data().readComments || {};
+      const userReadComments = postReadComments[currentUser.value.uid] || [];
+
+      const newReadComments = post.comments
+          .map(comment => comment.id)
+          .filter(commentId => !userReadComments.includes(commentId));
+
+      if (newReadComments.length > 0) {
+        await updateDoc(postRef, {
+          [`readComments.${currentUser.value.uid}`]: arrayUnion(...newReadComments)
+        });
+      }
+    } catch (error) {
+      console.error('Error updating read comments:', error);
+    }
+  }
 };
 
 const toggleReaction = async (post, reaction) => {
@@ -519,7 +543,7 @@ const addComment = async (post) => {
     await updateDoc(doc(db, 'posts', post.id), {comments: arrayUnion(comment)});
     commentInput.value[post.id] = '';
     const userName = getParticipantName(userId);
-    await sendNotification('commented on a post.', userName, post.id, comment.id);
+    // await sendNotification('commented on a post.', userName, post.id, comment.id);
     // Scroll to the new comment
     setTimeout(() => {
       const commentElement = document.getElementById(`comment-${comment.id}`);
