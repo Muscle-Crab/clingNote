@@ -108,6 +108,9 @@
                   </div>
                   <span class="font-semibold text-gray-200">{{ getParticipantName(post.userId) }}</span>
                 </div>
+                <button @click="speakText(getParticipantName(post.userId), post.topic)" class="text-gray-400 hover:text-indigo-400 focus:outline-none">
+                  <i class="fa fa-volume-up"></i>
+                </button>
               </div>
               <a href="#">
                 <h5 class="mb-2 font-bold tracking-tight text-gray-200 dark:text-white">{{ post.topic }}</h5>
@@ -147,10 +150,8 @@
                         </div>
                       </div>
                       <div class="flex items-center space-x-2">
-                        <button @click="speakText(comment.message)" class="text-gray-400 hover:text-indigo-400 focus:outline-none">
-                          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                            <path d="M10 3a1 1 0 01.993.883L11 4v12a1 1 0 01-1.993.117L9 16V4a1 1 0 011-1zm5.707 2.293a1 1 0 011.5 1.32l-.083.094-3.25 3.25a1 1 0 01-1.32.083l-.094-.083-3.25-3.25a1 1 0 011.32-1.497l.094.083L12 7.086l3.207-3.293z" />
-                          </svg>
+                        <button @click="speakText(getParticipantName(comment.userId), comment.message)" class="text-gray-400 hover:text-indigo-400 focus:outline-none">
+                          <i class="fa fa-volume-up"></i>
                         </button>
                         <div v-if="editingCommentId !== comment.id && currentUser && currentUser.uid === comment.userId">
                           <button @click="editComment(comment)" class="text-blue-400 focus:outline-none">Edit</button> |
@@ -530,14 +531,15 @@ const addComment = async (post) => {
     console.error('Error adding comment: ', e);
   }
 };
-const speakText = (text) => {
+const speakText = (username, message) => {
   if ('speechSynthesis' in window) {
-    const utterance = new SpeechSynthesisUtterance(text);
+    const utterance = new SpeechSynthesisUtterance(`${username} says: ${message}`);
     window.speechSynthesis.speak(utterance);
   } else {
     console.warn('Text-to-speech not supported in this browser.');
   }
 };
+
 const getParticipantAvatar = (userId) => {
   const participant = selectedRoom.value.participants.find(p => p.id === userId);
   return participant ? participant.avatar : '';
