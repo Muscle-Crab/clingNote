@@ -1,6 +1,6 @@
 <template>
   <!-- Main wrapper for the entire app -->
-  <div class="min-h-screen bg-gray-900 dark:bg-[#1c1c1e]">
+  <div class="min-h-screen bg-gray-900 dark:bg-[#1c1c1e]" style="background-image: url('https://www.transparenttextures.com/patterns/cubes.png'); background-position: center;">
     <!-- Container for the entire room -->
     <div class="container mx-auto px-4 py-1 pt-10">
       <!-- Search Bar -->
