@@ -3,6 +3,32 @@
   <div class="min-h-screen bg-gray-900 dark:bg-[#1c1c1e]">
     <!-- Container for the entire room -->
     <div class="container mx-auto px-4 py-1 pt-10">
+      <!-- Search Bar -->
+      <div class="mb-6">
+        <input
+            v-model="searchQuery"
+            @input="searchContent"
+            type="text"
+            placeholder="Search for posts or participants..."
+            class="w-full p-4 rounded-lg border border-gray-600 bg-gray-800 text-gray-200 placeholder-gray-500"
+        />
+      </div>
+      <div class="mb-6">
+        <h2 class="text-2xl font-bold mb-4 text-white">Example Posts</h2>
+        <div class="mb-6">
+          <div class="flex space-x-2 overflow-x-auto">
+            <div v-for="story in stories" :key="story.id" class="relative bg-gray-800 dark:bg-gray-800 rounded-lg shadow-lg w-40 h-32 flex-shrink-0 flex items-center justify-center p-1 border-2 border-green-500">
+              <div class="text-gray-200 text-sm text-center">
+                {{ story.text }}
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+
+
       <!-- Grid layout for different sections -->
       <div v-if="loading" class="animate-pulse">
         <!-- Skeleton Loader for Participants -->
@@ -72,7 +98,7 @@
 
         <!-- Main Content: Posts -->
         <div class="col-span-2 grid grid-cols-1 gap-8">
-          <div v-for="post in selectedRoom.posts" :key="post.id" :id="'post-' + post.id" class="md:min-w-[320px]">
+          <div v-for="post in filteredPosts" :key="post.id" :id="'post-' + post.id" class="md:min-w-[320px]">
             <div class="min-w-sm p-6 bg-gray-800 border border-gray-700 rounded-lg shadow dark:bg-gray-800 dark:border-gray-700">
               <div class="flex items-center justify-between mb-4">
                 <div class="flex items-center">
@@ -169,13 +195,7 @@
           </div>
         </div>
 
-        <!-- Right Sidebar: Actions -->
-        <div class="col-span-1 bg-gray-800 rounded-lg shadow-md p-6 dark:bg-gray-800">
-          <h2 class="text-xl font-semibold text-gray-200 mb-4">Actions</h2>
-          <button @click="leaveRoom" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline mb-4">Leave Room</button>
-          <button @click="shareRoom" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline mb-4">Share Room</button>
-          <button @click="showCreatePostModal()" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">Create New Post</button>
-        </div>
+
       </div>
     </div>
 
@@ -196,6 +216,41 @@
         </form>
       </div>
     </div>
+    <!-- Bottom Navigation Bar -->
+    <div class="fixed bottom-0 left-0 right-0 bg-gray-800 dark:bg-gray-900 shadow-lg py-2 flex justify-around">
+      <button @click="navigateTo('home')" class="flex flex-col items-center text-gray-400 dark:text-gray-300 hover:text-indigo-400 dark:hover:text-indigo-500">
+        <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <path d="M3 12l2-2 7-7 7 7 2 2h-5v6h-8v-6H3z"/>
+        </svg>
+        <span class="text-xs">Home</span>
+      </button>
+      <button @click="navigateTo('search')" class="flex flex-col items-center text-gray-400 dark:text-gray-300 hover:text-indigo-400 dark:hover:text-indigo-500">
+        <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <path d="M21 21l-6-6m2-3a7 7 0 1 1-14 0 7 7 0 0 1 14 0z"/>
+        </svg>
+        <span class="text-xs">Search</span>
+      </button>
+      <button @click="navigateTo('notifications')" class="flex flex-col items-center text-gray-400 dark:text-gray-300 hover:text-indigo-400 dark:hover:text-indigo-500">
+        <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <path d="M15 17h5l-1.405-1.405M18 10a6 6 0 1 0-12 0 6 6 0 0 0 12 0z"/>
+        </svg>
+        <span class="text-xs">Notifications</span>
+      </button>
+      <button @click="navigateTo('profile')" class="flex flex-col items-center text-gray-400 dark:text-gray-300 hover:text-indigo-400 dark:hover:text-indigo-500">
+        <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zM2 20c0-2.21 1.79-4 4-4h12c2.21 0 4 1.79 4 4v2H2v-2z"/>
+        </svg>
+        <span class="text-xs">Profile</span>
+      </button>
+    </div>
+
+
+    <!-- Floating Action Button -->
+    <button @click="showCreatePostModal()" class="fixed bottom-16 right-4 bg-indigo-600 text-white p-4 rounded-full shadow-lg">
+      <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+      </svg>
+    </button>
   </div>
 </template>
 
@@ -244,6 +299,15 @@ const newPost = ref({
 });
 const editingPost = ref(null);
 const commentInput = ref({});
+const searchQuery = ref('');
+const filteredPosts = ref([]);
+const filteredParticipants = ref([]);
+
+const searchContent = () => {
+  const query = searchQuery.value.toLowerCase();
+  filteredPosts.value = selectedRoom.value.posts.filter(post => post.topic.toLowerCase().includes(query) || post.message.toLowerCase().includes(query));
+  filteredParticipants.value = selectedRoom.value.participants.filter(participant => participant.name.toLowerCase().includes(query));
+};
 
 onMounted(() => {
   const unsubscribe = onSnapshot(collection(db, 'posts'), snapshot => {
@@ -255,6 +319,8 @@ onMounted(() => {
       }
     });
     selectedRoom.value.posts = posts;
+    filteredPosts.value = posts;
+    filteredParticipants.value = selectedRoom.value.participants;
   });
   return unsubscribe;
 });
@@ -469,7 +535,13 @@ const getParticipantName = (userId) => {
   const participant = selectedRoom.value.participants.find(p => p.id === userId);
   return participant ? participant.name : '';
 };
-
+const stories = ref([
+  { id: 1, text: 'If you could have dinner with any celebrity, who would it be?' },
+  { id: 2, text: 'What is your favorite movie and why?' },
+  { id: 3, text: 'If you could instantly master any musical instrument, which one would you choose?' },
+  { id: 4, text: 'What is your go-to comfort food?' },
+  { id: 5, text: 'If you could visit any country in the world, where would you go?' },
+]);
 const getPostComments = (post) => post.comments;
 
 const getPostCommentsCount = (post) => post.comments.length;
