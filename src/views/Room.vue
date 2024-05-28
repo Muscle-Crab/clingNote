@@ -81,9 +81,9 @@
       </div>
 
       <!-- Actual Content -->
-      <div v-else class="grid grid-cols-1 md:grid-cols-3 gap-8">
+      <div v-else class="md:grid grid-cols-1 md:grid-cols-3 gap-8">
         <!-- Left Sidebar: Participants -->
-        <div class="col-span-1 bg-gray-800 rounded-lg shadow-md p-6 dark:bg-gray-800">
+        <div class="col-span-1 mb-5 bg-gray-800 rounded-lg shadow-md p-6 dark:bg-gray-800">
           <h2 class="text-xl font-semibold text-gray-200 mb-4">Participants</h2>
           <ul class="space-y-4">
             <li v-for="participant in selectedRoom.participants" :key="participant.id" class="flex items-center">

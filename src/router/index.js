@@ -4,6 +4,7 @@ import RegisterPage from '../views/UserRegistrationForm.vue';
 import Login from '../views/Login.vue';
 import { auth } from '../firebaseConfig'; // Import your Firebase authentication instance
 import Room from '../views/Room.vue';
+import Landing from '../views/landing.vue';
 const routes = [
   {
     path: '/tasks',
@@ -22,6 +23,12 @@ const routes = [
     component: () => import('@/views/Profile.vue'),
     props: true,
     meta: { requiresAuth: true }
+  }, {
+    path: '/landing',
+    name: 'Landing',
+    component: Landing,
+
+
   },{
     path: '/',
     name: 'Discussion',
