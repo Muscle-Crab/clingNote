@@ -80,8 +80,8 @@
         </div>
       </div>
 
-      <!-- Actual Content -->
-      <div v-else class="md:grid grid-cols-1 md:grid-cols-3 gap-8">
+      <div v-else class="md:grid grid-cols-1 md:grid-cols-3 gap-8 items-start">
+        <!-- Actual Content -->
         <!-- Left Sidebar: Participants -->
         <div class="col-span-1 mb-5 bg-gray-800 rounded-lg shadow-md p-6 dark:bg-gray-800">
           <h2 class="text-xl font-semibold text-gray-200 mb-4">Participants</h2>

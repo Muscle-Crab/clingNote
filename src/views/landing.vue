@@ -6,7 +6,7 @@
         <p class="text-lg text-center mb-8">ClingNote is your go-to app for posting topics and getting opinions</p>
         <div class="flex justify-center">
           <button @click="speak" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded flex items-center">
-            <i class="fas fa-play-circle mr-2"></i> Play
+            <i class="fas fa-play-circle mr-2"></i> Listen
           </button>
         </div>
         <div class="max-w-3xl mx-auto mb-12">
@@ -79,7 +79,7 @@ export default {
         {id: 2, text: 'What music you could listen for an hour loop '},
         {id: 3, text: 'If you could instantly master any musical instrument, which one would you choose?'},
         {id: 4, text: 'If Jamaica had the same currency as Us, How often do you think people would travel'},
-        {id: 5, text: 'What is the most memorable soccer match you\'ve ever watched, and why?'},
+        {id: 5, text: ' Will Robots Take Our Jobs The '},
         {id: 6, text: 'Imagine having Messi, Ronaldo, Maradona and Pele as substitute and you need one goal to win on the 85th, who would you choose?'}
       ]
     };
