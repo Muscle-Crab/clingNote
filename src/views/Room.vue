@@ -106,7 +106,10 @@
                     <img v-if="getParticipantAvatar(post.userId)" :src="getParticipantAvatar(post.userId)" alt="User" class="rounded-full w-full h-full">
                     <span v-else>{{ getParticipantName(post.userId).charAt(0).toUpperCase() }}</span>
                   </div>
-                  <span class="font-semibold text-gray-200">{{ getParticipantName(post.userId) }}</span>
+                  <div class="flex flex-col">
+                    <span class="font-semibold text-gray-200">{{ getParticipantName(post.userId) }}</span>
+                    <span class="text-sm text-gray-400">{{ formatTimestamp(post.timestamp) }}</span>
+                  </div>
                 </div>
                 <button @click="speakText(getParticipantName(post.userId), post.topic)" class="text-gray-400 hover:text-indigo-400 focus:outline-none">
                   <i class="fa fa-volume-up"></i>
@@ -279,10 +282,13 @@
 import { ref, onMounted } from 'vue';
 import axios from 'axios';
 import { db, auth } from '@/firebaseConfig';
-import { formatDistanceToNow } from 'date-fns';
+
 import { collection, getDoc, onSnapshot, getDocs, addDoc, serverTimestamp, deleteDoc, doc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { useRoute } from 'vue-router';
+import dayjs from 'dayjs';
+import relativeTime from 'dayjs/plugin/relativeTime';
 
+dayjs.extend(relativeTime);
 const generateUniqueId = () => Math.random().toString(36).substr(2, 9);
 
 const route = useRoute();
@@ -309,11 +315,7 @@ const showModal = ref(false);
 const editedComment = ref('');
 const editingCommentId = ref(null);
 
-const formatTimestampToAgo = (timestamp) => {
-  if (!timestamp) return null;
-  const date = timestamp.toDate();
-  return formatDistanceToNow(date, {addSuffix: true, includeSeconds: true}).replace('about ', '');
-};
+
 const newPost = ref({
   topic: '',
   message: '',
@@ -340,6 +342,7 @@ onMounted(() => {
         posts.push(postData);
       }
     });
+    posts.sort((a, b) => b.timestamp - a.timestamp)
     selectedRoom.value.posts = posts;
     filteredPosts.value = posts;
     filteredParticipants.value = selectedRoom.value.participants;
@@ -605,11 +608,16 @@ const stories = ref([
   { id: 4, text: 'What is your go-to comfort food?' },
   { id: 5, text: 'If you could visit any country in the world, where would you go?' },
 ]);
-const getPostComments = (post) => post.comments;
+const formatTimestamp = (timestamp) => {
+  const seconds = timestamp.seconds;
+  const milliseconds = seconds * 1000 + Math.round(timestamp.nanoseconds / 1000000);
+  return dayjs(milliseconds).fromNow();
+};
 
-const getPostCommentsCount = (post) => post.comments.length;
 
-const allComments = selectedRoom.value.posts.reduce((acc, post) => acc.concat(post.comments), []);
+
+
+
 </script>
 
 <style scoped>
