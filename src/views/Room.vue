@@ -17,7 +17,7 @@
         <h2 class="text-2xl font-bold mb-4 text-white">Example Posts</h2>
         <div class="mb-6">
           <div class="flex space-x-2 overflow-x-auto">
-            <div v-for="story in stories" :key="story.id" class="relative bg-gray-800 dark:bg-gray-800 rounded-lg shadow-lg w-40 h-32 flex-shrink-0 flex items-center justify-center p-1 border-2 border-indigo-500">
+            <div v-for="story in stories" :key="story.id" class="relative bg-gray-800 dark:bg-gray-800 rounded-lg shadow-lg w-40 h-32 flex-shrink-0 flex items-center justify-center p-1 ">
               <div class="text-gray-200 text-sm text-center">
                 {{ story.text }}
               </div>
@@ -115,6 +115,13 @@
               <a href="#">
                 <h5 class="mb-2 font-bold tracking-tight text-gray-200 dark:text-white">{{ post.topic }}</h5>
               </a>
+              <a v-if="post.url?.includes('youtube.com')" :href="post.url" target="_blank">
+                <iframe width="100%" height="200" :src="'https://www.youtube.com/embed/' + extractYouTubeId(post.url)" frameborder="0" allowfullscreen></iframe>
+              </a>
+              <a v-else-if="post.url?.includes('tiktok.com')" :href="post.url" target="_blank">
+                <iframe width="100%" height="200" :src="'https://www.tiktok.com/embed/v2/' + extractTikTokId(post.url)" frameborder="0" allowfullscreen></iframe>
+              </a>
+
               <p class="text-gray-400 mb-4">{{ post.message }}</p>
               <div class="flex justify-between items-center">
                 <div>
@@ -218,6 +225,10 @@
             <label for="postMessage" class="block text-sm font-medium text-gray-200">Message</label>
             <textarea id="postMessage" v-model="newPost.topic" rows="6" class="mt-1 block w-full text-sm text-gray-900 border-0 focus:ring-0 focus:outline-none dark:text-white dark:placeholder-gray-400 dark:bg-gray-800" style="padding: 8px;" placeholder="Choose a topic to discuss" required></textarea>
           </div>
+<!--          <div class="py-2 px-4 mb-4 bg-gray-800 rounded-lg border border-gray-700 dark:bg-gray-800 dark:border-gray-700">-->
+<!--            <label for="postUrl" class="block text-sm font-medium text-gray-200">URL</label>-->
+<!--            <input id="postUrl" v-model="newPost.url" type="text" class="mt-1 block w-full text-sm text-gray-900 border-0 focus:ring-0 focus:outline-none dark:text-white dark:placeholder-gray-400 dark:bg-gray-800" placeholder="Paste URL here" required>-->
+<!--          </div>-->
           <div class="flex justify-end">
             <button type="submit" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">{{ editingPost ? 'Update' : 'Create' }}</button>
             <button @click="closeModal" type="button" class="ml-2 bg-gray-500 hover:bg-gray-600 text-gray-200 font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">Cancel</button>
@@ -225,6 +236,7 @@
         </form>
       </div>
     </div>
+
     <!-- Bottom Navigation Bar -->
     <div class="fixed bottom-0 left-0 right-0 bg-gray-800 dark:bg-gray-900 shadow-lg py-2 flex justify-around">
       <button @click="navigateTo('home')" class="flex flex-col items-center text-gray-400 dark:text-gray-300 hover:text-indigo-400 dark:hover:text-indigo-500">
@@ -304,7 +316,8 @@ const formatTimestampToAgo = (timestamp) => {
 };
 const newPost = ref({
   topic: '',
-  message: ''
+  message: '',
+  url:''
 });
 const editingPost = ref(null);
 const commentInput = ref({});
@@ -462,6 +475,17 @@ onMounted(() => {
     }
   });
 });
+const extractYouTubeId = (url) => {
+  const match = url.match(/(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|\S*?[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+  return match ? match[1] : null;
+};
+
+const extractTikTokId = (url) => {
+  const match = url.match(/(?:https?:\/\/)?(?:www\.)?tiktok\.com\/@([^/]+)\/video\/(\d+)/);
+  return match ? match[2] : null;
+};
+
+
 
 const createNewPost = async () => {
   const userId = currentUser.value ? currentUser.value.uid : null;
@@ -474,6 +498,7 @@ const createNewPost = async () => {
     room_id: room_id.value,
     topic: newPost.value.topic,
     message: newPost.value.message,
+    url: newPost.value.url,
     timestamp: serverTimestamp(),
     liked: false,
     likes: 0,
@@ -485,7 +510,7 @@ const createNewPost = async () => {
     const docRef = await addDoc(collection(db, 'posts'), newPostData);
     closeModal();
     const userName = getParticipantName(newPostData.userId);
-    await sendNotification('created a new post.', userName, docRef.id);
+    // await sendNotification('created a new post.', userName, docRef.id);
     // Scroll to the new post
     setTimeout(() => {
       const postElement = document.getElementById(`post-${docRef.id}`);
