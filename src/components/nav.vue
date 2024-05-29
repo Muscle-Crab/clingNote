@@ -9,9 +9,12 @@
         </svg>
       </button>
       <!-- Display user's email -->
-      <div v-if="userEmail" class="text-gray-800 dark:text-gray-200">
-        {{ userEmail }}
-      </div>
+      <router-link :to="'/profile/' + userId">
+        <div v-if="userEmail" class="text-gray-800 dark:text-gray-200">
+          {{ userEmail }}
+        </div>
+      </router-link>
+
     </div>
     <!-- Sidebar -->
     <aside :class="{ 'hidden': !sidebarOpen, 'block': sidebarOpen }"
@@ -64,7 +67,7 @@ import {useRouter} from 'vue-router';
 const router = useRouter();
 const sidebarOpen = ref(false);
 const userEmail = ref(null);
-
+const userId = ref(null)
 const logout = async () => {
   try {
     await auth.signOut(); // Sign the user out
@@ -93,6 +96,7 @@ onMounted(() => {
   const user = auth.currentUser;
   if (user) {
     userEmail.value = user.email;
+    userId.value = user.uid;
   }
 
   // Listen for auth state changes
