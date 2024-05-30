@@ -39,12 +39,12 @@
       <!-- Sidebar content -->
       <nav class="px-4 py-8">
         <ul class="space-y-4">
-          <li>
-            <a href="#"
-               class="text-gray-800 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-500 font-medium">
-              <router-link to="/tasks">My Routine</router-link>
-            </a>
-          </li>
+<!--          <li>-->
+<!--            <a href="#"-->
+<!--               class="text-gray-800 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-500 font-medium">-->
+<!--              <router-link to="/tasks">My Routine</router-link>-->
+<!--            </a>-->
+<!--          </li>-->
           <li>
             <!-- Add logout functionality -->
             <button @click="logout"

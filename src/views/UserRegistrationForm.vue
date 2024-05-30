@@ -97,7 +97,7 @@ const registerUser = async () => {
     dob.value = '';
     gender.value = '';
     avatar.value = null;
-    router.push('/landing');
+    router.push('/');
   } catch (error) {
     console.error('Registration failed:', error.message);
   } finally {

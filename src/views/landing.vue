@@ -62,7 +62,13 @@
             <p class="text-lg">I'm always open to new ideas so let me know if you have any new feature</p>
           </div>
         </div>
-
+        <div class="flex justify-center">
+          <button  class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded flex items-center">
+           <router-link to="/register"> <span>
+               Get Started
+            </span></router-link>
+          </button>
+        </div>
 
       </div>
     </div>
