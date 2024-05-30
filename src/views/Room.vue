@@ -230,10 +230,10 @@
             <label for="postMessage" class="block text-sm font-medium text-gray-200">Message</label>
             <textarea id="postMessage" v-model="newPost.topic" rows="6" class="mt-1 block w-full text-sm text-gray-900 border-0 focus:ring-0 focus:outline-none dark:text-white dark:placeholder-gray-400 dark:bg-gray-800" style="padding: 8px;" placeholder="Choose a topic to discuss" required></textarea>
           </div>
-          <div class="py-2 px-4 mb-4 bg-gray-800 rounded-lg border border-gray-700 dark:bg-gray-800 dark:border-gray-700">
-            <label for="postUrl" class="block text-sm font-medium text-gray-200">URL</label>
-            <input id="postUrl" v-model="newPost.url" type="text" class="mt-1 block w-full text-sm text-gray-900 border-0 focus:ring-0 focus:outline-none dark:text-white dark:placeholder-gray-400 dark:bg-gray-800" placeholder="Paste URL here" required>
-          </div>
+<!--          <div class="py-2 px-4 mb-4 bg-gray-800 rounded-lg border border-gray-700 dark:bg-gray-800 dark:border-gray-700">-->
+<!--            <label for="postUrl" class="block text-sm font-medium text-gray-200">URL</label>-->
+<!--            <input id="postUrl" v-model="newPost.url" type="text" class="mt-1 block w-full text-sm text-gray-900 border-0 focus:ring-0 focus:outline-none dark:text-white dark:placeholder-gray-400 dark:bg-gray-800" placeholder="Paste URL here" required>-->
+<!--          </div>-->
           <div class="flex justify-end">
             <button type="submit" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">{{ editingPost ? 'Update' : 'Create' }}</button>
             <button @click="closeModal" type="button" class="ml-2 bg-gray-500 hover:bg-gray-600 text-gray-200 font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">Cancel</button>
@@ -595,10 +595,16 @@ const stories = ref([
   { id: 5, text: 'If you could visit any country in the world, where would you go?' },
 ]);
 const formatTimestamp = (timestamp) => {
+  if (!timestamp || typeof timestamp.seconds !== 'number') {
+    // Handle the case where the timestamp is null, undefined, or doesn't have the 'seconds' property
+    return 'Invalid timestamp';
+  }
+
   const seconds = timestamp.seconds;
   const milliseconds = seconds * 1000 + Math.round(timestamp.nanoseconds / 1000000);
   return dayjs(milliseconds).fromNow();
 };
+
 
 const fetchRoomData = async () => {
   try {
