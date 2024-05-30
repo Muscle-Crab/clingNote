@@ -243,30 +243,23 @@
     <!-- Bottom Navigation Bar -->
     <div class="fixed bottom-0 left-0 right-0 bg-gray-800 dark:bg-gray-900 shadow-lg py-2 flex justify-around">
       <button @click="navigateTo('home')" class="flex flex-col items-center text-gray-400 dark:text-gray-300 hover:text-indigo-400 dark:hover:text-indigo-500">
-        <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-          <path d="M3 12l2-2 7-7 7 7 2 2h-5v6h-8v-6H3z"/>
-        </svg>
+        <i class="fa fa-home w-6 h-6"></i>
         <span class="text-xs">Home</span>
       </button>
       <button @click="navigateTo('search')" class="flex flex-col items-center text-gray-400 dark:text-gray-300 hover:text-indigo-400 dark:hover:text-indigo-500">
-        <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-          <path d="M21 21l-6-6m2-3a7 7 0 1 1-14 0 7 7 0 0 1 14 0z"/>
-        </svg>
+        <i class="fa fa-search w-6 h-6"></i>
         <span class="text-xs">Search</span>
       </button>
       <button @click="navigateTo('notifications')" class="flex flex-col items-center text-gray-400 dark:text-gray-300 hover:text-indigo-400 dark:hover:text-indigo-500">
-        <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-          <path d="M15 17h5l-1.405-1.405M18 10a6 6 0 1 0-12 0 6 6 0 0 0 12 0z"/>
-        </svg>
+        <i class="fa fa-bell w-6 h-6"></i>
         <span class="text-xs">Notifications</span>
       </button>
       <button @click="navigateTo('profile')" class="flex flex-col items-center text-gray-400 dark:text-gray-300 hover:text-indigo-400 dark:hover:text-indigo-500">
-        <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-          <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zM2 20c0-2.21 1.79-4 4-4h12c2.21 0 4 1.79 4 4v2H2v-2z"/>
-        </svg>
+        <i class="fa fa-user w-6 h-6"></i>
         <span class="text-xs">Profile</span>
       </button>
     </div>
+
 
 
     <!-- Floating Action Button -->
