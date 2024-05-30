@@ -152,14 +152,14 @@
                   <article v-for="comment in post.comments" :key="comment.id" :id="'comment-' + comment.id" class="pt-4 md:p-4 text-base bg-gray-800 dark:bg-gray-900">
                     <footer class="flex flex-col md:flex-row justify-between">
                       <div class="flex">
-                        <div class="w-12 h-12 md:w-12 md:h-12 rounded-full mr-3 flex items-center justify-center bg-gray-700 text-white text-xl">
+                        <div class="w-10 h-10 md:w-12 md:h-12 rounded-full mr-3 flex-shrink-0 flex items-center justify-center bg-gray-700 text-white text-xl">
                           <img v-if="getParticipantAvatar(comment.userId)" :src="getParticipantAvatar(comment.userId)" :alt="getParticipantName(comment.userId)" class="rounded-full w-full h-full">
                           <span v-else>{{ getParticipantName(comment.userId).charAt(0).toUpperCase() }}</span>
                         </div>
                         <div>
                           <p class="text-sm text-gray-200 dark:text-white font-semibold">{{ getParticipantName(comment.userId) }}</p>
                           <textarea v-if="editingCommentId === comment.id" v-model="editedComment" class="mt-1 block w-full text-sm text-gray-200 border-0 focus:ring-0 focus:outline-none dark:text-white dark:placeholder-gray-400 dark:bg-gray-900" required>{{ comment.message }}</textarea>
-                          <p v-else class="text-gray-400 dark:text-gray-400">{{ comment.message }}</p>
+                          <p v-else class="text-gray-400 dark:text-gray-400 break-words">{{ comment.message }}</p>
                         </div>
                       </div>
                       <div class="flex items-center space-x-2">
@@ -176,6 +176,8 @@
                   </article>
                 </div>
               </section>
+
+
               <div class="flex items-center mb-4 mt-5 space-x-4">
                 <button @click="toggleReaction(post, 'like')" class="reaction-button relative" :class="{ 'active': hasReaction(post, 'like') }">
                   <span class="reaction-icon">👍</span>
