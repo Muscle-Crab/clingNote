@@ -591,7 +591,7 @@ const stories = ref([
   { id: 1, text: 'If you could have dinner with any celebrity, who would it be?' },
   { id: 2, text: 'What is your favorite movie and why?' },
   { id: 3, text: 'If you could instantly master any musical instrument, which one would you choose?' },
-  { id: 4, text: 'What is your go-to comfort food?' },
+  { id: 4, text: 'Will Mbappe maintain top score at Real Madrid' },
   { id: 5, text: 'If you could visit any country in the world, where would you go?' },
 ]);
 const formatTimestamp = (timestamp) => {
