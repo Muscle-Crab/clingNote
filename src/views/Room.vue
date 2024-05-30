@@ -4,7 +4,7 @@
     <!-- Container for the entire room -->
     <div class="container mx-auto px-4 py-1 pt-10">
       <!-- Search Bar -->
-      <div class="mb-6">
+      <div class="mb-6" id="target-section">
         <input
             v-model="searchQuery"
             @input="searchContent"
@@ -244,21 +244,22 @@
 
     <!-- Bottom Navigation Bar -->
     <div class="fixed bottom-0 left-0 right-0 bg-gray-800 dark:bg-gray-900 shadow-lg py-2 flex justify-around">
-      <button @click="navigateTo('home')" class="flex flex-col items-center text-gray-400 dark:text-gray-300 hover:text-indigo-400 dark:hover:text-indigo-500">
+      <button  class="flex flex-col items-center text-gray-400 dark:text-gray-300 hover:text-indigo-400 dark:hover:text-indigo-500">
         <i class="fa fa-home w-6 h-6"></i>
-        <span class="text-xs">Home</span>
+        <router-link to="/"><span class="text-xs">Home</span>
+        </router-link>
       </button>
-      <button @click="navigateTo('search')" class="flex flex-col items-center text-gray-400 dark:text-gray-300 hover:text-indigo-400 dark:hover:text-indigo-500">
+      <button class="flex flex-col items-center text-gray-400 dark:text-gray-300 hover:text-indigo-400 dark:hover:text-indigo-500">
         <i class="fa fa-search w-6 h-6"></i>
-        <span class="text-xs">Search</span>
+        <a href="#target-section" class="text-xs">Search</a>
       </button>
-      <button @click="navigateTo('notifications')" class="flex flex-col items-center text-gray-400 dark:text-gray-300 hover:text-indigo-400 dark:hover:text-indigo-500">
+      <button class="flex flex-col items-center text-gray-400 dark:text-gray-300 hover:text-indigo-400 dark:hover:text-indigo-500">
         <i class="fa fa-bell w-6 h-6"></i>
         <span class="text-xs">Notifications</span>
       </button>
-      <button @click="navigateTo('profile')" class="flex flex-col items-center text-gray-400 dark:text-gray-300 hover:text-indigo-400 dark:hover:text-indigo-500">
+      <button  class="flex flex-col items-center text-gray-400 dark:text-gray-300 hover:text-indigo-400 dark:hover:text-indigo-500">
         <i class="fa fa-user w-6 h-6"></i>
-        <span class="text-xs">Profile</span>
+        <router-link :to="'/profile/' + ids"><span class="text-xs">Profile</span></router-link>
       </button>
     </div>
 
@@ -294,18 +295,7 @@ const selectedRoom = ref({
   posts: []
 });
 const loading = ref(true);
-onMounted(async () => {
-  try {
-    const querySnapshot = await getDocs(collection(db, 'users'));
-    querySnapshot.forEach(doc => {
-      selectedRoom.value.participants.push(doc.data());
-    });
-    loading.value = false;
-  } catch (error) {
-    console.error('Error fetching participants:', error);
-    loading.value = false;
-  }
-});
+
 const showModal = ref(false);
 const editedComment = ref('');
 const editingCommentId = ref(null);
@@ -463,11 +453,12 @@ const closeModal = () => {
   editingPost.value = null;
 };
 const currentUser = ref(null);
-
+const ids = ref(null)
 onMounted(() => {
   auth.onAuthStateChanged((user) => {
     if (user) {
       currentUser.value = user;
+      ids.value = user.uid
     } else {
       currentUser.value = null;
     }
@@ -508,7 +499,7 @@ const createNewPost = async () => {
     const docRef = await addDoc(collection(db, 'posts'), newPostData);
     closeModal();
     const userName = getParticipantName(newPostData.userId);
-    // await sendNotification('created a new post.', userName, docRef.id);
+    await sendNotification('created a new post.', userName, docRef.id);
     // Scroll to the new post
     setTimeout(() => {
       const postElement = document.getElementById(`post-${docRef.id}`);
@@ -609,7 +600,30 @@ const formatTimestamp = (timestamp) => {
   return dayjs(milliseconds).fromNow();
 };
 
+const fetchRoomData = async () => {
+  try {
+    const roomId = room_id.value
+    const roomDoc = await getDoc(doc(db, 'rooms', roomId));
+    if (roomDoc.exists()) {
+      const roomData = roomDoc.data();
+      const approvedUsers = roomData.approvedUsers;
 
+      const querySnapshot = await getDocs(collection(db, 'users'));
+      querySnapshot.forEach(doc => {
+        if (approvedUsers.includes(doc.id)) {
+          selectedRoom.value.participants.push(doc.data());
+        }
+      });
+    }
+    loading.value = false;
+  } catch (error) {
+    console.error('Error fetching room data:', error);
+    loading.value = false;
+  }
+};
+onMounted(async () => {
+  await fetchRoomData();
+});
 
 
 

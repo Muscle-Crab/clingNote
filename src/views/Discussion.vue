@@ -206,7 +206,7 @@ const createNewRoom = async () => {
       user_id: userId,
       private: isPrivate,
       requests: [],
-      approvedUsers: [],
+      approvedUsers: [userId], // Add the creator's user ID to the approvedUsers array
       timestamp: serverTimestamp()
     };
     const docRef = await addDoc(collection(db, 'rooms'), newRoomData);
@@ -222,6 +222,7 @@ const createNewRoom = async () => {
     console.error('Error creating new room:', error);
   }
 };
+
 
 const editRoom = (room) => {
   editedRoom.id = room.roomId;
