@@ -97,7 +97,7 @@
         </div>
 
         <!-- Main Content: Posts -->
-        <div class="col-span-2 grid grid-cols-1 gap-8">
+        <div class="col-span-2 grid grid-cols-1 gap-8 mb-10">
           <div v-for="post in filteredPosts" :key="post.id" :id="'post-' + post.id" class="md:min-w-[320px]">
             <div class="min-w-sm p-6 bg-gray-800 border border-gray-700 rounded-lg shadow dark:bg-gray-800 dark:border-gray-700">
               <div class="flex items-center justify-between mb-4">
