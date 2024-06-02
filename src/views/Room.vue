@@ -200,8 +200,15 @@
                   <span class="reaction-count absolute top-0 right-0 -mt-1 -mr-2 bg-purple-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center">{{ getReactionCount(post, 'sad') }}</span>
                 </button>
               </div>
-              <div class="mb-4">
-                <button @click="showCreatePostModal(post)" class="text-blue-400 focus:outline-none">Edit Post</button>
+              <div class="mb-4" v-if="post.userId === currentUser.uid">
+                <div class="inline-flex space-x-2">
+                  <button @click="showCreatePostModal(post)" class="text-blue-400 focus:outline-none flex items-center">
+                    <i class="fas fa-edit"></i>
+                  </button>
+                  <button @click="deletePost(post)" class="text-red-400 focus:outline-none flex items-center">
+                    <i class="fas fa-trash-alt"></i>
+                  </button>
+                </div>
               </div>
               <div class="flex items-center border-t border-gray-700 py-2">
                 <input
@@ -317,6 +324,14 @@ const searchContent = () => {
   filteredPosts.value = selectedRoom.value.posts.filter(post => post.topic.toLowerCase().includes(query) || post.message.toLowerCase().includes(query));
   filteredParticipants.value = selectedRoom.value.participants.filter(participant => participant.name.toLowerCase().includes(query));
 };
+async function deletePost(post) {
+  try {
+    await deleteDoc(doc(db, 'posts', post.id));
+    filteredPosts.value = filteredPosts.value.filter(p => p.id !== post.id);
+  } catch (error) {
+    console.error("Error deleting post: ", error);
+  }
+}
 
 onMounted(() => {
   const unsubscribe = onSnapshot(collection(db, 'posts'), snapshot => {
@@ -487,7 +502,7 @@ const createNewPost = async () => {
     room_id: room_id.value,
     topic: newPost.value.topic,
     message: newPost.value.message,
-    url: newPost.value.url,
+    // url: newPost?.value?.url,
     timestamp: serverTimestamp(),
     liked: false,
     likes: 0,
