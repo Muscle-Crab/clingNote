@@ -273,7 +273,7 @@
 
 
     <!-- Floating Action Button -->
-    <button @click="showCreatePostModal()" class="fixed bottom-16 right-4 bg-indigo-600 text-white p-4 rounded-full shadow-lg">
+    <button @click="showCreatePostModal()" class="fixed bottom-16 right-4 bg-indigo-600 text-white p-4 rounded-full shadow-lg animate-jump">
       <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
       </svg>
@@ -650,8 +650,17 @@ onMounted(async () => {
 
 </script>
 
-<style scoped>
-.container {
-  max-width: 1200px;
+<style>
+@keyframes jump {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-20px);
+  }
+}
+
+.animate-jump {
+  animation: jump 2.5s ease-in-out infinite;
 }
 </style>
