@@ -211,13 +211,18 @@
                 </div>
               </div>
               <div class="flex items-center border-t border-gray-700 py-2">
-                <input
-                    v-model="commentInput[post.id]"
-                    type="text"
-                    placeholder="Add a comment..."
-                    class="flex-1 rounded-full py-2 px-4 mr-2 border border-gray-600 focus:border-indigo-500 focus:ring-indigo-500 bg-gray-800 text-white placeholder-gray-500"
-                />
-                <button @click="addComment(post)" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-full focus:outline-none focus:shadow-outline"><i class="fa fa-comment"></i></button>
+  <textarea
+      v-model="commentInput[post.id]"
+      placeholder="Add a comment..."
+      class="flex-1 rounded-full py-2 px-4 mr-2 border border-gray-600 focus:border-indigo-500 focus:ring-indigo-500 bg-gray-800 text-white placeholder-gray-500 resize-none"
+      rows="1"
+  ></textarea>
+                <button
+                    @click="addComment(post)"
+                    class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-full focus:outline-none focus:shadow-outline"
+                >
+                  <i class="fa fa-comment"></i>
+                </button>
               </div>
             </div>
           </div>
