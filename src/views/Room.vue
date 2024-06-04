@@ -4,28 +4,16 @@
     <!-- Container for the entire room -->
     <div class="container mx-auto px-4 py-1 pt-10">
       <!-- Search Bar -->
-      <div class="mb-6" id="target-section">
-        <input
-            v-model="searchQuery"
-            @input="searchContent"
-            type="text"
-            placeholder="Search for posts or participants..."
-            class="w-full p-4 rounded-lg border border-gray-600 bg-gray-800 text-gray-200 placeholder-gray-500"
-        />
-      </div>
-      <div class="mb-6">
-        <h2 class="text-2xl font-bold mb-4 text-white">Example Posts</h2>
-        <div class="mb-6">
-          <div class="flex space-x-2 overflow-x-auto">
-            <div v-for="story in stories" :key="story.id" class="relative bg-gray-800 dark:bg-gray-800 rounded-lg shadow-lg w-40 h-32 flex-shrink-0 flex items-center justify-center p-1 ">
-              <div class="text-gray-200 text-sm text-center">
-                {{ story.text }}
-              </div>
-            </div>
-          </div>
-        </div>
+<!--      <div class="mb-6" id="target-section">-->
+<!--        <input-->
+<!--            v-model="searchQuery"-->
+<!--            @input="searchContent"-->
+<!--            type="text"-->
+<!--            placeholder="Search for posts or participants..."-->
+<!--            class="w-full p-4 rounded-lg border border-gray-600 bg-gray-800 text-gray-200 placeholder-gray-500"-->
+<!--        />-->
+<!--      </div>-->
 
-      </div>
 
 
 
@@ -86,7 +74,7 @@
         <div class="col-span-1 mb-5 bg-gray-800 rounded-lg shadow-md p-6 dark:bg-gray-800">
           <h2 class="text-xl font-semibold text-gray-200 mb-4">Participants</h2>
           <ul class="space-y-4">
-            <li v-for="participant in selectedRoom.participants" :key="participant.id" class="flex items-center">
+            <li v-for="(participant, index) in visibleParticipants" :key="participant.id" class="flex items-center">
               <div class="w-12 h-12 rounded-full mr-4 flex items-center justify-center bg-gray-700 text-white text-xl">
                 <img v-if="participant.avatar" :src="participant.avatar" alt="Participant" class="rounded-full w-full h-full">
                 <span v-else>{{ participant.name.charAt(0).toUpperCase() }}</span>
@@ -94,6 +82,18 @@
               <span class="text-gray-200">{{ participant.name }}</span>
             </li>
           </ul>
+          <!-- Use Font Awesome icons instead of a button -->
+          <div>
+            <!-- Your content here -->
+            <div
+                @click="toggleShowMore"
+                class="mt-4 p-3 bg-blue-600 text-white rounded-full cursor-pointer hover:bg-blue-700 flex items-center justify-center"
+                style="width: 40px; height: 40px;"
+            >
+              <i :class="showMore ? 'fas fa-chevron-up' : 'fas fa-chevron-down'" class="text-xl"></i>
+            </div>
+          </div>
+
         </div>
 
         <!-- Main Content: Posts -->
@@ -282,7 +282,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import axios from 'axios';
 import { db, auth } from '@/firebaseConfig';
 
@@ -602,13 +602,9 @@ const getParticipantName = (userId) => {
   const participant = selectedRoom.value.participants.find(p => p.id === userId);
   return participant ? participant.name : '';
 };
-const stories = ref([
-  { id: 1, text: 'If you could have dinner with any celebrity, who would it be?' },
-  { id: 2, text: 'What is your favorite movie and why?' },
-  { id: 3, text: 'If you could instantly master any musical instrument, which one would you choose?' },
-  { id: 4, text: 'Will Mbappe maintain top score at Real Madrid' },
-  { id: 5, text: 'If you could visit any country in the world, where would you go?' },
-]);
+
+
+
 const formatTimestamp = (timestamp) => {
   if (!timestamp || typeof timestamp.seconds !== 'number') {
     // Handle the case where the timestamp is null, undefined, or doesn't have the 'seconds' property
@@ -647,7 +643,14 @@ onMounted(async () => {
 });
 
 
+const showMore = ref(false);
+const visibleParticipants = computed(() => {
+  return showMore.value ? selectedRoom.value.participants : selectedRoom.value.participants.slice(0, 3);
+});
 
+const toggleShowMore = () => {
+  showMore.value = !showMore.value;
+};
 </script>
 
 <style>
