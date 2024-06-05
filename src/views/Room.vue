@@ -283,10 +283,10 @@
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
       </svg>
     </button>
-    <audio ref="backgroundMusic" autoplay loop>
-      <source src="@/assets/song.mp3" type="audio/mpeg">
-      Your browser does not support the audio element.
-    </audio>
+<!--    <audio ref="backgroundMusic" autoplay loop>-->
+<!--      <source src="@/assets/song.mp3" type="audio/mpeg">-->
+<!--      Your browser does not support the audio element.-->
+<!--    </audio>-->
   </div>
 </template>
 
