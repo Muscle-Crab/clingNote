@@ -283,11 +283,15 @@
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
       </svg>
     </button>
+    <audio ref="backgroundMusic" autoplay loop>
+      <source src="@/assets/song.mp3" type="audio/mpeg">
+      Your browser does not support the audio element.
+    </audio>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, watch} from 'vue';
 import axios from 'axios';
 import { db, auth } from '@/firebaseConfig';
 
@@ -295,6 +299,14 @@ import { collection, getDoc, onSnapshot, getDocs, addDoc, serverTimestamp, delet
 import { useRoute } from 'vue-router';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
+const audioRef = ref(null);
+
+watch(audioRef, (newVal) => {
+  if (newVal) {
+    newVal.play();
+  }
+}, { immediate: true });
+
 
 dayjs.extend(relativeTime);
 const generateUniqueId = () => Math.random().toString(36).substr(2, 9);
