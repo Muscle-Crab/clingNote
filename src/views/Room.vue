@@ -149,17 +149,38 @@
               </div>
               <section v-if="post.showComments" class="bg-gray-800 dark:bg-gray-900 antialiased">
                 <div>
-                  <article v-for="comment in post.comments" :key="comment.id" :id="'comment-' + comment.id" class="pt-4 md:p-4 text-base bg-gray-800 dark:bg-gray-900">
+                  <article
+                      v-for="comment in post.comments"
+                      :key="comment.id"
+                      :id="'comment-' + comment.id"
+                      class="pt-4 md:p-4 text-base bg-gray-800 dark:bg-gray-900"
+                  >
                     <footer class="flex flex-col md:flex-row justify-between">
                       <div class="flex">
-                        <div class="w-10 h-10 md:w-12 md:h-12 rounded-full mr-3 flex-shrink-0 flex items-center justify-center bg-gray-700 text-white text-xl">
-                          <img v-if="getParticipantAvatar(comment.userId)" :src="getParticipantAvatar(comment.userId)" :alt="getParticipantName(comment.userId)" class="rounded-full w-full h-full">
+                        <div
+                            class="w-10 h-10 md:w-12 md:h-12 rounded-full mr-3 flex-shrink-0 flex items-center justify-center bg-gray-700 text-white text-xl"
+                        >
+                          <img
+                              v-if="getParticipantAvatar(comment.userId)"
+                              :src="getParticipantAvatar(comment.userId)"
+                              :alt="getParticipantName(comment.userId)"
+                              class="rounded-full w-full h-full"
+                          />
                           <span v-else>{{ getParticipantName(comment.userId).charAt(0).toUpperCase() }}</span>
                         </div>
                         <div>
-                          <p class="text-sm text-gray-200 dark:text-white font-semibold">{{ getParticipantName(comment.userId) }}</p>
-                          <textarea v-if="editingCommentId === comment.id" v-model="editedComment" class="mt-1 block w-full text-sm text-gray-200 border-0 focus:ring-0 focus:outline-none dark:text-white dark:placeholder-gray-400 dark:bg-gray-900" required>{{ comment.message }}</textarea>
-                          <p v-else class="text-gray-400 dark:text-gray-400 break-words">{{ comment.message }}</p>
+                          <p class="text-sm text-gray-200 dark:text-white font-semibold">
+                            {{ getParticipantName(comment.userId) }}
+                          </p>
+                          <textarea
+                              v-if="editingCommentId === comment.id"
+                              v-model="editedComment"
+                              class="mt-1 block w-full text-sm text-gray-200 border-0 focus:ring-0 focus:outline-none dark:text-white dark:placeholder-gray-400 dark:bg-gray-900"
+                              required
+                          >{{ comment.message }}</textarea>
+                          <p v-else class="text-gray-400 dark:text-gray-400 break-words">
+                            {{ comment.message }}
+                          </p>
                         </div>
                       </div>
                       <div class="flex items-center space-x-2">
@@ -171,8 +192,72 @@
                           <button @click="deleteComment(post, comment.id)" class="text-red-400 focus:outline-none">Delete</button>
                         </div>
                         <button v-if="editingCommentId === comment.id" @click="saveComment(post, comment)" class="text-green-400 focus:outline-none">Save</button>
+                        <!-- Add Reply Button -->
+                        <button @click="toggleReplyForm(comment)" class="text-blue-400 focus:outline-none">Reply</button>
                       </div>
                     </footer>
+                    <!-- Reply Form -->
+                    <div v-if="comment.showReplyForm" class="mt-2">
+          <textarea
+              v-model="replyInput[comment.id]"
+              placeholder="Add a reply..."
+              class="w-full p-2 rounded-lg border border-gray-600 bg-gray-800 text-gray-200 placeholder-gray-500"
+          ></textarea>
+                      <button
+                          @click="addReply(post, comment)"
+                          class="mt-2 bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-full focus:outline-none focus:shadow-outline"
+                      >
+                        Submit
+                      </button>
+                    </div>
+                    <!-- Replies -->
+                    <div v-if="comment.replies && comment.replies.length > 0" class="mt-4 pl-6 border-l border-gray-700">
+                      <article
+                          v-for="reply in comment.replies"
+                          :key="reply.id"
+                          class="pt-4 md:p-4 text-base bg-gray-800 dark:bg-gray-900"
+                      >
+                        <footer class="flex justify-between">
+                          <div class="flex">
+                            <div
+                                class="w-8 h-8 rounded-full mr-3 flex-shrink-0 flex items-center justify-center bg-gray-700 text-white text-xl"
+                            >
+                              <img
+                                  v-if="getParticipantAvatar(reply.userId)"
+                                  :src="getParticipantAvatar(reply.userId)"
+                                  :alwt="getParticipantName(reply.userId)"
+                                  class="rounded-full w-full h-full"
+                              />
+                              <span v-else>{{ getParticipantName(reply.userId).charAt(0).toUpperCase() }}</span>
+                            </div>
+                            <div>
+                              <p class="text-sm text-gray-200 dark:text-white font-semibold">
+                                {{ getParticipantName(reply.userId) }}
+                              </p>
+                              <textarea
+                                  v-if="editingReplyId === reply.id"
+                                  v-model="editedReply"
+                                  class="mt-1 block w-full text-sm text-gray-200 border-0 focus:ring-0 focus:outline-none dark:text-white dark:placeholder-gray-400 dark:bg-gray-900"
+                                  required
+                              >{{ reply.message }}</textarea>
+                              <p v-else class="text-gray-400 dark:text-gray-400 break-words">
+                                {{ reply.message }}
+                              </p>
+                            </div>
+                          </div>
+                          <div class="flex items-center space-x-2">
+                            <button @click="speakText(getParticipantName(reply.userId), reply.message)" class="text-gray-400 hover:text-indigo-400 focus:outline-none">
+                              <i class="fa fa-volume-up"></i>
+                            </button>
+                            <div v-if="editingReplyId !== reply.id && currentUser && currentUser.uid === reply.userId">
+                              <button @click="editReply(reply)" class="text-blue-400 focus:outline-none">Edit</button> |
+                              <button @click="deleteReply(post, comment, reply.id)" class="text-red-400 focus:outline-none">Delete</button>
+                            </div>
+                            <button v-if="editingReplyId === reply.id" @click="saveReply(comment, reply, post)" class="text-green-400 focus:outline-none">Save</button>
+                          </div>
+                        </footer>
+                      </article>
+                    </div>
                   </article>
                 </div>
               </section>
@@ -668,6 +753,88 @@ const visibleParticipants = computed(() => {
 const toggleShowMore = () => {
   showMore.value = !showMore.value;
 };
+const replyInput = ref({});
+const editingReplyId = ref(null);
+const editedReply = ref('');
+const toggleReplyForm = (comment) => {
+  comment.showReplyForm = !comment.showReplyForm;
+};
+
+const deleteReply = async (post, comment, replyId) => {
+  try {
+    const postRef = doc(db, 'posts', post.id);
+    const postSnapshot = await getDoc(postRef);
+    const postComments = postSnapshot.data().comments;
+    const commentIndex = postComments.findIndex(c => c.id === comment.id);
+    if (commentIndex !== -1) {
+      const replyIndex = postComments[commentIndex].replies.findIndex(r => r.id === replyId);
+      if (replyIndex !== -1) {
+        postComments[commentIndex].replies.splice(replyIndex, 1);
+        await updateDoc(postRef, { comments: postComments });
+      }
+    }
+  } catch (error) {
+    console.error('Error deleting reply: ', error);
+  }
+};
+
+const editReply = (reply) => {
+  editingReplyId.value = reply.id;
+  editedReply.value = reply.message;
+};
+
+const saveReply = async (comment, reply, post) => {
+  try {
+    const postRef = doc(db, 'posts', post.id);
+    const postSnapshot = await getDoc(postRef);
+    const postComments = postSnapshot.data().comments;
+    const commentIndex = postComments.findIndex(c => c.id === comment.id);
+    if (commentIndex !== -1) {
+      const replyIndex = postComments[commentIndex].replies.findIndex(r => r.id === reply.id);
+      if (replyIndex !== -1) {
+        postComments[commentIndex].replies[replyIndex].message = editedReply.value;
+        await updateDoc(postRef, { comments: postComments });
+        editingReplyId.value = null;
+        editedReply.value = '';
+      }
+    }
+  } catch (error) {
+    console.error('Error saving reply: ', error);
+  }
+};
+
+const addReply = async (post, comment) => {
+  if (!replyInput.value[comment.id]) return;
+
+  const newReply = {
+    id: Date.now().toString(),
+    userId: currentUser.value.uid,
+    message: replyInput.value[comment.id],
+    timestamp: new Date().toISOString()
+  };
+
+  try {
+    const postRef = doc(db, 'posts', post.id);
+    const postSnapshot = await getDoc(postRef);
+    const postComments = postSnapshot.data().comments;
+    const commentIndex = postComments.findIndex(c => c.id === comment.id);
+    if (commentIndex !== -1) {
+      if (!postComments[commentIndex].replies) {
+        postComments[commentIndex].replies = [];
+      }
+      postComments[commentIndex].replies.push(newReply);
+      await updateDoc(postRef, { comments: postComments });
+      replyInput.value[comment.id] = '';
+
+      const userName = getParticipantName(currentUser.value.uid);
+      // await sendNotification('replied to your comment.', userName, post.id, comment.id, newReply.message);
+    }
+  } catch (error) {
+    console.error('Error adding reply: ', error);
+  }
+};
+
+
 </script>
 
 <style>
