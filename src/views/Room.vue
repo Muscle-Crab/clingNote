@@ -616,7 +616,7 @@ const createNewPost = async () => {
     const docRef = await addDoc(collection(db, 'posts'), newPostData);
     closeModal();
     const userName = getParticipantName(newPostData.userId);
-    await sendNotification('created a new post.', userName, docRef.id);
+    await sendNotification(`created a new post: ${newPostData.topic}`, userName, docRef.id, null, newPostData.message);
     // Scroll to the new post
     setTimeout(() => {
       const postElement = document.getElementById(`post-${docRef.id}`);
@@ -629,12 +629,19 @@ const createNewPost = async () => {
   }
 };
 
-const sendNotification = async (message, userName) => {
+
+
+const sendNotification = async (message, userName, postId, commentId = null, content = '') => {
   const headers = {
     'Authorization': 'Bearer token="ZWY3MWJhMDUtNTU1Yi00NGViLThmNjItNDNhZTY0YzMwOGRh"',
     'Content-Type': 'application/json'
   };
-  const notificationMessage = `${userName} ${message}`;
+
+  let notificationMessage = `${userName} ${message}`;
+  if (content) {
+    notificationMessage += `: ${content}`;
+  }
+
   const data = {
     "app_id": "65d866ad-f59c-4557-9d75-4ccf7fe60a47",
     "included_segments": ["All"],
@@ -674,7 +681,7 @@ const addComment = async (post) => {
     await updateDoc(doc(db, 'posts', post.id), {comments: arrayUnion(comment)});
     commentInput.value[post.id] = '';
     const userName = getParticipantName(userId);
-    await sendNotification('commented on a post.', userName, post.id, comment.id);
+    await sendNotification('commented on a post.', userName, post.id, comment.id, comment.message);
     // Scroll to the new comment
     setTimeout(() => {
       const commentElement = document.getElementById(`comment-${comment.id}`);
@@ -686,6 +693,7 @@ const addComment = async (post) => {
     console.error('Error adding comment: ', e);
   }
 };
+
 const speakText = (username, message) => {
   if ('speechSynthesis' in window) {
     const utterance = new SpeechSynthesisUtterance(`${username} says: ${message}`);
@@ -827,7 +835,7 @@ const addReply = async (post, comment) => {
       replyInput.value[comment.id] = '';
 
       const userName = getParticipantName(currentUser.value.uid);
-      // await sendNotification('replied to your comment.', userName, post.id, comment.id, newReply.message);
+      await sendNotification('replied to your comment.', userName, post.id, comment.id, newReply.message);
     }
   } catch (error) {
     console.error('Error adding reply: ', error);
