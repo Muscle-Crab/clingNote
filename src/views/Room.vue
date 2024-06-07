@@ -153,12 +153,12 @@
                       v-for="comment in post.comments"
                       :key="comment.id"
                       :id="'comment-' + comment.id"
-                      class="pt-4 md:p-4 text-base bg-gray-800 dark:bg-gray-900"
+                      class="pt-2 p-2 text-sm bg-gray-800 dark:bg-gray-900"
                   >
-                    <footer class="flex flex-col md:flex-row justify-between">
+                    <footer class="flex flex-col sm:flex-row justify-between">
                       <div class="flex">
                         <div
-                            class="w-10 h-10 md:w-12 md:h-12 rounded-full mr-3 flex-shrink-0 flex items-center justify-center bg-gray-700 text-white text-xl"
+                            class="w-8 h-8 sm:w-10 sm:h-10 rounded-full mr-2 flex-shrink-0 flex items-center justify-center bg-gray-700 text-white text-sm"
                         >
                           <img
                               v-if="getParticipantAvatar(comment.userId)"
@@ -169,13 +169,13 @@
                           <span v-else>{{ getParticipantName(comment.userId).charAt(0).toUpperCase() }}</span>
                         </div>
                         <div>
-                          <p class="text-sm text-gray-200 dark:text-white font-semibold">
+                          <p class="text-xs text-gray-200 dark:text-white font-semibold">
                             {{ getParticipantName(comment.userId) }}
                           </p>
                           <textarea
                               v-if="editingCommentId === comment.id"
                               v-model="editedComment"
-                              class="mt-1 block w-full text-sm text-gray-200 border-0 focus:ring-0 focus:outline-none dark:text-white dark:placeholder-gray-400 dark:bg-gray-900"
+                              class="mt-1 block w-full text-xs text-gray-200 border-0 focus:ring-0 focus:outline-none dark:text-white dark:placeholder-gray-400 dark:bg-gray-900"
                               required
                           >{{ comment.message }}</textarea>
                           <p v-else class="text-gray-400 dark:text-gray-400 break-words">
@@ -183,7 +183,7 @@
                           </p>
                         </div>
                       </div>
-                      <div class="flex items-center space-x-2">
+                      <div class="flex items-center space-x-1 mt-2 sm:mt-0">
                         <button @click="speakText(getParticipantName(comment.userId), comment.message)" class="text-gray-400 hover:text-indigo-400 focus:outline-none">
                           <i class="fa fa-volume-up"></i>
                         </button>
@@ -192,17 +192,15 @@
                           <button @click="deleteComment(post, comment.id)" class="text-red-400 focus:outline-none">Delete</button>
                         </div>
                         <button v-if="editingCommentId === comment.id" @click="saveComment(post, comment)" class="text-green-400 focus:outline-none">Save</button>
-                        <!-- Add Reply Button -->
-<!--                        <button @click="toggleReplyForm(comment)" class="text-blue-400 focus:outline-none">Reply</button>-->
                       </div>
                     </footer>
                     <!-- Reply Form -->
                     <div v-if="comment.showReplyForm" class="mt-2">
-          <textarea
-              v-model="replyInput[comment.id]"
-              placeholder="Add a reply..."
-              class="w-full p-2 rounded-lg border border-gray-600 bg-gray-800 text-gray-200 placeholder-gray-500"
-          ></textarea>
+        <textarea
+            v-model="replyInput[comment.id]"
+            placeholder="Add a reply..."
+            class="w-full p-2 rounded-lg border border-gray-600 bg-gray-800 text-gray-200 placeholder-gray-500 text-xs"
+        ></textarea>
                       <button
                           @click="addReply(post, comment)"
                           class="mt-2 bg-blue-500 hover:bg-blue-600 text-white font-bold py-1 px-3 rounded-full focus:outline-none focus:shadow-outline"
@@ -211,16 +209,16 @@
                       </button>
                     </div>
                     <!-- Replies -->
-                    <div v-if="comment.replies && comment.replies.length > 0" class="mt-4 pl-6 border-l border-gray-700">
+                    <div v-if="comment.replies && comment.replies.length > 0" class="mt-4 pl-4 border-l border-gray-700">
                       <article
                           v-for="reply in comment.replies"
                           :key="reply.id"
-                          class="pt-4 md:p-4 text-base bg-gray-800 dark:bg-gray-900"
+                          class="pt-2 p-2 text-sm bg-gray-800 dark:bg-gray-900"
                       >
                         <footer class="flex justify-between">
                           <div class="flex">
                             <div
-                                class="w-8 h-8 rounded-full mr-3 flex-shrink-0 flex items-center justify-center bg-gray-700 text-white text-xl"
+                                class="w-6 h-6 rounded-full mr-2 flex-shrink-0 flex items-center justify-center bg-gray-700 text-white text-sm"
                             >
                               <img
                                   v-if="getParticipantAvatar(reply.userId)"
@@ -231,13 +229,13 @@
                               <span v-else>{{ getParticipantName(reply.userId).charAt(0).toUpperCase() }}</span>
                             </div>
                             <div>
-                              <p class="text-sm text-gray-200 dark:text-white font-semibold">
+                              <p class="text-xs text-gray-200 dark:text-white font-semibold">
                                 {{ getParticipantName(reply.userId) }}
                               </p>
                               <textarea
                                   v-if="editingReplyId === reply.id"
                                   v-model="editedReply"
-                                  class="mt-1 block w-full text-sm text-gray-200 border-0 focus:ring-0 focus:outline-none dark:text-white dark:placeholder-gray-400 dark:bg-gray-900"
+                                  class="mt-1 block w-full text-xs text-gray-200 border-0 focus:ring-0 focus:outline-none dark:text-white dark:placeholder-gray-400 dark:bg-gray-900"
                                   required
                               >{{ reply.message }}</textarea>
                               <p v-else class="text-gray-400 dark:text-gray-400 break-words">
@@ -245,7 +243,7 @@
                               </p>
                             </div>
                           </div>
-                          <div class="flex items-center space-x-2">
+                          <div class="flex items-center space-x-1">
                             <button @click="speakText(getParticipantName(reply.userId), reply.message)" class="text-gray-400 hover:text-indigo-400 focus:outline-none">
                               <i class="fa fa-volume-up"></i>
                             </button>
@@ -261,6 +259,7 @@
                   </article>
                 </div>
               </section>
+
 
 
               <div class="flex items-center mb-4 mt-5 space-x-4">
