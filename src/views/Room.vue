@@ -193,7 +193,7 @@
                         </div>
                         <button v-if="editingCommentId === comment.id" @click="saveComment(post, comment)" class="text-green-400 focus:outline-none">Save</button>
                         <!-- Add Reply Button -->
-                        <button @click="toggleReplyForm(comment)" class="text-blue-400 focus:outline-none">Reply</button>
+<!--                        <button @click="toggleReplyForm(comment)" class="text-blue-400 focus:outline-none">Reply</button>-->
                       </div>
                     </footer>
                     <!-- Reply Form -->
@@ -835,7 +835,7 @@ const addReply = async (post, comment) => {
       replyInput.value[comment.id] = '';
 
       const userName = getParticipantName(currentUser.value.uid);
-      await sendNotification('replied to your comment.', userName, post.id, comment.id, newReply.message);
+      await sendNotification('replied to a comment.', userName, post.id, comment.id, newReply.message);
     }
   } catch (error) {
     console.error('Error adding reply: ', error);
