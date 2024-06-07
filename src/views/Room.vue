@@ -205,7 +205,7 @@
           ></textarea>
                       <button
                           @click="addReply(post, comment)"
-                          class="mt-2 bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-full focus:outline-none focus:shadow-outline"
+                          class="mt-2 bg-blue-500 hover:bg-blue-600 text-white font-bold py-1 px-3 rounded-full focus:outline-none focus:shadow-outline"
                       >
                         Submit
                       </button>
