@@ -3,70 +3,9 @@
   <div class="min-h-screen bg-gray-900 dark:bg-[#1c1c1e]" style="background-image: url('https://www.transparenttextures.com/patterns/cubes.png'); background-position: center;">
     <!-- Container for the entire room -->
     <div class="container mx-auto px-4 py-1 pt-10">
-      <!-- Search Bar -->
-<!--      <div class="mb-6" id="target-section">-->
-<!--        <input-->
-<!--            v-model="searchQuery"-->
-<!--            @input="searchContent"-->
-<!--            type="text"-->
-<!--            placeholder="Search for posts or participants..."-->
-<!--            class="w-full p-4 rounded-lg border border-gray-600 bg-gray-800 text-gray-200 placeholder-gray-500"-->
-<!--        />-->
-<!--      </div>-->
-
-
-
 
       <!-- Grid layout for different sections -->
-      <div v-if="loading" class="animate-pulse">
-        <!-- Skeleton Loader for Participants -->
-        <div class="col-span-1 bg-gray-800 rounded-lg shadow-md p-6 mb-8 dark:bg-gray-800 item-start">
-          <h2 class="text-xl font-semibold text-gray-200 mb-4">Participants</h2>
-          <ul class="space-y-4">
-            <li class="flex items-center">
-              <div class="w-12 h-12 bg-gray-600 rounded-full mr-4"></div>
-              <div class="h-4 bg-gray-600 rounded w-24"></div>
-            </li>
-            <li class="flex items-center">
-              <div class="w-12 h-12 bg-gray-600 rounded-full mr-4"></div>
-              <div class="h-4 bg-gray-600 rounded w-24"></div>
-            </li>
-            <li class="flex items-center">
-              <div class="w-12 h-12 bg-gray-600 rounded-full mr-4"></div>
-              <div class="h-4 bg-gray-600 rounded w-24"></div>
-            </li>
-          </ul>
-        </div>
-
-        <!-- Skeleton Loader for Posts -->
-        <div class="col-span-2 grid grid-cols-1 gap-8">
-          <div class="md:min-w-[320px]">
-            <div class="min-w-sm p-6 bg-gray-600 border border-gray-500 rounded-lg shadow dark:bg-gray-800">
-              <div class="flex items-center justify-between mb-4">
-                <div class="flex items-center">
-                  <div class="w-12 h-12 bg-gray-600 rounded-full mr-2"></div>
-                  <div class="h-4 bg-gray-600 rounded w-24"></div>
-                </div>
-              </div>
-              <div class="h-4 bg-gray-600 rounded mb-2"></div>
-              <div class="h-4 bg-gray-600 rounded mb-2"></div>
-              <div class="h-4 bg-gray-600 rounded mb-4"></div>
-              <div class="flex justify-between items-center">
-                <div class="h-6 bg-gray-600 rounded w-12"></div>
-                <div class="h-6 bg-gray-600 rounded w-12"></div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Skeleton Loader for Actions -->
-        <div class="col-span-1 bg-gray-800 rounded-lg shadow-md p-6 dark:bg-gray-800">
-          <h2 class="text-xl font-semibold text-gray-200 mb-4">Actions</h2>
-          <div class="h-12 bg-gray-600 rounded mb-4"></div>
-          <div class="h-12 bg-gray-600 rounded mb-4"></div>
-          <div class="h-12 bg-gray-600 rounded mb-4"></div>
-        </div>
-      </div>
+      <Skeleton :loading="loading" v-if="loading"/>
 
       <div v-else class="md:grid grid-cols-1 md:grid-cols-3 gap-8 items-start">
         <!-- Actual Content -->
@@ -378,7 +317,7 @@
 import { ref, onMounted, computed, watch} from 'vue';
 import axios from 'axios';
 import { db, auth } from '@/firebaseConfig';
-
+import Skeleton from "@/components/Skeleton.vue";
 import { collection, getDoc, onSnapshot, getDocs, addDoc, serverTimestamp, deleteDoc, doc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { useRoute } from 'vue-router';
 import dayjs from 'dayjs';
@@ -420,11 +359,7 @@ const searchQuery = ref('');
 const filteredPosts = ref([]);
 const filteredParticipants = ref([]);
 
-const searchContent = () => {
-  const query = searchQuery.value.toLowerCase();
-  filteredPosts.value = selectedRoom.value.posts.filter(post => post.topic.toLowerCase().includes(query) || post.message.toLowerCase().includes(query));
-  filteredParticipants.value = selectedRoom.value.participants.filter(participant => participant.name.toLowerCase().includes(query));
-};
+
 async function deletePost(post) {
   try {
     await deleteDoc(doc(db, 'posts', post.id));
