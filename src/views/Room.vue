@@ -38,7 +38,7 @@
         <!-- Main Content: Posts -->
         <div class="col-span-2 grid grid-cols-1 gap-8 mb-10">
           <div v-for="post in filteredPosts" :key="post.id" :id="'post-' + post.id" class="md:min-w-[320px]">
-            <div class="min-w-sm  bg-gray-900 b rounded-lg  dark:bg-gray-800 dark:border-gray-700">
+            <div class="min-w-sm  bg-gray-800 p-3 b rounded-lg  dark:bg-gray-800 dark:border-gray-700">
               <div class="flex items-center justify-between mb-4">
                 <div class="flex items-center">
                   <div class="w-12 h-12 rounded-full mr-2 flex items-center justify-center bg-gray-700 text-white text-xl">
