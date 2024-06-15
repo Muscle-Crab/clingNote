@@ -59,7 +59,7 @@
               </a>
               <div v-if="post.mediaUrl" class="flex justify-center">
                 <template v-if="isVideoUrl(post.mediaUrl)">
-                  <video class="w-96 h-auto rounded-lg" autoplay muted playsinline>
+                  <video class="w-96 h-auto rounded-lg" autoplay muted controls playsinline>
                     <source :src="post.mediaUrl" type="video/mp4">
                     Your browser does not support the video tag.
                   </video>
