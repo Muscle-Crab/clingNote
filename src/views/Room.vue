@@ -1,6 +1,6 @@
 <template>
   <!-- Main wrapper for the entire app -->
-  <div class="min-h-screen bg-gray-900 dark:bg-[#1c1c1e]" style="background-image: url('https://www.transparenttextures.com/patterns/cubes.png'); background-position: center;">
+  <div class="min-h-screen bg-gray-900 dark:bg-[#1c1c1e]" >
     <!-- Container for the entire room -->
     <div class="container mx-auto px-4 py-1 pt-10">
 
@@ -10,7 +10,7 @@
       <div v-else class="md:grid grid-cols-1 md:grid-cols-3 gap-8 items-start">
         <!-- Actual Content -->
         <!-- Left Sidebar: Participants -->
-        <div class="col-span-1 mb-5 bg-gray-800 rounded-lg shadow-md p-6 dark:bg-gray-800">
+        <div class="col-span-1 mb-5 bg-gray-900 rounded-lg   dark:bg-gray-800">
           <h2 class="text-xl font-semibold text-gray-200 mb-4">Participants</h2>
           <ul class="space-y-4">
             <li v-for="(participant, index) in visibleParticipants" :key="participant.id" class="flex items-center">
@@ -38,7 +38,7 @@
         <!-- Main Content: Posts -->
         <div class="col-span-2 grid grid-cols-1 gap-8 mb-10">
           <div v-for="post in filteredPosts" :key="post.id" :id="'post-' + post.id" class="md:min-w-[320px]">
-            <div class="min-w-sm p-6 bg-gray-800 border border-gray-700 rounded-lg shadow dark:bg-gray-800 dark:border-gray-700">
+            <div class="min-w-sm  bg-gray-900 b rounded-lg  dark:bg-gray-800 dark:border-gray-700">
               <div class="flex items-center justify-between mb-4">
                 <div class="flex items-center">
                   <div class="w-12 h-12 rounded-full mr-2 flex items-center justify-center bg-gray-700 text-white text-xl">
@@ -57,6 +57,17 @@
               <a href="#">
                 <h5 class="mb-2 font-bold tracking-tight text-gray-200 dark:text-white">{{ post.topic }}</h5>
               </a>
+              <div v-if="post.mediaUrl" class="flex justify-center">
+                <template v-if="isVideoUrl(post.mediaUrl)">
+                  <video class="w-96 h-auto rounded-lg" controls>
+                    <source :src="post.mediaUrl" type="video/mp4">
+                    Your browser does not support the video tag.
+                  </video>
+                </template>
+                <template v-else>
+                  <img :src="post.mediaUrl" alt="Uploaded Image" class="w-96 h-auto rounded-lg"/>
+                </template>
+              </div>
               <a v-if="post.url?.includes('youtube.com')" :href="post.url" target="_blank">
                 <iframe width="100%" height="200" :src="'https://www.youtube.com/embed/' + extractYouTubeId(post.url)" frameborder="0" allowfullscreen></iframe>
               </a>
@@ -86,13 +97,13 @@
                  </span>
                 </div>
               </div>
-              <section v-if="post.showComments" class="bg-gray-800 dark:bg-gray-900 antialiased">
+              <section v-if="post.showComments" class=" dark:bg-gray-900 antialiased">
                 <div>
                   <article
                       v-for="comment in post.comments"
                       :key="comment.id"
                       :id="'comment-' + comment.id"
-                      class="pt-2 p-2 text-sm bg-gray-800 dark:bg-gray-900"
+                      class="pt-2 p-2 text-sm  dark:bg-gray-900"
                   >
                     <footer class="flex flex-col sm:flex-row justify-between">
                       <div class="flex">
@@ -233,7 +244,7 @@
                   </button>
                 </div>
               </div>
-              <div class="flex items-center border-t border-gray-700 py-2">
+              <div class="flex items-center  py-2">
   <textarea
       v-model="commentInput[post.id]"
       placeholder="Add a comment..."
@@ -261,7 +272,7 @@
       <div class="relative bg-gray-800 rounded-lg shadow-lg p-6 max-w-lg w-full dark:bg-gray-800 dark:text-gray-200">
         <h2 class="text-2xl text-white font-semibold mb-4">{{ editingPost ? 'Edit Post' : 'Create New Post' }}</h2>
         <form @submit.prevent="editingPost ? updatePost() : createNewPost()">
-          <div class="py-2 px-4 mb-4 bg-gray-800 rounded-lg rounded-t-lg border border-gray-700 dark:bg-gray-800 dark:border-gray-700">
+          <div class="py-2 px-4 mb-4 bg-gray-800 rounded-lg rounded-t-lg border border-gray-700 dark:bg-gray-800 ">
             <label for="postMessage" class="block text-sm font-medium text-gray-200">Message</label>
             <textarea id="postMessage" v-model="newPost.topic" rows="6" class="mt-1 block w-full text-sm text-gray-900 border-0 focus:ring-0 focus:outline-none dark:text-white dark:placeholder-gray-400 dark:bg-gray-800" style="padding: 8px;" placeholder="Choose a topic to discuss" required></textarea>
           </div>
@@ -269,10 +280,39 @@
 <!--            <label for="postUrl" class="block text-sm font-medium text-gray-200">URL</label>-->
 <!--            <input id="postUrl" v-model="newPost.url" type="text" class="mt-1 block w-full text-sm text-gray-900 border-0 focus:ring-0 focus:outline-none dark:text-white dark:placeholder-gray-400 dark:bg-gray-800" placeholder="Paste URL here" required>-->
 <!--          </div>-->
-          <div class="flex justify-end">
-            <button type="submit" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">{{ editingPost ? 'Update' : 'Create' }}</button>
-            <button @click="closeModal" type="button" class="ml-2 bg-gray-500 hover:bg-gray-600 text-gray-200 font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">Cancel</button>
+          <div class="flex flex-col items-center justify-center   ">
+            <div class="flex items-center bg-gray-800 justify-between w-full px-3 py-2 bg-white dark:bg-gray-900 rounded-lg shadow-md">
+              <div class="flex justify-end space-x-2 ">
+                <button type="submit" @click="createNewPost" class="inline-flex items-center px-4 py-2 text-xs font-medium text-white bg-blue-700 rounded-lg focus:ring-4 focus:ring-blue-200 dark:focus:ring-blue-900 hover:bg-blue-800">
+                  {{ editingPost ? 'Update' : 'Create' }}
+                </button>
+                <button @click="closeModal" type="button" class="px-4 py-2 text-xs font-medium text-gray-700 bg-gray-300 dark:bg-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-400 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500">Cancel</button>
+              </div>
+              <div class="flex items-center space-x-2">
+                <label for="file-upload" class="inline-flex justify-center items-center p-2 text-gray-500 rounded cursor-pointer hover:text-gray-900 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-white dark:hover:bg-gray-600">
+                  <svg class="w-4 h-4" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 20 18">
+                    <path d="M18 0H2a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2Zm-5.5 4a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Zm4.376 10.481A1 1 0 0 1 16 15H4a1 1 0 0 1-.895-1.447l3.5-7A1 1 0 0 1 7.468 6a.965.965 0 0 1 .9.5l2.775 4.757 1.546-1.887a1 1 0 0 1 1.618.1l2.541 4a1 1 0 0 1 .028 1.011Z"/>
+                  </svg>
+                  <span class="sr-only">Upload media</span>
+                </label>
+                <input id="file-upload" type="file" @change="handleFileChange" accept="image/*, video/*" class="hidden" />
+              </div>
+            </div>
+            <div class="flex flex-col items-center w-full space-y-2">
+              <div v-if="mediaType === 'image' && imageUrl">
+                <img :src="imageUrl" alt="Selected Image" class="w-32 h-32 rounded-lg" />
+              </div>
+              <div v-else-if="mediaType === 'video' && videoUrl">
+                <video :src="videoUrl" controls class="w-32 h-32 rounded-lg"></video>
+              </div>
+              <div v-if="uploadProgress !== null">
+                <progress :value="uploadProgress" max="100" class="w-full"></progress>
+                <p>Upload Progress: {{ uploadProgress }}%</p>
+              </div>
+            </div>
           </div>
+
+
         </form>
       </div>
     </div>
@@ -316,13 +356,16 @@
 <script setup>
 import { ref, onMounted, computed, watch} from 'vue';
 import axios from 'axios';
-import { db, auth } from '@/firebaseConfig';
+import { db, auth, storage } from '@/firebaseConfig';
 import Skeleton from "@/components/Skeleton.vue";
 import { collection, getDoc, onSnapshot, getDocs, addDoc, serverTimestamp, deleteDoc, doc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { useRoute } from 'vue-router';
+import { ref as storageRef, uploadBytes, getDownloadURL, uploadBytesResumable } from "firebase/storage";
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 const audioRef = ref(null);
+const previewUrl = ref('');
+const fileToUpload = ref(null);
 
 watch(audioRef, (newVal) => {
   if (newVal) {
@@ -351,7 +394,8 @@ const editingCommentId = ref(null);
 const newPost = ref({
   topic: '',
   message: '',
-  url:''
+  url:'',
+  mediaUrl: ''
 });
 const editingPost = ref(null);
 const commentInput = ref({});
@@ -527,18 +571,48 @@ const extractTikTokId = (url) => {
 
 
 
+let isCreatingPost = false;
+
 const createNewPost = async () => {
+  if (isCreatingPost) {
+    console.log('Post creation in progress, please wait.');
+    return;
+  }
+
+  isCreatingPost = true;
+
   const userId = currentUser.value ? currentUser.value.uid : null;
   if (!userId) {
     console.error('User is not signed in');
+    isCreatingPost = false;
     return;
   }
+
+  if (!newPost.value.topic) {
+    console.error('Topic is required to create a new post');
+    isCreatingPost = false;
+    return;
+  }
+
+  let mediaUrl = '';
+  if (fileToUpload.value) {
+    try {
+      mediaUrl = await uploadFile(fileToUpload.value);
+    } catch (error) {
+      console.error('Error uploading file: ', error);
+      isCreatingPost = false;
+      return;
+    }
+  }
+
+  console.log('Media URL:', mediaUrl);
+
   const newPostData = {
     userId,
     room_id: room_id.value,
     topic: newPost.value.topic,
     message: newPost.value.message,
-    // url: newPost?.value?.url,
+    mediaUrl,
     timestamp: serverTimestamp(),
     liked: false,
     likes: 0,
@@ -550,16 +624,17 @@ const createNewPost = async () => {
     const docRef = await addDoc(collection(db, 'posts'), newPostData);
     closeModal();
     const userName = getParticipantName(newPostData.userId);
-    await sendNotification(`created a new post: ${newPostData.topic}`, userName, docRef.id, null, newPostData.message);
-    // Scroll to the new post
+    // await sendNotification(`created a new post: ${newPostData.topic}`, userName, docRef.id, null, newPostData.message);
     setTimeout(() => {
       const postElement = document.getElementById(`post-${docRef.id}`);
       if (postElement) {
-        postElement.scrollIntoView({behavior: 'smooth'});
+        postElement.scrollIntoView({ behavior: 'smooth' });
       }
     }, 500);
   } catch (error) {
     console.error('Error adding new post to Firestore: ', error);
+  } finally {
+    isCreatingPost = false;
   }
 };
 
@@ -776,6 +851,74 @@ const addReply = async (post, comment) => {
   }
 };
 
+const imageUrl = ref('');
+const videoUrl = ref('');
+const mediaType = ref('');
+const uploadProgress = ref(null);
+
+const handleFileChange = async (event) => {
+  const file = event.target.files[0];
+  if (file) {
+    fileToUpload.value = file;
+    mediaType.value = file.type.startsWith('image/') ? 'image' : 'video';
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      if (mediaType.value === 'image') {
+        imageUrl.value = e.target.result;
+      } else {
+        videoUrl.value = e.target.result;
+      }
+    };
+    reader.readAsDataURL(file);
+  }
+};
+
+
+
+function isVideoUrl(url) {
+  const videoExtensions = ['.mp4', '.avi', '.mov', '.mkv', '.wmv', '.flv', '.webm'];
+  const urlParts = url.split('?')[0].split('.');
+  const extension = urlParts[urlParts.length - 1].toLowerCase();
+  return videoExtensions.includes(`.${extension}`);
+}
+
+const uploadFile = async (file) => {
+  if (!file) return null;
+  const storageReference = storageRef(storage, `uploads/${file.name}`);
+  const uploadTask = uploadBytesResumable(storageReference, file);
+
+  return new Promise((resolve, reject) => {
+    uploadTask.on(
+        'state_changed',
+        (snapshot) => {
+          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+          uploadProgress.value = progress;
+        },
+        (error) => {
+          console.error('Upload failed', error);
+          reject(error);
+        },
+        async () => {
+          try {
+            const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+            console.log('File available at', downloadURL);
+            resolve(downloadURL);
+          } catch (error) {
+            console.error('Error getting download URL', error);
+            reject(error);
+          }
+        }
+    );
+  });
+};
+const removeImage = () => {
+  imageUrl.value = null;
+};
+
+const removeVideo = () => {
+  videoUrl.value = null;
+};
 
 </script>
 
