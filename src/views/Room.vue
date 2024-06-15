@@ -59,7 +59,7 @@
               </a>
               <div v-if="post.mediaUrl" class="flex justify-center">
                 <template v-if="isVideoUrl(post.mediaUrl)">
-                  <video class="w-96 h-auto rounded-lg" controls>
+                  <video class="w-96 h-auto rounded-lg" controls playsinline>
                     <source :src="post.mediaUrl" type="video/mp4">
                     Your browser does not support the video tag.
                   </video>
@@ -68,6 +68,7 @@
                   <img :src="post.mediaUrl" alt="Uploaded Image" class="w-96 h-auto rounded-lg"/>
                 </template>
               </div>
+
               <a v-if="post.url?.includes('youtube.com')" :href="post.url" target="_blank">
                 <iframe width="100%" height="200" :src="'https://www.youtube.com/embed/' + extractYouTubeId(post.url)" frameborder="0" allowfullscreen></iframe>
               </a>
