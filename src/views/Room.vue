@@ -624,7 +624,7 @@ const createNewPost = async () => {
     const docRef = await addDoc(collection(db, 'posts'), newPostData);
     closeModal();
     const userName = getParticipantName(newPostData.userId);
-    // await sendNotification(`created a new post: ${newPostData.topic}`, userName, docRef.id, null, newPostData.message);
+    await sendNotification(`created a new post: ${newPostData.topic}`, userName, docRef.id, null, newPostData.message);
     setTimeout(() => {
       const postElement = document.getElementById(`post-${docRef.id}`);
       if (postElement) {
