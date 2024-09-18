@@ -1,6 +1,14 @@
 <template>
-  <div class="p-4 sm:p-6 md:p-8 bg-gradient-to-b from-green-50 to-green-100 min-h-screen flex flex-col items-center">
+  <div class="p-4 sm:p-6 md:p-8 min-h-screen flex flex-col items-center" style="background: #E3E6E6">
     <h1 class="text-3xl sm:text-4xl md:text-5xl font-extrabold text-green-700 mb-6 md:mb-10">Soccer Pickup Group</h1>
+<!--    <div class="flex justify-between items-center mb-6">-->
+<!--      <button-->
+<!--          class="bg-red-500 text-white py-2 px-4 rounded-full hover:bg-red-600 transition text-base font-medium"-->
+<!--          @click="resetGame"-->
+<!--      >-->
+<!--        New  Game-->
+<!--      </button>-->
+<!--    </div>-->
     <p class="text-lg md:text-xl font-bold text-gray-800 mb-4">Today's Date: {{ today }}</p>
 
     <!-- Captain Selection Section -->
@@ -92,11 +100,33 @@
         <div v-for="player in players" :key="player.id" class="bg-white p-3 rounded-lg shadow-md flex flex-col items-center">
           <img src="@/assets/soccer.png" alt="Player" class="w-12 h-12 md:w-16 md:h-16 rounded-full border-2 border-blue-500 mb-2" />
           <span class="text-center text-xs md:text-sm font-semibold mb-1 md:mb-2">{{ player.name }}</span>
-          <button :class="['py-2 px-3 md:px-4 rounded-full text-xs md:text-sm font-medium transition-all', player.attending === 'Going' ? 'bg-green-500 text-white' : '', player.attending === 'Not Going' ? 'bg-red-500 text-white' : '', !player.attending ? 'bg-gray-200 text-gray-700 hover:bg-gray-300' : '']"
-                  @click="toggleAttendance(player)" :disabled="!canToggleAttendance(player)">
+
+          <!-- Display button only for the logged-in user matching the player -->
+          <button
+              v-if="canToggleAttendance(player)"
+              :class="[
+      'py-2 px-3 md:px-4 rounded-full text-xs md:text-sm font-medium transition-all',
+      player.attending === 'Going' ? 'bg-green-500 text-white' : '',
+      player.attending === 'Not Going' ? 'bg-red-500 text-white' : '',
+      !player.attending ? 'bg-gray-200 text-gray-700 hover:bg-gray-300' : ''
+    ]"
+              @click="toggleAttendance(player)">
             {{ player.attending || 'Select' }}
           </button>
+
+          <!-- Display status text for other players without the button -->
+          <span
+              v-else
+              :class="[
+      'text-xs md:text-sm font-medium',
+      player.attending === 'Going' ? 'text-green-500' : '',
+      player.attending === 'Not Going' ? 'text-red-500' : '',
+      !player.attending ? 'text-gray-500' : ''
+    ]">
+    {{ player.attending || 'Pending' }}
+  </span>
         </div>
+
       </div>
     </div>
   </div>
@@ -117,7 +147,9 @@ const availablePlayers = ref([]);
 const currentUserEmail = ref(null);
 const designatedEmail = 'ds7513635@gmail.com';
 
-const today = ref('')
+const today = ref('');
+const lastResetDate = ref(null); // To store the last reset date
+
 // Variables for manual captain selection
 const selectedCaptain1 = ref(null);
 const selectedCaptain2 = ref(null);
@@ -154,9 +186,22 @@ const fetchPlayers = async () => {
     const turnDoc = await getDoc(doc(db, 'game', 'turnState'));
     if (turnDoc.exists()) {
       captainTurn.value = turnDoc.data().currentTurn;
+      lastResetDate.value = turnDoc.data().lastResetDate || null; // Fetch last reset date
     } else {
       captainTurn.value = captains.value[0].id; // Default to the first captain
     }
+
+    checkAndResetDaily(); // Check if reset is needed when fetching players
+  }
+};
+
+// Function to check if a new day has started and reset if needed
+const checkAndResetDaily = async () => {
+  const currentDate = new Date().toLocaleDateString(); // Get current date string
+  if (lastResetDate.value !== currentDate) {
+    await resetGame(); // Reset game if the day has changed
+    lastResetDate.value = currentDate;
+    await updateDoc(doc(db, 'game', 'turnState'), { lastResetDate: currentDate }); // Update the date in Firebase
   }
 };
 
@@ -234,7 +279,7 @@ const assignSelectedCaptains = async () => {
 
   // Initialize turn state
   captainTurn.value = captains.value[0].id;
-  await setDoc(doc(db, 'game', 'turnState'), { currentTurn: captainTurn.value });
+  await setDoc(doc(db, 'game', 'turnState'), { currentTurn: captainTurn.value, lastResetDate: today.value });
 };
 
 // Captain picks a player and updates the captain's team in Firebase
@@ -251,6 +296,32 @@ const pickPlayer = async (captain, player) => {
 
   // Save the updated turn state to Firebase
   await updateDoc(doc(db, 'game', 'turnState'), { currentTurn: captainTurn.value });
+};
+
+// Reset the game: clear attendance, captains, and picked players
+const resetGame = async () => {
+  // Reset attendance status for all players
+  for (const player of players.value) {
+    player.attending = null; // Resetting to null or default
+    await updateDoc(doc(db, 'users', player.id), { attending: null });
+  }
+
+  // Clear captains and their teams
+  captains.value = [];
+  captainsAssigned.value = false;
+  captainTurn.value = null;
+  selectedCaptain1.value = null;
+  selectedCaptain2.value = null;
+
+  // Update Firebase to clear captains and turn state
+  const captainSnapshot = await getDocs(collection(db, 'captains'));
+  captainSnapshot.forEach(async (doc) => {
+    await updateDoc(doc.ref, { team: [] }); // Clear each captain's team
+  });
+  await setDoc(doc(db, 'game', 'turnState'), { currentTurn: null, lastResetDate: null });
+
+  // Update available players
+  updateAvailablePlayers();
 };
 
 // Fetch players and game state data on component mount

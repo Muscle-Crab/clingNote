@@ -36,7 +36,14 @@ const routes = [
     component: () => import('@/views/NotFoundComponent.vue'),
 
 
-  },{
+  },
+  {
+    path: '/',
+    name: 'Pickup',
+    component: () => import('@/views/Pickup.vue'),
+
+  },
+  {
     path: '/',
     name: 'Discussion',
     component: () => import('@/views/Discussion.vue'),
@@ -53,11 +60,12 @@ const routes = [
     path: '/login',
     name: 'Login',
     component: Login
-  },{
-    path: '/pickup',
-    name: 'Pickup',
-    component: Pickup
   },
+  // {
+  //   path: '/pickup',
+  //   name: 'Pickup',
+  //   component: Pickup
+  // },
   {
     path: '/register',
     name: 'Register',
