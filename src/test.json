@@ -1,0 +1,72 @@
+{
+  "users": [
+    {
+      "id": 1,
+      "username": "user1",
+      "email": "user1@example.com",
+      "profile_picture": "https://example.com/profiles/user1.jpg",
+      "created_at": "2024-04-28T12:00:00Z",
+      "rooms_joined": [1, 2],
+      "friends": [2],
+      "status": "online"
+    },
+    {
+      "id": 2,
+      "username": "user2",
+      "email": "user2@example.com",
+      "profile_picture": "https://example.com/profiles/user2.jpg",
+      "created_at": "2024-04-29T12:00:00Z",
+      "rooms_joined": [1],
+      "friends": [1],
+      "status": "offline"
+    }
+  ],
+  "chat_rooms": [
+    {
+      "id": 1,
+      "name": "Room 1",
+      "topic": "Ten Things You Like About Me",
+      "owner_id": 1,
+      "members": [1, 2],
+      "threads": [
+        {
+          "id": 1,
+          "title": "First Thread",
+          "messages": [
+            {"id": 1, "user_id": 1, "content": "I like your sense of humor!", "timestamp": "2024-04-28T13:00:00Z"},
+            {"id": 2, "user_id": 2, "content": "Your creativity is amazing!", "timestamp": "2024-04-28T13:05:00Z"}
+          ]
+        },
+        {
+          "id": 2,
+          "title": "Second Thread",
+          "messages": [
+            {"id": 3, "user_id": 1, "content": "Thanks! I appreciate it.", "timestamp": "2024-04-28T13:10:00Z"}
+          ]
+        }
+      ],
+      "created_at": "2024-04-28T12:00:00Z",
+      "updated_at": "2024-04-28T13:10:00Z",
+      "last_message_at": "2024-04-28T13:10:00Z"
+    },
+    {
+      "id": 2,
+      "name": "Room 2",
+      "topic": "Favorite Movies",
+      "owner_id": 2,
+      "members": [1],
+      "threads": [
+        {
+          "id": 3,
+          "title": "Sci-Fi Movies",
+          "messages": [
+            {"id": 4, "user_id": 1, "content": "I love sci-fi movies!", "timestamp": "2024-04-28T14:00:00Z"}
+          ]
+        }
+      ],
+      "created_at": "2024-04-29T12:00:00Z",
+      "updated_at": "2024-04-29T14:00:00Z",
+      "last_message_at": "2024-04-28T14:00:00Z"
+    }
+  ]
+}

@@ -5,6 +5,7 @@ import Login from '../views/Login.vue';
 import { auth } from '../firebaseConfig'; // Import your Firebase authentication instance
 import Room from '../views/Room.vue';
 import Landing from '../views/landing.vue';
+import Pickup from '../views/Pickup.vue';
 const routes = [
   {
     path: '/tasks',
@@ -30,6 +31,12 @@ const routes = [
 
 
   },{
+    path: '/:pathMatch(.*)*',
+    name: 'NotFoundComponent',
+    component: () => import('@/views/NotFoundComponent.vue'),
+
+
+  },{
     path: '/',
     name: 'Discussion',
     component: () => import('@/views/Discussion.vue'),
@@ -46,6 +53,10 @@ const routes = [
     path: '/login',
     name: 'Login',
     component: Login
+  },{
+    path: '/pickup',
+    name: 'Pickup',
+    component: Pickup
   },
   {
     path: '/register',
