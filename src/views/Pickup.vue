@@ -74,13 +74,17 @@
                     class="w-6 h-6 rounded-full border border-gray-300"
                 />
                 <span>{{ player.name }}</span>
+
+                <!-- Show Deselect button only if the current user is the captain -->
                 <button
+                    v-if="canInteractWithCaptain(captain)"
                     class="bg-red-500 text-white px-2 py-1 rounded-full text-xs hover:bg-red-600 transition"
                     @click="deselectPlayer(captain, player)">
                   Deselect
                 </button>
               </li>
             </ul>
+
           </div>
           <button v-for="player in filteredAvailablePlayers"
                   :key="player.id"
