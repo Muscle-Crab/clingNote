@@ -97,7 +97,14 @@
         </p>
       </div>
       <div class="grid grid-cols-2 md:grid-cols-3 gap-2 md:gap-4">
-        <div v-for="player in players" :key="player.id" class="bg-white p-3 rounded-lg shadow-md flex flex-col items-center">
+        <div
+            v-for="player in players"
+            :key="player.id"
+            :class="[
+    'p-3 rounded-lg shadow-md flex flex-col items-center',
+    currentUserEmail === player.email ? 'bg-yellow-200 border-4 border-yellow-500' : 'bg-white'
+  ]"
+        >
           <img src="@/assets/soccer.png" alt="Player" class="w-12 h-12 md:w-16 md:h-16 rounded-full border-2 border-blue-500 mb-2" />
           <span class="text-center text-xs md:text-sm font-semibold mb-1 md:mb-2">{{ player.name }}</span>
 
