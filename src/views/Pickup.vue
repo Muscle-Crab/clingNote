@@ -60,9 +60,9 @@
           <h3 class="text-lg md:text-xl font-bold text-blue-800">{{ captain.name }} (Captain)</h3>
           <p class="text-sm md:text-base text-gray-700 mb-3 md:mb-4">
             Turn to pick:
-            <span :class="captainTurn === captain.id ? 'text-green-600' : 'text-red-600'">
-              {{ captainTurn === captain.id ? 'Yes' : 'No' }}
-            </span>
+            <span :class="captain.turnToPick ? 'text-green-600' : 'text-red-600'">
+    {{ captain.turnToPick ? 'Yes' : 'No' }}
+  </span>
           </p>
           <div class="mb-3 md:mb-4">
             <h4 class="text-xs md:text-sm font-semibold text-gray-800">Picked Players:</h4>
@@ -82,10 +82,15 @@
               </li>
             </ul>
           </div>
-          <button v-for="player in filteredAvailablePlayers" :key="player.id" class="bg-gray-200 py-2 px-4 rounded-full text-xs md:text-sm mt-2 hover:bg-gray-300 transition"
-                  @click="pickPlayer(captain, player)" :disabled="captainTurn !== captain.id || !canInteractWithCaptain(captain)">
+          <button v-for="player in filteredAvailablePlayers"
+                  :key="player.id"
+                  class="bg-gray-200 py-2 px-4 rounded-full text-xs md:text-sm mt-2 hover:bg-gray-300 transition"
+                  @click="pickPlayer(captain, player)"
+                  :disabled="!captain.turnToPick || !canInteractWithCaptain(captain)">
             Pick {{ player.name }}
           </button>
+
+
         </div>
       </div>
     </div>
@@ -203,6 +208,7 @@ const fetchPlayers = async () => {
     }
   });
 
+
   checkAndResetDaily();
 };
 
@@ -277,19 +283,19 @@ const assignSelectedCaptains = async () => {
   captainsAssigned.value = true;
   updateAvailablePlayers();
 
-  // Add captains to Firebase
+  // Assign the first captain to start the picking process
   await setDoc(doc(db, 'captains', selectedCaptain1.value.id), {
     ...selectedCaptain1.value,
     team: [],
+    turnToPick: true  // Captain 1 starts with turn to pick
   });
   await setDoc(doc(db, 'captains', selectedCaptain2.value.id), {
     ...selectedCaptain2.value,
     team: [],
+    turnToPick: false  // Captain 2 does not start
   });
-
-  captainTurn.value = captains.value[0].id;
-  await setDoc(doc(db, 'game', 'turnState'), { currentTurn: captainTurn.value, lastResetDate: today.value });
 };
+
 
 // Captain picks a player and updates the team
 const pickPlayer = async (captain, player) => {
@@ -298,11 +304,18 @@ const pickPlayer = async (captain, player) => {
   updateAvailablePlayers();
 
   const otherCaptain = captains.value.find((c) => c.id !== captain.id);
-  captainTurn.value = otherCaptain.id;
 
-  await updateDoc(doc(db, 'captains', captain.id), { team: captain.team });
-  await updateDoc(doc(db, 'game', 'turnState'), { currentTurn: captainTurn.value });
+  // Toggle the `turnToPick` field between captains
+  await updateDoc(doc(db, 'captains', captain.id), {
+    team: captain.team,
+    turnToPick: false  // Captain who picked loses the turn
+  });
+  await updateDoc(doc(db, 'captains', otherCaptain.id), {
+    turnToPick: true  // The other captain gains the turn
+  });
 };
+
+
 
 // Captain deselects a player and updates the team
 const deselectPlayer = async (captain, player) => {
