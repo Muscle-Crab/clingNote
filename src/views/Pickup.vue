@@ -74,6 +74,11 @@
                     class="w-6 h-6 rounded-full border border-gray-300"
                 />
                 <span>{{ player.name }}</span>
+                <button
+                    class="bg-red-500 text-white px-2 py-1 rounded-full text-xs hover:bg-red-600 transition"
+                    @click="deselectPlayer(captain, player)">
+                  Deselect
+                </button>
               </li>
             </ul>
           </div>
@@ -101,9 +106,9 @@
             v-for="player in players"
             :key="player.id"
             :class="[
-    'p-3 rounded-lg shadow-md flex flex-col items-center',
-    currentUserEmail === player.email ? 'bg-yellow-200 border-4 border-yellow-500' : 'bg-white'
-  ]"
+            'p-3 rounded-lg shadow-md flex flex-col items-center',
+            currentUserEmail === player.email ? 'bg-yellow-200 border-4 border-yellow-500' : 'bg-white'
+          ]"
         >
           <img src="@/assets/soccer.png" alt="Player" class="w-12 h-12 md:w-16 md:h-16 rounded-full border-2 border-blue-500 mb-2" />
           <span class="text-center text-xs md:text-sm font-semibold mb-1 md:mb-2">{{ player.name }}</span>
@@ -112,11 +117,11 @@
           <button
               v-if="canToggleAttendance(player)"
               :class="[
-      'py-2 px-3 md:px-4 rounded-full text-xs md:text-sm font-medium transition-all',
-      player.attending === 'Going' ? 'bg-green-500 text-white' : '',
-      player.attending === 'Not Going' ? 'bg-red-500 text-white' : '',
-      !player.attending ? 'bg-gray-200 text-gray-700 hover:bg-gray-300' : ''
-    ]"
+              'py-2 px-3 md:px-4 rounded-full text-xs md:text-sm font-medium transition-all',
+              player.attending === 'Going' ? 'bg-green-500 text-white' : '',
+              player.attending === 'Not Going' ? 'bg-red-500 text-white' : '',
+              !player.attending ? 'bg-gray-200 text-gray-700 hover:bg-gray-300' : ''
+            ]"
               @click="toggleAttendance(player)">
             {{ player.attending || 'Select' }}
           </button>
@@ -125,15 +130,14 @@
           <span
               v-else
               :class="[
-      'text-xs md:text-sm font-medium',
-      player.attending === 'Going' ? 'text-green-500' : '',
-      player.attending === 'Not Going' ? 'text-red-500' : '',
-      !player.attending ? 'text-gray-500' : ''
-    ]">
-    {{ player.attending || 'Pending' }}
-  </span>
+              'text-xs md:text-sm font-medium',
+              player.attending === 'Going' ? 'text-green-500' : '',
+              player.attending === 'Not Going' ? 'text-red-500' : '',
+              !player.attending ? 'text-gray-500' : ''
+            ]">
+            {{ player.attending || 'Pending' }}
+          </span>
         </div>
-
       </div>
     </div>
   </div>
@@ -144,7 +148,7 @@
 import { ref, computed, onMounted } from 'vue';
 import { db } from '@/firebaseConfig';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
-import { collection, onSnapshot, doc, updateDoc, setDoc, getDoc } from 'firebase/firestore';
+import { collection, onSnapshot, doc, updateDoc, setDoc } from 'firebase/firestore';
 
 const players = ref([]);
 const captains = ref([]);
@@ -171,50 +175,44 @@ onAuthStateChanged(auth, (user) => {
   }
 });
 
-// Real-time listener for players
-// Real-time listener for players
+// Real-time listener for players and captains
 const fetchPlayers = async () => {
   onSnapshot(collection(db, 'users'), (snapshot) => {
     players.value = snapshot.docs.map((doc) => ({
       id: doc.id,
       ...doc.data(),
     }));
-
     updateAvailablePlayers();
   });
 
-  // Real-time listener for captains
   onSnapshot(collection(db, 'captains'), (snapshot) => {
     captains.value = snapshot.docs.map((doc) => ({
       id: doc.id,
       ...doc.data(),
     }));
     captainsAssigned.value = captains.value.length > 0;
-
     updateAvailablePlayers();
   });
 
-  // Real-time listener for turn state
   onSnapshot(doc(db, 'game', 'turnState'), (doc) => {
     if (doc.exists()) {
       captainTurn.value = doc.data().currentTurn || captains.value[0]?.id;
       lastResetDate.value = doc.data().lastResetDate || null;
     } else {
-      captainTurn.value = captains.value[0]?.id || null; // Set the first captain's turn by default if no turn is stored
+      captainTurn.value = captains.value[0]?.id || null;
     }
   });
 
-  checkAndResetDaily(); // Check if reset is needed when fetching players
+  checkAndResetDaily();
 };
-
 
 // Function to check if a new day has started and reset if needed
 const checkAndResetDaily = async () => {
-  const currentDate = new Date().toLocaleDateString(); // Get current date string
+  const currentDate = new Date().toLocaleDateString();
   if (lastResetDate.value !== currentDate) {
-    await resetGame(); // Reset game if the day has changed
+    await resetGame();
     lastResetDate.value = currentDate;
-    await updateDoc(doc(db, 'game', 'turnState'), { lastResetDate: currentDate }); // Update the date in Firebase
+    await updateDoc(doc(db, 'game', 'turnState'), { lastResetDate: currentDate });
   }
 };
 
@@ -289,50 +287,44 @@ const assignSelectedCaptains = async () => {
     team: [],
   });
 
-  // Initialize turn state
   captainTurn.value = captains.value[0].id;
   await setDoc(doc(db, 'game', 'turnState'), { currentTurn: captainTurn.value, lastResetDate: today.value });
 };
 
-// Captain picks a player and updates the captain's team in Firebase
-// Captain picks a player and updates the captain's team in Firebase
+// Captain picks a player and updates the team
 const pickPlayer = async (captain, player) => {
   captain.team = captain.team || [];
-
-  // Add the selected player to the captain's team
   captain.team.push(player);
   updateAvailablePlayers();
 
-  // Switch the turn to the other captain
   const otherCaptain = captains.value.find((c) => c.id !== captain.id);
   captainTurn.value = otherCaptain.id;
 
-  // Update the captain's team in Firebase
   await updateDoc(doc(db, 'captains', captain.id), { team: captain.team });
-
-  // Save the updated turn state to Firebase
   await updateDoc(doc(db, 'game', 'turnState'), { currentTurn: captainTurn.value });
 };
 
+// Captain deselects a player and updates the team
+const deselectPlayer = async (captain, player) => {
+  captain.team = captain.team.filter((p) => p.id !== player.id);
+  updateAvailablePlayers();
 
-// Reset the game: clear attendance, captains, and picked players
+  await updateDoc(doc(db, 'captains', captain.id), { team: captain.team });
+};
+
+// Reset the game
 const resetGame = async () => {
-  // Reset attendance status for all players
   for (const player of players.value) {
     await updateDoc(doc(db, 'users', player.id), { attending: null });
   }
 
-  // Clear captains and their teams
   captains.value = [];
   captainsAssigned.value = false;
   captainTurn.value = null;
   selectedCaptain1.value = null;
   selectedCaptain2.value = null;
 
-  // Update Firebase to clear captains and turn state
   await setDoc(doc(db, 'game', 'turnState'), { currentTurn: null, lastResetDate: null });
-
-  // Update available players
   updateAvailablePlayers();
 };
 
