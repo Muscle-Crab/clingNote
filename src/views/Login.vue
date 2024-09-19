@@ -21,6 +21,14 @@
             <span>Login</span>
           </button>
         </div>
+        <div>
+          <button @click.prevent="signInWithGoogle" class="w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">
+            <span class="mr-2">
+              <img src="https://img.icons8.com/color/48/000000/google-logo.png" alt="Google Icon" class="h-5 w-5"/>
+            </span>
+            <span>Sign in with Google</span>
+          </button>
+        </div>
         <div v-if="errorMessage" class="text-red-500 text-sm">{{ errorMessage }}</div>
       </form>
       <div class="mt-4 text-sm text-center">
@@ -29,15 +37,14 @@
     </div>
   </div>
 </template>
-
 <script setup>
 import { ref } from 'vue';
-import { signInWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '@/firebaseConfig';
+import { signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
+import { getFirestore, doc, setDoc } from 'firebase/firestore';
+import { auth, db } from '@/firebaseConfig'; // Ensure your Firebase is set up
 import { useRouter } from 'vue-router';
 
 const router = useRouter();
-
 const email = ref('');
 const password = ref('');
 const isSubmitting = ref(false);
@@ -49,10 +56,8 @@ const loginUser = async () => {
     const userCredential = await signInWithEmailAndPassword(auth, email.value, password.value);
     const user = userCredential.user;
     console.log('Successfully logged in user:', user.email);
-    // Clear form fields after login
     email.value = '';
     password.value = '';
-    // Redirect to the homepage or any other route after login
     router.push('/');
   } catch (error) {
     console.error('Login failed:', error.message);
@@ -61,4 +66,34 @@ const loginUser = async () => {
     isSubmitting.value = false;
   }
 };
+
+const signInWithGoogle = async () => {
+  const provider = new GoogleAuthProvider();
+  try {
+    const result = await signInWithPopup(auth, provider);
+    const user = result.user;
+
+    console.log('Google sign-in successful:', user.email);
+
+    // Save user credentials to Firestore
+    const userRef = doc(db, 'users', user.uid);
+    await setDoc(userRef, {
+      uid: user.uid,
+      name: user.displayName,
+      email: user.email,
+      profilePicture: user.photoURL,
+      provider: user.providerId,
+      lastLogin: new Date(),
+    });
+
+    console.log('User credentials saved to Firestore');
+
+    // Redirect after login
+    router.push('/');
+  } catch (error) {
+    console.error('Google sign-in failed:', error.message);
+    errorMessage.value = "Google sign-in failed.";
+  }
+};
+
 </script>
