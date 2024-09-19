@@ -26,7 +26,7 @@
             </select>
             <img
                 v-if="selectedCaptain1"
-                :src="selectedCaptain1.imageUrl || '@/assets/soccer.png'"
+                src="@/assets/soccer.png"
                 alt="Captain 1"
                 class="w-8 h-8 rounded-full border border-gray-300"
             />
@@ -38,7 +38,7 @@
             </select>
             <img
                 v-if="selectedCaptain2"
-                :src="selectedCaptain2.imageUrl || '@/assets/soccer.png'"
+                src="@/assets/soccer.png"
                 alt="Captain 2"
                 class="w-8 h-8 rounded-full border border-gray-300"
             />
@@ -137,7 +137,7 @@
 import { ref, computed, onMounted } from 'vue';
 import { db } from '@/firebaseConfig';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
-import { collection, getDocs, updateDoc, doc, setDoc, getDoc } from 'firebase/firestore';
+import { collection, onSnapshot, doc, updateDoc, setDoc, getDoc } from 'firebase/firestore';
 
 const players = ref([]);
 const captains = ref([]);
@@ -164,36 +164,42 @@ onAuthStateChanged(auth, (user) => {
   }
 });
 
-// Fetch users, captains, and turn state from Firebase when the component mounts
+// Real-time listener for players
+// Real-time listener for players
 const fetchPlayers = async () => {
-  const querySnapshot = await getDocs(collection(db, 'users'));
-  players.value = querySnapshot.docs.map((doc) => ({
-    id: doc.id,
-    ...doc.data(),
-  }));
+  onSnapshot(collection(db, 'users'), (snapshot) => {
+    players.value = snapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+    }));
 
-  // Check and load captains and turn state from Firebase
-  const captainSnapshot = await getDocs(collection(db, 'captains'));
-  if (!captainSnapshot.empty) {
-    captainSnapshot.forEach((doc) => {
-      const captain = doc.data();
-      captains.value.push(captain);
-    });
-    captainsAssigned.value = true;
     updateAvailablePlayers();
+  });
 
-    // Fetch and set the current captain turn state
-    const turnDoc = await getDoc(doc(db, 'game', 'turnState'));
-    if (turnDoc.exists()) {
-      captainTurn.value = turnDoc.data().currentTurn;
-      lastResetDate.value = turnDoc.data().lastResetDate || null; // Fetch last reset date
+  // Real-time listener for captains
+  onSnapshot(collection(db, 'captains'), (snapshot) => {
+    captains.value = snapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+    }));
+    captainsAssigned.value = captains.value.length > 0;
+
+    updateAvailablePlayers();
+  });
+
+  // Real-time listener for turn state
+  onSnapshot(doc(db, 'game', 'turnState'), (doc) => {
+    if (doc.exists()) {
+      captainTurn.value = doc.data().currentTurn || captains.value[0]?.id;
+      lastResetDate.value = doc.data().lastResetDate || null;
     } else {
-      captainTurn.value = captains.value[0].id; // Default to the first captain
+      captainTurn.value = captains.value[0]?.id || null; // Set the first captain's turn by default if no turn is stored
     }
+  });
 
-    checkAndResetDaily(); // Check if reset is needed when fetching players
-  }
+  checkAndResetDaily(); // Check if reset is needed when fetching players
 };
+
 
 // Function to check if a new day has started and reset if needed
 const checkAndResetDaily = async () => {
@@ -256,7 +262,6 @@ const toggleAttendance = async (player) => {
 
   const newStatus = player.attending === 'Going' ? 'Not Going' : 'Going';
   await updateDoc(doc(db, 'users', player.id), { attending: newStatus });
-  player.attending = newStatus;
 };
 
 // Assign two different captains and save them to Firebase
@@ -283,26 +288,30 @@ const assignSelectedCaptains = async () => {
 };
 
 // Captain picks a player and updates the captain's team in Firebase
+// Captain picks a player and updates the captain's team in Firebase
 const pickPlayer = async (captain, player) => {
   captain.team = captain.team || [];
+
+  // Add the selected player to the captain's team
   captain.team.push(player);
   updateAvailablePlayers();
 
   // Switch the turn to the other captain
-  captainTurn.value = captainTurn.value === captains.value[0].id ? captains.value[1].id : captains.value[0].id;
+  const otherCaptain = captains.value.find((c) => c.id !== captain.id);
+  captainTurn.value = otherCaptain.id;
 
-  // Update captain's team in Firebase
+  // Update the captain's team in Firebase
   await updateDoc(doc(db, 'captains', captain.id), { team: captain.team });
 
   // Save the updated turn state to Firebase
   await updateDoc(doc(db, 'game', 'turnState'), { currentTurn: captainTurn.value });
 };
 
+
 // Reset the game: clear attendance, captains, and picked players
 const resetGame = async () => {
   // Reset attendance status for all players
   for (const player of players.value) {
-    player.attending = null; // Resetting to null or default
     await updateDoc(doc(db, 'users', player.id), { attending: null });
   }
 
@@ -314,10 +323,6 @@ const resetGame = async () => {
   selectedCaptain2.value = null;
 
   // Update Firebase to clear captains and turn state
-  const captainSnapshot = await getDocs(collection(db, 'captains'));
-  captainSnapshot.forEach(async (doc) => {
-    await updateDoc(doc.ref, { team: [] }); // Clear each captain's team
-  });
   await setDoc(doc(db, 'game', 'turnState'), { currentTurn: null, lastResetDate: null });
 
   // Update available players
@@ -328,9 +333,10 @@ const resetGame = async () => {
 onMounted(fetchPlayers);
 onMounted(() => {
   const date = new Date();
-  today.value = date.toLocaleDateString(); // You can adjust the format as needed
+  today.value = date.toLocaleDateString();
 });
 </script>
+
 
 
 <style scoped>
