@@ -11,7 +11,7 @@ const app = createApp(App);
 app.use(store);
 app.use(router);
 app.use(OneSignalVuePlugin, {
-    appId: '65d866ad-f59c-4557-9d75-4ccf7fe60a47',
+    appId: '7562ab0c-0921-48c1-a06e-b89abc63a34e',
 });
 
 // Mount the app
