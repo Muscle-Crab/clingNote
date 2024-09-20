@@ -14,9 +14,13 @@
     <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
     <script>
         window.OneSignalDeferred = window.OneSignalDeferred || [];
-        OneSignalDeferred.push(function(OneSignal) {
-            OneSignal.init({
-                appId: "7562ab0c-0921-48c1-a06e-b89abc63a34e",
+        OneSignalDeferred.push(async function(OneSignal) {
+            await OneSignal.init({
+                appId: "fc206a71-7d65-4cfa-b8b2-0c10548e1476",
+                safari_web_id: "web.onesignal.auto.2068edc0-2ec7-4d8d-bc37-83913e3acbff",
+                notifyButton: {
+                    enable: true,
+                },
             });
         });
     </script>
