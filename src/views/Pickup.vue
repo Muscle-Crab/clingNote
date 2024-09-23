@@ -215,7 +215,26 @@ const fetchPlayers = async () => {
 
   checkAndResetDaily();
 };
+// Function to send notifications
+const sendNotification = async (message) => {
+  const headers = {
+    'Authorization': 'Bearer MzVkYmJkODUtOTBmMS00ZmM2LWFkZTgtMzcwNTRjODlhY2Y4',
+    'Content-Type': 'application/json'
+  };
 
+  const data = {
+    "app_id": "fc206a71-7d65-4cfa-b8b2-0c10548e1476",  // Updated app ID
+    "included_segments": ["All"],  // Sends to all users
+    "contents": {"en": message}
+  };
+
+  try {
+    await axios.post('https://onesignal.com/api/v1/notifications', data, { headers });
+    console.log('Notification sent:', message);
+  } catch (error) {
+    console.error('Error sending notification:', error);
+  }
+};
 // Function to check if a new day has started and reset if needed
 const checkAndResetDaily = async () => {
   const currentDate = new Date().toLocaleDateString();
@@ -271,13 +290,7 @@ const canInteractWithCaptain = (captain) => {
   return currentUserEmail.value === captain.email;
 };
 
-// Toggle attendance and update Firebase
-const toggleAttendance = async (player) => {
-  if (!canToggleAttendance(player)) return;
 
-  const newStatus = player.attending === 'Going' ? 'Not Going' : 'Going';
-  await updateDoc(doc(db, 'users', player.id), { attending: newStatus });
-};
 
 // Assign two different captains and save them to Firebase
 const assignSelectedCaptains = async () => {
@@ -287,7 +300,6 @@ const assignSelectedCaptains = async () => {
   captainsAssigned.value = true;
   updateAvailablePlayers();
 
-  // Assign the first captain to start the picking process
   await setDoc(doc(db, 'captains', selectedCaptain1.value.id), {
     ...selectedCaptain1.value,
     team: [],
@@ -298,10 +310,15 @@ const assignSelectedCaptains = async () => {
     team: [],
     turnToPick: false  // Captain 2 does not start
   });
+
+  // Send notification
+  sendNotification(`Captains selected: ${selectedCaptain1.value.name} and ${selectedCaptain2.value.name}.`);
 };
 
 
+
 // Captain picks a player and updates the team
+// Player picked by captain and send notification
 const pickPlayer = async (captain, player) => {
   captain.team = captain.team || [];
   captain.team.push(player);
@@ -309,7 +326,6 @@ const pickPlayer = async (captain, player) => {
 
   const otherCaptain = captains.value.find((c) => c.id !== captain.id);
 
-  // Toggle the `turnToPick` field between captains
   await updateDoc(doc(db, 'captains', captain.id), {
     team: captain.team,
     turnToPick: false  // Captain who picked loses the turn
@@ -317,16 +333,23 @@ const pickPlayer = async (captain, player) => {
   await updateDoc(doc(db, 'captains', otherCaptain.id), {
     turnToPick: true  // The other captain gains the turn
   });
+
+  // Send notification
+  sendNotification(`${captain.name} picked ${player.name}.`);
 };
 
 
 
 // Captain deselects a player and updates the team
+// Player deselected by captain and send notification
 const deselectPlayer = async (captain, player) => {
   captain.team = captain.team.filter((p) => p.id !== player.id);
   updateAvailablePlayers();
 
   await updateDoc(doc(db, 'captains', captain.id), { team: captain.team });
+
+  // Send notification
+  sendNotification(`${captain.name} deselected ${player.name}.`);
 };
 
 // Reset the game
@@ -343,7 +366,23 @@ const resetGame = async () => {
 
   await setDoc(doc(db, 'game', 'turnState'), { currentTurn: null, lastResetDate: null });
   updateAvailablePlayers();
+
+  // Send notification
+  sendNotification('A new game has been scheduled!');
 };
+
+// Toggle attendance and send notification
+const toggleAttendance = async (player) => {
+  if (!canToggleAttendance(player)) return;
+
+  const newStatus = player.attending === 'Going' ? 'Not Going' : 'Going';
+  await updateDoc(doc(db, 'users', player.id), { attending: newStatus });
+
+  // Send notification
+  const statusMessage = `${player.name} is now ${newStatus === 'Going' ? 'going' : 'not going'} to the game.`;
+  sendNotification(statusMessage);
+};
+
 
 // Fetch players and game state data on component mount
 onMounted(fetchPlayers);
