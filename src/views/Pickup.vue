@@ -158,6 +158,7 @@ import { ref, computed, onMounted } from 'vue';
 import { db } from '@/firebaseConfig';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
 import { collection, onSnapshot, doc, updateDoc, setDoc } from 'firebase/firestore';
+import axios from 'axios'
 
 const players = ref([]);
 const captains = ref([]);
@@ -218,11 +219,11 @@ const fetchPlayers = async () => {
 // Function to send notifications
 const sendNotification = async (message) => {
   const headers = {
-    'Authorization': 'Bearer MzVkYmJkODUtOTBmMS00ZmM2LWFkZTgtMzcwNTRjODlhY2Y4',
+    'Authorization': 'Bearer ZDZiZDk0NTktMjUwZS00NTQ4LWFhOTItNjBiZDZiMjVhYzYy',
     'Content-Type': 'application/json'
   };
-
   const data = {
+
     "app_id": "fc206a71-7d65-4cfa-b8b2-0c10548e1476",  // Updated app ID
     "included_segments": ["All"],  // Sends to all users
     "contents": {"en": message}
@@ -236,14 +237,14 @@ const sendNotification = async (message) => {
   }
 };
 // Function to check if a new day has started and reset if needed
-const checkAndResetDaily = async () => {
-  const currentDate = new Date().toLocaleDateString();
-  if (lastResetDate.value !== currentDate) {
-    await resetGame();
-    lastResetDate.value = currentDate;
-    await updateDoc(doc(db, 'game', 'turnState'), { lastResetDate: currentDate });
-  }
-};
+// const checkAndResetDaily = async () => {
+//   const currentDate = new Date().toLocaleDateString();
+//   if (lastResetDate.value !== currentDate) {
+//     await resetGame();
+//     lastResetDate.value = currentDate;
+//     await updateDoc(doc(db, 'game', 'turnState'), { lastResetDate: currentDate });
+//   }
+// };
 
 // Update available players to exclude captains and their picked players
 const updateAvailablePlayers = () => {
@@ -368,7 +369,7 @@ const resetGame = async () => {
   updateAvailablePlayers();
 
   // Send notification
-  sendNotification('A new game has been scheduled!');
+  sendNotification('Pickup up tonight @6pm Ballenger Creek Park being or on the turf');
 };
 
 // Toggle attendance and send notification
