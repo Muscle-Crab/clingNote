@@ -214,7 +214,7 @@ const fetchPlayers = async () => {
   });
 
 
-  checkAndResetDaily();
+  // checkAndResetDaily();
 };
 // Function to send notifications
 const sendNotification = async (message) => {
