@@ -384,9 +384,25 @@ const toggleAttendance = async (player) => {
   const newStatus = player.attending === 'Going' ? 'Not Going' : 'Going';
   await updateDoc(doc(db, 'users', player.id), { attending: newStatus });
 
-  // Send notification
+  // If the player is marked as "Not Going" and they are picked by a captain, remove them from the captain's team
+  if (newStatus === 'Not Going') {
+    captains.value.forEach(async (captain) => {
+      if (captain.team?.some((p) => p.id === player.id)) {
+        captain.team = captain.team.filter((p) => p.id !== player.id);
+        await updateDoc(doc(db, 'captains', captain.id), { team: captain.team });
+
+        // Send notification for player removal
+        sendNotification(`${player.name} has been removed from ${captain.name}'s team because they are no longer going.`);
+      }
+    });
+  }
+
+  // Send notification about the player's updated attendance status
   const statusMessage = `${player.name} is now ${newStatus === 'Going' ? 'going' : 'not going'} to the game.`;
   sendNotification(statusMessage);
+
+  // Update available players after changing attendance
+  updateAvailablePlayers();
 };
 
 
