@@ -1,13 +1,13 @@
 <template>
   <div class="p-4 sm:p-6 md:p-8 min-h-screen flex flex-col items-center" style="background: #E3E6E6">
     <h1 class="text-3xl sm:text-4xl md:text-5xl font-extrabold text-green-700 mb-6 md:mb-10">Soccer Pickup Group</h1>
-    <div class="flex justify-between items-center mb-6">
-<!--      <button-->
-<!--          class="bg-red-500 text-white py-2 px-4 rounded-full hover:bg-red-600 transition text-base font-medium"-->
-<!--          @click="resetGame"-->
-<!--      >-->
-<!--        New  Game-->
-<!--      </button>-->
+    <div v-if="canAssignCaptains" class="flex justify-between items-center mb-6">
+      <button
+          class="bg-red-500 text-white py-2 px-4 rounded-full hover:bg-red-600 transition text-base font-medium"
+          @click="resetGame"
+      >
+        New  Game
+      </button>
     </div>
     <p class="text-lg md:text-xl font-bold text-gray-800 mb-4">Today's Date: {{ today }}</p>
 
@@ -115,9 +115,13 @@
             v-for="player in players"
             :key="player.id"
             :class="[
-            'p-3 rounded-lg shadow-md flex flex-col items-center',
-            currentUserEmail === player.email ? 'bg-yellow-200 border-4 border-yellow-500' : 'bg-white'
-          ]"
+      'p-3 rounded-lg shadow-md flex flex-col items-center',
+      currentUserEmail === player.email ? 'bg-yellow-200 border-4 border-yellow-500' : '',
+      player.attending === 'Going' ? 'border-4 border-green-500' : '',
+      player.attending === 'Not Going' ? 'border-4 border-red-500' : '',
+      !player.attending ? 'border-4 border-gray-300' : '',
+      'bg-white'
+    ]"
         >
           <img src="@/assets/soccer.png" alt="Player" class="w-12 h-12 md:w-16 md:h-16 rounded-full border-2 border-blue-500 mb-2" />
           <span class="text-center text-xs md:text-sm font-semibold mb-1 md:mb-2">{{ player.name }}</span>
@@ -126,11 +130,11 @@
           <button
               v-if="canToggleAttendance(player)"
               :class="[
-              'py-2 px-3 md:px-4 rounded-full text-xs md:text-sm font-medium transition-all',
-              player.attending === 'Going' ? 'bg-green-500 text-white' : '',
-              player.attending === 'Not Going' ? 'bg-red-500 text-white' : '',
-              !player.attending ? 'bg-gray-200 text-gray-700 hover:bg-gray-300' : ''
-            ]"
+        'py-2 px-3 md:px-4 rounded-full text-xs md:text-sm font-medium transition-all',
+        player.attending === 'Going' ? 'bg-green-500 text-white' : '',
+        player.attending === 'Not Going' ? 'bg-red-500 text-white' : '',
+        !player.attending ? 'bg-gray-200 text-gray-700 hover:bg-gray-300' : ''
+      ]"
               @click="toggleAttendance(player)">
             {{ player.attending || 'Select' }}
           </button>
@@ -139,15 +143,16 @@
           <span
               v-else
               :class="[
-              'text-xs md:text-sm font-medium',
-              player.attending === 'Going' ? 'text-green-500' : '',
-              player.attending === 'Not Going' ? 'text-red-500' : '',
-              !player.attending ? 'text-gray-500' : ''
-            ]">
-            {{ player.attending || 'Pending' }}
-          </span>
+        'text-xs md:text-sm font-medium',
+        player.attending === 'Going' ? 'text-green-500' : '',
+        player.attending === 'Not Going' ? 'text-red-500' : '',
+        !player.attending ? 'text-gray-500' : ''
+      ]">
+      {{ player.attending || 'Pending' }}
+    </span>
         </div>
       </div>
+
     </div>
   </div>
 </template>
@@ -166,7 +171,7 @@ const captainsAssigned = ref(false);
 const captainTurn = ref(null);
 const availablePlayers = ref([]);
 const currentUserEmail = ref(null);
-const designatedEmail = 'ds7513635@gmail.com';
+const designatedEmails = ['ds7513635@gmail.com', 'pablo.novoa89@gmail.com','lordsarfo123@gmail.com','ideastogether@yahoo.com','testing@gmail.com'];
 
 const today = ref('');
 const lastResetDate = ref(null); // To store the last reset date
@@ -265,7 +270,7 @@ const canToggleAttendance = (player) => {
 };
 
 // Check if the logged-in user can assign captains
-const canAssignCaptains = computed(() => currentUserEmail.value === designatedEmail);
+const canAssignCaptains = computed(() => designatedEmails.includes(currentUserEmail.value));
 
 // Filter available captains for selection (only players marked as going)
 const availableCaptains = computed(() => players.value.filter((p) => p.attending === 'Going'));
