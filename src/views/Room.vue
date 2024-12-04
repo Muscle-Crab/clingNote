@@ -327,17 +327,32 @@
               </div>
             </div>
             <div class="flex flex-col items-center w-full space-y-2">
-              <div v-if="mediaType === 'image' && imageUrl">
+              <div v-if="mediaType === 'image' && imageUrl" class="relative">
                 <img :src="imageUrl" alt="Selected Image" class="w-32 h-32 rounded-lg" />
+                <!-- Close Button -->
+                <button
+                    @click="removeImage"
+                    class="absolute top-1 right-1 bg-gray-700 text-white rounded-full w-6 h-6 flex items-center justify-center hover:bg-red-600"
+                >
+                  ✕
+                </button>
               </div>
-              <div v-else-if="mediaType === 'video' && videoUrl">
+              <div v-else-if="mediaType === 'video' && videoUrl" class="relative">
                 <video :src="videoUrl" controls class="w-32 h-32 rounded-lg"></video>
+                <!-- Close Button -->
+                <button
+                    @click="removeVideo"
+                    class="absolute top-1 right-1 bg-gray-700 text-white rounded-full w-6 h-6 flex items-center justify-center hover:bg-red-600"
+                >
+                  ✕
+                </button>
               </div>
               <div v-if="uploadProgress !== null">
                 <progress :value="uploadProgress" max="100" class="w-full"></progress>
                 <p>Upload Progress: {{ uploadProgress }}%</p>
               </div>
             </div>
+
           </div>
 
 
@@ -984,11 +999,16 @@ const uploadFile = async (file) => {
 const showNotificationModal = ref(false);
 const removeImage = () => {
   imageUrl.value = null;
+  fileToUpload.value = null;
+  mediaType.value = '';
 };
 
 const removeVideo = () => {
   videoUrl.value = null;
+  fileToUpload.value = null;
+  mediaType.value = '';
 };
+
 const currentUrl = window.location.href; // Use the current page URL or replace with your link
 
 // Share functions for each platform
