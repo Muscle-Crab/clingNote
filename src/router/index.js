@@ -38,7 +38,7 @@ const routes = [
 
   },
   {
-    path: '/',
+    path: '/pickup',
     name: 'Pickup',
     component: () => import('@/views/Pickup.vue'),
 
@@ -48,7 +48,7 @@ const routes = [
     name: 'Discussion',
     component: () => import('@/views/Discussion.vue'),
     props: true,
-    meta: { requiresAuth: true }
+
   },
   {
     path: '/room/:id',
