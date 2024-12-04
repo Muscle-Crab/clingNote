@@ -44,14 +44,14 @@ const routes = [
 
   },
   {
-    path: '/',
+    path: '/fdfd',
     name: 'Discussion',
     component: () => import('@/views/Discussion.vue'),
     props: true,
-
+    // meta: { requiresAuth: true }
   },
   {
-    path: '/room/:id',
+    path: '/',
     name: 'RoomInterior',
     component: Room,
     props: true // Pass route params as props to the component
