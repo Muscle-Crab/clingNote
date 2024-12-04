@@ -8,6 +8,39 @@
       <Skeleton :loading="loading" v-if="loading"/>
 
       <div v-else class="md:grid grid-cols-1 md:grid-cols-3 gap-8 items-start">
+        <div class="flex space-x-4">
+          <!-- Facebook -->
+          <button
+              @click="shareOnFacebook"
+              class="flex items-center bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+          >
+            <i class="fab fa-facebook-f mr-2"></i> Facebook
+          </button>
+
+          <!-- Twitter -->
+          <button
+              @click="shareOnTwitter"
+              class="flex items-center bg-blue-400 text-white px-4 py-2 rounded-lg hover:bg-blue-500"
+          >
+            <i class="fab fa-twitter mr-2"></i> Twitter
+          </button>
+
+          <!-- WhatsApp -->
+          <button
+              @click="shareOnWhatsApp"
+              class="flex items-center bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600"
+          >
+            <i class="fab fa-whatsapp mr-2"></i> WhatsApp
+          </button>
+
+          <!-- LinkedIn -->
+          <button
+              @click="shareOnLinkedIn"
+              class="flex items-center bg-blue-800 text-white px-4 py-2 rounded-lg hover:bg-blue-900"
+          >
+            <i class="fab fa-linkedin-in mr-2"></i> LinkedIn
+          </button>
+        </div>
         <!-- Actual Content -->
         <!-- Left Sidebar: Participants -->
 <!--        <div class="col-span-1 mb-5 bg-gray-900 rounded-lg   dark:bg-gray-800">-->
@@ -36,7 +69,7 @@
 <!--        </div>-->
 
         <!-- Main Content: Posts -->
-        <div>
+        <div class="mt-5">
           <!-- Trigger Button -->
           <button
               @click="showNotificationModal = true"
@@ -446,18 +479,16 @@ onMounted(() => {
   const unsubscribe = onSnapshot(collection(db, 'posts'), snapshot => {
     const posts = [];
     snapshot.forEach(doc => {
-      const postData = {...doc.data(), id: doc.id};
-      if (postData.room_id === room_id.value) {
-        posts.push(postData);
-      }
+      const postData = { ...doc.data(), id: doc.id };
+      posts.push(postData);
     });
-    posts.sort((a, b) => b.timestamp - a.timestamp)
+    posts.sort((a, b) => b.timestamp - a.timestamp);
     selectedRoom.value.posts = posts;
     filteredPosts.value = posts;
-    filteredParticipants.value = selectedRoom.value.participants;
   });
   return unsubscribe;
 });
+
 
 const deleteComment = async (post, commentId) => {
   try {
@@ -771,28 +802,29 @@ const formatTimestamp = (timestamp) => {
 
 const fetchRoomData = async () => {
   try {
-    const roomId = room_id.value
-    const roomDoc = await getDoc(doc(db, 'rooms', roomId));
-    if (roomDoc.exists()) {
-      const roomData = roomDoc.data();
-      const approvedUsers = roomData.approvedUsers;
+    const querySnapshot = await getDocs(collection(db, 'rooms'));
+    querySnapshot.forEach(doc => {
+      const roomData = { id: doc.id, ...doc.data() };
+      selectedRoom.value.participants.push(...roomData.approvedUsers);
+    });
 
-      const querySnapshot = await getDocs(collection(db, 'users'));
-      querySnapshot.forEach(doc => {
-        if (approvedUsers.includes(doc.id)) {
-          selectedRoom.value.participants.push(doc.data());
-        }
-      });
-    }
+    // Fetch all users
+    const usersSnapshot = await getDocs(collection(db, 'users'));
+    usersSnapshot.forEach(doc => {
+      selectedRoom.value.participants.push({ id: doc.id, ...doc.data() });
+    });
+
     loading.value = false;
   } catch (error) {
     console.error('Error fetching room data:', error);
     loading.value = false;
   }
 };
+
 onMounted(async () => {
   await fetchRoomData();
 });
+
 
 
 const showMore = ref(false);
@@ -961,7 +993,28 @@ const removeImage = () => {
 const removeVideo = () => {
   videoUrl.value = null;
 };
+const currentUrl = window.location.href; // Use the current page URL or replace with your link
 
+// Share functions for each platform
+const shareOnFacebook = () => {
+  const facebookUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(currentUrl)}`;
+  window.open(facebookUrl, '_blank', 'width=600,height=400');
+};
+
+const shareOnTwitter = () => {
+  const twitterUrl = `https://twitter.com/intent/tweet?url=${encodeURIComponent(currentUrl)}&text=Check this out!`;
+  window.open(twitterUrl, '_blank', 'width=600,height=400');
+};
+
+const shareOnWhatsApp = () => {
+  const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(`Check this out: ${currentUrl}`)}`;
+  window.open(whatsappUrl, '_blank');
+};
+
+const shareOnLinkedIn = () => {
+  const linkedinUrl = `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(currentUrl)}`;
+  window.open(linkedinUrl, '_blank', 'width=600,height=400');
+};
 </script>
 
 <style>
