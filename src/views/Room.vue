@@ -668,7 +668,7 @@ const createNewPost = async () => {
 
   const newPostData = {
     userId,
-    room_id: room_id.value,
+
     topic: newPost.value.topic,
     message: newPost.value.message,
     mediaUrl,
