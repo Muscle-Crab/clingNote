@@ -76,9 +76,9 @@
           <!-- Modal -->
           <div
               v-if="showNotificationModal"
-              class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-70"
+              class="fixed inset-0 z-50 overflow-y-auto bg-black bg-opacity-70 flex justify-center items-center"
           >
-            <div class="relative bg-gray-800 rounded-lg shadow-lg p-6 max-w-xl w-full text-gray-200">
+            <div class="relative bg-gray-800 rounded-lg shadow-lg p-6 max-w-xl w-full text-gray-200 my-8">
               <!-- Close Button -->
               <button
                   @click="showNotificationModal = false"
@@ -93,7 +93,7 @@
               </h2>
 
               <!-- Video Tutorial -->
-              <div class="w-full  mb-6 rounded-lg  shadow-lg">
+              <div class="w-full mb-6 rounded-lg shadow-lg">
                 <video
                     src="@/assets/video.mp4"
                     controls
@@ -133,6 +133,7 @@
               </div>
             </div>
           </div>
+
         </div>
         <div class="col-span-2 grid grid-cols-1 gap-8 mb-10">
           <div v-for="post in filteredPosts" :key="post.id" :id="'post-' + post.id" class="md:min-w-[320px]">
