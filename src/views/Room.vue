@@ -93,9 +93,9 @@
               </h2>
 
               <!-- Video Tutorial -->
-              <div class="w-full h-64 mb-6 rounded-lg overflow-hidden shadow-lg">
+              <div class="w-full  mb-6 rounded-lg  shadow-lg">
                 <video
-                    src="/path-to-your-video.mp4"
+                    src="@/assets/video.mp4"
                     controls
                     autoplay
                     class="w-full h-full object-cover"
@@ -283,7 +283,7 @@
                 </button>
               </div>
               <p v-else class="text-center text-blue-500">
-                Please <router-link to="/login" class="underline hover:text-blue-700">log in</router-link> to create posts.
+                <router-link to="/login" class="underline hover:text-blue-700">log in</router-link> to leave a comment.
               </p>
             </div>
           </div>
