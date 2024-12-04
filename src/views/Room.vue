@@ -10,30 +10,30 @@
       <div v-else class="md:grid grid-cols-1 md:grid-cols-3 gap-8 items-start">
         <!-- Actual Content -->
         <!-- Left Sidebar: Participants -->
-        <div class="col-span-1 mb-5 bg-gray-900 rounded-lg   dark:bg-gray-800">
-          <h2 class="text-xl font-semibold text-gray-200 mb-4">Participants</h2>
-          <ul class="space-y-4">
-            <li v-for="(participant, index) in visibleParticipants" :key="participant.id" class="flex items-center">
-              <div class="w-12 h-12 rounded-full mr-4 flex items-center justify-center bg-gray-700 text-white text-xl">
-                <img v-if="participant.avatar" :src="participant.avatar" alt="Participant" class="rounded-full w-full h-full">
-                <span v-else>{{ participant.name.charAt(0).toUpperCase() }}</span>
-              </div>
-              <span class="text-gray-200">{{ participant.name }}</span>
-            </li>
-          </ul>
-          <!-- Use Font Awesome icons instead of a button -->
-          <div>
-            <!-- Your content here -->
-            <div
-                @click="toggleShowMore"
-                class="mt-4 p-3 bg-blue-600 text-white rounded-full cursor-pointer hover:bg-blue-700 flex items-center justify-center"
-                style="width: 40px; height: 40px;"
-            >
-              <i :class="showMore ? 'fas fa-chevron-up' : 'fas fa-chevron-down'" class="text-xl"></i>
-            </div>
-          </div>
+<!--        <div class="col-span-1 mb-5 bg-gray-900 rounded-lg   dark:bg-gray-800">-->
+<!--          <h2 class="text-xl font-semibold text-gray-200 mb-4">Participants</h2>-->
+<!--          <ul class="space-y-4">-->
+<!--            <li v-for="(participant, index) in visibleParticipants" :key="participant.id" class="flex items-center">-->
+<!--              <div class="w-12 h-12 rounded-full mr-4 flex items-center justify-center bg-gray-700 text-white text-xl">-->
+<!--                <img v-if="participant.avatar" :src="participant.avatar" alt="Participant" class="rounded-full w-full h-full">-->
+<!--                <span v-else>{{ participant.name.charAt(0).toUpperCase() }}</span>-->
+<!--              </div>-->
+<!--              <span class="text-gray-200">{{ participant.name }}</span>-->
+<!--            </li>-->
+<!--          </ul>-->
+<!--          &lt;!&ndash; Use Font Awesome icons instead of a button &ndash;&gt;-->
+<!--          <div>-->
+<!--            &lt;!&ndash; Your content here &ndash;&gt;-->
+<!--            <div-->
+<!--                @click="toggleShowMore"-->
+<!--                class="mt-4 p-3 bg-blue-600 text-white rounded-full cursor-pointer hover:bg-blue-700 flex items-center justify-center"-->
+<!--                style="width: 40px; height: 40px;"-->
+<!--            >-->
+<!--              <i :class="showMore ? 'fas fa-chevron-up' : 'fas fa-chevron-down'" class="text-xl"></i>-->
+<!--            </div>-->
+<!--          </div>-->
 
-        </div>
+<!--        </div>-->
 
         <!-- Main Content: Posts -->
         <div class="col-span-2 grid grid-cols-1 gap-8 mb-10">
@@ -46,7 +46,7 @@
                     <span v-else>{{ getParticipantName(post.userId).charAt(0).toUpperCase() }}</span>
                   </div>
                   <div class="flex flex-col">
-                    <span class="font-semibold text-gray-200">{{ getParticipantName(post.userId) }}</span>
+                    <span class="font-semibold text-gray-200">{{getUserNameById(post.userId)  }}</span>
                     <span class="text-sm text-gray-400">{{ formatTimestamp(post.timestamp) }}</span>
                   </div>
                 </div>
@@ -80,7 +80,12 @@
               <p class="text-gray-400 mb-4">{{ post.message }}</p>
               <div class="flex justify-between items-center">
                 <div>
-                  <button @click="toggleLike(post)" class="flex items-center text-blue-400 focus:outline-none">
+                  <button
+
+                      @click="currentUser ? toggleLike(post) : null"
+                      :disabled="!currentUser"
+
+                      class="flex items-center text-blue-400 focus:outline-none">
                     <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path>
                     </svg>
@@ -99,13 +104,13 @@
                  </span>
                 </div>
               </div>
-              <section v-if="post.showComments" class=" dark:bg-gray-900 antialiased">
+              <section v-if="post.showComments" class="dark:bg-gray-900 antialiased">
                 <div>
                   <article
                       v-for="comment in post.comments"
                       :key="comment.id"
                       :id="'comment-' + comment.id"
-                      class="pt-2 p-2 text-sm  dark:bg-gray-900"
+                      class="pt-2 p-2 text-sm dark:bg-gray-900"
                   >
                     <footer class="flex flex-col sm:flex-row justify-between">
                       <div class="flex">
@@ -115,128 +120,46 @@
                           <img
                               v-if="getParticipantAvatar(comment.userId)"
                               :src="getParticipantAvatar(comment.userId)"
-                              :alt="getParticipantName(comment.userId)"
+                              :alt="getUserNameById(comment.userId)"
                               class="rounded-full w-full h-full"
                           />
-                          <span v-else>{{ getParticipantName(comment.userId).charAt(0).toUpperCase() }}</span>
+                          <span v-else>{{ getUserNameById(comment.userId).charAt(0).toUpperCase() }}</span>
                         </div>
                         <div>
                           <p class="text-xs text-gray-200 dark:text-white font-semibold">
-                            {{ getParticipantName(comment.userId) }}
+                            {{ getUserNameById(comment.userId) }}
                           </p>
-                          <textarea
-                              v-if="editingCommentId === comment.id"
-                              v-model="editedComment"
-                              class="mt-1 block w-full text-xs text-gray-200 border-0 focus:ring-0 focus:outline-none dark:text-white dark:placeholder-gray-400 dark:bg-gray-900"
-                              required
-                          >{{ comment.message }}</textarea>
-                          <p v-else class="text-gray-400 dark:text-gray-400 break-words">
+                          <p class="text-gray-400 dark:text-gray-400 break-words">
                             {{ comment.message }}
                           </p>
                         </div>
                       </div>
-                      <div class="flex items-center space-x-1 mt-2 sm:mt-0">
-                        <button @click="speakText(getParticipantName(comment.userId), comment.message)" class="text-gray-400 hover:text-indigo-400 focus:outline-none">
-                          <i class="fa fa-volume-up"></i>
-                        </button>
-                        <div v-if="editingCommentId !== comment.id && currentUser && currentUser.uid === comment.userId">
-                          <button @click="editComment(comment)" class="text-blue-400 focus:outline-none">Edit</button> |
-                          <button @click="deleteComment(post, comment.id)" class="text-red-400 focus:outline-none">Delete</button>
-                        </div>
-                        <button v-if="editingCommentId === comment.id" @click="saveComment(post, comment)" class="text-green-400 focus:outline-none">Save</button>
-                      </div>
                     </footer>
-                    <!-- Reply Form -->
-                    <div v-if="comment.showReplyForm" class="mt-2">
-        <textarea
-            v-model="replyInput[comment.id]"
-            placeholder="Add a reply..."
-            class="w-full p-2 rounded-lg border border-gray-600 bg-gray-800 text-gray-200 placeholder-gray-500 text-xs"
-        ></textarea>
-                      <button
-                          @click="addReply(post, comment)"
-                          class="mt-2 bg-blue-500 hover:bg-blue-600 text-white font-bold py-1 px-3 rounded-full focus:outline-none focus:shadow-outline"
-                      >
-                        Submit
-                      </button>
-                    </div>
-                    <!-- Replies -->
-                    <div v-if="comment.replies && comment.replies.length > 0" class="mt-4 pl-4 border-l border-gray-700">
-                      <article
-                          v-for="reply in comment.replies"
-                          :key="reply.id"
-                          class="pt-2 p-2 text-sm bg-gray-800 dark:bg-gray-900"
-                      >
-                        <footer class="flex justify-between">
-                          <div class="flex">
-                            <div
-                                class="w-6 h-6 rounded-full mr-2 flex-shrink-0 flex items-center justify-center bg-gray-700 text-white text-sm"
-                            >
-                              <img
-                                  v-if="getParticipantAvatar(reply.userId)"
-                                  :src="getParticipantAvatar(reply.userId)"
-                                  :alwt="getParticipantName(reply.userId)"
-                                  class="rounded-full w-full h-full"
-                              />
-                              <span v-else>{{ getParticipantName(reply.userId).charAt(0).toUpperCase() }}</span>
-                            </div>
-                            <div>
-                              <p class="text-xs text-gray-200 dark:text-white font-semibold">
-                                {{ getParticipantName(reply.userId) }}
-                              </p>
-                              <textarea
-                                  v-if="editingReplyId === reply.id"
-                                  v-model="editedReply"
-                                  class="mt-1 block w-full text-xs text-gray-200 border-0 focus:ring-0 focus:outline-none dark:text-white dark:placeholder-gray-400 dark:bg-gray-900"
-                                  required
-                              >{{ reply.message }}</textarea>
-                              <p v-else class="text-gray-400 dark:text-gray-400 break-words">
-                                {{ reply.message }}
-                              </p>
-                            </div>
-                          </div>
-                          <div class="flex items-center space-x-1">
-                            <button @click="speakText(getParticipantName(reply.userId), reply.message)" class="text-gray-400 hover:text-indigo-400 focus:outline-none">
-                              <i class="fa fa-volume-up"></i>
-                            </button>
-                            <div v-if="editingReplyId !== reply.id && currentUser && currentUser.uid === reply.userId">
-                              <button @click="editReply(reply)" class="text-blue-400 focus:outline-none">Edit</button> |
-                              <button @click="deleteReply(post, comment, reply.id)" class="text-red-400 focus:outline-none">Delete</button>
-                            </div>
-                            <button v-if="editingReplyId === reply.id" @click="saveReply(comment, reply, post)" class="text-green-400 focus:outline-none">Save</button>
-                          </div>
-                        </footer>
-                      </article>
-                    </div>
                   </article>
                 </div>
               </section>
 
 
 
+
               <div class="flex items-center mb-4 mt-5 space-x-4">
-                <button @click="toggleReaction(post, 'like')" class="reaction-button relative" :class="{ 'active': hasReaction(post, 'like') }">
-                  <span class="reaction-icon">👍</span>
-                  <span class="reaction-count absolute top-0 right-0 -mt-1 -mr-2 bg-blue-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center">{{ getReactionCount(post, 'like') }}</span>
-                </button>
-                <button @click="toggleReaction(post, 'love')" class="reaction-button relative" :class="{ 'active': hasReaction(post, 'love') }">
-                  <span class="reaction-icon">❤️</span>
-                  <span class="reaction-count absolute top-0 right-0 -mt-1 -mr-2 bg-red-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center">{{ getReactionCount(post, 'love') }}</span>
-                </button>
-                <button @click="toggleReaction(post, 'laugh')" class="reaction-button relative" :class="{ 'active': hasReaction(post, 'laugh') }">
-                  <span class="reaction-icon">😂</span>
-                  <span class="reaction-count absolute top-0 right-0 -mt-1 -mr-2 bg-yellow-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center">{{ getReactionCount(post, 'laugh') }}</span>
-                </button>
-                <button @click="toggleReaction(post, 'surprised')" class="reaction-button relative" :class="{ 'active': hasReaction(post, 'surprised') }">
-                  <span class="reaction-icon">😮</span>
-                  <span class="reaction-count absolute top-0 right-0 -mt-1 -mr-2 bg-green-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center">{{ getReactionCount(post, 'surprised') }}</span>
-                </button>
-                <button @click="toggleReaction(post, 'sad')" class="reaction-button relative" :class="{ 'active': hasReaction(post, 'sad') }">
-                  <span class="reaction-icon">😢</span>
-                  <span class="reaction-count absolute top-0 right-0 -mt-1 -mr-2 bg-purple-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center">{{ getReactionCount(post, 'sad') }}</span>
-                </button>
+                <template v-for="reaction in reactions" :key="reaction.type">
+                  <button
+                      @click="currentUser ? toggleReaction(post, reaction.type) : null"
+                      :disabled="!currentUser"
+                      class="reaction-button relative"
+                      :class="{ 'active': hasReaction(post, reaction.type) }"
+                      :aria-label="reaction.label"
+                  >
+                    <span class="reaction-icon">{{ reaction.icon }}</span>
+                    <span class="reaction-count absolute top-0 right-0 -mt-1 -mr-2"
+                          :class="reaction.countClass">
+        {{ getReactionCount(post, reaction.type) }}
+      </span>
+                  </button>
+                </template>
               </div>
-              <div class="mb-4" v-if="post.userId === currentUser.uid">
+              <div class="mb-4" v-if="post.userId === currentUser?.uid">
                 <div class="inline-flex space-x-2">
                   <button @click="showCreatePostModal(post)" class="text-blue-400 focus:outline-none flex items-center">
                     <i class="fas fa-edit"></i>
@@ -246,7 +169,7 @@
                   </button>
                 </div>
               </div>
-              <div class="flex items-center  py-2">
+              <div class="flex items-center  py-2" v-if="currentUser">
   <textarea
       v-model="commentInput[post.id]"
       placeholder="Add a comment..."
@@ -260,6 +183,9 @@
                   <i class="fa fa-comment"></i>
                 </button>
               </div>
+              <p v-else class="text-center text-blue-500">
+                Please <router-link to="/login" class="underline hover:text-blue-700">log in</router-link> to create posts.
+              </p>
             </div>
           </div>
         </div>
@@ -343,11 +269,21 @@
 
 
     <!-- Floating Action Button -->
-    <button @click="showCreatePostModal()" class="fixed bottom-16 right-4 bg-indigo-600 text-white p-4 rounded-full shadow-lg animate-jump">
-      <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
-      </svg>
-    </button>
+    <div>
+      <button v-if="currentUser" @click="showCreatePostModal()" class="fixed bottom-16 right-4 bg-indigo-600 text-white p-4 rounded-full shadow-lg animate-jump">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+        </svg>
+
+      </button>
+
+      <button v-if="!currentUser"  class="fixed bottom-24 right-4 bg-indigo-600 text-white p-4 rounded-full shadow-lg animate-jump flex items-center">
+        <svg class="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+        </svg>
+        <span><router-link to="/login">Get Started</router-link></span>
+      </button>
+    </div>
 <!--    <audio ref="backgroundMusic" autoplay loop>-->
 <!--      <source src="@/assets/song.mp3" type="audio/mpeg">-->
 <!--      Your browser does not support the audio element.-->
@@ -368,12 +304,32 @@ import relativeTime from 'dayjs/plugin/relativeTime';
 const audioRef = ref(null);
 const previewUrl = ref('');
 const fileToUpload = ref(null);
-
+const users = ref([]);
 watch(audioRef, (newVal) => {
   if (newVal) {
     newVal.play();
   }
 }, { immediate: true });
+
+// Fetch users collection from Firestore
+const fetchUsers = async () => {
+  try {
+    const querySnapshot = await getDocs(collection(db, 'users'));
+    users.value = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  } catch (error) {
+    console.error('Error fetching users: ', error);
+  }
+};
+
+onMounted(() => {
+  fetchUsers();
+});
+
+
+const getUserNameById = (userId) => {
+  const user = users.value.find(user => user.id === userId);
+  return user ? user.name : 'Unknown User';
+};
 
 
 dayjs.extend(relativeTime);
@@ -487,7 +443,7 @@ const toggleCommentSection = async (post) => {
       const postRef = doc(db, 'posts', post.id);
       const postSnapshot = await getDoc(postRef);
       const postReadComments = postSnapshot.data().readComments || {};
-      const userReadComments = postReadComments[currentUser.value.uid] || [];
+      const userReadComments = postReadComments[currentUser?.value?.uid] || [];
 
       const newReadComments = post.comments
           .map(comment => comment.id)
@@ -495,7 +451,7 @@ const toggleCommentSection = async (post) => {
 
       if (newReadComments.length > 0) {
         await updateDoc(postRef, {
-          [`readComments.${currentUser.value.uid}`]: arrayUnion(...newReadComments)
+          [`readComments.${currentUser.value?.uid}`]: arrayUnion(...newReadComments)
         });
       }
     } catch (error) {
@@ -505,6 +461,8 @@ const toggleCommentSection = async (post) => {
 };
 
 const toggleReaction = async (post, reaction) => {
+  if (!currentUser.value) return; // Do nothing if the user is not authenticated
+
   try {
     const postRef = doc(db, 'posts', post.id);
     const postSnapshot = await getDoc(postRef);
@@ -514,16 +472,17 @@ const toggleReaction = async (post, reaction) => {
     } else {
       postReactions[currentUser.value.uid] = reaction;
     }
-    await updateDoc(postRef, {reactions: postReactions});
+    await updateDoc(postRef, { reactions: postReactions });
     post.reactions = postReactions;
   } catch (error) {
-    console.error('Error toggling reaction: ', error);
+    console.error('Error toggling reaction:', error);
   }
 };
 
+
 const hasReaction = (post, reaction) => {
   const postReactions = post.reactions || {};
-  return postReactions[currentUser.value.uid] === reaction;
+  return postReactions[currentUser.value?.uid] === reaction;
 };
 
 const getReactionCount = (post, reaction) => {
@@ -555,7 +514,7 @@ onMounted(() => {
   auth.onAuthStateChanged((user) => {
     if (user) {
       currentUser.value = user;
-      ids.value = user.uid
+      ids.value = user?.uid
     } else {
       currentUser.value = null;
     }
@@ -583,7 +542,7 @@ const createNewPost = async () => {
 
   isCreatingPost = true;
 
-  const userId = currentUser.value ? currentUser.value.uid : null;
+  const userId = currentUser.value ? currentUser.value?.uid : null;
   if (!userId) {
     console.error('User is not signed in');
     isCreatingPost = false;
@@ -680,7 +639,7 @@ const updatePost = async () => {
 };
 
 const addComment = async (post) => {
-  const userId = currentUser.value ? currentUser.value.uid : null;
+  const userId = currentUser.value ? currentUser.value?.uid : null;
   const comment = {
     userId,
     message: commentInput.value[post.id],
@@ -715,8 +674,8 @@ const speakText = (username, message) => {
 };
 
 const getParticipantAvatar = (userId) => {
-  const participant = selectedRoom.value.participants.find(p => p.id === userId);
-  return participant ? participant.avatar : '';
+  const user = users.value.find(user => user.id === userId);
+  return user ? user?.avatar : 'Unknown User';
 };
 
 const getParticipantName = (userId) => {
@@ -827,7 +786,7 @@ const addReply = async (post, comment) => {
 
   const newReply = {
     id: Date.now().toString(),
-    userId: currentUser.value.uid,
+    userId: currentUser.value?.uid,
     message: replyInput.value[comment.id],
     timestamp: new Date().toISOString()
   };
@@ -853,6 +812,13 @@ const addReply = async (post, comment) => {
   }
 };
 
+const reactions = ref([
+  { type: 'like', icon: '👍', label: 'Like', countClass: 'bg-blue-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center' },
+  { type: 'love', icon: '❤️', label: 'Love', countClass: 'bg-red-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center' },
+  { type: 'laugh', icon: '😂', label: 'Laugh', countClass: 'bg-yellow-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center' },
+  { type: 'surprised', icon: '😮', label: 'Surprised', countClass: 'bg-green-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center' },
+  { type: 'sad', icon: '😢', label: 'Sad', countClass: 'bg-purple-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center' },
+]);
 const imageUrl = ref('');
 const videoUrl = ref('');
 const mediaType = ref('');
