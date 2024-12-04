@@ -34,12 +34,7 @@
           </button>
 
           <!-- LinkedIn -->
-          <button
-              @click="shareOnLinkedIn"
-              class="flex items-center bg-blue-800 text-white px-4 py-2 rounded-lg hover:bg-blue-900"
-          >
-            <i class="fab fa-linkedin-in mr-2"></i> LinkedIn
-          </button>
+
         </div>
         <!-- Actual Content -->
         <!-- Left Sidebar: Participants -->
@@ -1011,10 +1006,7 @@ const shareOnWhatsApp = () => {
   window.open(whatsappUrl, '_blank');
 };
 
-const shareOnLinkedIn = () => {
-  const linkedinUrl = `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(currentUrl)}`;
-  window.open(linkedinUrl, '_blank', 'width=600,height=400');
-};
+
 </script>
 
 <style>
