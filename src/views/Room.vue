@@ -36,6 +36,76 @@
 <!--        </div>-->
 
         <!-- Main Content: Posts -->
+        <div>
+          <!-- Trigger Button -->
+          <button
+              @click="showNotificationModal = true"
+              class="flex items-center justify-center mb-5 px-6 py-3 bg-gradient-to-r from-indigo-500 via-purple-500 to-indigo-600 text-white text-lg font-semibold rounded-full shadow-md hover:shadow-lg hover:from-indigo-600 hover:to-purple-600 transition-all duration-200"
+          >
+            <i class="fas fa-bell mr-2"></i> Enable Notifications
+          </button>
+
+          <!-- Modal -->
+          <div
+              v-if="showNotificationModal"
+              class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-70"
+          >
+            <div class="relative bg-gray-800 rounded-lg shadow-lg p-6 max-w-xl w-full text-gray-200">
+              <!-- Close Button -->
+              <button
+                  @click="showNotificationModal = false"
+                  class="absolute top-4 right-4 text-gray-400 hover:text-gray-200"
+              >
+                <i class="fas fa-times text-xl"></i>
+              </button>
+
+              <!-- Modal Header -->
+              <h2 class="text-3xl font-bold mb-4 text-white text-center">
+                How to Enable Notifications
+              </h2>
+
+              <!-- Video Tutorial -->
+              <div class="w-full h-64 mb-6 rounded-lg overflow-hidden shadow-lg">
+                <video
+                    src="/path-to-your-video.mp4"
+                    controls
+                    autoplay
+                    class="w-full h-full object-cover"
+                ></video>
+              </div>
+
+              <!-- Steps -->
+              <ol class="list-decimal list-inside space-y-4 text-gray-300 text-lg">
+                <li>
+                  <span class="font-semibold">Bookmark this page to your home screen:</span>
+                  <ul class="list-disc list-inside ml-4">
+                    <li>On iPhone/iPad (Safari): Tap the "Share" icon, then select "Add to Home Screen."</li>
+                    <li>On Android (Chrome): Tap the three-dot menu, then select "Add to Home Screen."</li>
+                  </ul>
+                </li>
+                <li>
+                  <span class="font-semibold">Open the app from the home screen:</span> Tap the bookmark you just added.
+                </li>
+                <li>
+                  <span class="font-semibold">Tap the bell icon:</span> It's located at the bottom left corner of the screen.
+                </li>
+                <li>
+                  <span class="font-semibold">Allow notifications:</span> When prompted, click "Allow" to start receiving updates.
+                </li>
+              </ol>
+
+              <!-- Action Buttons -->
+              <div class="mt-6 flex justify-end">
+                <button
+                    @click="showNotificationModal = false"
+                    class="px-6 py-2 bg-indigo-600 text-white font-semibold rounded-full hover:bg-indigo-700 transition duration-200"
+                >
+                  Got It
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
         <div class="col-span-2 grid grid-cols-1 gap-8 mb-10">
           <div v-for="post in filteredPosts" :key="post.id" :id="'post-' + post.id" class="md:min-w-[320px]">
             <div class="min-w-sm  bg-gray-800 p-3 b rounded-lg  dark:bg-gray-800 dark:border-gray-700">
@@ -93,15 +163,16 @@
                   </button>
                 </div>
                 <div class="relative">
-                  <button @click="toggleCommentSection(post)" class="flex items-center text-blue-400 focus:outline-none">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l3 3m-3-3l-3 3m3-3H3a2 2 0 01-2-2V5a2 2 0 012-2h18a2 2 0 012 2v10a2 2 0 01-2 2h-8l-3 3z"></path>
-                    </svg>
-                    <span>{{ post.comments.length }}</span>
+                  <button @click="toggleCommentSection(post)" class="flex items-center space-x-2 text-blue-400 focus:outline-none">
+                    <i class="fa fa-comment text-lg"></i>
+                    <span class="text-sm font-medium">{{ post.comments.length }}</span>
                   </button>
-                  <span v-if="unreadCommentsCount(post) > 0" class="absolute top-0 right-0 -mt-2 -mr-2 bg-red-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center">
-                  {{ unreadCommentsCount(post) }}
-                 </span>
+                  <span
+                      v-if="unreadCommentsCount(post) > 0"
+                      class="absolute top-0 right-0 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center"
+                  >
+    {{ unreadCommentsCount(post) }}
+  </span>
                 </div>
               </div>
               <section v-if="post.showComments" class="dark:bg-gray-900 antialiased">
@@ -603,8 +674,9 @@ const createNewPost = async () => {
 
 const sendNotification = async (message, userName, postId, commentId = null, content = '') => {
   const headers = {
-    'Authorization': 'Bearer token="ZWY3MWJhMDUtNTU1Yi00NGViLThmNjItNDNhZTY0YzMwOGRh"',
+    'Authorization': 'Bearer ZDZiZDk0NTktMjUwZS00NTQ4LWFhOTItNjBiZDZiMjVhYzYy',
     'Content-Type': 'application/json'
+
   };
 
   let notificationMessage = `${userName} ${message}`;
@@ -613,7 +685,7 @@ const sendNotification = async (message, userName, postId, commentId = null, con
   }
 
   const data = {
-    "app_id": "65d866ad-f59c-4557-9d75-4ccf7fe60a47",
+    "app_id": "fc206a71-7d65-4cfa-b8b2-0c10548e1476",
     "included_segments": ["All"],
     "data": {"foo": "bar"},
     "contents": {"en": notificationMessage}
@@ -880,6 +952,8 @@ const uploadFile = async (file) => {
     );
   });
 };
+
+const showNotificationModal = ref(false);
 const removeImage = () => {
   imageUrl.value = null;
 };
