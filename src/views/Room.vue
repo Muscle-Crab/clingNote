@@ -19,10 +19,10 @@
 
           <!-- Twitter -->
           <button
-              @click="shareOnTwitter"
-              class="flex items-center bg-blue-400 text-white px-4 py-2 rounded-lg hover:bg-blue-500"
+              @click="copyToClipboard"
+              class="flex items-center bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 focus:outline-none"
           >
-            <i class="fab fa-twitter mr-2"></i> Twitter
+            <i class="fas fa-copy mr-2"></i> Copy
           </button>
 
           <!-- WhatsApp -->
@@ -1025,6 +1025,17 @@ const shareOnTwitter = () => {
 const shareOnWhatsApp = () => {
   const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(`Check this out: ${currentUrl}`)}`;
   window.open(whatsappUrl, '_blank');
+};
+const copyToClipboard = () => {
+  const url = window.location.href; // Get the current page URL
+  navigator.clipboard
+      .writeText(url)
+      .then(() => {
+        alert('URL copied to clipboard!');
+      })
+      .catch(err => {
+        console.error('Failed to copy URL: ', err);
+      });
 };
 
 
