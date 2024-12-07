@@ -20,6 +20,11 @@
           <!-- Twitter -->
           <button
               @click="copyToClipboard"
+
+
+
+
+
               class="flex items-center bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 focus:outline-none"
           >
             <i class="fas fa-copy mr-2"></i> Copy
@@ -386,9 +391,10 @@
     <!-- Floating Action Button -->
     <div>
       <button v-if="currentUser" @click="showCreatePostModal()" class="fixed bottom-16 right-4 bg-indigo-600 text-white p-4 rounded-full shadow-lg animate-jump">
-        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
-        </svg>
+<!--        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">-->
+<!--          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>-->
+<!--        </svg>-->
+        <span><router-link to="/login">Create</router-link></span>
 
       </button>
 
