@@ -199,7 +199,7 @@
                 <div class="relative">
                   <button @click="toggleCommentSection(post)" class="flex items-center space-x-2 text-blue-400 focus:outline-none">
                     <i class="fa fa-comment text-lg"></i>
-                    <span class="text-sm font-medium">{{ post.comments.length }}</span>
+                    <span class="text-sm font-medium">{{ post.comments?.length }}</span>
                   </button>
                   <span
                       v-if="unreadCommentsCount(post) > 0"
@@ -533,7 +533,7 @@ const editComment = (comment) => {
 const unreadCommentsCount = (post) => {
   if (!currentUser.value) return 0;
 
-  const totalComments = post.comments.length;
+  const totalComments = post.comments?.length;
   const readComments = post.readComments?.[currentUser.value.uid] || [];
   return totalComments - readComments.length;
 };
