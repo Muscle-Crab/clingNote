@@ -9,7 +9,7 @@
     'bg-blue-100': streak >= 7
   }"
     >
-      <h2 class="text-2xl font-bold"> Current Streak: {{ streak }} days</h2>
+      <h2 class="text-2xl font-bold"> Currents Streak: {{ streak }} days</h2>
 
       <!-- Display badge icon if a badge is unlocked -->
       <div v-if="unlockedBadges.length > 0" class="badge-display mt-2 flex justify-center items-center">
@@ -324,7 +324,13 @@ const deleteTask = async (index) => {
 const toggleTaskCompletion = async (index) => {
   const task = selectedDayRoutine.value[index];
   task.completed = !task.completed; // Toggle the completed state
-
+  if (task.completed) {
+    const completionMessage = `Great job! You completed the task: ${task.title}.`;
+    speak(completionMessage);
+  } else {
+    const uncompletionMessage = `You have marked the task: ${task.title} as incomplete.`;
+    speak(uncompletionMessage);
+  }
   try {
     // Get the reference to the document containing the tasks for the selected day
     const selectedDayDocRef = doc(db, 'weeklyRoutines', days[selectedDayIndex.value].day);
@@ -343,16 +349,6 @@ const toggleTaskCompletion = async (index) => {
 
       // Voice response when task is completed
 
-    }
-    if (task.completed) {
-      const nextTaskIndex = selectedDayRoutine.value.findIndex(t => !t.completed && t.title !== task.title);
-
-      if (nextTaskIndex !== -1) {
-        const nextTask = selectedDayRoutine.value[nextTaskIndex];
-        const completionMessage = `Task ${task.title} completed. It's time to begin the next task, ${nextTask.title}.`;
-        speak(completionMessage);
-        showNotification.value = true;
-      }
     }
   } catch (error) {
     console.error('Error updating task completion:', error);
