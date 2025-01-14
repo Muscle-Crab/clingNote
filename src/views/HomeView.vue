@@ -377,9 +377,6 @@ const handleDragEnd = async () => {
 };
 const speak = (text) => {
   const message = new SpeechSynthesisUtterance(text);
-  message.lang = 'en-US'; // Set language
-  message.pitch = 1; // Normal pitch
-  message.rate = 1; // Normal speed
   window.speechSynthesis.speak(message);
 };
 
