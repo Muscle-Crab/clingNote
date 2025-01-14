@@ -1,6 +1,26 @@
 <template>
   <div ref="scrollContainer" class="p-4 h-[100vh]  overflow-auto" style="background: teal">
 
+    <div
+        class="streak-display p-4 rounded-lg shadow-md mb-4 text-center"
+        :class="{
+    'bg-yellow-100': streak < 3,
+    'bg-green-100': streak >= 3 && streak < 7,
+    'bg-blue-100': streak >= 7
+  }"
+    >
+      <h2 class="text-2xl font-bold"> Current Streak: {{ streak }} days</h2>
+
+      <!-- Display badge icon if a badge is unlocked -->
+      <div v-if="unlockedBadges.length > 0" class="badge-display mt-2 flex justify-center items-center">
+        <div v-for="badge in unlockedBadges" :key="badge.days" class="badge-card mx-2">
+          <span class="text-3xl">{{ badge.icon }}</span>
+          <div class="text-sm font-semibold">{{ badge.name }}</div>
+        </div>
+      </div>
+
+      <p class="text-lg text-gray-700 mt-2 font-medium">{{ motivationalMessage }}</p>
+    </div>
 
     <!-- Calendar display -->
 
@@ -87,8 +107,8 @@
       <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded-md">Save Changes</button>
     </form>
 
-<!--    &lt;!&ndash; Search input field &ndash;&gt;-->
-<!--    <input type="text" v-model="searchQuery" class="w-full border-gray-300 rounded-md px-4 py-2 mb-2" placeholder="Search tasks">-->
+    <!--    &lt;!&ndash; Search input field &ndash;&gt;-->
+    <!--    <input type="text" v-model="searchQuery" class="w-full border-gray-300 rounded-md px-4 py-2 mb-2" placeholder="Search tasks">-->
 
     <!-- Daily routine tasks -->
     <div class="daily-routine">
@@ -141,13 +161,8 @@
                     <i class="fas fa-edit"></i>
                   </button>
                   <!-- Add a play button -->
-                  <button @click="startTimer(index)" v-if="!isRunning[index]" class="text-green-500 ml-2">
-                    <i class="fas fa-play"></i>
-                  </button>
-                  <!-- Stop timer button -->
-                  <button @click="stopTimer(index)" v-if="isRunning[index]" class="text-red-500 ml-2">
-                    <i class="fas fa-stop"></i>
-                  </button>
+
+
                 </div>
 
                 <div v-if="showNotification" class="notification-popup bg-green-500 text-white px-4 py-2 rounded-md absolute top-4 right-4">
@@ -192,35 +207,10 @@ const formatTimes = (index) => {
   return `${minutes < 10 ? '0' : ''}${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
 };
 
-// Define function to start timer
-const startTimer = (index) => {
-  // If the timer is already running, pause it
-  if (isRunning.value[index]) {
-    pauseTimer(index);
-    return;
-  }
-
-  // Start the timer
-  isRunning.value[index] = true;
-  timers[index] = setInterval(() => {
-    if (currentTime.value[index] < duration.value) {
-      currentTime.value[index]++;
-
-    } else {
-      stopTimer(index);
-    }
-  }, 1000);
-};
 
 
-// Define function to stop timer
-const stopTimer = (index) => {
-  if (isRunning.value[index]) {
-    clearInterval(timers[index]);
-    isRunning.value[index] = false;
-    currentTime.value[index] = 0;
-  }
-};
+
+
 const openModal = () => {
   modalOpen.value = true;
 };
@@ -258,8 +248,12 @@ const fetchSelectedDayRoutine = async () => {
     if (selectedDayIndex.value !== -1) {
       const selectedDayDocRef = doc(db, 'weeklyRoutines', days[selectedDayIndex.value].day);
       const selectedDayDocSnapshot = await getDoc(selectedDayDocRef);
+
       if (selectedDayDocSnapshot.exists()) {
-        selectedDayRoutine.value = selectedDayDocSnapshot.data().tasks;
+        selectedDayRoutine.value = selectedDayDocSnapshot.data().tasks.map(task => ({
+          ...task,
+          completed: !!task.completed, // Ensure boolean value for completed
+        }));
       } else {
         selectedDayRoutine.value = []; // No tasks for this day
       }
@@ -268,6 +262,7 @@ const fetchSelectedDayRoutine = async () => {
     console.error('Error fetching selected day routine:', error);
   }
 };
+
 const days = data.days;
 
 const isToday = (index) => {
@@ -288,7 +283,7 @@ const getSelectedDayRoutine = () => {
   return selectedDayIndex.value !== -1 ? weeklyRoutines?.tasks : [];
 };
 
-const selectedDayRoutine = ref([]);
+
 
 const updateRoutine = () => {
   selectedDayRoutine.value = getSelectedDayRoutine();
@@ -328,19 +323,43 @@ const deleteTask = async (index) => {
 
 const toggleTaskCompletion = async (index) => {
   const task = selectedDayRoutine.value[index];
-  task.completed = !task.completed;
+  task.completed = !task.completed; // Toggle the completed state
 
-  if (task.completed) {
-    const nextTaskIndex = selectedDayRoutine.value.findIndex(t => !t.completed && t.title !== task.title);
+  try {
+    // Get the reference to the document containing the tasks for the selected day
+    const selectedDayDocRef = doc(db, 'weeklyRoutines', days[selectedDayIndex.value].day);
 
-    if (nextTaskIndex !== -1) {
-      const nextTask = selectedDayRoutine.value[nextTaskIndex];
-      const completionMessage = `Task ${task.title} completed. It's time to begin the next task, ${nextTask.title}.`;
-      speak(completionMessage);
-      showNotification.value = true;
+    // Fetch the document snapshot
+    const selectedDayDocSnapshot = await getDoc(selectedDayDocRef);
+
+    if (selectedDayDocSnapshot.exists()) {
+      const tasks = selectedDayRoutine.value.map((t, i) => (i === index ? task : t)); // Update task in the array
+      await updateDoc(selectedDayDocRef, {
+        tasks: tasks,
+        updatedAt: serverTimestamp(),
+      });
+
+      console.log('Task completion updated successfully');
+
+      // Voice response when task is completed
+      if (task.completed) {
+        const completionMessage = `Great job! You completed the task: ${task.title}.`;
+        speak(completionMessage);
+      } else {
+        const uncompletionMessage = `You have marked the task: ${task.title} as incomplete.`;
+        speak(uncompletionMessage);
+      }
     }
+  } catch (error) {
+    console.error('Error updating task completion:', error);
   }
+
+  // Check streak after toggling task completion
+  checkStreakOnCompletion();
 };
+
+
+
 const handleDragEnd = async () => {
   try {
     const selectedDayDocRef = doc(db, 'weeklyRoutines', days[selectedDayIndex.value].day);
@@ -370,7 +389,6 @@ onMounted(() => {
   }
 });
 
-const showNotification = ref(false);
 
 const addNewTask = async () => {
   if (newTask.value.title.trim() === '') {
@@ -518,18 +536,139 @@ const calculateCompletionPercentage = (task) => {
   const totalTasks = selectedDayRoutine.value.length;
   return totalTasks === 0 ? 0 : Math.round((completedTasks / totalTasks) * 100);
 };
-const priorityClass = (priority) => {
-  switch (priority) {
-    case 'high':
-      return 'text-red-500 font-bold';
-    case 'medium':
-      return 'text-yellow-500';
-    case 'low':
-      return 'text-gray-500';
-    default:
-      return '';
+
+// Reactive state for streak tracking
+const streak = ref(0);
+const lastCompletionDate = ref(null);
+const unlockedBadges = ref([]);
+const motivationalMessage = ref('');
+const selectedDayRoutine = ref([]);
+const showNotification = ref(false);
+
+
+// List of predefined badges
+const badges = [
+  { days: 1, name: 'Consistency Starter', description: 'Completed tasks for 3 days in a row!', icon: '🔥' },
+  { days: 7, name: 'Streak Warrior', description: 'Completed tasks for 7 days in a row!', icon: '🏅' },
+  { days: 30, name: 'Master of Routine', description: 'Completed tasks for 30 days in a row!', icon: '💪' }
+];
+
+
+// Function to check for streak continuation
+const checkStreakOnCompletion = async () => {
+  const completionPercentage = calculateCompletionPercentage();
+
+  if (completionPercentage === 100) {
+    const today = new Date().toISOString().split('T')[0];
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+    const streakDocRef = doc(db, 'streaks', 'userStreak');
+
+    try {
+      const streakDocSnapshot = await getDoc(streakDocRef);
+
+      if (streakDocSnapshot.exists()) {
+        // Document exists, continue streak logic
+        const data = streakDocSnapshot.data();
+        lastCompletionDate.value = data.lastCompletionDate;
+        streak.value = data.streak;
+
+        if (lastCompletionDate.value === yesterdayStr) {
+          streak.value += 1; // Continue streak
+        } else if (lastCompletionDate.value !== today) {
+          streak.value = 1; // Reset streak only if today is not recorded
+        }
+      } else {
+        // Document does not exist, initialize streak
+        streak.value = 1;
+      }
+
+      lastCompletionDate.value = today;
+
+      // Use setDoc to create or overwrite the document
+      await setDoc(streakDocRef, {
+        streak: streak.value,
+        lastCompletionDate: today,
+        updatedAt: serverTimestamp(),
+      });
+
+      console.log('Streak updated successfully:', streak.value);
+
+      checkForBadges();
+      updateMotivationalMessage();
+    } catch (error) {
+      console.error('Error updating streak:', error);
+    }
+  } else {
+    console.log('Completion is not 100%. Streak not updated.');
   }
 };
+
+
+const fetchStreakOnLoad = async () => {
+  const streakDocRef = doc(db, 'streaks', 'userStreak');
+
+  try {
+    const streakDocSnapshot = await getDoc(streakDocRef);
+
+    if (streakDocSnapshot.exists()) {
+      const data = streakDocSnapshot.data();
+      streak.value = data.streak || 0; // Set the streak value from Firestore
+      lastCompletionDate.value = data.lastCompletionDate || null;
+      console.log('Streak fetched on load:', streak.value);
+    } else {
+      console.log('No streak document found, initializing streak to 0');
+      streak.value = 0; // Initialize to 0 if no document exists
+    }
+
+    updateMotivationalMessage();
+  } catch (error) {
+    console.error('Error fetching streak on load:', error);
+  }
+};
+
+onMounted(() => {
+  fetchStreakOnLoad(); // Fetch streak when the app is loaded
+  const todayIndex = new Date().getDay();
+  if (todayIndex !== -1) {
+    selectedDayIndex.value = todayIndex;
+    updateRoutine();
+    fetchSelectedDayRoutine();
+  }
+});
+
+// Function to update motivational message
+const updateMotivationalMessage = () => {
+  if (streak.value >= 7) {
+    motivationalMessage.value = "You're on fire! Keep it up!";
+  } else if (streak.value >= 3) {
+    motivationalMessage.value = "Great job! You're building a habit!";
+  } else {
+    motivationalMessage.value = "Good start! Keep going!";
+  }
+};
+
+// Function to check and unlock badges
+const checkForBadges = () => {
+  badges.forEach((badge) => {
+    if (streak.value === badge.days && !unlockedBadges.value.some((b) => b.days === badge.days)) {
+      unlockedBadges.value.push(badge);
+      showNotification.value = true; // Show a notification when a badge is unlocked
+      console.log(`Badge unlocked: ${badge.name}`);
+    }
+  });
+};
+
+
+// Call checkStreak when component is mounted
+onMounted(() => {
+  checkStreakOnCompletion();
+});
+
+
+
 </script>
 
 
@@ -549,11 +688,32 @@ const priorityClass = (priority) => {
 .draggable {
   cursor: grab;
 }
+
 .task-card {
   border-left: 3px solid red;
   border-right: 3px solid blue;
 }
+
 .drag {
   transform: rotate(5deg);
 }
+
+.streak-display {
+  background-color: #fef3c7;
+}
+
+.badge-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  width: 80px;
+}
+
+.badge-display span {
+  font-size: 2rem;
+}
 </style>
+
+
