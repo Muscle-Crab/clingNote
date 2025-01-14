@@ -31,7 +31,7 @@
     <div class="calendar-task-card bg-white rounded-2xl shadow-lg p-6 mb-2 w-full max-w-4xl mx-auto">
       <!-- Calendar Section -->
       <div class="calendar-section mb-2">
-        <div class="current-date text-2xl font-bold text-gray-900 mb-4">
+        <div class="current-date font-bold text-gray-900 mb-4">
           {{ currentDate }}
         </div>
         <div class="grid grid-cols-7 gap-3">
