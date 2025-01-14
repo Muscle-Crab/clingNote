@@ -714,5 +714,3 @@ onMounted(() => {
   font-size: 2rem;
 }
 </style>
-
-
