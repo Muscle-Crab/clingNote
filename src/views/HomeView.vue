@@ -2,25 +2,33 @@
   <div ref="scrollContainer" class="p-4 h-[100vh]  overflow-auto" style="background: teal">
 
     <div
-        class="streak-display p-4 rounded-lg shadow-md mb-4 text-center"
+        class="streak-display p-2 rounded-lg shadow-md mb-4 text-center flex flex-col items-center justify-center"
         :class="{
     'bg-yellow-100': streak < 3,
     'bg-green-100': streak >= 3 && streak < 7,
     'bg-blue-100': streak >= 7
   }"
     >
-      <h2 class="text-2xl font-bold"> Current Streak: {{ streak }} days</h2>
+      <!-- Streak and Badge Icons Row -->
+      <div class="flex items-center justify-between w-full">
+        <h2 class="text-lg font-bold">Streak: {{ streak }} days</h2>
 
-      <!-- Display badge icon if a badge is unlocked -->
-      <div v-if="unlockedBadges.length > 0" class="badge-display mt-2 flex justify-center items-center">
-        <div v-for="badge in unlockedBadges" :key="badge.days" class="badge-card mx-2">
-          <span class="text-3xl">{{ badge.icon }}</span>
-          <div class="text-sm font-semibold">{{ badge.name }}</div>
+        <!-- Display badges if unlocked -->
+        <div v-if="unlockedBadges.length > 0" class="flex space-x-2">
+      <span
+          v-for="badge in unlockedBadges"
+          :key="badge.days"
+          class="text-2xl badge-icon"
+      >
+        {{ badge.icon }}
+      </span>
         </div>
       </div>
 
-      <p class="text-lg text-gray-700 mt-2 font-medium">{{ motivationalMessage }}</p>
+      <!-- Motivational Message -->
+      <p class="text-sm text-gray-700 mt-1">{{ motivationalMessage }}</p>
     </div>
+
 
     <!-- Calendar display -->
 
@@ -592,6 +600,7 @@ const checkStreakOnCompletion = async () => {
       await setDoc(streakDocRef, {
         streak: streak.value,
         lastCompletionDate: today,
+        unlockedBadges: unlockedBadges.value,
         updatedAt: serverTimestamp(),
       });
 
@@ -616,19 +625,22 @@ const fetchStreakOnLoad = async () => {
 
     if (streakDocSnapshot.exists()) {
       const data = streakDocSnapshot.data();
-      streak.value = data.streak || 0; // Set the streak value from Firestore
+      streak.value = data.streak || 0;
       lastCompletionDate.value = data.lastCompletionDate || null;
-      console.log('Streak fetched on load:', streak.value);
+      unlockedBadges.value = data.unlockedBadges || []; // Retrieve unlocked badges
+      console.log('Streak and badges fetched on load:', streak.value, unlockedBadges.value);
     } else {
-      console.log('No streak document found, initializing streak to 0');
-      streak.value = 0; // Initialize to 0 if no document exists
+      console.log('No streak document found, initializing streak and badges to default');
+      streak.value = 0;
+      unlockedBadges.value = [];
     }
 
     updateMotivationalMessage();
   } catch (error) {
-    console.error('Error fetching streak on load:', error);
+    console.error('Error fetching streak and badges on load:', error);
   }
 };
+
 
 onMounted(() => {
   fetchStreakOnLoad(); // Fetch streak when the app is loaded
@@ -651,21 +663,32 @@ const updateMotivationalMessage = () => {
   }
 };
 
-// Function to check and unlock badges
-const checkForBadges = () => {
-  badges.forEach((badge) => {
+const checkForBadges = async () => {
+  badges.forEach(async (badge) => {
     if (streak.value === badge.days && !unlockedBadges.value.some((b) => b.days === badge.days)) {
       unlockedBadges.value.push(badge);
       showNotification.value = true; // Show a notification when a badge is unlocked
       console.log(`Badge unlocked: ${badge.name}`);
+
+      try {
+        // Save unlocked badges to Firestore
+        const streakDocRef = doc(db, 'streaks', 'userStreak');
+        await updateDoc(streakDocRef, {
+          unlockedBadges: unlockedBadges.value,
+        });
+      } catch (error) {
+        console.error('Error updating unlocked badges:', error);
+      }
     }
   });
 };
 
 
+
 // Call checkStreak when component is mounted
 onMounted(() => {
   checkStreakOnCompletion();
+
 });
 
 
@@ -715,4 +738,24 @@ onMounted(() => {
 .badge-display span {
   font-size: 2rem;
 }
+
+ .badge-icon {
+   display: inline-block;
+   font-size: 2rem;
+   animation: pulse 1.5s infinite;
+ }
+
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.2);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+
 </style>
