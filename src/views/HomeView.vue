@@ -325,6 +325,15 @@ const toggleTaskCompletion = async (index) => {
   const task = selectedDayRoutine.value[index];
   task.completed = !task.completed; // Toggle the completed state
 
+  // Voice response when task is completed
+  if (task.completed) {
+    const completionMessage = `Great job! You completed the task: ${task.title}.`;
+    speak(completionMessage);
+  } else {
+    const uncompletionMessage = `You have marked the task: ${task.title} as incomplete.`;
+    speak(uncompletionMessage);
+  }
+
   try {
     // Get the reference to the document containing the tasks for the selected day
     const selectedDayDocRef = doc(db, 'weeklyRoutines', days[selectedDayIndex.value].day);
@@ -340,15 +349,6 @@ const toggleTaskCompletion = async (index) => {
       });
 
       console.log('Task completion updated successfully');
-
-      // Voice response when task is completed
-      if (task.completed) {
-        const completionMessage = `Great job! You completed the task: ${task.title}.`;
-        speak(completionMessage);
-      } else {
-        const uncompletionMessage = `You have marked the task: ${task.title} as incomplete.`;
-        speak(uncompletionMessage);
-      }
     }
   } catch (error) {
     console.error('Error updating task completion:', error);
@@ -357,6 +357,7 @@ const toggleTaskCompletion = async (index) => {
   // Check streak after toggling task completion
   checkStreakOnCompletion();
 };
+
 
 
 
