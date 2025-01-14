@@ -178,13 +178,14 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed, reactive } from 'vue';
+import {ref, onMounted, computed, reactive} from 'vue';
 import axios from 'axios'
 import navi from '@/components/nav.vue'
 import data from '@/data.json';
 import draggable from "vuedraggable";
 import {db} from '@/firebaseConfig'; // Assuming you have imported the Firebase setup file and exported the db instance
 import {collection, doc, setDoc, serverTimestamp, getDoc, updateDoc} from 'firebase/firestore';
+
 const modalOpen = ref(false);
 
 
@@ -206,9 +207,6 @@ const formatTimes = (index) => {
   const seconds = currentTime.value[index] % 60;
   return `${minutes < 10 ? '0' : ''}${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
 };
-
-
-
 
 
 const openModal = () => {
@@ -284,7 +282,6 @@ const getSelectedDayRoutine = () => {
 };
 
 
-
 const updateRoutine = () => {
   selectedDayRoutine.value = getSelectedDayRoutine();
   fetchSelectedDayRoutine();
@@ -323,41 +320,19 @@ const deleteTask = async (index) => {
 
 const toggleTaskCompletion = async (index) => {
   const task = selectedDayRoutine.value[index];
-  task.completed = !task.completed; // Toggle the completed state
+  task.completed = !task.completed;
 
-  try {
-    // Get the reference to the document containing the tasks for the selected day
-    const selectedDayDocRef = doc(db, 'weeklyRoutines', days[selectedDayIndex.value].day);
+  if (task.completed) {
+    const nextTaskIndex = selectedDayRoutine.value.findIndex(t => !t.completed && t.title !== task.title);
 
-    // Fetch the document snapshot
-    const selectedDayDocSnapshot = await getDoc(selectedDayDocRef);
-
-    if (selectedDayDocSnapshot.exists()) {
-      const tasks = selectedDayRoutine.value.map((t, i) => (i === index ? task : t)); // Update task in the array
-      await updateDoc(selectedDayDocRef, {
-        tasks: tasks,
-        updatedAt: serverTimestamp(),
-      });
-
-      console.log('Task completion updated successfully');
-
-      // Voice response when task is completed
-      if (task.completed) {
-        const completionMessage = `Great job! You completed the task: ${task.title}.`;
-        speak(completionMessage);
-      } else {
-        const uncompletionMessage = `You have marked the task: ${task.title} as incomplete.`;
-        speak(uncompletionMessage);
-      }
+    if (nextTaskIndex !== -1) {
+      const nextTask = selectedDayRoutine.value[nextTaskIndex];
+      const completionMessage = `Task ${task.title} completed. It's time to begin the next task, ${nextTask.title}.`;
+      speak(completionMessage);
+      showNotification.value = true;
     }
-  } catch (error) {
-    console.error('Error updating task completion:', error);
   }
-
-  // Check streak after toggling task completion
-  checkStreakOnCompletion();
 };
-
 
 
 const handleDragEnd = async () => {
@@ -548,9 +523,9 @@ const showNotification = ref(false);
 
 // List of predefined badges
 const badges = [
-  { days: 1, name: 'Consistency Starter', description: 'Completed tasks for 3 days in a row!', icon: '🔥' },
-  { days: 7, name: 'Streak Warrior', description: 'Completed tasks for 7 days in a row!', icon: '🏅' },
-  { days: 30, name: 'Master of Routine', description: 'Completed tasks for 30 days in a row!', icon: '💪' }
+  {days: 1, name: 'Consistency Starter', description: 'Completed tasks for 3 days in a row!', icon: '🔥'},
+  {days: 7, name: 'Streak Warrior', description: 'Completed tasks for 7 days in a row!', icon: '🏅'},
+  {days: 30, name: 'Master of Routine', description: 'Completed tasks for 30 days in a row!', icon: '💪'}
 ];
 
 
@@ -668,7 +643,6 @@ onMounted(() => {
 });
 
 
-
 </script>
 
 
@@ -715,5 +689,3 @@ onMounted(() => {
   font-size: 2rem;
 }
 </style>
-
-
