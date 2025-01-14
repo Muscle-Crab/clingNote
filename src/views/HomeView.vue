@@ -320,19 +320,43 @@ const deleteTask = async (index) => {
 
 const toggleTaskCompletion = async (index) => {
   const task = selectedDayRoutine.value[index];
-  task.completed = !task.completed;
+  task.completed = !task.completed; // Toggle the completed state
 
-  if (task.completed) {
-    const nextTaskIndex = selectedDayRoutine.value.findIndex(t => !t.completed && t.title !== task.title);
+  try {
+    // Get the reference to the document containing the tasks for the selected day
+    const selectedDayDocRef = doc(db, 'weeklyRoutines', days[selectedDayIndex.value].day);
 
-    if (nextTaskIndex !== -1) {
-      const nextTask = selectedDayRoutine.value[nextTaskIndex];
-      const completionMessage = `Task ${task.title} completed. It's time to begin the next task, ${nextTask.title}.`;
-      speak(completionMessage);
-      showNotification.value = true;
+    // Fetch the document snapshot
+    const selectedDayDocSnapshot = await getDoc(selectedDayDocRef);
+
+    if (selectedDayDocSnapshot.exists()) {
+      const tasks = selectedDayRoutine.value.map((t, i) => (i === index ? task : t)); // Update task in the array
+      await updateDoc(selectedDayDocRef, {
+        tasks: tasks,
+        updatedAt: serverTimestamp(),
+      });
+
+      console.log('Task completion updated successfully');
+
+      // Voice response when task is completed
+      setTimeout(() => {
+        if (task.completed) {
+          const completionMessage = `Great job! You completed the task: ${task.title}.`;
+          speak(completionMessage);
+        } else {
+          const uncompletionMessage = `You have marked the task: ${task.title} as incomplete.`;
+          speak(uncompletionMessage);
+        }
+      }, 100); // Short delay to ensure user interaction context
     }
+  } catch (error) {
+    console.error('Error updating task completion:', error);
   }
+
+  // Check streak after toggling task completion
+  checkStreakOnCompletion();
 };
+
 
 
 const handleDragEnd = async () => {
