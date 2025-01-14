@@ -1,8 +1,8 @@
 <template>
-  <div ref="scrollContainer" class="p-4 h-[100vh]  overflow-auto" style="background: teal">
+  <div ref="scrollContainer" class="h-[100vh] overflow-auto bg-gray-100 p-3"  >
 
     <div
-        class="streak-display p-2 rounded-lg shadow-md mb-4 text-center flex flex-col items-center justify-center"
+        class="streak-display p-2 rounded-lg shadow-md mb-2 text-center flex flex-col items-center justify-center"
         :class="{
     'bg-yellow-100': streak < 3,
     'bg-green-100': streak >= 3 && streak < 7,
@@ -24,37 +24,58 @@
       </span>
         </div>
       </div>
-
       <!-- Motivational Message -->
       <p class="text-sm text-gray-700 mt-1">{{ motivationalMessage }}</p>
     </div>
-
-
     <!-- Calendar display -->
+    <div class="calendar-task-card bg-white rounded-2xl shadow-lg p-6 mb-2 w-full max-w-4xl mx-auto">
+      <!-- Calendar Section -->
+      <div class="calendar-section mb-2">
+        <div class="current-date text-2xl font-bold text-gray-900 mb-4">
+          {{ currentDate }}
+        </div>
+        <div class="grid grid-cols-7 gap-3">
+          <div
+              v-for="(day, index) in days"
+              :key="index"
+              class="day-container flex flex-col items-center justify-center p-3 rounded-lg cursor-pointer transition-all duration-300"
+              :class="{
+          'bg-gray-100 border border-gray-300': !isToday(index) && !isSelected(index),
+          'bg-blue-200 text-white': isSelected(index),
+          'bg-blue-500 text-white font-bold shadow-inner': isToday(index)
+        }"
+              @click="selectDate(index)"
+          >
+            <div class="text-lg">{{ day.day }}</div>
+            <div class="text-sm">{{ day.date }}</div>
+          </div>
+        </div>
+      </div>
 
-    <div class="calendar bg-white rounded-md shadow-md mb-6 p-3">
-      <div class="current-date text-2xl font-bold mb-4">{{ currentDate }}</div>
-      <div class="grid grid-cols-7 gap-2">
-        <div v-for="(day, index) in days" :key="index" class="day-container flex flex-col items-center justify-center" :class="{ 'bg-gray-200': isToday(index), 'bg-blue-200': isSelected(index) }" @click="selectDate(index)">
-          <div class="font-semibold">{{ day.day }}</div>
-          <div>{{ day.date }}</div>
+      <!-- Task Completion Section -->
+      <div class="task-completion-section">
+
+        <div class="text-sm text-gray-500 mb-3">
+          Completion: {{ calculateCompletionPercentage(task) }}%
+        </div>
+        <div class="w-full bg-gray-200 rounded-full h-3">
+          <div
+              class="bg-gradient-to-r from-blue-400 to-blue-600 h-3 rounded-full transition-all duration-300"
+              :style="{ width: calculateCompletionPercentage(task) + '%' }"
+          ></div>
         </div>
       </div>
     </div>
     <!-- Modal toggle button -->
-    <div class="fixed bottom-12 right-5">
-      <button @click="openModal" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+    <div class="fixed bottom-12 right-5 z-50">
+      <button
+          @click="openModal"
+          class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-3 px-5 rounded-full shadow-lg transition-transform transform hover:scale-105"
+      >
         <i class="fas fa-plus"></i> <!-- Font Awesome plus icon -->
       </button>
     </div>
-    <div class="task-card bg-white rounded-lg shadow-md p-4 mb-2" :class="{ 'draggable': taskIsDragging }">
-      <!-- Existing code... -->
-      <div class="text-sm text-gray-500 mb-2">Completion: {{ calculateCompletionPercentage(task) }}%</div>
-      <div class="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700">
-        <div class="bg-blue-600 h-2.5 rounded-full" :style="{ width: calculateCompletionPercentage(task) + '%' }"></div>
-      </div>
-      <!-- Existing code... -->
-    </div>
+
 
     <!-- Main modal -->
     <div :class="{ 'hidden': !modalOpen }" @keydown.escape="closeModal" tabindex="-1" aria-hidden="true" class="overflow-y-auto overflow-x-hidden fixed top-0 right-0 left-0 z-50 justify-center items-center w-full md:inset-0 h-modal md:h-full">
@@ -119,61 +140,132 @@
     <!--    <input type="text" v-model="searchQuery" class="w-full border-gray-300 rounded-md px-4 py-2 mb-2" placeholder="Search tasks">-->
 
     <!-- Daily routine tasks -->
-    <div class="daily-routine">
-      <h2 class="text-2xl font-bold mb-4">Daily Routine</h2>
-      <div v-if="filteredTasks?.length === 0" class="text-gray-500">No tasks match your search.</div>
+    <div class="daily-routine   min-h-screen">
+      <div v-if="filteredTasks?.length === 0" class="text-gray-500 text-center mt-8">
+        No tasks match your search.
+      </div>
       <div v-else>
-        <div class="scroll-container">
-          <draggable handle=".drag-handle" :animation="150" v-model="selectedDayRoutine" tag="div" class="tasks-list" ghost-class="ghost" drag-class="drag" @end="handleDragEnd">
+        <div class="scroll-container overflow-y-auto h-[80vh]">
+          <draggable
+              handle=".drag-handle"
+              :animation="150"
+              v-model="selectedDayRoutine"
+              tag="div"
+              class="tasks-list space-y-2"
+              ghost-class="ghost"
+              drag-class="drag"
+              @end="handleDragEnd"
+          >
             <template #item="{ element: task, index }">
-              <div class="task-card bg-white rounded-lg shadow-md p-4 mb-2"   :class="{ 'bg-gray-300': task.completed, 'draggable': taskIsDragging }">
-                <div class="flex items-center mb-2">
+              <div
+                  class="task-card bg-white rounded-xl shadow-lg p-5 relative hover:shadow-xl transition-shadow duration-300"
+                  :class="{  'draggable': taskIsDragging }"
+              >
+                <div class="flex items-center mb-3">
                   <div>
-                    <div :style="{ backgroundColor: generateRandomColor() }" class="w-8 h-8 rounded-full flex items-center justify-center mr-2">
+                    <div
+                        :style="{ backgroundColor: generateRandomColor() }"
+                        class="w-10 h-10 rounded-full flex items-center justify-center mr-3 shadow-sm"
+                    >
                       <i class="fas fa-arrows-alt text-white drag-handle"></i>
                     </div>
                   </div>
                   <div>
-                    <div class="text-lg font-semibold" :class="{ 'line-through': task.completed }">{{ task.title }}</div>
-                    <div class="text-sm text-gray-500">{{ task.time }}</div>
+                    <div
+                        class="text-lg font-semibold text-gray-800"
+                        :class="{ 'line-through text-gray-500': task.completed }"
+                    >
+                      {{ task.title }}
+                    </div>
+                    <div class="text-sm text-gray-400">{{ task.time }}</div>
                   </div>
                 </div>
-                <h2>{{ formatTimes(index)}}</h2>
 
-                <div class="flex items-center">
-                  <svg v-if="task.priority === 'high'" class="h-5 w-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 11l7-7 7 7M5 19l7-7 7 7"></path>
-                  </svg>
-                  <svg v-else-if="task.priority === 'medium'" class="h-5 w-5 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 11l7-7 7 7M5 19l7-7 7 7"></path>
-                  </svg>
-                  <svg v-else-if="task.priority === 'low'" class="h-5 w-5 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 11l7-7 7 7M5 19l7-7 7 7"></path>
-                  </svg>
+                <div class="text-sm text-gray-700 mb-3">{{ task.notes }}</div>
+
+<!--                <div class="flex items-center space-x-2 mb-3">-->
+<!--                  <svg-->
+<!--                      v-if="task.priority === 'high'"-->
+<!--                      class="h-5 w-5 text-red-500"-->
+<!--                      fill="none"-->
+<!--                      stroke="currentColor"-->
+<!--                      viewBox="0 0 24 24"-->
+<!--                      xmlns="http://www.w3.org/2000/svg"-->
+<!--                  >-->
+<!--                    <path-->
+<!--                        stroke-linecap="round"-->
+<!--                        stroke-linejoin="round"-->
+<!--                        stroke-width="2"-->
+<!--                        d="M5 11l7-7 7 7M5 19l7-7 7 7"-->
+<!--                    ></path>-->
+<!--                  </svg>-->
+<!--                  <svg-->
+<!--                      v-else-if="task.priority === 'medium'"-->
+<!--                      class="h-5 w-5 text-purple-500"-->
+<!--                      fill="none"-->
+<!--                      stroke="currentColor"-->
+<!--                      viewBox="0 0 24 24"-->
+<!--                      xmlns="http://www.w3.org/2000/svg"-->
+<!--                  >-->
+<!--                    <path-->
+<!--                        stroke-linecap="round"-->
+<!--                        stroke-linejoin="round"-->
+<!--                        stroke-width="2"-->
+<!--                        d="M5 11l7-7 7 7M5 19l7-7 7 7"-->
+<!--                    ></path>-->
+<!--                  </svg>-->
+<!--                  <svg-->
+<!--                      v-else-if="task.priority === 'low'"-->
+<!--                      class="h-5 w-5 text-yellow-500"-->
+<!--                      fill="none"-->
+<!--                      stroke="currentColor"-->
+<!--                      viewBox="0 0 24 24"-->
+<!--                      xmlns="http://www.w3.org/2000/svg"-->
+<!--                  >-->
+<!--                    <path-->
+<!--                        stroke-linecap="round"-->
+<!--                        stroke-linejoin="round"-->
+<!--                        stroke-width="2"-->
+<!--                        d="M5 11l7-7 7 7M5 19l7-7 7 7"-->
+<!--                    ></path>-->
+<!--                  </svg>-->
+<!--                </div>-->
+
+                <div class="flex flex-wrap gap-2 mb-3">
+              <span
+                  class="inline-block bg-gray-200 rounded-full px-3 py-1 text-xs font-medium text-gray-600"
+                  v-for="(label, index) in task.labels"
+                  :key="index"
+              >
+                {{ label }}
+              </span>
                 </div>
-                <div class="text-sm text-gray-500">{{ task.notes }}</div>
-                <div class="text-sm text-gray-500">
-                  <span class="inline-block bg-gray-200 rounded-full px-2 py-1 text-xs font-semibold text-gray-700 mr-2 mb-2" v-for="(label, index) in task.labels" :key="index">
-                    {{ label }}
-                  </span>
-                </div>
-                <div class="flex justify-end items-center">
-                  <button @click="toggleTaskCompletion(index)" class="text-blue-500 mr-2">
+
+                <div class="flex justify-end items-center space-x-3">
+                  <button
+                      @click="toggleTaskCompletion(index)"
+                      class="text-green-500 hover:text-green-700"
+                  >
                     <i class="fas fa-check"></i>
                   </button>
-                  <button @click="deleteTask(index)" class="text-red-500">
+                  <button
+                      @click="deleteTask(index)"
+                      class="text-red-500 hover:text-red-700"
+                  >
                     <i class="fas fa-trash-alt"></i>
                   </button>
-                  <!-- Add an edit button -->
-                  <button @click="startEditingTask(index)" class="text-yellow-500 ml-2">
+                  <button
+                      @click="startEditingTask(index)"
+                      class="text-yellow-500 hover:text-yellow-700"
+                  >
                     <i class="fas fa-edit"></i>
                   </button>
-                  <!-- Add a play button -->
-
-
                 </div>
 
-                <div v-if="showNotification" class="notification-popup bg-green-500 text-white px-4 py-2 rounded-md absolute top-4 right-4">
+                <div
+                    v-if="showNotification"
+                    class="notification-popup bg-green-500 text-white px-4 py-2 rounded-md absolute top-4 right-4 shadow-lg"
+                >
                   Create successfully
                 </div>
               </div>
@@ -182,6 +274,7 @@
         </div>
       </div>
     </div>
+
   </div>
 </template>
 
