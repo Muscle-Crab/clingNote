@@ -371,7 +371,29 @@ const fetchSelectedDayRoutine = async () => {
     const selectedDayDocSnapshot = await getDoc(selectedDayDocRef);
 
     if (selectedDayDocSnapshot.exists()) {
-      selectedDayRoutine.value = selectedDayDocSnapshot.data().tasks || [];
+      const tasks = selectedDayDocSnapshot.data().tasks || [];
+
+      // Fetch user names for each task
+      const tasksWithUserNames = await Promise.all(
+          tasks.map(async (task) => {
+            try {
+              const userDocRef = doc(db, 'users', task.userId);
+              const userDocSnapshot = await getDoc(userDocRef);
+
+              if (userDocSnapshot.exists()) {
+                const userName = userDocSnapshot.data().name;
+                return { ...task, userName };
+              } else {
+                return { ...task, userName: 'Unknown User' };
+              }
+            } catch (error) {
+              console.error('Error fetching user name:', error);
+              return { ...task, userName: 'Error Fetching User' };
+            }
+          })
+      );
+
+      selectedDayRoutine.value = tasksWithUserNames;
     } else {
       selectedDayRoutine.value = []; // No tasks for this user and day
     }
@@ -379,6 +401,7 @@ const fetchSelectedDayRoutine = async () => {
     console.error('Error fetching tasks:', error);
   }
 };
+
 
 
 
