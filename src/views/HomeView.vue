@@ -932,6 +932,11 @@ onMounted(() => {
     transform: scale(1);
   }
 }
-
+input[type="text"],
+input[type="time"],
+select,
+textarea {
+  font-size: 16px;
+}
 
 </style>
