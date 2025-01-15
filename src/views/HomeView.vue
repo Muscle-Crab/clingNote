@@ -188,6 +188,15 @@
                       {{ task.title }}
                     </div>
                     <div v-if="task.time" class="text-sm text-gray-400">{{ task.time }}</div>
+                    <!-- User Icon and Name with Spinning Icon -->
+                    <div class="flex items-center">
+                      <i
+                          class="fas fa-hourglass-half text-gray-700"
+                          :class="{ 'animate-spin-slow': index === topIncompleteTaskIndex }"
+                      ></i>
+
+                    </div>
+
                   </div>
                 </div>
 
@@ -465,11 +474,15 @@ const deleteTask = async (index) => {
     console.error('Error deleting task:', error);
   }
 };
-
+// Computed property to get the index of the top-most incomplete task
+const topIncompleteTaskIndex = computed(() => {
+  return selectedDayRoutine.value.findIndex((task) => !task.completed);
+});
 
 const toggleTaskCompletion = async (index) => {
   const task = { ...selectedDayRoutine.value[index] }; // Create a copy of the task to avoid direct mutation
   task.completed = !task.completed; // Toggle the completed state
+  startSpinning(index);
 
   // Voice response when task is completed or marked incomplete
   if (task.completed) {
@@ -868,7 +881,22 @@ onMounted(() => {
 });
 
 
+const spinningTasks = ref([]);
 
+// Function to check if a task is spinning
+const isSpinning = (index) => {
+  return spinningTasks.value[index] || false;
+};
+
+// Function to start spinning for a specific task
+const startSpinning = (index) => {
+  spinningTasks.value[index] = true;
+
+  // Stop spinning after a set duration (e.g., 5 seconds)
+  setTimeout(() => {
+    spinningTasks.value[index] = false;
+  }, 5000); // Adjust the duration as needed
+};
 </script>
 
 
@@ -943,5 +971,16 @@ textarea {
   border-radius: 0.375rem;
   width: 100%;
 }
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
 
+.animate-spin-slow {
+  animation: spin 3s linear infinite;
+}
 </style>
