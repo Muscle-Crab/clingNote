@@ -520,7 +520,9 @@ onAuthStateChanged(auth, (user) => {
     userId.value = user.uid; // Set user ID when the user logs in
     console.log('User ID:', userId.value);
 
-    // Fetch tasks after user ID is set
+    // Fetch tasks and streak after user ID is set
+    fetchStreakOnLoad(); // Ensure this runs after userId is set
+
     const todayIndex = new Date().getDay();
     if (todayIndex !== -1) {
       selectedDayIndex.value = todayIndex;
