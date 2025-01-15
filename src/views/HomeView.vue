@@ -180,7 +180,7 @@
                     >
                       {{ task.title }}
                     </div>
-                    <div class="text-sm text-gray-400">{{ task.time }}</div>
+                    <div v-if="task.time" class="text-sm text-gray-400">{{ task.time }}</div>
                   </div>
                 </div>
 
@@ -363,46 +363,25 @@ const currentDate = ref(getCurrentDate());
 let weeklyRoutines = [];
 
 const fetchSelectedDayRoutine = async () => {
+  if (!userId.value || selectedDayIndex.value === -1) return;
+
+  const selectedDayDocRef = doc(db, 'weeklyRoutines', `${userId.value}_${days[selectedDayIndex.value].day}`);
+
   try {
-    if (selectedDayIndex.value !== -1) {
-      const selectedDayDocRef = doc(db, 'weeklyRoutines', days[selectedDayIndex.value].day);
-      const selectedDayDocSnapshot = await getDoc(selectedDayDocRef);
+    const selectedDayDocSnapshot = await getDoc(selectedDayDocRef);
 
-      if (selectedDayDocSnapshot.exists()) {
-        const allTasks = selectedDayDocSnapshot.data().tasks || [];
-
-        // Filter tasks to include only those created by the logged-in user
-        const userTasks = allTasks.filter(task => task.userId === userId.value);
-
-        // Fetch user names for the filtered tasks
-        const tasksWithUserNames = await Promise.all(
-            userTasks.map(async (task) => {
-              try {
-                const userDocRef = doc(db, 'users', task.userId);
-                const userDocSnapshot = await getDoc(userDocRef);
-
-                if (userDocSnapshot.exists()) {
-                  const userName = userDocSnapshot.data().name;
-                  return { ...task, userName, completed: !!task.completed };
-                } else {
-                  return { ...task, userName: 'Unknown User', completed: !!task.completed };
-                }
-              } catch (error) {
-                console.error('Error fetching user name:', error);
-                return { ...task, userName: 'Error Fetching User', completed: !!task.completed };
-              }
-            })
-        );
-
-        selectedDayRoutine.value = tasksWithUserNames;
-      } else {
-        selectedDayRoutine.value = []; // No tasks for this day
-      }
+    if (selectedDayDocSnapshot.exists()) {
+      selectedDayRoutine.value = selectedDayDocSnapshot.data().tasks || [];
+    } else {
+      selectedDayRoutine.value = []; // No tasks for this user and day
     }
   } catch (error) {
-    console.error('Error fetching selected day routine:', error);
+    console.error('Error fetching tasks:', error);
   }
 };
+
+
+
 
 
 
@@ -441,34 +420,28 @@ const sortedSelectedDayRoutine = computed(() => {
 });
 
 const deleteTask = async (index) => {
+  const selectedDayDocRef = doc(db, 'weeklyRoutines', `${userId.value}_${days[selectedDayIndex.value].day}`);
+
   try {
-    // Get the reference to the document containing the tasks for the selected day
-    const selectedDayDocRef = doc(db, 'weeklyRoutines', days[selectedDayIndex.value].day);
+    selectedDayRoutine.value.splice(index, 1);
 
-    // Fetch the document snapshot
-    const selectedDayDocSnapshot = await getDoc(selectedDayDocRef);
+    await updateDoc(selectedDayDocRef, {
+      tasks: selectedDayRoutine.value,
+      updatedAt: serverTimestamp()
+    });
 
-    // Check if the document exists
-    if (selectedDayDocSnapshot.exists()) {
-      // Remove the task from the array in memory
-      selectedDayRoutine.value.splice(index, 1);
-
-      // Update the tasks in the Firestore document
-      await updateDoc(selectedDayDocRef, {
-        tasks: selectedDayRoutine.value,
-        updatedAt: serverTimestamp()
-      });
-    }
+    console.log('Task deleted successfully');
   } catch (error) {
     console.error('Error deleting task:', error);
   }
 };
 
+
 const toggleTaskCompletion = async (index) => {
-  const task = selectedDayRoutine.value[index];
+  const task = { ...selectedDayRoutine.value[index] }; // Create a copy of the task to avoid direct mutation
   task.completed = !task.completed; // Toggle the completed state
 
-  // Voice response when task is completed
+  // Voice response when task is completed or marked incomplete
   if (task.completed) {
     const completionMessage = `Great job! You completed the task: ${task.title}.`;
     speak(completionMessage);
@@ -477,18 +450,20 @@ const toggleTaskCompletion = async (index) => {
     speak(uncompletionMessage);
   }
 
-  try {
-    // Get the reference to the document containing the tasks for the selected day
-    const selectedDayDocRef = doc(db, 'weeklyRoutines', days[selectedDayIndex.value].day);
+  selectedDayRoutine.value.splice(index, 1, task); // Update the task locally
 
-    // Fetch the document snapshot
+  const selectedDayDocRef = doc(db, 'weeklyRoutines', `${userId.value}_${days[selectedDayIndex.value].day}`);
+
+  try {
     const selectedDayDocSnapshot = await getDoc(selectedDayDocRef);
 
     if (selectedDayDocSnapshot.exists()) {
-      const tasks = selectedDayRoutine.value.map((t, i) => (i === index ? task : t)); // Update task in the array
+      const tasks = selectedDayDocSnapshot.data().tasks || [];
+      tasks[index] = task; // Update the task at the correct index
+
       await updateDoc(selectedDayDocRef, {
         tasks: tasks,
-        updatedAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
       });
 
       console.log('Task completion updated successfully');
@@ -500,6 +475,8 @@ const toggleTaskCompletion = async (index) => {
   // Check streak after toggling task completion
   checkStreakOnCompletion();
 };
+
+
 
 
 
@@ -532,14 +509,29 @@ onMounted(() => {
     fetchSelectedDayRoutine();
   }
 });
+onMounted(() => {
+  const todayIndex = new Date().getDay();
+  if (todayIndex !== -1) {
+    selectedDayIndex.value = todayIndex;
+  }
+});
 onAuthStateChanged(auth, (user) => {
   if (user) {
     userId.value = user.uid; // Set user ID when the user logs in
     console.log('User ID:', userId.value);
+
+    // Fetch tasks after user ID is set
+    const todayIndex = new Date().getDay();
+    if (todayIndex !== -1) {
+      selectedDayIndex.value = todayIndex;
+      fetchSelectedDayRoutine(); // Fetch tasks for the current day
+    }
   } else {
     userId.value = null; // Clear user ID when the user logs out
+    selectedDayRoutine.value = []; // Clear tasks when no user is logged in
   }
 });
+
 const userId = ref(null);
 
 const addNewTask = async () => {
@@ -565,40 +557,30 @@ const addNewTask = async () => {
     labels: labels,
     notes: newTask.value.notes,
     userId: userId.value,
-    createdAt: new Date().toISOString() // Use JavaScript to set the timestamp
+    createdAt: new Date().toISOString()
   };
 
+  const selectedDayDocRef = doc(db, 'weeklyRoutines', `${userId.value}_${days[selectedDayIndex.value].day}`);
+
   try {
-    const selectedDayDocRef = doc(db, 'weeklyRoutines', days[selectedDayIndex.value].day);
     const selectedDayDocSnapshot = await getDoc(selectedDayDocRef);
 
+    let existingTasks = [];
     if (selectedDayDocSnapshot.exists()) {
-      const existingTasks = selectedDayDocSnapshot.data().tasks || [];
-      await updateDoc(selectedDayDocRef, {
-        tasks: [...existingTasks, task], // Update the tasks array
-        updatedAt: serverTimestamp() // Use serverTimestamp for the updated time field
-      });
-    } else {
-      await setDoc(selectedDayDocRef, {
-        day: days[selectedDayIndex.value].day,
-        tasks: [task],
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
-      });
+      existingTasks = selectedDayDocSnapshot.data().tasks || []; // Fallback to empty array if tasks is undefined
     }
 
-    selectedDayRoutine.value.push(task);
+    await setDoc(selectedDayDocRef, {
+      tasks: [...existingTasks, task],
+      updatedAt: serverTimestamp()
+    });
+
+    selectedDayRoutine.value = [...existingTasks, task]; // Update the local state
     selectedDayRoutine.value.sort((a, b) => {
       return new Date('1970/01/01 ' + a.time) - new Date('1970/01/01 ' + b.time);
     });
 
-    newTask.value = {
-      title: '',
-      time: '',
-      priority: 'low',
-      labels: [],
-      notes: ''
-    };
+    newTask.value = { title: '', time: '', priority: 'low', labels: [], notes: '' };
     error.value = '';
 
     showNotification.value = true;
@@ -606,9 +588,11 @@ const addNewTask = async () => {
       showNotification.value = false;
     }, 3000);
   } catch (error) {
-    console.error('Error adding task to Firestore:', error);
+    console.error('Error adding task:', error);
   }
 };
+
+
 
 
 
