@@ -577,20 +577,43 @@ const toggleTaskCompletion = async (index) => {
 
 
 const handleDragEnd = async () => {
+  if (selectedDayIndex.value === -1 || !userId.value) {
+    console.error('No selected day or user is not logged in');
+    return;
+  }
+
   try {
-    const selectedDayDocRef = doc(db, 'weeklyRoutines', days[selectedDayIndex.value].day);
+    // Reference the Firestore document for the selected day and user
+    const selectedDayDocRef = doc(
+        db,
+        'weeklyRoutines',
+        `${userId.value}_${days[selectedDayIndex.value].day}`
+    );
+
+    // Check if the document exists before updating
     const selectedDayDocSnapshot = await getDoc(selectedDayDocRef);
 
     if (selectedDayDocSnapshot.exists()) {
       await updateDoc(selectedDayDocRef, {
-        tasks: selectedDayRoutine.value,
-        updatedAt: serverTimestamp()
+        tasks: selectedDayRoutine.value, // Save the reordered tasks
+        updatedAt: serverTimestamp(),   // Update the timestamp
       });
+      console.log('Task order updated successfully in Firestore');
+    } else {
+      console.warn('Selected day document does not exist. Creating a new one...');
+      // Create a new document if it does not exist
+      await setDoc(selectedDayDocRef, {
+        tasks: selectedDayRoutine.value,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      console.log('New document created and task order saved.');
     }
   } catch (error) {
     console.error('Error updating task order:', error);
   }
 };
+
 const speak = (text) => {
   const message = new SpeechSynthesisUtterance(text);
   window.speechSynthesis.speak(message);
