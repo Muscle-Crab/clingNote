@@ -187,14 +187,23 @@
                     >
                       {{ task.title }}
                     </div>
-                    <div v-if="task.time" class="text-sm text-gray-400">{{ task.time }}</div>
+<!--                    <div v-if="task.time" class="text-sm text-gray-400">{{ task.time }}</div>-->
                     <!-- User Icon and Name with Spinning Icon -->
-                    <div class="flex items-center">
-                      <i
-                          class="fas fa-hourglass-half text-gray-700"
-                          :class="{ 'animate-spin-slow': index === topIncompleteTaskIndex }"
-                      ></i>
+                    <div class="flex items-center space-x-2 text-xs">
+                      <!-- Incomplete Task Indicator -->
+                      <div v-if="!task.completed && index !== topIncompleteTaskIndex" class="text-yellow-500">
+                        <i class="fas fa-circle"></i> Incomplete
+                      </div>
 
+                      <!-- In Progress Task Indicator -->
+                      <div v-if="index === topIncompleteTaskIndex" class="text-blue-500 flex items-center">
+                        <i class="fas fa-hourglass-half animate-spin-slow mr-1"></i> In Progress
+                      </div>
+
+                      <!-- Completed Task Indicator -->
+                      <div v-if="task.completed" class="text-green-500">
+                        <i class="fas fa-check-circle"></i> Completed
+                      </div>
                     </div>
 
                   </div>
