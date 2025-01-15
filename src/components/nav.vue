@@ -39,20 +39,34 @@
       <!-- Sidebar content -->
       <nav class="px-4 py-8">
         <ul class="space-y-4">
-          <li>
-            <a href="#"
-               class="text-gray-800 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-500 font-medium">
-              <router-link to="/tasks">My Routine</router-link>
-            </a>
+          <!-- My Routine -->
+          <li class="flex items-center space-x-3">
+            <i class="fas fa-calendar-check text-gray-800 dark:text-gray-200"></i>
+            <router-link to="/tasks"
+                         class="text-gray-800 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-500 font-medium">
+              My Routine
+            </router-link>
           </li>
-          <li>
-            <!-- Add logout functionality -->
+
+          <!-- Chat -->
+          <li class="flex items-center space-x-3">
+            <i class="fas fa-comments text-gray-800 dark:text-gray-200"></i>
+            <router-link to="/"
+                         class="text-gray-800 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-500 font-medium">
+              Chat
+            </router-link>
+          </li>
+
+          <!-- Logout -->
+          <li class="flex items-center space-x-3">
+            <i class="fas fa-sign-out-alt text-gray-800 dark:text-gray-200"></i>
             <button @click="logout"
                     class="text-gray-800 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-500 font-medium">
               Logout
             </button>
           </li>
         </ul>
+
       </nav>
     </aside>
     <!-- End of Sidebar -->
