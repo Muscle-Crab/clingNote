@@ -159,9 +159,10 @@
             <template #item="{ element: task, index }">
               <div
                   class="task-card bg-white rounded-xl shadow-lg p-5 relative hover:shadow-xl transition-shadow duration-300"
-                  :class="{  'draggable': taskIsDragging }"
+                  :class="{ 'draggable': taskIsDragging }"
               >
                 <div class="flex items-center mb-3">
+                  <!-- Drag Icon -->
                   <div>
                     <div
                         :style="{ backgroundColor: generateRandomColor() }"
@@ -170,6 +171,8 @@
                       <i class="fas fa-arrows-alt text-white drag-handle"></i>
                     </div>
                   </div>
+
+                  <!-- Task Title and Time -->
                   <div>
                     <div
                         class="text-lg font-semibold text-gray-800"
@@ -181,8 +184,9 @@
                   </div>
                 </div>
 
-                <div class="text-sm text-gray-700 mb-3">{{ task.notes }}</div>
 
+
+                <!-- Task Priority -->
 <!--                <div class="flex items-center space-x-2 mb-3">-->
 <!--                  <svg-->
 <!--                      v-if="task.priority === 'high'"-->
@@ -231,37 +235,50 @@
 <!--                  </svg>-->
 <!--                </div>-->
 
+                <!-- Task Labels -->
                 <div class="flex flex-wrap gap-2 mb-3">
-              <span
-                  class="inline-block bg-gray-200 rounded-full px-3 py-1 text-xs font-medium text-gray-600"
-                  v-for="(label, index) in task.labels"
-                  :key="index"
-              >
-                {{ label }}
-              </span>
+      <span
+          class="inline-block bg-gray-200 rounded-full px-3 py-1 text-xs font-medium text-gray-600"
+          v-for="(label, index) in task.labels"
+          :key="index"
+      >
+        {{ label }}
+      </span>
                 </div>
 
-                <div class="flex justify-end items-center space-x-3">
-                  <button
-                      @click="toggleTaskCompletion(index)"
-                      class="text-green-500 hover:text-green-700"
-                  >
-                    <i class="fas fa-check"></i>
-                  </button>
-                  <button
-                      @click="deleteTask(index)"
-                      class="text-red-500 hover:text-red-700"
-                  >
-                    <i class="fas fa-trash-alt"></i>
-                  </button>
-                  <button
-                      @click="startEditingTask(index)"
-                      class="text-yellow-500 hover:text-yellow-700"
-                  >
-                    <i class="fas fa-edit"></i>
-                  </button>
+                <!-- User Icon and Name Inline with Task Actions -->
+                <div class="flex items-center justify-between mb-3">
+                  <!-- User Icon and Name -->
+                  <div class="flex">
+                    <i class="fas fa-user  "></i>
+                    <div class="text-sm font-medium text-gray-700 ml-1">{{ task.userName }}</div>
+                  </div>
+
+                  <!-- Task Actions -->
+                  <div class="flex items-center space-x-3">
+                    <button
+                        @click="toggleTaskCompletion(index)"
+                        class="text-green-500 hover:text-green-700"
+                    >
+                      <i class="fas fa-check"></i>
+                    </button>
+                    <button
+                        @click="deleteTask(index)"
+                        class="text-red-500 hover:text-red-700"
+                    >
+                      <i class="fas fa-trash-alt"></i>
+                    </button>
+                    <button
+                        @click="startEditingTask(index)"
+                        class="text-yellow-500 hover:text-yellow-700"
+                    >
+                      <i class="fas fa-edit"></i>
+                    </button>
+                  </div>
                 </div>
 
+
+                <!-- Notification -->
                 <div
                     v-if="showNotification"
                     class="notification-popup bg-green-500 text-white px-4 py-2 rounded-md absolute top-4 right-4 shadow-lg"
@@ -270,6 +287,7 @@
                 </div>
               </div>
             </template>
+
           </draggable>
         </div>
       </div>
@@ -280,8 +298,8 @@
 
 <script setup>
 import { ref, onMounted, computed, reactive } from 'vue';
-import axios from 'axios'
-import navi from '@/components/nav.vue'
+import { auth } from '@/firebaseConfig'; // Assuming you have Firebase authentication configured
+import { onAuthStateChanged } from 'firebase/auth';
 import data from '@/data.json';
 import draggable from "vuedraggable";
 import {db} from '@/firebaseConfig'; // Assuming you have imported the Firebase setup file and exported the db instance
@@ -351,10 +369,32 @@ const fetchSelectedDayRoutine = async () => {
       const selectedDayDocSnapshot = await getDoc(selectedDayDocRef);
 
       if (selectedDayDocSnapshot.exists()) {
-        selectedDayRoutine.value = selectedDayDocSnapshot.data().tasks.map(task => ({
-          ...task,
-          completed: !!task.completed, // Ensure boolean value for completed
-        }));
+        const allTasks = selectedDayDocSnapshot.data().tasks || [];
+
+        // Filter tasks to include only those created by the logged-in user
+        const userTasks = allTasks.filter(task => task.userId === userId.value);
+
+        // Fetch user names for the filtered tasks
+        const tasksWithUserNames = await Promise.all(
+            userTasks.map(async (task) => {
+              try {
+                const userDocRef = doc(db, 'users', task.userId);
+                const userDocSnapshot = await getDoc(userDocRef);
+
+                if (userDocSnapshot.exists()) {
+                  const userName = userDocSnapshot.data().name;
+                  return { ...task, userName, completed: !!task.completed };
+                } else {
+                  return { ...task, userName: 'Unknown User', completed: !!task.completed };
+                }
+              } catch (error) {
+                console.error('Error fetching user name:', error);
+                return { ...task, userName: 'Error Fetching User', completed: !!task.completed };
+              }
+            })
+        );
+
+        selectedDayRoutine.value = tasksWithUserNames;
       } else {
         selectedDayRoutine.value = []; // No tasks for this day
       }
@@ -363,6 +403,8 @@ const fetchSelectedDayRoutine = async () => {
     console.error('Error fetching selected day routine:', error);
   }
 };
+
+
 
 const days = data.days;
 
@@ -490,15 +532,30 @@ onMounted(() => {
     fetchSelectedDayRoutine();
   }
 });
-
+onAuthStateChanged(auth, (user) => {
+  if (user) {
+    userId.value = user.uid; // Set user ID when the user logs in
+    console.log('User ID:', userId.value);
+  } else {
+    userId.value = null; // Clear user ID when the user logs out
+  }
+});
+const userId = ref(null);
 
 const addNewTask = async () => {
+  if (!userId.value) {
+    error.value = 'You must be logged in to add a task';
+    return;
+  }
+
   if (newTask.value.title.trim() === '') {
     error.value = 'Task name cannot be empty';
     return;
   }
 
-  const labels = typeof newTask.value.labels === 'string' ? newTask?.value?.labels.split(',').map(label => label.trim()) : [];
+  const labels = typeof newTask.value.labels === 'string'
+      ? newTask.value.labels.split(',').map(label => label.trim())
+      : [];
 
   const task = {
     title: newTask.value.title.trim(),
@@ -506,7 +563,9 @@ const addNewTask = async () => {
     time: formatTime(newTask.value.time),
     priority: newTask.value.priority,
     labels: labels,
-    notes: newTask.value.notes
+    notes: newTask.value.notes,
+    userId: userId.value,
+    createdAt: new Date().toISOString() // Use JavaScript to set the timestamp
   };
 
   try {
@@ -514,9 +573,10 @@ const addNewTask = async () => {
     const selectedDayDocSnapshot = await getDoc(selectedDayDocRef);
 
     if (selectedDayDocSnapshot.exists()) {
+      const existingTasks = selectedDayDocSnapshot.data().tasks || [];
       await updateDoc(selectedDayDocRef, {
-        tasks: [...selectedDayDocSnapshot.data().tasks, task],
-        updatedAt: serverTimestamp()
+        tasks: [...existingTasks, task], // Update the tasks array
+        updatedAt: serverTimestamp() // Use serverTimestamp for the updated time field
       });
     } else {
       await setDoc(selectedDayDocRef, {
@@ -549,6 +609,8 @@ const addNewTask = async () => {
     console.error('Error adding task to Firestore:', error);
   }
 };
+
+
 
 
 const formatTime = (time) => {
@@ -666,13 +728,11 @@ const checkStreakOnCompletion = async () => {
     yesterday.setDate(yesterday.getDate() - 1);
     const yesterdayStr = yesterday.toISOString().split('T')[0];
 
-    const streakDocRef = doc(db, 'streaks', 'userStreak');
-
     try {
+      const streakDocRef = doc(db, 'streaks', userId.value);
       const streakDocSnapshot = await getDoc(streakDocRef);
 
       if (streakDocSnapshot.exists()) {
-        // Document exists, continue streak logic
         const data = streakDocSnapshot.data();
         lastCompletionDate.value = data.lastCompletionDate;
         streak.value = data.streak;
@@ -680,29 +740,21 @@ const checkStreakOnCompletion = async () => {
         if (lastCompletionDate.value === yesterdayStr) {
           streak.value += 1; // Continue streak
         } else if (lastCompletionDate.value !== today) {
-          streak.value = 1; // Reset streak only if today is not recorded
+          streak.value = 1; // Reset streak
         }
       } else {
-        // Document does not exist, initialize streak
-        streak.value = 1;
+        streak.value = 1; // Initialize streak
       }
 
       lastCompletionDate.value = today;
 
-      // Use setDoc to create or overwrite the document
-      await setDoc(streakDocRef, {
-        streak: streak.value,
-        lastCompletionDate: today,
-        unlockedBadges: unlockedBadges.value,
-        updatedAt: serverTimestamp(),
-      });
-
-      console.log('Streak updated successfully:', streak.value);
+      // Update streak in Firestore
+      await updateStreakInFirestore();
 
       checkForBadges();
       updateMotivationalMessage();
     } catch (error) {
-      console.error('Error updating streak:', error);
+      console.error('Error checking streak continuation:', error);
     }
   } else {
     console.log('Completion is not 100%. Streak not updated.');
@@ -710,8 +762,11 @@ const checkStreakOnCompletion = async () => {
 };
 
 
+
 const fetchStreakOnLoad = async () => {
-  const streakDocRef = doc(db, 'streaks', 'userStreak');
+  if (!userId.value) return; // Ensure user is logged in
+
+  const streakDocRef = doc(db, 'streaks', userId.value); // Use userId as document ID
 
   try {
     const streakDocSnapshot = await getDoc(streakDocRef);
@@ -720,17 +775,33 @@ const fetchStreakOnLoad = async () => {
       const data = streakDocSnapshot.data();
       streak.value = data.streak || 0;
       lastCompletionDate.value = data.lastCompletionDate || null;
-      unlockedBadges.value = data.unlockedBadges || []; // Retrieve unlocked badges
-      console.log('Streak and badges fetched on load:', streak.value, unlockedBadges.value);
+      unlockedBadges.value = data.unlockedBadges || [];
+      console.log('Streak and badges fetched:', streak.value, unlockedBadges.value);
     } else {
-      console.log('No streak document found, initializing streak and badges to default');
-      streak.value = 0;
-      unlockedBadges.value = [];
+      console.log('No streak document found for this user');
     }
 
     updateMotivationalMessage();
   } catch (error) {
-    console.error('Error fetching streak and badges on load:', error);
+    console.error('Error fetching streak on load:', error);
+  }
+};
+
+const updateStreakInFirestore = async () => {
+  if (!userId.value) return; // Ensure user is logged in
+
+  const streakDocRef = doc(db, 'streaks', userId.value); // Use userId as document ID
+
+  try {
+    await setDoc(streakDocRef, {
+      streak: streak.value,
+      lastCompletionDate: lastCompletionDate.value,
+      unlockedBadges: unlockedBadges.value,
+      updatedAt: serverTimestamp()
+    });
+    console.log('Streak updated in Firestore:', streak.value);
+  } catch (error) {
+    console.error('Error updating streak in Firestore:', error);
   }
 };
 
@@ -760,21 +831,17 @@ const checkForBadges = async () => {
   badges.forEach(async (badge) => {
     if (streak.value === badge.days && !unlockedBadges.value.some((b) => b.days === badge.days)) {
       unlockedBadges.value.push(badge);
-      showNotification.value = true; // Show a notification when a badge is unlocked
       console.log(`Badge unlocked: ${badge.name}`);
 
       try {
-        // Save unlocked badges to Firestore
-        const streakDocRef = doc(db, 'streaks', 'userStreak');
-        await updateDoc(streakDocRef, {
-          unlockedBadges: unlockedBadges.value,
-        });
+        await updateStreakInFirestore(); // Save updated badges
       } catch (error) {
         console.error('Error updating unlocked badges:', error);
       }
     }
   });
 };
+
 
 
 
