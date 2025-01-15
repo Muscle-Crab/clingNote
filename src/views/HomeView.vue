@@ -863,8 +863,8 @@ const checkForBadges = async () => {
 
 // Call checkStreak when component is mounted
 onMounted(() => {
-  checkStreakOnCompletion();
 
+  checkStreakOnCompletion();
 });
 
 
