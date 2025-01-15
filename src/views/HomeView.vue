@@ -35,7 +35,7 @@
       <p class="text-sm text-gray-700 mt-1">{{ motivationalMessage }}</p>
     </div>
     <!-- Calendar display -->
-    <div class="calendar-task-card bg-white rounded-2xl shadow-lg p-6 mb-2 w-full max-w-4xl mx-auto">
+    <div class="calendar-task-card bg-white rounded-2xl mb-2 shadow-lg p-2 mb-2 w-full max-w-4xl mx-auto">
       <!-- Calendar Section -->
       <div class="calendar-section mb-2">
         <div class="current-date font-bold text-gray-900 mb-4">
@@ -60,18 +60,61 @@
       </div>
 
       <!-- Task Completion Section -->
-      <div class="task-completion-section">
 
-        <div class="text-sm text-gray-500 mb-3">
-          Completion: {{ calculateCompletionPercentage(task) }}%
-        </div>
-        <div class="w-full bg-gray-200 rounded-full h-3">
+      <div class="milestone-journey w-full h-auto relative p-6   rounded-lg ">
+        <!-- Animated Progress Bar -->
+        <div class="relative w-full h-[2px] bg-gray-300 rounded-full">
           <div
-              class="bg-gradient-to-r from-blue-400 to-blue-600 h-3 rounded-full transition-all duration-300"
+              class="absolute h-full bg-blue-500 transition-all duration-700 ease-out"
               :style="{ width: calculateCompletionPercentage(task) + '%' }"
           ></div>
         </div>
+
+        <!-- Milestones with icons and labels -->
+        <div
+            v-for="(milestone, index) in milestones"
+            :key="index"
+            class="flex flex-col items-center absolute top-0 transform -translate-x-1/2"
+            :style="{
+      left: index === 0
+        ? '0%'    /* First icon aligns perfectly to the left */
+        : index === milestones.length - 1
+        ? '100%'  /* Last icon aligns perfectly to the right */
+        : `${milestone.position}%`,
+      transform: index === 0
+        ? 'translateX(0)' /* Remove extra margin for the first icon */
+        : index === milestones.length - 1
+        ? 'translateX(-100%)' /* Adjust for the last icon */
+        : 'translateX(-50%)',
+    }"
+        >
+          <!-- Milestone Icon -->
+          <div
+              class="w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center mb-1 transition-transform duration-500"
+              :class="{
+        'bg-blue-500 scale-110': calculateCompletionPercentage(task) >= milestone.percent,
+        'bg-gray-400 scale-100': calculateCompletionPercentage(task) < milestone.percent,
+      }"
+          >
+            <div
+                class="text-xl sm:text-2xl transition-transform duration-500"
+                :class="{ 'animate-bounce': calculateCompletionPercentage(task) >= milestone.percent }"
+            >
+              {{ milestone.icon }}
+            </div>
+          </div>
+
+
+        </div>
+
+        <!-- Percentage Display -->
+        <div class="absolute top-[-2rem] right-4 bg-blue-100 text-blue-600 px-4 py-1 rounded-full shadow-md text-sm sm:text-base">
+          Progress: {{ calculateCompletionPercentage(task) }}%
+        </div>
       </div>
+
+
+
     </div>
     <!-- Modal toggle button -->
     <div class="fixed bottom-12 right-5 z-50">
@@ -889,7 +932,13 @@ onMounted(() => {
   checkStreakOnCompletion();
 });
 
-
+const milestones = ref([
+  { label: '0%', percent: 0, position: 0, icon: '🚶' },      // Walking icon for start
+  { label: '25%', percent: 25, position: 25, icon: '🏃' },   // Running icon
+  { label: '50%', percent: 50, position: 50, icon: '🚴' },   // Biking icon
+  { label: '75%', percent: 75, position: 75, icon: '🚗' },   // Car icon
+  { label: '100%', percent: 100, position: 100, icon: '🚀' } // Rocket icon for completion
+]);
 const spinningTasks = ref([]);
 
 // Function to check if a task is spinning
@@ -939,14 +988,7 @@ const startSpinning = (index) => {
   background-color: #fef3c7;
 }
 
-.badge-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  width: 80px;
-}
+
 
 .badge-display span {
   font-size: 2rem;
