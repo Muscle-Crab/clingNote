@@ -10,20 +10,27 @@
   }"
     >
       <!-- Streak and Badge Icons Row -->
-      <div class="flex items-center justify-between w-full">
+      <!-- Streak and Badge Icons Row -->
+      <div v-if="streak === 0" class="flex flex-col items-center justify-center">
+        <div class="text-4xl">😢</div>
+        <h2 class="text-lg font-bold text-red-500">No streak yet!</h2>
+        <p class="text-sm text-gray-600">Complete today's tasks to start a new streak!</p>
+      </div>
+      <div v-else class="flex items-center justify-between w-full">
         <h2 class="text-lg font-bold">Streak: {{ streak }} days</h2>
 
         <!-- Display badges if unlocked -->
         <div v-if="unlockedBadges.length > 0" class="flex space-x-2">
-      <span
-          v-for="badge in unlockedBadges"
-          :key="badge.days"
-          class="text-2xl badge-icon"
-      >
-        {{ badge.icon }}
-      </span>
+    <span
+        v-for="badge in unlockedBadges"
+        :key="badge.days"
+        class="text-2xl badge-icon"
+    >
+      {{ badge.icon }}
+    </span>
         </div>
       </div>
+
       <!-- Motivational Message -->
       <p class="text-sm text-gray-700 mt-1">{{ motivationalMessage }}</p>
     </div>
@@ -831,7 +838,7 @@ const updateMotivationalMessage = () => {
     motivationalMessage.value = "You're on fire! Keep it up!";
   } else if (streak.value >= 3) {
     motivationalMessage.value = "Great job! You're building a habit!";
-  } else {
+  } if (streak.value >= 1 && streak.value <= 3) {
     motivationalMessage.value = "Good start! Keep going!";
   }
 };
