@@ -937,6 +937,11 @@ input[type="time"],
 select,
 textarea {
   font-size: 16px;
+  line-height: 1.5;
+  padding: 0.5rem;
+  border: 1px solid #ccc;
+  border-radius: 0.375rem;
+  width: 100%;
 }
 
 </style>
