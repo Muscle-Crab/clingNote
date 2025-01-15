@@ -104,7 +104,7 @@
           <!-- Modal body -->
           <form @submit.prevent="addNewTask">
             <label for="newTask" class="block mb-2">Task Name:</label>
-            <input type="text" v-model="newTask.title" id="newTask" class="w-full border-gray-300 rounded-md px-4 py-2 mb-2" placeholder="Enter task name" required>
+            <input type="text" v-model="newTask.title" id="newTask" class="w-full border-gray-300 rounded-md px-4 py-2 mb-2 text-[16px]" placeholder="Enter task name" required>
             <label for="newTaskTime" class="block mb-2">Task Time:</label>
             <input type="time" v-model="newTask.time" id="newTaskTime" class="w-full border-gray-300 rounded-md px-4 py-2 mb-2" >
             <label for="newTaskPriority" class="block mb-2">Task Priority:</label>
