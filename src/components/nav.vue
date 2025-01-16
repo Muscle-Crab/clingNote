@@ -56,7 +56,13 @@
               Chat
             </router-link>
           </li>
-
+          <li class="flex items-center space-x-3">
+            <i class="fas fa-comments text-gray-800 dark:text-gray-200"></i>
+            <router-link to="/about"
+                         class="text-gray-800 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-500 font-medium">
+             test
+            </router-link>
+          </li>
           <!-- Logout -->
           <li class="flex items-center space-x-3">
             <i class="fas fa-sign-out-alt text-gray-800 dark:text-gray-200"></i>
