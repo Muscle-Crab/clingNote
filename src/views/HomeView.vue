@@ -365,7 +365,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed, reactive } from 'vue';
+import { ref, onMounted, computed, watch, reactive } from 'vue';
 import { auth } from '@/firebaseConfig'; // Assuming you have Firebase authentication configured
 import { onAuthStateChanged } from 'firebase/auth';
 import data from '@/data.json';
@@ -459,9 +459,36 @@ const generateRandomColor = () => {
 };
 
 const getCurrentDate = () => {
-  const options = {weekday: 'long', month: 'long', day: 'numeric', year: 'numeric'};
-  return new Date().toLocaleDateString('en-US', options);
+  const today = new Date();
+  const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+  return new Intl.DateTimeFormat('en-US', options).format(today);
 };
+const generateWeekDates = () => {
+  const today = new Date();
+  const currentDayIndex = today.getDay(); // 0 for Sunday, 1 for Monday, etc.
+  const week = [];
+
+  for (let i = 0; i < 7; i++) {
+    const diff = i - currentDayIndex;
+    const day = new Date(today);
+    day.setDate(today.getDate() + diff);
+
+    // Format the date as YYYY-MM-DD in local time
+    const formattedDate = day.toLocaleDateString('en-CA'); // 'en-CA' formats as YYYY-MM-DD
+    const dayName = new Intl.DateTimeFormat('en-US', { weekday: 'short' }).format(day);
+
+    week.push({ day: dayName, date: formattedDate });
+  }
+
+  days.value = week;
+};
+
+
+// Call this function when the component is mounted
+onMounted(() => {
+  generateWeekDates();
+  console.log('Generated days array:', days.value);
+});
 
 const currentDate = ref(getCurrentDate());
 
@@ -511,10 +538,36 @@ const days = data.days;
 const isToday = (index) => {
   return index === new Date().getDay();
 };
+// Function to update the displayed current date
+const updateCurrentDate = () => {
+  if (selectedDayIndex.value !== -1) {
+    const selectedDay = days.value[selectedDayIndex.value];
+    if (selectedDay && selectedDay.date) {
+      // Parse the date safely to avoid time zone issues
+      const [year, month, day] = selectedDay.date.split('-'); // Split YYYY-MM-DD
+      const fullDate = new Date(year, month - 1, day); // Create a Date object with zero-based month
 
+      const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+      currentDate.value = new Intl.DateTimeFormat('en-US', options).format(fullDate);
+    }
+  }
+};
+
+
+
+// Watch for tab (day) changes and update the current date
+watch(selectedDayIndex, updateCurrentDate);
+
+// On mounted, set the initial date to today's tab
+onMounted(() => {
+  const todayIndex = new Date().getDay();
+  selectedDayIndex.value = todayIndex; // Initialize to today's tab
+  updateCurrentDate(); // Update the displayed current date
+});
 const selectDate = (index) => {
   selectedDayIndex.value = index;
   updateRoutine();
+  updateCurrentDate()
   fetchSelectedDayRoutine();
 };
 
