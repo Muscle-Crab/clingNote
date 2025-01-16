@@ -785,7 +785,7 @@ const addNewTask = async () => {
 
     newTask.value = { title: '', time: '', priority: 'low', labels: [], notes: '' };
     error.value = '';
-    closeModal();
+
     // Send notification to the specific player ID
     const userName = await fetchUserName(userId.value);
     if (userName) {
