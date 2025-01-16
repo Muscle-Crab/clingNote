@@ -59,37 +59,42 @@ export default {
       window.speechSynthesis.speak(utterance);
     };
 
+    const notifyUser = (message) => {
+      if (Notification.permission === 'granted') {
+        new Notification('Task Reminder', {
+          body: message,
+          icon: '/path-to-icon.png',
+        });
+      }
+    };
+
     const startReminders = () => {
-      // Clear any existing interval to prevent duplicates
       if (reminderInterval) {
         clearInterval(reminderInterval);
       }
-
-      // Set up a new interval to run every minute
       reminderInterval = setInterval(() => {
         const incompleteTasks = tasks.value.filter((task) => !task.completed);
         if (incompleteTasks.length > 0) {
           const taskTitles = incompleteTasks.map((task) => task.title).join(', ');
-          speak(`Reminder: You have the following incomplete tasks: ${taskTitles}`);
+          const reminderMessage = `You have the following incomplete tasks: ${taskTitles}`;
+          notifyUser(reminderMessage);
+          speak(reminderMessage);
         } else {
-          speak('Great job! All your tasks are completed.');
+          const completionMessage = 'Great job! All your tasks are completed.';
+          notifyUser(completionMessage);
+          speak(completionMessage);
         }
-      }, 60 * 1000); // 1 minute in milliseconds
-    };
-
-    const stopReminders = () => {
-      if (reminderInterval) {
-        clearInterval(reminderInterval);
-      }
+      }, 60 * 1000); // 1 minute interval
     };
 
     onMounted(() => {
       loadTasks();
-      startReminders(); // Start reminders when the component is mounted
+      startReminders();
+      Notification.requestPermission();
     });
 
     onUnmounted(() => {
-      stopReminders(); // Stop reminders when the component is unmounted
+      if (reminderInterval) clearInterval(reminderInterval);
     });
 
     return {
