@@ -373,7 +373,7 @@ import draggable from "vuedraggable";
 import {db} from '@/firebaseConfig'; // Assuming you have imported the Firebase setup file and exported the db instance
 import {collection, doc, setDoc, serverTimestamp, getDoc, updateDoc} from 'firebase/firestore';
 const modalOpen = ref(false);
-
+import axios from 'axios';
 
 // Define reactive state
 const isRunning = ref([]);
@@ -392,6 +392,43 @@ const formatTimes = (index) => {
   const minutes = Math.floor(currentTime.value[index] / 60);
   const seconds = currentTime.value[index] % 60;
   return `${minutes < 10 ? '0' : ''}${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
+};
+const fetchUserName = async (userId) => {
+  try {
+    const userDocRef = doc(db, 'users', userId); // Ensure you have a `users` collection
+    const userDocSnapshot = await getDoc(userDocRef);
+
+    if (userDocSnapshot.exists()) {
+      return userDocSnapshot.data().name; // Assuming the user's name is stored under `name`
+    } else {
+      console.warn('User document not found');
+      return 'Unknown User';
+    }
+  } catch (error) {
+    console.error('Error fetching user name:', error);
+    return 'Error Fetching User';
+  }
+};
+
+const sendNotificationToPlayer = async (userName) => {
+  const headers = {
+    'Authorization': 'Bearer ZDZiZDk0NTktMjUwZS00NTQ4LWFhOTItNjBiZDZiMjVhYzYy', // Replace with your actual API key
+    'Content-Type': 'application/json'
+  };
+
+  const data = {
+    "app_id": "fc206a71-7d65-4cfa-b8b2-0c10548e1476",
+    "include_player_ids": ["ff823cf5-aef7-4363-82f7-33c1de7ce02e"],
+    "contents": { "en": `${userName} created a new task!` },
+    "headings": { "en": "New Task Alert" }
+  };
+
+  try {
+    await axios.post('https://onesignal.com/api/v1/notifications', data, { headers });
+    console.log('Notification sent successfully');
+  } catch (error) {
+    console.error('Error sending notification:', error);
+  }
 };
 
 
@@ -469,13 +506,6 @@ const fetchSelectedDayRoutine = async () => {
     console.error('Error fetching tasks:', error);
   }
 };
-
-
-
-
-
-
-
 const days = data.days;
 
 const isToday = (index) => {
@@ -703,6 +733,11 @@ const addNewTask = async () => {
     newTask.value = { title: '', time: '', priority: 'low', labels: [], notes: '' };
     error.value = '';
 
+    // Send notification to the specific player ID
+    const userName = await fetchUserName(userId.value);
+    if (userName) {
+      await sendNotificationToPlayer(userName);
+    }
     showNotification.value = true;
     setTimeout(() => {
       showNotification.value = false;
