@@ -19,14 +19,14 @@ export default {
   name: 'TaskManager',
   setup() {
     const tasks = ref([
-      { title: 'Complete project report', completed: false },
-      { title: 'Buy groceries', completed: false },
+      {title: 'Complete project report', completed: false},
+      {title: 'Buy groceries', completed: false},
     ]);
 
     let reminderInterval = null;
 
     const addTask = () => {
-      const newTask = { title: `Task ${tasks.value.length + 1}`, completed: false, synced: false };
+      const newTask = {title: `Task ${tasks.value.length + 1}`, completed: false};
       tasks.value.push(newTask);
       speak(`New task added: ${newTask.title}`);
       saveTasks();
@@ -65,7 +65,7 @@ export default {
         clearInterval(reminderInterval);
       }
 
-      // Set up a new interval to run every 5 minutes
+      // Set up a new interval to run every minute
       reminderInterval = setInterval(() => {
         const incompleteTasks = tasks.value.filter((task) => !task.completed);
         if (incompleteTasks.length > 0) {
@@ -74,7 +74,7 @@ export default {
         } else {
           speak('Great job! All your tasks are completed.');
         }
-      }, 5 * 60 * 1000); // 5 minutes in milliseconds
+      }, 60 * 1000); // 1 minute in milliseconds
     };
 
     const stopReminders = () => {
