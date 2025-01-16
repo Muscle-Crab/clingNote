@@ -8,7 +8,7 @@ import Landing from '../views/landing.vue';
 import Pickup from '../views/Pickup.vue';
 const routes = [
   {
-    path: '/tasks',
+    path: '/',
     name: 'home',
     component: HomeView,
     meta: { requiresAuth: true }
@@ -51,7 +51,7 @@ const routes = [
     // meta: { requiresAuth: true }
   },
   {
-    path: '/',
+    path: '/chat',
     name: 'RoomInterior',
     component: Room,
     props: true // Pass route params as props to the component

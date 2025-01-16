@@ -42,7 +42,7 @@
           <!-- My Routine -->
           <li class="flex items-center space-x-3">
             <i class="fas fa-calendar-check text-gray-800 dark:text-gray-200"></i>
-            <router-link to="/tasks"
+            <router-link to="/"
                          class="text-gray-800 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-500 font-medium">
               My Routine
             </router-link>
@@ -51,7 +51,7 @@
           <!-- Chat -->
           <li class="flex items-center space-x-3">
             <i class="fas fa-comments text-gray-800 dark:text-gray-200"></i>
-            <router-link to="/"
+            <router-link to="/chat"
                          class="text-gray-800 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-500 font-medium">
               Chat
             </router-link>
