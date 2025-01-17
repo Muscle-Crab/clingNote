@@ -619,10 +619,10 @@ const toggleTaskCompletion = async (index) => {
   task.completed = !task.completed; // Toggle the completed state
   startSpinning(index);
 
-  // Voice response when task is completed or marked incomplete
+  // Voice announcement after the local state is fully updated
   if (task.completed) {
     speak(`Great job! You completed the task: ${task.title}.`);
-    announceNextTask(); // Announce the next task
+    announceNextTask(index); // Pass the index of the completed task
   } else {
     speak(`You have marked the task: ${task.title} as incomplete.`);
   }
@@ -700,14 +700,16 @@ const speak = (text) => {
   const message = new SpeechSynthesisUtterance(text);
   window.speechSynthesis.speak(message);
 };
-const announceNextTask = () => {
-  const nextTask = selectedDayRoutine.value.find((task) => !task.completed);
+const announceNextTask = (completedIndex) => {
+  const nextTask = selectedDayRoutine.value.find((task, index) => !task.completed && index !== completedIndex);
   if (nextTask) {
     speak(`Your next task is: ${nextTask.title}.`);
   } else {
     speak("Congratulations! All tasks are complete.");
   }
 };
+
+
 
 onMounted(() => {
   const todayIndex = new Date().getDay();
