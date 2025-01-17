@@ -3,7 +3,12 @@
     <h1 class="text-xl font-bold">Task Manager</h1>
     <div v-for="(task, index) in tasks" :key="index" class="p-4 border rounded my-2">
       <h2>{{ task.title }}</h2>
-      <p>Status: <span :class="{ 'text-green-500': task.completed, 'text-red-500': !task.completed }">{{ task.completed ? 'Completed' : 'Incomplete' }}</span></p>
+      <p>
+        Status:
+        <span :class="{ 'text-green-500': task.completed, 'text-red-500': !task.completed }">
+          {{ task.completed ? 'Completed' : 'Incomplete' }}
+        </span>
+      </p>
       <button @click="toggleTaskCompletion(index)" class="bg-blue-500 text-white px-2 py-1 rounded">
         {{ task.completed ? 'Mark Incomplete' : 'Mark Complete' }}
       </button>
@@ -14,6 +19,7 @@
 
 <script>
 import { ref, onMounted, onUnmounted } from 'vue';
+import axios from 'axios';
 
 export default {
   name: 'TaskManager',
@@ -25,19 +31,25 @@ export default {
 
     let reminderInterval = null;
 
-    const addTask = () => {
+    const addTask = async () => {
       const newTask = {title: `Task ${tasks.value.length + 1}`, completed: false};
       tasks.value.push(newTask);
       speak(`New task added: ${newTask.title}`);
       saveTasks();
+
+      // Notify users about the new task
+      await sendNotificationToPlayer('UserName', ['ff823cf5-aef7-4363-82f7-33c1de7ce02e']); // Replace with actual player IDs
     };
 
-    const toggleTaskCompletion = (index) => {
+    const toggleTaskCompletion = async (index) => {
       const task = tasks.value[index];
       task.completed = !task.completed;
       const status = task.completed ? 'completed' : 'marked incomplete';
       speak(`Task "${task.title}" has been ${status}`);
       saveTasks();
+
+      // Optional: Notify users about task status changes
+      await sendNotificationToPlayer('UserName', ['ff823cf5-aef7-4363-82f7-33c1de7ce02e']); // Replace with actual player IDs
     };
 
     const saveTasks = () => {
@@ -85,6 +97,27 @@ export default {
           speak(completionMessage);
         }
       }, 60 * 1000); // 1 minute interval
+    };
+
+    const sendNotificationToPlayer = async (userName, playerIds) => {
+      const headers = {
+        Authorization: 'Bearer ZDZiZDk0NTktMjUwZS00NTQ4LWFhOTItNjBiZDZiMjVhYzYy', // Replace with your actual API key
+        'Content-Type': 'application/json',
+      };
+
+      const data = {
+        app_id: "fc206a71-7d65-4cfa-b8b2-0c10548e1476",
+        include_player_ids: playerIds, // Array of player IDs
+        contents: {en: `${userName} created a new task!`},
+        headings: {en: "New Task Alert"},
+      };
+
+      try {
+        await axios.post('https://onesignal.com/api/v1/notifications', data, {headers});
+        console.log('Notification sent successfully');
+      } catch (error) {
+        console.error('Error sending notification:', error.response?.data || error.message);
+      }
     };
 
     onMounted(() => {
