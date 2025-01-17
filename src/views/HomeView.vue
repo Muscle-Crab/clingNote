@@ -416,34 +416,20 @@ const sendNotificationToPlayer = async (userName) => {
     'Content-Type': 'application/json'
   };
 
-  // The player ID that should receive notifications
-  const targetPlayerId = "ff823cf5-aef7-4363-82f7-33c1de7ce02e";
-
-  // Fetch the current device's player ID
-  const currentPlayerId = localStorage.getItem('currentPlayerId'); // Example storage method
-
-  // Ensure the notification is not sent to the same device that created the task
-  if (currentPlayerId === targetPlayerId) {
-    console.log("Task was created from the target device. Notification will not be sent.");
-    return;
-  }
-
   const data = {
-    app_id: "fc206a71-7d65-4cfa-b8b2-0c10548e1476",
-    include_player_ids: [targetPlayerId], // Notify only the target device
-    contents: { en: `${userName} created a new task!` },
-    headings: { en: "New Task Alert" }
+    "app_id": "fc206a71-7d65-4cfa-b8b2-0c10548e1476",
+    "include_player_ids": ["ff823cf5-aef7-4363-82f7-33c1de7ce02e"],
+    "contents": { "en": `${userName} created a new task!` },
+    "headings": { "en": "New Task Alert" }
   };
 
   try {
     await axios.post('https://onesignal.com/api/v1/notifications', data, { headers });
-    console.log('Notification sent successfully to target device');
+    console.log('Notification sent successfully');
   } catch (error) {
     console.error('Error sending notification:', error);
   }
 };
-
-
 
 
 
