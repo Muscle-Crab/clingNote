@@ -784,6 +784,7 @@ const addNewTask = async () => {
     });
 
     newTask.value = { title: '', time: '', priority: 'low', labels: [], notes: '' };
+    closeModal()
     error.value = '';
 
     // Send notification to the specific player ID
