@@ -34,6 +34,19 @@
       <!-- Motivational Message -->
       <p class="text-sm text-gray-700 mt-1">{{ motivationalMessage }}</p>
     </div>
+    <div v-if="showFullScreenAnimation" class="fixed inset-0 bg-gradient-to-br from-green-500 via-blue-500 to-purple-500 flex items-center justify-center z-50">
+      <div class="text-center">
+        <h1 class="text-4xl font-bold text-white animate-bounce">🎉 All Tasks Completed! 🎉</h1>
+        <p class="text-lg text-white mt-4">Congratulations on completing all your tasks!</p>
+        <button
+            @click="closeFullScreenAnimation"
+            class="mt-6 px-6 py-3 bg-white text-blue-600 font-semibold rounded-lg shadow-lg hover:bg-blue-100"
+        >
+          Close
+        </button>
+      </div>
+    </div>
+
     <!-- Calendar display -->
     <div class="calendar-task-card bg-white rounded-2xl mb-2 shadow-lg p-2 mb-2 w-full max-w-4xl mx-auto">
       <!-- Calendar Section -->
@@ -651,6 +664,7 @@ const toggleTaskCompletion = async (index) => {
 
   // Check streak after toggling task completion
   checkStreakOnCompletion();
+  checkAllTasksCompleted();
 };
 
 
@@ -709,6 +723,20 @@ const announceNextTask = (completedIndex) => {
   }
 };
 
+const showFullScreenAnimation = ref(false);
+
+const checkAllTasksCompleted = () => {
+  // Check if all tasks are marked as completed
+  const allCompleted = selectedDayRoutine.value.every(task => task.completed);
+
+  if (allCompleted) {
+    showFullScreenAnimation.value = true;
+  }
+};
+
+const closeFullScreenAnimation = () => {
+  showFullScreenAnimation.value = false;
+};
 
 
 onMounted(() => {
