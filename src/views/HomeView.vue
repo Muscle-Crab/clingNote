@@ -621,11 +621,10 @@ const toggleTaskCompletion = async (index) => {
 
   // Voice response when task is completed or marked incomplete
   if (task.completed) {
-    const completionMessage = `Great job! You completed the task: ${task.title}.`;
-    speak(completionMessage);
+    speak(`Great job! You completed the task: ${task.title}.`);
+    announceNextTask(); // Announce the next task
   } else {
-    const uncompletionMessage = `You have marked the task: ${task.title} as incomplete.`;
-    speak(uncompletionMessage);
+    speak(`You have marked the task: ${task.title} as incomplete.`);
   }
 
   selectedDayRoutine.value.splice(index, 1, task); // Update the task locally
@@ -700,6 +699,14 @@ const handleDragEnd = async () => {
 const speak = (text) => {
   const message = new SpeechSynthesisUtterance(text);
   window.speechSynthesis.speak(message);
+};
+const announceNextTask = () => {
+  const nextTask = selectedDayRoutine.value.find((task) => !task.completed);
+  if (nextTask) {
+    speak(`Your next task is: ${nextTask.title}.`);
+  } else {
+    speak("Congratulations! All tasks are complete.");
+  }
 };
 
 onMounted(() => {
@@ -786,6 +793,9 @@ const addNewTask = async () => {
     newTask.value = { title: '', time: '', priority: 'low', labels: [], notes: '' };
     closeModal()
     error.value = '';
+
+
+
 
     // Send notification to the specific player ID
     const userName = await fetchUserName(userId.value);
