@@ -390,6 +390,7 @@
                    <!-- Task Actions -->
                    <div class="flex items-center space-x-3">
                      <button
+                         v-if="isToday(selectedDayIndex)"
                          @click="toggleTaskCompletion(index)"
                          class="text-green-500 hover:text-green-700"
                      >
