@@ -107,17 +107,18 @@
            <div
                class="w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center mb-1 transition-transform duration-500"
                :class="{
-        'bg-blue-500 scale-110': calculateCompletionPercentage(task) >= milestone.percent,
-        'bg-gray-400 scale-100': calculateCompletionPercentage(task) < milestone.percent,
-      }"
+    'bg-blue-500 scale-110': calculateCompletionPercentage(task) > 0 && calculateCompletionPercentage(task) >= milestone.percent,
+    'bg-gray-400 scale-100': calculateCompletionPercentage(task) <= 0 || calculateCompletionPercentage(task) < milestone.percent,
+  }"
            >
              <div
                  class="text-xl sm:text-2xl transition-transform duration-500"
-                 :class="{ 'animate-bounce': calculateCompletionPercentage(task) >= milestone.percent }"
+                 :class="{ 'animate-bounce': calculateCompletionPercentage(task) > 0 && calculateCompletionPercentage(task) >= milestone.percent }"
              >
                {{ milestone.icon }}
              </div>
            </div>
+
 
 
          </div>
@@ -1062,6 +1063,13 @@ const updateStreakInFirestore = async () => {
   }
 };
 
+const badges = [
+  { name: "Seed Starter", days: 1, icon: "🌱" },
+  { name: "Sprouting Leaves", days: 3, icon: "🌿" },
+  { name: "Small Tree", days: 7, icon: "🌳" },
+  { name: "Mature Tree", days: 15, icon: "🌲" },
+  { name: "Peak Performer", days: 30, icon: "🏔️" }
+];
 
 onMounted(() => {
   fetchStreakOnLoad(); // Fetch streak when the app is loaded
