@@ -846,13 +846,14 @@ const checkAllTasksCompleted = () => {
 
   if (allCompleted) {
     showFullScreenAnimation.value = true;
+    // Voice response to congratulate and ask what they want to do
+    speak("Congratulations! You've completed all your tasks. What would you like to do now?");
+    // Add a slight delay before confirming
+    setTimeout(() => {
+      speak("Go ahead and enjoy your reward or goal for today!");
+    }, 3000); // 3-second delay
   }
-  // Voice response to congratulate and ask what they want to do
-  speak("Congratulations! You've completed all your tasks. What would you like to do now?");
-  // Add a slight delay before confirming
-  setTimeout(() => {
-    speak("Go ahead and enjoy your reward or goal for today!");
-  }, 3000); // 3-second delay
+
 
 };
 
