@@ -16,10 +16,30 @@
   }"
      >
        <!-- Streak on the left -->
-       <div class="flex flex-col">
-         <h2 class="text-sm font-semibold">Streak: {{ streak }} days</h2>
-         <p v-if="streak === 0" class="text-xs text-red-500 font-medium">No streak yet!</p>
-         <p v-else class="text-xs text-gray-600">{{ motivationalMessage }}</p>
+       <div class="flex items-center space-x-4">
+         <!-- Streak Icon -->
+         <div class=" flex items-center justify-center w-10 h-10 bg-blue-100 text-blue-600 rounded-full">
+         <div class="streak-icon">
+           {{ getStreakIcon(streak) }}
+         </div>
+
+         </div>
+
+         <!-- Streak and Credits Information -->
+         <div class="flex flex-col">
+           <h2 class="text-base font-semibold text-gray-800">
+             Streak: <span class="text-blue-600">{{ streak }}</span> days
+           </h2>
+           <div class="flex items-center space-x-2">
+
+           </div>
+           <p v-if="streak === 0" class="text-xs text-red-500 font-medium mt-1">
+             No streak yet!
+           </p>
+           <p v-else class="text-sm text-gray-600 mt-1">
+             {{ motivationalMessage }}
+           </p>
+         </div>
        </div>
 
        <!-- Message in the middle -->
@@ -33,8 +53,13 @@
        </div>
 
        <!-- Icon on the right -->
-       <div class="text-4xl streak-icon">
-         {{ getStreakIcon(streak) }}
+       <div class="text-4xl ">
+         <div class="flex items-center justify-between">
+           <span class="text-sm font-medium text-yellow-500 flex items-center">
+    {{ userCredits }} 💰
+  </span>
+         </div>
+
        </div>
      </div>
      <div v-if="showFullScreenAnimation" class="fixed inset-0 bg-gradient-to-br from-green-500 via-blue-500 to-purple-500 flex items-center justify-center z-50">
@@ -180,6 +205,14 @@
                  <label :for="'day-' + index" class="text-sm">{{ day.day }}</label>
                </div>
              </div>
+             <label for="taskPosition" class="block mb-2">Insert Position:</label>
+             <select v-model="newTask.position" id="taskPosition" class="w-full border-gray-300 rounded-md px-4 py-2 mb-2">
+               <option :value="0">First</option>
+               <option v-for="(task, index) in selectedDayRoutine" :key="index" :value="index + 1">
+                 {{ index + 2 }}{{ getOrdinalSuffix(index + 2) }}
+               </option>
+             </select>
+
 
              <label for="newTaskLabels" class="block mb-2">Task Labels:</label>
              <input type="text" v-model="newTask.labels" id="newTaskLabels" class="w-full border-gray-300 rounded-md px-4 py-2 mb-2" placeholder="Enter task labels (comma-separated)">
@@ -481,7 +514,8 @@ const newTask = ref({
   priority: 'low',
   labels: [],
   notes: '',
-  selectedDays: [] // Ensure this is initialized as an array
+  selectedDays: [], // Ensure this is initialized as an array
+  position: 0
 });
 
 const error = ref('');
@@ -532,7 +566,8 @@ let weeklyRoutines = [];
 const fetchSelectedDayRoutine = async () => {
   if (!userId.value || selectedDayIndex.value === -1) return;
 
-  const selectedDayDocRef = doc(db, 'weeklyRoutines', `${userId.value}_${days[selectedDayIndex.value].day}`);
+  const selectedDay = days[selectedDayIndex.value];
+  const selectedDayDocRef = doc(db, 'weeklyRoutines', `${userId.value}_${selectedDay.day}`);
 
   try {
     const selectedDayDocSnapshot = await getDoc(selectedDayDocRef);
@@ -544,15 +579,18 @@ const fetchSelectedDayRoutine = async () => {
       const tasksWithUserNames = await Promise.all(
           tasks.map(async (task) => {
             try {
+              if (!task.userId) {
+                return { ...task, userName: 'Unknown User' };
+              }
+
               const userDocRef = doc(db, 'users', task.userId);
               const userDocSnapshot = await getDoc(userDocRef);
 
-              if (userDocSnapshot.exists()) {
-                const userName = userDocSnapshot.data().name;
-                return { ...task, userName };
-              } else {
-                return { ...task, userName: 'Unknown User' };
-              }
+              const userName = userDocSnapshot.exists()
+                  ? userDocSnapshot.data().name
+                  : 'Unknown User';
+
+              return { ...task, userName };
             } catch (error) {
               console.error('Error fetching user name:', error);
               return { ...task, userName: 'Error Fetching User' };
@@ -565,7 +603,8 @@ const fetchSelectedDayRoutine = async () => {
       selectedDayRoutine.value = []; // No tasks for this user and day
     }
   } catch (error) {
-    console.error('Error fetching tasks:', error);
+    console.error('Error fetching tasks for the selected day:', error);
+    selectedDayRoutine.value = []; // Clear tasks on error
   }
 };
 const days = data.days;
@@ -662,7 +701,13 @@ const toggleTaskCompletion = async (index) => {
   const task = { ...selectedDayRoutine.value[index] }; // Create a copy of the task to avoid direct mutation
   task.completed = !task.completed; // Toggle the completed state
   startSpinning(index);
-
+  if (task.completed) {
+    userCredits.value += 10; // Award 10 credits for completing a task
+    console.log(`Credits earned: 10. Total credits: ${userCredits.value}`);
+  } else {
+    userCredits.value -= 10; // Deduct credits if task is marked incomplete
+    console.log(`Credits deducted: 10. Total credits: ${userCredits.value}`);
+  }
   // Voice announcement after the local state is fully updated
   if (task.completed) {
     speak(`Great job! You completed the task: ${task.title}.`);
@@ -846,6 +891,10 @@ const addNewTask = async () => {
         existingTasks = selectedDayDocSnapshot.data().tasks || [];
       }
 
+      // Insert task at the specified position
+      const position = parseInt(newTask.value.position, 10);
+      existingTasks.splice(position, 0, task);
+
       await setDoc(selectedDayDocRef, {
         tasks: [...existingTasks, task],
         updatedAt: serverTimestamp()
@@ -859,7 +908,7 @@ const addNewTask = async () => {
       }
     }
 
-    newTask.value = { title: '', time: '', priority: 'low', labels: [], notes: '', selectedDays: [] };
+    newTask.value = { title: '', time: '', priority: 'low', labels: [], notes: '', selectedDays: [], position: 0 };
     closeModal();
     error.value = '';
 
@@ -878,9 +927,41 @@ const addNewTask = async () => {
 
 
 
+const userCredits = ref(0);
 
 
+const updateCreditsInFirestore = async () => {
+  const userDocRef = doc(db, 'users', userId.value);
 
+  try {
+    await updateDoc(userDocRef, {
+      credits: userCredits.value,
+      updatedAt: serverTimestamp(),
+    });
+    console.log('Credits updated in Firestore');
+  } catch (error) {
+    console.error('Error updating credits:', error);
+  }
+};
+
+watch(userCredits, updateCreditsInFirestore);
+const fetchUserCredits = async () => {
+  if (!userId.value) return;
+
+  const userDocRef = doc(db, 'users', userId.value);
+
+  try {
+    const userDocSnapshot = await getDoc(userDocRef);
+    if (userDocSnapshot.exists()) {
+      userCredits.value = userDocSnapshot.data().credits || 0;
+      console.log('User credits loaded:', userCredits.value);
+    }
+  } catch (error) {
+    console.error('Error fetching user credits:', error);
+  }
+};
+
+onMounted(fetchUserCredits);
 
 
 
@@ -1147,6 +1228,11 @@ const milestones = ref([
   { label: '75%', percent: 75, position: 75, icon: '🌲' },   // Mature tree
   { label: '100%', percent: 100, position: 100, icon: '🏔️' } // Fully grown tree at the peak
 ]);
+const getOrdinalSuffix = (number) => {
+  const suffixes = ["th", "st", "nd", "rd"];
+  const v = number % 100;
+  return suffixes[(v - 20) % 10] || suffixes[v] || suffixes[0];
+};
 
 const spinningTasks = ref([]);
 
