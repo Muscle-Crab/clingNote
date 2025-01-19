@@ -1,5 +1,5 @@
 <template>
-  <div ref="scrollContainer" class="h-[100vh] overflow-auto bg-gray-100 p-3"  >
+  <div ref="scrollContainer" class="h-[100vh] overflow-auto bg-gray-200 p-3"  >
     <div v-if="isLoading" class="flex justify-center items-center h-full">
       <div class="flex items-center space-x-2">
         <div class="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
@@ -113,7 +113,11 @@
         </div>
       </div>
       <!-- Calendar display -->
-      <div class="calendar-task-card bg-white rounded-2xl mb-2 shadow-lg p-2 mb-2 w-full max-w-4xl mx-auto">
+      <div class="calendar-task-card
+      bg-gray-100 rounded-2xl mb-2 shadow-lg p-2 mb-2 w-full max-w-4xl mx-auto"
+
+
+      >
         <!-- Calendar Section -->
         <div class="calendar-section mb-2">
           <div class="current-date font-bold text-gray-900 mb-4">
@@ -312,7 +316,11 @@
               <template #item="{ element: task, index }">
                 <div
                     class="task-card bg-white rounded-xl shadow-lg p-5 relative hover:shadow-xl transition-shadow duration-300"
-                    :class="{ 'draggable': taskIsDragging }"
+                    :class="{
+    'bg-gray-200': task.completed, // Add a light green background for completed tasks
+     // Add a light red background for incomplete tasks
+    'draggable': taskIsDragging
+  }"
                 >
                   <div class="flex items-center mb-3">
                     <!-- Drag Icon -->
