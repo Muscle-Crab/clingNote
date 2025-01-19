@@ -133,9 +133,9 @@
     <div class="fixed bottom-12 right-5 z-50">
       <button
           @click="openModal"
-          class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-3 px-5 rounded-full shadow-lg transition-transform transform hover:scale-105"
+          class="mt-4 px-6 py-2 bg-blue-500 text-white rounded-full shadow-lg hover:bg-blue-600 transition duration-200"
       >
-        <i class="fas fa-plus"></i> <!-- Font Awesome plus icon -->
+        Add New Task
       </button>
     </div>
 
@@ -204,8 +204,15 @@
 
     <!-- Daily routine tasks -->
     <div class="daily-routine   min-h-screen">
-      <div v-if="filteredTasks?.length === 0" class="text-gray-500 text-center mt-8">
-        No tasks match your search.
+      <div v-if="selectedDayRoutine?.length === 0" class="flex flex-col items-center justify-center mt-16">
+        <img
+            src="https://cdn.pixabay.com/photo/2017/02/01/11/12/bulb-2029707_640.png"
+            alt="No tasks illustration"
+            class="w-48 h-48 mb-6"
+        />
+        <h2 class="text-lg font-semibold text-gray-700">No tasks found!</h2>
+        <p class="text-sm text-gray-500 mt-2">You don’t have any tasks for this day. Add a new task to get started.</p>
+
       </div>
       <div v-else>
         <div class="scroll-container overflow-y-auto h-[80vh]">
