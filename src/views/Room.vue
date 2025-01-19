@@ -163,13 +163,14 @@
               </a>
               <div v-if="post.mediaUrl" class="flex justify-center">
                 <template v-if="isVideoUrl(post.mediaUrl)">
-                  <video class="w-96 h-auto rounded-lg" autoplay muted controls playsinline>
+                  <video class="max-w-full max-h-80 rounded-lg object-contain" autoplay muted controls playsinline>
                     <source :src="post.mediaUrl" type="video/mp4">
                     Your browser does not support the video tag.
                   </video>
                 </template>
                 <template v-else>
-                  <img :src="post.mediaUrl" alt="Uploaded Image" class="w-96 h-auto rounded-lg"/>
+                  <img :src="post.mediaUrl" alt="Uploaded Image" class="max-w-full max-h-80 rounded-lg object-contain" />
+
                 </template>
               </div>
 
