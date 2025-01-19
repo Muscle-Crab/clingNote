@@ -161,22 +161,36 @@
            <!-- Modal body -->
            <form @submit.prevent="addNewTask">
              <label for="newTask" class="block mb-2">Task Name:</label>
-             <input type="text" v-model="newTask.title" id="newTask" class="w-full border-gray-300 rounded-md px-4 py-2 mb-2 text-[16px]" placeholder="Enter task name" required>
+             <input type="text" v-model="newTask.title" id="newTask" class="w-full border-gray-300 rounded-md px-4 py-2 mb-2" placeholder="Enter task name" required>
+
              <label for="newTaskTime" class="block mb-2">Task Time:</label>
-             <input type="time" v-model="newTask.time" id="newTaskTime" class="w-full border-gray-300 rounded-md px-4 py-2 mb-2" >
+             <input type="time" v-model="newTask.time" id="newTaskTime" class="w-full border-gray-300 rounded-md px-4 py-2 mb-2">
+
              <label for="newTaskPriority" class="block mb-2">Task Priority:</label>
              <select v-model="newTask.priority" id="newTaskPriority" class="w-full border-gray-300 rounded-md px-4 py-2 mb-2">
                <option value="low">Low</option>
                <option value="medium">Medium</option>
                <option value="high">High</option>
              </select>
+
+             <label for="newTaskDays" class="block mb-2">Select Days:</label>
+             <div class="flex flex-wrap gap-2 mb-2">
+               <div v-for="(day, index) in days" :key="index" class="flex items-center space-x-2">
+                 <input type="checkbox" :id="'day-' + index" :value="day" v-model="newTask.selectedDays" class="form-checkbox">
+                 <label :for="'day-' + index" class="text-sm">{{ day.day }}</label>
+               </div>
+             </div>
+
              <label for="newTaskLabels" class="block mb-2">Task Labels:</label>
              <input type="text" v-model="newTask.labels" id="newTaskLabels" class="w-full border-gray-300 rounded-md px-4 py-2 mb-2" placeholder="Enter task labels (comma-separated)">
+
              <label for="newTaskNotes" class="block mb-2">Task Notes:</label>
              <textarea v-model="newTask.notes" id="newTaskNotes" class="w-full border-gray-300 rounded-md px-4 py-2 mb-2" placeholder="Enter task notes"></textarea>
+
              <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded-md">Add Task</button>
              <div v-if="error" class="text-red-500 mt-2">{{ error }}</div>
            </form>
+
          </div>
        </div>
      </div>
@@ -466,8 +480,10 @@ const newTask = ref({
   time: '',
   priority: 'low',
   labels: [],
-  notes: ''
+  notes: '',
+  selectedDays: [] // Ensure this is initialized as an array
 });
+
 const error = ref('');
 const editingTask = ref(null);
 const editedTask = ref({title: '', time: '', priority: 'low', labels: [], notes: ''});
@@ -800,6 +816,11 @@ const addNewTask = async () => {
     return;
   }
 
+  // Ensure at least one day is selected or fallback to the currently selected tab day
+  const selectedDays = newTask.value.selectedDays.length > 0
+      ? newTask.value.selectedDays
+      : [days[selectedDayIndex.value]]; // Use the day from the selected tab
+
   const labels = typeof newTask.value.labels === 'string'
       ? newTask.value.labels.split(',').map(label => label.trim())
       : [];
@@ -815,28 +836,31 @@ const addNewTask = async () => {
     createdAt: new Date().toISOString()
   };
 
-  const selectedDayDocRef = doc(db, 'weeklyRoutines', `${userId.value}_${days[selectedDayIndex.value].day}`);
-
   try {
-    const selectedDayDocSnapshot = await getDoc(selectedDayDocRef);
+    for (const selectedDay of selectedDays) {
+      const selectedDayDocRef = doc(db, 'weeklyRoutines', `${userId.value}_${selectedDay.day}`);
+      const selectedDayDocSnapshot = await getDoc(selectedDayDocRef);
 
-    let existingTasks = [];
-    if (selectedDayDocSnapshot.exists()) {
-      existingTasks = selectedDayDocSnapshot.data().tasks || []; // Fallback to empty array if tasks is undefined
+      let existingTasks = [];
+      if (selectedDayDocSnapshot.exists()) {
+        existingTasks = selectedDayDocSnapshot.data().tasks || [];
+      }
+
+      await setDoc(selectedDayDocRef, {
+        tasks: [...existingTasks, task],
+        updatedAt: serverTimestamp()
+      });
+
+      // Update the local state if the task is for the currently selected tab
+      if (selectedDayIndex.value !== -1 && selectedDay.day === days[selectedDayIndex.value].day) {
+        selectedDayRoutine.value = [...existingTasks, task].sort((a, b) => {
+          return new Date('1970/01/01 ' + a.time) - new Date('1970/01/01 ' + b.time);
+        });
+      }
     }
 
-    await setDoc(selectedDayDocRef, {
-      tasks: [...existingTasks, task],
-      updatedAt: serverTimestamp()
-    });
-
-    selectedDayRoutine.value = [...existingTasks, task]; // Update the local state
-    selectedDayRoutine.value.sort((a, b) => {
-      return new Date('1970/01/01 ' + a.time) - new Date('1970/01/01 ' + b.time);
-    });
-
-    newTask.value = { title: '', time: '', priority: 'low', labels: [], notes: '' };
-    closeModal()
+    newTask.value = { title: '', time: '', priority: 'low', labels: [], notes: '', selectedDays: [] };
+    closeModal();
     error.value = '';
 
 
@@ -847,14 +871,14 @@ const addNewTask = async () => {
     if (userName) {
       await sendNotificationToPlayer(userName);
     }
-    showNotification.value = true;
-    setTimeout(() => {
-      showNotification.value = false;
-    }, 3000);
   } catch (error) {
     console.error('Error adding task:', error);
   }
 };
+
+
+
+
 
 
 
