@@ -8,7 +8,41 @@
     </div>
    <div v-else>
      <div
-         class="streak-display p-2 rounded shadow-sm mb-2 flex items-center justify-between"
+         v-if="showGoalPrompt"
+         class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+     >
+       <div class="bg-white rounded-lg shadow-lg p-6 w-11/12 max-w-sm">
+         <h2 class="text-lg sm:text-xl font-bold text-gray-800 text-center">
+           🎯 Set Your Goal for Today
+         </h2>
+         <p class="text-sm text-gray-600 mt-3 text-center">
+           What would you like to achieve today?
+         </p>
+         <input
+             v-model="newGoal"
+             type="text"
+             placeholder="Enter your goal..."
+             class="w-full border border-gray-300 rounded-md px-4 py-2 mt-4 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+         />
+         <div class="flex flex-col sm:flex-row sm:justify-between mt-6">
+           <button
+               @click="dismissGoalPrompt"
+               class="w-full sm:w-1/2 px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition duration-200 mb-3 sm:mb-0"
+           >
+             Skip
+           </button>
+           <button
+               @click="setGoal"
+               class="w-full sm:w-1/2 sm:ml-2 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition duration-200"
+           >
+             Set Goal
+           </button>
+         </div>
+       </div>
+     </div>
+
+     <div
+         class="streak-display p-3 rounded shadow-sm mb-4 flex flex-col sm:flex-row items-center sm:justify-between"
          :class="{
     'bg-yellow-50': streak < 3,
     'bg-green-50': streak >= 3 && streak < 7,
@@ -16,52 +50,49 @@
   }"
      >
        <!-- Streak on the left -->
-       <div class="flex items-center space-x-4">
+       <div class="flex items-center space-x-3 w-full sm:w-auto mb-1 sm:mb-0">
          <!-- Streak Icon -->
-         <div class=" flex items-center justify-center w-10 h-10 bg-blue-100 text-blue-600 rounded-full">
-         <div class="streak-icon">
-           {{ getStreakIcon(streak) }}
-         </div>
-
+         <div class="flex items-center justify-center w-10 h-10 bg-blue-100 text-blue-600 rounded-full">
+           <div class="streak-icon">
+             {{ getStreakIcon(streak) }}
+           </div>
          </div>
 
          <!-- Streak and Credits Information -->
          <div class="flex flex-col">
-           <h2 class="text-base font-semibold text-gray-800">
+           <h2 class="text-sm font-semibold text-gray-800">
              Streak: <span class="text-blue-600">{{ streak }}</span> days
            </h2>
-           <div class="flex items-center space-x-2">
-
-           </div>
            <p v-if="streak === 0" class="text-xs text-red-500 font-medium mt-1">
              No streak yet!
            </p>
-           <p v-else class="text-sm text-gray-600 mt-1">
+           <p v-else class="text-xs text-gray-600 mt-1">
              {{ motivationalMessage }}
            </p>
          </div>
        </div>
 
        <!-- Message in the middle -->
-       <div class="text-center flex-1 mx-2">
-         <p v-if="streak === 0" class="text-xs text-gray-500">
+       <div class="text-center flex-1 mx-2 text-sm">
+         <p v-if="streak === 0" class="text-gray-500">
            Complete today's tasks to start a streak!
          </p>
-         <p v-else-if="milestoneMessages[streak]" class="text-sm font-semibold text-blue-500">
+         <p v-else-if="milestoneMessages[streak]" class="font-semibold text-blue-500">
            {{ getMilestoneMessage(streak) }}
          </p>
        </div>
 
-       <!-- Icon on the right -->
-       <div class="text-4xl ">
-         <div class="flex items-center justify-between">
-           <span class="text-sm font-medium text-yellow-500 flex items-center">
-    {{ userCredits }} 💰
-  </span>
-         </div>
+       <!-- Icon and Credits on the right -->
+       <div class="flex flex-col items-center sm:items-end">
 
+         <span class="text-sm font-medium text-blue-500 flex items-center ">
+     <span class="text-sm font-medium text-yellow-500 flex items-center">
+      💰 {{ pointsAccumulated }}/{{ totalPoints }}
+    </span> <span class="ml-2 font-semibold">{{ dailyGoal || 'No Goal Set' }}</span>
+    </span>
        </div>
      </div>
+
      <div v-if="showFullScreenAnimation" class="fixed inset-0 bg-gradient-to-br from-green-500 via-blue-500 to-purple-500 flex items-center justify-center z-50">
        <div class="text-center">
          <h1 class="text-4xl font-bold text-white animate-bounce">🎉 All Tasks Completed! 🎉</h1>
@@ -1213,7 +1244,55 @@ const checkForBadges = async () => {
   });
 };
 
+// State for managing goals and popup visibility
+const dailyGoal = ref('');
+const newGoal = ref('');
+const showGoalPrompt = ref(false);
+const currentDayKey = new Date().toISOString().split('T')[0]; // Format: YYYY-MM-DD
+const pointsAccumulated = ref(0);
+const totalPoints = computed(() => selectedDayRoutine.value.length * 10); // Total points (10 points per task)
 
+// Check if the goal is already set for today
+const checkGoalForToday = () => {
+  const savedGoal = localStorage.getItem(`dailyGoal_${currentDayKey}`);
+  if (savedGoal) {
+    dailyGoal.value = savedGoal;
+    showGoalPrompt.value = false;
+  } else {
+    showGoalPrompt.value = true;
+  }
+};
+
+// Set the daily goal
+const setGoal = () => {
+  if (newGoal.value.trim()) {
+    dailyGoal.value = newGoal.value.trim();
+    localStorage.setItem(`dailyGoal_${currentDayKey}`, dailyGoal.value); // Save goal in localStorage
+    newGoal.value = '';
+    showGoalPrompt.value = false; // Hide the popup
+  } else {
+    alert('Please enter a valid goal.');
+  }
+};
+
+// Dismiss the goal prompt without setting a goal
+const dismissGoalPrompt = () => {
+  showGoalPrompt.value = false;
+};
+
+// Update points when tasks are completed
+watch(
+    () => selectedDayRoutine.value,
+    (tasks) => {
+      pointsAccumulated.value = tasks?.filter((task) => task.completed).length * 10;
+    },
+    { deep: true }
+);
+
+// On mounted, check for the goal
+onMounted(() => {
+  checkGoalForToday();
+});
 
 
 // Call checkStreak when component is mounted
