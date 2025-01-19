@@ -2,38 +2,40 @@
   <div ref="scrollContainer" class="h-[100vh] overflow-auto bg-gray-100 p-3"  >
 
     <div
-        class="streak-display p-2 rounded-lg shadow-md mb-2 text-center flex flex-col items-center justify-center"
+        class="streak-display p-2 rounded shadow-sm mb-2 flex items-center justify-between"
         :class="{
-    'bg-yellow-100': streak < 3,
-    'bg-green-100': streak >= 3 && streak < 7,
-    'bg-blue-100': streak >= 7
+    'bg-yellow-50': streak < 3,
+    'bg-green-50': streak >= 3 && streak < 7,
+    'bg-blue-50': streak >= 7
   }"
     >
-      <!-- Streak and Badge Icons Row -->
-      <!-- Streak and Badge Icons Row -->
-      <div v-if="streak === 0" class="flex flex-col items-center justify-center">
-        <div class="text-4xl">😢</div>
-        <h2 class="text-lg font-bold text-red-500">No streak yet!</h2>
-        <p class="text-sm text-gray-600">Complete today's tasks to start a new streak!</p>
-      </div>
-      <div v-else class="flex items-center justify-between w-full">
-        <h2 class="text-lg font-bold">Streak: {{ streak }} days</h2>
-
-        <!-- Display badges if unlocked -->
-        <div v-if="unlockedBadges.length > 0" class="flex space-x-2">
-    <span
-        v-for="badge in unlockedBadges"
-        :key="badge.days"
-        class="text-2xl badge-icon"
-    >
-      {{ badge.icon }}
-    </span>
-        </div>
+      <!-- Streak on the left -->
+      <div class="flex flex-col">
+        <h2 class="text-sm font-semibold">Streak: {{ streak }} days</h2>
+        <p v-if="streak === 0" class="text-xs text-red-500 font-medium">No streak yet!</p>
+        <p v-else class="text-xs text-gray-600">{{ motivationalMessage }}</p>
       </div>
 
-      <!-- Motivational Message -->
-      <p class="text-sm text-gray-700 mt-1">{{ motivationalMessage }}</p>
+      <!-- Message in the middle -->
+      <div class="text-center flex-1 mx-2">
+        <p v-if="streak === 0" class="text-xs text-gray-500">
+          Complete today's tasks to start a streak!
+        </p>
+        <p v-else-if="milestoneMessages[streak]" class="text-sm font-semibold text-blue-500">
+          {{ getMilestoneMessage(streak) }}
+        </p>
+      </div>
+
+      <!-- Icon on the right -->
+      <div class="text-4xl streak-icon">
+        {{ getStreakIcon(streak) }}
+      </div>
     </div>
+
+
+
+
+
     <div v-if="showFullScreenAnimation" class="fixed inset-0 bg-gradient-to-br from-green-500 via-blue-500 to-purple-500 flex items-center justify-center z-50">
       <div class="text-center">
         <h1 class="text-4xl font-bold text-white animate-bounce">🎉 All Tasks Completed! 🎉</h1>
@@ -577,7 +579,16 @@ const updateCurrentDate = () => {
 
 // Watch for tab (day) changes and update the current date
 watch(selectedDayIndex, updateCurrentDate);
+const milestoneMessages = {
+  7: "One week of success! 🌟",
+  15: "Halfway to a month! 🚀",
+  30: "Amazing! A full month streak! 🎖️"
+};
 
+// Function to get motivational messages for milestones
+const getMilestoneMessage = (streak) => {
+  return milestoneMessages[streak] || "Keep it going!";
+};
 // On mounted, set the initial date to today's tab
 onMounted(() => {
   const todayIndex = new Date().getDay();
@@ -948,14 +959,24 @@ const unlockedBadges = ref([]);
 const motivationalMessage = ref('');
 const selectedDayRoutine = ref([]);
 const showNotification = ref(false);
-
-
-// List of predefined badges
-const badges = [
-  { days: 1, name: 'Consistency Starter', description: 'Completed tasks for 3 days in a row!', icon: '🔥' },
-  { days: 7, name: 'Streak Warrior', description: 'Completed tasks for 7 days in a row!', icon: '🏅' },
-  { days: 30, name: 'Master of Routine', description: 'Completed tasks for 30 days in a row!', icon: '💪' }
+const streakIcons = [
+  '🌱', '🌞', '🌟', '🔥', '🏆', '🎯', '🚀', '🌈', '💎', '🎵',
+  '🌹', '🍀', '🦋', '🌻', '🌙', '✨', '🎉', '🎈', '🎂', '🍔',
+  '🍕', '🍩', '🍎', '🍉', '🥇', '🥂', '🌊', '🌌', '🪐', '🧠'
 ];
+
+
+// Function to get the icon for the current streak day
+const getStreakIcon = (streak) => {
+  if (streak >= 30) {
+    return '🎖️'; // Special icon for streaks beyond 30 days
+  }
+  return streakIcons[streak - 1]; // Array is 0-indexed, so subtract 1
+};
+
+
+// Function to get the icon based on the current streak
+
 
 
 // Function to check for streak continuation
@@ -1092,12 +1113,13 @@ onMounted(() => {
 });
 
 const milestones = ref([
-  { label: '0%', percent: 0, position: 0, icon: '🚶' },      // Walking icon for start
-  { label: '25%', percent: 25, position: 25, icon: '🏃' },   // Running icon
-  { label: '50%', percent: 50, position: 50, icon: '🚴' },   // Biking icon
-  { label: '75%', percent: 75, position: 75, icon: '🚗' },   // Car icon
-  { label: '100%', percent: 100, position: 100, icon: '🚀' } // Rocket icon for completion
+  { label: '0%', percent: 0, position: 0, icon: '🌱' },      // Seed planted
+  { label: '25%', percent: 25, position: 25, icon: '🌿' },   // Sprouting leaves
+  { label: '50%', percent: 50, position: 50, icon: '🌳' },   // Small tree
+  { label: '75%', percent: 75, position: 75, icon: '🌲' },   // Mature tree
+  { label: '100%', percent: 100, position: 100, icon: '🏔️' } // Fully grown tree at the peak
 ]);
+
 const spinningTasks = ref([]);
 
 // Function to check if a task is spinning
@@ -1170,17 +1192,7 @@ const startSpinning = (index) => {
     transform: scale(1);
   }
 }
-input[type="text"],
-input[type="time"],
-select,
-textarea {
-  font-size: 16px;
-  line-height: 1.5;
-  padding: 0.5rem;
-  border: 1px solid #ccc;
-  border-radius: 0.375rem;
-  width: 100%;
-}
+
 @keyframes spin {
   0% {
     transform: rotate(0deg);
@@ -1192,5 +1204,22 @@ textarea {
 
 .animate-spin-slow {
   animation: spin 3s linear infinite;
+}
+.streak-icon {
+  animation: pulse 1.5s infinite;
+  transition: transform 0.3s ease-in-out;
+}
+
+.streak-icon:hover {
+  transform: scale(1.1);
+}
+
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.1);
+  }
 }
 </style>
