@@ -344,6 +344,19 @@
                       >
                         {{ task.title }}
                       </div>
+                      <div class="absolute top-2 right-2 bg-blue-100  px-2 py-1 rounded-full text-xs font-bold flex items-center ">
+                        <span>10</span>
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 24 24">
+                          <circle cx="12" cy="12" r="10" fill="gold" />
+                          <circle cx="12" cy="12" r="8" fill="goldenrod" />
+                          <circle cx="9" cy="9" r="3" fill="rgba(255, 255, 255, 0.4)" />
+                          <text x="12" y="16" font-size="12" text-anchor="middle" fill="white" font-family="Arial" font-weight="bold">
+                            $
+                          </text>
+                        </svg>
+
+                      </div>
+
                       <!--                    <div v-if="task.time" class="text-sm text-gray-400">{{ task.time }}</div>-->
                       <!-- User Icon and Name with Spinning Icon -->
                       <div class="flex items-center space-x-2 text-xs">
