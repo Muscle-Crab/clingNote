@@ -1196,7 +1196,59 @@ const checkStreakOnCompletion = async () => {
   }
 };
 
+// Function to check tasks and reduce streak
+const checkTasksAndReduceStreak = async () => {
+  if (!userId.value) return;
 
+  const today = new Date().toISOString().split('T')[0];
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+  try {
+    const streakDocRef = doc(db, 'streaks', userId.value);
+    const streakDocSnapshot = await getDoc(streakDocRef);
+
+    if (streakDocSnapshot.exists()) {
+      const data = streakDocSnapshot.data();
+      lastCompletionDate.value = data.lastCompletionDate || null;
+      streak.value = data.streak || 0;
+
+      if (lastCompletionDate.value !== today && lastCompletionDate.value !== yesterdayStr) {
+        streak.value = Math.max(streak.value - 1, 0); // Decrease streak, but not below 0
+
+        await updateDoc(streakDocRef, {
+          streak: streak.value,
+          lastCompletionDate: yesterdayStr,
+          updatedAt: serverTimestamp(),
+        });
+
+        console.log('Streak reduced due to incomplete tasks for the day.');
+      }
+    }
+  } catch (error) {
+    console.error('Error checking and updating streak:', error);
+  }
+};
+
+// Run the check daily at midnight
+const startDailyCheck = () => {
+  const now = new Date();
+  const midnight = new Date();
+  midnight.setHours(24, 0, 0, 0); // Set to midnight
+
+  const timeToMidnight = midnight.getTime() - now.getTime();
+
+  setTimeout(() => {
+    checkTasksAndReduceStreak(); // Run immediately at midnight
+    setInterval(checkTasksAndReduceStreak, 24 * 60 * 60 * 1000); // Then run every 24 hours
+  }, timeToMidnight);
+};
+
+// Start the daily check when the component is mounted
+onMounted(() => {
+  startDailyCheck();
+});
 
 const fetchStreakOnLoad = async () => {
   if (!userId.value) return; // Ensure user is logged in
