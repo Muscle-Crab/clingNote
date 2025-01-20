@@ -1117,8 +1117,8 @@ const filteredTasks = computed(() => {
   }
 });
 const calculateCompletionPercentage = (task) => {
-  if (!selectedDayRoutine.value) {
-    return 0; // Return 0 if selectedDayRoutine is not yet defined
+  if (!selectedDayRoutine.value || !isToday(selectedDayIndex.value)) {
+    return 0; // Return 0% if it's not today
   }
 
   const completedTasks = selectedDayRoutine.value.filter(t => t.completed).length;
