@@ -317,7 +317,7 @@
                 <div
                     class="task-card bg-white rounded-xl shadow-lg p-5 relative hover:shadow-xl transition-shadow duration-300"
                     :class="{
-    'bg-gray-200': task.completed, // Add a light green background for completed tasks
+    'bg-gray-200': task.completed && isToday(selectedDayIndex), // Add a light green background for completed tasks
      // Add a light red background for incomplete tasks
     'draggable': taskIsDragging
   }"
@@ -337,7 +337,7 @@
                     <div>
                       <div
                           class="text-lg font-semibold text-gray-800"
-                          :class="{ 'line-through text-gray-500': task.completed }"
+                          :class="{ 'line-through text-gray-500': task.completed && isToday(selectedDayIndex) }"
                       >
                         {{ task.title }}
                       </div>
@@ -345,17 +345,17 @@
                       <!-- User Icon and Name with Spinning Icon -->
                       <div class="flex items-center space-x-2 text-xs">
                         <!-- Incomplete Task Indicator -->
-                        <div v-if="!task.completed && index !== topIncompleteTaskIndex" class="text-yellow-500">
+                        <div v-if="!task.completed && isToday(selectedDayIndex)" class="text-yellow-500">
                           <i class="fas fa-circle"></i> Incomplete
                         </div>
 
                         <!-- In Progress Task Indicator -->
-                        <div v-if="index === topIncompleteTaskIndex" class="text-blue-500 flex items-center">
+                        <div v-if="isToday(selectedDayIndex) && index === topIncompleteTaskIndex" class="text-blue-500 flex items-center">
                           <i class="fas fa-hourglass-half animate-spin-slow mr-1"></i> In Progress
                         </div>
 
                         <!-- Completed Task Indicator -->
-                        <div v-if="task.completed" class="text-green-500">
+                        <div v-if="task.completed && isToday(selectedDayIndex)"  class="text-green-500">
                           <i class="fas fa-check-circle"></i> Completed
                         </div>
                       </div>
@@ -1372,11 +1372,21 @@ const startSpinning = (index) => {
   }, 5000); // Adjust the duration as needed
 };
 const isLoading = ref(true);
-
 onMounted(async () => {
   try {
     isLoading.value = true; // Start loading
     await new Promise((resolve) => setTimeout(resolve, 2000)); // Simulate data fetching
+
+    // Iterate over tasks and update their 'completed' status if the date is in the past
+    selectedDayRoutine.value.forEach((task) => {
+      const taskDate = new Date(task.date); // Assuming tasks have a `date` property in YYYY-MM-DD format
+      const today = new Date();
+
+      // Check if the task date is in the past
+      if (taskDate < today) {
+        task.completed = false; // Reset completed status
+      }
+    });
   } catch (error) {
     console.error('Error loading tasks:', error);
   } finally {
