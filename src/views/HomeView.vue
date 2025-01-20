@@ -767,21 +767,18 @@ const toggleTaskCompletion = async (index) => {
   if (task.completed) {
     userCredits.value += 10; // Award 10 credits for completing a task
     console.log(`Credits earned: 10. Total credits: ${userCredits.value}`);
+    speak(`Great job! You completed the task: ${task.title}.`);
+    announceNextTask(index); // Pass the index of the completed task
     const userName = await fetchUserName(userId.value);
     if (userName) {
       await sendNotificationToPlayer(userName, "completed");
     }
   } else {
+    speak(`You have marked the task: ${task.title} as incomplete.`);
     userCredits.value -= 10; // Deduct credits if task is marked incomplete
     console.log(`Credits deducted: 10. Total credits: ${userCredits.value}`);
   }
-  // Voice announcement after the local state is fully updated
-  if (task.completed) {
-    speak(`Great job! You completed the task: ${task.title}.`);
-    announceNextTask(index); // Pass the index of the completed task
-  } else {
-    speak(`You have marked the task: ${task.title} as incomplete.`);
-  }
+
 
   selectedDayRoutine.value.splice(index, 1, task); // Update the task locally
 
