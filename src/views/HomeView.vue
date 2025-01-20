@@ -44,7 +44,7 @@
 
 
       <div
-          class="streak-display p-3 rounded shadow-sm mb-4 flex flex-col sm:flex-row items-center sm:justify-between"
+          class="streak-display p-3 rounded shadow-sm mb-2 flex flex-col sm:flex-row items-center sm:justify-between"
           :class="{
     'bg-yellow-50': streak < 3,
     'bg-green-50': streak >= 3 && streak < 7,
