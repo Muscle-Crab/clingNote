@@ -7,39 +7,7 @@
       </div>
     </div>
     <div v-else>
-      <div
-          v-if="showGoalPrompt"
-          class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
-      >
-        <div class="bg-white rounded-lg shadow-lg p-6 w-11/12 max-w-sm">
-          <h2 class="text-lg sm:text-xl font-bold text-gray-800 text-center">
-            🎯 Set Your Goal for Today
-          </h2>
-          <p class="text-sm text-gray-600 mt-3 text-center">
-            What would you like to achieve today?
-          </p>
-          <input
-              v-model="newGoal"
-              type="text"
-              placeholder="Enter your goal..."
-              class="w-full border border-gray-300 rounded-md px-4 py-2 mt-4 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          />
-          <div class="flex flex-col sm:flex-row sm:justify-between mt-6">
-            <button
-                @click="dismissGoalPrompt"
-                class="w-full sm:w-1/2 px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition duration-200 mb-3 sm:mb-0"
-            >
-              Skip
-            </button>
-            <button
-                @click="setGoal"
-                class="w-full sm:w-1/2 sm:ml-2 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition duration-200"
-            >
-              Set Goal
-            </button>
-          </div>
-        </div>
-      </div>
+
 
 
 
@@ -74,29 +42,22 @@
           </div>
         </div>
 
-        <!-- Message in the middle -->
-        <div class="text-center flex-1 mx-2 text-sm">
-          <p v-if="streak === 0" class="text-gray-500">
-            Complete today's tasks to start a streak!
-          </p>
-          <p v-else-if="milestoneMessages[streak]" class="font-semibold text-blue-500">
-            {{ getMilestoneMessage(streak) }}
-          </p>
-        </div>
-
         <!-- Icon and Credits on the right -->
         <div class="flex flex-col items-center sm:items-end">
-
-         <span class="text-sm font-medium text-blue-500 flex items-center ">
-    <span
-        v-if="!isNaN(pointsAccumulated) && !isNaN(totalPoints)"
-        class="text-sm font-medium text-yellow-500 flex items-center"
-    >
-  💰 {{ pointsAccumulated }}/{{ totalPoints }}
-</span>
-<span class="ml-2 font-semibold">{{ dailyGoal || 'No Goal Set' }}</span>
-
+          <div class="text-sm font-medium text-blue-500 flex items-center">
+            <!-- Points Needed -->
+            <span v-if="!isNaN(pointsAccumulated) && !isNaN(totalPoints)">
+      You need
+      <span class="text-yellow-500 font-semibold">
+        💰{{ totalPoints - pointsAccumulated }}
+      </span>
+      more points to earn idle time.
     </span>
+            <!-- Completed Message -->
+            <span v-else-if="pointsAccumulated >= totalPoints" class="text-green-500 font-semibold">
+      You've earned enough points for idle time! 🎉
+    </span>
+          </div>
         </div>
       </div>
 
@@ -1350,58 +1311,14 @@ const checkForBadges = async () => {
 };
 
 // State for managing goals and popup visibility
-const dailyGoal = ref('');
-const newGoal = ref('');
-const showGoalPrompt = ref(false);
+
+
+
 const currentDayKey = new Date().toISOString().split('T')[0]; // Format: YYYY-MM-DD
 const pointsAccumulated = ref(0);
 const totalPoints = computed(() => selectedDayRoutine?.value?.length * 10); // Total points (10 points per task)
 
-const checkGoalForToday = () => {
-  const savedGoal = localStorage.getItem(`dailyGoal_${currentDayKey}`);
-  const skippedGoal = localStorage.getItem(`goalSkipped_${currentDayKey}`); // Check if skipped
 
-  if (savedGoal) {
-    dailyGoal.value = savedGoal; // Load saved goal
-    showGoalPrompt.value = false; // Hide prompt if goal is already set
-  } else if (skippedGoal) {
-    dailyGoal.value = "No Goal Set"; // Reflect skipped state
-    showGoalPrompt.value = false; // Hide prompt if goal was skipped
-  } else {
-    showGoalPrompt.value = true; // Show prompt if no goal is set or skipped
-    speak("What is your goal for today?");
-  }
-};
-
-// Function to set the daily goal
-const setGoal = () => {
-  if (newGoal.value.trim()) {
-    dailyGoal.value = newGoal.value.trim();
-    localStorage.setItem(`dailyGoal_${currentDayKey}`, dailyGoal.value); // Save goal in local storage
-    speak(`Your goal for today is set to: ${dailyGoal.value}`);
-    newGoal.value = '';
-    showGoalPrompt.value = false; // Close the prompt
-  } else {
-    alert("Please enter a valid goal.");
-  }
-};
-
-// Function to dismiss the goal prompt
-const dismissGoalPrompt = () => {
-  localStorage.setItem(`goalSkipped_${currentDayKey}`, true); // Mark as skipped for the day
-  dailyGoal.value = "No Goal Set"; // Set the reactive state to "No Goal Set"
-  speak("Goal setting skipped for today.");
-  showGoalPrompt.value = false; // Close the prompt
-};
-
-
-
-
-
-// On mounted, check for the goal
-onMounted(() => {
-  checkGoalForToday();
-});
 
 // Update points when tasks are completed
 watch(
@@ -1412,10 +1329,7 @@ watch(
     { deep: true }
 );
 
-// On mounted, check for the goal
-onMounted(() => {
-  checkGoalForToday();
-});
+
 
 
 // Call checkStreak when component is mounted
