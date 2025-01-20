@@ -523,17 +523,29 @@ const fetchUserName = async (userId) => {
   }
 };
 
-const sendNotificationToPlayer = async (userName) => {
+const sendNotificationToPlayer = async (userName, action) => {
   const headers = {
     'Authorization': 'Bearer ZDZiZDk0NTktMjUwZS00NTQ4LWFhOTItNjBiZDZiMjVhYzYy', // Replace with your actual API key
     'Content-Type': 'application/json'
   };
 
+  // Define the content and heading based on the action
+  const actionMessages = {
+    created: {
+      content: `${userName} created a new task!`,
+      heading: "New Task Alert"
+    },
+    completed: {
+      content: `${userName} completed a task!`,
+      heading: "Task Completed"
+    }
+  };
+
   const data = {
-    "app_id": "fc206a71-7d65-4cfa-b8b2-0c10548e1476",
-    "include_player_ids": ["ff823cf5-aef7-4363-82f7-33c1de7ce02e"],
-    "contents": { "en": `${userName} created a new task!` },
-    "headings": { "en": "New Task Alert" }
+    "app_id": "fc206a71-7d65-4cfa-b8b2-0c10548e1476", // Replace with your actual OneSignal app ID
+    "include_player_ids": ["ff823cf5-aef7-4363-82f7-33c1de7ce02e"], // Replace with the user's device/player ID
+    "contents": { "en": actionMessages[action]?.content || "An action was performed." },
+    "headings": { "en": actionMessages[action]?.heading || "Notification" }
   };
 
   try {
@@ -543,6 +555,7 @@ const sendNotificationToPlayer = async (userName) => {
     console.error('Error sending notification:', error);
   }
 };
+
 
 
 
@@ -751,6 +764,10 @@ const toggleTaskCompletion = async (index) => {
   if (task.completed) {
     userCredits.value += 10; // Award 10 credits for completing a task
     console.log(`Credits earned: 10. Total credits: ${userCredits.value}`);
+    const userName = await fetchUserName(userId.value);
+    if (userName) {
+      await sendNotificationToPlayer(userName, "completed");
+    }
   } else {
     userCredits.value -= 10; // Deduct credits if task is marked incomplete
     console.log(`Credits deducted: 10. Total credits: ${userCredits.value}`);
@@ -973,7 +990,7 @@ const addNewTask = async () => {
     // Send notification to the specific player ID
     const userName = await fetchUserName(userId.value);
     if (userName) {
-      await sendNotificationToPlayer(userName);
+      await sendNotificationToPlayer(userName, "created");
     }
   } catch (error) {
     console.error('Error adding task:', error);
