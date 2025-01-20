@@ -201,12 +201,15 @@
       </div>
       <!-- Modal toggle button -->
       <div class="fixed bottom-12 right-5 z-50">
-        <button
-            @click="openModal"
-            class="mt-4 px-6 py-2 bg-blue-500 text-white rounded-full shadow-lg hover:bg-blue-600 transition duration-200"
-        >
-          Add New Task
-        </button>
+        <div>
+          <button
+              @click="handleAddTaskClick"
+              class="mt-4 px-6 py-2 bg-blue-500 text-white rounded-full shadow-lg hover:bg-blue-600 transition duration-200"
+          >
+            Add Task
+          </button>
+        </div>
+
       </div>
       <!-- Main modal -->
       <div :class="{ 'hidden': !modalOpen }" @keydown.escape="closeModal" tabindex="-1" aria-hidden="true" class="overflow-y-auto overflow-x-hidden fixed top-0 right-0 left-0 z-50 justify-center items-center w-full md:inset-0 h-modal md:h-full">
@@ -1410,6 +1413,16 @@ onMounted(async () => {
     isLoading.value = false; // Stop loading after data is fetched
   }
 });
+const handleAddTaskClick = () => {
+  if (auth.currentUser) {
+    openModal(); // Open the modal if the user is logged in
+  } else {
+    redirectToLogin(); // Redirect to login if the user is not logged in
+  }
+};
+const redirectToLogin = () => {
+  window.location.href = '/login'; // Redirect to your login page
+};
 </script>
 
 
