@@ -431,10 +431,10 @@
                   <!-- User Icon and Name Inline with Task Actions -->
                   <div class="flex items-center justify-between mb-3">
                     <!-- User Icon and Name -->
-<!--                    <div class="flex">-->
-<!--                      <i class="fas fa-user  "></i>-->
-<!--                      <div class="text-sm font-medium text-gray-700 ml-1">{{ task.userName }}</div>-->
-<!--                    </div>-->
+                    <div class="flex">
+                      <i class="fas fa-user  "></i>
+                      <div class="text-sm font-medium text-gray-700 ml-1">{{ task.userName }}</div>
+                    </div>
 
                     <!-- Task Actions -->
                     <div class="flex items-center space-x-3">
