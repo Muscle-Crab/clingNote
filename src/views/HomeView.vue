@@ -936,7 +936,7 @@ const addNewTask = async () => {
   // Ensure at least one day is selected or fallback to the currently selected tab day
   const selectedDays = newTask.value.selectedDays.length > 0
       ? newTask.value.selectedDays
-      : [days[selectedDayIndex.value]]; // Use the day from the selected tab
+      : [days[selectedDayIndex.value]];
 
   const labels = typeof newTask.value.labels === 'string'
       ? newTask.value.labels.split(',').map(label => label.trim())
@@ -968,13 +968,13 @@ const addNewTask = async () => {
       existingTasks.splice(position, 0, task);
 
       await setDoc(selectedDayDocRef, {
-        tasks: [...existingTasks, task],
+        tasks: existingTasks, // Only save `existingTasks` once
         updatedAt: serverTimestamp()
       });
 
       // Update the local state if the task is for the currently selected tab
       if (selectedDayIndex.value !== -1 && selectedDay.day === days[selectedDayIndex.value].day) {
-        selectedDayRoutine.value = [...existingTasks, task].sort((a, b) => {
+        selectedDayRoutine.value = [...existingTasks].sort((a, b) => {
           return new Date('1970/01/01 ' + a.time) - new Date('1970/01/01 ' + b.time);
         });
       }
