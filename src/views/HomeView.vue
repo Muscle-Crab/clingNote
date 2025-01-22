@@ -840,21 +840,15 @@ const announceNextTask = (completedIndex) => {
 const showFullScreenAnimation = ref(false);
 
 const checkAllTasksCompleted = () => {
-  // Check if all tasks are marked as completed
   const allCompleted = selectedDayRoutine.value.every(task => task.completed);
 
   if (allCompleted) {
     showFullScreenAnimation.value = true;
-    // Voice response to congratulate and ask what they want to do
-    speak("Congratulations! You've completed all your tasks. What would you like to do now?");
-    // Add a slight delay before confirming
-    setTimeout(() => {
-      speak("Go ahead and enjoy your reward or goal for today!");
-    }, 3000); // 3-second delay
+    speak("Congratulations! You've completed all your tasks!");
+    checkStreakOnCompletion(); // Ensure streak check is called here
   }
-
-
 };
+
 
 const closeFullScreenAnimation = () => {
   showFullScreenAnimation.value = false;
@@ -1090,12 +1084,12 @@ const filteredTasks = computed(() => {
     });
   }
 });
-const calculateCompletionPercentage = (task) => {
-  if (!selectedDayRoutine.value || !isToday(selectedDayIndex.value)) {
-    return 0; // Return 0% if it's not today
+const calculateCompletionPercentage = () => {
+  if (!selectedDayRoutine.value || !Array.isArray(selectedDayRoutine.value)) {
+    return 0; // Return 0% if no tasks are available
   }
 
-  const completedTasks = selectedDayRoutine.value.filter(t => t.completed).length;
+  const completedTasks = selectedDayRoutine.value.filter(task => task.completed).length;
   const totalTasks = selectedDayRoutine.value.length;
   return totalTasks === 0 ? 0 : Math.round((completedTasks / totalTasks) * 100);
 };
@@ -1129,44 +1123,45 @@ const getStreakIcon = (streak) => {
 
 // Function to check for streak continuation
 const checkStreakOnCompletion = async () => {
+  if (!userId.value) return;
+
   const completionPercentage = calculateCompletionPercentage();
+  const today = new Date().toISOString().split('T')[0]; // Current date
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayStr = yesterday.toISOString().split('T')[0]; // Yesterday's date
 
-  if (completionPercentage === 100) {
-    const today = new Date().toISOString().split('T')[0];
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    const yesterdayStr = yesterday.toISOString().split('T')[0];
+  try {
+    const streakDocRef = doc(db, 'streaks', userId.value);
+    const streakDocSnapshot = await getDoc(streakDocRef);
 
-    try {
-      const streakDocRef = doc(db, 'streaks', userId.value);
-      const streakDocSnapshot = await getDoc(streakDocRef);
+    if (streakDocSnapshot.exists()) {
+      const data = streakDocSnapshot.data();
+      lastCompletionDate.value = data.lastCompletionDate || null;
+      streak.value = data.streak || 0;
 
-      if (streakDocSnapshot.exists()) {
-        const data = streakDocSnapshot.data();
-        lastCompletionDate.value = data.lastCompletionDate;
-        streak.value = data.streak;
-
+      if (completionPercentage === 100) {
+        // Increment streak if all tasks completed
         if (lastCompletionDate.value === yesterdayStr) {
           streak.value += 1; // Continue streak
         } else if (lastCompletionDate.value !== today) {
-          streak.value = 1; // Reset streak
+          streak.value = 1; // Start a new streak
         }
+        lastCompletionDate.value = today; // Update completion date
       } else {
-        streak.value = 1; // Initialize streak
+        // Reset streak if no tasks are completed
+        if (lastCompletionDate.value !== today && lastCompletionDate.value !== yesterdayStr) {
+          streak.value = Math.max(streak.value - 1, 0); // Reduce streak, min 0
+          lastCompletionDate.value = yesterdayStr; // Mark last missed day
+        }
       }
 
-      lastCompletionDate.value = today;
-
-      // Update streak in Firestore
-      await updateStreakInFirestore();
-
+      await updateStreakInFirestore(); // Save changes
       checkForBadges();
       updateMotivationalMessage();
-    } catch (error) {
-      console.error('Error checking streak continuation:', error);
     }
-  } else {
-    console.log('Completion is not 100%. Streak not updated.');
+  } catch (error) {
+    console.error('Error updating streak:', error);
   }
 };
 
@@ -1189,19 +1184,21 @@ const checkTasksAndReduceStreak = async () => {
       streak.value = data.streak || 0;
 
       if (lastCompletionDate.value !== today && lastCompletionDate.value !== yesterdayStr) {
-        streak.value = Math.max(streak.value - 1, 0); // Decrease streak, but not below 0
+        const todayTasksCompleted = calculateCompletionPercentage() === 100;
 
-        await updateDoc(streakDocRef, {
-          streak: streak.value,
-          lastCompletionDate: yesterdayStr,
-          updatedAt: serverTimestamp(),
-        });
-
-        console.log('Streak reduced due to incomplete tasks for the day.');
+        if (!todayTasksCompleted) {
+          streak.value = Math.max(streak.value - 1, 0);
+          await updateDoc(streakDocRef, {
+            streak: streak.value,
+            lastCompletionDate: yesterdayStr,
+            updatedAt: serverTimestamp(),
+          });
+          console.log('Streak reduced due to incomplete tasks.');
+        }
       }
     }
   } catch (error) {
-    console.error('Error checking and updating streak:', error);
+    console.error('Error reducing streak:', error);
   }
 };
 
@@ -1249,9 +1246,9 @@ const fetchStreakOnLoad = async () => {
 };
 
 const updateStreakInFirestore = async () => {
-  if (!userId.value) return; // Ensure user is logged in
+  if (!userId.value) return;
 
-  const streakDocRef = doc(db, 'streaks', userId.value); // Use userId as document ID
+  const streakDocRef = doc(db, 'streaks', userId.value);
 
   try {
     await setDoc(streakDocRef, {
@@ -1265,6 +1262,7 @@ const updateStreakInFirestore = async () => {
     console.error('Error updating streak in Firestore:', error);
   }
 };
+
 
 const badges = [
   { name: "Seed Starter", days: 1, icon: "🌱" },
@@ -1373,14 +1371,21 @@ onMounted(async () => {
     isLoading.value = true; // Start loading
     await new Promise((resolve) => setTimeout(resolve, 2000)); // Simulate data fetching
 
+    // Safeguard to ensure selectedDayRoutine is defined and iterable
+    if (!selectedDayRoutine.value || !Array.isArray(selectedDayRoutine.value)) {
+      selectedDayRoutine.value = [];
+    }
+
     // Iterate over tasks and update their 'completed' status if the date is in the past
     selectedDayRoutine.value.forEach((task) => {
-      const taskDate = new Date(task.date); // Assuming tasks have a `date` property in YYYY-MM-DD format
-      const today = new Date();
+      if (task.date) {
+        const taskDate = new Date(task.date); // Assuming tasks have a `date` property in YYYY-MM-DD format
+        const today = new Date();
 
-      // Check if the task date is in the past
-      if (taskDate < today) {
-        task.completed = false; // Reset completed status
+        // Check if the task date is in the past
+        if (taskDate < today) {
+          task.completed = false; // Reset completed status
+        }
       }
     });
   } catch (error) {
