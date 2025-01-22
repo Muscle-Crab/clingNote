@@ -299,6 +299,7 @@
 
                     <!-- Task Title and Time -->
                     <div>
+
                       <div
                           class="text-lg font-semibold text-gray-800"
                           :class="{ 'line-through text-gray-500': task.completed && isToday(selectedDayIndex) }"
@@ -433,7 +434,11 @@
                       </button>
                     </div>
                   </div>
-
+                  <div
+                      class="absolute bottom-2 left-2 w-5 h-5 flex items-center justify-center bg-gray-300 rounded-full text-xs font-bold text-gray-800 shadow-sm"
+                  >
+                    {{ index + 1 }}
+                  </div>
 
                   <!-- Notification -->
                   <div
