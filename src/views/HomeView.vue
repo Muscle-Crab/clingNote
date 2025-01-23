@@ -848,13 +848,65 @@ const checkAllTasksCompleted = () => {
   const allCompleted = selectedDayRoutine.value.every(task => task.completed);
 
   if (allCompleted) {
-    showFullScreenAnimation.value = true;
+    showFullScreenAnimation.value = true; // Show animation
     speak("Congratulations! You've completed all your tasks!");
-    checkStreakOnCompletion(); // Ensure streak check is called here
+    updateStreakOnCompletion(); // Ensure streak is updated
   }
 };
+const updateStreakOnCompletion = async () => {
+  if (!userId.value) return;
 
+  const today = new Date().toISOString().split('T')[0];
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayStr = yesterday.toISOString().split('T')[0];
 
+  const streakDocRef = doc(db, 'streaks', userId.value);
+
+  try {
+    const streakDocSnapshot = await getDoc(streakDocRef);
+
+    if (streakDocSnapshot.exists()) {
+      const data = streakDocSnapshot.data();
+      lastCompletionDate.value = data.lastCompletionDate || null;
+      streak.value = data.streak || 0;
+
+      if (lastCompletionDate.value === yesterdayStr || lastCompletionDate.value === today) {
+        // Continue streak
+        streak.value += 1;
+      } else {
+        // Start new streak
+        streak.value = 1;
+      }
+
+      lastCompletionDate.value = today;
+
+      await updateDoc(streakDocRef, {
+        streak: streak.value,
+        lastCompletionDate: lastCompletionDate.value,
+        updatedAt: serverTimestamp()
+      });
+
+      console.log(`Streak updated: ${streak.value}`);
+    } else {
+      // Create new streak document
+      await setDoc(streakDocRef, {
+        streak: 1,
+        lastCompletionDate: today,
+        updatedAt: serverTimestamp()
+      });
+      streak.value = 1;
+      lastCompletionDate.value = today;
+
+      console.log("Streak document created with initial streak of 1.");
+    }
+
+    checkForBadges(); // Update badges if needed
+    updateMotivationalMessage();
+  } catch (error) {
+    console.error('Error updating streak:', error);
+  }
+};
 const closeFullScreenAnimation = () => {
   showFullScreenAnimation.value = false;
 };
