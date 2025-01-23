@@ -45,20 +45,21 @@
         <!-- Icon and Credits on the right -->
         <div class="flex flex-col items-center sm:items-end">
           <div class="text-sm font-medium text-blue-500 flex items-center">
-            <!-- Points Needed -->
-            <span v-if="!isNaN(pointsAccumulated) && !isNaN(totalPoints)">
+            <!-- Display message when idle time is not yet available -->
+            <span v-if="pointsAccumulated < totalPoints && !isNaN(pointsAccumulated) && !isNaN(totalPoints)">
       You need
       <span class="text-yellow-500 font-semibold">
         💰{{ totalPoints - pointsAccumulated }}
       </span>
       more points to earn idle time.
     </span>
-            <!-- Completed Message -->
-            <span v-else-if="pointsAccumulated >= totalPoints" class="text-green-500 font-semibold">
-      You've earned enough points for idle time! 🎉
+            <!-- Display message when idle time is available -->
+            <span v-else class="text-green-500 font-semibold">
+      Idle time is now available! 🎉
     </span>
           </div>
         </div>
+
       </div>
 
       <div v-if="showFullScreenAnimation" class="fixed inset-0 bg-gradient-to-br from-green-500 via-blue-500 to-purple-500 flex items-center justify-center z-50">
