@@ -454,6 +454,9 @@
                   >
                     Create successfully
                   </div>
+                  <div v-if="transferNotification" class="fixed top-5 right-5 bg-blue-500 text-white px-4 py-2 rounded-lg shadow-lg transition-opacity duration-300">
+                    {{ transferNotification }}
+                  </div>
                   <div v-if="transferModalOpen" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
                     <div class="bg-white p-5 rounded-lg shadow-lg w-96">
                       <h2 class="text-lg font-semibold mb-4">Select a Day to Transfer</h2>
@@ -528,6 +531,8 @@ const closeTransferModal = () => {
   selectedTransferDay.value = null;
 };
 
+const transferNotification = ref(null);
+
 const transferTask = async () => {
   if (!userId.value || selectedTransferTaskIndex.value === null || selectedTransferDay.value === null) {
     console.warn("Invalid task or day selection");
@@ -579,12 +584,19 @@ const transferTask = async () => {
 
     console.log(`Task "${task.title}" moved to ${targetDay}`);
 
+    // **Show Transfer Notification**
+    transferNotification.value = `Task "${task.title}" moved to ${targetDay}`;
+    setTimeout(() => {
+      transferNotification.value = null;
+    }, 3000); // Auto-hide after 3 seconds
+
     // Close modal
     closeTransferModal();
   } catch (error) {
     console.error('Error transferring task:', error);
   }
 };
+
 
 const fetchUserName = async (userId) => {
   try {
