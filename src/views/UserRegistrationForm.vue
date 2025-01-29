@@ -28,6 +28,9 @@
             <option value="other">Other</option>
           </select>
         </div>
+        <div v-if="errorMessage" class="text-red-500 bg-red-100 border border-red-400 px-4 py-2 rounded mb-4">
+          {{ errorMessage }}
+        </div>
         <div>
           <button type="submit" :disabled="isSubmitting" class="w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
             <span class="mr-2">
@@ -64,33 +67,41 @@ const handleAvatarChange = (event) => {
   const file = event.target.files[0];
   avatar.value = file;
 };
+const errorMessage = ref(''); // Add error message state
+
+const getFriendlyErrorMessage = (error) => {
+  const errorMap = {
+    "auth/email-already-in-use": "This email is already registered. Please use a different email or log in.",
+    "auth/weak-password": "Your password is too weak. Please use at least 6 characters.",
+    "auth/invalid-email": "Invalid email format. Please enter a valid email address.",
+    "auth/missing-email": "Please enter an email address.",
+    "auth/missing-password": "Please enter a password.",
+    "auth/user-not-found": "No account found with this email. Please sign up first.",
+    "auth/wrong-password": "Incorrect password. Please try again.",
+    "auth/network-request-failed": "Network error. Please check your connection and try again.",
+    "auth/too-many-requests": "Too many attempts. Please try again later.",
+  };
+
+  return errorMap[error.code] || "An unexpected error occurred. Please try again.";
+};
 
 const registerUser = async () => {
+  errorMessage.value = ''; // Reset error message
   try {
     isSubmitting.value = true;
     const userCredential = await createUserWithEmailAndPassword(auth, email.value, password.value);
     const user = userCredential.user;
 
     const userData = {
-      id: user.uid, // Adding the id field
+      id: user.uid,
       email: user.email,
       name: name.value,
       dob: dob.value,
       gender: gender.value,
-      // avatarURL: if you have an avatar URL
     };
-
-    // If avatar is selected, upload it to a storage bucket and get the URL
-    if (avatar.value) {
-      // Here you need to write code to upload the avatar to a storage bucket and get its URL
-      // Example:
-      // const avatarURL = await uploadAvatarToStorageBucket(avatar.value);
-      // userData.avatarURL = avatarURL;
-    }
 
     await setDoc(doc(db, 'users', user.uid), userData);
 
-    console.log('Successfully registered user:', user.email);
     email.value = '';
     password.value = '';
     name.value = '';
@@ -99,7 +110,7 @@ const registerUser = async () => {
     avatar.value = null;
     router.push('/');
   } catch (error) {
-    console.error('Registration failed:', error.message);
+    errorMessage.value = getFriendlyErrorMessage(error); // Set user-friendly error message
   } finally {
     isSubmitting.value = false;
   }
