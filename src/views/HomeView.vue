@@ -433,6 +433,12 @@
                       >
                         <i class="fas fa-edit"></i>
                       </button>
+                      <button
+                          @click="openTransferModal(index)"
+                          class="text-blue-500 hover:text-blue-700"
+                      >
+                        <i class="fas fa-right-left"></i>
+                      </button>
                     </div>
                   </div>
                   <div
@@ -448,6 +454,24 @@
                   >
                     Create successfully
                   </div>
+                  <div v-if="transferModalOpen" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
+                    <div class="bg-white p-5 rounded-lg shadow-lg w-96">
+                      <h2 class="text-lg font-semibold mb-4">Select a Day to Transfer</h2>
+
+                      <label for="transferDay" class="block mb-2 text-gray-700">Choose a day:</label>
+                      <select v-model="selectedTransferDay" id="transferDay" class="w-full border border-gray-300 rounded-md p-2">
+                        <option v-for="(day, index) in days" :key="index" :value="index" :disabled="index === selectedDayIndex">
+                          {{ day.day }} - {{ day.date }}
+                        </option>
+                      </select>
+
+                      <div class="flex justify-end mt-4">
+                        <button @click="closeTransferModal" class="mr-2 px-4 py-2 bg-gray-300 rounded-md">Cancel</button>
+                        <button @click="transferTask()" class="px-4 py-2 bg-blue-500 text-white rounded-md">Transfer</button>
+                      </div>
+                    </div>
+                  </div>
+
                 </div>
               </template>
 
@@ -489,6 +513,79 @@ const formatTimes = (index) => {
   const seconds = currentTime.value[index] % 60;
   return `${minutes < 10 ? '0' : ''}${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
 };
+const transferModalOpen = ref(false);
+const selectedTransferTaskIndex = ref(null);
+const selectedTransferDay = ref(null);
+
+const openTransferModal = (index) => {
+  selectedTransferTaskIndex.value = index;
+  transferModalOpen.value = true;
+};
+
+const closeTransferModal = () => {
+  transferModalOpen.value = false;
+  selectedTransferTaskIndex.value = null;
+  selectedTransferDay.value = null;
+};
+
+const transferTask = async () => {
+  if (!userId.value || selectedTransferTaskIndex.value === null || selectedTransferDay.value === null) {
+    console.warn("Invalid task or day selection");
+    return;
+  }
+
+  const currentDayIndex = selectedDayIndex.value;
+  const targetDayIndex = selectedTransferDay.value;
+  if (currentDayIndex === targetDayIndex) {
+    console.warn("Cannot transfer task to the same day");
+    return;
+  }
+
+  const currentDay = days[currentDayIndex].day;
+  const targetDay = days[targetDayIndex].day;
+
+  const currentDayDocRef = doc(db, 'weeklyRoutines', `${userId.value}_${currentDay}`);
+  const targetDayDocRef = doc(db, 'weeklyRoutines', `${userId.value}_${targetDay}`);
+
+  try {
+    const currentDayDocSnapshot = await getDoc(currentDayDocRef);
+    const targetDayDocSnapshot = await getDoc(targetDayDocRef);
+
+    let currentTasks = currentDayDocSnapshot.exists() ? currentDayDocSnapshot.data().tasks : [];
+    let targetTasks = targetDayDocSnapshot.exists() ? targetDayDocSnapshot.data().tasks : [];
+
+    // Remove the task from the current day and add it to the selected day
+    const [task] = currentTasks.splice(selectedTransferTaskIndex.value, 1);
+    if (!task) return;
+
+    targetTasks.push(task);
+
+    // Update Firestore
+    await updateDoc(currentDayDocRef, {
+      tasks: currentTasks,
+      updatedAt: serverTimestamp()
+    });
+
+    await setDoc(targetDayDocRef, {
+      tasks: targetTasks,
+      updatedAt: serverTimestamp()
+    });
+
+    // Update UI
+    selectedDayRoutine.value = currentTasks;
+    if (selectedDayIndex.value === targetDayIndex) {
+      selectedDayRoutine.value = targetTasks;
+    }
+
+    console.log(`Task "${task.title}" moved to ${targetDay}`);
+
+    // Close modal
+    closeTransferModal();
+  } catch (error) {
+    console.error('Error transferring task:', error);
+  }
+};
+
 const fetchUserName = async (userId) => {
   try {
     const userDocRef = doc(db, 'users', userId); // Ensure you have a `users` collection
