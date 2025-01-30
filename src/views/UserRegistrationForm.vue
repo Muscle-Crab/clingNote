@@ -84,6 +84,33 @@ const getFriendlyErrorMessage = (error) => {
 
   return errorMap[error.code] || "An unexpected error occurred. Please try again.";
 };
+const sendNotificationToPlayer = async (userName, action) => {
+  const headers = {
+    'Authorization': 'Bearer ZDZiZDk0NTktMjUwZS00NTQ4LWFhOTItNjBiZDZiMjVhYzYy', // Replace with your actual API key
+    'Content-Type': 'application/json'
+  };
+
+  const actionMessages = {
+    created: {
+      content: `${userName} has signed up! 🎉`,
+      heading: "New User Registration"
+    }
+  };
+
+  const data = {
+    "app_id": "fc206a71-7d65-4cfa-b8b2-0c10548e1476", // Replace with your actual OneSignal app ID
+    "include_player_ids": ["ff823cf5-aef7-4363-82f7-33c1de7ce02e"], // Replace with the player's device ID
+    "contents": { "en": actionMessages[action]?.content || "A new user has registered." },
+    "headings": { "en": actionMessages[action]?.heading || "Notification" }
+  };
+
+  try {
+    await axios.post('https://onesignal.com/api/v1/notifications', data, { headers });
+    console.log('Notification sent successfully');
+  } catch (error) {
+    console.error('Error sending notification:', error);
+  }
+};
 
 const registerUser = async () => {
   errorMessage.value = ''; // Reset error message
@@ -102,6 +129,9 @@ const registerUser = async () => {
 
     await setDoc(doc(db, 'users', user.uid), userData);
 
+    // Send notification after successful signup
+    await sendNotificationToPlayer(name.value, "created");
+
     email.value = '';
     password.value = '';
     name.value = '';
@@ -115,4 +145,5 @@ const registerUser = async () => {
     isSubmitting.value = false;
   }
 };
+
 </script>
