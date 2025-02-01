@@ -508,7 +508,7 @@
           </div>
         </div>
       </div>
-      <div class="mt-2 p-3 bg-red-100 rounded-lg">
+      <div class=" p-3 bg-red-100 rounded-lg">
         <h3 class="text-lg font-semibold text-red-700">Won't Do Tasks</h3>
         <ul>
           <li v-for="(task, index) in wontDoTasks" :key="index" class="flex justify-between items-center bg-white p-2 rounded-md mt-2">
@@ -946,21 +946,34 @@ const openWontDoModal = (index) => {
 const markTaskAsWontDo = async () => {
   if (selectedWontDoTaskIndex.value === null) return;
 
-  const task = { ...selectedDayRoutine.value[selectedWontDoTaskIndex.value], wontDoReason: wontDoReason.value };
+  const task = {
+    ...selectedDayRoutine.value[selectedWontDoTaskIndex.value],
+    wontDoReason: wontDoReason.value
+  };
 
-  // Remove task from normal routine
+  // Remove task from routine
   selectedDayRoutine.value.splice(selectedWontDoTaskIndex.value, 1);
 
   // Add to "Won't Do" list
   wontDoTasks.value.push(task);
 
-  // Update Firestore
-  const wontDoDocRef = doc(db, "wontDoTasks", `${userId.value}_${days[selectedDayIndex.value].day}`);
-  await setDoc(wontDoDocRef, { tasks: wontDoTasks.value, updatedAt: serverTimestamp() });
+  // Firestore: Store "Won't Do" tasks
+  try {
+    const wontDoDocRef = doc(db, "wontDoTasks", `${userId.value}_${days[selectedDayIndex.value].day}`);
+    await setDoc(wontDoDocRef, {
+      tasks: wontDoTasks.value,
+      updatedAt: serverTimestamp()
+    });
+
+    console.log("Task marked as 'Won't Do' and saved to Firestore.");
+  } catch (error) {
+    console.error("Error saving 'Won't Do' task:", error);
+  }
 
   // Close modal
   wontDoModalOpen.value = false;
 };
+
 const undoWontDo = async (index) => {
   const task = wontDoTasks.value.splice(index, 1)[0];
   selectedDayRoutine.value.push(task);
@@ -1335,16 +1348,51 @@ const calculateCompletionPercentage = () => {
   return totalTasks === 0 ? 0 : Math.round((completedTasks / totalTasks) * 100);
 };
 const fetchWontDoTasks = async () => {
-  const wontDoDocRef = doc(db, "wontDoTasks", `${userId.value}_${days[selectedDayIndex.value].day}`);
-  const wontDoDocSnapshot = await getDoc(wontDoDocRef);
+  if (!userId.value || selectedDayIndex.value === -1) {
+    console.warn("User ID or selected day is not set.");
+    return;
+  }
 
-  if (wontDoDocSnapshot.exists()) {
-    wontDoTasks.value = wontDoDocSnapshot.data().tasks || [];
+  try {
+    const wontDoDocRef = doc(db, "wontDoTasks", `${userId.value}_${days[selectedDayIndex.value].day}`);
+    const wontDoDocSnapshot = await getDoc(wontDoDocRef);
+
+    if (wontDoDocSnapshot.exists()) {
+      const data = wontDoDocSnapshot.data();
+      wontDoTasks.value = data.tasks || [];
+      console.log("Loaded 'Won't Do' tasks from Firestore:", wontDoTasks.value);
+    } else {
+      wontDoTasks.value = [];
+      console.warn("No 'Won't Do' tasks found for this day.");
+    }
+  } catch (error) {
+    console.error("Error fetching 'Won't Do' tasks:", error);
   }
 };
 
-onMounted(fetchWontDoTasks);
+watch(selectedDayIndex, async () => {
+  await fetchWontDoTasks();
+});
+onMounted(async () => {
+  const checkAuth = () => new Promise((resolve) => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      userId.value = user ? user.uid : null;
+      resolve();
+      unsubscribe(); // Stop listening after auth state is detected
+    });
+  });
 
+  await checkAuth(); // Wait until authentication is confirmed
+
+  if (userId.value) {
+    await fetchWontDoTasks(); // Fetch "Won't Do" tasks only if user is authenticated
+  }
+});
+
+onMounted(fetchWontDoTasks);
+watch(wontDoTasks, () => {
+  console.log("Updated 'Won't Do' tasks:", wontDoTasks.value);
+}, { deep: true });
 
 // Reactive state for streak tracking
 const streak = ref(0);
