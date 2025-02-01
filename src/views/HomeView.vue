@@ -421,23 +421,32 @@
                       >
                         <i class="fas fa-check"></i>
                       </button>
+
+
                       <button
                           @click="deleteTask(index)"
                           class="text-red-500 hover:text-red-700"
                       >
                         <i class="fas fa-trash-alt"></i>
                       </button>
-                      <button
-                          @click="startEditingTask(index)"
-                          class="text-yellow-500 hover:text-yellow-700"
-                      >
-                        <i class="fas fa-edit"></i>
-                      </button>
+
+<!--                      <button-->
+<!--                          @click="startEditingTask(index)"-->
+<!--                          class="text-yellow-500 hover:text-yellow-700"-->
+<!--                      >-->
+<!--                        <i class="fas fa-edit"></i>-->
+<!--                      </button>-->
                       <button
                           @click="openTransferModal(index)"
                           class="text-blue-500 hover:text-blue-700"
                       >
                         <i class="fas fa-right-left"></i>
+                      </button>
+                      <button
+                          @click="openWontDoModal(index)"
+                          class="text--500 hover:text-orange-700"
+                      >
+                        <i class="fas fa-ban"></i>
                       </button>
                     </div>
                   </div>
@@ -446,7 +455,24 @@
                   >
                     {{ index + 1 }}
                   </div>
+                  <div v-if="wontDoModalOpen" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
+                    <div class="bg-white p-5 rounded-lg shadow-lg w-96">
+                      <h2 class="text-lg font-semibold mb-4">Mark as "Won't Do"</h2>
 
+                      <p class="text-gray-700 mb-2">Why won't you do this task?</p>
+                      <textarea v-model="wontDoReason" class="w-full border rounded-md p-2 mb-3"></textarea>
+
+                      <div class="flex justify-end mt-4">
+                        <button @click="wontDoModalOpen = false" class="mr-2 px-4 py-2 bg-red-300 rounded-md">
+                          <i class="fa fa-times"></i> <!-- Cancel icon -->
+                        </button>
+                        <button @click="markTaskAsWontDo" class="px-4 py-2 bg-blue-300 rounded-md">
+                          <i class="fa fa-check"></i> <!-- Confirm icon -->
+                        </button>
+
+                      </div>
+                    </div>
+                  </div>
                   <!-- Notification -->
                   <div
                       v-if="showNotification"
@@ -481,6 +507,17 @@
             </draggable>
           </div>
         </div>
+      </div>
+      <div class="mt-2 p-3 bg-red-100 rounded-lg">
+        <h3 class="text-lg font-semibold text-red-700">Won't Do Tasks</h3>
+        <ul>
+          <li v-for="(task, index) in wontDoTasks" :key="index" class="flex justify-between items-center bg-white p-2 rounded-md mt-2">
+            <span>{{ task.title }} - {{ task.wontDoReason }}</span>
+            <button @click="undoWontDo(index)" class="text-green-500 hover:text-green-700">
+              <i class="fas fa-undo"></i>
+            </button>
+          </li>
+        </ul>
       </div>
     </div>
 
@@ -896,6 +933,44 @@ const toggleTaskCompletion = async (index) => {
   checkAllTasksCompleted();
 };
 
+const wontDoModalOpen = ref(false);
+const wontDoReason = ref("");
+const selectedWontDoTaskIndex = ref(null);
+const wontDoTasks = ref([]); // Separate list for Won't Do tasks
+
+const openWontDoModal = (index) => {
+  selectedWontDoTaskIndex.value = index;
+  wontDoReason.value = "";
+  wontDoModalOpen.value = true;
+};
+const markTaskAsWontDo = async () => {
+  if (selectedWontDoTaskIndex.value === null) return;
+
+  const task = { ...selectedDayRoutine.value[selectedWontDoTaskIndex.value], wontDoReason: wontDoReason.value };
+
+  // Remove task from normal routine
+  selectedDayRoutine.value.splice(selectedWontDoTaskIndex.value, 1);
+
+  // Add to "Won't Do" list
+  wontDoTasks.value.push(task);
+
+  // Update Firestore
+  const wontDoDocRef = doc(db, "wontDoTasks", `${userId.value}_${days[selectedDayIndex.value].day}`);
+  await setDoc(wontDoDocRef, { tasks: wontDoTasks.value, updatedAt: serverTimestamp() });
+
+  // Close modal
+  wontDoModalOpen.value = false;
+};
+const undoWontDo = async (index) => {
+  const task = wontDoTasks.value.splice(index, 1)[0];
+  selectedDayRoutine.value.push(task);
+
+  // Update Firestore
+  const wontDoDocRef = doc(db, "wontDoTasks", `${userId.value}_${days[selectedDayIndex.value].day}`);
+  await setDoc(wontDoDocRef, { tasks: wontDoTasks.value, updatedAt: serverTimestamp() });
+
+  console.log("Task restored from 'Won't Do'");
+};
 
 
 
@@ -1252,14 +1327,24 @@ const filteredTasks = computed(() => {
   }
 });
 const calculateCompletionPercentage = () => {
-  if (!selectedDayRoutine.value || !Array.isArray(selectedDayRoutine.value)) {
-    return 0; // Return 0% if no tasks are available
-  }
+  if (!selectedDayRoutine.value) return 0;
 
+  const totalTasks = selectedDayRoutine.value.length + wontDoTasks.value.length;
   const completedTasks = selectedDayRoutine.value.filter(task => task.completed).length;
-  const totalTasks = selectedDayRoutine.value.length;
+
   return totalTasks === 0 ? 0 : Math.round((completedTasks / totalTasks) * 100);
 };
+const fetchWontDoTasks = async () => {
+  const wontDoDocRef = doc(db, "wontDoTasks", `${userId.value}_${days[selectedDayIndex.value].day}`);
+  const wontDoDocSnapshot = await getDoc(wontDoDocRef);
+
+  if (wontDoDocSnapshot.exists()) {
+    wontDoTasks.value = wontDoDocSnapshot.data().tasks || [];
+  }
+};
+
+onMounted(fetchWontDoTasks);
+
 
 // Reactive state for streak tracking
 const streak = ref(0);
