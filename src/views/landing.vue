@@ -1,9 +1,9 @@
 <template>
   <div class="container">
-    <h2>Set a Reminder</h2>
+    <h2>Set a Reminder fjkldjf;djfd</h2>
 
     <div class="form-container">
-      <label for="reminder-title">Reminder Title Change:</label>
+      <label for="reminder-title">Reminder Title:</label>
       <input type="text" v-model="reminderTitle" placeholder="Enter reminder title" />
 
       <label for="reminder-date">Date:</label>
@@ -12,7 +12,7 @@
       <label for="reminder-time">Time:</label>
       <input type="time" v-model="reminderTime" />
 
-      <button @click="sendReminderToCalendar" class="btn add-reminder">
+      <button @click="setReminder" class="btn add-reminder">
         Add Reminder to Calendar App
       </button>
     </div>
@@ -29,33 +29,35 @@ export default {
     };
   },
   methods: {
-    sendReminderToCalendar() {
+    setReminder() {
       if (!this.reminderTitle || !this.reminderDate || !this.reminderTime) {
         alert("Please enter all reminder details!");
         return;
       }
 
-      // Convert the selected date & time to a correct format
       const reminderDateTime = new Date(`${this.reminderDate}T${this.reminderTime}:00`);
-      const formatDate = (date) => date.toISOString().replace(/-|:|\.\d+/g, "");
+      const formattedDate = reminderDateTime.toISOString().split("T")[0];
+      const formattedTime = reminderDateTime.toTimeString().split(" ")[0];
 
-      // Create an ICS file formatted for reminders
-      const icsContent = `BEGIN:VCALENDAR
-VERSION:2.0
-BEGIN:VTODO
-SUMMARY:${this.reminderTitle}
-DESCRIPTION:Reminder from Vue.js app.
-DUE:${formatDate(reminderDateTime)}
-STATUS:NEEDS-ACTION
-END:VTODO
-END:VCALENDAR`;
+      // Check if the user is on an Apple device (iOS/macOS)
+      const isAppleDevice = navigator.userAgent.match(/(iPhone|iPad|Macintosh)/i);
 
-      // Create a Blob for the ICS file
-      const blob = new Blob([icsContent], { type: "text/calendar" });
-      const url = URL.createObjectURL(blob);
-
-      // Open the file directly in the Calendar app instead of downloading
-      window.location.href = url;
+      if (isAppleDevice) {
+        // Open Apple Reminders App
+        const appleReminderUrl = `x-apple-reminderkit://create?title=${encodeURIComponent(
+            this.reminderTitle
+        )}&dueDate=${formattedDate}T${formattedTime}`;
+        window.location.href = appleReminderUrl;
+      } else {
+        // Open Google Calendar Reminder (Web & Android)
+        const googleCalendarUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(
+            this.reminderTitle
+        )}&dates=${formattedDate}T${formattedTime.replace(/:/g, "")}Z/${formattedDate}T${formattedTime.replace(
+            /:/g,
+            ""
+        )}Z&details=Reminder%20set%20from%20Vue.js%20app&reminders=1`;
+        window.open(googleCalendarUrl, "_blank");
+      }
     },
   },
 };
