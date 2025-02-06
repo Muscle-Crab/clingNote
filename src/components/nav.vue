@@ -67,7 +67,16 @@
              </router-link>
            </li>
          </div>
-
+          <div v-if="userEmail === 'ds7513635@gmail.com'">
+            <!-- Chat -->
+            <li class="flex items-center space-x-3">
+              <i class="fas fa-comments text-gray-800 dark:text-gray-200"></i>
+              <router-link to="/landing"
+                           class="text-gray-800 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-500 font-medium">
+                about
+              </router-link>
+            </li>
+          </div>
           <!-- Logout -->
           <li class="flex items-center space-x-3">
             <i class="fas fa-sign-out-alt text-gray-800 dark:text-gray-200"></i>
