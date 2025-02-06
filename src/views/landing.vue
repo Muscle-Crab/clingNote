@@ -1,6 +1,6 @@
 <template>
   <div class="container">
-    <h2>Set a Reminder fjkldjf;djfd</h2>
+    <h2>Set a Reminder</h2>
 
     <div class="form-container">
       <label for="reminder-title">Reminder Title:</label>
@@ -12,7 +12,11 @@
       <label for="reminder-time">Time:</label>
       <input type="time" v-model="reminderTime" />
 
-      <button @click="setReminder" class="btn add-reminder">
+      <button @click="setReminderInGoogleCalendar" class="btn google-calendar">
+        Add Reminder to Google Calendar
+      </button>
+
+      <button @click="openICSFile" class="btn add-reminder">
         Add Reminder to Calendar App
       </button>
     </div>
@@ -29,35 +33,55 @@ export default {
     };
   },
   methods: {
-    setReminder() {
+    // 1️⃣ Add Reminder to Google Calendar (No Login Required)
+    setReminderInGoogleCalendar() {
       if (!this.reminderTitle || !this.reminderDate || !this.reminderTime) {
         alert("Please enter all reminder details!");
         return;
       }
 
-      const reminderDateTime = new Date(`${this.reminderDate}T${this.reminderTime}:00`);
-      const formattedDate = reminderDateTime.toISOString().split("T")[0];
-      const formattedTime = reminderDateTime.toTimeString().split(" ")[0];
+      // Format date and time
+      const dateTime = new Date(`${this.reminderDate}T${this.reminderTime}`).toISOString().replace(/-|:|\.\d+/g, "");
 
-      // Check if the user is on an Apple device (iOS/macOS)
-      const isAppleDevice = navigator.userAgent.match(/(iPhone|iPad|Macintosh)/i);
+      // Encode the details for URL
+      const title = encodeURIComponent(this.reminderTitle);
+      const details = encodeURIComponent("Reminder set from Vue.js app.");
+      const location = encodeURIComponent("Online");
 
-      if (isAppleDevice) {
-        // Open Apple Reminders App
-        const appleReminderUrl = `x-apple-reminderkit://create?title=${encodeURIComponent(
-            this.reminderTitle
-        )}&dueDate=${formattedDate}T${formattedTime}`;
-        window.location.href = appleReminderUrl;
-      } else {
-        // Open Google Calendar Reminder (Web & Android)
-        const googleCalendarUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(
-            this.reminderTitle
-        )}&dates=${formattedDate}T${formattedTime.replace(/:/g, "")}Z/${formattedDate}T${formattedTime.replace(
-            /:/g,
-            ""
-        )}Z&details=Reminder%20set%20from%20Vue.js%20app&reminders=1`;
-        window.open(googleCalendarUrl, "_blank");
+      // Google Calendar reminder link
+      const googleCalendarUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&details=${details}&location=${location}&dates=${dateTime}/${dateTime}`;
+
+      // Open Google Calendar with pre-filled reminder
+      window.open(googleCalendarUrl, "_blank");
+    },
+
+    // 2️⃣ Open ICS File in Calendar App Instead of Downloading
+    openICSFile() {
+      if (!this.reminderTitle || !this.reminderDate || !this.reminderTime) {
+        alert("Please enter all reminder details!");
+        return;
       }
+
+      // Format date & time
+      const reminderDateTime = new Date(`${this.reminderDate}T${this.reminderTime}:00`);
+      const formatDate = (date) => date.toISOString().replace(/-|:|\.\d+/g, "");
+
+      // Create an ICS file formatted as a reminder
+      const icsContent = `BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VTODO
+SUMMARY:${this.reminderTitle}
+DESCRIPTION:Reminder set from Vue.js app.
+DUE:${formatDate(reminderDateTime)}
+END:VTODO
+END:VCALENDAR`;
+
+      // Create a Blob
+      const blob = new Blob([icsContent], { type: "text/calendar" });
+      const url = URL.createObjectURL(blob);
+
+      // Instead of forcing a download, we open the file directly
+      window.location.href = url;
     },
   },
 };
@@ -107,6 +131,15 @@ input {
   cursor: pointer;
   transition: background 0.3s;
   margin: 10px;
+}
+
+.google-calendar {
+  background: #4285f4;
+  color: white;
+}
+
+.google-calendar:hover {
+  background: #357ae8;
 }
 
 .add-reminder {
