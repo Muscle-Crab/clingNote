@@ -1,52 +1,127 @@
 <template>
- <div>
- 
- </div>
+  <div class="container">
+    <h2>Calendar Reminder</h2>
+
+    <!-- Event Input Form -->
+    <div class="form-container">
+      <label for="event-title">Event Title:</label>
+      <input type="text" v-model="eventTitle" placeholder="Enter event title" />
+
+      <label for="event-date">Date:</label>
+      <input type="date" v-model="eventDate" />
+
+      <label for="event-time">Time:</label>
+      <input type="time" v-model="eventTime" />
+
+      <button @click="downloadICSFile" class="btn add-event">
+        Add to Calendar App
+      </button>
+    </div>
+  </div>
 </template>
 
-<script setup>
-import { ref } from 'vue';
+<script>
+export default {
+  data() {
+    return {
+      eventTitle: "",
+      eventDate: "",
+      eventTime: "",
+    };
+  },
+  methods: {
+    downloadICSFile() {
+      if (!this.eventTitle || !this.eventDate || !this.eventTime) {
+        alert("Please enter all event details!");
+        return;
+      }
 
-const players = ref([
-  { id: 1, name: 'Player 1', attending: null },
-  { id: 2, name: 'Player 2', attending: null },
-  { id: 3, name: 'Player 3', attending: null },
-  { id: 4, name: 'Player 4', attending: null },
-  { id: 5, name: 'Player 5', attending: null },
-  { id: 6, name: 'Player 6', attending: null },
-  { id: 7, name: 'Player 7', attending: null },
-  { id: 8, name: 'Player 8', attending: null },
-  { id: 9, name: 'Player 9', attending: null },
-  { id: 10, name: 'Player 10', attending: null },
-]);
+      // Convert event date & time to correct format
+      const startDateTime = new Date(`${this.eventDate}T${this.eventTime}:00`);
+      const endDateTime = new Date(startDateTime.getTime() + 3600000); // Event duration: 1 hour
 
-const captains = ref([]);
-const captainsAssigned = ref(false);
-const captainTurn = ref(null);
-const availablePlayers = ref([]);
+      // Format date to YYYYMMDDTHHMMSSZ (UTC time format)
+      const formatDate = (date) =>
+          date.toISOString().replace(/-|:|\.\d+/g, "");
 
-const toggleAttendance = (player) => {
-  player.attending = player.attending === 'Going' ? 'Not Going' : 'Going';
-};
+      const icsContent = `BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+SUMMARY:${this.eventTitle}
+DESCRIPTION:Reminder set from Vue.js app
+DTSTART:${formatDate(startDateTime)}
+DTEND:${formatDate(endDateTime)}
+LOCATION:Online
+END:VEVENT
+END:VCALENDAR`;
 
-const assignCaptains = () => {
-  const goingPlayers = players.value.filter((p) => p.attending === 'Going');
-  captains.value = [goingPlayers[0], goingPlayers[1]];
-  captainsAssigned.value = true;
-  availablePlayers.value = goingPlayers.slice(2);
-  captainTurn.value = captains.value[0].id;
-};
+      // Create a downloadable ICS file
+      const blob = new Blob([icsContent], { type: "text/calendar" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
 
-const pickPlayer = (captain, player) => {
-  captain.team = captain.team || [];
-  captain.team.push(player);
-  availablePlayers.value = availablePlayers.value.filter((p) => p.id !== player.id);
-  captainTurn.value = captainTurn.value === captains.value[0].id ? captains.value[1].id : captains.value[0].id;
+      link.href = url;
+      link.download = "event.ics";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    },
+  },
 };
 </script>
 
 <style scoped>
-body {
-  font-family: 'Arial', sans-serif;
+.container {
+  max-width: 400px;
+  margin: 50px auto;
+  text-align: center;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  background: #fff;
+}
+
+h2 {
+  color: #333;
+  margin-bottom: 20px;
+}
+
+.form-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+label {
+  margin: 10px 0 5px;
+  font-weight: bold;
+}
+
+input {
+  width: 80%;
+  padding: 8px;
+  margin-bottom: 15px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  font-size: 14px;
+}
+
+.btn {
+  padding: 10px 15px;
+  border: none;
+  border-radius: 5px;
+  font-size: 16px;
+  cursor: pointer;
+  transition: background 0.3s;
+}
+
+.add-event {
+  background: #34a853;
+  color: white;
+}
+
+.add-event:hover {
+  background: #2c8c41;
 }
 </style>
