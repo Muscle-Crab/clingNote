@@ -3,7 +3,7 @@
     <h2>Set a Reminder</h2>
 
     <div class="form-container">
-      <label for="reminder-title">Reminder Title:</label>
+      <label for="reminder-title">Reminder Title Change:</label>
       <input type="text" v-model="reminderTitle" placeholder="Enter reminder title" />
 
       <label for="reminder-date">Date:</label>
@@ -12,11 +12,7 @@
       <label for="reminder-time">Time:</label>
       <input type="time" v-model="reminderTime" />
 
-      <button @click="setReminderInGoogleCalendar" class="btn google-calendar">
-        Add Reminder to Google Calendar
-      </button>
-
-      <button @click="openICSFile" class="btn add-reminder">
+      <button @click="sendReminderToCalendar" class="btn add-reminder">
         Add Reminder to Calendar App
       </button>
     </div>
@@ -33,54 +29,32 @@ export default {
     };
   },
   methods: {
-    // 1️⃣ Add Reminder to Google Calendar (No Login Required)
-    setReminderInGoogleCalendar() {
+    sendReminderToCalendar() {
       if (!this.reminderTitle || !this.reminderDate || !this.reminderTime) {
         alert("Please enter all reminder details!");
         return;
       }
 
-      // Format date and time
-      const dateTime = new Date(`${this.reminderDate}T${this.reminderTime}`).toISOString().replace(/-|:|\.\d+/g, "");
-
-      // Encode the details for URL
-      const title = encodeURIComponent(this.reminderTitle);
-      const details = encodeURIComponent("Reminder set from Vue.js app.");
-      const location = encodeURIComponent("Online");
-
-      // Google Calendar reminder link
-      const googleCalendarUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&details=${details}&location=${location}&dates=${dateTime}/${dateTime}`;
-
-      // Open Google Calendar with pre-filled reminder
-      window.open(googleCalendarUrl, "_blank");
-    },
-
-    // 2️⃣ Open ICS File in Calendar App Instead of Downloading
-    openICSFile() {
-      if (!this.reminderTitle || !this.reminderDate || !this.reminderTime) {
-        alert("Please enter all reminder details!");
-        return;
-      }
-
-      // Format date & time
+      // Convert the selected date & time to a correct format
       const reminderDateTime = new Date(`${this.reminderDate}T${this.reminderTime}:00`);
       const formatDate = (date) => date.toISOString().replace(/-|:|\.\d+/g, "");
 
-      // Create an ICS file formatted as a reminder
+      // Create an ICS file formatted for reminders
       const icsContent = `BEGIN:VCALENDAR
 VERSION:2.0
 BEGIN:VTODO
 SUMMARY:${this.reminderTitle}
-DESCRIPTION:Reminder set from Vue.js app.
+DESCRIPTION:Reminder from Vue.js app.
 DUE:${formatDate(reminderDateTime)}
+STATUS:NEEDS-ACTION
 END:VTODO
 END:VCALENDAR`;
 
-      // Create a Blob
+      // Create a Blob for the ICS file
       const blob = new Blob([icsContent], { type: "text/calendar" });
       const url = URL.createObjectURL(blob);
 
-      // Instead of forcing a download, we open the file directly
+      // Open the file directly in the Calendar app instead of downloading
       window.location.href = url;
     },
   },
@@ -131,15 +105,6 @@ input {
   cursor: pointer;
   transition: background 0.3s;
   margin: 10px;
-}
-
-.google-calendar {
-  background: #4285f4;
-  color: white;
-}
-
-.google-calendar:hover {
-  background: #357ae8;
 }
 
 .add-reminder {
