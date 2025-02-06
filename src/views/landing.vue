@@ -52,6 +52,11 @@ DESCRIPTION:Reminder set from Vue.js app
 DTSTART:${formatDate(startDateTime)}
 DTEND:${formatDate(endDateTime)}
 LOCATION:Online
+BEGIN:VALARM
+TRIGGER:-PT0M
+ACTION:DISPLAY
+DESCRIPTION:Reminder for ${this.eventTitle}
+END:VALARM
 END:VEVENT
 END:VCALENDAR`;
 
