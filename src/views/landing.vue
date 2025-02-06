@@ -2,7 +2,6 @@
   <div class="container">
     <h2>Set a Reminder</h2>
 
-    <!-- Reminder Input Form -->
     <div class="form-container">
       <label for="reminder-title">Reminder Title:</label>
       <input type="text" v-model="reminderTitle" placeholder="Enter reminder title" />
@@ -17,7 +16,7 @@
         Add Reminder to Google Calendar
       </button>
 
-      <button @click="downloadReminderICSFile" class="btn add-reminder">
+      <button @click="openICSFile" class="btn add-reminder">
         Add Reminder to Calendar App
       </button>
     </div>
@@ -56,8 +55,8 @@ export default {
       window.open(googleCalendarUrl, "_blank");
     },
 
-    // 2️⃣ Add Reminder to Default Calendar App (iOS, Android, Windows)
-    downloadReminderICSFile() {
+    // 2️⃣ Open ICS File in Calendar App Instead of Downloading
+    openICSFile() {
       if (!this.reminderTitle || !this.reminderDate || !this.reminderTime) {
         alert("Please enter all reminder details!");
         return;
@@ -77,17 +76,12 @@ DUE:${formatDate(reminderDateTime)}
 END:VTODO
 END:VCALENDAR`;
 
-      // Create and download ICS file
+      // Create a Blob
       const blob = new Blob([icsContent], { type: "text/calendar" });
       const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
 
-      link.href = url;
-      link.download = "reminder.ics";
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+      // Instead of forcing a download, we open the file directly
+      window.location.href = url;
     },
   },
 };
