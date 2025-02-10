@@ -443,7 +443,7 @@
                     </div>
 
                     <!-- Task Actions -->
-                    <div class="flex items-center space-x-1 sm:space-x-2">
+                    <div class="flex items-center space-x-1 sm:space-x-2 space-x-4">
                       <button
                           v-if="isToday(selectedDayIndex)"
                           @click="toggleTaskCompletion(index)"
@@ -455,7 +455,7 @@
                       <button @click="openModal('calendar', task)" class="rounded-md text-xs sm:text-sm">
                         📅
                       </button>
-                      <button
+                      <button v-if="!isToday(selectedDayIndex)"
                           @click="deleteTask(index)"
                           class="text-red-500 hover:text-red-700 text-xs sm:text-sm"
                       >
