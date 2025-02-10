@@ -794,6 +794,7 @@ const openModal = (type = 'task') => {
 const closeModal = () => {
   isModalOpen.value = false;
   reminder.value = { date: "", time: "" };
+  modalOpen.value = false
 };
 const selectedDayIndex = ref(-1);
 const newTask = ref({
