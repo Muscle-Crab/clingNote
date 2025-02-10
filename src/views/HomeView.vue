@@ -327,10 +327,35 @@
                         <div v-if="!task.completed && isToday(selectedDayIndex)" class="text-yellow-500">
                           <i class="fas fa-circle"></i> Incomplete
                         </div>
-                        <button @click="generateICSFile(task)" class="text-blue-500 hover:text-blue-700">
-                          📅 Add to Calendar
-                        </button>
+                        <div>
+                          <!-- Button to Open Modal -->
 
+
+                          <!-- Modal -->
+                          <div v-if="isModalOpen" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
+                            <div class="bg-white p-5 rounded-lg shadow-lg w-96">
+                              <h2 class="text-lg font-semibold mb-4">Add Reminder</h2>
+
+                              <!-- Display Task Title (No Input) -->
+                              <p class="text-md font-medium mb-3">Task: <span class="font-semibold text-blue-600">{{ selectedTaskTitle }}</span></p>
+
+                              <!-- Reminder Form -->
+                              <form @submit.prevent="handleAddReminder">
+                                <label for="reminderDate" class="block mb-2">Date:</label>
+                                <input type="date" v-model="reminder.date" id="reminderDate" class="w-full border-gray-300 rounded-md p-2 mb-2" required>
+
+                                <label for="reminderTime" class="block mb-2">Time:</label>
+                                <input type="time" v-model="reminder.time" id="reminderTime" class="w-full border-gray-300 rounded-md p-2 mb-2" required>
+
+                                <!-- Modal Buttons -->
+                                <div class="flex justify-end mt-4">
+                                  <button @click="closeModal" type="button" class="mr-2 px-4 py-2 bg-gray-300 rounded-md">Cancel</button>
+                                  <button type="submit" class="px-4 py-2 bg-blue-500 text-white rounded-md">Add to Calendar</button>
+                                </div>
+                              </form>
+                            </div>
+                          </div>
+                        </div>
                         <!-- In Progress Task Indicator -->
                         <div v-if="isToday(selectedDayIndex) && index === topIncompleteTaskIndex" class="text-blue-500 flex items-center">
                           <i class="fas fa-hourglass-half animate-spin-slow mr-1"></i> In Progress
@@ -340,6 +365,7 @@
                         <div v-if="task.completed && isToday(selectedDayIndex)"  class="text-green-500">
                           <i class="fas fa-check-circle"></i> Completed
                         </div>
+
                       </div>
 
                     </div>
@@ -416,42 +442,41 @@
                     </div>
 
                     <!-- Task Actions -->
-                    <div class="flex items-center space-x-3">
+                    <div class="flex items-center space-x-1 sm:space-x-2">
                       <button
                           v-if="isToday(selectedDayIndex)"
                           @click="toggleTaskCompletion(index)"
-                          class="text-green-500 hover:text-green-700"
+                          class="text-green-500 hover:text-green-700 text-xs sm:text-sm"
                       >
-                        <i class="fas fa-check"></i>
+                        ✅
                       </button>
 
+                      <button @click="openModal(task)" class="rounded-md text-xs sm:text-sm">
+                        📅
+                      </button>
 
                       <button
                           @click="deleteTask(index)"
-                          class="text-red-500 hover:text-red-700"
+                          class="text-red-500 hover:text-red-700 text-xs sm:text-sm"
                       >
-                        <i class="fas fa-trash-alt"></i>
+                        🗑️
                       </button>
 
-<!--                      <button-->
-<!--                          @click="startEditingTask(index)"-->
-<!--                          class="text-yellow-500 hover:text-yellow-700"-->
-<!--                      >-->
-<!--                        <i class="fas fa-edit"></i>-->
-<!--                      </button>-->
                       <button
                           @click="openTransferModal(index)"
-                          class="text-blue-500 hover:text-blue-700"
+                          class="text-blue-500 hover:text-blue-700 text-xs sm:text-sm"
                       >
-                        <i class="fas fa-right-left"></i>
+                        🔄
                       </button>
+
                       <button
                           @click="openWontDoModal(index)"
-                          class="text--500 hover:text-orange-700"
+                          class="text-orange-500 hover:text-orange-700 text-xs sm:text-sm"
                       >
-                        <i class="fas fa-ban"></i>
+                        🚫
                       </button>
                     </div>
+
                   </div>
                   <div
                       class="absolute bottom-2 left-2 w-5 h-5 flex items-center justify-center bg-gray-300 rounded-full text-xs font-bold text-gray-800 shadow-sm"
@@ -553,6 +578,9 @@ const formatTimes = (index) => {
     return '00:00';
   }
 
+
+
+
   // Format remaining time as MM:SS
   const minutes = Math.floor(currentTime.value[index] / 60);
   const seconds = currentTime.value[index] % 60;
@@ -567,6 +595,7 @@ const openTransferModal = (index) => {
   transferModalOpen.value = true;
 };
 
+
 const closeTransferModal = () => {
   transferModalOpen.value = false;
   selectedTransferTaskIndex.value = null;
@@ -574,6 +603,63 @@ const closeTransferModal = () => {
 };
 
 const transferNotification = ref(null);
+
+
+
+const isModalOpen = ref(false);
+const selectedTaskTitle = ref(""); // Stores the title of the selected task
+const reminder = ref({ date: "", time: "" });
+
+// Open Modal and Set Task Title
+
+
+// Close Modal
+
+
+// Function to Download `.ics` File
+const handleAddReminder = () => {
+  if (!reminder.value.date || !reminder.value.time) {
+    alert("Please enter both date and time!");
+    return;
+  }
+
+  // Format Date and Time
+  const startDateTime = new Date(`${reminder.value.date}T${reminder.value.time}:00`);
+  const endDateTime = new Date(startDateTime.getTime() + 3600000); // Default: 1-hour duration
+
+  const formatDate = (date) => date.toISOString().replace(/-|:|\.\d+/g, "");
+
+  const icsContent = `BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+SUMMARY:${selectedTaskTitle.value}
+DESCRIPTION:Reminder
+DTSTART:${formatDate(startDateTime)}
+DTEND:${formatDate(endDateTime)}
+LOCATION:Online
+BEGIN:VALARM
+TRIGGER:-PT15M
+ACTION:DISPLAY
+DESCRIPTION:Reminder for ${selectedTaskTitle.value}
+END:VALARM
+END:VEVENT
+END:VCALENDAR`;
+
+  // Create .ics File
+  const blob = new Blob([icsContent], { type: "text/calendar" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+
+  link.href = url;
+  link.download = `${selectedTaskTitle.value.replace(/\s+/g, "_")}.ics`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+
+  // Close Modal and Reset Form
+  closeModal();
+};
 
 const transferTask = async () => {
   if (!userId.value || selectedTransferTaskIndex.value === null || selectedTransferDay.value === null) {
@@ -695,11 +781,15 @@ const sendNotificationToPlayer = async (userName, action) => {
 
 
 
-const openModal = () => {
-  modalOpen.value = true;
+const openModal = (task) => {
+  selectedTaskTitle.value = task.title; // Automatically set task title
+  isModalOpen.value = true;
 };
+
+// Close Modal
 const closeModal = () => {
-  modalOpen.value = false;
+  isModalOpen.value = false;
+  reminder.value = { date: "", time: "" };
 };
 const selectedDayIndex = ref(-1);
 const newTask = ref({
@@ -752,45 +842,6 @@ onMounted(() => {
   generateWeekDates();
   console.log('Generated days array:', days.value);
 });
-const generateICSFile = (task) => {
-  const pad = (num) => num.toString().padStart(2, '0');
-
-  const now = new Date();
-  const taskDate = new Date(`${task.date}T${task.time}`);
-
-  const formatDate = (date) => {
-    return `${date.getUTCFullYear()}${pad(date.getUTCMonth() + 1)}${pad(date.getUTCDate())}T${pad(date.getUTCHours())}${pad(date.getUTCMinutes())}${pad(date.getUTCSeconds())}Z`;
-  };
-
-  const icsContent = `
-BEGIN:VCALENDAR
-VERSION:2.0
-PRODID:-//YourAppName//TaskScheduler//EN
-BEGIN:VEVENT
-UID:${now.getTime()}@yourapp.com
-DTSTAMP:${formatDate(now)}
-DTSTART:${formatDate(taskDate)}
-DTEND:${formatDate(new Date(taskDate.getTime() + 60 * 60 * 1000))}
-SUMMARY:${task.title}
-DESCRIPTION:${task.notes || "No additional details"}
-PRIORITY:${task.priority === 'high' ? 1 : task.priority === 'medium' ? 5 : 9}
-END:VEVENT
-END:VCALENDAR
-  `.trim();
-
-  // Create Blob
-  const blob = new Blob([icsContent], { type: 'text/calendar' });
-  const url = URL.createObjectURL(blob);
-
-  // Create a download link
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `${task.title.replace(/\s+/g, '_')}.ics`;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
-};
 
 const currentDate = ref(getCurrentDate());
 
