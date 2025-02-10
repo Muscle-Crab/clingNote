@@ -327,6 +327,9 @@
                         <div v-if="!task.completed && isToday(selectedDayIndex)" class="text-yellow-500">
                           <i class="fas fa-circle"></i> Incomplete
                         </div>
+                        <button @click="generateICSFile(task)" class="text-blue-500 hover:text-blue-700">
+                          📅 Add to Calendar
+                        </button>
 
                         <!-- In Progress Task Indicator -->
                         <div v-if="isToday(selectedDayIndex) && index === topIncompleteTaskIndex" class="text-blue-500 flex items-center">
@@ -749,6 +752,45 @@ onMounted(() => {
   generateWeekDates();
   console.log('Generated days array:', days.value);
 });
+const generateICSFile = (task) => {
+  const pad = (num) => num.toString().padStart(2, '0');
+
+  const now = new Date();
+  const taskDate = new Date(`${task.date}T${task.time}`);
+
+  const formatDate = (date) => {
+    return `${date.getUTCFullYear()}${pad(date.getUTCMonth() + 1)}${pad(date.getUTCDate())}T${pad(date.getUTCHours())}${pad(date.getUTCMinutes())}${pad(date.getUTCSeconds())}Z`;
+  };
+
+  const icsContent = `
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//YourAppName//TaskScheduler//EN
+BEGIN:VEVENT
+UID:${now.getTime()}@yourapp.com
+DTSTAMP:${formatDate(now)}
+DTSTART:${formatDate(taskDate)}
+DTEND:${formatDate(new Date(taskDate.getTime() + 60 * 60 * 1000))}
+SUMMARY:${task.title}
+DESCRIPTION:${task.notes || "No additional details"}
+PRIORITY:${task.priority === 'high' ? 1 : task.priority === 'medium' ? 5 : 9}
+END:VEVENT
+END:VCALENDAR
+  `.trim();
+
+  // Create Blob
+  const blob = new Blob([icsContent], { type: 'text/calendar' });
+  const url = URL.createObjectURL(blob);
+
+  // Create a download link
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `${task.title.replace(/\s+/g, '_')}.ics`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+};
 
 const currentDate = ref(getCurrentDate());
 
