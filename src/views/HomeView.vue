@@ -452,7 +452,7 @@
                         ✅
                       </button>
 
-                      <button @click="openModal('calendar', task)" class="rounded-md text-xs sm:text-sm">
+                      <button @click="openModal('calendar', task.title)" class="rounded-md text-xs sm:text-sm">
                         📅
                       </button>
                       <button v-if="!isToday(selectedDayIndex)"
@@ -623,6 +623,9 @@ const handleAddReminder = () => {
     return;
   }
 
+  // Check if a task is selected; if not, use the default title
+  const eventTitle = selectedTaskTitle.value || "Task Reminder";
+
   // Format Date and Time
   const startDateTime = new Date(`${reminder.value.date}T${reminder.value.time}:00`);
   const endDateTime = new Date(startDateTime.getTime() + 3600000); // Default: 1-hour duration
@@ -632,15 +635,15 @@ const handleAddReminder = () => {
   const icsContent = `BEGIN:VCALENDAR
 VERSION:2.0
 BEGIN:VEVENT
-SUMMARY:${selectedTaskTitle.value}
-DESCRIPTION:Reminder
+SUMMARY:${eventTitle}
+DESCRIPTION:Reminder for ${eventTitle}
 DTSTART:${formatDate(startDateTime)}
 DTEND:${formatDate(endDateTime)}
 LOCATION:Online
 BEGIN:VALARM
 TRIGGER:-PT15M
 ACTION:DISPLAY
-DESCRIPTION:Reminder for ${selectedTaskTitle.value}
+DESCRIPTION:Reminder for ${eventTitle}
 END:VALARM
 END:VEVENT
 END:VCALENDAR`;
@@ -651,7 +654,7 @@ END:VCALENDAR`;
   const link = document.createElement("a");
 
   link.href = url;
-  link.download = `${selectedTaskTitle.value.replace(/\s+/g, "_")}.ics`;
+  link.download = `${eventTitle.replace(/\s+/g, "_")}.ics`;
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
@@ -660,6 +663,7 @@ END:VCALENDAR`;
   // Close Modal and Reset Form
   closeModal();
 };
+
 
 const transferTask = async () => {
   if (!userId.value || selectedTransferTaskIndex.value === null || selectedTransferDay.value === null) {
@@ -781,13 +785,15 @@ const sendNotificationToPlayer = async (userName, action) => {
 
 
 
-const openModal = (type = 'task') => {
+const openModal = (type = 'task', title = '') => {
   if (type === 'task') {
-    modalOpen.value = true;  // Ensure this opens the task modal
+    modalOpen.value = true;
   } else if (type === 'calendar') {
-    isModalOpen.value = true; // Open the calendar modal
+    selectedTaskTitle.value = title || "Task Reminder"; // Set title when opening calendar modal
+    isModalOpen.value = true;
   }
 };
+
 
 
 // Close Modal
