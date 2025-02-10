@@ -166,11 +166,12 @@
         <div>
           <router-link
               :to="userId ? '#' : '/login'"
-              @click.native.prevent="userId && openModal()"
+              @click.native.prevent="userId && openModal('task')"
               class="mt-4 px-6 py-2 bg-blue-500 text-white rounded-full shadow-lg hover:bg-blue-600 transition duration-200"
           >
             Add Task
           </router-link>
+
         </div>
       </div>
       <!-- Main modal -->
@@ -336,10 +337,10 @@
                             <div class="bg-white p-5 rounded-lg shadow-lg w-96">
                               <h2 class="text-lg font-semibold mb-4">Add Reminder</h2>
 
-                              <!-- Display Task Title (No Input) -->
-                              <p class="text-md font-medium mb-3">Task: <span class="font-semibold text-blue-600">{{ selectedTaskTitle }}</span></p>
+                              <p class="text-md font-medium mb-3">
+                                Task: <span class="font-semibold text-blue-600">{{ selectedTaskTitle }}</span>
+                              </p>
 
-                              <!-- Reminder Form -->
                               <form @submit.prevent="handleAddReminder">
                                 <label for="reminderDate" class="block mb-2">Date:</label>
                                 <input type="date" v-model="reminder.date" id="reminderDate" class="w-full border-gray-300 rounded-md p-2 mb-2" required>
@@ -347,7 +348,6 @@
                                 <label for="reminderTime" class="block mb-2">Time:</label>
                                 <input type="time" v-model="reminder.time" id="reminderTime" class="w-full border-gray-300 rounded-md p-2 mb-2" required>
 
-                                <!-- Modal Buttons -->
                                 <div class="flex justify-end mt-4">
                                   <button @click="closeModal" type="button" class="mr-2 px-4 py-2 bg-gray-300 rounded-md">Cancel</button>
                                   <button type="submit" class="px-4 py-2 bg-blue-500 text-white rounded-md">Add to Calendar</button>
@@ -355,6 +355,7 @@
                               </form>
                             </div>
                           </div>
+
                         </div>
                         <!-- In Progress Task Indicator -->
                         <div v-if="isToday(selectedDayIndex) && index === topIncompleteTaskIndex" class="text-blue-500 flex items-center">
@@ -451,10 +452,9 @@
                         ✅
                       </button>
 
-                      <button @click="openModal(task)" class="rounded-md text-xs sm:text-sm">
+                      <button @click="openModal('calendar', task)" class="rounded-md text-xs sm:text-sm">
                         📅
                       </button>
-
                       <button
                           @click="deleteTask(index)"
                           class="text-red-500 hover:text-red-700 text-xs sm:text-sm"
@@ -534,7 +534,7 @@
               </template>
 
             </draggable>
-            <div class=" p-3 bg-red-100 rounded-lg">
+            <div v-if="wontDoTasks.length != 0" class=" p-3 bg-red-100 rounded-lg">
               <h3 class="text-lg font-semibold text-red-700">Won't Do Tasks</h3>
               <ul>
                 <li v-for="(task, index) in wontDoTasks" :key="index" class="flex justify-between items-center bg-white p-2 rounded-md mt-2">
@@ -781,10 +781,14 @@ const sendNotificationToPlayer = async (userName, action) => {
 
 
 
-const openModal = (task) => {
-  selectedTaskTitle.value = task.title; // Automatically set task title
-  isModalOpen.value = true;
+const openModal = (type = 'task') => {
+  if (type === 'task') {
+    modalOpen.value = true;  // Ensure this opens the task modal
+  } else if (type === 'calendar') {
+    isModalOpen.value = true; // Open the calendar modal
+  }
 };
+
 
 // Close Modal
 const closeModal = () => {
