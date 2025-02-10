@@ -347,7 +347,14 @@
 
                                 <label for="reminderTime" class="block mb-2">Time:</label>
                                 <input type="time" v-model="reminder.time" id="reminderTime" class="w-full border-gray-300 rounded-md p-2 mb-2" required>
-
+                                <label for="reminderRepeat" class="block mb-2">Repeat:</label>
+                                <select v-model="reminder.repeat" id="reminderRepeat" class="w-full border-gray-300 rounded-md p-2 mb-2">
+                                  <option value="">No Repeat</option>
+                                  <option value="daily">Daily</option>
+                                  <option value="weekly">Weekly</option>
+                                  <option value="monthly">Monthly</option>
+                                  <option value="yearly">Yearly</option>
+                                </select>
                                 <div class="flex justify-end mt-4">
                                   <button @click="closeModal" type="button" class="mr-2 px-4 py-2 bg-gray-300 rounded-md">Cancel</button>
                                   <button type="submit" class="px-4 py-2 bg-blue-500 text-white rounded-md">Add to Calendar</button>
