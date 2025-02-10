@@ -623,7 +623,7 @@ const handleAddReminder = () => {
     return;
   }
 
-  // Check if a task is selected; if not, use the default title
+  // Check if a task is selected; if not, use a default title
   const eventTitle = selectedTaskTitle.value || "Task Reminder";
 
   // Format Date and Time
@@ -632,6 +632,28 @@ const handleAddReminder = () => {
 
   const formatDate = (date) => date.toISOString().replace(/-|:|\.\d+/g, "");
 
+  // Define recurrence rule based on selected repeat option
+  let recurrenceRule = "";
+  if (reminder.value.repeat) {
+    switch (reminder.value.repeat) {
+      case "daily":
+        recurrenceRule = "RRULE:FREQ=DAILY";
+        break;
+      case "weekly":
+        recurrenceRule = "RRULE:FREQ=WEEKLY";
+        break;
+      case "monthly":
+        recurrenceRule = "RRULE:FREQ=MONTHLY";
+        break;
+      case "yearly":
+        recurrenceRule = "RRULE:FREQ=YEARLY";
+        break;
+      default:
+        recurrenceRule = "";
+    }
+  }
+
+  // Generate the .ics file content
   const icsContent = `BEGIN:VCALENDAR
 VERSION:2.0
 BEGIN:VEVENT
@@ -640,6 +662,7 @@ DESCRIPTION:Reminder for ${eventTitle}
 DTSTART:${formatDate(startDateTime)}
 DTEND:${formatDate(endDateTime)}
 LOCATION:Online
+${recurrenceRule}
 BEGIN:VALARM
 TRIGGER:-PT15M
 ACTION:DISPLAY
@@ -663,6 +686,7 @@ END:VCALENDAR`;
   // Close Modal and Reset Form
   closeModal();
 };
+
 
 
 const transferTask = async () => {
