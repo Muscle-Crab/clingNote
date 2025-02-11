@@ -630,16 +630,12 @@ const handleAddReminder = () => {
     return;
   }
 
-  // Check if a task is selected; if not, use a default title
   const eventTitle = selectedTaskTitle.value || "Task Reminder";
-
-  // Format Date and Time
   const startDateTime = new Date(`${reminder.value.date}T${reminder.value.time}:00`);
-  const endDateTime = new Date(startDateTime.getTime() + 3600000); // Default: 1-hour duration
+  const endDateTime = new Date(startDateTime.getTime() + 3600000);
 
   const formatDate = (date) => date.toISOString().replace(/-|:|\.\d+/g, "");
 
-  // Define recurrence rule based on selected repeat option
   let recurrenceRule = "";
   if (reminder.value.repeat) {
     switch (reminder.value.repeat) {
@@ -660,7 +656,6 @@ const handleAddReminder = () => {
     }
   }
 
-  // Generate the .ics file content
   const icsContent = `BEGIN:VCALENDAR
 VERSION:2.0
 BEGIN:VEVENT
@@ -678,7 +673,6 @@ END:VALARM
 END:VEVENT
 END:VCALENDAR`;
 
-  // Create .ics File
   const blob = new Blob([icsContent], { type: "text/calendar" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
@@ -690,9 +684,12 @@ END:VCALENDAR`;
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
 
-  // Close Modal and Reset Form
-  closeModal();
+  // Try opening the file automatically after download
+  setTimeout(() => {
+    window.location.href = url;
+  }, 500);
 };
+
 
 
 
