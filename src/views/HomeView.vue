@@ -162,18 +162,18 @@
 
       </div>
       <!-- Modal toggle button -->
-      <div class="fixed bottom-12 right-5 z-50">
-        <div>
-          <router-link
-              :to="userId ? '#' : '/login'"
-              @click.native.prevent="userId && openModal('task')"
-              class="mt-4 px-6 py-2 bg-blue-500 text-white rounded-full shadow-lg hover:bg-blue-600 transition duration-200"
-          >
-            Add Task
-          </router-link>
-
-        </div>
+      <div class="fixed bottom-10 left-1/2 transform -translate-x-1/2 z-50">
+        <router-link
+            :to="userId ? '#' : '/login'"
+            @click.native.prevent="userId && openModal('task')"
+            class="p-4 bg-blue-500 text-white rounded-full shadow-lg hover:bg-blue-600 transition duration-200 flex items-center justify-center"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" class="w-6 h-6">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+          </svg>
+        </router-link>
       </div>
+
       <!-- Main modal -->
       <div :class="{ 'hidden': !modalOpen }" @keydown.escape="closeModal" tabindex="-1" aria-hidden="true" class="overflow-y-auto overflow-x-hidden fixed top-0 right-0 left-0 z-50 justify-center items-center w-full md:inset-0 h-modal md:h-full">
         <!-- Modal content -->
