@@ -1851,7 +1851,7 @@ const isSpinning = (index) => {
   return spinningTasks.value[index] || false;
 };
 const completedTaskCount = computed(() => {
-  return selectedDayRoutine.value.filter(task => task.completed).length;
+  return selectedDayRoutine.value?.filter(task => task.completed).length;
 });
 // Function to start spinning for a specific task
 const startSpinning = (index) => {
