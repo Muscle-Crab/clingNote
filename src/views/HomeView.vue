@@ -269,6 +269,18 @@
         </div>
         <div v-else>
           <div class="scroll-container overflow-y-auto h-[80vh]">
+            <div class="flex items-center justify-between cursor-pointer my-4">
+              <h3 class="text-lg font-semibold text-gray-700">Completed ({{completedTaskCount}})</h3>
+              <button @click="showCompleted = !showCompleted">
+                <i
+                    :class="{
+            'fas fa-eye text-gray-500': showCompleted,
+            'fas fa-eye-slash text-gray-500': !showCompleted,
+          }"
+                    class="text-xl"
+                ></i>
+              </button>
+            </div>
             <draggable
                 handle=".drag-handle"
                 :animation="150"
@@ -280,7 +292,7 @@
                 @end="handleDragEnd"
             >
               <template #item="{ element: task, index }">
-                <div  v-if="shouldDisplayTask(task)"
+                <div   v-if="shouldDisplayTask(task) && (showCompleted || !task.completed)"
                     class="task-card bg-white rounded-xl shadow-lg p-5 relative hover:shadow-xl transition-shadow duration-300"
                     :class="{
     'bg-gray-200': task.completed && isToday(selectedDayIndex), // Add a light green background for completed tasks
@@ -851,7 +863,7 @@ const openModal = (type = 'task', index = null, title = '') => {
   }
 };
 
-
+const showCompleted = ref(false);
 
 
 
@@ -1838,7 +1850,9 @@ const shouldDisplayTask = (task) => {
 const isSpinning = (index) => {
   return spinningTasks.value[index] || false;
 };
-
+const completedTaskCount = computed(() => {
+  return selectedDayRoutine.value.filter(task => task.completed).length;
+});
 // Function to start spinning for a specific task
 const startSpinning = (index) => {
   spinningTasks.value[index] = true;
