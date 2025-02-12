@@ -280,7 +280,7 @@
                 @end="handleDragEnd"
             >
               <template #item="{ element: task, index }">
-                <div
+                <div  v-if="shouldDisplayTask(task)"
                     class="task-card bg-white rounded-xl shadow-lg p-5 relative hover:shadow-xl transition-shadow duration-300"
                     :class="{
     'bg-gray-200': task.completed && isToday(selectedDayIndex), // Add a light green background for completed tasks
@@ -306,8 +306,10 @@
                           class="text-lg font-semibold text-gray-800"
                           :class="{ 'line-through text-gray-500': task.completed && isToday(selectedDayIndex) }"
                       >
-                        {{ task.title }}
+                        {{ task.title }} <span v-if="task.reminder" class="mr-2">⏰</span>
                       </div>
+
+
                       <div class="absolute top-2 right-2 bg-blue-100  px-2 py-1 rounded-full text-xs font-bold flex items-center ">
                         <span>10</span>
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 24 24">
@@ -459,7 +461,7 @@
                         ✅
                       </button>
 
-                      <button @click="openModal('calendar', task.title)" class="rounded-md text-xs sm:text-sm">
+                      <button @click="openModal('calendar', index, task.title)" class="rounded-md text-xs sm:text-sm">
                         📅
                       </button>
                       <button v-if="!isToday(selectedDayIndex)"
@@ -622,45 +624,69 @@ const reminder = ref({ date: "", time: "" });
 
 // Close Modal
 
-
+const selectedTaskIndex = ref(null);
 // Function to Download `.ics` File
-const handleAddReminder = () => {
+const handleAddReminder = async () => {
   if (!reminder.value.date || !reminder.value.time) {
     alert("Please enter both date and time!");
     return;
   }
 
-  // Check if a task is selected; if not, use a default title
-  const eventTitle = selectedTaskTitle.value || "Task Reminder";
+  if (selectedTaskIndex.value === null) {
+    alert("No task selected!");
+    return;
+  }
 
-  // Format Date and Time
+  // Get the selected task
+  const task = { ...selectedDayRoutine.value[selectedTaskIndex.value] };
+
+  // Add reminder to the task
+  task.reminder = {
+    date: reminder.value.date,
+    time: reminder.value.time,
+    repeat: reminder.value.repeat || "", // Default empty if no repeat set
+  };
+
+  // Update Firestore
+  try {
+    const selectedDayDocRef = doc(db, 'weeklyRoutines', `${userId.value}_${days[selectedDayIndex.value].day}`);
+    const selectedDayDocSnapshot = await getDoc(selectedDayDocRef);
+
+    if (selectedDayDocSnapshot.exists()) {
+      let tasks = selectedDayDocSnapshot.data().tasks || [];
+      tasks[selectedTaskIndex.value] = task;
+
+      await updateDoc(selectedDayDocRef, {
+        tasks: tasks,
+        updatedAt: serverTimestamp()
+      });
+
+      selectedDayRoutine.value[selectedTaskIndex.value] = task;
+      console.log("Reminder added successfully to the task.");
+    }
+  } catch (error) {
+    console.error("Error updating task with reminder:", error);
+    return;
+  }
+
+  // **ICS FILE GENERATION** (Google Calendar Integration)
+  const eventTitle = task.title || "Task Reminder";
   const startDateTime = new Date(`${reminder.value.date}T${reminder.value.time}:00`);
   const endDateTime = new Date(startDateTime.getTime() + 3600000); // Default: 1-hour duration
 
   const formatDate = (date) => date.toISOString().replace(/-|:|\.\d+/g, "");
 
-  // Define recurrence rule based on selected repeat option
   let recurrenceRule = "";
   if (reminder.value.repeat) {
     switch (reminder.value.repeat) {
-      case "daily":
-        recurrenceRule = "RRULE:FREQ=DAILY";
-        break;
-      case "weekly":
-        recurrenceRule = "RRULE:FREQ=WEEKLY";
-        break;
-      case "monthly":
-        recurrenceRule = "RRULE:FREQ=MONTHLY";
-        break;
-      case "yearly":
-        recurrenceRule = "RRULE:FREQ=YEARLY";
-        break;
-      default:
-        recurrenceRule = "";
+      case "daily": recurrenceRule = "RRULE:FREQ=DAILY"; break;
+      case "weekly": recurrenceRule = "RRULE:FREQ=WEEKLY"; break;
+      case "monthly": recurrenceRule = "RRULE:FREQ=MONTHLY"; break;
+      case "yearly": recurrenceRule = "RRULE:FREQ=YEARLY"; break;
+      default: recurrenceRule = "";
     }
   }
 
-  // Generate the .ics file content
   const icsContent = `BEGIN:VCALENDAR
 VERSION:2.0
 BEGIN:VEVENT
@@ -678,7 +704,6 @@ END:VALARM
 END:VEVENT
 END:VCALENDAR`;
 
-  // Create .ics File
   const blob = new Blob([icsContent], { type: "text/calendar" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
@@ -690,9 +715,12 @@ END:VCALENDAR`;
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
 
-  // Close Modal and Reset Form
+  // **Close Modal and Reset Reminder Form**
   closeModal();
+  reminder.value = { date: "", time: "", repeat: "" };
 };
+
+
 
 
 
@@ -813,17 +841,17 @@ const sendNotificationToPlayer = async (userName, action) => {
 
 
 
-
-
-
-const openModal = (type = 'task', title = '') => {
-  if (type === 'task') {
-    modalOpen.value = true;
-  } else if (type === 'calendar') {
-    selectedTaskTitle.value = title || "Task Reminder"; // Set title when opening calendar modal
+const openModal = (type = 'task', index = null, title = '') => {
+  if (type === 'calendar') {
+    selectedTaskIndex.value = index; // Store task index
+    selectedTaskTitle.value = title || "Task Reminder";
     isModalOpen.value = true;
+  } else {
+    modalOpen.value = true;
   }
 };
+
+
 
 
 
@@ -1787,6 +1815,24 @@ const getOrdinalSuffix = (number) => {
 };
 
 const spinningTasks = ref([]);
+
+const getTodayDate = () => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0); // Reset time to midnight for accurate comparison
+  const formattedDate = today.toISOString().split('T')[0]; // Format as YYYY-MM-DD
+  console.log("Today's Date:", formattedDate); // Log the date for debugging
+  return formattedDate;
+};
+
+// Call the function to see the output
+const shouldDisplayTask = (task) => {
+  if (!task.reminder || !task.reminder.date) return true; // Always show unscheduled tasks
+  const todayDate = getTodayDate(); // Get correctly formatted today's date
+  return task.reminder.date === todayDate; // Show scheduled tasks only on their due date
+};
+
+
+
 
 // Function to check if a task is spinning
 const isSpinning = (index) => {
