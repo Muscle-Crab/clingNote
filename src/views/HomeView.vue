@@ -722,33 +722,21 @@ END:VALARM
 END:VEVENT
 END:VCALENDAR`;
 
-  // Function to force download without permission prompt
-  const downloadICSFile = (filename, content) => {
-    const blob = new Blob([content], { type: "text/calendar" });
-    const url = URL.createObjectURL(blob);
+  const blob = new Blob([icsContent], { type: "text/calendar" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
 
-    const a = document.createElement("a");
-    a.style.display = "none";
-    a.href = url;
-    a.download = filename;
-
-    document.body.appendChild(a);
-    a.click();
-
-    setTimeout(() => {
-      URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-    }, 100); // Cleanup after download
-  };
-
-  // Trigger direct ICS file download
-  downloadICSFile(`${eventTitle.replace(/\s+/g, "_")}.ics`, icsContent);
+  link.href = url;
+  link.download = `${eventTitle.replace(/\s+/g, "_")}.ics`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
 
   // **Close Modal and Reset Reminder Form**
   closeModal();
   reminder.value = { date: "", time: "", repeat: "" };
 };
-
 
 
 
