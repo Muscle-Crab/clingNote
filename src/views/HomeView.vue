@@ -1114,6 +1114,7 @@ const toggleTaskCompletion = async (index) => {
   // Check streak after toggling task completion
   checkStreakOnCompletion();
   checkAllTasksCompleted();
+  selectedDayRoutine.value = selectedDayRoutine.value.filter(task => showCompleted || !task.completed);
 };
 
 const wontDoModalOpen = ref(false);
@@ -1844,10 +1845,12 @@ const getTodayDate = () => {
 
 // Call the function to see the output
 const shouldDisplayTask = (task) => {
-  if (!task.reminder || !task.reminder.date) return true; // Always show unscheduled tasks
-  const todayDate = getTodayDate(); // Get correctly formatted today's date
-  return task.reminder.date === todayDate; // Show scheduled tasks only on their due date
+  if (!showCompleted && task.completed) return false;
+  if (!task.reminder || !task.reminder.date) return true;
+  const todayDate = getTodayDate();
+  return task.reminder.date === todayDate;
 };
+
 
 
 
