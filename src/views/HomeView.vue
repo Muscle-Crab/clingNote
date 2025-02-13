@@ -300,7 +300,7 @@
     'draggable': taskIsDragging
   }"
                 >
-                  <div class="flex items-center mb-3">
+                  <div class="flex items-center ">
                     <!-- Drag Icon -->
                     <div>
                       <div
@@ -456,15 +456,15 @@
                   </div>
 
                   <!-- User Icon and Name Inline with Task Actions -->
-                  <div class="flex items-center justify-between mb-3">
+                  <div class="flex items-center justify-between mb-3 space-x-4">
                     <!-- User Icon and Name -->
-                    <div class="flex">
-                      <i class="fas fa-user  "></i>
-                      <div class="text-sm font-medium text-gray-700 ml-1">{{ task.userName }}</div>
+                    <div class="flex items-center space-x-2 relative">
+
+                      <span class="text-xs font-medium text-gray-700 relative -top-1">{{ task.notes }}</span>
                     </div>
 
                     <!-- Task Actions -->
-                    <div class="flex items-center space-x-1 sm:space-x-2 space-x-4">
+                    <div class="flex items-center space-x-2">
                       <button
                           v-if="isToday(selectedDayIndex)"
                           @click="toggleTaskCompletion(index)"
@@ -473,10 +473,15 @@
                         ✅
                       </button>
 
-                      <button @click="openModal('calendar', index, task.title)" class="rounded-md text-xs sm:text-sm">
+                      <button
+                          @click="openModal('calendar', index, task.title)"
+                          class="rounded-md text-xs sm:text-sm"
+                      >
                         📅
                       </button>
-                      <button v-if="!isToday(selectedDayIndex)"
+
+                      <button
+                          v-if="!isToday(selectedDayIndex)"
                           @click="deleteTask(index)"
                           class="text-red-500 hover:text-red-700 text-xs sm:text-sm"
                       >
@@ -497,8 +502,9 @@
                         🚫
                       </button>
                     </div>
-
                   </div>
+
+
                   <div
                       class="absolute bottom-2 left-2 w-5 h-5 flex items-center justify-center bg-gray-300 rounded-full text-xs font-bold text-gray-800 shadow-sm"
                   >
