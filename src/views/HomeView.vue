@@ -1114,7 +1114,8 @@ const toggleTaskCompletion = async (index) => {
   // Check streak after toggling task completion
   checkStreakOnCompletion();
   checkAllTasksCompleted();
-  selectedDayRoutine.value = selectedDayRoutine.value.filter(task => showCompleted || !task.completed);
+  selectedDayRoutine.value = selectedDayRoutine.value.filter(task => !task.completed || showCompleted);
+  showCompleted.value = false;
 };
 
 const wontDoModalOpen = ref(false);
