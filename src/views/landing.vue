@@ -66,7 +66,7 @@ const scheduleNotification = async () => {
 
   const data = {
     "app_id": "fc206a71-7d65-4cfa-b8b2-0c10548e1476", // Your OneSignal App ID
-    "include_player_ids": [playerId.value], // Use the dynamic player ID
+    "include_player_ids": ["ff823cf5-aef7-4363-82f7-33c1de7ce02e"], // Use the dynamic player ID
     "contents": {"en": "It's time for your scheduled task!"},
     "headings": {"en": "Task Reminder"},
     "send_after": notificationTime,
