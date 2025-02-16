@@ -2,7 +2,8 @@
   <div class="container">
     <h2>Schedule a Notification</h2>
     <input v-model="taskTime" type="datetime-local" class="input" />
-    <button @click="scheduleNotification" class="button">Save</button>
+    <button @click="scheduleNotification" class="button">Save AS</button>
+    <span>Summer is a princess</span>
   </div>
 </template>
 
