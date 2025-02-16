@@ -1,8 +1,8 @@
 <template>
-  <div>
+  <div class="container">
     <h2>Schedule a Notification</h2>
-    <input v-model="taskTime" type="datetime-local" />
-    <button @click="scheduleNotification">Save me</button>
+    <input v-model="taskTime" type="datetime-local" class="input" />
+    <button @click="scheduleNotification" class="button">Save</button>
   </div>
 </template>
 
@@ -28,10 +28,11 @@ const scheduleNotification = async () => {
 
   const data = {
     "app_id": "fc206a71-7d65-4cfa-b8b2-0c10548e1476",
-    "included_segments": ["Subscribed Users"],
-    "send_after": notificationTime,
+    "include_player_ids": ["ff823cf5-aef7-4363-82f7-33c1de7ce02e"], // Replace with user's OneSignal player ID
     "contents": { "en": "It's time for your scheduled task!" },
-    "headings": { "en": "Task Reminder" }
+    "headings": { "en": "Task Reminder" },
+    "send_after": notificationTime,
+    "url": "https://your-app.com"
   };
 
   try {
@@ -49,11 +50,14 @@ const scheduleNotification = async () => {
 // Listen for push notifications and trigger TTS
 onMounted(() => {
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.ready.then(registration => {
-      OneSignal.Notifications.addEventListener('click', (event) => {
-        const message = event.notification.body;
-        speakNotification(message);
-      });
+    navigator.serviceWorker.ready.then(() => {
+      // Listen for OneSignal notifications
+      if (window.OneSignal) {
+        window.OneSignal.Notifications.addEventListener('click', (event) => {
+          const message = event.notification.body;
+          speakNotification(message);
+        });
+      }
 
       // Backup method using BroadcastChannel
       const bc = new BroadcastChannel('notification-channel');
@@ -73,3 +77,34 @@ const speakNotification = (message) => {
   }
 };
 </script>
+
+<style scoped>
+.container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px;
+}
+
+.input {
+  width: 100%;
+  max-width: 300px;
+  padding: 10px;
+  margin: 10px 0;
+  font-size: 16px;
+}
+
+.button {
+  padding: 10px 15px;
+  font-size: 16px;
+  background-color: #007bff;
+  color: white;
+  border: none;
+  cursor: pointer;
+  border-radius: 5px;
+}
+
+.button:hover {
+  background-color: #0056b3;
+}
+</style>
