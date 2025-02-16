@@ -1,6 +1,6 @@
 <template>
   <div class="container">
-    <h2>Schedule a Notification</h2>
+    <h2>Schedule a Notification again</h2>
     <input v-model="taskTime" type="datetime-local" class="input" />
     <button @click="scheduleNotification" class="button">Save</button>
   </div>
@@ -51,9 +51,12 @@ const scheduleNotification = async () => {
 onMounted(() => {
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.ready.then(() => {
+      console.log("Service worker ready");
+
       // Listen for OneSignal notifications
       if (window.OneSignal) {
         window.OneSignal.Notifications.addEventListener('click', (event) => {
+          console.log("OneSignal notification clicked:", event);
           const message = event.notification.body;
           speakNotification(message);
         });
@@ -62,6 +65,7 @@ onMounted(() => {
       // Backup method using BroadcastChannel
       const bc = new BroadcastChannel('notification-channel');
       bc.onmessage = event => {
+        console.log("BroadcastChannel received message:", event.data);
         const message = event.data.body;
         speakNotification(message);
       };
@@ -71,9 +75,12 @@ onMounted(() => {
 
 // Speak out notifications
 const speakNotification = (message) => {
+  console.log("Speaking notification:", message);
   if (synth) {
     const utterance = new SpeechSynthesisUtterance(message);
     synth.speak(utterance);
+  } else {
+    console.error("Speech synthesis not available");
   }
 };
 </script>
