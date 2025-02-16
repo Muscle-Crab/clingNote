@@ -1,117 +1,45 @@
 <template>
-  <div class="container">
-    <h2>Schedule a Notification again</h2>
-    <input v-model="taskTime" type="datetime-local" class="input" />
-    <button @click="scheduleNotification" class="button">Save</button>
+  <div>
+    <h2>OneSignal Player ID</h2>
+    <p v-if="playerId">Your Player ID: {{ playerId }}</p>
+    <p v-else>Fetching Player ID...</p>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
-import axios from 'axios';
+import { ref, onMounted } from "vue";
 
-const taskTime = ref('');
-const synth = window.speechSynthesis; // Web Speech API for TTS
+const playerId = ref(null);
 
-const scheduleNotification = async () => {
-  if (!taskTime.value) {
-    alert('Please enter a valid date and time.');
-    return;
-  }
-
-  const notificationTime = new Date(taskTime.value).toISOString();
-
-  const headers = {
-    'Authorization': 'Bearer ZDZiZDk0NTktMjUwZS00NTQ4LWFhOTItNjBiZDZiMjVhYzYy',
-    'Content-Type': 'application/json'
-  };
-
-  const data = {
-    "app_id": "fc206a71-7d65-4cfa-b8b2-0c10548e1476",
-    "include_player_ids": ["ff823cf5-aef7-4363-82f7-33c1de7ce02e"], // Replace with user's OneSignal player ID
-    "contents": { "en": "It's time for your scheduled task!" },
-    "headings": { "en": "Task Reminder" },
-    "send_after": notificationTime,
-    "url": "https://your-app.com"
-  };
-
-  try {
-    const response = await axios.post('https://onesignal.com/api/v1/notifications', data, { headers });
-
-    if (response.data.id) {
-      alert('Notification scheduled successfully!');
-    }
-  } catch (error) {
-    console.error('Error scheduling notification:', error);
-    alert('Failed to schedule notification.');
-  }
-};
-
-// Listen for push notifications and trigger TTS
-onMounted(() => {
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.ready.then(() => {
-      console.log("Service worker ready");
-
-      // Listen for OneSignal notifications
-      if (window.OneSignal) {
-        window.OneSignal.Notifications.addEventListener('click', (event) => {
-          console.log("OneSignal notification clicked:", event);
-          const message = event.notification.body;
-          speakNotification(message);
-        });
+const getPlayerId = () => {
+  if (window.OneSignal) {
+    window.OneSignal.push(async function () {
+      try {
+        const id = await window.OneSignal.getUserId();
+        playerId.value = id;
+        console.log("Player ID:", id);
+      } catch (error) {
+        console.error("Error fetching Player ID:", error);
       }
-
-      // Backup method using BroadcastChannel
-      const bc = new BroadcastChannel('notification-channel');
-      bc.onmessage = event => {
-        console.log("BroadcastChannel received message:", event.data);
-        const message = event.data.body;
-        speakNotification(message);
-      };
     });
-  }
-});
-
-// Speak out notifications
-const speakNotification = (message) => {
-  console.log("Speaking notification:", message);
-  if (synth) {
-    const utterance = new SpeechSynthesisUtterance(message);
-    synth.speak(utterance);
   } else {
-    console.error("Speech synthesis not available");
+    console.error("OneSignal is not loaded yet.");
   }
 };
+
+onMounted(() => {
+  getPlayerId();
+});
 </script>
 
 <style scoped>
-.container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 20px;
+h2 {
+  font-size: 1.5rem;
+  margin-bottom: 10px;
 }
 
-.input {
-  width: 100%;
-  max-width: 300px;
-  padding: 10px;
-  margin: 10px 0;
-  font-size: 16px;
-}
-
-.button {
-  padding: 10px 15px;
-  font-size: 16px;
-  background-color: #007bff;
-  color: white;
-  border: none;
-  cursor: pointer;
-  border-radius: 5px;
-}
-
-.button:hover {
-  background-color: #0056b3;
+p {
+  font-size: 1rem;
+  color: #333;
 }
 </style>
