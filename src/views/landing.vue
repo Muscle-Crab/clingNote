@@ -1,132 +1,125 @@
 <template>
   <div class="container">
-    <h2>Calendar Reminder</h2>
+    <h2>Schedule a Notification</h2>
 
-    <!-- Event Input Form -->
-    <div class="form-container">
-      <label for="event-title">Event Title:</label>
-      <input type="text" v-model="eventTitle" placeholder="Enter event title" />
+    <input v-model="taskTime" type="datetime-local" class="input" />
+    <button @click="scheduleNotification" class="button">Save</button>
 
-      <label for="event-date">Date:</label>
-      <input type="date" v-model="eventDate" />
-
-      <label for="event-time">Time:</label>
-      <input type="time" v-model="eventTime" />
-
-      <button @click="downloadICSFile" class="btn add-event">
-        Add to Calendar App
-      </button>
-    </div>
+    <!-- Show Player ID when available -->
+    <p v-if="playerId" class="player-id">
+      Player ID: <strong>{{ playerId }}</strong>
+    </p>
   </div>
 </template>
 
-<script>
-export default {
-  data() {
-    return {
-      eventTitle: "",
-      eventDate: "",
-      eventTime: "",
-    };
-  },
-  methods: {
-    downloadICSFile() {
-      if (!this.eventTitle || !this.eventDate || !this.eventTime) {
-        alert("Please enter all event details!");
-        return;
-      }
+<script setup>
+import {ref, onMounted} from 'vue';
+import {useOneSignal} from '@onesignal/onesignal-vue3';
+import axios from 'axios';
 
-      // Convert event date & time to correct format
-      const startDateTime = new Date(`${this.eventDate}T${this.eventTime}:00`);
-      const endDateTime = new Date(startDateTime.getTime() + 3600000); // Event duration: 1 hour
+const taskTime = ref('');
+const playerId = ref('');
+const {OneSignal, isOneSignalInitialized} = useOneSignal(); // Get OneSignal instance
 
-      // Format date to YYYYMMDDTHHMMSSZ (UTC time format)
-      const formatDate = (date) =>
-          date.toISOString().replace(/-|:|\.\d+/g, "");
+const fetchPlayerId = async () => {
+  try {
+    if (!isOneSignalInitialized.value) {
+      console.warn('OneSignal is not yet initialized. Retrying...');
+      setTimeout(fetchPlayerId, 2000); // Retry after 2 seconds
+      return;
+    }
 
-      const icsContent = `BEGIN:VCALENDAR
-VERSION:2.0
-BEGIN:VEVENT
-SUMMARY:${this.eventTitle}
-DESCRIPTION:Reminder set from Vue.js app
-DTSTART:${formatDate(startDateTime)}
-DTEND:${formatDate(endDateTime)}
-LOCATION:Online
-BEGIN:VALARM
-TRIGGER:-PT0M
-ACTION:DISPLAY
-DESCRIPTION:Reminder for ${this.eventTitle}
-END:VALARM
-END:VEVENT
-END:VCALENDAR`;
+    const userId = await OneSignal.getUserId(); // Get Player ID from OneSignal
+    if (userId) {
+      playerId.value = userId;
+      localStorage.setItem('player_id', userId);
+    } else {
+      console.warn('User is not subscribed to notifications.');
+    }
+  } catch (error) {
+    console.error('Error fetching player ID:', error);
+  }
+};
 
-      // Create a downloadable ICS file
-      const blob = new Blob([icsContent], { type: "text/calendar" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
+// Call the function after OneSignal initializes
+onMounted(() => {
+  setTimeout(fetchPlayerId, 3000); // Ensure OneSignal is ready before fetching
+});
 
-      link.href = url;
-      link.download = "event.ics";
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-    },
-  },
+const scheduleNotification = async () => {
+  if (!taskTime.value) {
+    alert('Please enter a valid date and time.');
+    return;
+  }
+
+  if (!playerId.value) {
+    alert('Player ID not found. Please ensure OneSignal is initialized.');
+    return;
+  }
+
+  const notificationTime = new Date(taskTime.value).toISOString();
+
+  const headers = {
+    'Authorization': 'Bearer ZDZiZDk0NTktMjUwZS00NTQ4LWFhOTItNjBiZDZiMjVhYzYy', // Replace with your actual API key
+    'Content-Type': 'application/json'
+  };
+
+  const data = {
+    "app_id": "fc206a71-7d65-4cfa-b8b2-0c10548e1476", // Your OneSignal App ID
+    "include_player_ids": [playerId.value], // Use the dynamic player ID
+    "contents": {"en": "It's time for your scheduled task!"},
+    "headings": {"en": "Task Reminder"},
+    "send_after": notificationTime,
+    "url": "https://your-app.com" // Optional: Link to your app or task page
+  };
+
+  try {
+    const response = await axios.post('https://onesignal.com/api/v1/notifications', data, {headers});
+
+    if (response.data.id) {
+      alert('Notification scheduled successfully!');
+    }
+  } catch (error) {
+    console.error('Error scheduling notification:', error);
+    alert('Failed to schedule notification. Check console for details.');
+  }
 };
 </script>
 
 <style scoped>
 .container {
-  max-width: 400px;
-  margin: 50px auto;
-  text-align: center;
-  padding: 20px;
-  border-radius: 8px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  background: #fff;
-}
-
-h2 {
-  color: #333;
-  margin-bottom: 20px;
-}
-
-.form-container {
   display: flex;
   flex-direction: column;
   align-items: center;
+  padding: 20px;
 }
 
-label {
-  margin: 10px 0 5px;
-  font-weight: bold;
-}
-
-input {
-  width: 80%;
-  padding: 8px;
-  margin-bottom: 15px;
-  border: 1px solid #ccc;
-  border-radius: 5px;
-  font-size: 14px;
-}
-
-.btn {
-  padding: 10px 15px;
-  border: none;
-  border-radius: 5px;
+.input {
+  width: 100%;
+  max-width: 300px;
+  padding: 10px;
+  margin: 10px 0;
   font-size: 16px;
-  cursor: pointer;
-  transition: background 0.3s;
 }
 
-.add-event {
-  background: #34a853;
+.button {
+  padding: 10px 15px;
+  font-size: 16px;
+  background-color: #007bff;
   color: white;
+  border: none;
+  cursor: pointer;
+  border-radius: 5px;
 }
 
-.add-event:hover {
-  background: #2c8c41;
+.button:hover {
+  background-color: #0056b3;
+}
+
+/* Style for displaying the Player ID */
+.player-id {
+  margin-top: 15px;
+  font-size: 14px;
+  color: #333;
 }
 </style>
