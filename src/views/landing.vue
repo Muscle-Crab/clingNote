@@ -1,25 +1,19 @@
 <template>
   <div class="container">
     <h2>Schedule a Notification</h2>
-
     <input v-model="taskTime" type="datetime-local" class="input" />
     <button @click="scheduleNotification" class="button">Save</button>
-  <span>changed</span>
-    <!-- Show Player ID when available -->
-    <p v-if="playerId" class="player-id">
-      Player ID: <strong>{{ playerId }}</strong>
-    </p>
   </div>
 </template>
 
 <script setup>
-import {ref, onMounted} from 'vue';
-import {useOneSignal} from '@onesignal/onesignal-vue3';
+import { ref, onMounted } from 'vue';
+import { useOneSignal } from '@onesignal/onesignal-vue3';
 import axios from 'axios';
 
 const taskTime = ref('');
 const playerId = ref('');
-const {OneSignal, isOneSignalInitialized} = useOneSignal(); // Get OneSignal instance
+const { OneSignal, isOneSignalInitialized } = useOneSignal(); // Get OneSignal instance
 
 const fetchPlayerId = async () => {
   try {
@@ -66,7 +60,7 @@ const scheduleNotification = async () => {
 
   const data = {
     "app_id": "fc206a71-7d65-4cfa-b8b2-0c10548e1476", // Your OneSignal App ID
-    "include_player_ids": ["ff823cf5-aef7-4363-82f7-33c1de7ce02e"], // Use the dynamic player ID
+    "include_player_ids": [playerId.value], // Use the dynamic player ID
     "contents": {"en": "It's time for your scheduled task!"},
     "headings": {"en": "Task Reminder"},
     "send_after": notificationTime,
@@ -114,12 +108,5 @@ const scheduleNotification = async () => {
 
 .button:hover {
   background-color: #0056b3;
-}
-
-/* Style for displaying the Player ID */
-.player-id {
-  margin-top: 15px;
-  font-size: 14px;
-  color: #333;
 }
 </style>
