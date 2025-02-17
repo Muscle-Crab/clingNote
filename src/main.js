@@ -1,26 +1,23 @@
-import { createApp } from 'vue';
-import App from './App.vue';
-import router from './router';
-import { getAuth, onAuthStateChanged } from "firebase/auth";
-import { storePlayerId } from "./utils/oneSignal"; // Import function to store Player ID
+import { createApp } from 'vue'
+import App from './App.vue'
+import router from './router'
+import store from './store'
+import OneSignalVuePlugin from '@onesignal/onesignal-vue3'
 
-// Firebase Authentication listener
-const auth = getAuth();
-onAuthStateChanged(auth, (user) => {
-    if (user) {
-        console.log("User logged in:", user.uid);
-
-        // Wait for OneSignal to be ready before retrieving the Player ID
-        window.OneSignal = window.OneSignal || [];
-        window.OneSignal.push(() => {
-            storePlayerId(); // Store OneSignal Player ID when user logs in
-        });
-    } else {
-        console.log("User logged out");
-    }
-});
-
-// Create and mount Vue app
+// Initialize the Vue app
 const app = createApp(App);
+
+// Use plugins
+app.use(store);
 app.use(router);
+// app.use(OneSignalVuePlugin, {
+//     appId: 'fc206a71-7d65-4cfa-b8b2-0c10548e1476', // Your OneSignal App ID
+//     allowLocalhostAsSecureOrigin: true, // Enable for localhost testing
+//     notifyButton: {
+//         enable: true, // Show the notification permission button
+//     },
+//     autoResubscribe: true, // Automatically resubscribe returning users
+// });
+
+// Mount the app
 app.mount('#app');

@@ -1,35 +1,43 @@
 <script setup>
-import { ref, onMounted } from "vue";
-import { storePlayerId } from "@/utils/oneSignal";
+import { ref, onMounted } from 'vue';
 
 const playerId = ref(null);
 
-const getPlayerId = () => {
-  window.OneSignal = window.OneSignal || [];
-  window.OneSignal.push(async () => {
+onMounted(async () => {
+  if (window.OneSignal) {
     try {
-      const id = await window.OneSignal.getUserId();
-      if (id) {
-        playerId.value = id;
-        storePlayerId(id); // Store only if valid
-      } else {
-        console.warn("OneSignal Player ID is null or undefined.");
-      }
-    } catch (error) {
-      console.error("Error retrieving Player ID:", error);
-    }
-  });
-};
+      // Wait for OneSignal initialization
+      await window.OneSignal.init();
 
-onMounted(() => {
-  getPlayerId();
+      // Check if the user is already subscribed
+      const isSubscribed = await window.OneSignal.Notifications.isPushEnabled();
+
+      if (isSubscribed) {
+        playerId.value = await window.OneSignal.User.getId();
+        console.log('User is already subscribed with player_id:', playerId.value);
+      }
+
+      // Listen for permission changes (subscription events)
+      window.OneSignal.Notifications.addEventListener('permissionChange', async (event) => {
+        if (event === 'granted') {
+          playerId.value = await window.OneSignal.User.getId();
+          console.log('User subscribed, player_id:', playerId.value);
+        }
+      });
+
+    } catch (error) {
+      console.error('OneSignal initialization error:', error);
+    }
+  } else {
+    console.error('OneSignal is not available.');
+  }
 });
 </script>
 
 <template>
   <div>
-    <h2>OneSignal Player ID</h2>
+    <h2>OneSignal Subscription</h2>
     <p v-if="playerId">Your Player ID: <strong>{{ playerId }}</strong></p>
-    <p v-else>Retrieving Player ID...</p>
+    <p v-else>Click the bell to subscribe and get your Player ID.</p>
   </div>
 </template>
