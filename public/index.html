@@ -17,10 +17,6 @@
     <script>
         window.OneSignalDeferred = window.OneSignalDeferred || [];
         OneSignalDeferred.push(async function(OneSignal) {
-            alert("Checking for OneSignal ID..."); // Immediate pop-up when the page loads
-
-            console.log("Initializing OneSignal...");
-
             await OneSignal.init({
                 appId: "fc206a71-7d65-4cfa-b8b2-0c10548e1476",
                 safari_web_id: "web.onesignal.auto.2068edc0-2ec7-4d8d-bc37-83913e3acbff",
@@ -28,35 +24,8 @@
                     enable: true,
                 },
             });
-
-            console.log("OneSignal initialized!");
-
-            // Function to continuously check for the OneSignal Player ID
-            async function checkUserId(retries = 10) {
-                for (let i = 0; i < retries; i++) {
-                    const userId = await OneSignal.getUserId();
-
-                    console.log(`Attempt ${i + 1}: OneSignal User ID:`, userId);
-
-                    if (userId) {
-                        alert("OneSignal ID found: " + userId);
-                        console.log("OneSignal ID found:", userId);
-                        return;
-                    }
-
-                    await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second before retrying
-                }
-
-                alert("No OneSignal ID found. User may not be subscribed yet.");
-                console.log("No OneSignal ID found after retries.");
-            }
-
-            checkUserId(); // Start checking for the Player ID
         });
     </script>
-
-
-
 
 
 </head>
