@@ -13,31 +13,51 @@
 
     <title><%= htmlWebpackPlugin.options.title %></title>
 
-<!--    <script>-->
-<!--        window.OneSignalDeferred = window.OneSignalDeferred || [];-->
-<!--        OneSignalDeferred.push(async function(OneSignal) {-->
-<!--            await OneSignal.init({-->
-<!--                appId: "fc206a71-7d65-4cfa-b8b2-0c10548e1476",-->
-<!--                safari_web_id: "web.onesignal.auto.2068edc0-2ec7-4d8d-bc37-83913e3acbff",-->
-<!--                notifyButton: {-->
-<!--                    enable: true,-->
-<!--                },-->
-<!--            });-->
+    <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js"></script>
 
-<!--            console.log("OneSignal Initialized");-->
+    <script>
+        console.log("This is a test log. If you see this, console logging is working.");
 
-<!--            // Wait for the subscription status-->
-<!--            const isSubscribed = await OneSignal.isPushNotificationsEnabled();-->
-<!--            console.log("User is subscribed:", isSubscribed);-->
+        window.OneSignalDeferred = window.OneSignalDeferred || [];
+        OneSignalDeferred.push(async function(OneSignal) {
+            console.log("Inside OneSignal Deferred function");
 
-<!--            if (isSubscribed) {-->
-<!--                const playerId = await OneSignal.getUserId();-->
-<!--                console.log("OneSignal Player ID:", playerId);-->
-<!--            } else {-->
-<!--                console.log("User has not subscribed to notifications.");-->
-<!--            }-->
-<!--        });-->
-<!--    </script>-->
+            if (!OneSignal) {
+                console.error("OneSignal is not available inside Deferred function!");
+                return;
+            }
+
+            console.log("Before OneSignal Initialization");
+
+            try {
+                await OneSignal.init({
+                    appId: "fc206a71-7d65-4cfa-b8b2-0c10548e1476",
+                    safari_web_id: "web.onesignal.auto.2068edc0-2ec7-4d8d-bc37-83913e3acbff",
+                    notifyButton: {
+                        enable: true,
+                    },
+                });
+
+                console.log("OneSignal Initialized");
+            } catch (error) {
+                console.error("OneSignal init failed:", error);
+            }
+
+            // Check subscription status
+            const isSubscribed = await OneSignal.isPushNotificationsEnabled();
+            console.log("User is subscribed:", isSubscribed);
+
+            if (isSubscribed) {
+                const playerId = await OneSignal.getUserId();
+                console.log("OneSignal Player ID:", playerId);
+            } else {
+                console.log("User has not subscribed to notifications.");
+            }
+        });
+
+        console.log("Script executed, waiting for OneSignal...");
+    </script>
+
 
 
 
