@@ -13,7 +13,6 @@
 
     <title><%= htmlWebpackPlugin.options.title %></title>
 
-    <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
     <script>
         window.OneSignalDeferred = window.OneSignalDeferred || [];
         OneSignalDeferred.push(async function(OneSignal) {
@@ -24,8 +23,15 @@
                     enable: true,
                 },
             });
+
+            // Get and display the Player ID
+            OneSignal.getUserId().then(function(playerId) {
+                console.log("OneSignal Player ID:", playerId);
+                // Send this playerId to your backend and store it for the user
+            });
         });
     </script>
+
 
 
 </head>
