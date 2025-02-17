@@ -1,6 +1,6 @@
 <template>
   <div class="container">
-    <h2>OneSignal Subscription fdfdf</h2>
+    <h2>OneSignal Subscription work</h2>
 
     <p><strong>Your External ID:</strong> {{ userId }}</p>
 
@@ -60,12 +60,19 @@ const fetchPlayerId = async () => {
       }
     }
 
-    // Fetch player_id
-    playerId.value = await window.OneSignal.User.getId();
+    // Fetch player_id using OneSignal's getAliases()
+    const aliases = await window.OneSignal.User.getAliases();
+    playerId.value = aliases?.external_id || null;
+
     console.log("User subscribed, player_id:", playerId.value);
 
     // Register subscription
     await createSubscription(userId.value, playerId.value);
+
+    // ✅ Send automatic notification if user is subscribed
+    if (isSubscribed) {
+      sendNotification(userId.value, "Welcome! You have successfully subscribed to notifications.");
+    }
 
   } catch (error) {
     console.error("OneSignal initialization error:", error);
@@ -77,11 +84,11 @@ const fetchPlayerId = async () => {
 // Function to create a OneSignal subscription using Fetch API
 const createSubscription = async (userId, playerId) => {
   const headers = {
-    'Authorization': 'Bearer ZDZiZDk0NTktMjUwZS00NTQ4LWFhOTItNjBiZDZiMjVhYzYy', // Replace with your OneSignal API Key
+    'Authorization': 'Bearer YOUR-ONESIGNAL-REST-API-KEY', // 🔹 Replace with your actual OneSignal REST API Key
     'Content-Type': 'application/json'
   };
 
-  const appId = "fc206a71-7d65-4cfa-b8b2-0c10548e1476"; // Replace with your OneSignal App ID
+  const appId = "YOUR-ONESIGNAL-APP-ID"; // 🔹 Replace with your actual OneSignal App ID
   const aliasLabel = "external_id";
   const aliasId = userId;
 
@@ -119,25 +126,20 @@ const createSubscription = async (userId, playerId) => {
   }
 };
 
-// Function to send a test notification to the subscribed device
-const sendTestNotification = async () => {
-  if (!playerId.value) {
-    console.error("User is not subscribed or player ID is not available.");
-    return;
-  }
-
+// Function to send a notification
+const sendNotification = async (userId, message) => {
   const headers = {
-    'Authorization': 'Basic ZDZiZDk0NTktMjUwZS00NTQ4LWFhOTItNjBiZDZiMjVhYzYy', // Replace with your OneSignal API Key
+    'Authorization': 'Basic YOUR-ONESIGNAL-REST-API-KEY', // 🔹 Replace with your actual OneSignal REST API Key
     'Content-Type': 'application/json'
   };
 
-  const appId = "fc206a71-7d65-4cfa-b8b2-0c10548e1476"; // Replace with your OneSignal App ID
+  const appId = "YOUR-ONESIGNAL-APP-ID"; // 🔹 Replace with your actual OneSignal App ID
 
   const data = {
     app_id: appId,
-    include_aliases: { "external_id": [userId.value] }, // Send to specific user
-    contents: { "en": "This is a test notification!" }, // Test message
-    headings: { "en": "Test Alert" }, // Notification title
+    include_aliases: { "external_id": [userId] }, // Send to specific user
+    contents: { "en": message }, // Notification message
+    headings: { "en": "Welcome!" }, // Notification title
     url: "https://yourwebsite.com" // Optional URL
   };
 
@@ -149,10 +151,20 @@ const sendTestNotification = async () => {
     });
 
     const result = await response.json();
-    console.log("Test notification sent:", result);
+    console.log("Notification sent:", result);
   } catch (error) {
-    console.error("Error sending test notification:", error);
+    console.error("Error sending notification:", error);
   }
+};
+
+// Function to send a test notification manually
+const sendTestNotification = async () => {
+  if (!playerId.value) {
+    console.error("User is not subscribed or external ID is not available.");
+    return;
+  }
+
+  sendNotification(userId.value, "This is a test notification!");
 };
 </script>
 
