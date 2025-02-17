@@ -13,50 +13,48 @@
 
     <title><%= htmlWebpackPlugin.options.title %></title>
 
-    <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js"></script>
-
+    <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
     <script>
-        console.log("This is a test log. If you see this, console logging is working.");
-
         window.OneSignalDeferred = window.OneSignalDeferred || [];
         OneSignalDeferred.push(async function(OneSignal) {
-            console.log("Inside OneSignal Deferred function");
+            alert("Checking for OneSignal ID..."); // Immediate pop-up when the page loads
 
-            if (!OneSignal) {
-                console.error("OneSignal is not available inside Deferred function!");
-                return;
+            console.log("Initializing OneSignal...");
+
+            await OneSignal.init({
+                appId: "fc206a71-7d65-4cfa-b8b2-0c10548e1476",
+                safari_web_id: "web.onesignal.auto.2068edc0-2ec7-4d8d-bc37-83913e3acbff",
+                notifyButton: {
+                    enable: true,
+                },
+            });
+
+            console.log("OneSignal initialized!");
+
+            // Function to continuously check for the OneSignal Player ID
+            async function checkUserId(retries = 10) {
+                for (let i = 0; i < retries; i++) {
+                    const userId = await OneSignal.getUserId();
+
+                    console.log(`Attempt ${i + 1}: OneSignal User ID:`, userId);
+
+                    if (userId) {
+                        alert("OneSignal ID found: " + userId);
+                        console.log("OneSignal ID found:", userId);
+                        return;
+                    }
+
+                    await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second before retrying
+                }
+
+                alert("No OneSignal ID found. User may not be subscribed yet.");
+                console.log("No OneSignal ID found after retries.");
             }
 
-            console.log("Before OneSignal Initialization");
-
-            try {
-                await OneSignal.init({
-                    appId: "fc206a71-7d65-4cfa-b8b2-0c10548e1476",
-                    safari_web_id: "web.onesignal.auto.2068edc0-2ec7-4d8d-bc37-83913e3acbff",
-                    notifyButton: {
-                        enable: true,
-                    },
-                });
-
-                console.log("OneSignal Initialized");
-            } catch (error) {
-                console.error("OneSignal init failed:", error);
-            }
-
-            // Check subscription status
-            const isSubscribed = await OneSignal.isPushNotificationsEnabled();
-            console.log("User is subscribed:", isSubscribed);
-
-            if (isSubscribed) {
-                const playerId = await OneSignal.getUserId();
-                console.log("OneSignal Player ID:", playerId);
-            } else {
-                console.log("User has not subscribed to notifications.");
-            }
+            checkUserId(); // Start checking for the Player ID
         });
-
-        console.log("Script executed, waiting for OneSignal...");
     </script>
+
 
 
 
