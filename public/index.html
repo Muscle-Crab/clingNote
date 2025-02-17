@@ -13,24 +13,31 @@
 
     <title><%= htmlWebpackPlugin.options.title %></title>
 
-    <script>
-        window.OneSignalDeferred = window.OneSignalDeferred || [];
-        OneSignalDeferred.push(async function(OneSignal) {
-            await OneSignal.init({
-                appId: "fc206a71-7d65-4cfa-b8b2-0c10548e1476",
-                safari_web_id: "web.onesignal.auto.2068edc0-2ec7-4d8d-bc37-83913e3acbff",
-                notifyButton: {
-                    enable: true,
-                },
-            });
+<!--    <script>-->
+<!--        window.OneSignalDeferred = window.OneSignalDeferred || [];-->
+<!--        OneSignalDeferred.push(async function(OneSignal) {-->
+<!--            await OneSignal.init({-->
+<!--                appId: "fc206a71-7d65-4cfa-b8b2-0c10548e1476",-->
+<!--                safari_web_id: "web.onesignal.auto.2068edc0-2ec7-4d8d-bc37-83913e3acbff",-->
+<!--                notifyButton: {-->
+<!--                    enable: true,-->
+<!--                },-->
+<!--            });-->
 
-            // Get and display the Player ID
-            OneSignal.getUserId().then(function(playerId) {
-                console.log("OneSignal Player ID:", playerId);
-                // Send this playerId to your backend and store it for the user
-            });
-        });
-    </script>
+<!--            console.log("OneSignal Initialized");-->
+
+<!--            // Wait for the subscription status-->
+<!--            const isSubscribed = await OneSignal.isPushNotificationsEnabled();-->
+<!--            console.log("User is subscribed:", isSubscribed);-->
+
+<!--            if (isSubscribed) {-->
+<!--                const playerId = await OneSignal.getUserId();-->
+<!--                console.log("OneSignal Player ID:", playerId);-->
+<!--            } else {-->
+<!--                console.log("User has not subscribed to notifications.");-->
+<!--            }-->
+<!--        });-->
+<!--    </script>-->
 
 
 
