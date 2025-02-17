@@ -67,7 +67,7 @@
              </router-link>
            </li>
          </div>
-          <div v-if="userEmail === 'ds7513635@gmail.com'">
+          <div >
             <!-- Chat -->
             <li class="flex items-center space-x-3">
               <i class="fas fa-comments text-gray-800 dark:text-gray-200"></i>
