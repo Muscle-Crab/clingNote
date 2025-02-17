@@ -1,6 +1,6 @@
 <template>
   <div class="container">
-    <h2>OneSignal Subscription</h2>
+    <h2>OneSignal Subscription fdfdf</h2>
 
     <p><strong>Your External ID:</strong> {{ userId }}</p>
 
@@ -12,10 +12,9 @@
     </button>
 
     <div v-if="playerId" class="notification-section">
-      <h3>Send Notification</h3>
-      <input v-model="notificationMessage" placeholder="Enter message" />
-      <button @click="sendNotification" :disabled="!notificationMessage">
-        Send Notification
+      <h3>Send Test Notification</h3>
+      <button @click="sendTestNotification">
+        About (Send Test Notification)
       </button>
     </div>
   </div>
@@ -27,7 +26,6 @@ import { ref } from 'vue';
 const playerId = ref(null);
 const userId = ref("dsDDbr945rawMAUKKpIAJcnPYrX2"); // Replace with actual user ID
 const isLoading = ref(false);
-const notificationMessage = ref("");
 
 const fetchPlayerId = async () => {
   if (!window.OneSignal) {
@@ -46,7 +44,7 @@ const fetchPlayerId = async () => {
     // Wait for OneSignal to be ready
     await new Promise(resolve => setTimeout(resolve, 2000)); // Allow initialization time
 
-    // Check if user has notifications enabled (Updated)
+    // Check if user is subscribed
     const isSubscribed = await window.OneSignal.User.PushSubscription.optedIn;
     console.log("Is user subscribed?", isSubscribed);
 
@@ -66,7 +64,7 @@ const fetchPlayerId = async () => {
     playerId.value = await window.OneSignal.User.getId();
     console.log("User subscribed, player_id:", playerId.value);
 
-    // Register user subscription in OneSignal API
+    // Register subscription
     await createSubscription(userId.value, playerId.value);
 
   } catch (error) {
@@ -87,7 +85,7 @@ const createSubscription = async (userId, playerId) => {
   const aliasLabel = "external_id";
   const aliasId = userId;
 
-  // Get push token (Updated)
+  // Get push token
   const pushToken = await window.OneSignal.User.PushSubscription.token;
 
   if (!pushToken) {
@@ -98,7 +96,7 @@ const createSubscription = async (userId, playerId) => {
   const url = `https://api.onesignal.com/apps/${appId}/users/by/${aliasLabel}/${aliasId}/subscriptions`;
 
   const data = {
-    type: "push", // Subscription type (web push)
+    type: "push",
     token: pushToken,
     enabled: true
   };
@@ -121,8 +119,13 @@ const createSubscription = async (userId, playerId) => {
   }
 };
 
-// Function to send a notification to a specific user via external ID
-const sendNotification = async () => {
+// Function to send a test notification to the subscribed device
+const sendTestNotification = async () => {
+  if (!playerId.value) {
+    console.error("User is not subscribed or player ID is not available.");
+    return;
+  }
+
   const headers = {
     'Authorization': 'Basic ZDZiZDk0NTktMjUwZS00NTQ4LWFhOTItNjBiZDZiMjVhYzYy', // Replace with your OneSignal API Key
     'Content-Type': 'application/json'
@@ -132,10 +135,10 @@ const sendNotification = async () => {
 
   const data = {
     app_id: appId,
-    include_aliases: { "external_id": [userId.value] }, // Target specific user
-    contents: { "en": notificationMessage.value }, // Notification message
-    headings: { "en": "New Notification" }, // Notification title
-    url: "https://yourwebsite.com" // Optional: URL to open on click
+    include_aliases: { "external_id": [userId.value] }, // Send to specific user
+    contents: { "en": "This is a test notification!" }, // Test message
+    headings: { "en": "Test Alert" }, // Notification title
+    url: "https://yourwebsite.com" // Optional URL
   };
 
   try {
@@ -146,9 +149,9 @@ const sendNotification = async () => {
     });
 
     const result = await response.json();
-    console.log("Notification sent:", result);
+    console.log("Test notification sent:", result);
   } catch (error) {
-    console.error("Error sending notification:", error);
+    console.error("Error sending test notification:", error);
   }
 };
 </script>
@@ -177,13 +180,5 @@ button:disabled {
 
 .notification-section {
   margin-top: 20px;
-}
-
-input {
-  padding: 10px;
-  font-size: 16px;
-  margin-right: 10px;
-  border: 1px solid #ccc;
-  border-radius: 5px;
 }
 </style>
