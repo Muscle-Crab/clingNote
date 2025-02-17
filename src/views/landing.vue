@@ -36,7 +36,7 @@ onMounted(async () => {
 
 <template>
   <div>
-    <h2>OneSignal Subscription</h2>
+    <h2>OneSignal Subscriptions</h2>
     <p v-if="playerId">Your Player ID: <strong>{{ playerId }}</strong></p>
     <p v-else>Click the bell to subscribe and get your Player ID.</p>
   </div>

@@ -10,14 +10,14 @@ const app = createApp(App);
 // Use plugins
 app.use(store);
 app.use(router);
-// app.use(OneSignalVuePlugin, {
-//     appId: 'fc206a71-7d65-4cfa-b8b2-0c10548e1476', // Your OneSignal App ID
-//     allowLocalhostAsSecureOrigin: true, // Enable for localhost testing
-//     notifyButton: {
-//         enable: true, // Show the notification permission button
-//     },
-//     autoResubscribe: true, // Automatically resubscribe returning users
-// });
+app.use(OneSignalVuePlugin, {
+    appId: 'fc206a71-7d65-4cfa-b8b2-0c10548e1476', // Your OneSignal App ID
+    allowLocalhostAsSecureOrigin: true, // Enable for localhost testing
+    notifyButton: {
+        enable: true, // Show the notification permission button
+    },
+    autoResubscribe: true, // Automatically resubscribe returning users
+});
 
 // Mount the app
 app.mount('#app');
