@@ -657,12 +657,10 @@ const handleAddReminder = async () => {
 
   // Get the selected task
   const task = { ...selectedDayRoutine.value[selectedTaskIndex.value] };
-
-  // Add reminder to the task
   task.reminder = {
     date: reminder.value.date,
     time: reminder.value.time,
-    repeat: reminder.value.repeat || "", // Default empty if no repeat set
+    repeat: reminder.value.repeat || "",
   };
 
   // Update Firestore
@@ -681,59 +679,16 @@ const handleAddReminder = async () => {
 
       selectedDayRoutine.value[selectedTaskIndex.value] = task;
       console.log("Reminder added successfully to the task.");
+
+      // Schedule notification
+      await scheduleNotification(task, task.reminder);
     }
   } catch (error) {
     console.error("Error updating task with reminder:", error);
     return;
   }
 
-  // **ICS FILE GENERATION** (Google Calendar Integration)
-  const eventTitle = task.title || "Task Reminder";
-  const startDateTime = new Date(`${reminder.value.date}T${reminder.value.time}:00`);
-  const endDateTime = new Date(startDateTime.getTime() + 3600000); // Default: 1-hour duration
-
-  const formatDate = (date) => date.toISOString().replace(/-|:|\.\d+/g, "");
-
-  let recurrenceRule = "";
-  if (reminder.value.repeat) {
-    switch (reminder.value.repeat) {
-      case "daily": recurrenceRule = "RRULE:FREQ=DAILY"; break;
-      case "weekly": recurrenceRule = "RRULE:FREQ=WEEKLY"; break;
-      case "monthly": recurrenceRule = "RRULE:FREQ=MONTHLY"; break;
-      case "yearly": recurrenceRule = "RRULE:FREQ=YEARLY"; break;
-      default: recurrenceRule = "";
-    }
-  }
-
-  const icsContent = `BEGIN:VCALENDAR
-VERSION:2.0
-BEGIN:VEVENT
-SUMMARY:${eventTitle}
-DESCRIPTION:Reminder for ${eventTitle}
-DTSTART:${formatDate(startDateTime)}
-DTEND:${formatDate(endDateTime)}
-LOCATION:Online
-${recurrenceRule}
-BEGIN:VALARM
-TRIGGER:-PT15M
-ACTION:DISPLAY
-DESCRIPTION:Reminder for ${eventTitle}
-END:VALARM
-END:VEVENT
-END:VCALENDAR`;
-
-  const blob = new Blob([icsContent], { type: "text/calendar" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-
-  link.href = url;
-  link.download = `${eventTitle.replace(/\s+/g, "_")}.ics`;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
-
-  // **Close Modal and Reset Reminder Form**
+  // Close Modal
   closeModal();
   reminder.value = { date: "", time: "", repeat: "" };
 };
@@ -821,6 +776,34 @@ const fetchUserName = async (userId) => {
   } catch (error) {
     console.error('Error fetching user name:', error);
     return 'Error Fetching User';
+  }
+};
+const scheduleNotification = async (task, reminder) => {
+  if (!task || !reminder.date || !reminder.time) {
+    console.error("Invalid task or reminder data");
+    return;
+  }
+
+  const scheduledDateTime = new Date(`${reminder.date}T${reminder.time}:00`).toISOString();
+
+  const headers = {
+    'Authorization': 'Bearer ZDZiZDk0NTktMjUwZS00NTQ4LWFhOTItNjBiZDZiMjVhYzYy', // Replace with your OneSignal API key
+    'Content-Type': 'application/json'
+  };
+
+  const notificationData = {
+    "app_id": "fc206a71-7d65-4cfa-b8b2-0c10548e1476", // Replace with your OneSignal App ID
+    "include_player_ids": ["ff823cf5-aef7-4363-82f7-33c1de7ce02e"], // Replace with actual user player ID
+    "contents": { "en": `Reminder: ${task.title} at ${reminder.time}` },
+    "headings": { "en": "Task Reminder" },
+    "send_after": scheduledDateTime, // Schedule the notification
+  };
+
+  try {
+    await axios.post('https://onesignal.com/api/v1/notifications', notificationData, { headers });
+    console.log('Scheduled notification successfully');
+  } catch (error) {
+    console.error('Error scheduling notification:', error);
   }
 };
 
