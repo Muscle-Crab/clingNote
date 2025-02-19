@@ -166,7 +166,7 @@
         <router-link
             :to="userId ? '#' : '/login'"
             @click.native.prevent="userId && openModal('task')"
-            class="relative flex items-center justify-center w-16 h-16 bg-blue-600 text-white rounded-full shadow-lg transform hover:scale-105 transition-transform duration-200"
+            class="relative flex items-center justify-center w-16 h-16 bg-blue-500 text-white rounded-full shadow-lg transform hover:scale-105 transition-transform duration-200"
         >
           <!-- Pulsating Background Effect -->
           <span class="absolute inset-0 rounded-full bg-blue-500 opacity-50 animate-ping"></span>
