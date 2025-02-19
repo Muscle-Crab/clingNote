@@ -166,12 +166,22 @@
         <router-link
             :to="userId ? '#' : '/login'"
             @click.native.prevent="userId && openModal('task')"
-            class="p-4 bg-blue-500 text-white rounded-full shadow-lg hover:bg-blue-600 transition duration-200 flex items-center justify-center"
+            class="relative flex items-center justify-center w-16 h-16 bg-blue-600 text-white rounded-full shadow-lg transform hover:scale-105 transition-transform duration-200"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" class="w-6 h-6">
+          <!-- Pulsating Background Effect -->
+          <span class="absolute inset-0 rounded-full bg-blue-500 opacity-50 animate-ping"></span>
+
+          <!-- Plus Icon -->
+          <svg class="relative w-7 h-7 z-10" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" stroke="currentColor" fill="none">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="4" d="M12 4v16m8-8H4" />
           </svg>
         </router-link>
+
+
+
+
+
+
       </div>
 
       <!-- Main modal -->
@@ -292,7 +302,7 @@
                 @end="handleDragEnd"
             >
               <template #item="{ element: task, index }">
-                <div   v-if="shouldDisplayTask(task) && (showCompleted || !task.completed)"
+                <div   v-if="(showCompleted || !task.completed)"
                     class="task-card bg-white rounded-xl shadow-lg p-5 relative hover:shadow-xl transition-shadow duration-300"
                     :class="{
     'bg-gray-200': task.completed && isToday(selectedDayIndex), // Add a light green background for completed tasks
