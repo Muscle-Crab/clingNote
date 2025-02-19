@@ -794,6 +794,16 @@ const scheduleNotification = async (task, reminder) => {
     return;
   }
 
+  // Convert reminder.time to 12-hour format
+  const convertTo12HourFormat = (time24) => {
+    const [hours, minutes] = time24.split(':').map(Number);
+    const period = hours >= 12 ? 'PM' : 'AM';
+    const formattedHours = hours % 12 || 12; // Convert 0 or 12 to 12 AM/PM
+    return `${formattedHours}:${minutes.toString().padStart(2, '0')} ${period}`;
+  };
+
+  const formattedTime = convertTo12HourFormat(reminder.time);
+
   const scheduledDateTime = new Date(`${reminder.date}T${reminder.time}:00`).toISOString();
 
   const headers = {
@@ -804,7 +814,7 @@ const scheduleNotification = async (task, reminder) => {
   const notificationData = {
     "app_id": "fc206a71-7d65-4cfa-b8b2-0c10548e1476", // Replace with your OneSignal App ID
     "include_player_ids": ["ff823cf5-aef7-4363-82f7-33c1de7ce02e"], // Replace with actual user player ID
-    "contents": { "en": `Reminder: ${task.title} at ${reminder.time}` },
+    "contents": { "en": `${task.title} at ${formattedTime}` },
     "headings": { "en": "Task Reminder" },
     "send_after": scheduledDateTime, // Schedule the notification
   };
@@ -812,8 +822,14 @@ const scheduleNotification = async (task, reminder) => {
   try {
     await axios.post('https://onesignal.com/api/v1/notifications', notificationData, { headers });
     console.log('Scheduled notification successfully');
+
+    // Display confirmation alert
+    alert(`Task "${task.title}" has been scheduled successfully for ${formattedTime}!`);
+
+
   } catch (error) {
     console.error('Error scheduling notification:', error);
+    alert("Failed to schedule the task. Please try again.");
   }
 };
 
