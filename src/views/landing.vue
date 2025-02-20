@@ -1,8 +1,12 @@
 <template>
   <div class="container">
-    <h2>Schedule a Notification dalton</h2>
+    <h2>Schedule a Notification - Dalton</h2>
     <input v-model="taskTime" type="datetime-local" class="input" />
     <button @click="sendNotificationToDevice" class="button">Save</button>
+
+    <!-- ✅ Display OneSignal Player ID -->
+    <p v-if="playerId">📲 OneSignal ID: <strong>{{ playerId }}</strong></p>
+    <p v-else>No OneSignal ID found</p>
   </div>
 </template>
 
@@ -13,15 +17,11 @@ const taskTime = ref('');
 const playerId = ref(null); // ✅ Store the OneSignal Player ID
 const ONE_SIGNAL_APP_ID = "fc206a71-7d65-4cfa-b8b2-0c10548e1476"; // Your OneSignal App ID
 const ONE_SIGNAL_API_KEY = "ZDZiZDk0NTktMjUwZS00NTQ4LWFhOTItNjBiZDZiMjVhYzYy"; // Your OneSignal API Key
+const USER_EXTERNAL_ID = "test_external_id"; // Replace with actual user ID
 
-// ✅ Function to Get the Current Device Player ID
+// ✅ Function to Get the Current Device Player ID and Display It
 const getPlayerIdFromAPI = async () => {
-  const ONE_SIGNAL_APP_ID = "fc206a71-7d65-4cfa-b8b2-0c10548e1476"; // Your OneSignal App ID
-  const ONE_SIGNAL_API_KEY = "ZDZiZDk0NTktMjUwZS00NTQ4LWFhOTItNjBiZDZiMjVhYzYy"; // Your OneSignal API Key
-  const USER_EXTERNAL_ID = "test_external_id"; // Replace with the actual user ID
-
   const url = `https://api.onesignal.com/apps/${ONE_SIGNAL_APP_ID}/users/by/external_id/${USER_EXTERNAL_ID}`;
-
   const options = {
     method: "GET",
     headers: {
@@ -39,25 +39,21 @@ const getPlayerIdFromAPI = async () => {
 
     // ✅ Extract Player ID from response
     if (data.subscriptions && data.subscriptions.length > 0) {
-      const playerId = data.subscriptions[0].id;
-      console.log("Player ID:", playerId);
-      return playerId;
+      playerId.value = data.subscriptions[0].id;
+      console.log("Player ID:", playerId.value);
     } else {
       console.warn("No subscriptions found for this user.");
-      return null;
+      playerId.value = null; // Reset if no subscription
     }
   } catch (error) {
     console.error("Error fetching player ID:", error);
-    return null;
+    playerId.value = null;
   }
 };
 
-
-// ✅ Function to Schedule a Notification for the Current Device
+// ✅ Function to Send Notification
 const sendNotificationToDevice = async () => {
-  const playerId = await getPlayerIdFromAPI();
-
-  if (!playerId) {
+  if (!playerId.value) {
     alert("No Player ID found. Ensure notifications are enabled.");
     return;
   }
@@ -71,7 +67,7 @@ const sendNotificationToDevice = async () => {
     },
     body: JSON.stringify({
       app_id: ONE_SIGNAL_APP_ID,
-      include_player_ids: [playerId], // ✅ Send to this specific device
+      include_player_ids: [playerId.value], // ✅ Send to this specific device
       contents: { en: "Your scheduled notification!" },
       headings: { en: "Task Reminder" },
       send_after: new Date().toISOString(),
@@ -97,9 +93,10 @@ const sendNotificationToDevice = async () => {
   }
 };
 
-
-// ✅ Initialize OneSignal and Get Player ID When Component Mounts
-
+// ✅ Get Player ID When Component Mounts
+onMounted(() => {
+  getPlayerIdFromAPI();
+});
 </script>
 
 <style scoped>
