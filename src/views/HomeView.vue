@@ -574,11 +574,12 @@
             <div v-if="wontDoTasks.length != 0" class=" p-3 bg-red-100 rounded-lg">
               <h3 class="text-lg font-semibold text-red-700">Won't Do Tasks</h3>
               <ul>
-                <li v-for="(task, index) in wontDoTasks" :key="index" class="flex justify-between items-center bg-white p-2 rounded-md mt-2">
-                  <span>{{ task.title }} - {{ task.wontDoReason }}</span>
+                <li v-for="(task, index) in wontDoTasks" :key="index" class="flex  items-center bg-white p-2 rounded-md mt-2">
                   <button @click="undoWontDo(index)" class="text-green-500 hover:text-green-700">
                     <i class="fas fa-undo"></i>
                   </button>
+                  <span class="ml-2">{{ task.title }} - {{ task.wontDoReason }}</span>
+
                 </li>
               </ul>
             </div>
