@@ -1,160 +1,127 @@
 <template>
   <div class="container">
-    <h2>OneSignal Subscription</h2>
-
-    <p><strong>Your Firebase UID (External ID):</strong> {{ userId || "Not Logged In" }}</p>
-
-    <p v-if="playerId"><strong>Your Player ID:</strong> {{ playerId }}</p>
-    <p v-else>Click the button to subscribe and get your Player ID.</p>
-
-    <button @click="fetchPlayerId" :disabled="isLoading || !userId">
-      {{ isLoading ? "Loading..." : "Get Player ID" }}
-    </button>
+    <h2>Schedule a Notification</h2>
+    <input v-model="taskTime" type="datetime-local" class="input" />
+    <button @click="scheduleNotification" class="button">Save</button>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from "vue";
-import { getAuth, onAuthStateChanged } from "firebase/auth";
+import { ref, onMounted } from 'vue';
+import axios from 'axios';
 
-// Firebase Auth & User Info
-const auth = getAuth();
-const userId = ref(null); // User UID from Firebase
-const playerId = ref(null);
-const isLoading = ref(false);
+const taskTime = ref('');
+const synth = window.speechSynthesis; // Web Speech API for TTS
 
-// ✅ Listen for Firebase Authentication changes
-onMounted(() => {
-  onAuthStateChanged(auth, (user) => {
-    if (user) {
-      userId.value = user.uid; // Set user UID dynamically
-      console.log("Firebase User UID:", user.uid);
-    } else {
-      userId.value = null; // User is not logged in
-    }
-  });
-});
-
-// ✅ Fetch Player ID & Set External User ID in OneSignal
-const fetchPlayerId = async () => {
-  if (!window.OneSignal) {
-    console.error("OneSignal SDK is not loaded!");
+const scheduleNotification = async () => {
+  if (!taskTime.value) {
+    alert('Please enter a valid date and time.');
     return;
   }
 
-  if (!userId.value) {
-    alert("You must be logged in to get a Player ID.");
-    return;
-  }
+  const notificationTime = new Date(taskTime.value).toISOString();
+
+  const headers = {
+    'Authorization': 'Bearer ZDZiZDk0NTktMjUwZS00NTQ4LWFhOTItNjBiZDZiMjVhYzYy',
+    'Content-Type': 'application/json'
+  };
+
+  const data = {
+    "app_id": "fc206a71-7d65-4cfa-b8b2-0c10548e1476",
+    "include_player_ids": ["ff823cf5-aef7-4363-82f7-33c1de7ce02e"], // Replace with user's OneSignal player ID
+    "contents": { "en": "It's time for your scheduled task!" },
+    "headings": { "en": "Task Reminder" },
+    "send_after": notificationTime,
+    "url": "https://your-app.com"
+  };
 
   try {
-    isLoading.value = true;
-    console.log("Initializing OneSignal...");
+    const response = await axios.post('https://onesignal.com/api/v1/notifications', data, { headers });
 
-    // ✅ Assign Firebase UID as OneSignal External ID
-    await window.OneSignal.push(() => {
-      window.OneSignal.User.addAlias("external_id", userId.value);
-    });
-    console.log(`User alias set: external_id -> ${userId.value}`);
-
-    // Wait for OneSignal to be ready
-    await new Promise(resolve => setTimeout(resolve, 2000));
-
-    // Check if notifications are enabled
-    const isSubscribed = await window.OneSignal.Notifications.isPushEnabled();
-    console.log("Is user subscribed?", isSubscribed);
-
-    if (!isSubscribed) {
-      console.log("User is not subscribed. Asking for permission...");
-
-      // Request notification permission
-      const permission = await window.OneSignal.Notifications.requestPermission();
-      if (permission !== "granted") {
-        console.error("User denied notification permission.");
-        isLoading.value = false;
-        return;
-      }
+    if (response.data.id) {
+      alert('Notification scheduled successfully!');
     }
-
-    // Fetch player_id
-    playerId.value = await window.OneSignal.User.getId();
-    console.log("User subscribed, player_id:", playerId.value);
-
-    // ✅ Create the subscription in OneSignal API
-    await createSubscription(userId.value);
-
   } catch (error) {
-    console.error("OneSignal initialization error:", error);
-  } finally {
-    isLoading.value = false;
+    console.error('Error scheduling notification:', error);
+    alert('Failed to schedule notification.');
   }
 };
 
-// ✅ Function to create a OneSignal subscription using Fetch API
-const createSubscription = async (externalId) => {
-  const headers = {
-    "Authorization": "Bearer ZDZiZDk0NTktMjUwZS00NTQ4LWFhOTItNjBiZDZiMjVhYzYy", // Replace with your OneSignal API Key
-    "Content-Type": "application/json",
+// Initialize OneSignal Notification Click Handling
+onMounted(() => {
+  if (window.OneSignal) {
+    window.OneSignal.push(() => {
+      console.log("OneSignal is initialized.");
+
+      // Listen for notification click event
+      window.OneSignal.on('notificationClick', (event) => {
+        console.log("OneSignal notification clicked:", event);
+        const message = event.notification.body;
+        speakNotification(message);
+      });
+
+      // Backup method: Listen for notification display and speak it immediately
+      window.OneSignal.on('notificationDisplay', (event) => {
+        console.log("OneSignal notification displayed:", event);
+      });
+    });
+  }
+
+  // Backup method using BroadcastChannel
+  const bc = new BroadcastChannel('notification-channel');
+  bc.onmessage = event => {
+    console.log("BroadcastChannel received message:", event.data);
+    const message = event.data.body;
+    speakNotification(message);
   };
+});
 
-  const appId = "fc206a71-7d65-4cfa-b8b2-0c10548e1476"; // Replace with your OneSignal App ID
-  const aliasLabel = "external_id";
-  const aliasId = externalId;
+// Speak out notifications
+const speakNotification = (message) => {
+  console.log("Speaking notification:", message);
 
-  // Get push token
-  const pushToken = await window.OneSignal.User.PushSubscription.token;
-
-  if (!pushToken) {
-    console.error("Push token not available.");
+  if (!synth) {
+    console.error("Speech synthesis not available");
     return;
   }
 
-  const url = `https://api.onesignal.com/apps/${appId}/users/by/${aliasLabel}/${aliasId}/subscriptions`;
+  // Stop any ongoing speech
+  synth.cancel();
 
-  const data = {
-    type: "push", // Subscription type (web push)
-    token: pushToken,
-    enabled: true,
-  };
-
-  try {
-    const response = await fetch(url, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(data),
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! Status: ${response.status}`);
-    }
-
-    const result = await response.json();
-    console.log("Subscription created:", result);
-  } catch (error) {
-    console.error("Error creating subscription:", error);
-  }
+  const utterance = new SpeechSynthesisUtterance(message);
+  utterance.lang = "en-US"; // Adjust for language preferences
+  utterance.rate = 1.0; // Adjust speed if needed
+  synth.speak(utterance);
 };
 </script>
 
 <style scoped>
 .container {
-  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   padding: 20px;
 }
 
-button {
-  padding: 10px 15px;
-  border: none;
-  background-color: #007bff;
-  color: white;
+.input {
+  width: 100%;
+  max-width: 300px;
+  padding: 10px;
+  margin: 10px 0;
   font-size: 16px;
-  cursor: pointer;
-  border-radius: 5px;
-  margin-top: 10px;
 }
 
-button:disabled {
-  background-color: #cccccc;
-  cursor: not-allowed;
+.button {
+  padding: 10px 15px;
+  font-size: 16px;
+  background-color: #007bff;
+  color: white;
+  border: none;
+  cursor: pointer;
+  border-radius: 5px;
+}
+
+.button:hover {
+  background-color: #0056b3;
 }
 </style>
