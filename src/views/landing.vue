@@ -1,12 +1,17 @@
 <template>
   <div class="container">
-    <h2>Schedule a Notification</h2>
+    <h2>OneSignal Notification Setup</h2>
 
-    <!-- Display Player ID if available -->
-    <p v-if="playerId">Your Player ID: <strong>{{ playerId }}</strong></p>
+    <!-- Input for setting External User ID -->
+    <input v-model="inputUserId" type="text" placeholder="Enter External User ID" class="input" />
+    <button @click="setExternalUserId" class="button">Set External ID</button>
 
+    <!-- Display External User ID -->
+    <p v-if="externalUserId">Your External User ID: <strong>{{ externalUserId }}</strong></p>
+
+    <!-- Schedule Notification Section -->
     <input v-model="taskTime" type="datetime-local" class="input" />
-    <button @click="scheduleNotification" class="button">Save</button>
+    <button @click="scheduleNotification" class="button">Schedule Notification</button>
   </div>
 </template>
 
@@ -15,22 +20,47 @@ import { ref, onMounted } from 'vue';
 import axios from 'axios';
 
 const taskTime = ref('');
-const playerId = ref(null);
-const synth = window.speechSynthesis; // Web Speech API for TTS
+const inputUserId = ref('');
+const externalUserId = ref(null);
+const synth = window.speechSynthesis;
 
+// Function to set External User ID in OneSignal
+const setExternalUserId = async () => {
+  if (!inputUserId.value) {
+    alert('Please enter an External User ID.');
+    return;
+  }
+
+  await waitForOneSignal(); // Ensure OneSignal is ready
+
+  if (window.OneSignal) {
+    try {
+      await window.OneSignal.User.setExternalId(inputUserId.value);
+      externalUserId.value = inputUserId.value;
+      console.log("External User ID set:", inputUserId.value);
+      alert("External User ID set successfully!");
+    } catch (error) {
+      console.error("Error setting External User ID:", error);
+      alert("Failed to set External User ID.");
+    }
+  } else {
+    console.warn('OneSignal is not initialized.');
+  }
+};
+
+// Function to schedule a notification
 const scheduleNotification = async () => {
   if (!taskTime.value) {
     alert('Please enter a valid date and time.');
     return;
   }
 
-  if (!playerId.value) {
-    alert('Player ID not found. Please enable notifications.');
+  if (!externalUserId.value) {
+    alert('External User ID not found. Please set it first.');
     return;
   }
 
   const notificationTime = new Date(taskTime.value).toISOString();
-
   const headers = {
     'Authorization': 'Bearer ZDZiZDk0NTktMjUwZS00NTQ4LWFhOTItNjBiZDZiMjVhYzYy',
     'Content-Type': 'application/json'
@@ -38,7 +68,7 @@ const scheduleNotification = async () => {
 
   const data = {
     "app_id": "fc206a71-7d65-4cfa-b8b2-0c10548e1476",
-    "include_player_ids": [playerId.value], // Use dynamic Player ID
+    "include_external_user_ids": [externalUserId.value],
     "contents": { "en": "It's time for your scheduled task!" },
     "headings": { "en": "Task Reminder" },
     "send_after": notificationTime,
@@ -57,7 +87,7 @@ const scheduleNotification = async () => {
   }
 };
 
-// Ensure OneSignal is initialized before retrieving Player ID
+// Wait for OneSignal to be ready
 const waitForOneSignal = async () => {
   return new Promise((resolve) => {
     const checkReady = () => {
@@ -66,79 +96,32 @@ const waitForOneSignal = async () => {
         resolve();
       } else {
         console.log('Waiting for OneSignal to initialize...');
-
       }
     };
     checkReady();
   });
 };
 
-// Function to retrieve OneSignal Player ID using SDK v16+
-const getPlayerId = async () => {
-  await waitForOneSignal(); // Wait until OneSignal is ready
+// Retrieve the saved External User ID on page load
+const getExternalUserId = async () => {
+  await waitForOneSignal();
 
   if (window.OneSignal) {
     try {
-      const userId = await window.OneSignal.User.getId();
+      const userId = await window.OneSignal.User.getExternalId();
       if (userId) {
-        playerId.value = userId;
-        console.log('OneSignal User ID:', userId);
-      } else {
-        console.warn('OneSignal User ID not available.');
+        externalUserId.value = userId;
+        console.log('Retrieved OneSignal External User ID:', userId);
       }
     } catch (error) {
-      console.error('Error getting OneSignal User ID:', error);
+      console.error('Error retrieving External User ID:', error);
     }
-  } else {
-    console.warn('OneSignal is not initialized.');
   }
 };
 
 onMounted(async () => {
-  await getPlayerId();
-
-  if (window.OneSignal) {
-    console.log("OneSignal is initialized.");
-
-    // Listen for notification click event
-    window.OneSignal.Event.on('notification.clicked', (event) => {
-      console.log("OneSignal notification clicked:", event);
-      const message = event.notification.body;
-      speakNotification(message);
-    });
-
-    // Listen for notification display event
-    window.OneSignal.Event.on('notification.displayed', (event) => {
-      console.log("OneSignal notification displayed:", event);
-    });
-  }
-
-  // Backup method using BroadcastChannel
-  const bc = new BroadcastChannel('notification-channel');
-  bc.onmessage = event => {
-    console.log("BroadcastChannel received message:", event.data);
-    const message = event.data.body;
-    speakNotification(message);
-  };
+  await getExternalUserId();
 });
-
-// Speak out notifications
-const speakNotification = (message) => {
-  console.log("Speaking notification:", message);
-
-  if (!synth) {
-    console.error("Speech synthesis not available");
-    return;
-  }
-
-  // Stop any ongoing speech
-  synth.cancel();
-
-  const utterance = new SpeechSynthesisUtterance(message);
-  utterance.lang = "en-US"; // Adjust for language preferences
-  utterance.rate = 1.0; // Adjust speed if needed
-  synth.speak(utterance);
-};
 </script>
 
 <style scoped>
