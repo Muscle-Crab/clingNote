@@ -1,6 +1,10 @@
 <template>
   <div class="container">
     <h2>Schedule a Notification</h2>
+
+    <!-- Display Player ID if available -->
+    <p v-if="playerId">Your Player ID: <strong>{{ playerId }}</strong></p>
+
     <input v-model="taskTime" type="datetime-local" class="input" />
     <button @click="scheduleNotification" class="button">Save</button>
   </div>
@@ -11,11 +15,17 @@ import { ref, onMounted } from 'vue';
 import axios from 'axios';
 
 const taskTime = ref('');
+const playerId = ref(null);
 const synth = window.speechSynthesis; // Web Speech API for TTS
 
 const scheduleNotification = async () => {
   if (!taskTime.value) {
     alert('Please enter a valid date and time.');
+    return;
+  }
+
+  if (!playerId.value) {
+    alert('Player ID not found. Please enable notifications.');
     return;
   }
 
@@ -28,7 +38,7 @@ const scheduleNotification = async () => {
 
   const data = {
     "app_id": "fc206a71-7d65-4cfa-b8b2-0c10548e1476",
-    "include_player_ids": ["ff823cf5-aef7-4363-82f7-33c1de7ce02e"], // Replace with user's OneSignal player ID
+    "include_player_ids": [playerId.value], // Use dynamic Player ID
     "contents": { "en": "It's time for your scheduled task!" },
     "headings": { "en": "Task Reminder" },
     "send_after": notificationTime,
@@ -47,23 +57,59 @@ const scheduleNotification = async () => {
   }
 };
 
-// Initialize OneSignal Notification Click Handling
-onMounted(() => {
+// Ensure OneSignal is initialized before retrieving Player ID
+const waitForOneSignal = async () => {
+  return new Promise((resolve) => {
+    const checkReady = () => {
+      if (window.OneSignal && window.OneSignal.isReady) {
+        console.log('OneSignal is ready.');
+        resolve();
+      } else {
+        console.log('Waiting for OneSignal to initialize...');
+
+      }
+    };
+    checkReady();
+  });
+};
+
+// Function to retrieve OneSignal Player ID using SDK v16+
+const getPlayerId = async () => {
+  await waitForOneSignal(); // Wait until OneSignal is ready
+
   if (window.OneSignal) {
-    window.OneSignal.push(() => {
-      console.log("OneSignal is initialized.");
+    try {
+      const userId = await window.OneSignal.User.getId();
+      if (userId) {
+        playerId.value = userId;
+        console.log('OneSignal User ID:', userId);
+      } else {
+        console.warn('OneSignal User ID not available.');
+      }
+    } catch (error) {
+      console.error('Error getting OneSignal User ID:', error);
+    }
+  } else {
+    console.warn('OneSignal is not initialized.');
+  }
+};
 
-      // Listen for notification click event
-      window.OneSignal.on('notificationClick', (event) => {
-        console.log("OneSignal notification clicked:", event);
-        const message = event.notification.body;
-        speakNotification(message);
-      });
+onMounted(async () => {
+  await getPlayerId();
 
-      // Backup method: Listen for notification display and speak it immediately
-      window.OneSignal.on('notificationDisplay', (event) => {
-        console.log("OneSignal notification displayed:", event);
-      });
+  if (window.OneSignal) {
+    console.log("OneSignal is initialized.");
+
+    // Listen for notification click event
+    window.OneSignal.Event.on('notification.clicked', (event) => {
+      console.log("OneSignal notification clicked:", event);
+      const message = event.notification.body;
+      speakNotification(message);
+    });
+
+    // Listen for notification display event
+    window.OneSignal.Event.on('notification.displayed', (event) => {
+      console.log("OneSignal notification displayed:", event);
     });
   }
 
