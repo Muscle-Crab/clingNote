@@ -32,7 +32,7 @@ const scheduleNotification = async () => {
     "contents": { "en": "It's time for your scheduled task!" },
     "headings": { "en": "Task Reminder" },
     "send_after": notificationTime,
-    "url": "https://your-app.com"
+    "url": "https://clingnote.netlify.app"
   };
 
   try {
