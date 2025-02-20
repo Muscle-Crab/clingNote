@@ -1,6 +1,6 @@
 <template>
   <div class="container">
-    <h2>Schedule a Notification changed</h2>
+    <h2>Schedule a Notification</h2>
     <input v-model="taskTime" type="datetime-local" class="input" />
     <button @click="scheduleNotification" class="button">Save</button>
   </div>
@@ -11,35 +11,13 @@ import { ref, onMounted } from 'vue';
 import axios from 'axios';
 
 const taskTime = ref('');
-const userExternalId = ref(null); // Dynamic external ID
-
 const ONE_SIGNAL_APP_ID = "fc206a71-7d65-4cfa-b8b2-0c10548e1476"; // Your OneSignal App ID
 const ONE_SIGNAL_API_KEY = "ZDZiZDk0NTktMjUwZS00NTQ4LWFhOTItNjBiZDZiMjVhYzYy"; // Your OneSignal API Key
-
-// ✅ Function to Get Dynamic External ID (Replace with your logic)
-const fetchUserExternalId = async () => {
-  try {
-    // Example: Fetch from API or local storage
-    const response = await axios.get("/api/user"); // Replace with actual API endpoint
-    if (response.data && response.data.external_id) {
-      userExternalId.value = response.data.external_id;
-      console.log("Fetched External ID:", userExternalId.value);
-    } else {
-      console.error("External ID not found.");
-    }
-  } catch (error) {
-    console.error("Error fetching user external ID:", error);
-  }
-};
+const USER_EXTERNAL_ID = "test_external_id"; // Replace with dynamic user ID
 
 // ✅ Function to Check If a OneSignal User Exists, Create if Not
 const getOrCreateUser = async () => {
-  if (!userExternalId.value) {
-    console.error("No external ID available.");
-    return null;
-  }
-
-  const url = `https://api.onesignal.com/apps/${ONE_SIGNAL_APP_ID}/users/by/external_id/${userExternalId.value}`;
+  const url = `https://api.onesignal.com/apps/${ONE_SIGNAL_APP_ID}/users/by/external_id/${USER_EXTERNAL_ID}`;
   const options = {
     method: 'GET',
     headers: {
@@ -67,11 +45,6 @@ const getOrCreateUser = async () => {
 
 // ✅ Function to Create a OneSignal User
 const createOneSignalUser = async () => {
-  if (!userExternalId.value) {
-    console.error("Cannot create user: No external ID available.");
-    return null;
-  }
-
   const url = `https://api.onesignal.com/apps/${ONE_SIGNAL_APP_ID}/users`;
   const options = {
     method: 'POST',
@@ -81,7 +54,7 @@ const createOneSignalUser = async () => {
       Authorization: `Key ${ONE_SIGNAL_API_KEY}`
     },
     body: JSON.stringify({
-      identity: { external_id: userExternalId.value },
+      identity: { external_id: USER_EXTERNAL_ID },
       properties: {
         language: 'en',
         timezone_id: 'America/Los_Angeles',
@@ -118,11 +91,6 @@ const scheduleNotification = async () => {
     return;
   }
 
-  if (!userExternalId.value) {
-    alert("Error: No user external ID available.");
-    return;
-  }
-
   const notificationTime = new Date(taskTime.value).toISOString();
   const externalId = await getOrCreateUser();
 
@@ -138,15 +106,15 @@ const scheduleNotification = async () => {
 
   const data = {
     "app_id": ONE_SIGNAL_APP_ID,
-    "include_aliases": { "external_id": [externalId] }, // ✅ Send notification using external_id
-    "contents": { "en": "It's time for your scheduled task!" },
-    "headings": { "en": "Task Reminder" },
+    "include_aliases": {"external_id": [externalId]}, // ✅ Send notification using external_id
+    "contents": {"en": "It's time for your scheduled task!"},
+    "headings": {"en": "Task Reminder"},
     "send_after": notificationTime,
     "url": "https://your-app.com"
   };
 
   try {
-    const response = await axios.post('https://onesignal.com/api/v1/notifications', data, { headers });
+    const response = await axios.post('https://onesignal.com/api/v1/notifications', data, {headers});
 
     if (response.data.id) {
       alert('Notification scheduled successfully!');
@@ -157,10 +125,9 @@ const scheduleNotification = async () => {
   }
 };
 
-// ✅ Ensure External ID is Fetched on Page Load
-onMounted(async () => {
-  await fetchUserExternalId(); // Fetch the dynamic external ID
-  await getOrCreateUser(); // Ensure the user exists in OneSignal
+// ✅ Ensure OneSignal is initialized only once
+onMounted(() => {
+  getOrCreateUser();
 });
 </script>
 
