@@ -1,6 +1,6 @@
 <template>
   <div class="container">
-    <h2>Schedule a Notification</h2>
+    <h2>Schedule a Notification change</h2>
     <input v-model="taskTime" type="datetime-local" class="input" />
     <button @click="scheduleNotification" class="button">Save</button>
   </div>
@@ -8,7 +8,6 @@
 
 <script setup>
 import { ref, onMounted } from 'vue';
-import axios from 'axios';
 
 const taskTime = ref('');
 const ONE_SIGNAL_APP_ID = "fc206a71-7d65-4cfa-b8b2-0c10548e1476"; // Your OneSignal App ID
@@ -99,31 +98,44 @@ const scheduleNotification = async () => {
     return;
   }
 
-  const headers = {
-    'Authorization': `Bearer ${ONE_SIGNAL_API_KEY}`,
-    'Content-Type': 'application/json'
-  };
-
-  const data = {
-    "app_id": ONE_SIGNAL_APP_ID,
-    "include_aliases": {"external_id": [externalId]}, // ✅ Send notification using external_id
-    "contents": {"en": "It's time for your scheduled task!"},
-    "headings": {"en": "Task Reminder"},
-    "send_after": notificationTime,
-    "url": "https://your-app.com"
+  const url = 'https://onesignal.com/api/v1/notifications';
+  const options = {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${ONE_SIGNAL_API_KEY}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      "app_id": ONE_SIGNAL_APP_ID,
+      "include_aliases": { "external_id": [externalId] },
+      "target_channel": "push",
+      "contents": { "en": "It's time for your scheduled task!" },
+      "headings": { "en": "Task Reminder" },
+      "send_after": notificationTime,
+      "url": "https://your-app.com"
+    })
   };
 
   try {
-    const response = await axios.post('https://onesignal.com/api/v1/notifications', data, {headers});
+    const response = await fetch(url, options);
+    const data = await response.json();
 
-    if (response.data.id) {
+    console.log("OneSignal Response:", data); // ✅ Log response for debugging
+
+    if (data.errors) {
+      console.error("OneSignal Errors:", data.errors);
+      alert(`Failed to schedule notification: ${data.errors.join(", ")}`);
+    } else if (data.id) {
       alert('Notification scheduled successfully!');
+    } else {
+      alert('Failed to schedule notification.');
     }
   } catch (error) {
     console.error('Error scheduling notification:', error);
     alert('Failed to schedule notification.');
   }
 };
+;
 
 // ✅ Ensure OneSignal is initialized only once
 onMounted(() => {
