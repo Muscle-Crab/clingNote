@@ -1,8 +1,8 @@
 <template>
   <div class="container">
-    <h2>Schedule a Notification change</h2>
+    <h2>Schedule a Notification dalton</h2>
     <input v-model="taskTime" type="datetime-local" class="input" />
-    <button @click="scheduleNotification" class="button">Save</button>
+    <button @click="sendNotificationToDevice" class="button">Save</button>
   </div>
 </template>
 
@@ -10,137 +10,96 @@
 import { ref, onMounted } from 'vue';
 
 const taskTime = ref('');
+const playerId = ref(null); // ✅ Store the OneSignal Player ID
 const ONE_SIGNAL_APP_ID = "fc206a71-7d65-4cfa-b8b2-0c10548e1476"; // Your OneSignal App ID
 const ONE_SIGNAL_API_KEY = "ZDZiZDk0NTktMjUwZS00NTQ4LWFhOTItNjBiZDZiMjVhYzYy"; // Your OneSignal API Key
-const USER_EXTERNAL_ID = "test_external_id"; // Replace with dynamic user ID
 
-// ✅ Function to Check If a OneSignal User Exists, Create if Not
-const getOrCreateUser = async () => {
+// ✅ Function to Get the Current Device Player ID
+const getPlayerIdFromAPI = async () => {
+  const ONE_SIGNAL_APP_ID = "fc206a71-7d65-4cfa-b8b2-0c10548e1476"; // Your OneSignal App ID
+  const ONE_SIGNAL_API_KEY = "ZDZiZDk0NTktMjUwZS00NTQ4LWFhOTItNjBiZDZiMjVhYzYy"; // Your OneSignal API Key
+  const USER_EXTERNAL_ID = "test_external_id"; // Replace with the actual user ID
+
   const url = `https://api.onesignal.com/apps/${ONE_SIGNAL_APP_ID}/users/by/external_id/${USER_EXTERNAL_ID}`;
+
   const options = {
-    method: 'GET',
+    method: "GET",
     headers: {
-      accept: 'application/json',
-      Authorization: `Key ${ONE_SIGNAL_API_KEY}`
-    }
-  };
-
-  try {
-    const response = await fetch(url, options);
-    const data = await response.json();
-
-    if (data && data.identity) {
-      console.log("User exists:", data.identity.external_id);
-      return data.identity.external_id;
-    } else {
-      console.log("User does not exist, creating user...");
-      return await createOneSignalUser();
-    }
-  } catch (error) {
-    console.error("Error fetching user:", error);
-    return null;
-  }
-};
-
-// ✅ Function to Create a OneSignal User
-const createOneSignalUser = async () => {
-  const url = `https://api.onesignal.com/apps/${ONE_SIGNAL_APP_ID}/users`;
-  const options = {
-    method: 'POST',
-    headers: {
-      accept: 'application/json',
-      'content-type': 'application/json',
-      Authorization: `Key ${ONE_SIGNAL_API_KEY}`
+      accept: "application/json",
+      Authorization: `Key ${ONE_SIGNAL_API_KEY}`, // ✅ Required API Key
     },
-    body: JSON.stringify({
-      identity: { external_id: USER_EXTERNAL_ID },
-      properties: {
-        language: 'en',
-        timezone_id: 'America/Los_Angeles',
-        lat: 90,
-        long: 135,
-        country: 'US',
-        first_active: Math.floor(Date.now() / 1000),
-        last_active: Math.floor(Date.now() / 1000)
-      }
-    })
   };
 
   try {
     const response = await fetch(url, options);
+    if (!response.ok) {
+      throw new Error(`HTTP error! Status: ${response.status}`);
+    }
     const data = await response.json();
 
-    if (data && data.identity) {
-      console.log("User created successfully:", data.identity.external_id);
-      return data.identity.external_id;
+    // ✅ Extract Player ID from response
+    if (data.subscriptions && data.subscriptions.length > 0) {
+      const playerId = data.subscriptions[0].id;
+      console.log("Player ID:", playerId);
+      return playerId;
     } else {
-      console.error("Failed to create user.");
+      console.warn("No subscriptions found for this user.");
       return null;
     }
   } catch (error) {
-    console.error("Error creating user:", error);
+    console.error("Error fetching player ID:", error);
     return null;
   }
 };
 
-// ✅ Function to Schedule a Notification Using External ID
-const scheduleNotification = async () => {
-  if (!taskTime.value) {
-    alert('Please enter a valid date and time.');
+
+// ✅ Function to Schedule a Notification for the Current Device
+const sendNotificationToDevice = async () => {
+  const playerId = await getPlayerIdFromAPI();
+
+  if (!playerId) {
+    alert("No Player ID found. Ensure notifications are enabled.");
     return;
   }
 
-  const notificationTime = new Date(taskTime.value).toISOString();
-  const externalId = await getOrCreateUser();
-
-  if (!externalId) {
-    alert("Error: Unable to retrieve or create OneSignal External ID.");
-    return;
-  }
-
-  const url = 'https://onesignal.com/api/v1/notifications';
+  const url = "https://onesignal.com/api/v1/notifications";
   const options = {
-    method: 'POST',
+    method: "POST",
     headers: {
-      'Authorization': `Bearer ${ONE_SIGNAL_API_KEY}`,
-      'Content-Type': 'application/json'
+      Authorization: `Bearer ${ONE_SIGNAL_API_KEY}`,
+      "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      "app_id": ONE_SIGNAL_APP_ID,
-      "include_aliases": { "external_id": [externalId] },
-      "target_channel": "push",
-      "contents": { "en": "It's time for your scheduled task!" },
-      "headings": { "en": "Task Reminder" },
-      "send_after": notificationTime,
-      "url": "https://your-app.com"
-    })
+      app_id: ONE_SIGNAL_APP_ID,
+      include_player_ids: [playerId], // ✅ Send to this specific device
+      contents: { en: "Your scheduled notification!" },
+      headings: { en: "Task Reminder" },
+      send_after: new Date().toISOString(),
+    }),
   };
 
   try {
     const response = await fetch(url, options);
     const data = await response.json();
-
-    console.log("OneSignal Response:", data); // ✅ Log response for debugging
+    console.log("OneSignal Response:", data);
 
     if (data.errors) {
       console.error("OneSignal Errors:", data.errors);
-      alert(`Failed to schedule notification: ${data.errors.join(", ")}`);
+      alert(`Failed to send notification: ${data.errors.join(", ")}`);
     } else if (data.id) {
-      alert('Notification scheduled successfully!');
+      alert("Notification sent successfully!");
     } else {
-      alert('Failed to schedule notification.');
+      alert("Failed to send notification.");
     }
   } catch (error) {
-    console.error('Error scheduling notification:', error);
-    alert('Failed to schedule notification.');
+    console.error("Error sending notification:", error);
+    alert("Failed to send notification.");
   }
 };
-;
 
-// ✅ Ensure OneSignal is initialized only once
-onMounted(() => {
-  getOrCreateUser();
-});
+
+// ✅ Initialize OneSignal and Get Player ID When Component Mounts
+
 </script>
 
 <style scoped>
