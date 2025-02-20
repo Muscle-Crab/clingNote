@@ -1,6 +1,6 @@
 <template>
   <div class="container">
-    <h2>Schedule a Notification - Dalton</h2>
+    <h2>Schedule a Notification </h2>
     <input v-model="taskTime" type="datetime-local" class="input" />
     <button @click="sendNotificationToDevice" class="button">Save</button>
 
