@@ -480,12 +480,17 @@
 
                     <!-- Task Actions -->
                     <div class="flex items-center space-x-2">
+
+                      <!-- Task Completion Radio Button -->
                       <button
                           v-if="isToday(selectedDayIndex)"
                           @click="toggleTaskCompletion(index)"
-                          class="text-green-500 hover:text-green-700 text-xs sm:text-sm"
+                          class="absolute top-2 left-2 focus:outline-none"
                       >
-                        ✅
+                        <i
+                            :class="task.completed ? 'fas fa-dot-circle text-green-500' : 'far fa-circle text-gray-400'"
+                            class="text-xl transition-all duration-300 ease-in-out"
+                        ></i>
                       </button>
 
                       <button
