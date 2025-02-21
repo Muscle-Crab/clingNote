@@ -1237,13 +1237,31 @@ const announceNextTask = (completedIndex) => {
 
 const showFullScreenAnimation = ref(false);
 
-const checkAllTasksCompleted = () => {
+const checkAllTasksCompleted = async () => {
   const allCompleted = selectedDayRoutine.value.every(task => task.completed);
 
   if (allCompleted) {
     showFullScreenAnimation.value = true; // Show animation
     speak("Congratulations! You've completed all your tasks!");
     updateStreakOnCompletion(); // Ensure streak is updated
+
+    // **Reset all tasks to incomplete**
+    selectedDayRoutine.value.forEach(task => {
+      task.completed = false;
+    });
+
+    // **Update Firestore**
+    try {
+      const selectedDayDocRef = doc(db, 'weeklyRoutines', `${userId.value}_${days[selectedDayIndex.value].day}`);
+      await updateDoc(selectedDayDocRef, {
+        tasks: selectedDayRoutine.value, // Save the updated tasks
+        updatedAt: serverTimestamp()
+      });
+
+      console.log('All tasks have been reset to incomplete.');
+    } catch (error) {
+      console.error('Error resetting tasks:', error);
+    }
   }
 };
 const updateStreakOnCompletion = async () => {
@@ -1534,7 +1552,12 @@ const filteredTasks = computed(() => {
     });
   }
 });
-const calculateCompletionPercentage = () => {
+const calculateCompletionPercentage = (task) => {
+  const todayIndex = new Date().getDay(); // Get current day index
+  if (selectedDayIndex.value !== todayIndex) {
+    return 0; // Reset progress for non-today tabs
+  }
+
   if (!selectedDayRoutine.value) return 0;
 
   const totalTasks = selectedDayRoutine.value.length + wontDoTasks.value.length;
@@ -1542,6 +1565,7 @@ const calculateCompletionPercentage = () => {
 
   return totalTasks === 0 ? 0 : Math.round((completedTasks / totalTasks) * 100);
 };
+
 const fetchWontDoTasks = async () => {
   if (!userId.value || selectedDayIndex.value === -1) {
     console.warn("User ID or selected day is not set.");
