@@ -328,9 +328,14 @@
                           class="text-lg font-semibold text-gray-800"
                           :class="{ 'line-through text-gray-500': task.completed && isToday(selectedDayIndex) }"
                       >
-                        {{ task.title }} <span v-if="task.reminder" class="mr-2">⏰</span>
+                        {{ task.title }}
                       </div>
+                      <div v-if="task.reminder?.date && task.reminder?.time" class="text-sm text-gray-500 mt-1">
+                        <div v-if="task.reminder?.date && task.reminder?.time" class="text-sm text-gray-500 mt-1">
+                          📅 {{ formatShortDate(task.reminder.date) }} • ⏰ {{ formatTime(task.reminder.time) }}
+                        </div>
 
+                      </div>
 
                       <div class="absolute top-2 right-2 bg-blue-100  px-2 py-1 rounded-full text-xs font-bold flex items-center ">
                         <span>10</span>
@@ -614,12 +619,7 @@ const formatTimes = (index) => {
   // Ensure currentTime[index] is defined and not NaN
   if (typeof currentTime.value[index] === 'undefined' || isNaN(currentTime.value[index])) {
     return '00:00';
-  }
-
-
-
-
-  // Format remaining time as MM:SS
+  }// Format remaining time as MM:SS
   const minutes = Math.floor(currentTime.value[index] / 60);
   const seconds = currentTime.value[index] % 60;
   return `${minutes < 10 ? '0' : ''}${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
@@ -1488,7 +1488,11 @@ const fetchUserCredits = async () => {
 
 onMounted(fetchUserCredits);
 
-
+const formatShortDate = (date) => {
+  if (!date) return "";
+  const options = { month: "short", day: "numeric" }; // Example: "Feb 19"
+  return new Date(date).toLocaleDateString("en-US", options);
+};
 
 
 const formatTime = (time) => {
@@ -1871,7 +1875,11 @@ onMounted(() => {
 
   checkStreakOnCompletion();
 });
-
+const formatDate = (date) => {
+  if (!date) return "";
+  const options = { weekday: "long", month: "short", day: "numeric", year: "numeric" };
+  return new Date(date).toLocaleDateString("en-US", options);
+};
 const milestones = ref([
   { label: '0%', percent: 0, position: 0, icon: '🌱' },      // Seed planted
   { label: '25%', percent: 25, position: 25, icon: '🌿' },   // Sprouting leaves
