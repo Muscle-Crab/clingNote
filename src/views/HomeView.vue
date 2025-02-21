@@ -955,7 +955,24 @@ const fetchSelectedDayRoutine = async () => {
     const selectedDayDocSnapshot = await getDoc(selectedDayDocRef);
 
     if (selectedDayDocSnapshot.exists()) {
-      const tasks = selectedDayDocSnapshot.data().tasks || [];
+      let tasks = selectedDayDocSnapshot.data().tasks || [];
+
+      const isTodaySelected = selectedDay.date === getTodayDate();
+      const isPastDay = new Date(selectedDay.date) < new Date(getTodayDate());
+
+      // If the selected day is in the past, reset all tasks to incomplete
+      if (isPastDay) {
+        tasks = tasks.map(task => ({
+          ...task,
+          completed: false
+        }));
+
+        // Update Firestore with reset tasks
+        await updateDoc(selectedDayDocRef, {
+          tasks: tasks,
+          updatedAt: serverTimestamp()
+        });
+      }
 
       // Fetch user names for each task
       const tasksWithUserNames = await Promise.all(
