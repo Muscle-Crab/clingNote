@@ -31,7 +31,7 @@
           <!-- Streak and Credits Information -->
           <div class="flex flex-col">
             <h2 class="text-sm font-semibold text-gray-800">
-              Streak: <span class="text-blue-600">{{ streak }}</span> days
+              🔥<span class="text-blue-600">{{ streak }}</span> days
             </h2>
             <p v-if="streak === 0" class="text-xs text-red-500 font-medium mt-1">
               No streak yet!
