@@ -324,7 +324,7 @@
             <draggable
                 handle=".drag-handle"
                 :animation="150"
-                :list="sortedSelectedDayRoutine"
+                v-model="selectedDayRoutine"
                 tag="div"
                 class="tasks-list space-y-2"
                 ghost-class="ghost"
