@@ -203,72 +203,126 @@
             </div>
             <!-- Modal body -->
             <form @submit.prevent="addNewTask">
-              <label for="newTask" class="block mb-2">Task Name:</label>
-              <input type="text" v-model="newTask.title" id="newTask" class="w-full border-gray-300 rounded-md px-4 py-2 mb-2" placeholder="Enter task name" required>
-
-              <div >
-                <label for="newTaskReminderDate" class="block mb-2">Reminder Date:</label>
+              <!-- Basic Task Input -->
+              <div>
+                <label for="newTask" class="block mb-2">Task Name:</label>
                 <input
-                    type="date"
-                    v-model="newTask.reminder.date"
-                    id="newTaskReminderDate"
+                    type="text"
+                    v-model="newTask.title"
+                    id="newTask"
                     class="w-full border-gray-300 rounded-md px-4 py-2 mb-2"
+                    placeholder="Enter task name"
+                    required
                 />
-                <label for="newTaskReminderTime" class="block mb-2">Reminder Time:</label>
-                <input
-                    type="time"
-                    v-model="newTask.reminder.time"
-                    id="newTaskReminderTime"
-                    class="w-full border-gray-300 rounded-md px-4 py-2 mb-2"
-                />
-                <label for="newTaskReminderRepeat" class="block mb-2">Repeat:</label>
-                <select
-                    v-model="newTask.reminder.repeat"
-                    id="newTaskReminderRepeat"
-                    class="w-full border-gray-300 rounded-md px-4 py-2 mb-2"
-                >
-                  <option value="">No Repeat</option>
-                  <option value="daily">Daily</option>
-                  <option value="weekly">Weekly</option>
-                  <option value="monthly">Monthly</option>
-                  <option value="yearly">Yearly</option>
-                </select>
               </div>
 
+              <!-- Toggle for Advanced Options -->
+              <div class="flex items-center cursor-pointer mb-2" @click="showAdvanced = !showAdvanced">
+                <span class="mr-2">Advanced Options</span>
+                <!-- Example using FontAwesome icons; adjust as needed -->
+                <i :class="showAdvanced ? 'fas fa-chevron-up' : 'fas fa-chevron-down'"></i>
+              </div>
 
+              <!-- Advanced Fields -->
+              <transition name="fade">
+                <div v-if="showAdvanced">
+                  <div class="mb-4">
+                    <label for="newTaskReminderDate" class="block mb-2">Reminder Date:</label>
+                    <input
+                        type="date"
+                        v-model="newTask.reminder.date"
+                        id="newTaskReminderDate"
+                        class="w-full border-gray-300 rounded-md px-4 py-2 mb-2"
+                    />
+                    <label for="newTaskReminderTime" class="block mb-2">Reminder Time:</label>
+                    <input
+                        type="time"
+                        v-model="newTask.reminder.time"
+                        id="newTaskReminderTime"
+                        class="w-full border-gray-300 rounded-md px-4 py-2 mb-2"
+                    />
+                    <label for="newTaskReminderRepeat" class="block mb-2">Repeat:</label>
+                    <select
+                        v-model="newTask.reminder.repeat"
+                        id="newTaskReminderRepeat"
+                        class="w-full border-gray-300 rounded-md px-4 py-2 mb-2"
+                    >
+                      <option value="">No Repeat</option>
+                      <option value="daily">Daily</option>
+                      <option value="weekly">Weekly</option>
+                      <option value="monthly">Monthly</option>
+                      <option value="yearly">Yearly</option>
+                    </select>
+                  </div>
 
+<!--                  <div class="mb-4">-->
+<!--                    <label for="newTaskPriority" class="block mb-2">Task Priority:</label>-->
+<!--                    <select-->
+<!--                        v-model="newTask.priority"-->
+<!--                        id="newTaskPriority"-->
+<!--                        class="w-full border-gray-300 rounded-md px-4 py-2 mb-2"-->
+<!--                    >-->
+<!--                      <option value="low">Low</option>-->
+<!--                      <option value="medium">Medium</option>-->
+<!--                      <option value="high">High</option>-->
+<!--                    </select>-->
+<!--                  </div>-->
 
+                  <div class="mb-4">
+                    <label for="newTaskDays" class="block mb-2">Select Days:</label>
+                    <div class="flex flex-wrap gap-2 mb-2">
+                      <div v-for="(day, index) in days" :key="index" class="flex items-center space-x-2">
+                        <input type="checkbox" :id="'day-' + index" :value="day" v-model="newTask.selectedDays" class="form-checkbox" />
+                        <label :for="'day-' + index" class="text-sm">{{ day.day }}</label>
+                      </div>
+                    </div>
+                  </div>
 
-              <label for="newTaskPriority" class="block mb-2">Task Priority:</label>
-              <select v-model="newTask.priority" id="newTaskPriority" class="w-full border-gray-300 rounded-md px-4 py-2 mb-2">
-                <option value="low">Low</option>
-                <option value="medium">Medium</option>
-                <option value="high">High</option>
-              </select>
+                  <div class="mb-4">
+                    <label for="taskPosition" class="block mb-2">Insert Position:</label>
+                    <select
+                        v-model="newTask.position"
+                        id="taskPosition"
+                        class="w-full border-gray-300 rounded-md px-4 py-2 mb-2"
+                    >
+                      <option :value="0">First</option>
+                      <option
+                          v-for="(task, index) in selectedDayRoutine"
+                          :key="index"
+                          :value="index + 1"
+                      >
+                        {{ index + 2 }}{{ getOrdinalSuffix(index + 2) }}
+                      </option>
+                    </select>
+                  </div>
 
-              <label for="newTaskDays" class="block mb-2">Select Days:</label>
-              <div class="flex flex-wrap gap-2 mb-2">
-                <div v-for="(day, index) in days" :key="index" class="flex items-center space-x-2">
-                  <input type="checkbox" :id="'day-' + index" :value="day" v-model="newTask.selectedDays" class="form-checkbox">
-                  <label :for="'day-' + index" class="text-sm">{{ day.day }}</label>
+                  <div class="mb-4">
+                    <label for="newTaskLabels" class="block mb-2">Task Labels:</label>
+                    <input
+                        type="text"
+                        v-model="newTask.labels"
+                        id="newTaskLabels"
+                        class="w-full border-gray-300 rounded-md px-4 py-2 mb-2"
+                        placeholder="Enter task labels (comma-separated)"
+                    />
+                  </div>
+
+                  <div class="mb-4">
+                    <label for="newTaskNotes" class="block mb-2">Task Notes:</label>
+                    <textarea
+                        v-model="newTask.notes"
+                        id="newTaskNotes"
+                        class="w-full border-gray-300 rounded-md px-4 py-2 mb-2"
+                        placeholder="Enter task notes"
+                    ></textarea>
+                  </div>
                 </div>
-              </div>
-              <label for="taskPosition" class="block mb-2">Insert Position:</label>
-              <select v-model="newTask.position" id="taskPosition" class="w-full border-gray-300 rounded-md px-4 py-2 mb-2">
-                <option :value="0">First</option>
-                <option v-for="(task, index) in selectedDayRoutine" :key="index" :value="index + 1">
-                  {{ index + 2 }}{{ getOrdinalSuffix(index + 2) }}
-                </option>
-              </select>
+              </transition>
 
-
-              <label for="newTaskLabels" class="block mb-2">Task Labels:</label>
-              <input type="text" v-model="newTask.labels" id="newTaskLabels" class="w-full border-gray-300 rounded-md px-4 py-2 mb-2" placeholder="Enter task labels (comma-separated)">
-
-              <label for="newTaskNotes" class="block mb-2">Task Notes:</label>
-              <textarea v-model="newTask.notes" id="newTaskNotes" class="w-full border-gray-300 rounded-md px-4 py-2 mb-2" placeholder="Enter task notes"></textarea>
-
-              <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded-md">Add Task</button>
+              <!-- Submit Button & Error -->
+              <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded-md">
+                Add Task
+              </button>
               <div v-if="error" class="text-red-500 mt-2">{{ error }}</div>
             </form>
 
@@ -644,21 +698,12 @@ const modalOpen = ref(false);
 import axios from 'axios';
 
 // Define reactive state
-const isRunning = ref([]);
+
 const currentTime = ref([]);
-const duration = ref(60 * 60); // Duration in seconds
-const timers = [];
+const showAdvanced = ref(false)
 
 // Define function to format time
-const formatTimes = (index) => {
-  // Ensure currentTime[index] is defined and not NaN
-  if (typeof currentTime.value[index] === 'undefined' || isNaN(currentTime.value[index])) {
-    return '00:00';
-  }// Format remaining time as MM:SS
-  const minutes = Math.floor(currentTime.value[index] / 60);
-  const seconds = currentTime.value[index] % 60;
-  return `${minutes < 10 ? '0' : ''}${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
-};
+
 const transferModalOpen = ref(false);
 const selectedTransferTaskIndex = ref(null);
 const selectedTransferDay = ref(null);
@@ -2113,4 +2158,6 @@ onMounted(async () => {
     transform: scale(1.1);
   }
 }
+
+
 </style>
