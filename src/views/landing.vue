@@ -1,7 +1,7 @@
 <template>
   <div>
     <button @click="getPlayerId">Get Player ID</button>
-    <p v-if="playerId">Player ID: {{ playerId }}</p>
+    <p v-if="playerId">Player ID fdfdfdfd: {{ playerId }}</p>
   </div>
 </template>
 
