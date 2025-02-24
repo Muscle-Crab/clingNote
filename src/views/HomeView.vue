@@ -324,7 +324,7 @@
             <draggable
                 handle=".drag-handle"
                 :animation="150"
-                v-model="selectedDayRoutine"
+                :list="sortedSelectedDayRoutine"
                 tag="div"
                 class="tasks-list space-y-2"
                 ghost-class="ghost"
@@ -1108,7 +1108,12 @@ const updateRoutine = () => {
 
 const sortedSelectedDayRoutine = computed(() => {
   return selectedDayRoutine.value.slice().sort((a, b) => {
-    return new Date('1970/01/01 ' + a.time) - new Date('1970/01/01 ' + b.time);
+    // If both tasks have the same completion status, sort by time
+    if (a.completed === b.completed) {
+      return new Date('1970/01/01 ' + a.time) - new Date('1970/01/01 ' + b.time);
+    }
+    // If task A is completed and task B is not, A comes first
+    return a.completed ? -1 : 1;
   });
 });
 
