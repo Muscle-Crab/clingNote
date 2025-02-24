@@ -1,7 +1,7 @@
 <template>
   <div>
     <button @click="getPlayerId">Get Player ID</button>
-    <p v-if="playerId">Player ID fdfdfdfd: {{ playerId }}</p>
+    <p v-if="playerId">Player ID : {{ playerId }}</p>
   </div>
 </template>
 
@@ -36,7 +36,7 @@ export default {
 
       try {
         if (window.OneSignal.User && window.OneSignal.User.onesignalId) {
-          playerId.value = window.OneSignal.User.onesignalId;
+          playerId.value = window.OneSignal.User.id;
           console.log("✅ OneSignal Player ID:", playerId.value);
         } else {
           console.warn("⚠️ Player ID is not available. Ensure the user is subscribed.");
