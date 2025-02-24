@@ -206,8 +206,38 @@
               <label for="newTask" class="block mb-2">Task Name:</label>
               <input type="text" v-model="newTask.title" id="newTask" class="w-full border-gray-300 rounded-md px-4 py-2 mb-2" placeholder="Enter task name" required>
 
-              <label for="newTaskTime" class="block mb-2">Task Time:</label>
-              <input type="time" v-model="newTask.time" id="newTaskTime" class="w-full border-gray-300 rounded-md px-4 py-2 mb-2">
+              <div >
+                <label for="newTaskReminderDate" class="block mb-2">Reminder Date:</label>
+                <input
+                    type="date"
+                    v-model="newTask.reminder.date"
+                    id="newTaskReminderDate"
+                    class="w-full border-gray-300 rounded-md px-4 py-2 mb-2"
+                />
+                <label for="newTaskReminderTime" class="block mb-2">Reminder Time:</label>
+                <input
+                    type="time"
+                    v-model="newTask.reminder.time"
+                    id="newTaskReminderTime"
+                    class="w-full border-gray-300 rounded-md px-4 py-2 mb-2"
+                />
+                <label for="newTaskReminderRepeat" class="block mb-2">Repeat:</label>
+                <select
+                    v-model="newTask.reminder.repeat"
+                    id="newTaskReminderRepeat"
+                    class="w-full border-gray-300 rounded-md px-4 py-2 mb-2"
+                >
+                  <option value="">No Repeat</option>
+                  <option value="daily">Daily</option>
+                  <option value="weekly">Weekly</option>
+                  <option value="monthly">Monthly</option>
+                  <option value="yearly">Yearly</option>
+                </select>
+              </div>
+
+
+
+
 
               <label for="newTaskPriority" class="block mb-2">Task Priority:</label>
               <select v-model="newTask.priority" id="newTaskPriority" class="w-full border-gray-300 rounded-md px-4 py-2 mb-2">
@@ -901,9 +931,11 @@ const newTask = ref({
   priority: 'low',
   labels: [],
   notes: '',
-  selectedDays: [], // Ensure this is initialized as an array
-  position: 0
+  selectedDays: [],
+  position: 0,
+  reminder: { date: '', time: '', repeat: '' }  // Now defined
 });
+
 
 const error = ref('');
 const editingTask = ref(null);
@@ -1391,14 +1423,16 @@ const addNewTask = async () => {
     return;
   }
 
-  // Ensure at least one day is selected or fallback to the currently selected tab day
-  const selectedDays = newTask.value.selectedDays.length > 0
-      ? newTask.value.selectedDays
-      : [days[selectedDayIndex.value]];
+  // Fallback to the currently selected day if no days are explicitly selected
+  const selectedDays =
+      newTask.value.selectedDays.length > 0
+          ? newTask.value.selectedDays
+          : [days[selectedDayIndex.value]];
 
-  const labels = typeof newTask.value.labels === 'string'
-      ? newTask.value.labels.split(',').map(label => label.trim())
-      : [];
+  const labels =
+      typeof newTask.value.labels === 'string'
+          ? newTask.value.labels.split(',').map(label => label.trim())
+          : [];
 
   const task = {
     title: newTask.value.title.trim(),
@@ -1411,9 +1445,18 @@ const addNewTask = async () => {
     createdAt: new Date().toISOString()
   };
 
+  // If reminder data is provided, attach it to the task
+  if (newTask.value.reminder.date && newTask.value.reminder.time) {
+    task.reminder = { ...newTask.value.reminder };
+  }
+
   try {
     for (const selectedDay of selectedDays) {
-      const selectedDayDocRef = doc(db, 'weeklyRoutines', `${userId.value}_${selectedDay.day}`);
+      const selectedDayDocRef = doc(
+          db,
+          'weeklyRoutines',
+          `${userId.value}_${selectedDay.day}`
+      );
       const selectedDayDocSnapshot = await getDoc(selectedDayDocRef);
 
       let existingTasks = [];
@@ -1426,26 +1469,38 @@ const addNewTask = async () => {
       existingTasks.splice(position, 0, task);
 
       await setDoc(selectedDayDocRef, {
-        tasks: existingTasks, // Only save `existingTasks` once
+        tasks: existingTasks,
         updatedAt: serverTimestamp()
       });
 
-      // Update the local state if the task is for the currently selected tab
-      if (selectedDayIndex.value !== -1 && selectedDay.day === days[selectedDayIndex.value].day) {
+      // Update the UI if the task belongs to the currently selected day
+      if (selectedDay.day === days[selectedDayIndex.value].day) {
         selectedDayRoutine.value = [...existingTasks].sort((a, b) => {
           return new Date('1970/01/01 ' + a.time) - new Date('1970/01/01 ' + b.time);
         });
       }
     }
 
-    newTask.value = { title: '', time: '', priority: 'low', labels: [], notes: '', selectedDays: [], position: 0 };
+    // If a reminder was set, schedule the notification
+    if (task.reminder) {
+      scheduleNotification(task, task.reminder);
+    }
+
+    // Reset the newTask state after adding, ensuring the reminder object is always defined
+    newTask.value = {
+      title: '',
+      time: '',
+      priority: 'low',
+      labels: [],
+      notes: '',
+      selectedDays: [],
+      position: 0,
+      reminder: { date: '', time: '', repeat: '' }
+    };
     closeModal();
     error.value = '';
 
-
-
-
-    // Send notification to the specific player ID
+    // Optionally, send a notification for task creation
     const userName = await fetchUserName(userId.value);
     if (userName) {
       await sendNotificationToPlayer(userName, "created");
@@ -1454,6 +1509,8 @@ const addNewTask = async () => {
     console.error('Error adding task:', error);
   }
 };
+
+
 
 
 
