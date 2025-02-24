@@ -1,8 +1,8 @@
 <template>
   <div>
-    <button @click="getPlayerId">Get Player ID</button>
+    <button @click="getSubscriptionId">Get Subscription ID</button>
     <button @click="sendNotification">Send Notification</button>
-    <p v-if="playerId">Player ID: {{ playerId }}</p>
+    <p v-if="subscriptionId">Subscription ID: {{ subscriptionId }}</p>
   </div>
 </template>
 
@@ -11,9 +11,9 @@ import { ref, onMounted } from "vue";
 
 export default {
   setup() {
-    const playerId = ref(null);
+    const subscriptionId = ref(null);
 
-    async function getPlayerId() {
+    async function getSubscriptionId() {
       if (!window.OneSignal) {
         console.error("❌ OneSignal is not available.");
         return;
@@ -21,28 +21,28 @@ export default {
 
       window.OneSignal.push(async function () {
         try {
-          const id = window.OneSignal.User.onesignalId; // ✅ Use onesignalId directly
+          const id = window.OneSignal.User.PushSubscription.id; // ✅ Use `.id` instead of `getId()`
           if (id) {
-            playerId.value = id;
-            console.log("✅ OneSignal Player ID:", id);
+            subscriptionId.value = id;
+            console.log("✅ OneSignal Subscription ID:", id);
           } else {
-            console.warn("⚠️ Player ID is not available. Ensure the user is subscribed.");
+            console.warn("⚠️ Subscription ID is not available. Ensure the user is subscribed.");
           }
         } catch (error) {
-          console.error("❌ Error retrieving Player ID:", error);
+          console.error("❌ Error retrieving Subscription ID:", error);
         }
       });
     }
 
     async function sendNotification() {
-      if (!playerId.value) {
-        console.warn("⚠️ Cannot send notification. Player ID is missing.");
+      if (!subscriptionId.value) {
+        console.warn("⚠️ Cannot send notification. Subscription ID is missing.");
         return;
       }
 
       const notificationData = {
         app_id: "fc206a71-7d65-4cfa-b8b2-0c10548e1476", // ✅ Your OneSignal App ID
-        include_player_ids: [playerId.value], // ✅ Target the retrieved Player ID
+        include_player_ids: [subscriptionId.value], // ✅ Use Subscription ID here
         headings: { en: "Test Notification" },
         contents: { en: "This is a test notification from Vue.js!" },
       };
@@ -58,8 +58,13 @@ export default {
         });
 
         const result = await response.json();
-        console.log("✅ Notification sent successfully:", result);
-        alert("✅ Notification Sent!");
+        if (result.errors) {
+          console.error("❌ Notification API Error:", result.errors);
+          alert("❌ Failed to send notification! Check the console.");
+        } else {
+          console.log("✅ Notification sent successfully:", result);
+          alert("✅ Notification Sent!");
+        }
       } catch (error) {
         console.error("❌ Error sending notification:", error);
         alert("❌ Failed to send notification!");
@@ -67,12 +72,12 @@ export default {
     }
 
     onMounted(() => {
-      getPlayerId(); // Auto-fetch Player ID on mount
+      getSubscriptionId(); // Auto-fetch Subscription ID on mount
     });
 
     return {
-      playerId,
-      getPlayerId,
+      subscriptionId,
+      getSubscriptionId,
       sendNotification,
     };
   },
