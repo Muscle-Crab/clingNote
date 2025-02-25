@@ -886,7 +886,12 @@ const scheduleNotification = async (task, reminder) => {
   const formattedTime = convertTo12HourFormat(reminder.time);
 
   const scheduledDateTime = new Date(`${reminder.date}T${reminder.time}:00`).toISOString();
+  const playerId = window.OneSignal.User.PushSubscription.id;
 
+  if (!playerId) {
+    console.error("Player ID not found. Make sure OneSignal is initialized.");
+    return;
+  }
   const headers = {
     'Authorization': 'Bearer ZDZiZDk0NTktMjUwZS00NTQ4LWFhOTItNjBiZDZiMjVhYzYy', // Replace with your OneSignal API key
     'Content-Type': 'application/json'
@@ -894,7 +899,7 @@ const scheduleNotification = async (task, reminder) => {
 
   const notificationData = {
     "app_id": "fc206a71-7d65-4cfa-b8b2-0c10548e1476", // Replace with your OneSignal App ID
-    "include_player_ids": ["ff823cf5-aef7-4363-82f7-33c1de7ce02e"], // Replace with actual user player ID
+    "include_player_ids": [playerId], // Replace with actual user player ID
     "contents": { "en": `${task.title} at ${formattedTime}` },
     "headings": { "en": "Task Reminder" },
     "send_after": scheduledDateTime, // Schedule the notification
