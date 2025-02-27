@@ -266,7 +266,11 @@
                       <label :for="'day-' + index" class="text-sm">{{ day.day }}</label>
                     </div>
                   </div>
+                  <select v-model="newTask.type" id="taskType" class="w-full border border-gray-300 rounded-md px-4 py-2">
 
+                    <option value="recurring">Recurring</option>
+                    <option value="one-time">One-time</option>
+                  </select>
                   <label for="taskPosition">Insert Position:</label>
                   <select
                       v-model="newTask.position"
@@ -972,6 +976,7 @@ const newTask = ref({
   notes: '',
   selectedDays: [],
   position: 0,
+  type: 'recurring',
   reminder: { date: '', time: '', repeat: '' }  // Now defined
 });
 
@@ -1339,29 +1344,43 @@ const checkAllTasksCompleted = async () => {
   const allCompleted = selectedDayRoutine.value.every(task => task.completed);
 
   if (allCompleted) {
-    showFullScreenAnimation.value = true; // Show animation
+    // 🎉 Show completion animation
+    showFullScreenAnimation.value = true;
     speak("Congratulations! You've completed all your tasks!");
-    updateStreakOnCompletion(); // Ensure streak is updated
+    updateStreakOnCompletion(); // 🔥 Update streak progression
 
-    // **Reset all tasks to incomplete**
-    selectedDayRoutine.value.forEach(task => {
-      task.completed = false;
+    // 🗑 Remove one-time tasks & reset recurring tasks
+    selectedDayRoutine.value = selectedDayRoutine.value.filter(task => {
+      if (task.type === "one-time") {
+        return false; // Remove from array (will also be removed from Firestore)
+      } else {
+        task.completed = false; // Reset recurring task to incomplete
+        return true; // Keep in array
+      }
     });
 
-    // **Update Firestore**
+    // 🔄 Update Firestore
     try {
       const selectedDayDocRef = doc(db, 'weeklyRoutines', `${userId.value}_${days[selectedDayIndex.value].day}`);
-      await updateDoc(selectedDayDocRef, {
-        tasks: selectedDayRoutine.value, // Save the updated tasks
-        updatedAt: serverTimestamp()
-      });
 
-      console.log('All tasks have been reset to incomplete.');
+      if (selectedDayRoutine.value.length > 0) {
+        await updateDoc(selectedDayDocRef, {
+          tasks: selectedDayRoutine.value,
+          updatedAt: serverTimestamp()
+        });
+        console.log("✅ One-time tasks removed, recurring tasks reset.");
+      } else {
+        await deleteDoc(selectedDayDocRef); // Remove document if no tasks remain
+        console.log("🗑 All tasks removed. Firestore document deleted.");
+      }
+
     } catch (error) {
-      console.error('Error resetting tasks:', error);
+      console.error("❌ Error updating Firestore:", error);
     }
   }
 };
+
+
 const updateStreakOnCompletion = async () => {
   if (!userId.value) return;
 
@@ -1486,7 +1505,7 @@ const addNewTask = async () => {
     labels: labels,
     notes: newTask.value.notes,
     userId: userId.value,
-
+    type: newTask.value.type,
     createdAt: new Date().toISOString()
   };
 
@@ -1541,7 +1560,7 @@ const addNewTask = async () => {
       selectedDays: [],
       position: 0,
       reminder: { date: '', time: '', repeat: '' },
-
+      type: 'recurring',
     };
     closeModal();
     error.value = '';
