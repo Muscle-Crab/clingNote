@@ -266,10 +266,7 @@
                       <label :for="'day-' + index" class="text-sm">{{ day.day }}</label>
                     </div>
                   </div>
-                  <select v-model="newTask.isRecurring" id="taskRecurrence" class="w-full border px-4 py-2">
-                    <option :value="false">One-Time</option>
-                    <option :value="true">Recurring</option>
-                  </select>
+
                   <label for="taskPosition">Insert Position:</label>
                   <select
                       v-model="newTask.position"
@@ -1489,7 +1486,7 @@ const addNewTask = async () => {
     labels: labels,
     notes: newTask.value.notes,
     userId: userId.value,
-    isRecurring: newTask.value.isRecurring,
+
     createdAt: new Date().toISOString()
   };
 
@@ -1544,7 +1541,7 @@ const addNewTask = async () => {
       selectedDays: [],
       position: 0,
       reminder: { date: '', time: '', repeat: '' },
-      isRecurring: false // New flag for task recurrence
+
     };
     closeModal();
     error.value = '';
@@ -1559,52 +1556,7 @@ const addNewTask = async () => {
   }
 };
 
-const cleanUpTasks = async () => {
-  if (!userId.value) return;
 
-  const today = new Date();
-  const formattedToday = today.toISOString().split('T')[0]; // YYYY-MM-DD
-  const currentHour = today.getHours();
-
-  if (currentHour >= 0) {
-    return; // Only execute after 12 PM
-  }
-
-  try {
-    for (const day of days) {
-      const dayDocRef = doc(db, 'weeklyRoutines', `${userId.value}_${day.day}`);
-      const dayDocSnapshot = await getDoc(dayDocRef);
-
-      if (dayDocSnapshot.exists()) {
-        let tasks = dayDocSnapshot.data().tasks || [];
-
-        // Remove one-time tasks whose reminder date is before today
-        tasks = tasks.filter(task => task.isRecurring || task.reminder?.date >= formattedToday);
-
-        await updateDoc(dayDocRef, {
-          tasks,
-          updatedAt: serverTimestamp(),
-        });
-
-        console.log(`Old one-time tasks removed for ${day.day}`);
-      }
-    }
-  } catch (error) {
-    console.error('Error cleaning up old one-time tasks:', error);
-  }
-};
-const scheduleTaskCleanup = () => {
-  setInterval(() => {
-    const now = new Date();
-    if (now.getHours() === 12 && now.getMinutes() === 0) {
-      cleanUpTasks();
-    }
-  }, 60 * 60 * 1000); // Run every hour
-};
-
-onMounted(() => {
-  scheduleTaskCleanup();
-});
 
 
 const userCredits = ref(0);
