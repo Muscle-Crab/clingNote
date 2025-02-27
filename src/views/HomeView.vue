@@ -40,7 +40,7 @@
             <p v-else class="text-xs text-gray-600 mt-1">
               {{ motivationalMessage }}
             </p>
-            <button @click="cleanUpTasks">Run Cleanup</button>
+
           </div>
         </div>
 
