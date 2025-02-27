@@ -404,7 +404,7 @@
                           class="text-lg font-semibold text-gray-800"
                           :class="{ 'line-through text-gray-500': task.completed && isToday(selectedDayIndex) }"
                       >
-                        {{ task.title }}/{{task.isRecurring}}
+                        {{ task.title }}
                       </div>
                       <div v-if="task.reminder?.date && task.reminder?.time" class="text-sm text-gray-500 mt-1">
                         <div v-if="task.reminder?.date && task.reminder?.time" class="text-sm text-gray-500 mt-1">
@@ -1563,36 +1563,36 @@ const cleanUpTasks = async () => {
   if (!userId.value) return;
 
   const today = new Date();
-  const formattedToday = today.toISOString().split("T")[0];
+  const formattedToday = today.toISOString().split('T')[0]; // YYYY-MM-DD
   const currentHour = today.getHours();
 
-  if (currentHour >= 12) {
-    console.log("It's not after 12 PM yet. Cleanup skipped.");
-    return;
+  if (currentHour >= 0) {
+    return; // Only execute after 12 PM
   }
 
   try {
     for (const day of days) {
-      const dayDocRef = doc(db, "weeklyRoutines", `${userId.value}_${day.day}`);
+      const dayDocRef = doc(db, 'weeklyRoutines', `${userId.value}_${day.day}`);
       const dayDocSnapshot = await getDoc(dayDocRef);
 
       if (dayDocSnapshot.exists()) {
         let tasks = dayDocSnapshot.data().tasks || [];
 
-        // Remove one-time tasks
-        tasks = tasks.filter((task) => task.isRecurring || task.reminder?.date >= formattedToday);
+        // Remove one-time tasks whose reminder date is before today
+        tasks = tasks.filter(task => task.isRecurring || task.reminder?.date >= formattedToday);
 
-        await updateDoc(dayDocRef, { tasks, updatedAt: serverTimestamp() });
-        console.log(`One-time tasks removed for ${day.day}`);
+        await updateDoc(dayDocRef, {
+          tasks,
+          updatedAt: serverTimestamp(),
+        });
+
+        console.log(`Old one-time tasks removed for ${day.day}`);
       }
     }
   } catch (error) {
-    console.error("Error cleaning up tasks:", error);
+    console.error('Error cleaning up old one-time tasks:', error);
   }
 };
-
-// Expose function to the window (for testing in console)
-window.cleanUpTasks = cleanUpTasks;
 const scheduleTaskCleanup = () => {
   setInterval(() => {
     const now = new Date();
@@ -1605,10 +1605,7 @@ const scheduleTaskCleanup = () => {
 onMounted(() => {
   scheduleTaskCleanup();
 });
-onMounted(() => {
-  // Attach function to window for testing
-  window.cleanUpTasks = cleanUpTasks;
-});
+
 
 const userCredits = ref(0);
 
