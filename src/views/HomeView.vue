@@ -66,7 +66,8 @@
 
       <div v-if="showFullScreenAnimation" class="fixed inset-0 bg-gradient-to-br from-green-500 via-blue-500 to-purple-500 flex items-center justify-center z-50">
         <div class="text-center">
-          <h1 class="text-4xl font-bold text-white animate-bounce">🎉 All Tasks Completed! 🎉</h1>
+
+          <h1 class="text-4xl font-bold text-white animate-bounce">🎉 All Tasks Completed! 🔥<span class="text-yellow-600">{{ streak }}</span> days</h1>
           <p class="text-lg text-white mt-4">Congratulations on completing all your tasks!</p>
           <button
               @click="closeFullScreenAnimation"
