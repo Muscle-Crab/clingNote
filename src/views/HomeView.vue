@@ -193,7 +193,7 @@
           class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50"
       >
         <!-- Modal Content -->
-        <div class="bg-white w-full max-w-2xl rounded-lg shadow-lg overflow-hidden flex flex-col max-h-[90vh]">
+        <div class="bg-white w-full max-w-2xl rounded-lg shadow-lg flex flex-col max-h-screen">
 
           <!-- Modal Header -->
           <div class="flex justify-between items-center p-4 border-b">
@@ -203,9 +203,10 @@
             </button>
           </div>
 
-          <!-- Scrollable Body -->
-          <div class="p-4 flex-1 overflow-y-auto">
-            <form @submit.prevent="addNewTask" class="flex flex-col space-y-4">
+          <!-- Form -->
+          <form @submit.prevent="addNewTask" class="flex flex-col flex-1">
+            <!-- Scrollable Body -->
+            <div class="p-4 flex-1 overflow-y-auto max-h-[70vh]">
               <!-- Basic Task Input -->
               <div>
                 <label for="newTask" class="block font-medium">Task Name:</label>
@@ -300,16 +301,20 @@
                 </div>
               </transition>
 
-              <!-- Submit Button & Error -->
-              <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded-md">
+              <div v-if="error" class="text-red-500 mt-2">{{ error }}</div>
+            </div>
+
+            <!-- Submit Button (Inside the Form) -->
+            <div class="bg-white p-4 border-t flex justify-end">
+              <button type="submit" class="bg-blue-500 text-white px-6 py-2 rounded-md shadow-md hover:bg-blue-600 transition">
                 Add Task
               </button>
-              <div v-if="error" class="text-red-500 mt-2">{{ error }}</div>
-            </form>
-
-          </div>
+            </div>
+          </form>
         </div>
       </div>
+
+
       <!-- Edit task form -->
       <form v-if="editingTask !== null" @submit.prevent="updateTask" class="mt-4">
         <label for="editTask" class="block mb-2">Edit Task Name:</label>
