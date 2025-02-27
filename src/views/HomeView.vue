@@ -186,27 +186,26 @@
 
       <!-- Main modal -->
       <div
-          :class="{ 'hidden': !modalOpen }"
+          v-if="modalOpen"
           @keydown.escape="closeModal"
-          tabindex="-1"
-          aria-hidden="true"
-          class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50"
+          class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50 p-4"
       >
         <!-- Modal Content -->
-        <div class="bg-white w-full max-w-2xl rounded-lg shadow-lg flex flex-col max-h-screen">
+        <div class="bg-white w-full max-w-lg md:max-w-xl lg:max-w-2xl rounded-lg shadow-lg flex flex-col max-h-[90vh] overflow-hidden">
 
           <!-- Modal Header -->
           <div class="flex justify-between items-center p-4 border-b">
             <h3 class="text-lg font-semibold text-gray-900">Add Task</h3>
-            <button @click="closeModal" class="text-gray-500 hover:text-gray-700">
+            <button @click="closeModal" class="text-gray-500 hover:text-gray-700 text-2xl">
               ✕
             </button>
           </div>
 
           <!-- Form -->
           <form @submit.prevent="addNewTask" class="flex flex-col flex-1">
-            <!-- Scrollable Body -->
-            <div class="p-4 flex-1 overflow-y-auto max-h-[70vh]">
+
+            <!-- Scrollable Modal Body -->
+            <div class="p-4 flex-1 overflow-y-auto max-h-[65vh]">
               <!-- Basic Task Input -->
               <div>
                 <label for="newTask" class="block font-medium">Task Name:</label>
@@ -221,14 +220,14 @@
               </div>
 
               <!-- Toggle Advanced Options -->
-              <div class="flex items-center cursor-pointer text-blue-500 font-medium" @click="showAdvanced = !showAdvanced">
+              <div class="flex items-center cursor-pointer text-blue-500 font-medium mt-2" @click="showAdvanced = !showAdvanced">
                 <span class="mr-2">Advanced Options</span>
                 <i :class="showAdvanced ? 'fas fa-chevron-up' : 'fas fa-chevron-down'"></i>
               </div>
 
               <!-- Advanced Fields -->
               <transition name="fade">
-                <div v-if="showAdvanced" class="flex flex-col space-y-3">
+                <div v-if="showAdvanced" class="flex flex-col space-y-3 mt-3">
                   <label for="newTaskReminderDate">Reminder Date:</label>
                   <input
                       type="date"
@@ -2015,7 +2014,9 @@ const shouldDisplayTask = (task) => {
 };
 
 
-
+watch(modalOpen, (isOpen) => {
+  document.body.style.overflow = isOpen ? "hidden" : "";
+});
 
 
 // Function to check if a task is spinning
