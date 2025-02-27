@@ -185,137 +185,118 @@
       </div>
 
       <!-- Main modal -->
-      <div :class="{ 'hidden': !modalOpen }" @keydown.escape="closeModal" tabindex="-1" aria-hidden="true" class="overflow-y-auto overflow-x-hidden fixed top-0 right-0 left-0 z-50 justify-center items-center w-full md:inset-0 h-modal md:h-full">
-        <!-- Modal content -->
-        <div class="relative p-4 w-full max-w-2xl h-full md:h-auto">
-          <div class="relative p-4 bg-white rounded-lg shadow dark:bg-gray-800 sm:p-5">
-            <!-- Modal header -->
-            <div class="flex justify-between items-center pb-4 mb-4 rounded-t border-b sm:mb-5 dark:border-gray-600">
-              <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
-                Add Task
-              </h3>
-              <button @click="closeModal" type="button" class="text-gray-400 bg-transparent hover:bg-gray-200 hover:text-gray-900 rounded-lg text-sm p-1.5 ml-auto inline-flex items-center dark:hover:bg-gray-600 dark:hover:text-white">
-                <svg aria-hidden="true" class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-                  <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path>
-                </svg>
-                <span class="sr-only">Close modal</span>
-              </button>
-            </div>
-            <!-- Modal body -->
-            <form @submit.prevent="addNewTask">
+      <div
+          :class="{ 'hidden': !modalOpen }"
+          @keydown.escape="closeModal"
+          tabindex="-1"
+          aria-hidden="true"
+          class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50"
+      >
+        <!-- Modal Content -->
+        <div class="bg-white w-full max-w-2xl rounded-lg shadow-lg overflow-hidden flex flex-col max-h-[90vh]">
+
+          <!-- Modal Header -->
+          <div class="flex justify-between items-center p-4 border-b">
+            <h3 class="text-lg font-semibold text-gray-900">Add Task</h3>
+            <button @click="closeModal" class="text-gray-500 hover:text-gray-700">
+              ✕
+            </button>
+          </div>
+
+          <!-- Scrollable Body -->
+          <div class="p-4 flex-1 overflow-y-auto">
+            <form @submit.prevent="addNewTask" class="flex flex-col space-y-4">
               <!-- Basic Task Input -->
               <div>
-                <label for="newTask" class="block mb-2">Task Name:</label>
+                <label for="newTask" class="block font-medium">Task Name:</label>
                 <input
                     type="text"
                     v-model="newTask.title"
                     id="newTask"
-                    class="w-full border-gray-300 rounded-md px-4 py-2 mb-2"
+                    class="w-full border border-gray-300 rounded-md px-4 py-2"
                     placeholder="Enter task name"
                     required
                 />
               </div>
 
-              <!-- Toggle for Advanced Options -->
-              <div class="flex items-center cursor-pointer mb-2" @click="showAdvanced = !showAdvanced">
+              <!-- Toggle Advanced Options -->
+              <div class="flex items-center cursor-pointer text-blue-500 font-medium" @click="showAdvanced = !showAdvanced">
                 <span class="mr-2">Advanced Options</span>
-                <!-- Example using FontAwesome icons; adjust as needed -->
                 <i :class="showAdvanced ? 'fas fa-chevron-up' : 'fas fa-chevron-down'"></i>
               </div>
 
               <!-- Advanced Fields -->
               <transition name="fade">
-                <div v-if="showAdvanced">
-                  <div class="mb-4">
-                    <label for="newTaskReminderDate" class="block mb-2">Reminder Date:</label>
-                    <input
-                        type="date"
-                        v-model="newTask.reminder.date"
-                        id="newTaskReminderDate"
-                        class="w-full border-gray-300 rounded-md px-4 py-2 mb-2"
-                    />
-                    <label for="newTaskReminderTime" class="block mb-2">Reminder Time:</label>
-                    <input
-                        type="time"
-                        v-model="newTask.reminder.time"
-                        id="newTaskReminderTime"
-                        class="w-full border-gray-300 rounded-md px-4 py-2 mb-2"
-                    />
-                    <label for="newTaskReminderRepeat" class="block mb-2">Repeat:</label>
-                    <select
-                        v-model="newTask.reminder.repeat"
-                        id="newTaskReminderRepeat"
-                        class="w-full border-gray-300 rounded-md px-4 py-2 mb-2"
-                    >
-                      <option value="">No Repeat</option>
-                      <option value="daily">Daily</option>
-                      <option value="weekly">Weekly</option>
-                      <option value="monthly">Monthly</option>
-                      <option value="yearly">Yearly</option>
-                    </select>
-                  </div>
+                <div v-if="showAdvanced" class="flex flex-col space-y-3">
+                  <label for="newTaskReminderDate">Reminder Date:</label>
+                  <input
+                      type="date"
+                      v-model="newTask.reminder.date"
+                      id="newTaskReminderDate"
+                      class="w-full border border-gray-300 rounded-md px-4 py-2"
+                  />
 
-<!--                  <div class="mb-4">-->
-<!--                    <label for="newTaskPriority" class="block mb-2">Task Priority:</label>-->
-<!--                    <select-->
-<!--                        v-model="newTask.priority"-->
-<!--                        id="newTaskPriority"-->
-<!--                        class="w-full border-gray-300 rounded-md px-4 py-2 mb-2"-->
-<!--                    >-->
-<!--                      <option value="low">Low</option>-->
-<!--                      <option value="medium">Medium</option>-->
-<!--                      <option value="high">High</option>-->
-<!--                    </select>-->
-<!--                  </div>-->
+                  <label for="newTaskReminderTime">Reminder Time:</label>
+                  <input
+                      type="time"
+                      v-model="newTask.reminder.time"
+                      id="newTaskReminderTime"
+                      class="w-full border border-gray-300 rounded-md px-4 py-2"
+                  />
 
-                  <div class="mb-4">
-                    <label for="newTaskDays" class="block mb-2">Select Days:</label>
-                    <div class="flex flex-wrap gap-2 mb-2">
-                      <div v-for="(day, index) in days" :key="index" class="flex items-center space-x-2">
-                        <input type="checkbox" :id="'day-' + index" :value="day" v-model="newTask.selectedDays" class="form-checkbox" />
-                        <label :for="'day-' + index" class="text-sm">{{ day.day }}</label>
-                      </div>
+                  <label for="newTaskReminderRepeat">Repeat:</label>
+                  <select
+                      v-model="newTask.reminder.repeat"
+                      id="newTaskReminderRepeat"
+                      class="w-full border border-gray-300 rounded-md px-4 py-2"
+                  >
+                    <option value="">No Repeat</option>
+                    <option value="daily">Daily</option>
+                    <option value="weekly">Weekly</option>
+                    <option value="monthly">Monthly</option>
+                    <option value="yearly">Yearly</option>
+                  </select>
+
+                  <label for="newTaskDays">Select Days:</label>
+                  <div class="flex flex-wrap gap-2 mb-2">
+                    <div v-for="(day, index) in days" :key="index" class="flex items-center space-x-2">
+                      <input type="checkbox" :id="'day-' + index" :value="day" v-model="newTask.selectedDays" class="form-checkbox" />
+                      <label :for="'day-' + index" class="text-sm">{{ day.day }}</label>
                     </div>
                   </div>
 
-                  <div class="mb-4">
-                    <label for="taskPosition" class="block mb-2">Insert Position:</label>
-                    <select
-                        v-model="newTask.position"
-                        id="taskPosition"
-                        class="w-full border-gray-300 rounded-md px-4 py-2 mb-2"
+                  <label for="taskPosition">Insert Position:</label>
+                  <select
+                      v-model="newTask.position"
+                      id="taskPosition"
+                      class="w-full border border-gray-300 rounded-md px-4 py-2"
+                  >
+                    <option :value="0">First</option>
+                    <option
+                        v-for="(task, index) in selectedDayRoutine"
+                        :key="index"
+                        :value="index + 1"
                     >
-                      <option :value="0">First</option>
-                      <option
-                          v-for="(task, index) in selectedDayRoutine"
-                          :key="index"
-                          :value="index + 1"
-                      >
-                        {{ index + 2 }}{{ getOrdinalSuffix(index + 2) }}
-                      </option>
-                    </select>
-                  </div>
+                      {{ index + 2 }}{{ getOrdinalSuffix(index + 2) }}
+                    </option>
+                  </select>
 
-                  <div class="mb-4">
-                    <label for="newTaskLabels" class="block mb-2">Task Labels:</label>
-                    <input
-                        type="text"
-                        v-model="newTask.labels"
-                        id="newTaskLabels"
-                        class="w-full border-gray-300 rounded-md px-4 py-2 mb-2"
-                        placeholder="Enter task labels (comma-separated)"
-                    />
-                  </div>
+                  <label for="newTaskLabels">Task Labels:</label>
+                  <input
+                      type="text"
+                      v-model="newTask.labels"
+                      id="newTaskLabels"
+                      class="w-full border border-gray-300 rounded-md px-4 py-2"
+                      placeholder="Enter task labels (comma-separated)"
+                  />
 
-                  <div class="mb-4">
-                    <label for="newTaskNotes" class="block mb-2">Task Notes:</label>
-                    <textarea
-                        v-model="newTask.notes"
-                        id="newTaskNotes"
-                        class="w-full border-gray-300 rounded-md px-4 py-2 mb-2"
-                        placeholder="Enter task notes"
-                    ></textarea>
-                  </div>
+                  <label for="newTaskNotes">Task Notes:</label>
+                  <textarea
+                      v-model="newTask.notes"
+                      id="newTaskNotes"
+                      class="w-full border border-gray-300 rounded-md px-4 py-2"
+                      placeholder="Enter task notes"
+                  ></textarea>
                 </div>
               </transition>
 
