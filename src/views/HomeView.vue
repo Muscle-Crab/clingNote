@@ -187,26 +187,26 @@
       <!-- Main modal -->
       <div
           v-if="modalOpen"
-          @keydown.escape="closeModal"
           class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50 p-4"
       >
         <!-- Modal Content -->
-        <div class="bg-white w-full max-w-lg md:max-w-xl lg:max-w-2xl rounded-lg shadow-lg flex flex-col max-h-[90vh] overflow-hidden">
+        <div
+            class="bg-white w-full max-w-lg md:max-w-xl lg:max-w-2xl rounded-lg shadow-lg flex flex-col"
+            style="max-height: 80vh; overflow-y: auto;"
+        >
 
-          <!-- Modal Header -->
-          <div class="flex justify-between items-center p-4 border-b">
+          <!-- Modal Header (Fixed) -->
+          <div class="flex justify-between items-center p-4 border-b bg-gray-100">
             <h3 class="text-lg font-semibold text-gray-900">Add Task</h3>
             <button @click="closeModal" class="text-gray-500 hover:text-gray-700 text-2xl">
               ✕
             </button>
           </div>
 
-          <!-- Form -->
+          <!-- Scrollable Modal Body -->
           <form @submit.prevent="addNewTask" class="flex flex-col flex-1">
-
-            <!-- Scrollable Modal Body -->
-            <div class="p-4 flex-1 overflow-y-auto max-h-[65vh]">
-              <!-- Basic Task Input -->
+            <div class="p-4 flex-1 overflow-y-auto max-h-[60vh]">
+              <!-- Task Input -->
               <div>
                 <label for="newTask" class="block font-medium">Task Name:</label>
                 <input
@@ -219,7 +219,7 @@
                 />
               </div>
 
-              <!-- Toggle Advanced Options -->
+              <!-- Advanced Options Toggle -->
               <div class="flex items-center cursor-pointer text-blue-500 font-medium mt-2" @click="showAdvanced = !showAdvanced">
                 <span class="mr-2">Advanced Options</span>
                 <i :class="showAdvanced ? 'fas fa-chevron-up' : 'fas fa-chevron-down'"></i>
@@ -303,8 +303,8 @@
               <div v-if="error" class="text-red-500 mt-2">{{ error }}</div>
             </div>
 
-            <!-- Submit Button (Inside the Form) -->
-            <div class="bg-white p-4 border-t flex justify-end">
+            <!-- Modal Footer (Fixed) -->
+            <div class="bg-gray-100 p-4 border-t flex justify-end">
               <button type="submit" class="bg-blue-500 text-white px-6 py-2 rounded-md shadow-md hover:bg-blue-600 transition">
                 Add Task
               </button>
@@ -312,6 +312,8 @@
           </form>
         </div>
       </div>
+
+
 
 
       <!-- Edit task form -->
