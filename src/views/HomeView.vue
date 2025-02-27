@@ -350,7 +350,7 @@
         </div>
         <div v-else>
           <div class="scroll-container overflow-y-auto h-[80vh]">
-            <div class="flex items-center justify-between cursor-pointer my-4">
+            <div v-if="selectedDayIndex === new Date().getDay()" class="flex items-center justify-between cursor-pointer my-4" >
               <h3 class="text-lg font-semibold text-gray-700">Completed ({{completedTaskCount}})</h3>
               <button @click="showCompleted = !showCompleted">
                 <i
@@ -373,7 +373,7 @@
                 @end="handleDragEnd"
             >
               <template #item="{ element: task, index }">
-                <div   v-if="(showCompleted || !task.completed)"
+                <div   v-if="(!task.completed || (isToday(selectedDayIndex) && showCompleted))"
                     class="task-card bg-white rounded-xl shadow-lg p-5 relative hover:shadow-xl transition-shadow duration-300"
                     :class="{
     'bg-gray-200': task.completed && isToday(selectedDayIndex), // Add a light green background for completed tasks
