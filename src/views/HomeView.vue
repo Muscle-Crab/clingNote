@@ -1385,10 +1385,10 @@ const checkAllTasksCompleted = async () => {
 const updateStreakOnCompletion = async () => {
   if (!userId.value) return;
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = new Date().toISOString().split('T')[0]; // Today's date in YYYY-MM-DD
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
-  const yesterdayStr = yesterday.toISOString().split('T')[0];
+  const yesterdayStr = yesterday.toISOString().split('T')[0]; // Yesterday’s date
 
   const streakDocRef = doc(db, 'streaks', userId.value);
 
@@ -1400,14 +1400,21 @@ const updateStreakOnCompletion = async () => {
       lastCompletionDate.value = data.lastCompletionDate || null;
       streak.value = data.streak || 0;
 
-      if (lastCompletionDate.value === yesterdayStr || lastCompletionDate.value === today) {
-        // Continue streak
+      // ✅ Prevent multiple streak updates per day
+      if (lastCompletionDate.value === today) {
+        console.log("User already earned a streak today. No update needed.");
+        return; // 🚀 Exit early if streak is already updated today
+      }
+
+      // 🔥 Continue streak if yesterday was completed
+      if (lastCompletionDate.value === yesterdayStr) {
         streak.value += 1;
       } else {
-        // Start new streak
+        // ⏳ If there's a gap, reset the streak
         streak.value = 1;
       }
 
+      // Update last completion date to today
       lastCompletionDate.value = today;
 
       await updateDoc(streakDocRef, {
@@ -1416,26 +1423,28 @@ const updateStreakOnCompletion = async () => {
         updatedAt: serverTimestamp()
       });
 
-      console.log(`Streak updated: ${streak.value}`);
+      console.log(`🎉 Streak updated: ${streak.value}`);
     } else {
-      // Create new streak document
+      // No existing streak, start fresh
       await setDoc(streakDocRef, {
         streak: 1,
         lastCompletionDate: today,
         updatedAt: serverTimestamp()
       });
+
       streak.value = 1;
       lastCompletionDate.value = today;
 
-      console.log("Streak document created with initial streak of 1.");
+      console.log("🔥 New streak started at 1.");
     }
 
-    checkForBadges(); // Update badges if needed
+    checkForBadges(); // Update badges if applicable
     updateMotivationalMessage();
   } catch (error) {
     console.error('Error updating streak:', error);
   }
 };
+
 const closeFullScreenAnimation = () => {
   showFullScreenAnimation.value = false;
 };
