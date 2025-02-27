@@ -36,9 +36,11 @@
             <p v-if="streak === 0" class="text-xs text-red-500 font-medium mt-1">
               No streak yet!
             </p>
+
             <p v-else class="text-xs text-gray-600 mt-1">
               {{ motivationalMessage }}
             </p>
+            <button @click="cleanUpTasks">Run Cleanup</button>
           </div>
         </div>
 
@@ -264,7 +266,10 @@
                       <label :for="'day-' + index" class="text-sm">{{ day.day }}</label>
                     </div>
                   </div>
-
+                  <select v-model="newTask.isRecurring" id="taskRecurrence" class="w-full border px-4 py-2">
+                    <option :value="false">One-Time</option>
+                    <option :value="true">Recurring</option>
+                  </select>
                   <label for="taskPosition">Insert Position:</label>
                   <select
                       v-model="newTask.position"
@@ -399,7 +404,7 @@
                           class="text-lg font-semibold text-gray-800"
                           :class="{ 'line-through text-gray-500': task.completed && isToday(selectedDayIndex) }"
                       >
-                        {{ task.title }}
+                        {{ task.title }}/{{task.isRecurring}}
                       </div>
                       <div v-if="task.reminder?.date && task.reminder?.time" class="text-sm text-gray-500 mt-1">
                         <div v-if="task.reminder?.date && task.reminder?.time" class="text-sm text-gray-500 mt-1">
@@ -1484,6 +1489,7 @@ const addNewTask = async () => {
     labels: labels,
     notes: newTask.value.notes,
     userId: userId.value,
+    isRecurring: newTask.value.isRecurring,
     createdAt: new Date().toISOString()
   };
 
@@ -1537,7 +1543,8 @@ const addNewTask = async () => {
       notes: '',
       selectedDays: [],
       position: 0,
-      reminder: { date: '', time: '', repeat: '' }
+      reminder: { date: '', time: '', repeat: '' },
+      isRecurring: false // New flag for task recurrence
     };
     closeModal();
     error.value = '';
@@ -1552,9 +1559,56 @@ const addNewTask = async () => {
   }
 };
 
+const cleanUpTasks = async () => {
+  if (!userId.value) return;
 
+  const today = new Date();
+  const formattedToday = today.toISOString().split("T")[0];
+  const currentHour = today.getHours();
 
+  if (currentHour >= 12) {
+    console.log("It's not after 12 PM yet. Cleanup skipped.");
+    return;
+  }
 
+  try {
+    for (const day of days) {
+      const dayDocRef = doc(db, "weeklyRoutines", `${userId.value}_${day.day}`);
+      const dayDocSnapshot = await getDoc(dayDocRef);
+
+      if (dayDocSnapshot.exists()) {
+        let tasks = dayDocSnapshot.data().tasks || [];
+
+        // Remove one-time tasks
+        tasks = tasks.filter((task) => task.isRecurring || task.reminder?.date >= formattedToday);
+
+        await updateDoc(dayDocRef, { tasks, updatedAt: serverTimestamp() });
+        console.log(`One-time tasks removed for ${day.day}`);
+      }
+    }
+  } catch (error) {
+    console.error("Error cleaning up tasks:", error);
+  }
+};
+
+// Expose function to the window (for testing in console)
+window.cleanUpTasks = cleanUpTasks;
+const scheduleTaskCleanup = () => {
+  setInterval(() => {
+    const now = new Date();
+    if (now.getHours() === 12 && now.getMinutes() === 0) {
+      cleanUpTasks();
+    }
+  }, 60 * 60 * 1000); // Run every hour
+};
+
+onMounted(() => {
+  scheduleTaskCleanup();
+});
+onMounted(() => {
+  // Attach function to window for testing
+  window.cleanUpTasks = cleanUpTasks;
+});
 
 const userCredits = ref(0);
 
