@@ -1197,13 +1197,16 @@ const toggleTaskCompletion = async (index) => {
       await sendNotificationToPlayer(userName, "completed");
     }
   } else {
-    // speak(`You have marked the task: ${task.title} as incomplete.`);
     userCredits.value -= 10; // Deduct credits if task is marked incomplete
     console.log(`Credits deducted: 10. Total credits: ${userCredits.value}`);
   }
 
-
-  selectedDayRoutine.value.splice(index, 1, task); // Update the task locally
+  // Remove one-time tasks from the UI immediately
+  if (task.type === "one-time") {
+    selectedDayRoutine.value.splice(index, 1);
+  } else {
+    selectedDayRoutine.value.splice(index, 1, task); // Update recurring tasks
+  }
 
   const selectedDayDocRef = doc(db, 'weeklyRoutines', `${userId.value}_${days[selectedDayIndex.value].day}`);
 
@@ -1211,18 +1214,30 @@ const toggleTaskCompletion = async (index) => {
     const selectedDayDocSnapshot = await getDoc(selectedDayDocRef);
 
     if (selectedDayDocSnapshot.exists()) {
-      const tasks = selectedDayDocSnapshot.data().tasks || [];
-      tasks[index] = task; // Update the task at the correct index
+      let tasks = selectedDayDocSnapshot.data().tasks || [];
 
-      await updateDoc(selectedDayDocRef, {
-        tasks: tasks,
-        updatedAt: serverTimestamp()
-      });
+      if (task.type === "one-time") {
+        // Remove the one-time task completely
+        tasks = tasks.filter((_, i) => i !== index);
+      } else {
+        tasks[index] = task; // Otherwise, update the task
+      }
 
-      console.log('Task completion updated successfully');
+      if (tasks.length > 0) {
+        // Update Firestore with remaining tasks
+        await updateDoc(selectedDayDocRef, {
+          tasks: tasks,
+          updatedAt: serverTimestamp(),
+        });
+      } else {
+        // If no tasks remain, delete the entire document
+        await deleteDoc(selectedDayDocRef);
+      }
+
+      console.log("Task completion updated successfully");
     }
   } catch (error) {
-    console.error('Error updating task completion:', error);
+    console.error("Error updating task completion:", error);
   }
 
   // Check streak after toggling task completion
