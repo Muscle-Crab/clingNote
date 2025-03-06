@@ -1400,10 +1400,10 @@ const checkAllTasksCompleted = async () => {
 const updateStreakOnCompletion = async () => {
   if (!userId.value) return;
 
-  const today = new Date().toISOString().split('T')[0]; // Today's date in YYYY-MM-DD
+  const today = new Date().toISOString().split('T')[0]; // Format YYYY-MM-DD
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
-  const yesterdayStr = yesterday.toISOString().split('T')[0]; // Yesterday’s date
+  const yesterdayStr = yesterday.toISOString().split('T')[0]; // Get yesterday's date
 
   const streakDocRef = doc(db, 'streaks', userId.value);
 
@@ -1434,8 +1434,8 @@ const updateStreakOnCompletion = async () => {
 
       await updateDoc(streakDocRef, {
         streak: streak.value,
-        lastCompletionDate: lastCompletionDate.value,
-        updatedAt: serverTimestamp()
+        lastCompletionDate: today,
+        updatedAt: serverTimestamp(),
       });
 
       console.log(`🎉 Streak updated: ${streak.value}`);
@@ -1456,7 +1456,7 @@ const updateStreakOnCompletion = async () => {
     checkForBadges(); // Update badges if applicable
     updateMotivationalMessage();
   } catch (error) {
-    console.error('Error updating streak:', error);
+    console.error("❌ Error updating streak:", error);
   }
 };
 
