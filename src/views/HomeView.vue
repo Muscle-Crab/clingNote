@@ -86,7 +86,9 @@
         <!-- Calendar Section -->
         <div class="calendar-section mb-2">
           <div class="current-date font-bold text-gray-900 mb-4">
-            <span>{{ currentDate }}</span><span> <TimeTracker /></span>
+
+            <span>{{ currentDate }}</span>
+            <TimeTracker />
           </div>
           <div class="grid grid-cols-7 gap-3">
             <div

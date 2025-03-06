@@ -1,9 +1,9 @@
 <template>
-  <div class="flex flex-col items-center ">
-    <div class="stopwatch">
+  <div class="w-full flex flex-col items-center space-y-2 text-center">
+    <div class="w-full bg-gray-800 text-white py-2 text-lg font-semibold">
       ⏳ Hours Used Today: {{ formattedTime }}
     </div>
-    <p class="text-sm text-red-600 italic text-center">
+    <p class="w-full text-sm text-red-600 italic">
       "{{ motivationalQuote }}"
     </p>
   </div>
@@ -80,14 +80,5 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.stopwatch {
-  font-size: 1.5rem;
-  font-weight: bold;
-  color: #fff;
-  background: #333;
-  padding: 0.5rem 1rem;
-  border-radius: 8px;
-  display: inline-block;
-  margin-bottom: 10px;
-}
+/* No additional styles needed since Tailwind handles everything */
 </style>
