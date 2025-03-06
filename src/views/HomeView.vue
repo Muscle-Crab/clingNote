@@ -158,7 +158,7 @@
           </div>
 
           <!-- Percentage Display -->
-          <div class="absolute top-[-2rem] right-4 bg-blue-100 text-blue-600 px-4 py-1 rounded-full shadow-md text-sm sm:text-base">
+          <div class="absolute top-[-8rem] right-4 bg-blue-100 text-blue-600 px-4 py-1 rounded-full shadow-md text-sm sm:text-base">
             Progress: {{ calculateCompletionPercentage(task) }}%
           </div>
         </div>
@@ -418,13 +418,12 @@
                       >
                         {{ task.title }}
                       </div>
-                      <div v-if="task.reminder?.date && task.reminder?.time" class="text-sm text-gray-500 mt-1 flex items-center">
-                        📅 {{ formatShortDate(task.reminder.date) }} • ⏰ {{ formatTime(task.reminder.time) }}
-                        <button @click="removeNotification(task, index)" class="ml-2 text-red-500 hover:text-red-700">
-                          ❌
-                        </button>
-                      </div>
+                      <div v-if="task.reminder?.date && task.reminder?.time" class="text-sm text-gray-500 mt-1">
+                        <div v-if="task.reminder?.date && task.reminder?.time" class="text-sm text-gray-500 mt-1">
+                          📅 {{ formatShortDate(task.reminder.date) }} • ⏰ {{ formatTime(task.reminder.time) }}
+                        </div>
 
+                      </div>
 
                       <div class="absolute top-2 right-2 bg-blue-100  px-2 py-1 rounded-full text-xs font-bold flex items-center ">
                         <span>10</span>
@@ -897,7 +896,6 @@ const scheduleNotification = async (task, reminder) => {
     console.error("Player ID not found. Make sure OneSignal is initialized.");
     return;
   }
-
   const headers = {
     'Authorization': 'Bearer ZDZiZDk0NTktMjUwZS00NTQ4LWFhOTItNjBiZDZiMjVhYzYy', // Replace with your OneSignal API key
     'Content-Type': 'application/json'
@@ -912,39 +910,18 @@ const scheduleNotification = async (task, reminder) => {
   };
 
   try {
-    const response = await axios.post('https://onesignal.com/api/v1/notifications', notificationData, { headers });
-    console.log('Scheduled notification successfully:', response.data);
-
-    // Save notification ID in Firestore for later cancellation
-    if (response.data.id) {
-      task.reminder.notificationId = response.data.id;
-
-      // Update Firestore
-      const selectedDayDocRef = doc(db, 'weeklyRoutines', `${userId.value}_${days[selectedDayIndex.value].day}`);
-      const selectedDayDocSnapshot = await getDoc(selectedDayDocRef);
-
-      if (selectedDayDocSnapshot.exists()) {
-        let tasks = selectedDayDocSnapshot.data().tasks || [];
-        tasks[selectedTaskIndex.value] = task;
-
-        await updateDoc(selectedDayDocRef, {
-          tasks: tasks,
-          updatedAt: serverTimestamp()
-        });
-
-        console.log("Reminder with notification ID saved successfully.");
-      }
-    }
+    await axios.post('https://onesignal.com/api/v1/notifications', notificationData, { headers });
+    console.log('Scheduled notification successfully');
 
     // Display confirmation alert
     alert(`Task "${task.title}" has been scheduled successfully for ${formattedTime}!`);
+
 
   } catch (error) {
     console.error('Error scheduling notification:', error);
     alert("Failed to schedule the task. Please try again.");
   }
 };
-
 
 const sendNotificationToPlayer = async (userName, action) => {
   const headers = {
@@ -2100,33 +2077,6 @@ watch(modalOpen, (isOpen) => {
   document.body.style.overflow = isOpen ? "hidden" : "";
 });
 
-const removeNotification = async (task, index) => {
-  if (!task || !task.reminder) return;
-
-  // Remove reminder from UI
-  task.reminder = null;
-  selectedDayRoutine.value[index] = task;
-
-  // Update Firestore
-  try {
-    const selectedDayDocRef = doc(db, 'weeklyRoutines', `${userId.value}_${days[selectedDayIndex.value].day}`);
-    const selectedDayDocSnapshot = await getDoc(selectedDayDocRef);
-
-    if (selectedDayDocSnapshot.exists()) {
-      let tasks = selectedDayDocSnapshot.data().tasks || [];
-      tasks[index].reminder = null;
-
-      await updateDoc(selectedDayDocRef, {
-        tasks: tasks,
-        updatedAt: serverTimestamp(),
-      });
-
-      alert("Notification removed successfully.");
-    }
-  } catch (error) {
-    console.error("Error removing notification:", error);
-  }
-};
 
 // Function to check if a task is spinning
 const isSpinning = (index) => {
