@@ -897,6 +897,7 @@ const scheduleNotification = async (task, reminder) => {
     console.error("Player ID not found. Make sure OneSignal is initialized.");
     return;
   }
+
   const headers = {
     'Authorization': 'Bearer ZDZiZDk0NTktMjUwZS00NTQ4LWFhOTItNjBiZDZiMjVhYzYy', // Replace with your OneSignal API key
     'Content-Type': 'application/json'
@@ -911,18 +912,39 @@ const scheduleNotification = async (task, reminder) => {
   };
 
   try {
-    await axios.post('https://onesignal.com/api/v1/notifications', notificationData, { headers });
-    console.log('Scheduled notification successfully');
+    const response = await axios.post('https://onesignal.com/api/v1/notifications', notificationData, { headers });
+    console.log('Scheduled notification successfully:', response.data);
+
+    // Save notification ID in Firestore for later cancellation
+    if (response.data.id) {
+      task.reminder.notificationId = response.data.id;
+
+      // Update Firestore
+      const selectedDayDocRef = doc(db, 'weeklyRoutines', `${userId.value}_${days[selectedDayIndex.value].day}`);
+      const selectedDayDocSnapshot = await getDoc(selectedDayDocRef);
+
+      if (selectedDayDocSnapshot.exists()) {
+        let tasks = selectedDayDocSnapshot.data().tasks || [];
+        tasks[selectedTaskIndex.value] = task;
+
+        await updateDoc(selectedDayDocRef, {
+          tasks: tasks,
+          updatedAt: serverTimestamp()
+        });
+
+        console.log("Reminder with notification ID saved successfully.");
+      }
+    }
 
     // Display confirmation alert
     alert(`Task "${task.title}" has been scheduled successfully for ${formattedTime}!`);
-
 
   } catch (error) {
     console.error('Error scheduling notification:', error);
     alert("Failed to schedule the task. Please try again.");
   }
 };
+
 
 const sendNotificationToPlayer = async (userName, action) => {
   const headers = {
