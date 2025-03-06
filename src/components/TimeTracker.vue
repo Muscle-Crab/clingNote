@@ -1,7 +1,7 @@
 <template>
   <div class="w-full flex flex-col items-center space-y-2 text-center">
     <div class="w-full bg-gray-800 text-white py-2 text-lg font-semibold">
-      ⏳ Hours Used Today: {{ formattedTime }}
+      ⏳ Hours Left Today: {{ formattedTimeLeft }}
     </div>
     <p class="w-full text-sm text-red-600 italic">
       "{{ motivationalQuote }}"
@@ -12,7 +12,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from "vue";
 
-const startOfDay = ref(null);
+const secondsInDay = 16 * 60 * 60; // 24 hours - 8 hours for sleep
 const elapsedTime = ref(0);
 let interval;
 
@@ -31,44 +31,25 @@ const quotes = [
 // Pick a random quote
 const motivationalQuote = ref(quotes[Math.floor(Math.random() * quotes.length)]);
 
-// Function to get the start of today (midnight)
-const getStartOfDay = () => {
-  const now = new Date();
-  now.setHours(0, 0, 0, 0); // Set time to midnight
-  return now.getTime();
-};
-
-// Load start of the day
-const loadStartOfDay = () => {
-  const savedStartOfDay = localStorage.getItem("startOfDay");
-  if (savedStartOfDay && new Date().toDateString() === new Date(parseInt(savedStartOfDay, 10)).toDateString()) {
-    startOfDay.value = parseInt(savedStartOfDay, 10);
-  } else {
-    startOfDay.value = getStartOfDay();
-    localStorage.setItem("startOfDay", startOfDay.value);
-  }
-};
-
-// Update elapsed time since midnight
+// Update elapsed time since wake-up (assuming wake-up at 8 AM)
 const updateElapsedTime = () => {
-  elapsedTime.value = Math.floor((Date.now() - startOfDay.value) / 1000);
+  const now = new Date();
+  const secondsSinceWakeUp = (now.getHours() - 8) * 3600 + now.getMinutes() * 60 + now.getSeconds();
+  elapsedTime.value = Math.max(0, Math.min(secondsSinceWakeUp, secondsInDay)); // Ensure within bounds
 };
 
-// Format elapsed time as 12-hour HH:MM:SS AM/PM
-const formattedTime = computed(() => {
-  let hours = Math.floor(elapsedTime.value / 3600);
-  let minutes = Math.floor((elapsedTime.value % 3600) / 60);
-  let seconds = elapsedTime.value % 60;
+// Compute time left for today
+const formattedTimeLeft = computed(() => {
+  let remainingSeconds = Math.max(0, secondsInDay - elapsedTime.value);
+  let hours = Math.floor(remainingSeconds / 3600);
+  let minutes = Math.floor((remainingSeconds % 3600) / 60);
+  let seconds = remainingSeconds % 60;
 
-  const period = hours >= 12 ? "" : "";
-  hours = hours % 12 || 12; // Convert 0 or 12 to 12-hour format
-
-  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")} ${period}`;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 });
 
 // Start tracking time
 onMounted(() => {
-  loadStartOfDay();
   updateElapsedTime();
   interval = setInterval(updateElapsedTime, 1000);
 });
