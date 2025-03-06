@@ -1,26 +1,20 @@
 <template>
   <div class="w-full flex flex-col items-center space-y-2 text-center">
-    <div class="w-full bg-gray-800 text-white py-2 text-lg font-semibold flex justify-between items-center px-4">
-      <span>⏳ Hours Left Today: {{ formattedTimeLeft }}</span>
-      <button @click="toggleAudio" class="text-white text-2xl focus:outline-none">
-        {{ isMuted ? "🔇" : "🔊" }}
-      </button>
+    <div class="w-full bg-gray-800 text-white py-2 text-lg font-semibold">
+      ⏳ Hours Left Today: {{ formattedTimeLeft }}
     </div>
     <p class="w-full text-sm text-red-600 italic">
       "{{ motivationalQuote }}"
     </p>
-    <audio ref="audioPlayer" loop></audio>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from "vue";
-import tickSound from "@/assets/tick.mp3"; // Import the audio file
+import tickSound from "@/assets/tick.mp3"; // ✅ Import the tick sound
 
 const secondsInDay = 16 * 60 * 60; // 24 hours - 8 hours for sleep
 const elapsedTime = ref(0);
-const audioPlayer = ref(null);
-const isMuted = ref(false); // Track mute state
 let interval;
 
 // List of motivational quotes about time
@@ -38,7 +32,7 @@ const quotes = [
 // Pick a random quote
 const motivationalQuote = ref(quotes[Math.floor(Math.random() * quotes.length)]);
 
-// Update elapsed time since wake-up (assuming wake-up at 8 AM)
+// Function to update elapsed time since wake-up (assuming wake-up at 8 AM)
 const updateElapsedTime = () => {
   const now = new Date();
   const secondsSinceWakeUp = (now.getHours() - 8) * 3600 + now.getMinutes() * 60 + now.getSeconds();
@@ -55,26 +49,19 @@ const formattedTimeLeft = computed(() => {
   return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 });
 
-// Toggle audio mute/unmute
-const toggleAudio = () => {
-  if (audioPlayer.value) {
-    isMuted.value = !isMuted.value;
-    audioPlayer.value.muted = isMuted.value;
-  }
+// Function to play ticking sound
+const playTickSound = () => {
+  const tick = new Audio(tickSound); // ✅ Use the imported sound file
+  tick.play().catch((error) => console.warn("Sound play error:", error));
 };
 
-// Start tracking time and play audio
+// Start tracking time
 onMounted(() => {
   updateElapsedTime();
-  interval = setInterval(updateElapsedTime, 1000);
-
-  if (audioPlayer.value) {
-    audioPlayer.value.src = tickSound;
-    audioPlayer.value.loop = true;
-    audioPlayer.value.play().catch(error => {
-      console.error("Audio playback failed:", error);
-    });
-  }
+  interval = setInterval(() => {
+    updateElapsedTime();
+    playTickSound(); // Play tick sound every second
+  }, 1000);
 });
 
 // Cleanup when unmounted
