@@ -1,20 +1,26 @@
 <template>
   <div class="w-full flex flex-col items-center space-y-2 text-center">
-    <div class="w-full bg-gray-800 text-white py-2 text-lg font-semibold">
-      ⏳ Hours Left Today: {{ formattedTimeLeft }}
+    <div class="w-full bg-gray-800 text-white py-2 text-lg font-semibold flex justify-between items-center px-4">
+      <span>⏳ Hours Left Today: {{ formattedTimeLeft }}</span>
+      <button @click="toggleAudio" class="text-white text-2xl focus:outline-none">
+        {{ isMuted ? "🔇" : "🔊" }}
+      </button>
     </div>
     <p class="w-full text-sm text-red-600 italic">
       "{{ motivationalQuote }}"
     </p>
+    <audio ref="audioPlayer" muted loop></audio>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from "vue";
-import tickSound from "@/assets/tick.mp3"; // ✅ Import the tick sound
+import tickSound from "@/assets/tick.mp3"; // Import the audio file
 
 const secondsInDay = 16 * 60 * 60; // 24 hours - 8 hours for sleep
 const elapsedTime = ref(0);
+const audioPlayer = ref(null);
+const isMuted = ref(true); // Start muted (required for autoplay on mobile)
 let interval;
 
 // List of motivational quotes about time
@@ -32,7 +38,7 @@ const quotes = [
 // Pick a random quote
 const motivationalQuote = ref(quotes[Math.floor(Math.random() * quotes.length)]);
 
-// Function to update elapsed time since wake-up (assuming wake-up at 8 AM)
+// Update elapsed time since wake-up (assuming wake-up at 8 AM)
 const updateElapsedTime = () => {
   const now = new Date();
   const secondsSinceWakeUp = (now.getHours() - 8) * 3600 + now.getMinutes() * 60 + now.getSeconds();
@@ -49,19 +55,30 @@ const formattedTimeLeft = computed(() => {
   return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 });
 
-// Function to play ticking sound
-const playTickSound = () => {
-  const tick = new Audio(tickSound); // ✅ Use the imported sound file
-  tick.play().catch((error) => console.warn("Sound play error:", error));
+// Toggle audio mute/unmute
+const toggleAudio = () => {
+  if (audioPlayer.value) {
+    isMuted.value = !isMuted.value;
+    audioPlayer.value.muted = isMuted.value;
+
+    if (!isMuted.value) {
+      audioPlayer.value.play().catch(error => {
+        console.error("Audio playback failed:", error);
+      });
+    } else {
+      audioPlayer.value.pause();
+    }
+  }
 };
 
 // Start tracking time
 onMounted(() => {
   updateElapsedTime();
-  interval = setInterval(() => {
-    updateElapsedTime();
-    playTickSound(); // Play tick sound every second
-  }, 1000);
+  interval = setInterval(updateElapsedTime, 1000);
+
+  if (audioPlayer.value) {
+    audioPlayer.value.src = tickSound;
+  }
 });
 
 // Cleanup when unmounted
