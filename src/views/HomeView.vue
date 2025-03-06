@@ -873,27 +873,6 @@ const fetchUserName = async (userId) => {
     return 'Error Fetching User';
   }
 };
-const cancelScheduledNotification = async (notificationId) => {
-  if (!notificationId) {
-    console.error("No notification ID provided.");
-    return;
-  }
-
-  const headers = {
-    'Authorization': 'Bearer ZDZiZDk0NTktMjUwZS00NTQ4LWFhOTItNjBiZDZiMjVhYzYy', // Replace with your OneSignal API key
-    'Content-Type': 'application/json'
-  };
-
-  try {
-    await axios.delete(`https://onesignal.com/api/v1/notifications/${notificationId}`, { headers });
-    console.log(`Scheduled notification ${notificationId} canceled.`);
-  } catch (error) {
-    console.error("Error canceling scheduled notification:", error);
-  }
-};
-
-const scheduledNotifications = ref({}); // Store notification IDs by task ID
-
 const scheduleNotification = async (task, reminder) => {
   if (!task || !reminder.date || !reminder.time) {
     console.error("Invalid task or reminder data");
@@ -917,7 +896,6 @@ const scheduleNotification = async (task, reminder) => {
     console.error("Player ID not found. Make sure OneSignal is initialized.");
     return;
   }
-
   const headers = {
     'Authorization': 'Bearer ZDZiZDk0NTktMjUwZS00NTQ4LWFhOTItNjBiZDZiMjVhYzYy', // Replace with your OneSignal API key
     'Content-Type': 'application/json'
@@ -925,30 +903,25 @@ const scheduleNotification = async (task, reminder) => {
 
   const notificationData = {
     "app_id": "fc206a71-7d65-4cfa-b8b2-0c10548e1476", // Replace with your OneSignal App ID
-    "include_player_ids": [playerId],
+    "include_player_ids": [playerId], // Replace with actual user player ID
     "contents": { "en": `${task.title} at ${formattedTime}` },
     "headings": { "en": "Task Reminder" },
-    "send_after": scheduledDateTime
+    "send_after": scheduledDateTime, // Schedule the notification
   };
 
   try {
-    const response = await axios.post('https://onesignal.com/api/v1/notifications', notificationData, { headers });
+    await axios.post('https://onesignal.com/api/v1/notifications', notificationData, { headers });
+    console.log('Scheduled notification successfully');
 
-    if (response.data && response.data.id) {
-      scheduledNotifications.value[task.id] = response.data.id; // Store notification ID
-      console.log(`Scheduled notification successfully: ${response.data.id}`);
+    // Display confirmation alert
+    alert(`Task "${task.title}" has been scheduled successfully for ${formattedTime}!`);
 
-      // Display confirmation alert
-      alert(`Task "${task.title}" has been scheduled successfully for ${formattedTime}!`);
 
-      return response.data.id; // Return notification ID for tracking
-    }
   } catch (error) {
     console.error('Error scheduling notification:', error);
     alert("Failed to schedule the task. Please try again.");
   }
 };
-
 
 const sendNotificationToPlayer = async (userName, action) => {
   const headers = {
@@ -1201,35 +1174,20 @@ const sortedSelectedDayRoutine = computed(() => {
 
 const deleteTask = async (index) => {
   const selectedDayDocRef = doc(db, 'weeklyRoutines', `${userId.value}_${days[selectedDayIndex.value].day}`);
-  const task = selectedDayRoutine.value[index];
-
-  if (!task) {
-    console.error("Task not found at index:", index);
-    return;
-  }
 
   try {
-    // Cancel the scheduled notification if it exists
-    if (scheduledNotifications.value[task.id]) {
-      await cancelScheduledNotification(scheduledNotifications.value[task.id]);
-      delete scheduledNotifications.value[task.id]; // Remove the notification ID from storage
-    }
-
-    // Remove task from UI list
     selectedDayRoutine.value.splice(index, 1);
 
-    // Update Firestore
     await updateDoc(selectedDayDocRef, {
       tasks: selectedDayRoutine.value,
       updatedAt: serverTimestamp()
     });
 
-    console.log(`Task "${task.title}" deleted successfully.`);
+    console.log('Task deleted successfully');
   } catch (error) {
     console.error('Error deleting task:', error);
   }
 };
-
 // Computed property to get the index of the top-most incomplete task
 const topIncompleteTaskIndex = computed(() => {
   return selectedDayRoutine.value.findIndex((task) => !task.completed);
