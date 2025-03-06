@@ -86,7 +86,7 @@
         <!-- Calendar Section -->
         <div class="calendar-section mb-2">
           <div class="current-date font-bold text-gray-900 mb-4">
-            {{ currentDate }}
+            <span>{{ currentDate }}</span><span> <TimeTracker /></span>
           </div>
           <div class="grid grid-cols-7 gap-3">
             <div
@@ -690,7 +690,7 @@ import {db} from '@/firebaseConfig'; // Assuming you have imported the Firebase 
 import {collection, doc, setDoc, serverTimestamp, getDoc, updateDoc} from 'firebase/firestore';
 const modalOpen = ref(false);
 import axios from 'axios';
-
+import TimeTracker from "@/components/TimeTracker.vue";
 // Define reactive state
 
 const currentTime = ref([]);
