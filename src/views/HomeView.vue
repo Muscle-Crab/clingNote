@@ -360,7 +360,15 @@
         <div v-else>
           <div class="scroll-container overflow-y-auto h-[80vh]">
             <div v-if="selectedDayIndex === new Date().getDay()" class="flex items-center justify-between cursor-pointer my-2" >
-              <h3 class="text-lg font-semibold text-gray-700">Completed ({{completedTaskCount}}/{{selectedDayRoutine?.length}})</h3>
+              <h3 class="text-xl font-bold text-gray-900 flex items-center gap-2">
+                <h3 class="text-xl font-bold text-gray-900 flex items-center gap-2">
+                  <span class=" tracking-wide text-gray-600">Completed</span>
+                  <span class="text-sm font-medium bg-blue-100 text-blue-600 px-3 py-1 rounded-full">
+        {{ completedTaskCount }}/{{ selectedDayRoutine?.length }}
+    </span>
+                </h3>
+              </h3>
+
               <button @click="showCompleted = !showCompleted">
                 <i
                     :class="{
