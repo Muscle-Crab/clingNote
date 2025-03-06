@@ -359,8 +359,8 @@
         </div>
         <div v-else>
           <div class="scroll-container overflow-y-auto h-[80vh]">
-            <div v-if="selectedDayIndex === new Date().getDay()" class="flex items-center justify-between cursor-pointer my-4" >
-              <h3 class="text-lg font-semibold text-gray-700">Completed ({{completedTaskCount}})</h3>
+            <div v-if="selectedDayIndex === new Date().getDay()" class="flex items-center justify-between cursor-pointer my-2" >
+              <h3 class="text-lg font-semibold text-gray-700">Completed ({{completedTaskCount}}/{{selectedDayRoutine?.length}})</h3>
               <button @click="showCompleted = !showCompleted">
                 <i
                     :class="{
