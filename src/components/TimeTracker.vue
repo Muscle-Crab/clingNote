@@ -1,19 +1,26 @@
 <template>
   <div class="w-full flex flex-col items-center space-y-2 text-center">
-    <div class="w-full bg-gray-800 text-white py-2 text-lg font-semibold">
-      ⏳ Hours Left Today: {{ formattedTimeLeft }}
+    <div class="w-full bg-gray-800 text-white py-2 text-lg font-semibold flex justify-between items-center px-4">
+      <span>⏳ Hours Left Today: {{ formattedTimeLeft }}</span>
+      <button @click="toggleAudio" class="text-white text-2xl focus:outline-none">
+        {{ isMuted ? "🔇" : "🔊" }}
+      </button>
     </div>
     <p class="w-full text-sm text-red-600 italic">
       "{{ motivationalQuote }}"
     </p>
+    <audio ref="audioPlayer" loop></audio>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from "vue";
+import tickSound from "@/assets/tick.mp3"; // Import the audio file
 
 const secondsInDay = 16 * 60 * 60; // 24 hours - 8 hours for sleep
 const elapsedTime = ref(0);
+const audioPlayer = ref(null);
+const isMuted = ref(false); // Track mute state
 let interval;
 
 // List of motivational quotes about time
@@ -48,10 +55,26 @@ const formattedTimeLeft = computed(() => {
   return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 });
 
-// Start tracking time
+// Toggle audio mute/unmute
+const toggleAudio = () => {
+  if (audioPlayer.value) {
+    isMuted.value = !isMuted.value;
+    audioPlayer.value.muted = isMuted.value;
+  }
+};
+
+// Start tracking time and play audio
 onMounted(() => {
   updateElapsedTime();
   interval = setInterval(updateElapsedTime, 1000);
+
+  if (audioPlayer.value) {
+    audioPlayer.value.src = tickSound;
+    audioPlayer.value.loop = true;
+    audioPlayer.value.play().catch(error => {
+      console.error("Audio playback failed:", error);
+    });
+  }
 });
 
 // Cleanup when unmounted
