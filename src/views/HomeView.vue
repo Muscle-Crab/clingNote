@@ -418,12 +418,13 @@
                       >
                         {{ task.title }}
                       </div>
-                      <div v-if="task.reminder?.date && task.reminder?.time" class="text-sm text-gray-500 mt-1">
-                        <div v-if="task.reminder?.date && task.reminder?.time" class="text-sm text-gray-500 mt-1">
-                          📅 {{ formatShortDate(task.reminder.date) }} • ⏰ {{ formatTime(task.reminder.time) }}
-                        </div>
-
+                      <div v-if="task.reminder?.date && task.reminder?.time" class="text-sm text-gray-500 mt-1 flex items-center">
+                        📅 {{ formatShortDate(task.reminder.date) }} • ⏰ {{ formatTime(task.reminder.time) }}
+                        <button @click="removeNotification(task, index)" class="ml-2 text-red-500 hover:text-red-700">
+                          ❌
+                        </button>
                       </div>
+
 
                       <div class="absolute top-2 right-2 bg-blue-100  px-2 py-1 rounded-full text-xs font-bold flex items-center ">
                         <span>10</span>
@@ -2077,6 +2078,33 @@ watch(modalOpen, (isOpen) => {
   document.body.style.overflow = isOpen ? "hidden" : "";
 });
 
+const removeNotification = async (task, index) => {
+  if (!task || !task.reminder) return;
+
+  // Remove reminder from UI
+  task.reminder = null;
+  selectedDayRoutine.value[index] = task;
+
+  // Update Firestore
+  try {
+    const selectedDayDocRef = doc(db, 'weeklyRoutines', `${userId.value}_${days[selectedDayIndex.value].day}`);
+    const selectedDayDocSnapshot = await getDoc(selectedDayDocRef);
+
+    if (selectedDayDocSnapshot.exists()) {
+      let tasks = selectedDayDocSnapshot.data().tasks || [];
+      tasks[index].reminder = null;
+
+      await updateDoc(selectedDayDocRef, {
+        tasks: tasks,
+        updatedAt: serverTimestamp(),
+      });
+
+      alert("Notification removed successfully.");
+    }
+  } catch (error) {
+    console.error("Error removing notification:", error);
+  }
+};
 
 // Function to check if a task is spinning
 const isSpinning = (index) => {
