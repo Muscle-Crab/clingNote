@@ -59,9 +59,10 @@
             <span v-else class="text-green-500 font-semibold">
       Idle time is now available! 🎉
     </span>
+
           </div>
         </div>
-
+        <SocialMediaAccess :completionPercentage="calculateCompletionPercentage(task)" />
       </div>
 
       <div v-if="showFullScreenAnimation" class="fixed inset-0 bg-gradient-to-br from-green-500 via-blue-500 to-purple-500 flex items-center justify-center z-50">
@@ -88,7 +89,7 @@
           <div class="current-date font-bold text-gray-900 mb-4">
 
             <span>{{ currentDate }}</span>
-            <TimeTracker />
+<!--            <TimeTracker />-->
           </div>
           <div class="grid grid-cols-7 gap-3">
             <div
@@ -496,57 +497,6 @@
                     </div>
                   </div>
 
-
-
-                  <!-- Task Priority -->
-                  <!--                <div class="flex items-center space-x-2 mb-3">-->
-                  <!--                  <svg-->
-                  <!--                      v-if="task.priority === 'high'"-->
-                  <!--                      class="h-5 w-5 text-red-500"-->
-                  <!--                      fill="none"-->
-                  <!--                      stroke="currentColor"-->
-                  <!--                      viewBox="0 0 24 24"-->
-                  <!--                      xmlns="http://www.w3.org/2000/svg"-->
-                  <!--                  >-->
-                  <!--                    <path-->
-                  <!--                        stroke-linecap="round"-->
-                  <!--                        stroke-linejoin="round"-->
-                  <!--                        stroke-width="2"-->
-                  <!--                        d="M5 11l7-7 7 7M5 19l7-7 7 7"-->
-                  <!--                    ></path>-->
-                  <!--                  </svg>-->
-                  <!--                  <svg-->
-                  <!--                      v-else-if="task.priority === 'medium'"-->
-                  <!--                      class="h-5 w-5 text-purple-500"-->
-                  <!--                      fill="none"-->
-                  <!--                      stroke="currentColor"-->
-                  <!--                      viewBox="0 0 24 24"-->
-                  <!--                      xmlns="http://www.w3.org/2000/svg"-->
-                  <!--                  >-->
-                  <!--                    <path-->
-                  <!--                        stroke-linecap="round"-->
-                  <!--                        stroke-linejoin="round"-->
-                  <!--                        stroke-width="2"-->
-                  <!--                        d="M5 11l7-7 7 7M5 19l7-7 7 7"-->
-                  <!--                    ></path>-->
-                  <!--                  </svg>-->
-                  <!--                  <svg-->
-                  <!--                      v-else-if="task.priority === 'low'"-->
-                  <!--                      class="h-5 w-5 text-yellow-500"-->
-                  <!--                      fill="none"-->
-                  <!--                      stroke="currentColor"-->
-                  <!--                      viewBox="0 0 24 24"-->
-                  <!--                      xmlns="http://www.w3.org/2000/svg"-->
-                  <!--                  >-->
-                  <!--                    <path-->
-                  <!--                        stroke-linecap="round"-->
-                  <!--                        stroke-linejoin="round"-->
-                  <!--                        stroke-width="2"-->
-                  <!--                        d="M5 11l7-7 7 7M5 19l7-7 7 7"-->
-                  <!--                    ></path>-->
-                  <!--                  </svg>-->
-                  <!--                </div>-->
-
                   <!-- Task Labels -->
                   <div class="flex flex-wrap gap-2 mb-3">
       <span
@@ -701,6 +651,7 @@ import {collection, doc, setDoc, serverTimestamp, getDoc, updateDoc} from 'fireb
 const modalOpen = ref(false);
 import axios from 'axios';
 import TimeTracker from "@/components/TimeTracker.vue";
+import SocialMediaAccess from "@/components/SocialMediaAccess.vue"
 // Define reactive state
 
 const currentTime = ref([]);
@@ -1204,7 +1155,7 @@ const toggleTaskCompletion = async (index) => {
     announceNextTask(index); // Pass the index of the completed task
     const userName = await fetchUserName(userId.value);
     if (userName) {
-      await sendNotificationToPlayer(userName, "completed");
+      // await sendNotificationToPlayer(userName, "completed");
     }
   } else {
     userCredits.value -= 10; // Deduct credits if task is marked incomplete
@@ -1373,15 +1324,13 @@ const checkAllTasksCompleted = async () => {
     // 🎉 Show completion animation
     showFullScreenAnimation.value = true;
     speak("Congratulations! You've completed all your tasks!");
-    updateStreakOnCompletion(); // 🔥 Update streak progression
-
+    updateStreakOnCompletion();
+    fetchSelectedDayRoutine()// 🔥 Update streak progression
+     showCompleted.value = true
     // 🗑 Remove one-time tasks & reset recurring tasks
     selectedDayRoutine.value = selectedDayRoutine.value.filter(task => {
       if (task.type === "one-time") {
         return false; // Remove from array (will also be removed from Firestore)
-      } else {
-        task.completed = false; // Reset recurring task to incomplete
-        return true; // Keep in array
       }
     });
 
@@ -1472,6 +1421,8 @@ const updateStreakOnCompletion = async () => {
 
 const closeFullScreenAnimation = () => {
   showFullScreenAnimation.value = false;
+  showCompleted.value = true
+
 };
 
 
