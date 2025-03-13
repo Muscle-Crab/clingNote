@@ -1,7 +1,7 @@
 <template>
   <div class="text-center">
-    <div v-if="completionPercentage < 100">
-      <p class="text-sm text-gray-800 mb-3">Earn full points to access only from here</p>
+    <div v-if="completionPercentage < 60">
+      <p class="text-sm text-gray-800 mb-3">Earn over 60 points to access only from here</p>
     </div>
     <div v-else>
       <p class="text-sm text-green-600 font-semibold mb-3">✅ You can now access social media from here</p>
