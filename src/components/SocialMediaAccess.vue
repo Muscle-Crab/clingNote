@@ -1,7 +1,7 @@
 <template>
   <div class="text-center">
     <div v-if="completionPercentage < 60">
-      <p class="text-sm text-gray-800 mb-3">Earn over 60 points to access only from here</p>
+      <p class="text-sm text-gray-800 mb-3">Earn over 60 points to access social media</p>
     </div>
     <div v-else>
       <p class="text-sm text-green-600 font-semibold mb-3">✅ You can now access social media from here</p>
@@ -13,7 +13,7 @@
           v-for="platform in socialPlatforms"
           :key="platform.id"
           @click="attemptToOpenSocialMedia(platform)"
-          :disabled="completionPercentage < 100"
+          :disabled="completionPercentage < 60"
           class="w-12 h-12 flex items-center justify-center rounded-full shadow-md transition-all duration-300
         hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-300"
       >
@@ -21,7 +21,7 @@
             :src="platform.icon"
             :alt="platform.name"
             class="w-7 h-7 transition-all duration-300"
-            :class="{'opacity-40 grayscale': completionPercentage < 100}"
+            :class="{'opacity-40 grayscale': completionPercentage < 60}"
         />
       </button>
     </div>
@@ -43,14 +43,12 @@ const socialPlatforms = [
     name: "TikTok",
     icon: "https://upload.wikimedia.org/wikipedia/en/a/a9/TikTok_logo.svg",
     app: "tiktok://",
-    web: "https://www.tiktok.com",
   },
   {
     id: "instagram",
     name: "Instagram",
     icon: "https://upload.wikimedia.org/wikipedia/commons/a/a5/Instagram_icon.png",
     app: "instagram://",
-    web: "https://www.instagram.com",
   },
   {
     id: "youtube",
@@ -64,7 +62,6 @@ const socialPlatforms = [
     name: "Facebook",
     icon: "https://upload.wikimedia.org/wikipedia/commons/5/51/Facebook_f_logo_%282019%29.svg",
     app: "fb://",
-    web: "https://www.facebook.com",
   },
 ];
 
@@ -73,7 +70,7 @@ const appDeepLink = "yourapp://home";
 
 // Function to open social media apps on mobile
 const attemptToOpenSocialMedia = (platform) => {
-  if (props.completionPercentage < 100) return; // Prevent access if tasks are incomplete
+  if (props.completionPercentage < 60) return; // Prevent access if points are below 60
 
   const userAgent = navigator.userAgent || navigator.vendor;
 
@@ -84,8 +81,6 @@ const attemptToOpenSocialMedia = (platform) => {
       window.location.href = `intent://${platform.web.replace("https://", "")}#Intent;scheme=https;package=com.android.chrome;end;`;
       return;
     } else {
-      // Open links externally in a real browser
-      window.open(platform.web, "_blank");
       return;
     }
   }
@@ -95,11 +90,6 @@ const attemptToOpenSocialMedia = (platform) => {
 
   // Try opening the app first
   window.location.href = platform.app;
-
-  // If the app fails, redirect to the web version after a delay
-  setTimeout(() => {
-    window.location.href = platform.web;
-  }, 1500);
 };
 
 // Ensure returning from social media redirects back to your app
