@@ -30,6 +30,7 @@
 
 <script setup>
 import { defineProps } from "vue";
+import { onMounted } from "vue";
 
 const props = defineProps({
   completionPercentage: Number, // Receiving prop from parent
@@ -67,6 +68,9 @@ const socialPlatforms = [
   },
 ];
 
+// Your app's deep link URL (replace with your actual app's deep link)
+const appDeepLink = "yourapp://home";
+
 // Function to open social media apps on mobile
 const attemptToOpenSocialMedia = (platform) => {
   if (props.completionPercentage < 100) return; // Prevent access if tasks are incomplete
@@ -86,6 +90,9 @@ const attemptToOpenSocialMedia = (platform) => {
     }
   }
 
+  // Store return path in session storage
+  sessionStorage.setItem("returnToApp", appDeepLink);
+
   // Try opening the app first
   window.location.href = platform.app;
 
@@ -94,4 +101,13 @@ const attemptToOpenSocialMedia = (platform) => {
     window.location.href = platform.web;
   }, 1500);
 };
+
+// Ensure returning from social media redirects back to your app
+onMounted(() => {
+  const returnToApp = sessionStorage.getItem("returnToApp");
+  if (returnToApp) {
+    sessionStorage.removeItem("returnToApp");
+    window.location.href = returnToApp;
+  }
+});
 </script>
