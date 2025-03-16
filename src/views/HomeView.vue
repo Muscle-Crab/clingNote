@@ -1821,10 +1821,11 @@ const checkStreakOnCompletion = async () => {
 const checkTasksAndReduceStreak = async () => {
   if (!userId.value) return;
 
-  const today = new Date().toISOString().split('T')[0];
+  const now = new Date();
+  const todayStr = now.toISOString().split('T')[0]; // Current date in YYYY-MM-DD format
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
-  const yesterdayStr = yesterday.toISOString().split('T')[0];
+  const yesterdayStr = yesterday.toISOString().split('T')[0]; // Yesterday's date
 
   try {
     const streakDocRef = doc(db, 'streaks', userId.value);
@@ -1835,24 +1836,46 @@ const checkTasksAndReduceStreak = async () => {
       lastCompletionDate.value = data.lastCompletionDate || null;
       streak.value = data.streak || 0;
 
-      if (lastCompletionDate.value !== today && lastCompletionDate.value !== yesterdayStr) {
-        const todayTasksCompleted = calculateCompletionPercentage() === 100;
+      // Prevent multiple reductions in a single day
+      if (lastCompletionDate.value === todayStr) {
+        console.log("Streak already updated today, skipping check.");
+        return;
+      }
 
-        if (!todayTasksCompleted) {
-          streak.value = Math.max(streak.value - 1, 0);
-          await updateDoc(streakDocRef, {
-            streak: streak.value,
-            lastCompletionDate: yesterdayStr,
-            updatedAt: serverTimestamp(),
-          });
-          console.log('Streak reduced due to incomplete tasks.');
-        }
+      const yesterdayTasksCompleted = await checkIfTasksCompleted(yesterdayStr);
+
+      if (!yesterdayTasksCompleted) {
+        streak.value = Math.max(streak.value - 1, 0);
+        console.log("Streak reduced due to incomplete tasks on the previous day.");
+
+        await updateDoc(streakDocRef, {
+          streak: streak.value,
+          lastCompletionDate: todayStr, // Update last checked date to today
+          updatedAt: serverTimestamp(),
+        });
       }
     }
   } catch (error) {
-    console.error('Error reducing streak:', error);
+    console.error("Error reducing streak:", error);
   }
 };
+
+// Function to check if tasks were completed for a given date
+const checkIfTasksCompleted = async (dateStr) => {
+  const selectedDay = days.find(day => day.date === dateStr);
+  if (!selectedDay) return false;
+
+  const selectedDayDocRef = doc(db, "weeklyRoutines", `${userId.value}_${selectedDay.day}`);
+  const selectedDayDocSnapshot = await getDoc(selectedDayDocRef);
+
+  if (selectedDayDocSnapshot.exists()) {
+    const tasks = selectedDayDocSnapshot.data().tasks || [];
+    return tasks.every(task => task.completed); // Return true if all tasks were completed
+  }
+
+  return false;
+};
+
 
 // Run the check daily at midnight
 const startDailyCheck = () => {
