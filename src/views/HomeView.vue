@@ -1323,7 +1323,7 @@ const checkAllTasksCompleted = async () => {
   if (allCompleted) {
     // 🎉 Show completion animation
     showFullScreenAnimation.value = true;
-    speak("Congratulations! You've completed all your tasks!");
+    speak("Congratulations! You are free to do whatever you want");
     updateStreakOnCompletion();
     fetchSelectedDayRoutine()// 🔥 Update streak progression
      showCompleted.value = true
