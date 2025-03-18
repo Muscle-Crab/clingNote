@@ -539,7 +539,6 @@
                       </button>
 
                       <button
-                          v-if="!isToday(selectedDayIndex)"
                           @click="deleteTask(index)"
                           class="text-red-500 hover:text-red-700 text-xs sm:text-sm"
                       >
@@ -1155,7 +1154,7 @@ const toggleTaskCompletion = async (index) => {
     announceNextTask(index); // Pass the index of the completed task
     const userName = await fetchUserName(userId.value);
     if (userName) {
-      // await sendNotificationToPlayer(userName, "completed");
+      await sendNotificationToPlayer(userName, "completed");
     }
   } else {
     userCredits.value -= 10; // Deduct credits if task is marked incomplete
