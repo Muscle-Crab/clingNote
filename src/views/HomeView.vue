@@ -1155,7 +1155,7 @@ const toggleTaskCompletion = async (index) => {
     announceNextTask(index); // Pass the index of the completed task
     const userName = await fetchUserName(userId.value);
     if (userName) {
-      await sendNotificationToPlayer(userName, "completed");
+      // await sendNotificationToPlayer(userName, "completed");
     }
   } else {
     userCredits.value -= 10; // Deduct credits if task is marked incomplete
@@ -1805,13 +1805,20 @@ const checkStreakOnCompletion = async () => {
       streak.value = data.streak || 0;
 
       if (completionPercentage === 100) {
-        // Increment streak if all tasks completed
-        if (lastCompletionDate.value === yesterdayStr) {
-          streak.value += 1; // Continue streak
-        } else if (lastCompletionDate.value !== today) {
-          streak.value = 1; // Start a new streak
+        // Increment streak if all tasks completed and the last completion date has passed
+        const lastDate = new Date(lastCompletionDate.value);
+        const todayDate = new Date(today);
+
+        if (lastDate < todayDate) {
+          const diffInDays = Math.floor((todayDate - lastDate) / (1000 * 60 * 60 * 24));
+          if (diffInDays === 1) {
+            streak.value += 1; // Continue streak
+          } else {
+            streak.value = 1; // Start a new streak
+          }
+
+          lastCompletionDate.value = today; // Update completion date
         }
-        lastCompletionDate.value = today; // Update completion date
       } else {
         // Reset streak if no tasks are completed
         if (lastCompletionDate.value !== today && lastCompletionDate.value !== yesterdayStr) {
