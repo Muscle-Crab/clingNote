@@ -40,7 +40,13 @@
             <p v-else class="text-xs text-gray-600 mt-1">
               {{ motivationalMessage }}
             </p>
-
+            <button
+                v-if="!isToday(selectedDayIndex)"
+                @click="resetTasksToIncomplete"
+                class="bg-red-500 text-white px-4 py-2 rounded-md mt-2"
+            >
+              Reset All Tasks to Incomplete
+            </button>
           </div>
         </div>
 
@@ -999,10 +1005,9 @@ const fetchSelectedDayRoutine = async () => {
     if (selectedDayDocSnapshot.exists()) {
       let tasks = selectedDayDocSnapshot.data().tasks || [];
 
-      const isTodaySelected = selectedDay.date === getTodayDate();
       const isPastDay = new Date(selectedDay.date) < new Date(getTodayDate());
 
-      // If the selected day is in the past, reset all tasks to incomplete
+      // If it's a past day, reset all tasks to incomplete
       if (isPastDay) {
         tasks = tasks.map(task => ({
           ...task,
@@ -1016,38 +1021,16 @@ const fetchSelectedDayRoutine = async () => {
         });
       }
 
-      // Fetch user names for each task
-      const tasksWithUserNames = await Promise.all(
-          tasks.map(async (task) => {
-            try {
-              if (!task.userId) {
-                return { ...task, userName: 'Unknown User' };
-              }
-
-              const userDocRef = doc(db, 'users', task.userId);
-              const userDocSnapshot = await getDoc(userDocRef);
-
-              const userName = userDocSnapshot.exists()
-                  ? userDocSnapshot.data().name
-                  : 'Unknown User';
-
-              return { ...task, userName };
-            } catch (error) {
-              console.error('Error fetching user name:', error);
-              return { ...task, userName: 'Error Fetching User' };
-            }
-          })
-      );
-
-      selectedDayRoutine.value = tasksWithUserNames || [];
+      selectedDayRoutine.value = tasks;
     } else {
-      selectedDayRoutine.value = []; // No tasks for this user and day
+      selectedDayRoutine.value = [];
     }
   } catch (error) {
     console.error('Error fetching tasks for the selected day:', error);
-    selectedDayRoutine.value = []; // Clear tasks on error
+    selectedDayRoutine.value = [];
   }
 };
+
 const days = data.days;
 
 const isToday = (index) => {
@@ -2039,12 +2022,9 @@ const getTodayDate = () => {
 
 // Call the function to see the output
 const shouldDisplayTask = (task) => {
-  if (!showCompleted && task.completed) return false;
-  if (!task.reminder || !task.reminder.date) return true;
-  const todayDate = getTodayDate();
-  return task.reminder.date === todayDate;
+  if (!showCompleted && task.completed && isToday(selectedDayIndex.value)) return false;
+  return true;
 };
-
 
 watch(modalOpen, (isOpen) => {
   document.body.style.overflow = isOpen ? "hidden" : "";
