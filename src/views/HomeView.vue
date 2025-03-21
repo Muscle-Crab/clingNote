@@ -40,13 +40,6 @@
             <p v-else class="text-xs text-gray-600 mt-1">
               {{ motivationalMessage }}
             </p>
-            <button
-                v-if="!isToday(selectedDayIndex)"
-                @click="resetTasksToIncomplete"
-                class="bg-red-500 text-white px-4 py-2 rounded-md mt-2"
-            >
-              Reset All Tasks to Incomplete
-            </button>
           </div>
         </div>
 
@@ -107,7 +100,7 @@
           'bg-blue-200 text-white': isSelected(index),
           'bg-blue-500 text-white font-bold shadow-inner': isToday(index)
         }"
-                @click="selectDate(index)"
+                @click="handleDayTabClick(index)"
             >
               <div class="text-lg">{{ day.day }}</div>
               <div class="text-sm">{{ day.date }}</div>
@@ -811,6 +804,31 @@ const transferTask = async () => {
     console.error('Error transferring task:', error);
   }
 };
+const resetTasksToIncomplete = async () => {
+  if (!userId.value || selectedDayIndex.value === -1) return;
+
+  const selectedDay = days[selectedDayIndex.value];
+  const selectedDayDocRef = doc(db, 'weeklyRoutines', `${userId.value}_${selectedDay.day}`);
+
+  try {
+    let tasks = selectedDayRoutine.value.map(task => ({
+      ...task,
+      completed: false
+    }));
+
+    // Update Firestore
+    await updateDoc(selectedDayDocRef, {
+      tasks: tasks,
+      updatedAt: serverTimestamp()
+    });
+
+    // Update UI
+    selectedDayRoutine.value = tasks;
+    console.log("All tasks reset to incomplete for the selected day.");
+  } catch (error) {
+    console.error("Error resetting tasks:", error);
+  }
+};
 
 
 const fetchUserName = async (userId) => {
@@ -1282,6 +1300,18 @@ const handleDragEnd = async () => {
   } catch (error) {
     console.error('Error updating task order:', error);
   }
+};
+const handleDayTabClick = async (index) => {
+  const todayIndex = new Date().getDay();
+
+  // If it's not today and not already selected, reset tasks to incomplete
+  if (index !== todayIndex && selectedDayIndex.value !== index) {
+    selectedDayIndex.value = index;
+    await resetTasksToIncomplete();
+  }
+
+  // Continue to load tasks and update date
+  selectDate(index);
 };
 
 const speak = (text) => {
