@@ -955,7 +955,7 @@ const openModal = (type = 'task', index = null, title = '') => {
   }
 };
 
-const showCompleted = ref(true);
+const showCompleted = ref(false);
 
 
 
@@ -1168,7 +1168,7 @@ const toggleTaskCompletion = async (index) => {
     announceNextTask(index); // Pass the index of the completed task
     const userName = await fetchUserName(userId.value);
     if (userName) {
-      // await sendNotificationToPlayer(userName, "completed");
+      await sendNotificationToPlayer(userName, "completed");
     }
   } else {
     userCredits.value -= 10; // Deduct credits if task is marked incomplete
@@ -1218,7 +1218,7 @@ const toggleTaskCompletion = async (index) => {
   checkStreakOnCompletion();
   checkAllTasksCompleted();
   selectedDayRoutine.value = selectedDayRoutine.value.filter(task => !task.completed || showCompleted);
-  showCompleted.value = true;
+  showCompleted.value = false;
 };
 
 const wontDoModalOpen = ref(false);
