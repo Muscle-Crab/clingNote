@@ -2,10 +2,21 @@
   <div class="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
     <div class="bg-white p-8 rounded shadow-md max-w-md w-full">
       <h2 class="text-3xl font-extrabold text-gray-900 text-center mb-6">Login</h2>
+
+      <!-- 📌 Bookmark Prompt -->
+      <div v-if="showBookmarkPrompt" class="bg-yellow-100 border border-yellow-300 text-yellow-800 p-4 rounded mb-6 text-sm">
+        <p v-if="isIos">To bookmark this app, tap the <strong>Share</strong> icon and choose <strong>"Add to Home Screen"</strong>.</p>
+        <p v-else-if="isAndroid">To bookmark this app, tap the <strong>⋮ menu</strong> and select <strong>"Add to Home screen"</strong>.</p>
+        <p v-else>Press <strong>Ctrl+D</strong> (Windows) or <strong>Cmd+D</strong> (Mac) to bookmark this app.</p>
+        <button @click="showBookmarkPrompt = false" class="mt-2 text-blue-600 hover:underline">Dismiss</button>
+      </div>
+
       <form @submit.prevent="loginUser" class="space-y-4">
+        <!-- Login Fields -->
         <div>
           <label for="email-address" class="sr-only">Email address</label>
-          <input id="email-address" name="email" type="email" v-model="email" required placeholder="Email address" class="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm">
+          <input id="email-address" name="email" type="email" v-model="email" required placeholder="Email address"
+                 class="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm">
         </div>
         <div>
           <label for="password" class="sr-only">Password</label>
@@ -38,10 +49,10 @@
   </div>
 </template>
 <script setup>
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 import { signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
-import { getFirestore, doc, setDoc } from 'firebase/firestore';
-import { auth, db } from '@/firebaseConfig'; // Ensure your Firebase is set up
+import { doc, setDoc } from 'firebase/firestore';
+import { auth, db } from '@/firebaseConfig';
 import { useRouter } from 'vue-router';
 
 const router = useRouter();
@@ -49,6 +60,16 @@ const email = ref('');
 const password = ref('');
 const isSubmitting = ref(false);
 const errorMessage = ref('');
+
+// Platform detection
+const isIos = /iphone|ipad|ipod/.test(window.navigator.userAgent.toLowerCase());
+const isAndroid = /android/.test(window.navigator.userAgent.toLowerCase());
+const showBookmarkPrompt = ref(false);
+
+onMounted(() => {
+  // Show bookmark prompt only if not already dismissed (you can enhance with localStorage)
+  showBookmarkPrompt.value = true;
+});
 
 const loginUser = async () => {
   try {
@@ -75,7 +96,6 @@ const signInWithGoogle = async () => {
 
     console.log('Google sign-in successful:', user.email);
 
-    // Save user credentials to Firestore
     const userRef = doc(db, 'users', user.uid);
     await setDoc(userRef, {
       uid: user.uid,
@@ -86,14 +106,11 @@ const signInWithGoogle = async () => {
       lastLogin: new Date(),
     });
 
-    console.log('User credentials saved to Firestore');
-
-    // Redirect after login
     router.push('/');
   } catch (error) {
     console.error('Google sign-in failed:', error.message);
     errorMessage.value = "Google sign-in failed.";
   }
 };
-
 </script>
+
