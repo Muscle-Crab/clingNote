@@ -811,24 +811,37 @@ const resetTasksToIncomplete = async () => {
   const selectedDayDocRef = doc(db, 'weeklyRoutines', `${userId.value}_${selectedDay.day}`);
 
   try {
-    let tasks = selectedDayRoutine.value.map(task => ({
+    const docSnap = await getDoc(selectedDayDocRef);
+    if (!docSnap.exists()) {
+      console.warn("No tasks to reset for this day.");
+      return;
+    }
+
+    // Fetch the actual tasks for this day
+    const existingTasks = docSnap.data().tasks || [];
+
+    const resetTasks = existingTasks.map(task => ({
       ...task,
       completed: false
     }));
 
     // Update Firestore
     await updateDoc(selectedDayDocRef, {
-      tasks: tasks,
+      tasks: resetTasks,
       updatedAt: serverTimestamp()
     });
 
-    // Update UI
-    selectedDayRoutine.value = tasks;
-    console.log("All tasks reset to incomplete for the selected day.");
+    // If we're currently viewing this day, update the UI
+    if (days[selectedDayIndex.value].day === selectedDay.day) {
+      selectedDayRoutine.value = resetTasks;
+    }
+
+    console.log(`All tasks for ${selectedDay.day} reset to incomplete.`);
   } catch (error) {
     console.error("Error resetting tasks:", error);
   }
 };
+
 
 
 const fetchUserName = async (userId) => {
@@ -1032,12 +1045,12 @@ const fetchSelectedDayRoutine = async () => {
           completed: false
         }));
 
-        // Update Firestore with reset tasks
         await updateDoc(selectedDayDocRef, {
           tasks: tasks,
           updatedAt: serverTimestamp()
         });
       }
+
 
       selectedDayRoutine.value = tasks;
     } else {
