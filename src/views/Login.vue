@@ -87,6 +87,23 @@ const loginUser = async () => {
     isSubmitting.value = false;
   }
 };
+onMounted(() => {
+  showBookmarkPrompt.value = true;
+
+  // Speak the instruction based on platform
+  const message = isIos
+      ? 'To bookmark this app, tap the Share icon and choose Add to Home Screen.'
+      : isAndroid
+          ? 'To bookmark this app, tap the three dots menu and select Add to Home screen.'
+          : 'Press Control D on Windows or Command D on Mac to bookmark this app.';
+
+  const utterance = new SpeechSynthesisUtterance(message);
+  utterance.lang = 'en-US';
+  utterance.rate = 1;
+  utterance.pitch = 1;
+  speechSynthesis.speak(utterance);
+});
+
 
 const signInWithGoogle = async () => {
   const provider = new GoogleAuthProvider();
