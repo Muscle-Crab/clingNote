@@ -1460,7 +1460,7 @@ const updateStreakOnCompletion = async () => {
 
 const closeFullScreenAnimation = () => {
   showFullScreenAnimation.value = false;
-  showCompleted.value = true
+
 
 };
 
