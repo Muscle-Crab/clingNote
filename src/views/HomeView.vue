@@ -617,6 +617,21 @@
               </template>
 
             </draggable>
+            <!-- Idle Time Illustration -->
+            <div
+                v-if="selectedDayRoutine.length > 0 && selectedDayRoutine.every(task => task.completed) && !showCompleted"
+                class="flex flex-col items-center justify-center mt-10"
+            >
+              <img
+                  src="@/assets/free.svg"
+              alt="Idle Time Illustration"
+              class="w-64 h-64 mb-4"
+              />
+              <h2 class="text-2xl font-bold text-gray-700">It's Idle Time 🧘</h2>
+              <p class="text-gray-500 mt-2 text-sm text-center px-4 max-w-md">
+                You’ve completed all your tasks for today. Take a break and enjoy your free time!
+              </p>
+            </div>
             <div v-if="wontDoTasks.length != 0" class=" p-3 bg-red-100 rounded-lg">
               <h3 class="text-lg font-semibold text-red-700">Won't Do Tasks</h3>
               <ul>
