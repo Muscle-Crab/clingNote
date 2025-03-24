@@ -1366,7 +1366,6 @@ const checkAllTasksCompleted = async () => {
     speak("Congratulations! You are free to do whatever you want");
     updateStreakOnCompletion();
     fetchSelectedDayRoutine()// 🔥 Update streak progression
-     showCompleted.value = false
     // 🗑 Remove one-time tasks & reset recurring tasks
     selectedDayRoutine.value = selectedDayRoutine.value.filter(task => {
       if (task.type === "one-time") {
