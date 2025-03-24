@@ -619,7 +619,7 @@
             </draggable>
             <!-- Idle Time Illustration -->
             <div
-                v-if="selectedDayRoutine.length > 0 && selectedDayRoutine.every(task => task.completed) && !showCompleted"
+                v-if="selectedDayRoutine?.length > 0 && selectedDayRoutine?.every(task => task.completed) && !showCompleted"
                 class="flex flex-col items-center justify-center mt-10"
             >
               <img
