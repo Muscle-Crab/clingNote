@@ -18,6 +18,17 @@
       +
     </button>
 
+    <div v-if="pendingTranscript" class="mt-4 p-4 bg-yellow-100 rounded">
+      <p><strong>Pending:</strong> "{{ pendingTranscript }}"</p>
+      <p class="text-sm text-gray-500">Adding in 5 seconds...</p>
+      <button
+          @click="cancelPending"
+          class="mt-2 bg-red-500 text-white px-3 py-1 rounded"
+      >
+        Cancel
+      </button>
+    </div>
+
     <p class="mt-4 text-gray-500">Hold the button and speak to add a task</p>
   </div>
 </template>
@@ -28,6 +39,8 @@ import { ref, onMounted } from 'vue'
 const tasks = ref([])
 const recognition = ref(null)
 const isListening = ref(false)
+const pendingTranscript = ref('')
+const addTimeout = ref(null)
 
 onMounted(() => {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
@@ -42,7 +55,13 @@ onMounted(() => {
 
   recognition.value.onresult = (event) => {
     const transcript = event.results[0][0].transcript
-    tasks.value.push(transcript)
+    pendingTranscript.value = transcript
+
+    // Start a 5-second timer before adding the task
+    addTimeout.value = setTimeout(() => {
+      tasks.value.push(pendingTranscript.value)
+      pendingTranscript.value = ''
+    }, 5000)
   }
 
   recognition.value.onerror = (event) => {
@@ -62,6 +81,14 @@ const stopListening = () => {
     recognition.value.stop()
     isListening.value = false
   }
+}
+
+const cancelPending = () => {
+  if (addTimeout.value) {
+    clearTimeout(addTimeout.value)
+    addTimeout.value = null
+  }
+  pendingTranscript.value = ''
 }
 </script>
 
