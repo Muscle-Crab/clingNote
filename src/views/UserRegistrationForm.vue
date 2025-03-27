@@ -31,6 +31,13 @@
         <div v-if="errorMessage" class="text-red-500 bg-red-100 border border-red-400 px-4 py-2 rounded mb-4">
           {{ errorMessage }}
         </div>
+        <p class="text-sm text-gray-600 dark:text-gray-300 mt-4">
+          By continuing, you agree to our
+          <router-link to="/terms" class="text-blue-600 hover:underline">
+            Terms & Conditions
+          </router-link>.
+        </p>
+
         <div>
           <button type="submit" :disabled="isSubmitting" class="w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
             <span class="mr-2">

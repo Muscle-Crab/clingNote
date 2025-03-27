@@ -39,6 +39,13 @@
             </span>
             <span>Sign in with Google</span>
           </button>
+          <p class="text-sm text-gray-600 dark:text-gray-300 mt-4">
+            By continuing, you agree to our
+            <router-link to="/terms" class="text-blue-600 hover:underline">
+              Terms & Conditions
+            </router-link>.
+          </p>
+
         </div>
         <div v-if="errorMessage" class="text-red-500 text-sm">{{ errorMessage }}</div>
       </form>
