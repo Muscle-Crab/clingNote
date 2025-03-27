@@ -2146,6 +2146,7 @@ if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
     const transcript = event.results[0][0].transcript.trim();
     newTask.value.title = transcript;
     addNewTask(); // Automatically call your existing function to save the task
+    recognition.stop();
   };
 } else {
   console.warn("Speech recognition not supported in this browser.");
