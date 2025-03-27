@@ -12,13 +12,26 @@
         class="bg-blue-500 text-white p-4 rounded-full text-2xl shadow-lg"
         @mousedown="startListening"
         @mouseup="stopListening"
-        @touchstart="startListening"
-        @touchend="stopListening"
+        @touchstart.prevent="startListening"
+        @touchend.prevent="stopListening"
     >
       +
     </button>
 
-    <p class="mt-4 text-gray-500">Hold the button and speak to add a task</p>
+    <div v-if="isListening" class="mt-2 text-blue-600 font-medium">🎤 Listening...</div>
+
+    <div v-if="pendingTranscript" class="mt-4 p-4 bg-yellow-100 rounded">
+      <p><strong>Pending:</strong> "{{ pendingTranscript }}"</p>
+      <p class="text-sm text-gray-500">Adding in 5 seconds...</p>
+      <button
+          @click="cancelPending"
+          class="mt-2 bg-red-500 text-white px-3 py-1 rounded"
+      >
+        Cancel
+      </button>
+    </div>
+
+    <p class="mt-4 text-gray-500">Hold the button and speak your task</p>
   </div>
 </template>
 
@@ -28,6 +41,8 @@ import { ref, onMounted } from 'vue'
 const tasks = ref([])
 const recognition = ref(null)
 const isListening = ref(false)
+const pendingTranscript = ref('')
+const addTimeout = ref(null)
 
 onMounted(() => {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
@@ -39,20 +54,40 @@ onMounted(() => {
   recognition.value = new SpeechRecognition()
   recognition.value.continuous = false
   recognition.value.lang = 'en-US'
+  recognition.value.interimResults = false
+
+  recognition.value.onstart = () => {
+    isListening.value = true
+  }
 
   recognition.value.onresult = (event) => {
     const transcript = event.results[0][0].transcript
-    tasks.value.push(transcript)
+    pendingTranscript.value = transcript
+
+    // Start a 5-second timer before adding the task
+    addTimeout.value = setTimeout(() => {
+      tasks.value.push(pendingTranscript.value)
+      pendingTranscript.value = ''
+    }, 5000)
+  }
+
+  recognition.value.onspeechend = () => {
+    recognition.value.stop()
+  }
+
+  recognition.value.onend = () => {
+    isListening.value = false
   }
 
   recognition.value.onerror = (event) => {
     console.error('Speech error:', event)
+    isListening.value = false
   }
 })
 
 const startListening = () => {
   if (recognition.value && !isListening.value) {
-    isListening.value = true
+    pendingTranscript.value = ''
     recognition.value.start()
   }
 }
@@ -60,8 +95,15 @@ const startListening = () => {
 const stopListening = () => {
   if (recognition.value && isListening.value) {
     recognition.value.stop()
-    isListening.value = false
   }
+}
+
+const cancelPending = () => {
+  if (addTimeout.value) {
+    clearTimeout(addTimeout.value)
+    addTimeout.value = null
+  }
+  pendingTranscript.value = ''
 }
 </script>
 
