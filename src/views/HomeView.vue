@@ -167,27 +167,42 @@
 
       </div>
       <!-- Modal toggle button -->
-      <div class="fixed bottom-10 left-1/2 transform -translate-x-1/2 z-50">
+      <!-- Floating Add Task + Voice Input Buttons -->
+      <div class="fixed bottom-10 left-1/2 transform -translate-x-1/2 z-50 flex flex-col items-center space-y-4">
+
+        <!-- Add Task Button -->
         <router-link
             :to="userId ? '#' : '/login'"
             @click.native.prevent="userId && openModal('task')"
-            class="relative flex items-center justify-center w-16 h-16 bg-blue-500 text-white rounded-full shadow-lg transform hover:scale-105 transition-transform duration-200"
+            class="relative flex items-center justify-center w-16 h-16 bg-blue-600 text-white rounded-full shadow-xl hover:scale-105 transition-transform duration-300"
+            title="Add Task"
         >
-          <!-- Pulsating Background Effect -->
-          <span class="absolute inset-0 rounded-full bg-blue-500 opacity-50 animate-ping"></span>
-
-          <!-- Plus Icon -->
-          <svg class="relative w-7 h-7 z-10" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" stroke="currentColor" fill="none">
+          <span class="absolute inset-0 bg-blue-500 rounded-full opacity-50"></span>
+          <svg class="w-7 h-7 z-10 relative" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="4" d="M12 4v16m8-8H4" />
           </svg>
         </router-link>
 
+        <!-- Voice Input Button (Pulses when listening) -->
+        <button
+            @click="startVoiceInput"
+            class="relative w-16 h-16 flex items-center justify-center bg-white border-2 border-blue-500 text-blue-600 rounded-full shadow-xl hover:bg-blue-100 transition duration-300"
+            title="Add Task with Voice"
+        >
+          <!-- Pulse effect when listening -->
+          <span
+              v-if="listening"
+              class="absolute inset-0 animate-ping bg-green-400 rounded-full opacity-50"
+          ></span>
 
-
-
-
+          <!-- Mic Icon -->
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-7 h-7 z-10 relative" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2Z"/>
+          </svg>
+        </button>
 
       </div>
+
 
       <!-- Main modal -->
       <div
@@ -2099,9 +2114,47 @@ watch(modalOpen, (isOpen) => {
 const isSpinning = (index) => {
   return spinningTasks.value[index] || false;
 };
+
 const completedTaskCount = computed(() => {
   return selectedDayRoutine.value?.filter(task => task.completed).length;
 });
+const listening = ref(false);
+let recognition;
+
+// Initialize SpeechRecognition only if supported
+if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  recognition = new SpeechRecognition();
+  recognition.lang = 'en-US';
+  recognition.interimResults = false;
+  recognition.maxAlternatives = 1;
+
+  recognition.onstart = () => {
+    listening.value = true;
+  };
+
+  recognition.onerror = (event) => {
+    console.error("Speech recognition error:", event.error);
+    listening.value = false;
+  };
+
+  recognition.onend = () => {
+    listening.value = false;
+  };
+
+  recognition.onresult = (event) => {
+    const transcript = event.results[0][0].transcript.trim();
+    newTask.value.title = transcript;
+    addNewTask(); // Automatically call your existing function to save the task
+  };
+} else {
+  console.warn("Speech recognition not supported in this browser.");
+}
+
+const startVoiceInput = () => {
+  if (recognition) recognition.start();
+};
+
 // Function to start spinning for a specific task
 const startSpinning = (index) => {
   spinningTasks.value[index] = true;
