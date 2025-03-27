@@ -224,116 +224,137 @@
           </div>
 
           <!-- Scrollable Modal Body -->
-          <form @submit.prevent="addNewTask" class="flex flex-col flex-1">
-            <div class="p-4 flex-1 overflow-y-auto max-h-[60vh]">
+          <form @submit.prevent="addNewTask" class="flex flex-col flex-1 bg-white dark:bg-gray-900 rounded-2xl shadow-lg">
+            <!-- Content -->
+            <div class="p-6 flex-1 overflow-y-auto max-h-[60vh] space-y-6">
+
               <!-- Task Input -->
               <div>
-                <label for="newTask" class="block font-medium">Task Name:</label>
+                <label for="newTask" class="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Task Name</label>
                 <input
                     type="text"
                     v-model="newTask.title"
                     id="newTask"
-                    class="w-full border border-gray-300 rounded-md px-4 py-2"
+                    class="w-full rounded-xl px-4 py-3 bg-gray-100 dark:bg-gray-800 border border-transparent focus:ring-2 focus:ring-blue-500 text-sm dark:text-white"
                     placeholder="Enter task name"
                     required
                 />
               </div>
 
+              <!-- DateTime Picker -->
+              <div>
+                <label for="reminderDateTime" class="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Reminder</label>
+                <input
+                    type="datetime-local"
+                    v-model="newTask.reminder.datetime"
+                    id="reminderDateTime"
+                    class="w-full rounded-xl px-4 py-3 bg-gray-100 dark:bg-gray-800 border border-transparent focus:ring-2 focus:ring-blue-500 text-sm dark:text-white"
+                />
+              </div>
+
+              <!-- Recurring Icon Toggle -->
+              <div class="flex items-center space-x-3">
+    <span class="text-sm font-medium text-gray-700 dark:text-gray-200">
+      {{ newTask.type === 'recurring' ? 'Recurring' : 'One-Time' }}
+    </span>
+
+                <button
+                    type="button"
+                    @click="toggleRecurring"
+                    :class="[
+        'rounded-full p-2 transition-all',
+        newTask.type === 'recurring'
+          ? 'bg-blue-500 text-white shadow-md'
+          : 'bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300'
+      ]"
+                >
+                  <i :class="newTask.type === 'recurring' ? 'fas fa-sync-alt' : 'fas fa-dot-circle'"></i>
+                </button>
+              </div>
+
               <!-- Advanced Options Toggle -->
-              <div class="flex items-center cursor-pointer text-blue-500 font-medium mt-2" @click="showAdvanced = !showAdvanced">
-                <span class="mr-2">Advanced Options</span>
+              <div @click="showAdvanced = !showAdvanced" class="flex items-center justify-between text-blue-600 cursor-pointer font-medium">
+                <span>Advanced Options</span>
                 <i :class="showAdvanced ? 'fas fa-chevron-up' : 'fas fa-chevron-down'"></i>
               </div>
 
-              <!-- Advanced Fields -->
+              <!-- Advanced Section -->
               <transition name="fade">
-                <div v-if="showAdvanced" class="flex flex-col space-y-3 mt-3">
-                  <label for="newTaskReminderDate">Reminder Date:</label>
-                  <input
-                      type="date"
-                      v-model="newTask.reminder.date"
-                      id="newTaskReminderDate"
-                      class="w-full border border-gray-300 rounded-md px-4 py-2"
-                  />
-
-                  <label for="newTaskReminderTime">Reminder Time:</label>
-                  <input
-                      type="time"
-                      v-model="newTask.reminder.time"
-                      id="newTaskReminderTime"
-                      class="w-full border border-gray-300 rounded-md px-4 py-2"
-                  />
-
-                  <label for="newTaskReminderRepeat">Repeat:</label>
-                  <select
-                      v-model="newTask.reminder.repeat"
-                      id="newTaskReminderRepeat"
-                      class="w-full border border-gray-300 rounded-md px-4 py-2"
-                  >
-                    <option value="">No Repeat</option>
-                    <option value="daily">Daily</option>
-                    <option value="weekly">Weekly</option>
-                    <option value="monthly">Monthly</option>
-                    <option value="yearly">Yearly</option>
-                  </select>
-
-                  <label for="newTaskDays">Select Days:</label>
-                  <div class="flex flex-wrap gap-2 mb-2">
-                    <div v-for="(day, index) in days" :key="index" class="flex items-center space-x-2">
-                      <input type="checkbox" :id="'day-' + index" :value="day" v-model="newTask.selectedDays" class="form-checkbox" />
-                      <label :for="'day-' + index" class="text-sm">{{ day.day }}</label>
+                <div v-if="showAdvanced" class="space-y-4 text-sm text-gray-700 dark:text-gray-200">
+                  <!-- Select Days -->
+                  <div>
+                    <label class="block font-medium mb-1">Select Days</label>
+                    <div class="flex flex-wrap gap-2">
+                      <label
+                          v-for="(day, index) in days"
+                          :key="index"
+                          class="flex items-center gap-2 text-sm"
+                      >
+                        <input type="checkbox" :id="'day-' + index" :value="day" v-model="newTask.selectedDays" class="accent-blue-500" />
+                        {{ day.day }}
+                      </label>
                     </div>
                   </div>
-                  <select v-model="newTask.type" id="taskType" class="w-full border border-gray-300 rounded-md px-4 py-2">
 
-                    <option value="recurring">Recurring</option>
-                    <option value="one-time">One-time</option>
-                  </select>
-                  <label for="taskPosition">Insert Position:</label>
-                  <select
-                      v-model="newTask.position"
-                      id="taskPosition"
-                      class="w-full border border-gray-300 rounded-md px-4 py-2"
-                  >
-                    <option :value="0">First</option>
-                    <option
-                        v-for="(task, index) in selectedDayRoutine"
-                        :key="index"
-                        :value="index + 1"
+                  <!-- Position -->
+                  <div>
+                    <label for="taskPosition" class="block font-medium mb-1">Insert Position</label>
+                    <select
+                        v-model="newTask.position"
+                        id="taskPosition"
+                        class="w-full rounded-xl px-4 py-2 bg-gray-100 dark:bg-gray-800 border border-transparent focus:ring-2 focus:ring-blue-500"
                     >
-                      {{ index + 2 }}{{ getOrdinalSuffix(index + 2) }}
-                    </option>
-                  </select>
+                      <option :value="0">First</option>
+                      <option
+                          v-for="(task, index) in selectedDayRoutine"
+                          :key="index"
+                          :value="index + 1"
+                      >
+                        {{ index + 2 }}{{ getOrdinalSuffix(index + 2) }}
+                      </option>
+                    </select>
+                  </div>
 
-                  <label for="newTaskLabels">Task Labels:</label>
-                  <input
-                      type="text"
-                      v-model="newTask.labels"
-                      id="newTaskLabels"
-                      class="w-full border border-gray-300 rounded-md px-4 py-2"
-                      placeholder="Enter task labels (comma-separated)"
-                  />
+                  <!-- Labels -->
+                  <div>
+                    <label for="newTaskLabels" class="block font-medium mb-1">Labels</label>
+                    <input
+                        type="text"
+                        v-model="newTask.labels"
+                        id="newTaskLabels"
+                        class="w-full rounded-xl px-4 py-2 bg-gray-100 dark:bg-gray-800 border border-transparent focus:ring-2 focus:ring-blue-500"
+                        placeholder="e.g., Work, Fitness"
+                    />
+                  </div>
 
-                  <label for="newTaskNotes">Task Notes:</label>
-                  <textarea
-                      v-model="newTask.notes"
-                      id="newTaskNotes"
-                      class="w-full border border-gray-300 rounded-md px-4 py-2"
-                      placeholder="Enter task notes"
-                  ></textarea>
+                  <!-- Notes -->
+                  <div>
+                    <label for="newTaskNotes" class="block font-medium mb-1">Notes</label>
+                    <textarea
+                        v-model="newTask.notes"
+                        id="newTaskNotes"
+                        class="w-full rounded-xl px-4 py-2 bg-gray-100 dark:bg-gray-800 border border-transparent focus:ring-2 focus:ring-blue-500"
+                        placeholder="Add more details..."
+                    ></textarea>
+                  </div>
                 </div>
               </transition>
 
-              <div v-if="error" class="text-red-500 mt-2">{{ error }}</div>
+              <!-- Error Message -->
+              <div v-if="error" class="text-red-500 text-sm">{{ error }}</div>
             </div>
 
-            <!-- Modal Footer (Fixed) -->
-            <div class="bg-gray-100 p-4 border-t flex justify-end">
-              <button type="submit" class="bg-blue-500 text-white px-6 py-2 rounded-md shadow-md hover:bg-blue-600 transition">
+            <!-- Footer -->
+            <div class="bg-gray-50 dark:bg-gray-800 px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex justify-end">
+              <button
+                  type="submit"
+                  class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2 rounded-xl transition-shadow shadow-md"
+              >
                 Add Task
               </button>
             </div>
           </form>
+
         </div>
       </div>
 
@@ -907,6 +928,7 @@ const scheduleNotification = async (task, reminder) => {
   const formattedTime = convertTo12HourFormat(reminder.time);
 
   const scheduledDateTime = new Date(`${reminder.date}T${reminder.time}:00`).toISOString();
+
   const playerId = window.OneSignal.User.PushSubscription.id;
 
   if (!playerId) {
@@ -1526,7 +1548,6 @@ const addNewTask = async () => {
     return;
   }
 
-  // Fallback to the currently selected day if no days are explicitly selected
   const selectedDays =
       newTask.value.selectedDays.length > 0
           ? newTask.value.selectedDays
@@ -1540,7 +1561,7 @@ const addNewTask = async () => {
   const task = {
     title: newTask.value.title.trim(),
     completed: false,
-    time: formatTime(newTask.value.time),
+    time: '', // fallback in case reminder isn't set
     priority: newTask.value.priority,
     labels: labels,
     notes: newTask.value.notes,
@@ -1549,9 +1570,18 @@ const addNewTask = async () => {
     createdAt: new Date().toISOString()
   };
 
-  // If reminder data is provided, attach it to the task
-  if (newTask.value.reminder.date && newTask.value.reminder.time) {
-    task.reminder = { ...newTask.value.reminder };
+  // Parse datetime-local input if provided
+  if (newTask.value.reminder?.datetime) {
+    const dateObj = new Date(newTask.value.reminder.datetime);
+    const date = dateObj.toISOString().split('T')[0];
+    const time = dateObj.toTimeString().slice(0, 5); // "HH:MM"
+
+    task.time = time;
+    task.reminder = {
+      date,
+      time,
+      repeat: newTask.value.reminder.repeat || ''
+    };
   }
 
   try {
@@ -1568,7 +1598,6 @@ const addNewTask = async () => {
         existingTasks = selectedDayDocSnapshot.data().tasks || [];
       }
 
-      // Insert task at the specified position
       const position = parseInt(newTask.value.position, 10);
       existingTasks.splice(position, 0, task);
 
@@ -1577,20 +1606,17 @@ const addNewTask = async () => {
         updatedAt: serverTimestamp()
       });
 
-      // Update the UI if the task belongs to the currently selected day
       if (selectedDay.day === days[selectedDayIndex.value].day) {
         selectedDayRoutine.value = [...existingTasks].sort((a, b) => {
-          return new Date('1970/01/01 ' + a.time) - new Date('1970/01/01 ' + b.time);
+          return new Date('1970/01/01T' + a.time) - new Date('1970/01/01T' + b.time);
         });
       }
     }
 
-    // If a reminder was set, schedule the notification
     if (task.reminder) {
-      scheduleNotification(task, task.reminder);
+      await scheduleNotification(task, task.reminder);
     }
 
-    // Reset the newTask state after adding, ensuring the reminder object is always defined
     newTask.value = {
       title: '',
       time: '',
@@ -1599,13 +1625,12 @@ const addNewTask = async () => {
       notes: '',
       selectedDays: [],
       position: 0,
-      reminder: { date: '', time: '', repeat: '' },
-      type: 'recurring',
+      reminder: { datetime: '', repeat: '' },
+      type: 'recurring'
     };
     closeModal();
     error.value = '';
 
-    // Optionally, send a notification for task creation
     const userName = await fetchUserName(userId.value);
     if (userName) {
       await sendNotificationToPlayer(userName, "created");
@@ -1614,6 +1639,7 @@ const addNewTask = async () => {
     console.error('Error adding task:', error);
   }
 };
+
 
 
 
@@ -2155,6 +2181,15 @@ if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
 const startVoiceInput = () => {
   if (recognition) recognition.start();
 };
+
+function toggleRecurring() {
+  console.log('Clicked! Current type:', newTask.value.type)
+  newTask.value.type = newTask.value.type === 'recurring' ? 'one-time' : 'recurring'
+  console.log('New type:', newTask.value.type)
+}
+
+
+
 
 // Function to start spinning for a specific task
 const startSpinning = (index) => {
