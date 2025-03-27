@@ -632,7 +632,7 @@
                 You’ve completed all your tasks for today. Take a break and enjoy your free time!
               </p>
             </div>
-            <div v-if="wontDoTasks.length != 0" class=" p-3 bg-red-100 rounded-lg">
+            <div v-if="wontDoTasks.length != 0 && !selectedDayRoutine?.every(task => task.completed)" class=" p-3 bg-red-100 rounded-lg">
               <h3 class="text-lg font-semibold text-red-700">Won't Do Tasks</h3>
               <ul>
                 <li v-for="(task, index) in wontDoTasks" :key="index" class="flex  items-center bg-white p-2 rounded-md mt-2">
