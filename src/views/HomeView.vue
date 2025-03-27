@@ -917,49 +917,53 @@ const scheduleNotification = async (task, reminder) => {
     return;
   }
 
-  // Convert reminder.time to 12-hour format
-  const convertTo12HourFormat = (time24) => {
-    const [hours, minutes] = time24.split(':').map(Number);
-    const period = hours >= 12 ? 'PM' : 'AM';
-    const formattedHours = hours % 12 || 12; // Convert 0 or 12 to 12 AM/PM
-    return `${formattedHours}:${minutes.toString().padStart(2, '0')} ${period}`;
-  };
-
-  const formattedTime = convertTo12HourFormat(reminder.time);
-
-  const scheduledDateTime = new Date(`${reminder.date}T${reminder.time}:00`).toISOString();
-  const playerId = window.OneSignal.User.PushSubscription.id;
-
-  if (!playerId) {
-    console.error("Player ID not found. Make sure OneSignal is initialized.");
-    return;
-  }
-  const headers = {
-    'Authorization': 'Bearer ZDZiZDk0NTktMjUwZS00NTQ4LWFhOTItNjBiZDZiMjVhYzYy', // Replace with your OneSignal API key
-    'Content-Type': 'application/json'
-  };
-
-  const notificationData = {
-    "app_id": "fc206a71-7d65-4cfa-b8b2-0c10548e1476", // Replace with your OneSignal App ID
-    "include_player_ids": [playerId], // Replace with actual user player ID
-    "contents": { "en": `${task.title} at ${formattedTime}` },
-    "headings": { "en": "Task Reminder" },
-    "send_after": scheduledDateTime, // Schedule the notification
-  };
-
   try {
+    // Ensure OneSignal is initialized and user has allowed notifications
+    const isEnabled = await window.OneSignal.isPushNotificationsEnabled();
+    if (!isEnabled) {
+      alert("Please enable notifications to receive task reminders.");
+      return;
+    }
+
+    const playerId = await window.OneSignal.getUserId();
+    if (!playerId) {
+      console.error("Player ID not available. Notification cannot be scheduled.");
+      return;
+    }
+
+    // Convert local time to UTC ISO string
+    const localDateTime = new Date(`${reminder.date}T${reminder.time}`);
+    const utcDateTime = new Date(localDateTime.getTime() - localDateTime.getTimezoneOffset() * 60000).toISOString();
+
+    const formattedTime = new Intl.DateTimeFormat('en-US', {
+      hour: 'numeric',
+      minute: 'numeric',
+      hour12: true
+    }).format(localDateTime);
+
+    const headers = {
+      'Authorization': 'Bearer ZDZiZDk0NTktMjUwZS00NTQ4LWFhOTItNjBiZDZiMjVhYzYy',
+      'Content-Type': 'application/json'
+    };
+
+    const notificationData = {
+      app_id: 'fc206a71-7d65-4cfa-b8b2-0c10548e1476',
+      include_player_ids: [playerId],
+      contents: { en: `${task.title} at ${formattedTime}` },
+      headings: { en: 'Task Reminder' },
+      send_after: utcDateTime // Send at the correct UTC time
+    };
+
     await axios.post('https://onesignal.com/api/v1/notifications', notificationData, { headers });
-    console.log('Scheduled notification successfully');
-
-    // Display confirmation alert
-    alert(`Task "${task.title}" has been scheduled successfully for ${formattedTime}!`);
-
+    console.log("Notification scheduled for:", utcDateTime);
+    alert(`Task "${task.title}" is scheduled for ${formattedTime}.`);
 
   } catch (error) {
-    console.error('Error scheduling notification:', error);
-    alert("Failed to schedule the task. Please try again.");
+    console.error("Failed to schedule notification:", error);
+    alert("There was a problem scheduling your reminder.");
   }
 };
+
 
 const sendNotificationToPlayer = async (userName, action) => {
   const headers = {
