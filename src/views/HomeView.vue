@@ -203,6 +203,29 @@
 
       </div>
 
+      <div
+          v-if="showDailyReportPopup"
+          class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+      >
+        <div class="bg-white p-6 rounded-xl shadow-xl text-center max-w-sm w-full">
+          <h2 class="text-lg font-semibold text-gray-800 mb-3">Daily Report Ready</h2>
+          <p class="text-sm text-gray-600 mb-4">Tap the speaker icon to hear your task summary.</p>
+          <button
+              @click="playDailyReport"
+              class="text-blue-600 hover:text-blue-800 text-3xl transition-transform transform hover:scale-110"
+          >
+            🔊
+          </button>
+          <div class="mt-4">
+            <button
+                @click="dismissReportPopup"
+                class="text-sm text-gray-500 hover:text-gray-700"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      </div>
 
       <!-- Main modal -->
       <div
@@ -1641,11 +1664,63 @@ const addNewTask = async () => {
 };
 
 
+const speakDailyReport = async () => {
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
 
+  const todayDateStr = today.toISOString().split('T')[0];
+  const yesterdayDateStr = yesterday.toISOString().split('T')[0];
 
+  const todayDay = days.find(day => day.date === todayDateStr);
+  const yesterdayDay = days.find(day => day.date === yesterdayDateStr);
+
+  let yesterdayCompleted = 0;
+  let todayTotal = selectedDayRoutine.value?.length || 0;
+  let streakGained = false;
+
+  // Check yesterday's tasks
+  if (userId.value && yesterdayDay) {
+    const yesterdayDocRef = doc(db, 'weeklyRoutines', `${userId.value}_${yesterdayDay.day}`);
+    const snapshot = await getDoc(yesterdayDocRef);
+    if (snapshot.exists()) {
+      const tasks = snapshot.data().tasks || [];
+      yesterdayCompleted = tasks.filter(task => task.completed).length;
+      streakGained = tasks.length > 0 && yesterdayCompleted === tasks.length;
+    }
+  }
+
+  const message = `Yesterday, you completed ${yesterdayCompleted} task${yesterdayCompleted === 1 ? '' : 's'}.
+    You have ${todayTotal} task${todayTotal === 1 ? '' : 's'} today.
+    ${streakGained ? 'Great job! You earned a streak yesterday!' : 'You did not gain a streak yesterday, but today is a fresh start!'}`;
+
+  speak(message);
+};
+
+const showDailyReportPopup = ref(false);
+const lastSpokenDate = ref(localStorage.getItem("lastSpokenDate") || null);
+onMounted(() => {
+  const todayStr = new Date().toISOString().split("T")[0];
+
+  if (lastSpokenDate.value !== todayStr) {
+    showDailyReportPopup.value = true; // show popup
+  }
+});
 
 const userCredits = ref(0);
-
+const playDailyReport = () => {
+  speakDailyReport(); // Call your existing function
+  const todayStr = new Date().toISOString().split("T")[0];
+  localStorage.setItem("lastSpokenDate", todayStr);
+  lastSpokenDate.value = todayStr;
+  showDailyReportPopup.value = false;
+};
+const dismissReportPopup = () => {
+  const todayStr = new Date().toISOString().split("T")[0];
+  localStorage.setItem("lastSpokenDate", todayStr);
+  lastSpokenDate.value = todayStr;
+  showDailyReportPopup.value = false;
+};
 
 const updateCreditsInFirestore = async () => {
   const userDocRef = doc(db, 'users', userId.value);
@@ -1765,6 +1840,7 @@ const filteredTasks = computed(() => {
     });
   }
 });
+
 const calculateCompletionPercentage = (task) => {
   const todayIndex = new Date().getDay(); // Get current day index
   if (selectedDayIndex.value !== todayIndex) {
