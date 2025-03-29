@@ -5,7 +5,6 @@ import Login from '../views/Login.vue';
 import { auth } from '../firebaseConfig'; // Import your Firebase authentication instance
 import Room from '../views/Room.vue';
 import Landing from '../views/landing.vue';
-import test from '../views/testing.vue'
 import TermsandCondition from '../views/TermsandCondition.vue'
 import Pickup from '../views/Pickup.vue';
 const routes = [
@@ -15,12 +14,7 @@ const routes = [
     component: HomeView,
     
   },
-  {
-    path: '/test',
-    name: 'test',
-    component: test,
 
-  },
   {
     path: '/about',
     name: 'about',
