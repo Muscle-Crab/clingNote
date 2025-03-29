@@ -638,7 +638,7 @@
                             <option value="60">1 hour</option>
                           </select>
                           <div class="flex justify-end gap-2">
-                            <button @click="showTimerModal = false" class="px-4 py-2 bg-gray-300 rounded">Cancel</button>
+                            <button @click="showTimerModal = false" class="px-4 py-2 mm bg-gray-300 rounded">Cancel</button>
                             <button @click="startTimer" class="px-4 py-2 bg-blue-500 text-white rounded">Start</button>
                           </div>
                         </div>
