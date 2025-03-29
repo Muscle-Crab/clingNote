@@ -1,79 +1,56 @@
 <template>
-  <div class="p-4 max-w-md mx-auto">
-    <h1 class="text-xl font-bold mb-4">Voice Task Creator</h1>
-
-    <button
-        @click="startListening"
-        class="bg-blue-500 text-white px-4 py-2 rounded mb-4"
-    >
-      🎙️ Start Voice Input
-    </button>
-
-    <p v-if="listening" class="text-green-600 mb-2">Listening...</p>
-    <p v-if="error" class="text-red-600 mb-2">{{ error }}</p>
-
-    <ul>
-      <li
-          v-for="(task, index) in tasks"
-          :key="index"
-          class="bg-gray-100 rounded p-2 my-2"
-      >
-        {{ task }}
-      </li>
-    </ul>
+  <div class="p-4">
+    Test
   </div>
 </template>
 
-<script setup>
-import { ref } from 'vue'
+<script>
+export default {
+  data() {
+    return {
+      tasks: [
+        { id: 1, name: 'Write report', duration: 30, running: false, remaining: 1800 },
+        { id: 2, name: 'Workout', duration: 45, running: false, remaining: 2700 },
+        { id: 3, name: 'Study session', duration: 60, running: false, remaining: 3600 },
+      ],
+    };
+  },
+  methods: {
+    startTask(task) {
+      if (task.running) return;
 
-const tasks = ref([])
-const listening = ref(false)
-const error = ref(null)
+      task.running = true;
+      const startTime = Date.now();
+      const interval = setInterval(() => {
+        const elapsed = Math.floor((Date.now() - startTime) / 1000);
+        task.remaining = task.duration * 60 - elapsed;
+        if (task.remaining <= 0) {
+          clearInterval(interval);
+          task.running = false;
+          task.remaining = 0;
+          this.notifyUser(task.name + ' is complete!');
+        }
+      }, 1000);
 
-let recognition
-
-// Initialize SpeechRecognition
-if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-  const SpeechRecognition =
-      window.SpeechRecognition || window.webkitSpeechRecognition
-
-  recognition = new SpeechRecognition()
-  recognition.lang = 'en-US'
-  recognition.interimResults = false
-  recognition.maxAlternatives = 1
-
-  recognition.onstart = () => {
-    listening.value = true
-    error.value = null
-  }
-
-  recognition.onerror = (e) => {
-    error.value = `Error: ${e.error}`
-    listening.value = false
-  }
-
-  recognition.onend = () => {
-    listening.value = false
-  }
-
-  recognition.onresult = (event) => {
-    const transcript = event.results[0][0].transcript.trim()
-    tasks.value.push(transcript)
-  }
-} else {
-  error.value = 'Speech recognition not supported in this browser.'
-}
-
-const startListening = () => {
-  if (recognition) {
-    recognition.start()
-  }
-}
+      // Schedule a notification (basic, can integrate with OneSignal)
+      if ('Notification' in window && Notification.permission === 'granted') {
+        setTimeout(() => {
+          this.notifyUser(`${task.name} is finished!`);
+        }, task.duration * 60 * 1000);
+      }
+    },
+    formatTime(seconds) {
+      const mins = Math.floor(seconds / 60);
+      const secs = seconds % 60;
+      return `${mins}m ${secs}s`;
+    },
+    notifyUser(message) {
+      if (Notification.permission !== 'granted') {
+        Notification.requestPermission();
+      } else {
+        new Notification(message);
+      }
+    },
+  },
+};
 </script>
-
-<style>
-body {
-  font-family: system-ui, sans-serif;
-}
-</style>
