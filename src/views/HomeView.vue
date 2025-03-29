@@ -616,6 +616,33 @@
                       >
                         🚫
                       </button>
+                      <button
+                          @click="showTimerModal = true"
+                          class="relative w-16 h-16 flex items-center justify-center bg-yellow-400 text-white rounded-full shadow-xl hover:bg-yellow-500 transition duration-300"
+                          title="Start Timer"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-7 h-7 z-10 relative" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M12 8a1 1 0 0 1 1 1v3h2a1 1 0 1 1 0 2h-3a1 1 0 0 1-1-1v-4a1 1 0 0 1 1-1Z"/>
+                          <path fill-rule="evenodd" d="M12 22a10 10 0 1 0-10-10 10.011 10.011 0 0 0 10 10Zm0-18a8 8 0 1 1-8 8 8.009 8.009 0 0 1 8-8Z"/>
+                        </svg>
+                      </button>
+                      <div v-if="showTimerModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                        <div class="bg-white rounded-xl shadow-xl p-6 w-96">
+                          <h3 class="text-xl font-semibold mb-4">Set a Timer</h3>
+                          <label class="block mb-2 text-gray-700">Select duration:</label>
+                          <select v-model="selectedTimerDuration" class="w-full mb-4 p-2 rounded border">
+                            <option value="5">5 minutes</option>
+                            <option value="10">10 minutes</option>
+                            <option value="15">15 minutes</option>
+                            <option value="30">30 minutes</option>
+                            <option value="60">1 hour</option>
+                          </select>
+                          <div class="flex justify-end gap-2">
+                            <button @click="showTimerModal = false" class="px-4 py-2 bg-gray-300 rounded">Cancel</button>
+                            <button @click="startTimer" class="px-4 py-2 bg-blue-500 text-white rounded">Start</button>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
 
@@ -1138,7 +1165,45 @@ const fetchSelectedDayRoutine = async () => {
 };
 
 const days = data.days;
+const showTimerModal = ref(false);
+const selectedTimerDuration = ref(5); // default to 5 minutes
 
+const startTimer = async () => {
+  showTimerModal.value = false;
+  const now = new Date();
+  const endTime = new Date(now.getTime() + selectedTimerDuration.value * 60000); // in ms
+
+  const formattedEndTime = endTime.toISOString();
+  const formattedText = `${selectedTimerDuration.value} minute timer completed!`;
+
+  const playerId = window.OneSignal.User.PushSubscription.id;
+
+  if (!playerId) {
+    alert("OneSignal not initialized");
+    return;
+  }
+
+  const headers = {
+    'Authorization': 'Bearer ZDZiZDk0NTktMjUwZS00NTQ4LWFhOTItNjBiZDZiMjVhYzYy',
+    'Content-Type': 'application/json'
+  };
+
+  const notificationData = {
+    app_id: "fc206a71-7d65-4cfa-b8b2-0c10548e1476",
+    include_player_ids: [playerId],
+    contents: { en: formattedText },
+    headings: { en: "⏰ Timer Finished" },
+    send_after: formattedEndTime
+  };
+
+  try {
+    await axios.post('https://onesignal.com/api/v1/notifications', notificationData, { headers });
+    alert(`Timer set for ${selectedTimerDuration.value} minutes! Notification will appear when done.`);
+  } catch (error) {
+    console.error('Failed to schedule timer:', error);
+    alert("Timer scheduling failed.");
+  }
+};
 const isToday = (index) => {
   return index === new Date().getDay();
 };
