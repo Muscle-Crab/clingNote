@@ -618,13 +618,10 @@
                       </button>
                       <button
                           @click="showTimerModal = true"
-                          class="relative w-16 h-16 flex items-center justify-center bg-yellow-400 text-white rounded-full shadow-xl hover:bg-yellow-500 transition duration-300"
+                          class="text-orange-500 hover:text-orange-700 text-xs sm:text-sm"
                           title="Start Timer"
                       >
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-7 h-7 z-10 relative" viewBox="0 0 24 24" fill="currentColor">
-                          <path d="M12 8a1 1 0 0 1 1 1v3h2a1 1 0 1 1 0 2h-3a1 1 0 0 1-1-1v-4a1 1 0 0 1 1-1Z"/>
-                          <path fill-rule="evenodd" d="M12 22a10 10 0 1 0-10-10 10.011 10.011 0 0 0 10 10Zm0-18a8 8 0 1 1-8 8 8.009 8.009 0 0 1 8-8Z"/>
-                        </svg>
+                        ⏱️
                       </button>
                       <div v-if="showTimerModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
                         <div class="bg-white rounded-xl shadow-xl p-6 w-96">
