@@ -382,28 +382,29 @@
       </div>
 
 
+      <div
+          v-if="voiceNoteModalOpen"
+          class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+      >
+        <div class="bg-white p-6 rounded-xl shadow-lg ">
+          <div class="flex justify-between items-center mb-4">
+            <h2 class="text-lg font-semibold text-gray-800">Voice Note</h2>
+            <button @click="closeVoiceNoteModal" class="text-gray-500 hover:text-gray-700 text-xl">✕</button>
+          </div>
+          <audio :src="currentVoiceNoteURL" controls class="w-full rounded-md mb-4 shadow" />
+          <button
+              @click="removeVoiceNote(currentVoiceNoteIndex); closeVoiceNoteModal();"
+              class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 text-sm"
+          >
+            Delete Voice Note ❌
+          </button>
+        </div>
+      </div>
 
 
-      <!-- Edit task form -->
-      <form v-if="editingTask !== null" @submit.prevent="updateTask" class="mt-4">
-        <label for="editTask" class="block mb-2">Edit Task Name:</label>
-        <input type="text" v-model="editedTask.title" id="editTask" class="w-full border-gray-300 rounded-md px-4 py-2 mb-2" required>
-        <label for="editTaskTime" class="block mb-2">Edit Task Time:</label>
-        <input type="time" v-model="editedTask.time" id="editTaskTime" class="w-full border-gray-300 rounded-md px-4 py-2 mb-2" required>
-        <label for="editTaskPriority" class="block mb-2">Edit Task Priority:</label>
-        <select v-model="editedTask.priority" id="editTaskPriority" class="w-full border-gray-300 rounded-md px-4 py-2 mb-2">
-          <option value="low">Low</option>
-          <option value="medium">Medium</option>
-          <option value="high">High</option>
-        </select>
-        <label for="editTaskLabels" class="block mb-2">Edit Task Labels:</label>
-        <input type="text" v-model="editedTask.labels" id="editTaskLabels" class="w-full border-gray-300 rounded-md px-4 py-2 mb-2" placeholder="Enter task labels (comma-separated)">
-        <label for="editTaskNotes" class="block mb-2">Edit Task Notes:</label>
-        <textarea v-model="editedTask.notes" id="editTaskNotes" class="w-full border-gray-300 rounded-md px-4 py-2 mb-2" placeholder="Enter task notes"></textarea>
-        <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded-md">Save Changes</button>
-      </form>
-      <!--    &lt;!&ndash; Search input field &ndash;&gt;-->
-      <!--    <input type="text" v-model="searchQuery" class="w-full border-gray-300 rounded-md px-4 py-2 mb-2" placeholder="Search tasks">-->
+
+
+
       <!-- Daily routine tasks -->
       <div class="daily-routine   min-h-screen">
         <div v-if="selectedDayRoutine?.length === 0" class="flex flex-col items-center justify-center mt-16">
@@ -474,6 +475,7 @@
                       <div
                           class="text-lg font-semibold text-gray-800"
                           :class="{ 'line-through text-gray-500': task.completed && isToday(selectedDayIndex) }"
+                          @click="task.voiceNote && openVoiceNoteModal(task.voiceNote, index)"
                       >
                         {{ task.title }}
                       </div>
@@ -483,16 +485,7 @@
                         </div>
 
                       </div>
-                      <div v-if="task.voiceNote" class="mt-2 flex items-center gap-2 bg-gray-100 p-2 rounded-lg shadow-sm w-fit max-w-xs">
-                        <audio :src="task.voiceNote" controls class="h-8 w-48 rounded-md"></audio>
-                        <button
-                            @click="removeVoiceNote(index)"
-                            class="text-gray-500 hover:text-red-500 text-base font-bold"
-                            title="Remove voice note"
-                        >
-                          ❌
-                        </button>
-                      </div>
+
 
 
 
@@ -2495,6 +2488,20 @@ const removeVoiceNote = async (index) => {
   } catch (error) {
     console.error("Error removing voice note:", error);
   }
+};
+const voiceNoteModalOpen = ref(false);
+const currentVoiceNoteURL = ref(null);
+const currentVoiceNoteIndex = ref(null); // to handle deletion
+const openVoiceNoteModal = (voiceNoteURL, index) => {
+  currentVoiceNoteURL.value = voiceNoteURL;
+  currentVoiceNoteIndex.value = index;
+  voiceNoteModalOpen.value = true;
+};
+
+const closeVoiceNoteModal = () => {
+  voiceNoteModalOpen.value = false;
+  currentVoiceNoteURL.value = null;
+  currentVoiceNoteIndex.value = null;
 };
 </script>
 
