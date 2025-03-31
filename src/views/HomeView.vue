@@ -483,6 +483,19 @@
                         </div>
 
                       </div>
+                      <div v-if="task.voiceNote" class="mt-2 flex items-center gap-2 bg-gray-100 p-2 rounded-lg shadow-sm w-fit max-w-xs">
+                        <audio :src="task.voiceNote" controls class="h-8 w-48 rounded-md"></audio>
+                        <button
+                            @click="removeVoiceNote(index)"
+                            class="text-gray-500 hover:text-red-500 text-base font-bold"
+                            title="Remove voice note"
+                        >
+                          ❌
+                        </button>
+                      </div>
+
+
+
 
                       <div class="absolute top-2 right-2 bg-blue-100  px-2 py-1 rounded-full text-xs font-bold flex items-center ">
                         <span>10</span>
@@ -616,6 +629,10 @@
                       >
                         🚫
                       </button>
+                      <!-- Replace `task.id` with the actual task ID -->
+                      <button @click="startRecording(index)" v-if="!recording">🎙️</button>
+                      <button @click="stopRecording" v-if="recording">🛑 </button>
+
                       <button
                           @click="showTimerModal = true"
                           class="text-orange-500 hover:text-orange-700 text-xs sm:text-sm"
@@ -740,12 +757,14 @@
 import { ref, onMounted, computed, watch, reactive } from 'vue';
 import { auth } from '@/firebaseConfig'; // Assuming you have Firebase authentication configured
 import { onAuthStateChanged } from 'firebase/auth';
+import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import data from '@/data.json';
 import draggable from "vuedraggable";
 import {db} from '@/firebaseConfig'; // Assuming you have imported the Firebase setup file and exported the db instance
-import {collection, doc, setDoc, serverTimestamp, getDoc, updateDoc} from 'firebase/firestore';
+import { doc, setDoc, serverTimestamp, getDoc, updateDoc,getFirestore} from 'firebase/firestore';
 const modalOpen = ref(false);
 import axios from 'axios';
+import { deleteObject } from "firebase/storage";
 import TimeTracker from "@/components/TimeTracker.vue";
 import SocialMediaAccess from "@/components/SocialMediaAccess.vue"
 // Define reactive state
@@ -2367,6 +2386,116 @@ onMounted(async () => {
     isLoading.value = false; // Stop loading after data is fetched
   }
 });
+const recording = ref(false);
+const mediaRecorder = ref(null);
+const audioChunks = ref([]);
+const currentTaskId = ref(null);
+const mediaStream = ref(null); // ✅ store the mic stream to stop it later
+
+const startRecording = async (index) => {
+  if (index === null || index === undefined) {
+    console.error('Invalid task index');
+    return;
+  }
+
+  currentTaskId.value = index;
+
+  try {
+    mediaStream.value = await navigator.mediaDevices.getUserMedia({ audio: true }); // ✅ store the stream
+    mediaRecorder.value = new MediaRecorder(mediaStream.value);
+    audioChunks.value = [];
+
+    mediaRecorder.value.ondataavailable = event => {
+      if (event.data.size > 0) {
+        audioChunks.value.push(event.data);
+      }
+    };
+
+    mediaRecorder.value.onstop = async () => {
+      const audioBlob = new Blob(audioChunks.value, { type: 'audio/webm' });
+
+      const fileName = `voiceNotes/${userId.value}_${days[selectedDayIndex.value].day}_task${currentTaskId.value}_${Date.now()}.webm`;
+      const storage = getStorage();
+      const storageRefInstance = storageRef(storage, fileName);
+      await uploadBytes(storageRefInstance, audioBlob);
+      const downloadURL = await getDownloadURL(storageRefInstance);
+
+      // Update the voiceNote field of the correct task
+      const selectedDayDocRef = doc(db, 'weeklyRoutines', `${userId.value}_${days[selectedDayIndex.value].day}`);
+      const selectedDayDocSnapshot = await getDoc(selectedDayDocRef);
+      if (selectedDayDocSnapshot.exists()) {
+        const tasks = selectedDayDocSnapshot.data().tasks || [];
+
+        tasks[currentTaskId.value].voiceNote = downloadURL;
+
+        await updateDoc(selectedDayDocRef, {
+          tasks: tasks,
+          updatedAt: serverTimestamp()
+        });
+
+        selectedDayRoutine.value = tasks;
+        console.log('Voice note saved to Firestore');
+      }
+
+      // ✅ Stop mic after recording finishes
+      if (mediaStream.value) {
+        mediaStream.value.getTracks().forEach(track => track.stop());
+        mediaStream.value = null;
+      }
+    };
+
+    mediaRecorder.value.start();
+    recording.value = true;
+  } catch (err) {
+    console.error('Error starting recording:', err);
+  }
+};
+
+const stopRecording = () => {
+  if (mediaRecorder.value && recording.value) {
+    mediaRecorder.value.stop();
+    recording.value = false;
+
+    // ✅ Also stop the mic in case onstop isn't triggered (just in case)
+    if (mediaStream.value) {
+      mediaStream.value.getTracks().forEach(track => track.stop());
+      mediaStream.value = null;
+    }
+  }
+};
+const removeVoiceNote = async (index) => {
+  const task = selectedDayRoutine.value[index];
+  if (!task || !task.voiceNote) return;
+
+  try {
+    // Delete from Firebase Storage
+    const storage = getStorage();
+    const fileRef = storageRef(storage, task.voiceNote);
+    await deleteObject(fileRef);
+
+    // Remove voiceNote from the task
+    task.voiceNote = null;
+
+    // Update Firestore
+    const selectedDayDocRef = doc(db, 'weeklyRoutines', `${userId.value}_${days[selectedDayIndex.value].day}`);
+    const snapshot = await getDoc(selectedDayDocRef);
+
+    if (snapshot.exists()) {
+      const tasks = snapshot.data().tasks || [];
+      tasks[index] = task;
+
+      await updateDoc(selectedDayDocRef, {
+        tasks,
+        updatedAt: serverTimestamp()
+      });
+
+      selectedDayRoutine.value = tasks;
+      console.log("Voice note removed");
+    }
+  } catch (error) {
+    console.error("Error removing voice note:", error);
+  }
+};
 </script>
 
 
