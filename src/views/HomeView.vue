@@ -391,7 +391,12 @@
             <h2 class="text-lg font-semibold text-gray-800">Voice Note</h2>
             <button @click="closeVoiceNoteModal" class="text-gray-500 hover:text-gray-700 text-xl">✕</button>
           </div>
-          <audio :src="currentVoiceNoteURL" controls class="w-full rounded-md mb-4 shadow" />
+          <audio
+              :src="currentVoiceNoteURL"
+              controls
+              playsinline
+              class="w-full max-w-2xl rounded-xl shadow-inner mb-6"
+          ></audio>
           <button
               @click="removeVoiceNote(currentVoiceNoteIndex); closeVoiceNoteModal();"
               class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 text-sm"
@@ -2395,7 +2400,8 @@ const startRecording = async (index) => {
 
   try {
     mediaStream.value = await navigator.mediaDevices.getUserMedia({ audio: true }); // ✅ store the stream
-    mediaRecorder.value = new MediaRecorder(mediaStream.value);
+    mediaRecorder.value = new MediaRecorder(stream, { mimeType: 'audio/mp4' }); // safer
+
     audioChunks.value = [];
 
     mediaRecorder.value.ondataavailable = event => {
