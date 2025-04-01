@@ -382,24 +382,88 @@
       </div>
 
 
-      <div
-          v-if="voiceNoteModalOpen"
-          class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
-      >
-        <div class="bg-white p-6 rounded-xl shadow-lg ">
-          <div class="flex justify-between items-center mb-4">
-            <h2 class="text-lg font-semibold text-gray-800">Voice Note</h2>
-            <button @click="closeVoiceNoteModal" class="text-gray-500 hover:text-gray-700 text-xl">✕</button>
+      <!-- Task Detail Modal -->
+      <div v-if="taskDetailModalOpen" id="task-detail-modal" tabindex="-1" aria-hidden="true"
+           class="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto overflow-x-hidden bg-black bg-opacity-50">
+        <div class="relative p-4 w-full max-w-md max-h-full">
+          <div class="relative bg-white rounded-2xl shadow-lg dark:bg-gray-800">
+            <!-- Header -->
+            <div class="flex items-center justify-between p-5 border-b border-gray-200 dark:border-gray-700 rounded-t">
+              <h3 class="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                <svg class="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor"
+                     stroke-width="2" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4"></path></svg>
+                Task Details
+              </h3>
+              <button @click="closeTaskDetailModal"
+                      class="text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg p-1 transition">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2"
+                     viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round"
+                                               d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+
+            <!-- Body -->
+            <div class="p-5 space-y-4 text-sm text-gray-700 dark:text-gray-200">
+              <!-- Title -->
+              <div class="flex items-center gap-3">
+                <svg class="w-5 h-5 text-gray-500 dark:text-gray-300" fill="none" stroke="currentColor"
+                     stroke-width="2" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"></path></svg>
+                <span class="font-medium">Title:</span> {{ taskDetail.title }}
+              </div>
+
+              <!-- Reminder -->
+              <div v-if="taskDetail.reminder?.date && taskDetail.reminder?.time" class="flex items-center gap-3">
+                <svg class="w-5 h-5 text-gray-500 dark:text-gray-300" fill="none" stroke="currentColor"
+                     stroke-width="2" viewBox="0 0 24 24"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2z"/></svg>
+                <span class="font-medium">Reminder:</span> {{ formatShortDate(taskDetail.reminder.date) }} at {{ formatTime(taskDetail.reminder.time) }}
+              </div>
+
+              <!-- Type -->
+              <div class="flex items-center gap-3">
+                <svg class="w-5 h-5 text-gray-500 dark:text-gray-300" fill="none" stroke="currentColor"
+                     stroke-width="2" viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/></svg>
+                <span class="font-medium">Type:</span> {{ taskDetail.type }}
+              </div>
+
+              <!-- Notes -->
+              <div v-if="taskDetail.notes" class="flex items-start gap-3">
+                <svg class="w-5 h-5 text-gray-500 dark:text-gray-300" fill="none" stroke="currentColor"
+                     stroke-width="2" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9l7 7v9a2 2 0 0 1-2 2z"/></svg>
+                <div>
+                  <div class="font-medium">Notes:</div>
+                  <div class="text-gray-600 dark:text-gray-400">{{ taskDetail.notes }}</div>
+                </div>
+              </div>
+
+              <!-- Labels -->
+              <div v-if="taskDetail.labels?.length" class="flex items-start gap-3">
+                <svg class="w-5 h-5 text-gray-500 dark:text-gray-300" fill="none" stroke="currentColor"
+                     stroke-width="2" viewBox="0 0 24 24"><path d="M7 7h10v10H7z"/></svg>
+                <div>
+                  <div class="font-medium">Labels:</div>
+                  <div class="flex flex-wrap gap-2 mt-1">
+              <span v-for="(label, index) in taskDetail.labels" :key="index"
+                    class="bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100 px-2 py-1 rounded text-xs">
+                {{ label }}
+              </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Footer -->
+            <div class="p-4 border-t border-gray-200 dark:border-gray-700 text-right">
+              <button @click="closeTaskDetailModal"
+                      class="inline-flex items-center justify-center text-white bg-blue-600 hover:bg-blue-700 focus:ring-4 focus:ring-blue-300 font-medium rounded-lg text-sm px-5 py-2 dark:bg-blue-500 dark:hover:bg-blue-600 dark:focus:ring-blue-700">
+                Close
+              </button>
+            </div>
           </div>
-          <audio :src="currentVoiceNoteURL" controls class="w-full rounded-md mb-4 shadow" />
-          <button
-              @click="removeVoiceNote(currentVoiceNoteIndex); closeVoiceNoteModal();"
-              class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 text-sm"
-          >
-            Delete Voice Note ❌
-          </button>
         </div>
       </div>
+
+
+
 
 
 
@@ -475,7 +539,7 @@
                       <div
                           class="text-lg font-semibold text-gray-800"
                           :class="{ 'line-through text-gray-500': task.completed && isToday(selectedDayIndex) }"
-                          @click="task.voiceNote && openVoiceNoteModal(task.voiceNote, index)"
+                          @click="openTaskDetailModal(task)"
                       >
                         {{ task.title }}
                       </div>
@@ -485,16 +549,7 @@
                         </div>
 
                       </div>
-                      <div v-if="task.voiceNote" class="mt-2 flex items-center gap-2 bg-gray-100 p-2 rounded-lg shadow-sm w-fit max-w-xs">
-                        <audio :src="task.voiceNote" controls class="h-8 w-48 rounded-md"></audio>
-                        <button
-                            @click="removeVoiceNote(index)"
-                            class="text-gray-500 hover:text-red-500 text-base font-bold"
-                            title="Remove voice note"
-                        >
-                          ❌
-                        </button>
-                      </div>
+
 
 
 
@@ -631,9 +686,7 @@
                       >
                         🚫
                       </button>
-                      <!-- Replace `task.id` with the actual task ID -->
-                      <button @click="startRecording(index)" v-if="!recording">🎙️</button>
-                      <button @click="stopRecording" v-if="recording">🛑 </button>
+
 
                       <button
                           @click="showTimerModal = true"
@@ -2284,11 +2337,7 @@ const getTodayDate = () => {
   return formattedDate;
 };
 
-// Call the function to see the output
-const shouldDisplayTask = (task) => {
-  if (!showCompleted && task.completed && isToday(selectedDayIndex.value)) return false;
-  return true;
-};
+
 
 watch(modalOpen, (isOpen) => {
   document.body.style.overflow = isOpen ? "hidden" : "";
@@ -2388,130 +2437,18 @@ onMounted(async () => {
     isLoading.value = false; // Stop loading after data is fetched
   }
 });
-const recording = ref(false);
-const mediaRecorder = ref(null);
-const audioChunks = ref([]);
-const currentTaskId = ref(null);
-const mediaStream = ref(null); // ✅ store the mic stream to stop it later
-
-const startRecording = async (index) => {
-  if (index === null || index === undefined) {
-    console.error('Invalid task index');
-    return;
-  }
-
-  currentTaskId.value = index;
-
-  try {
-    mediaStream.value = await navigator.mediaDevices.getUserMedia({ audio: true }); // ✅ store the stream
-    mediaRecorder.value = new MediaRecorder(mediaStream.value);
-    audioChunks.value = [];
-
-    mediaRecorder.value.ondataavailable = event => {
-      if (event.data.size > 0) {
-        audioChunks.value.push(event.data);
-      }
-    };
-
-    mediaRecorder.value.onstop = async () => {
-      const audioBlob = new Blob(audioChunks.value, { type: 'audio/webm' });
-
-      const fileName = `voiceNotes/${userId.value}_${days[selectedDayIndex.value].day}_task${currentTaskId.value}_${Date.now()}.webm`;
-      const storage = getStorage();
-      const storageRefInstance = storageRef(storage, fileName);
-      await uploadBytes(storageRefInstance, audioBlob);
-      const downloadURL = await getDownloadURL(storageRefInstance);
-
-      // Update the voiceNote field of the correct task
-      const selectedDayDocRef = doc(db, 'weeklyRoutines', `${userId.value}_${days[selectedDayIndex.value].day}`);
-      const selectedDayDocSnapshot = await getDoc(selectedDayDocRef);
-      if (selectedDayDocSnapshot.exists()) {
-        const tasks = selectedDayDocSnapshot.data().tasks || [];
-
-        tasks[currentTaskId.value].voiceNote = downloadURL;
-
-        await updateDoc(selectedDayDocRef, {
-          tasks: tasks,
-          updatedAt: serverTimestamp()
-        });
-
-        selectedDayRoutine.value = tasks;
-        console.log('Voice note saved to Firestore');
-      }
-
-      // ✅ Stop mic after recording finishes
-      if (mediaStream.value) {
-        mediaStream.value.getTracks().forEach(track => track.stop());
-        mediaStream.value = null;
-      }
-    };
-
-    mediaRecorder.value.start();
-    recording.value = true;
-  } catch (err) {
-    console.error('Error starting recording:', err);
-  }
+const taskDetailModalOpen = ref(false);
+const taskDetail = ref({});
+const openTaskDetailModal = (task) => {
+  taskDetail.value = task;
+  taskDetailModalOpen.value = true;
 };
 
-const stopRecording = () => {
-  if (mediaRecorder.value && recording.value) {
-    mediaRecorder.value.stop();
-    recording.value = false;
-
-    // ✅ Also stop the mic in case onstop isn't triggered (just in case)
-    if (mediaStream.value) {
-      mediaStream.value.getTracks().forEach(track => track.stop());
-      mediaStream.value = null;
-    }
-  }
-};
-const removeVoiceNote = async (index) => {
-  const task = selectedDayRoutine.value[index];
-  if (!task || !task.voiceNote) return;
-
-  try {
-    // Delete from Firebase Storage
-    const storage = getStorage();
-    const fileRef = storageRef(storage, task.voiceNote);
-    await deleteObject(fileRef);
-
-    // Remove voiceNote from the task
-    task.voiceNote = null;
-
-    // Update Firestore
-    const selectedDayDocRef = doc(db, 'weeklyRoutines', `${userId.value}_${days[selectedDayIndex.value].day}`);
-    const snapshot = await getDoc(selectedDayDocRef);
-
-    if (snapshot.exists()) {
-      const tasks = snapshot.data().tasks || [];
-      tasks[index] = task;
-
-      await updateDoc(selectedDayDocRef, {
-        tasks,
-        updatedAt: serverTimestamp()
-      });
-
-      selectedDayRoutine.value = tasks;
-      console.log("Voice note removed");
-    }
-  } catch (error) {
-    console.error("Error removing voice note:", error);
-  }
-};
-const voiceNoteModalOpen = ref(false);
-const currentVoiceNoteURL = ref(null);
-const currentVoiceNoteIndex = ref(null); // to handle deletion
-const openVoiceNoteModal = (voiceNoteURL, index) => {
-  currentVoiceNoteURL.value = voiceNoteURL;
-  currentVoiceNoteIndex.value = index;
-  voiceNoteModalOpen.value = true;
+const closeTaskDetailModal = () => {
+  taskDetailModalOpen.value = false;
+  taskDetail.value = {};
 };
 
-const closeVoiceNoteModal = () => {
-  voiceNoteModalOpen.value = false;
-  currentVoiceNoteURL.value = null;
-  currentVoiceNoteIndex.value = null;
-};
 </script>
 
 
