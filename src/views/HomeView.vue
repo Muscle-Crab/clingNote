@@ -1369,6 +1369,8 @@ const sortedSelectedDayRoutine = computed(() => {
 });
 
 const deleteTask = async (index) => {
+  const confirmed = confirm("Are you sure you want to delete this task?");
+  if (!confirmed) return;
   const selectedDayDocRef = doc(db, 'weeklyRoutines', `${userId.value}_${days[selectedDayIndex.value].day}`);
 
   try {
