@@ -410,7 +410,9 @@
                      stroke-width="2" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"></path></svg>
                 <span class="font-medium">Title:</span> {{ taskDetail.title }}
               </div>
-
+              <div v-if="taskDetail.imageURL" class="mt-3">
+                <img :src="taskDetail.imageURL" class="rounded-lg max-h-60 object-contain" alt="Task Image" />
+              </div>
               <!-- Reminder -->
               <div v-if="taskDetail.reminder?.date && taskDetail.reminder?.time" class="flex items-center gap-3">
                 <svg class="w-5 h-5 text-gray-500 dark:text-gray-300" fill="none" stroke="currentColor"
@@ -541,7 +543,9 @@
                           :class="{ 'line-through text-gray-500': task.completed && isToday(selectedDayIndex) }"
                           @click="openTaskDetailModal(task)"
                       >
-                        {{ task.title }}
+                        {{ task.title }}<span v-if="task.imageURL" class="ml-2 text-blue-500 text-sm">
+                        🖼️
+                      </span>
                       </div>
                       <div v-if="task.reminder?.date && task.reminder?.time" class="text-sm text-gray-500 mt-1">
                         <div v-if="task.reminder?.date && task.reminder?.time" class="text-sm text-gray-500 mt-1">
@@ -686,7 +690,10 @@
                       >
                         🚫
                       </button>
-
+                      <button @click="triggerImageUpload(index)">
+                        📷
+                      </button>
+                      <input type="file" ref="fileInput" accept="image/*" @change="handleImageUpload($event, index)" class="hidden" />
 
                       <button
                           @click="showTimerModal = true"
@@ -695,6 +702,7 @@
                       >
                         ⏱️
                       </button>
+
                       <div v-if="showTimerModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
                         <div class="bg-white rounded-xl shadow-xl p-6 w-96">
                           <h3 class="text-xl font-semibold mb-4">Set a Timer</h3>
@@ -2447,6 +2455,42 @@ const openTaskDetailModal = (task) => {
 const closeTaskDetailModal = () => {
   taskDetailModalOpen.value = false;
   taskDetail.value = {};
+};
+const triggerImageUpload = (index) => {
+  const fileInput = document.querySelectorAll('input[type="file"]')[index];
+  fileInput.click();
+};
+const handleImageUpload = async (event, taskIndex) => {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const validTypes = ['image/jpeg', 'image/png', 'image/webp'];
+  const maxSize = 2 * 1024 * 1024; // 2MB max
+
+  if (!validTypes.includes(file.type)) {
+    alert('Only JPEG, PNG, or WEBP allowed.');
+    return;
+  }
+  if (file.size > maxSize) {
+    alert('Image size must be under 2MB.');
+    return;
+  }
+
+  const storage = getStorage();
+  const storageReference = storageRef(storage, `task_images/${userId.value}_${Date.now()}_${file.name}`);
+  await uploadBytes(storageReference, file);
+  const downloadURL = await getDownloadURL(storageReference);
+
+  // Update task with image URL
+  const selectedDayDocRef = doc(db, 'weeklyRoutines', `${userId.value}_${days[selectedDayIndex.value].day}`);
+  const docSnap = await getDoc(selectedDayDocRef);
+  if (!docSnap.exists()) return;
+
+  const tasks = docSnap.data().tasks;
+  tasks[taskIndex].imageURL = downloadURL;
+
+  await updateDoc(selectedDayDocRef, { tasks });
+  selectedDayRoutine.value[taskIndex].imageURL = downloadURL;
 };
 
 </script>
