@@ -410,9 +410,22 @@
                      stroke-width="2" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"></path></svg>
                 <span class="font-medium">Title:</span> {{ taskDetail.title }}
               </div>
-              <div v-if="taskDetail.imageURL" class="mt-3">
-                <img :src="taskDetail.imageURL" class="rounded-lg max-h-60 object-contain" alt="Task Image" />
+              <div v-if="taskDetail.imageURL" class="mt-3 relative group">
+                <img
+                    :src="taskDetail.imageURL"
+                    class="rounded-lg max-h-60 object-contain w-full"
+                    alt="Task Image"
+                />
+                <!-- X icon on hover -->
+                <button
+                    @click="removeTaskImage"
+                    class="absolute top-2 right-2 bg-red-500 hover:bg-red-600 text-white rounded-full p-1 text-xs shadow-md group-hover:block transition-opacity"
+                    title="Remove image"
+                >
+                  ✕
+                </button>
               </div>
+
               <!-- Reminder -->
               <div v-if="taskDetail.reminder?.date && taskDetail.reminder?.time" class="flex items-center gap-3">
                 <svg class="w-5 h-5 text-gray-500 dark:text-gray-300" fill="none" stroke="currentColor"
@@ -2491,6 +2504,37 @@ const handleImageUpload = async (event, taskIndex) => {
 
   await updateDoc(selectedDayDocRef, { tasks });
   selectedDayRoutine.value[taskIndex].imageURL = downloadURL;
+};
+const removeTaskImage = async () => {
+  if (!taskDetail.value.imageURL) return;
+
+  const confirmed = confirm("Are you sure you want to remove this image?");
+  if (!confirmed) return;
+
+  try {
+    const selectedDayDocRef = doc(db, 'weeklyRoutines', `${userId.value}_${days[selectedDayIndex.value].day}`);
+    const docSnap = await getDoc(selectedDayDocRef);
+
+    if (docSnap.exists()) {
+      const tasks = docSnap.data().tasks;
+      const taskIndex = tasks.findIndex(t => t.title === taskDetail.value.title && t.createdAt === taskDetail.value.createdAt);
+      if (taskIndex !== -1) {
+        // Optionally delete from Firebase Storage
+        if (taskDetail.value.imageURL.includes('firebase')) {
+          const imageRef = storageRef(getStorage(), taskDetail.value.imageURL);
+          await deleteObject(imageRef);
+        }
+
+        tasks[taskIndex].imageURL = null;
+        await updateDoc(selectedDayDocRef, { tasks });
+        selectedDayRoutine.value[taskIndex].imageURL = null;
+        taskDetail.value.imageURL = null;
+        console.log("Image removed.");
+      }
+    }
+  } catch (error) {
+    console.error("Error removing image:", error);
+  }
 };
 
 </script>
