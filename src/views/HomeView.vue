@@ -405,27 +405,45 @@
             <!-- Body -->
             <div class="p-5 space-y-4 text-sm text-gray-700 dark:text-gray-200">
               <!-- Title -->
-              <div class="flex items-center gap-3">
-                <svg class="w-5 h-5 text-gray-500 dark:text-gray-300" fill="none" stroke="currentColor"
-                     stroke-width="2" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"></path></svg>
-                <span class="font-medium">Title:</span> {{ taskDetail.title }}
+              <div class="flex items-center gap-3 text-2xl font-semibold text-gray-800 dark:text-white">
+                <span class="font-medium"></span> {{ taskDetail.title }}
               </div>
+
               <div v-if="taskDetail.imageURL" class="mt-3 relative group">
                 <img
                     :src="taskDetail.imageURL"
                     class="rounded-lg max-h-60 object-contain w-full"
                     alt="Task Image"
                 />
-                <!-- X icon on hover -->
                 <button
-                    @click="removeTaskImage"
-                    class="absolute top-2 right-2 bg-red-500 hover:bg-red-600 text-white rounded-full p-1 text-xs shadow-md group-hover:block transition-opacity"
+                    @click="removeTaskAttachment('imageURL')"
+                    class="absolute top-2 right-2 bg-red-500 hover:bg-red-600 text-white rounded-full p-1 text-xs shadow-md group-hover:block"
                     title="Remove image"
                 >
                   ✕
                 </button>
               </div>
 
+              <!-- PDF or Other File PREVIEW -->
+              <div v-if="taskDetail.fileURL" class="mt-3 relative group">
+                <div class="flex items-center space-x-2 p-2 bg-gray-100 rounded shadow">
+                  📄
+                  <a
+                      :href="taskDetail.fileURL"
+                      target="_blank"
+                      class="text-blue-600 hover:underline"
+                  >
+                    {{ taskDetail.fileName || 'Download File' }}
+                  </a>
+                </div>
+                <button
+                    @click="removeTaskAttachment('fileURL')"
+                    class="absolute top-2 right-2 bg-red-500 hover:bg-red-600 text-white rounded-full p-1 text-xs shadow-md group-hover:block"
+                    title="Remove file"
+                >
+                  ✕
+                </button>
+              </div>
               <!-- Reminder -->
               <div v-if="taskDetail.reminder?.date && taskDetail.reminder?.time" class="flex items-center gap-3">
                 <svg class="w-5 h-5 text-gray-500 dark:text-gray-300" fill="none" stroke="currentColor"
@@ -433,12 +451,6 @@
                 <span class="font-medium">Reminder:</span> {{ formatShortDate(taskDetail.reminder.date) }} at {{ formatTime(taskDetail.reminder.time) }}
               </div>
 
-              <!-- Type -->
-              <div class="flex items-center gap-3">
-                <svg class="w-5 h-5 text-gray-500 dark:text-gray-300" fill="none" stroke="currentColor"
-                     stroke-width="2" viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/></svg>
-                <span class="font-medium">Type:</span> {{ taskDetail.type }}
-              </div>
 
               <!-- Notes -->
               <div v-if="taskDetail.notes" class="flex items-start gap-3">
@@ -709,10 +721,11 @@
                       <input
                           type="file"
                           :ref="'fileInput_' + index"
-                          accept="image/*"
-                          @change="handleImageUpload($event, index)"
+                          accept="image/*,.pdf,.doc,.docx,.txt"
+                          @change="handleUpload($event, index)"
                           class="hidden"
                       />
+
 
 
                       <button
@@ -2485,42 +2498,51 @@ const triggerImageUpload = (index) => {
   const input = proxy.$refs[inputRef];
   if (input) input.click();
 };
-const handleImageUpload = async (event, taskIndex) => {
+const handleUpload = async (event, taskIndex) => {
   const file = event.target.files[0];
   if (!file) return;
 
-  const validTypes = ['image/jpeg', 'image/png', 'image/webp'];
-  const maxSize = 5 * 1024 * 1024; // 2MB max
-
-  if (!validTypes.includes(file.type)) {
-    alert('Only JPEG, PNG, or WEBP allowed.');
+  const maxSize = 5 * 1024 * 1024;
+  if (file.size > maxSize) {
+    alert('File size must be under 5MB.');
     return;
   }
-  if (file.size > maxSize) {
-    alert('Image size must be under 2MB.');
+
+  const isImage = file.type.startsWith('image/');
+  const isDoc = file.type.includes('pdf') || file.type.includes('msword') || file.type.includes('text');
+
+  if (!isImage && !isDoc) {
+    alert('Only images or common documents allowed.');
     return;
   }
 
   const storage = getStorage();
-  const storageReference = storageRef(storage, `task_images/${userId.value}_${Date.now()}_${file.name}`);
-  await uploadBytes(storageReference, file);
-  const downloadURL = await getDownloadURL(storageReference);
+  const path = isImage ? 'task_images' : 'task_files';
+  const fileRef = storageRef(storage, `${path}/${userId.value}_${Date.now()}_${file.name}`);
+  await uploadBytes(fileRef, file);
+  const downloadURL = await getDownloadURL(fileRef);
 
-  // Update task with image URL
+  // Update task with appropriate URL
   const selectedDayDocRef = doc(db, 'weeklyRoutines', `${userId.value}_${days[selectedDayIndex.value].day}`);
   const docSnap = await getDoc(selectedDayDocRef);
   if (!docSnap.exists()) return;
 
   const tasks = docSnap.data().tasks;
-  tasks[taskIndex].imageURL = downloadURL;
+  if (isImage) {
+    tasks[taskIndex].imageURL = downloadURL;
+  } else {
+    tasks[taskIndex].fileURL = downloadURL;
+    tasks[taskIndex].fileName = file.name;
+  }
 
   await updateDoc(selectedDayDocRef, { tasks });
-  selectedDayRoutine.value[taskIndex].imageURL = downloadURL;
+  selectedDayRoutine.value[taskIndex] = tasks[taskIndex];
 };
-const removeTaskImage = async () => {
-  if (!taskDetail.value.imageURL) return;
 
-  const confirmed = confirm("Are you sure you want to remove this image?");
+const removeTaskAttachment = async (field) => {
+  if (!taskDetail.value?.[field]) return;
+
+  const confirmed = confirm(`Are you sure you want to remove this ${field.includes("image") ? "image" : "file"}?`);
   if (!confirmed) return;
 
   try {
@@ -2529,25 +2551,47 @@ const removeTaskImage = async () => {
 
     if (docSnap.exists()) {
       const tasks = docSnap.data().tasks;
-      const taskIndex = tasks.findIndex(t => t.title === taskDetail.value.title && t.createdAt === taskDetail.value.createdAt);
+      const taskIndex = tasks.findIndex(t =>
+          t.title === taskDetail.value.title &&
+          t.createdAt === taskDetail.value.createdAt
+      );
+
       if (taskIndex !== -1) {
+        const url = taskDetail.value[field];
+
         // Optionally delete from Firebase Storage
-        if (taskDetail.value.imageURL.includes('firebase')) {
-          const imageRef = storageRef(getStorage(), taskDetail.value.imageURL);
-          await deleteObject(imageRef);
+        if (url?.includes('firebase')) {
+          const fileRef = storageRef(getStorage(), url);
+          await deleteObject(fileRef);
         }
 
-        tasks[taskIndex].imageURL = null;
+        // Remove the file/image fields
+        tasks[taskIndex][field] = null;
+
+        // If file, also remove name/type
+        if (field === 'fileURL') {
+          tasks[taskIndex].fileName = null;
+          tasks[taskIndex].fileType = null;
+        }
+
         await updateDoc(selectedDayDocRef, { tasks });
-        selectedDayRoutine.value[taskIndex].imageURL = null;
-        taskDetail.value.imageURL = null;
-        console.log("Image removed.");
+
+        // Update local state
+        selectedDayRoutine.value[taskIndex][field] = null;
+        taskDetail.value[field] = null;
+        if (field === 'fileURL') {
+          taskDetail.value.fileName = null;
+          taskDetail.value.fileType = null;
+        }
+
+        console.log(`${field} removed.`);
       }
     }
   } catch (error) {
-    console.error("Error removing image:", error);
+    console.error(`Error removing ${field}:`, error);
   }
 };
+
 
 </script>
 
