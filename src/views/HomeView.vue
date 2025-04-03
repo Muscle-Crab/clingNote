@@ -706,7 +706,14 @@
                       <button @click="triggerImageUpload(index)">
                         📷
                       </button>
-                      <input type="file" ref="fileInput" accept="image/*" @change="handleImageUpload($event, index)" class="hidden" />
+                      <input
+                          type="file"
+                          :ref="'fileInput_' + index"
+                          accept="image/*"
+                          @change="handleImageUpload($event, index)"
+                          class="hidden"
+                      />
+
 
                       <button
                           @click="showTimerModal = true"
@@ -843,7 +850,9 @@ import axios from 'axios';
 import { deleteObject } from "firebase/storage";
 import TimeTracker from "@/components/TimeTracker.vue";
 import SocialMediaAccess from "@/components/SocialMediaAccess.vue"
-// Define reactive state
+import { getCurrentInstance } from 'vue';
+
+const { proxy } = getCurrentInstance();
 
 const currentTime = ref([]);
 const showAdvanced = ref(false)
@@ -2472,8 +2481,9 @@ const closeTaskDetailModal = () => {
   taskDetail.value = {};
 };
 const triggerImageUpload = (index) => {
-  const fileInput = document.querySelectorAll('input[type="file"]')[index];
-  fileInput.click();
+  const inputRef = `fileInput_${index}`;
+  const input = proxy.$refs[inputRef];
+  if (input) input.click();
 };
 const handleImageUpload = async (event, taskIndex) => {
   const file = event.target.files[0];
