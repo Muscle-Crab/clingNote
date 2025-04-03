@@ -2490,7 +2490,7 @@ const handleImageUpload = async (event, taskIndex) => {
   if (!file) return;
 
   const validTypes = ['image/jpeg', 'image/png', 'image/webp'];
-  const maxSize = 2 * 1024 * 1024; // 2MB max
+  const maxSize = 5 * 1024 * 1024; // 2MB max
 
   if (!validTypes.includes(file.type)) {
     alert('Only JPEG, PNG, or WEBP allowed.');
