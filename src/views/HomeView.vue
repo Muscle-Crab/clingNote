@@ -580,8 +580,8 @@
                           :class="{ 'line-through text-gray-500': task.completed && isToday(selectedDayIndex) }"
                           @click="openTaskDetailModal(task)"
                       >
-                        {{ task.title }}<span v-if="task.imageURL" class="ml-2 text-blue-500 text-sm">
-                        🖼️
+                        {{ task.title }}<span v-if="task.imageURL || task.fileURL" class="ml-2 text-blue-500 text-sm">
+                       📄
                       </span>
                       </div>
                       <div v-if="task.reminder?.date && task.reminder?.time" class="text-sm text-gray-500 mt-1">
@@ -728,7 +728,7 @@
                         🚫
                       </button>
                       <button @click="triggerImageUpload(index)">
-                        📷
+                        📎
                       </button>
                       <input
                           type="file"
