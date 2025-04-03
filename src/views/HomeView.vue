@@ -412,8 +412,9 @@
               <div v-if="taskDetail.imageURL" class="mt-3 relative group">
                 <img
                     :src="taskDetail.imageURL"
-                    class="rounded-lg max-h-60 object-contain w-full"
+                    class="rounded-lg max-h-60 object-contain w-full cursor-pointer"
                     alt="Task Image"
+                    @click="showImagePreview = true"
                 />
                 <button
                     @click="removeTaskAttachment('imageURL')"
@@ -490,7 +491,18 @@
       </div>
 
 
-
+      <!-- Fullscreen Image Preview -->
+      <div
+          v-if="showImagePreview"
+          class="fixed inset-0 bg-black bg-opacity-80 z-50 flex items-center justify-center"
+          @click="showImagePreview = false"
+      >
+        <img
+            :src="taskDetail.imageURL"
+            class="max-w-full max-h-full rounded-xl shadow-lg border-4 border-white"
+            alt="Full Image Preview"
+        />
+      </div>
 
 
 
@@ -2592,6 +2604,7 @@ const removeTaskAttachment = async (field) => {
   }
 };
 
+const showImagePreview = ref(false);
 
 </script>
 
