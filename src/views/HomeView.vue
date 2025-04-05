@@ -2619,17 +2619,23 @@ const toggleTaskImportance = async (index) => {
   const task = { ...selectedDayRoutine.value[index] };
   task.important = !task.important;
 
+  // Voice feedback
+  const voiceMessage = task.important ? 'Marked as important' : 'No longer marked as important';
+  speak(voiceMessage);
+
+  // Update local array
   selectedDayRoutine.value.splice(index, 1, task);
 
+  // Update Firestore
   const selectedDayDocRef = doc(db, 'weeklyRoutines', `${userId.value}_${days[selectedDayIndex.value].day}`);
   const docSnap = await getDoc(selectedDayDocRef);
   if (!docSnap.exists()) return;
 
   const tasks = docSnap.data().tasks;
   tasks[index] = task;
-
   await updateDoc(selectedDayDocRef, { tasks });
 };
+
 
 </script>
 
