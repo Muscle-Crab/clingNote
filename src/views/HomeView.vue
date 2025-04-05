@@ -590,7 +590,10 @@
                         </div>
 
                       </div>
-
+                      <CountdownProgress
+                          v-if="task.reminder && task.reminder.date && task.reminder.time"
+                          :reminderTime="`${task.reminder.date}T${task.reminder.time}`"
+                      />
 
 
 
@@ -876,6 +879,7 @@ import { deleteObject } from "firebase/storage";
 import TimeTracker from "@/components/TimeTracker.vue";
 import SocialMediaAccess from "@/components/SocialMediaAccess.vue"
 import { getCurrentInstance } from 'vue';
+import CountdownProgress from '@/components/CountdownProgress.vue';
 
 const { proxy } = getCurrentInstance();
 
