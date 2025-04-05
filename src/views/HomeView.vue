@@ -555,11 +555,11 @@
               <template #item="{ element: task, index }">
                 <div   v-if="(!task.completed || (isToday(selectedDayIndex) && showCompleted))"
                     class="task-card bg-white rounded-xl shadow-lg p-5 relative hover:shadow-xl transition-shadow duration-300"
-                    :class="{
-    'bg-gray-200': task.completed && isToday(selectedDayIndex), // Add a light green background for completed tasks
-     // Add a light red background for incomplete tasks
-    'draggable': taskIsDragging
-  }"
+                       :class="{
+  'bg-gray-200': task.completed && isToday(selectedDayIndex),
+  'border-red-600 border-2 shadow-lg': task.important, // NEW visual for important
+  'draggable': taskIsDragging
+}"
                 >
                   <div class="flex items-center ">
                     <!-- Drag Icon -->
@@ -583,6 +583,7 @@
                         {{ task.title }}<span v-if="task.imageURL || task.fileURL" class="ml-2 text-blue-500 text-sm">
                        📄
                       </span>
+
                       </div>
                       <div v-if="task.reminder?.date && task.reminder?.time" class="text-sm text-gray-500 mt-1">
                         <div v-if="task.reminder?.date && task.reminder?.time" class="text-sm text-gray-500 mt-1">
@@ -615,6 +616,13 @@
                         <div v-if="!task.completed && isToday(selectedDayIndex)" class="text-yellow-500">
                           <i class="fas fa-circle"></i> Incomplete
                         </div>
+                        <button
+                            @click="toggleTaskImportance(index)"
+                            class="text-xl hover:scale-110 transition-transform"
+                            :title="task.important ? 'Marked as Important' : 'Mark as Important'"
+                        >
+                          <i :class="task.important ? 'fas fa-fire text-red-500' : 'fas fa-fire text-gray-400'" />
+                        </button>
                         <div>
                           <!-- Button to Open Modal -->
 
@@ -651,10 +659,10 @@
                           </div>
 
                         </div>
-                        <!-- In Progress Task Indicator -->
-                        <div v-if="isToday(selectedDayIndex) && index === topIncompleteTaskIndex" class="text-blue-500 flex items-center">
-                          <i class="fas fa-hourglass-half animate-spin-slow mr-1"></i> In Progress
-                        </div>
+<!--                        &lt;!&ndash; In Progress Task Indicator &ndash;&gt;-->
+<!--                        <div v-if="isToday(selectedDayIndex) && index === topIncompleteTaskIndex" class="text-blue-500 flex items-center">-->
+<!--                          <i class="fas fa-hourglass-half animate-spin-slow mr-1"></i> In Progress-->
+<!--                        </div>-->
 
                         <!-- Completed Task Indicator -->
                         <div v-if="task.completed && isToday(selectedDayIndex)"  class="text-green-500">
@@ -1778,6 +1786,7 @@ const addNewTask = async () => {
   const task = {
     title: newTask.value.title.trim(),
     completed: false,
+    important: false,
     time: '', // fallback in case reminder isn't set
     priority: newTask.value.priority,
     labels: labels,
@@ -2606,6 +2615,21 @@ const removeTaskAttachment = async (field) => {
 };
 
 const showImagePreview = ref(false);
+const toggleTaskImportance = async (index) => {
+  const task = { ...selectedDayRoutine.value[index] };
+  task.important = !task.important;
+
+  selectedDayRoutine.value.splice(index, 1, task);
+
+  const selectedDayDocRef = doc(db, 'weeklyRoutines', `${userId.value}_${days[selectedDayIndex.value].day}`);
+  const docSnap = await getDoc(selectedDayDocRef);
+  if (!docSnap.exists()) return;
+
+  const tasks = docSnap.data().tasks;
+  tasks[index] = task;
+
+  await updateDoc(selectedDayDocRef, { tasks });
+};
 
 </script>
 
