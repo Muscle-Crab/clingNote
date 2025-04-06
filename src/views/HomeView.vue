@@ -2137,10 +2137,10 @@ const checkStreakOnCompletion = async () => {
   if (!userId.value) return;
 
   const completionPercentage = calculateCompletionPercentage();
-  const today = new Date().toISOString().split('T')[0]; // Current date
+  const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
-  const yesterdayStr = yesterday.toISOString().split('T')[0]; // Yesterday's date
+  const yesterdayStr = yesterday.toISOString().split('T')[0];
 
   try {
     const streakDocRef = doc(db, 'streaks', userId.value);
@@ -2151,37 +2151,45 @@ const checkStreakOnCompletion = async () => {
       lastCompletionDate.value = data.lastCompletionDate || null;
       streak.value = data.streak || 0;
 
+      // 🛡️ Avoid double updates in one day
+      if (lastCompletionDate.value === today) {
+        console.log("✅ Streak already updated today");
+        return;
+      }
+
       if (completionPercentage === 100) {
-        // Increment streak if all tasks completed and the last completion date has passed
         const lastDate = new Date(lastCompletionDate.value);
         const todayDate = new Date(today);
 
-        if (lastDate < todayDate) {
-          const diffInDays = Math.floor((todayDate - lastDate) / (1000 * 60 * 60 * 24));
-          if (diffInDays === 1) {
-            streak.value += 1; // Continue streak
-          } else {
-            streak.value = 1; // Start a new streak
-          }
+        const diffInDays = Math.floor((todayDate - lastDate) / (1000 * 60 * 60 * 24));
 
-          lastCompletionDate.value = today; // Update completion date
+        if (diffInDays === 1) {
+          streak.value += 1; // Continue streak
+        } else {
+          streak.value = 1; // Restart streak
         }
+
+        lastCompletionDate.value = today;
+
+        console.log(`🔥 Streak updated to ${streak.value}`);
       } else {
-        // Reset streak if no tasks are completed
+        // Missed yesterday and today = reduce
         if (lastCompletionDate.value !== today && lastCompletionDate.value !== yesterdayStr) {
-          streak.value = Math.max(streak.value - 1, 0); // Reduce streak, min 0
-          lastCompletionDate.value = yesterdayStr; // Mark last missed day
+          streak.value = Math.max(streak.value - 1, 0);
+          lastCompletionDate.value = yesterdayStr;
+          console.log("⚠️ Streak reduced due to inactivity.");
         }
       }
 
-      await updateStreakInFirestore(); // Save changes
+      await updateStreakInFirestore();
       checkForBadges();
       updateMotivationalMessage();
     }
   } catch (error) {
-    console.error('Error updating streak:', error);
+    console.error('❌ Error updating streak:', error);
   }
 };
+
 
 // Function to check tasks and reduce streak
 const checkTasksAndReduceStreak = async () => {
