@@ -1494,6 +1494,7 @@ const toggleTaskCompletion = async (index) => {
   // Check streak after toggling task completion
   checkStreakOnCompletion();
   checkAllTasksCompleted();
+  await saveDailyPerformance();
   selectedDayRoutine.value = selectedDayRoutine.value.filter(task => !task.completed || showCompleted);
   showCompleted.value = false;
 };
@@ -1628,6 +1629,8 @@ const checkAllTasksCompleted = async () => {
     speak("Congratulations! You are free to do whatever you want");
     updateStreakOnCompletion();
     fetchSelectedDayRoutine()// 🔥 Update streak progression
+    await saveDailyPerformance();
+
     // 🗑 Remove one-time tasks & reset recurring tasks
     selectedDayRoutine.value = selectedDayRoutine.value.filter(task => {
       if (task.type === "one-time") {
@@ -1870,35 +1873,34 @@ const addNewTask = async () => {
 const speakDailyReport = async () => {
   const today = new Date();
   const yesterday = new Date(today);
-  yesterday.setDate(today.getDate() - 1);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayStr = yesterday.toISOString().split('T')[0];
 
-  const todayDateStr = today.toISOString().split('T')[0];
-  const yesterdayDateStr = yesterday.toISOString().split('T')[0];
-
-  const todayDay = days.find(day => day.date === todayDateStr);
-  const yesterdayDay = days.find(day => day.date === yesterdayDateStr);
+  const docRef = doc(db, 'dailyReports', `${userId.value}_${yesterdayStr}`);
+  const snapshot = await getDoc(docRef);
 
   let yesterdayCompleted = 0;
-  let todayTotal = selectedDayRoutine.value?.length || 0;
+  let yesterdayTotal = 0;
   let streakGained = false;
 
-  // Check yesterday's tasks
-  if (userId.value && yesterdayDay) {
-    const yesterdayDocRef = doc(db, 'weeklyRoutines', `${userId.value}_${yesterdayDay.day}`);
-    const snapshot = await getDoc(yesterdayDocRef);
-    if (snapshot.exists()) {
-      const tasks = snapshot.data().tasks || [];
-      yesterdayCompleted = tasks.filter(task => task.completed).length;
-      streakGained = tasks.length > 0 && yesterdayCompleted === tasks.length;
-    }
+  if (snapshot.exists()) {
+    const data = snapshot.data();
+    yesterdayCompleted = data.completedTasks;
+    yesterdayTotal = data.totalTasks;
+    streakGained = data.streakGained;
   }
 
-  const message = `Yesterday, you completed ${yesterdayCompleted} task${yesterdayCompleted === 1 ? '' : 's'}.
-    You have ${todayTotal} task${todayTotal === 1 ? '' : 's'} today.
-    ${streakGained ? 'Great job! You earned a streak yesterday!' : 'You did not gain a streak yesterday, but today is a fresh start!'}`;
+  const todayTotal = selectedDayRoutine.value.length;
+
+  const message = `Yesterday, you completed ${yesterdayCompleted} of ${yesterdayTotal} tasks.
+    Today you have ${todayTotal} task${todayTotal === 1 ? '' : 's'}.
+    ${streakGained ? '🔥 Great job on earning a streak!' : '🌱 No streak gained, but today is a new chance!'}`;
 
   speak(message);
 };
+
+
+
 
 const showDailyReportPopup = ref(false);
 const lastSpokenDate = ref(localStorage.getItem("lastSpokenDate") || null);
@@ -2651,6 +2653,27 @@ const toggleTaskImportance = async (index) => {
   await updateDoc(selectedDayDocRef, { tasks });
 };
 
+const saveDailyPerformance = async () => {
+  const today = new Date();
+  const dateStr = today.toISOString().split('T')[0]; // YYYY-MM-DD
+  const docRef = doc(db, 'dailyReports', `${userId.value}_${dateStr}`);
+
+  const completedCount = selectedDayRoutine.value.filter(task => task.completed).length;
+  const totalCount = selectedDayRoutine.value.length + wontDoTasks.value.length;
+
+  const streakGained = totalCount > 0 && completedCount === totalCount;
+
+  await setDoc(docRef, {
+    userId: userId.value,
+    date: dateStr,
+    totalTasks: totalCount,
+    completedTasks: completedCount,
+    streakGained,
+    updatedAt: serverTimestamp()
+  });
+
+  console.log("✅ Daily performance saved.");
+};
 
 </script>
 
