@@ -505,6 +505,28 @@
       </div>
 
 
+      <!-- Voice Input Modal -->
+      <div
+          v-if="listening"
+          class="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center"
+      >
+        <div class="bg-white rounded-xl shadow-2xl px-6 py-8 w-full max-w-sm text-center">
+          <!-- Visual Voice Waveform -->
+          <div class="flex space-x-1 justify-center mb-4">
+            <div class="w-2 h-6 bg-green-400 animate-pulse rounded"></div>
+            <div class="w-2 h-4 bg-green-400 animate-pulse rounded delay-100"></div>
+            <div class="w-2 h-8 bg-green-400 animate-pulse rounded delay-200"></div>
+            <div class="w-2 h-5 bg-green-400 animate-pulse rounded delay-300"></div>
+          </div>
+
+          <!-- Transcribed Text -->
+          <p class="text-base font-medium text-gray-700">
+            Listening: "<span class="text-blue-600">{{ liveTranscript }}</span>"
+          </p>
+
+          <p class="text-xs text-gray-400 mt-2">Speak now, your task is being transcribed...</p>
+        </div>
+      </div>
 
 
 
@@ -2438,7 +2460,7 @@ const completedTaskCount = computed(() => {
 });
 const listening = ref(false);
 let recognition;
-
+const liveTranscript = ref('');
 // Initialize SpeechRecognition only if supported
 if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -2462,13 +2484,30 @@ if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
 
   recognition.onresult = (event) => {
     const transcript = event.results[0][0].transcript.trim();
+    liveTranscript.value = transcript;
     newTask.value.title = transcript;
-    addNewTask(); // Automatically call your existing function to save the task
+    addNewTask(); // Your existing save function
     recognition.stop();
   };
 } else {
   console.warn("Speech recognition not supported in this browser.");
 }
+recognition.interimResults = true;
+
+recognition.onresult = (event) => {
+  let transcript = '';
+  for (let i = event.resultIndex; i < event.results.length; ++i) {
+    transcript += event.results[i][0].transcript;
+  }
+
+  liveTranscript.value = transcript.trim();
+
+  if (event.results[event.results.length - 1].isFinal) {
+    newTask.value.title = transcript.trim();
+    addNewTask();
+    recognition.stop();
+  }
+};
 
 const startVoiceInput = () => {
   if (recognition) recognition.start();
@@ -2762,5 +2801,15 @@ const saveDailyPerformance = async () => {
   }
 }
 
+@keyframes pulseWave {
+  0%, 100% { height: 0.5rem; }
+  50% { height: 2rem; }
+}
+.animate-pulse {
+  animation: pulseWave 1s ease-in-out infinite;
+}
+.delay-100 { animation-delay: 0.1s; }
+.delay-200 { animation-delay: 0.2s; }
+.delay-300 { animation-delay: 0.3s; }
 
 </style>
