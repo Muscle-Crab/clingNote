@@ -1909,6 +1909,13 @@ onMounted(() => {
     showDailyReportPopup.value = true; // show popup
   }
 });
+watch(selectedDayIndex, () => {
+  const todayStr = new Date().toISOString().split("T")[0];
+
+  if (lastSpokenDate.value !== todayStr && isToday(selectedDayIndex.value)) {
+    showDailyReportPopup.value = true;
+  }
+});
 
 const userCredits = ref(0);
 const playDailyReport = () => {
