@@ -2487,6 +2487,7 @@ recognition.onresult = (event) => {
   if (event.results[event.results.length - 1].isFinal) {
     newTask.value.title = transcript.trim();
     addNewTask();
+    liveTranscript.value = null
     recognition.stop();
   }
 };
