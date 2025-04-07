@@ -2,22 +2,22 @@ import { createApp } from 'vue'
 import App from './App.vue'
 import router from './router'
 import store from './store'
-import OneSignalVuePlugin from '@onesignal/onesignal-vue3'
 
-// Initialize the Vue app
+import OneSignalVue from '@onesignal/onesignal-vue3'
+
+
 const app = createApp(App);
+// Initialize OneSignal Plugin
+// app.use(OneSignalVue, {
+//     appId: "fc206a71-7d65-4cfa-b8b2-0c10548e1476", // Your OneSignal App ID
+//     allowLocalhostAsSecureOrigin: true, // Allow localhost for testing
+// });
+// Initialize the Vue app
+
 
 // Use plugins
 app.use(store);
 app.use(router);
-// app.use(OneSignalVuePlugin, {
-//     appId: 'fc206a71-7d65-4cfa-b8b2-0c10548e1476', // Your OneSignal App ID
-//     allowLocalhostAsSecureOrigin: true, // Enable for localhost testing
-//     notifyButton: {
-//         enable: true, // Show the notification permission button
-//     },
-//     autoResubscribe: true, // Automatically resubscribe returning users
-// });
 
 // Mount the app
 app.mount('#app');

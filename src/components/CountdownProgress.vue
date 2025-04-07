@@ -1,5 +1,5 @@
 <template>
-  <div v-if="!isExpired">
+  <div >
     <div class="text-sm text-gray-600 mb-1">
       ⏳ {{ formattedTimeRemaining }}
     </div>
@@ -10,7 +10,7 @@
       ></div>
     </div>
   </div>
-  <div v-else class="text-sm text-red-500">⏰ Reminder time reached</div>
+  <div  class="text-sm text-red-500">⏰ Reminder time reached</div>
 </template>
 
 <script setup>
