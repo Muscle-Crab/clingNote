@@ -203,29 +203,7 @@
 
       </div>
 
-      <div
-          v-if="showDailyReportPopup"
-          class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
-      >
-        <div class="bg-white p-6 rounded-xl shadow-xl text-center max-w-sm w-full">
-          <h2 class="text-lg font-semibold text-gray-800 mb-3">Daily Report Ready</h2>
-          <p class="text-sm text-gray-600 mb-4">Tap the speaker icon to hear your task summary.</p>
-          <button
-              @click="playDailyReport"
-              class="text-blue-600 hover:text-blue-800 text-3xl transition-transform transform hover:scale-110"
-          >
-            🔊
-          </button>
-          <div class="mt-4">
-            <button
-                @click="dismissReportPopup"
-                class="text-sm text-gray-500 hover:text-gray-700"
-            >
-              Dismiss
-            </button>
-          </div>
-        </div>
-      </div>
+
 
       <!-- Main modal -->
       <div
