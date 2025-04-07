@@ -510,9 +510,18 @@
           v-if="listening"
           class="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center"
       >
-        <div class="bg-white rounded-xl shadow-2xl px-6 py-8 w-full max-w-sm text-center">
+        <div class="bg-white rounded-xl shadow-2xl px-6 py-8 w-full max-w-sm text-center relative">
+          <!-- ❌ Cancel Button -->
+          <button
+              @click="cancelVoiceInput"
+              class="absolute top-3 right-3 text-gray-400 hover:text-red-500 text-xl font-bold"
+              title="Cancel"
+          >
+            ✕
+          </button>
+
           <!-- Visual Voice Waveform -->
-          <div class="flex space-x-1 justify-center mb-4">
+          <div class="flex space-x-1 justify-center mb-4 mt-2">
             <div class="w-2 h-6 bg-green-400 animate-pulse rounded"></div>
             <div class="w-2 h-4 bg-green-400 animate-pulse rounded delay-100"></div>
             <div class="w-2 h-8 bg-green-400 animate-pulse rounded delay-200"></div>
@@ -527,6 +536,7 @@
           <p class="text-xs text-gray-400 mt-2">Speak now, your task is being transcribed...</p>
         </div>
       </div>
+
 
 
 
@@ -712,7 +722,7 @@
                     <!-- User Icon and Name -->
                     <div class="flex items-center space-x-2 relative">
 
-                      <span class="text-xs font-medium text-gray-700 relative -top-1">{{ task.notes }}</span>
+
                     </div>
 
                     <!-- Task Actions -->
@@ -2507,6 +2517,11 @@ recognition.onresult = (event) => {
     addNewTask();
     recognition.stop();
   }
+};
+const cancelVoiceInput = () => {
+  if (recognition) recognition.stop();
+  listening.value = false;
+  liveTranscript.value = '';
 };
 
 const startVoiceInput = () => {
