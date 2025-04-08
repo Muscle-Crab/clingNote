@@ -2175,7 +2175,7 @@ const checkStreakOnCompletion = async () => {
         const lastDate = new Date(lastCompletionDate.value);
         const todayDate = new Date(today);
 
-        if (lastDate < todayDate) {
+        if (lastDate !== todayDate) {
           const diffInDays = Math.floor((todayDate - lastDate) / (1000 * 60 * 60 * 24));
           if (diffInDays === 1) {
             streak.value += 1; // Continue streak
