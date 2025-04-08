@@ -441,20 +441,29 @@
                 </div>
               </div>
 
-              <!-- Labels -->
               <div v-if="taskDetail.labels?.length" class="flex items-start gap-3">
                 <svg class="w-5 h-5 text-gray-500 dark:text-gray-300" fill="none" stroke="currentColor"
                      stroke-width="2" viewBox="0 0 24 24"><path d="M7 7h10v10H7z"/></svg>
                 <div>
                   <div class="font-medium">Labels:</div>
                   <div class="flex flex-wrap gap-2 mt-1">
-              <span v-for="(label, index) in taskDetail.labels" :key="index"
-                    class="bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100 px-2 py-1 rounded text-xs">
-                {{ label }}
-              </span>
+      <span
+          v-for="(label, index) in taskDetail.labels"
+          :key="index"
+          @click="toggleLabelHighlight(label)"
+          :class="[
+          'px-3 py-1 text-xs rounded-full cursor-pointer font-medium transition',
+          activeLabels.includes(label)
+            ? 'bg-green-500 text-white'
+            : 'bg-gray-200 text-gray-800 dark:bg-gray-600 dark:text-gray-100'
+        ]"
+      >
+        {{ label }}
+      </span>
                   </div>
                 </div>
               </div>
+
             </div>
 
             <!-- Footer -->
@@ -686,13 +695,19 @@
 
                   <!-- Task Labels -->
                   <div class="flex flex-wrap gap-2 mb-3">
-      <span
-          class="inline-block bg-gray-200 rounded-full px-3 py-1 text-xs font-medium text-gray-600"
-          v-for="(label, index) in task.labels"
-          :key="index"
-      >
-        {{ label }}
-      </span>
+     <span
+         v-for="(label, index) in task.labels"
+         :key="index"
+         @click="toggleLabelHighlight(label)"
+         :class="[
+              'inline-block rounded-full px-3 py-1 text-xs font-medium cursor-pointer',
+              activeLabels.includes(label)
+                ? 'bg-green-500 text-white'
+                : 'bg-gray-200 text-gray-600'
+            ]"
+               >
+            {{ label }}
+        </span>
                   </div>
 
                   <!-- User Icon and Name Inline with Task Actions -->
@@ -2701,6 +2716,17 @@ const saveDailyPerformance = async () => {
 
   console.log("✅ Daily performance saved.");
 };
+const activeLabels = ref([]);
+
+function toggleLabelHighlight(label) {
+  const index = activeLabels.value.indexOf(label);
+  if (index > -1) {
+    activeLabels.value.splice(index, 1); // remove label
+  } else {
+    activeLabels.value.push(label); // add label
+  }
+}
+
 
 </script>
 
