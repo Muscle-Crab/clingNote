@@ -6,7 +6,6 @@ import { auth } from '../firebaseConfig';
 import Room from '../views/Room.vue';
 import Landing from '../views/landing.vue';
 import TermsandCondition from '../views/TermsandCondition.vue';
-import PremiumConfirmation from '../components/PremiumConfirmation.vue';
 import Pickup from '../views/Pickup.vue';
 import Addiction from "@/views/addiction.vue";
 
@@ -23,11 +22,7 @@ const routes = [
     component: HomeView,
     meta: { requiresAuth: true }
   },
-  {
-    path: '/premium-confirmation',
-    name: 'PremiumConfirmation',
-    component: PremiumConfirmation
-  },
+
   {
     path: '/addiction',
     name: 'addiction',
