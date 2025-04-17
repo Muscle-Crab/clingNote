@@ -2,23 +2,41 @@ import { createRouter, createWebHistory } from 'vue-router';
 import HomeView from '../views/HomeView.vue';
 import RegisterPage from '../views/UserRegistrationForm.vue';
 import Login from '../views/Login.vue';
-import { auth } from '../firebaseConfig'; // Import your Firebase authentication instance
+import { auth } from '../firebaseConfig';
 import Room from '../views/Room.vue';
 import Landing from '../views/landing.vue';
-import TermsandCondition from '../views/TermsandCondition.vue'
+import TermsandCondition from '../views/TermsandCondition.vue';
+import PremiumConfirmation from '../components/PremiumConfirmation.vue';
 import Pickup from '../views/Pickup.vue';
+import Addiction from "@/views/addiction.vue";
+
 const routes = [
   {
     path: '/',
+    name: 'Root',
+    // placeholder, redirection handled in route guard
+    component: Landing
+  },
+  {
+    path: '/home',
     name: 'home',
     component: HomeView,
-    
+    meta: { requiresAuth: true }
   },
-
+  {
+    path: '/premium-confirmation',
+    name: 'PremiumConfirmation',
+    component: PremiumConfirmation
+  },
+  {
+    path: '/addiction',
+    name: 'addiction',
+    component: Addiction
+  },
   {
     path: '/about',
     name: 'about',
-    component: () => import(/* webpackChunkName: "about" */ '../views/AboutView.vue')
+    component: () => import('../views/AboutView.vue')
   },
   {
     path: '/profile/:userId',
@@ -26,37 +44,33 @@ const routes = [
     component: () => import('@/views/Profile.vue'),
     props: true,
     meta: { requiresAuth: true }
-  }, {
+  },
+  {
     path: '/landing',
     name: 'Landing',
-    component: Landing,
-
-
-  },{
+    component: Landing
+  },
+  {
     path: '/:pathMatch(.*)*',
     name: 'NotFoundComponent',
-    component: () => import('@/views/NotFoundComponent.vue'),
-
-
+    component: () => import('@/views/NotFoundComponent.vue')
   },
   {
     path: '/pickup',
     name: 'Pickup',
-    component: () => import('@/views/Pickup.vue'),
-
+    component: Pickup
   },
   {
     path: '/fdfd',
     name: 'Discussion',
     component: () => import('@/views/Discussion.vue'),
-    props: true,
-    // meta: { requiresAuth: true }
+    props: true
   },
   {
     path: '/chat',
     name: 'RoomInterior',
     component: Room,
-    props: true // Pass route params as props to the component
+    props: true
   },
   {
     path: '/login',
@@ -72,7 +86,7 @@ const routes = [
     path: '/register',
     name: 'Register',
     component: RegisterPage
-  },
+  }
 ];
 
 const router = createRouter({
@@ -80,29 +94,33 @@ const router = createRouter({
   routes
 });
 
-// Route guard to check if the user is authenticated
+// Route guard
 router.beforeEach(async (to, from, next) => {
   const requiresAuth = to.matched.some(record => record.meta.requiresAuth);
-  const currentUser = auth.currentUser;
 
-  if (requiresAuth) {
-    if (!currentUser) {
-      // If authentication state is not persisted, wait for it to initialize
-      await new Promise((resolve) => {
+  const getUser = () =>
+      new Promise(resolve => {
         const unsubscribe = auth.onAuthStateChanged(user => {
-          if (user) {
-            unsubscribe();
-            resolve();
-          } else {
-            next('/login');
-          }
+          unsubscribe();
+          resolve(user);
         });
       });
+
+  const currentUser = auth.currentUser || await getUser();
+
+  if (to.path === '/') {
+    if (currentUser) {
+      return next('/home');
+    } else {
+      return next('/landing');
     }
+  }
+
+  if (requiresAuth && !currentUser) {
+    return next('/login');
   }
 
   next();
 });
 
 export default router;
-
