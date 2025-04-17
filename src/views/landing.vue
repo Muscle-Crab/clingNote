@@ -8,10 +8,18 @@
       <p class="text-base md:text-lg text-gray-300 max-w-2xl mx-auto mb-6">
         Whether you’re knocking out homework 📚, hitting the gym 💪, planning meals 🛒, or tackling your to-dos ✅ — this all-in-one productivity app helps you stay consistent every day.
       </p>
+      <div class="mt-8">
+        <router-link
+            to="/home"
+            class="inline-block bg-blue-600 hover:bg-blue-700 text-white text-lg font-semibold px-6 py-3 rounded-full shadow-md transition duration-300"
+        >
+          Get Started
+        </router-link>
+      </div>
       <!-- Video -->
       <div class="max-w-3xl mx-auto aspect-video rounded-xl overflow-hidden shadow-xl">
         <video
-            src="@/assets/guide.mp4"
+            src="@/assets/video.mp4"
             autoplay
             muted
             playsinline
