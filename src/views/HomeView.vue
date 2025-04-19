@@ -1707,15 +1707,11 @@ const updateStreakOnCompletion = async () => {
       if (lastCompletionDate.value === today) {
         console.log("User already earned a streak today. No update needed.");
         return; // 🚀 Exit early if streak is already updated today
+      }else{
+        streak.value += 1;
       }
 
-      // 🔥 Continue streak if yesterday was completed
-      if (lastCompletionDate.value === yesterdayStr) {
-        streak.value += 1;
-      } else {
-        // ⏳ If there's a gap, reset the streak
-        streak.value = 1;
-      }
+
 
       // Update last completion date to today
       lastCompletionDate.value = today;
