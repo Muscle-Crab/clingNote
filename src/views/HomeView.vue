@@ -87,8 +87,17 @@
         <div class="calendar-section mb-2">
           <div class="current-date font-bold text-gray-900 mb-4">
 
-            <span>{{ currentDate }}</span>
-<!--            <TimeTracker />-->
+            <span>
+ <div class="flex items-center justify-between w-full">
+  <span class="text-gray-900 font-bold">{{ currentDate }}</span>
+  <span class="ml-3 inline-block bg-red-100 text-red-700 text-sm font-semibold px-2 py-1 rounded-lg shadow-sm border border-red-300">
+    ⏳ {{ daysLeftInYear }} days left
+  </span>
+</div>
+
+</span>
+
+
           </div>
           <div class="grid grid-cols-7 gap-3">
             <div
@@ -2722,6 +2731,17 @@ function toggleLabelHighlight(label) {
   }
 }
 
+const daysLeftInYear = computed(() => {
+  const today = new Date();
+  const endOfYear = new Date(today.getFullYear(), 11, 31); // December 31
+  const diffTime = endOfYear - today;
+  return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+});
+onMounted(() => {
+  setTimeout(() => {
+    speak(`Only ${daysLeftInYear.value} days left in the year. Make them count.`);
+  }, 3000); // Delay for dramatic effect
+});
 
 </script>
 
