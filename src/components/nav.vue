@@ -14,15 +14,15 @@
           {{ userEmail }}
         </div>
       </router-link>
-
     </div>
+
     <!-- Sidebar -->
     <aside :class="{ 'hidden': !sidebarOpen, 'block': sidebarOpen }"
            class="fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-gray-200 dark:bg-gray-800 dark:border-gray-700">
       <div class="flex items-center justify-between p-4">
         <router-link to="/">
           <a href="#" class="flex items-center space-x-3 rtl:space-x-reverse">
-            <img src="@/assets/logo.png" class="h-8" alt="Flowbite Logo"/>
+            <img src="@/assets/logo.png" class="h-8" alt="Cling Note Logo"/>
             <span class="self-center text-2xl font-semibold whitespace-nowrap dark:text-white">Cling Note</span>
           </a>
         </router-link>
@@ -36,6 +36,7 @@
           </svg>
         </button>
       </div>
+
       <!-- Sidebar content -->
       <nav class="px-4 py-8">
         <ul class="space-y-4">
@@ -57,36 +58,31 @@
             </router-link>
           </li>
 
-         <div v-if="userEmail === 'ds7513635@gmail.com'">
-           <!-- Chat -->
-           <li class="flex items-center space-x-3">
-             <i class="fas fa-comments text-gray-800 dark:text-gray-200"></i>
-             <router-link to="/about"
-                          class="text-gray-800 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-500 font-medium">
-               about
-             </router-link>
-           </li>
-         </div>
-          <div v-if="userEmail === 'ds7513635@gmail.com'">
-            <!-- Chat -->
+          <!-- Admin Only Routes -->
+          <template v-if="userEmail === 'ds7513635@gmail.com'">
             <li class="flex items-center space-x-3">
-              <i class="fas fa-comments text-gray-800 dark:text-gray-200"></i>
+              <i class="fas fa-info-circle text-gray-800 dark:text-gray-200"></i>
+              <router-link to="/about"
+                           class="text-gray-800 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-500 font-medium">
+                About
+              </router-link>
+            </li>
+            <li class="flex items-center space-x-3">
+              <i class="fas fa-rocket text-gray-800 dark:text-gray-200"></i>
               <router-link to="/landing"
                            class="text-gray-800 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-500 font-medium">
-                about
+                Landing
               </router-link>
             </li>
-          </div>
-          <div v-if="userEmail === 'ds7513635@gmail.com'">
-            <!-- Chat -->
             <li class="flex items-center space-x-3">
-              <i class="fas fa-comments text-gray-800 dark:text-gray-200"></i>
+              <i class="fas fa-heartbeat text-gray-800 dark:text-gray-200"></i>
               <router-link to="/addiction"
                            class="text-gray-800 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-500 font-medium">
-                addiction
+                Addiction
               </router-link>
             </li>
-          </div>
+          </template>
+
           <!-- Logout -->
           <li class="flex items-center space-x-3">
             <i class="fas fa-sign-out-alt text-gray-800 dark:text-gray-200"></i>
@@ -96,31 +92,51 @@
             </button>
           </li>
         </ul>
-
       </nav>
     </aside>
-    <!-- End of Sidebar -->
   </nav>
 </template>
 
 <script setup>
-import {ref, onMounted} from 'vue';
-import {auth} from '@/firebaseConfig'; // Import Firebase authentication
-import {useRouter} from 'vue-router';
+import { ref, onMounted } from 'vue';
+import { auth } from '@/firebaseConfig';
+import { useRouter } from 'vue-router';
 
 const router = useRouter();
 const sidebarOpen = ref(false);
 const userEmail = ref(null);
-const userId = ref(null)
+const userId = ref(null);
+
 const logout = async () => {
   try {
-    await auth.signOut(); // Sign the user out
-    console.log('logged out')
+    await auth.signOut();
+    console.log('logged out');
     router.push('/login');
   } catch (error) {
     console.error('Error logging out:', error.message);
   }
 };
+onMounted(() => {
+  if (window.innerWidth > 768) {
+    sidebarOpen.value = true;
+  }
+
+  // ✅ Use only onAuthStateChanged to reliably get the user ID
+  auth.onAuthStateChanged((user) => {
+    if (user) {
+      console.log("[AUTH] User logged in:", user.uid);
+      userEmail.value = user.email;
+      userId.value = user.uid;
+    } else {
+      console.log("[AUTH] User not logged in");
+      userEmail.value = null;
+      userId.value = null;
+    }
+  });
+});
+
+
+console.log("Current User ID:", auth.currentUser?.uid);
 
 const toggleSidebar = () => {
   sidebarOpen.value = !sidebarOpen.value;
@@ -131,29 +147,29 @@ const closeSidebar = () => {
 };
 
 onMounted(() => {
-  // Check window width on mount and open sidebar by default in desktop view
   if (window.innerWidth > 768) {
     sidebarOpen.value = true;
   }
 
-  // Get the currently signed-in user
   const user = auth.currentUser;
   if (user) {
     userEmail.value = user.email;
     userId.value = user.uid;
   }
 
-  // Listen for auth state changes
+  // Auth state changes
   auth.onAuthStateChanged((user) => {
     if (user) {
       userEmail.value = user.email;
+      userId.value = user.uid;
     } else {
       userEmail.value = null;
+      userId.value = null;
     }
   });
 });
 </script>
 
 <style scoped>
-/* Add styles for the sidebar here */
+/* Customize the sidebar or add responsive styles here if needed */
 </style>
