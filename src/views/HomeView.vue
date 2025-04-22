@@ -570,6 +570,9 @@
                 ></i>
               </button>
             </div>
+            <!-- Conveyor Wrapper -->
+            <div class="overflow-hidden relative h-[80vh] overflow-y-auto" ref="scrollContainer">
+              <div class="animate-conveyor top-0 left-0 w-full">
             <draggable
                 handle=".drag-handle"
                 :animation="150"
@@ -867,6 +870,9 @@
               </template>
 
             </draggable>
+              </div>
+            </div>
+
             <!-- Idle Time Illustration -->
             <div
                 v-if="selectedDayRoutine?.length > 0 && selectedDayRoutine?.every(task => task.completed) && !showCompleted"
@@ -2783,6 +2789,9 @@ onMounted(() => {
 }
 
 .task-card {
+  padding: 1rem;
+  margin: 0; /* remove vertical gaps */
+  border-bottom: 1px solid #ccc;
   border-left: 3px solid red;
   border-right: 3px solid blue;
 }
@@ -2859,5 +2868,20 @@ onMounted(() => {
 .delay-100 { animation-delay: 0.1s; }
 .delay-200 { animation-delay: 0.2s; }
 .delay-300 { animation-delay: 0.3s; }
+@keyframes conveyorScrollDown {
+  0% {
+    transform: translateY(-50%);
+  }
+  100% {
+    transform: translateY(0%);
+  }
+}
+
+.animate-conveyor {
+  animation: conveyorScrollDown 60s linear infinite;
+  will-change: transform;
+}
+
+
 
 </style>
