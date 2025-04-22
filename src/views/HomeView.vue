@@ -1478,9 +1478,9 @@ const toggleTaskCompletion = async (index) => {
     // speak(`Great job! You completed the task: ${task.title}.`);
     announceNextTask(index); // Pass the index of the completed task
     const userName = await fetchUserName(userId.value);
-    if (userName) {
-      await sendNotificationToPlayer(userName, "completed");
-    }
+    // if (userName) {
+    //   await sendNotificationToPlayer(userName, "completed");
+    // }
   } else {
     userCredits.value -= 10; // Deduct credits if task is marked incomplete
     console.log(`Credits deducted: 10. Total credits: ${userCredits.value}`);
@@ -1697,7 +1697,7 @@ const checkAllTasksCompleted = async () => {
 const updateStreakOnCompletion = async () => {
   if (!userId.value) return;
 
-  const today = new Date().toISOString().split('T')[0]; // Format YYYY-MM-DD
+  const today = new Date().toLocaleDateString('en-CA');
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
   const yesterdayStr = yesterday.toISOString().split('T')[0]; // Get yesterday's date
@@ -2282,6 +2282,25 @@ const checkIfTasksCompleted = async (dateStr) => {
   return false;
 };
 
+watch(currentDate, async () => {
+  const todayStr = new Date().toISOString().split('T')[0];
+
+  const streakDocRef = doc(db, 'streaks', userId.value);
+  const streakDocSnap = await getDoc(streakDocRef);
+
+  if (streakDocSnap.exists()) {
+    const data = streakDocSnap.data();
+    const lastChecked = data.lastCheckedDate;
+
+    if (lastChecked !== todayStr) {
+      await checkTasksAndReduceStreak(); // already defined
+      await updateDoc(streakDocRef, {
+        lastCheckedDate: todayStr,
+        updatedAt: serverTimestamp()
+      });
+    }
+  }
+});
 
 // Run the check daily at midnight
 const startDailyCheck = () => {
