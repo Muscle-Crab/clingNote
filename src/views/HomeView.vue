@@ -1478,9 +1478,9 @@ const toggleTaskCompletion = async (index) => {
     // speak(`Great job! You completed the task: ${task.title}.`);
     announceNextTask(index); // Pass the index of the completed task
     const userName = await fetchUserName(userId.value);
-    // if (userName) {
-    //   await sendNotificationToPlayer(userName, "completed");
-    // }
+    if (userName) {
+      await sendNotificationToPlayer(userName, "completed");
+    }
   } else {
     userCredits.value -= 10; // Deduct credits if task is marked incomplete
     console.log(`Credits deducted: 10. Total credits: ${userCredits.value}`);
@@ -1755,7 +1755,7 @@ const updateStreakOnCompletion = async () => {
 
 const closeFullScreenAnimation = () => {
   showFullScreenAnimation.value = false;
-  showCompleted.value = false
+ fetchSelectedDayRoutine()
 };
 
 
