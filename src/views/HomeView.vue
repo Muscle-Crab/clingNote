@@ -2880,14 +2880,14 @@ onMounted(() => {
 
 .animate-conveyor {
   animation: conveyorScrollDown 30s linear infinite;
+  animation-play-state: running;
   will-change: transform;
 }
 
-/* Desktop hover */
 .animate-conveyor:hover,
 .animate-conveyor:active {
-  animation: none !important;
-  transform: translateY(0%) !important;
+  animation-play-state: paused;
 }
+
 
 </style>
