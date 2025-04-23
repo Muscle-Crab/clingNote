@@ -211,6 +211,23 @@
         </button>
 
       </div>
+      <div v-if="showTimerModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-white rounded-xl shadow-xl p-6 w-96">
+          <h3 class="text-xl font-semibold mb-4">Set a Timer</h3>
+          <label class="block mb-2 text-gray-700">Select duration:</label>
+          <select v-model="selectedTimerDuration" class="w-full mb-4 p-2 rounded border">
+            <option value="5">5 minutes</option>
+            <option value="10">10 minutes</option>
+            <option value="15">15 minutes</option>
+            <option value="30">30 minutes</option>
+            <option value="60">1 hour</option>
+          </select>
+          <div class="flex justify-end gap-2">
+            <button @click="showTimerModal = false" class="px-4 py-2 mm bg-gray-300 rounded">Cancel</button>
+            <button @click="startTimer" class="px-4 py-2 bg-blue-500 text-white rounded">Start</button>
+          </div>
+        </div>
+      </div>
       <div v-if="wontDoModalOpen" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
         <div class="bg-white p-5 rounded-lg shadow-lg w-96">
           <h2 class="text-lg font-semibold mb-4">Mark as "Won't Do"</h2>
@@ -826,23 +843,7 @@
                         ⏱️
                       </button>
 
-                      <div v-if="showTimerModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                        <div class="bg-white rounded-xl shadow-xl p-6 w-96">
-                          <h3 class="text-xl font-semibold mb-4">Set a Timer</h3>
-                          <label class="block mb-2 text-gray-700">Select duration:</label>
-                          <select v-model="selectedTimerDuration" class="w-full mb-4 p-2 rounded border">
-                            <option value="5">5 minutes</option>
-                            <option value="10">10 minutes</option>
-                            <option value="15">15 minutes</option>
-                            <option value="30">30 minutes</option>
-                            <option value="60">1 hour</option>
-                          </select>
-                          <div class="flex justify-end gap-2">
-                            <button @click="showTimerModal = false" class="px-4 py-2 mm bg-gray-300 rounded">Cancel</button>
-                            <button @click="startTimer" class="px-4 py-2 bg-blue-500 text-white rounded">Start</button>
-                          </div>
-                        </div>
-                      </div>
+
                     </div>
                   </div>
 
@@ -2881,10 +2882,12 @@ onMounted(() => {
   animation: conveyorScrollDown 30s linear infinite;
   will-change: transform;
 }
-.animate-conveyor:hover {
-  animation: none !important; /* Fully stops the animation */
-  transform: translateY(0%) !important; /* Resets to natural position (top) */
-}
 
+/* Desktop hover */
+.animate-conveyor:hover,
+.animate-conveyor:active {
+  animation: none !important;
+  transform: translateY(0%) !important;
+}
 
 </style>
