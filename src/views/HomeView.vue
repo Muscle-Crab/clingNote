@@ -2882,7 +2882,8 @@ onMounted(() => {
   will-change: transform;
 }
 .animate-conveyor:hover {
-  animation-play-state: paused;
+  animation: none !important; /* Fully stops the animation */
+  transform: translateY(0%) !important; /* Resets to natural position (top) */
 }
 
 
