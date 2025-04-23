@@ -2880,13 +2880,11 @@ onMounted(() => {
 
 .animate-conveyor {
   animation: conveyorScrollDown 30s linear infinite;
-  animation-play-state: running;
   will-change: transform;
 }
-
-.animate-conveyor:hover,
-.animate-conveyor:active {
-  animation-play-state: paused;
+.animate-conveyor:hover {
+  animation: none !important; /* Fully stops the animation */
+  transform: translateY(0%) !important; /* Resets to natural position (top) */
 }
 
 
