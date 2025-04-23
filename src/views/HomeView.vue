@@ -211,8 +211,41 @@
         </button>
 
       </div>
+      <div v-if="wontDoModalOpen" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
+        <div class="bg-white p-5 rounded-lg shadow-lg w-96">
+          <h2 class="text-lg font-semibold mb-4">Mark as "Won't Do"</h2>
 
+          <p class="text-gray-700 mb-2">Why won't you do this task?</p>
+          <textarea v-model="wontDoReason" class="w-full border rounded-md p-2 mb-3"></textarea>
 
+          <div class="flex justify-end mt-4">
+            <button @click="wontDoModalOpen = false" class="mr-2 px-4 py-2 bg-red-300 rounded-md">
+              <i class="fa fa-times"></i> <!-- Cancel icon -->
+            </button>
+            <button @click="markTaskAsWontDo" class="px-4 py-2 bg-blue-300 rounded-md">
+              <i class="fa fa-check"></i> <!-- Confirm icon -->
+            </button>
+
+          </div>
+        </div>
+      </div>
+      <div v-if="transferModalOpen" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
+        <div class="bg-white p-5 rounded-lg shadow-lg w-96">
+          <h2 class="text-lg font-semibold mb-4">Select a Day to Transfer</h2>
+
+          <label for="transferDay" class="block mb-2 text-gray-700">Choose a day:</label>
+          <select v-model="selectedTransferDay" id="transferDay" class="w-full border border-gray-300 rounded-md p-2">
+            <option v-for="(day, index) in days" :key="index" :value="index" :disabled="index === selectedDayIndex">
+              {{ day.day }} - {{ day.date }}
+            </option>
+          </select>
+
+          <div class="flex justify-end mt-4">
+            <button @click="closeTransferModal" class="mr-2 px-4 py-2 bg-gray-300 rounded-md">Cancel</button>
+            <button @click="transferTask()" class="px-4 py-2 bg-blue-500 text-white rounded-md">Transfer</button>
+          </div>
+        </div>
+      </div>
 
       <!-- Main modal -->
       <div
@@ -500,7 +533,35 @@
         />
       </div>
 
+      <div v-if="isModalOpen" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
+        <div class="bg-white p-5 rounded-lg shadow-lg w-96">
+          <h2 class="text-lg font-semibold mb-4">Add Reminder</h2>
 
+          <p class="text-md font-medium mb-3">
+            Task: <span class="font-semibold text-blue-600">{{ selectedTaskTitle }}</span>
+          </p>
+
+          <form @submit.prevent="handleAddReminder">
+            <label for="reminderDate" class="block mb-2">Date:</label>
+            <input type="date" v-model="reminder.date" id="reminderDate" class="w-full border-gray-300 rounded-md p-2 mb-2" required>
+
+            <label for="reminderTime" class="block mb-2">Time:</label>
+            <input type="time" v-model="reminder.time" id="reminderTime" class="w-full border-gray-300 rounded-md p-2 mb-2" required>
+            <label for="reminderRepeat" class="block mb-2">Repeat:</label>
+            <select v-model="reminder.repeat" id="reminderRepeat" class="w-full border-gray-300 rounded-md p-2 mb-2">
+              <option value="">No Repeat</option>
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+              <option value="yearly">Yearly</option>
+            </select>
+            <div class="flex justify-end mt-4">
+              <button @click="closeModal" type="button" class="mr-2 px-4 py-2 bg-gray-300 rounded-md">Cancel</button>
+              <button type="submit" class="px-4 py-2 bg-blue-500 text-white rounded-md">Add to Calendar</button>
+            </div>
+          </form>
+        </div>
+      </div>
       <!-- Voice Input Modal -->
       <div
           v-if="listening"
@@ -659,35 +720,7 @@
 
 
                           <!-- Modal -->
-                          <div v-if="isModalOpen" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
-                            <div class="bg-white p-5 rounded-lg shadow-lg w-96">
-                              <h2 class="text-lg font-semibold mb-4">Add Reminder</h2>
 
-                              <p class="text-md font-medium mb-3">
-                                Task: <span class="font-semibold text-blue-600">{{ selectedTaskTitle }}</span>
-                              </p>
-
-                              <form @submit.prevent="handleAddReminder">
-                                <label for="reminderDate" class="block mb-2">Date:</label>
-                                <input type="date" v-model="reminder.date" id="reminderDate" class="w-full border-gray-300 rounded-md p-2 mb-2" required>
-
-                                <label for="reminderTime" class="block mb-2">Time:</label>
-                                <input type="time" v-model="reminder.time" id="reminderTime" class="w-full border-gray-300 rounded-md p-2 mb-2" required>
-                                <label for="reminderRepeat" class="block mb-2">Repeat:</label>
-                                <select v-model="reminder.repeat" id="reminderRepeat" class="w-full border-gray-300 rounded-md p-2 mb-2">
-                                  <option value="">No Repeat</option>
-                                  <option value="daily">Daily</option>
-                                  <option value="weekly">Weekly</option>
-                                  <option value="monthly">Monthly</option>
-                                  <option value="yearly">Yearly</option>
-                                </select>
-                                <div class="flex justify-end mt-4">
-                                  <button @click="closeModal" type="button" class="mr-2 px-4 py-2 bg-gray-300 rounded-md">Cancel</button>
-                                  <button type="submit" class="px-4 py-2 bg-blue-500 text-white rounded-md">Add to Calendar</button>
-                                </div>
-                              </form>
-                            </div>
-                          </div>
 
                         </div>
 <!--                        &lt;!&ndash; In Progress Task Indicator &ndash;&gt;-->
@@ -819,24 +852,7 @@
                   >
                     {{ index + 1 }}
                   </div>
-                  <div v-if="wontDoModalOpen" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
-                    <div class="bg-white p-5 rounded-lg shadow-lg w-96">
-                      <h2 class="text-lg font-semibold mb-4">Mark as "Won't Do"</h2>
 
-                      <p class="text-gray-700 mb-2">Why won't you do this task?</p>
-                      <textarea v-model="wontDoReason" class="w-full border rounded-md p-2 mb-3"></textarea>
-
-                      <div class="flex justify-end mt-4">
-                        <button @click="wontDoModalOpen = false" class="mr-2 px-4 py-2 bg-red-300 rounded-md">
-                          <i class="fa fa-times"></i> <!-- Cancel icon -->
-                        </button>
-                        <button @click="markTaskAsWontDo" class="px-4 py-2 bg-blue-300 rounded-md">
-                          <i class="fa fa-check"></i> <!-- Confirm icon -->
-                        </button>
-
-                      </div>
-                    </div>
-                  </div>
                   <!-- Notification -->
                   <div
                       v-if="showNotification"
@@ -847,23 +863,7 @@
                   <div v-if="transferNotification" class="fixed top-5 right-5 bg-blue-500 text-white px-4 py-2 rounded-lg shadow-lg transition-opacity duration-300">
                     {{ transferNotification }}
                   </div>
-                  <div v-if="transferModalOpen" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
-                    <div class="bg-white p-5 rounded-lg shadow-lg w-96">
-                      <h2 class="text-lg font-semibold mb-4">Select a Day to Transfer</h2>
 
-                      <label for="transferDay" class="block mb-2 text-gray-700">Choose a day:</label>
-                      <select v-model="selectedTransferDay" id="transferDay" class="w-full border border-gray-300 rounded-md p-2">
-                        <option v-for="(day, index) in days" :key="index" :value="index" :disabled="index === selectedDayIndex">
-                          {{ day.day }} - {{ day.date }}
-                        </option>
-                      </select>
-
-                      <div class="flex justify-end mt-4">
-                        <button @click="closeTransferModal" class="mr-2 px-4 py-2 bg-gray-300 rounded-md">Cancel</button>
-                        <button @click="transferTask()" class="px-4 py-2 bg-blue-500 text-white rounded-md">Transfer</button>
-                      </div>
-                    </div>
-                  </div>
 
                 </div>
 
@@ -2881,7 +2881,9 @@ onMounted(() => {
   animation: conveyorScrollDown 60s linear infinite;
   will-change: transform;
 }
-
+.animate-conveyor:hover {
+  animation-play-state: paused;
+}
 
 
 </style>
