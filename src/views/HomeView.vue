@@ -1538,7 +1538,7 @@ const toggleTaskCompletion = async (index) => {
   checkAllTasksCompleted();
   await saveDailyPerformance();
   selectedDayRoutine.value = selectedDayRoutine.value.filter(task => !task.completed || showCompleted);
-  showCompleted.value = true;
+  showCompleted.value = false;
 };
 
 const wontDoModalOpen = ref(false);
