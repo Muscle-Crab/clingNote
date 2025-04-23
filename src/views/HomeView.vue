@@ -650,7 +650,7 @@
             </div>
             <!-- Conveyor Wrapper -->
             <div class="overflow-hidden relative h-[80vh] overflow-y-auto" ref="scrollContainer">
-              <div class="animate-conveyor">
+              <div >
             <draggable
                 handle=".drag-handle"
                 :animation="150"
