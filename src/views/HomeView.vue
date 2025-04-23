@@ -2768,31 +2768,6 @@ onMounted(() => {
     speak(`Only ${daysLeftInYear.value} days left in the year. Make them count.`);
   }, 3000); // Delay for dramatic effect
 });
-const scrollContainer = ref(null);
-let resumeTimeout = null;
-
-const pauseAndResumeConveyor = () => {
-  const el = scrollContainer.value?.querySelector('.animate-conveyor');
-  if (!el) return;
-
-  el.classList.add('paused');
-
-  if (resumeTimeout) clearTimeout(resumeTimeout);
-
-  resumeTimeout = setTimeout(() => {
-    el.classList.remove('paused');
-  }, 5000); // 5 seconds of inactivity
-};
-
-onMounted(() => {
-  const container = scrollContainer.value;
-
-  if (container) {
-    container.addEventListener('mouseover', pauseAndResumeConveyor);
-    container.addEventListener('touchstart', pauseAndResumeConveyor);
-    container.addEventListener('wheel', pauseAndResumeConveyor);
-  }
-});
 
 </script>
 
@@ -2907,9 +2882,9 @@ onMounted(() => {
   animation: conveyorScrollDown 30s linear infinite;
   will-change: transform;
 }
-.paused {
-  animation-play-state: paused !important;
-  transform: translateY(0%) !important;
+.animate-conveyor:hover {
+  animation: none !important; /* Fully stops the animation */
+  transform: translateY(0%) !important; /* Resets to natural position (top) */
 }
 
 
