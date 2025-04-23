@@ -90,9 +90,9 @@
             <span>
  <div class="flex items-center justify-between w-full">
   <span class="text-gray-900 font-bold">{{ currentDate }}</span>
-  <span class="ml-3 inline-block bg-red-100 text-red-700 text-sm font-semibold px-2 py-1 rounded-lg shadow-sm border border-red-300">
-    ⏳ {{ daysLeftInYear }} days left
-  </span>
+ <span class="ml-3 inline-block bg-red-100 text-red-700 text-sm font-semibold px-2 py-1 rounded-lg shadow-sm border border-red-300 animate-pulse-slow">
+  ⏳ {{ daysLeftInYear }} days left
+</span>
 </div>
 
 </span>
@@ -2887,5 +2887,19 @@ onMounted(() => {
   transform: translateY(0%) !important; /* Resets to natural position (top) */
 }
 
+@keyframes pulseSlow {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.05);
+    opacity: 0.85;
+  }
+}
+
+.animate-pulse-slow {
+  animation: pulseSlow 2s infinite;
+}
 
 </style>
