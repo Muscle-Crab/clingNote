@@ -650,7 +650,7 @@
             </div>
             <!-- Conveyor Wrapper -->
             <div class="overflow-hidden relative h-[80vh] overflow-y-auto" ref="scrollContainer">
-              <div class="animate-conveyor top-0 left-0 w-full">
+              <div class="animate-conveyor">
             <draggable
                 handle=".drag-handle"
                 :animation="150"
@@ -1537,7 +1537,7 @@ const toggleTaskCompletion = async (index) => {
   checkAllTasksCompleted();
   await saveDailyPerformance();
   selectedDayRoutine.value = selectedDayRoutine.value.filter(task => !task.completed || showCompleted);
-  showCompleted.value = false;
+  showCompleted.value = true;
 };
 
 const wontDoModalOpen = ref(false);
