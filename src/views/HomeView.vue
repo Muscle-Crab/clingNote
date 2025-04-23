@@ -2878,7 +2878,7 @@ onMounted(() => {
 }
 
 .animate-conveyor {
-  animation: conveyorScrollDown 60s linear infinite;
+  animation: conveyorScrollDown 30s linear infinite;
   will-change: transform;
 }
 .animate-conveyor:hover {
