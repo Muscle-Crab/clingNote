@@ -7,12 +7,12 @@ import OneSignalVue from '@onesignal/onesignal-vue3'
 
 
 const app = createApp(App);
-// Initialize OneSignal Plugin
-// app.use(OneSignalVue, {
-//     appId: "fc206a71-7d65-4cfa-b8b2-0c10548e1476", // Your OneSignal App ID
-//     allowLocalhostAsSecureOrigin: true, // Allow localhost for testing
-// });
-// Initialize the Vue app
+
+app.use(OneSignalVue, {
+    appId: "fc206a71-7d65-4cfa-b8b2-0c10548e1476", // Your OneSignal App ID
+    allowLocalhostAsSecureOrigin: true, // Allow localhost for testing
+});
+
 
 
 // Use plugins
