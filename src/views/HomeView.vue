@@ -26,10 +26,6 @@
             <div class="streak-icon">
               {{ getStreakIcon(streak) }}
             </div>
-            <span>test</span>
-            <div v-if="oneSignalId" class="mt-4 p-2 text-xs text-blue-800 bg-blue-100 rounded shadow">
-              OneSignal ID: {{ oneSignalId }}
-            </div>
           </div>
 
           <!-- Streak and Credits Information -->
@@ -1018,18 +1014,8 @@ const handleAddReminder = async () => {
   closeModal();
   reminder.value = { date: "", time: "", repeat: "" };
 };
-const oneSignalId = ref(null);
-onMounted(() => {
-  const checkOneSignalId = () => {
-    const id = window?.OneSignal?.User?.PushSubscription?.id;
-    if (id) {
-      oneSignalId.value = id;
-      console.log("OneSignal ID:", id);
-    }
-  };
 
-  setTimeout(checkOneSignalId, 2000); // slight delay to ensure OneSignal is initialized
-});
+
 
 
 
