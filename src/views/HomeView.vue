@@ -1703,13 +1703,13 @@ const checkAllTasksCompleted = async () => {
 
 
 const updateStreakOnCompletion = async () => {
-  if (!userId.value) return;
+  if (!userId.value) {
+    console.log("No userId, skipping streak update");
+    return;
+  }
 
   const today = new Date().toLocaleDateString('en-CA');
-  const yesterday = new Date();
-  yesterday.setDate(yesterday.getDate() - 1);
-  const yesterdayStr = yesterday.toISOString().split('T')[0]; // Get yesterday's date
-
+  console.log('today',today)
   const streakDocRef = doc(db, 'streaks', userId.value);
 
   try {
@@ -1720,18 +1720,17 @@ const updateStreakOnCompletion = async () => {
       lastCompletionDate.value = data.lastCompletionDate || null;
       streak.value = data.streak || 0;
 
-      // ✅ Prevent multiple streak updates per day
+
+
       if (lastCompletionDate.value === today) {
-        console.log("User already earned a streak today. No update needed.");
-        return; // 🚀 Exit early if streak is already updated today
-      }else{
-        streak.value += 1;
+        console.log("Streak already updated today.");
+        return;
       }
+        streak.value += 1;
+        lastCompletionDate.value = today;
 
 
 
-      // Update last completion date to today
-      lastCompletionDate.value = today;
 
       await updateDoc(streakDocRef, {
         streak: streak.value,
@@ -1739,9 +1738,9 @@ const updateStreakOnCompletion = async () => {
         updatedAt: serverTimestamp(),
       });
 
-      console.log(`🎉 Streak updated: ${streak.value}`);
+      console.log(`✅ Streak updated to ${streak.value}`);
     } else {
-      // No existing streak, start fresh
+      // No streak document yet
       await setDoc(streakDocRef, {
         streak: 1,
         lastCompletionDate: today,
@@ -1751,15 +1750,17 @@ const updateStreakOnCompletion = async () => {
       streak.value = 1;
       lastCompletionDate.value = today;
 
-      console.log("🔥 New streak started at 1.");
+      console.log("🔥 New streak started at 1");
     }
 
-    checkForBadges(); // Update badges if applicable
+    checkForBadges();
     updateMotivationalMessage();
   } catch (error) {
-    console.error("❌ Error updating streak:", error);
+    console.error("❌ Error in updateStreakOnCompletion:", error);
   }
 };
+
+
 
 const closeFullScreenAnimation = () => {
   showFullScreenAnimation.value = false;
@@ -2214,10 +2215,10 @@ const checkStreakOnCompletion = async () => {
         }
       } else {
         // Reset streak if no tasks are completed
-        if (lastCompletionDate.value !== today && lastCompletionDate.value !== yesterdayStr) {
-          streak.value = Math.max(streak.value - 1, 0); // Reduce streak, min 0
-          lastCompletionDate.value = yesterdayStr; // Mark last missed day
-        }
+        // if (lastCompletionDate.value !== today && lastCompletionDate.value !== yesterdayStr) {
+        //   streak.value = Math.max(streak.value - 1, 0); // Reduce streak, min 0
+        //   lastCompletionDate.value = yesterdayStr; // Mark last missed day
+        // }
       }
 
       await updateStreakInFirestore(); // Save changes
