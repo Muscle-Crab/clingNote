@@ -1209,7 +1209,7 @@ const sendNotificationToPlayer = async (userName, action) => {
 
   const data = {
     "app_id": "fc206a71-7d65-4cfa-b8b2-0c10548e1476", // Replace with your actual OneSignal app ID
-    "include_player_ids": ["3581ab6a-69f2-4328-9090-bc36e71c3869"], // Replace with the user's device/player ID
+    "include_player_ids": ["All"], // Replace with the user's device/player ID
     "contents": { "en": actionMessages[action]?.content || "An action was performed." },
     "headings": { "en": actionMessages[action]?.heading || "Notification" }
   };
@@ -2204,13 +2204,8 @@ const checkStreakOnCompletion = async () => {
         const todayDate = new Date(today);
 
         if (lastDate !== todayDate) {
-          const diffInDays = Math.floor((todayDate - lastDate) / (1000 * 60 * 60 * 24));
-          if (diffInDays === 1) {
-            streak.value += 1; // Continue streak
-          } else {
-            streak.value = 1; // Start a ne   sw streak
-          }
 
+          streak.value += 1; // Start a ne   sw streak
           lastCompletionDate.value = today; // Update completion date
         }
       } else {
