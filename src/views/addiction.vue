@@ -277,7 +277,7 @@ onMounted(() => {
         await updateDoc(userRef, { fuel: 100 })
       }
 
-      speakDailyCheck()
+      // speakDailyCheck()
     }
   })
 })
