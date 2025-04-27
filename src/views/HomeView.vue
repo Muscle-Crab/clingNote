@@ -1,11 +1,13 @@
 <template>
   <div ref="scrollContainer" class="h-[100vh] overflow-auto bg-gray-200 p-3"  >
-    <div v-if="isLoading" class="flex justify-center items-center h-full">
-      <div class="flex items-center space-x-2">
-        <div class="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-        <span class="text-gray-700 font-medium">Loading tasks...</span>
+    <div v-if="isLoading" class="fixed inset-0 bg-gradient-to-br from-green-500 via-blue-500 to-purple-500 flex items-center justify-center z-50">
+      <div class="text-center">
+        <h1 class="text-4xl font-bold text-white animate-bounce">👋 Welcome!</h1>
+        <p class="text-lg text-white mt-4">Setting up your tasks...</p>
+        <div class="mt-6 w-12 h-12 border-4 border-white border-t-transparent rounded-full animate-spin mx-auto"></div>
       </div>
     </div>
+
     <div v-else>
 
 
