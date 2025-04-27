@@ -1209,7 +1209,7 @@ const sendNotificationToPlayer = async (userName, action) => {
 
   const data = {
     "app_id": "fc206a71-7d65-4cfa-b8b2-0c10548e1476", // Replace with your actual OneSignal app ID
-    "include_player_ids": ["add35b5a-915c-4fc6-8723-7298d1c42a9e"], // Replace with the user's device/player ID
+    "include_player_ids": ["5c526d24-effd-4c83-b93d-a4ef1af2f762"], // Replace with the user's device/player ID
     "contents": { "en": actionMessages[action]?.content || "An action was performed." },
     "headings": { "en": actionMessages[action]?.heading || "Notification" }
   };
@@ -1722,7 +1722,7 @@ const updateStreakOnCompletion = async () => {
 
 
 
-      if (lastCompletionDate.value === today) {
+      if (lastCompletionDate.value == today) {
         console.log("Streak already updated today.");
         return;
       }
