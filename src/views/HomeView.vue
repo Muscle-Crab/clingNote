@@ -1637,16 +1637,25 @@ const handleDragEnd = async () => {
   }
 };
 const handleDayTabClick = async (index) => {
-  const todayIndex = new Date().getDay();
+  const today = new Date();
+  const selectedDateParts = days.value[index].date.split('-'); // format YYYY-MM-DD
+  const selectedDate = new Date(
+      selectedDateParts[0],
+      selectedDateParts[1] - 1,
+      selectedDateParts[2]
+  );
 
-  // If it's not today and not already selected, reset tasks to incomplete
-  if (index !== todayIndex && selectedDayIndex.value !== index) {
+  const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+  // Only reset if selected day is *before* today
+  if (selectedDate < todayMidnight) {
     selectedDayIndex.value = index;
     await resetTasksToIncomplete();
+  } else {
+    selectedDayIndex.value = index;
   }
 
-  // Continue to load tasks and update date
-  selectDate(index);
+  selectDate(index); // Always update view
 };
 
 const speak = (text) => {
