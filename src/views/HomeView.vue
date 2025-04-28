@@ -1724,13 +1724,14 @@ const updateStreakOnCompletion = async () => {
 
 
 
-      if (lastCompletionDate.value == today) {
-        console.log("Streak already updated today.");
+      if (lastCompletionDate.value === today) {
+        console.log("🛑 Streak already updated today. Skipping...");
         return;
       }
-        streak.value += 1;
-        lastCompletionDate.value = today;
 
+      // Only increase streak if today not already updated
+      streak.value += 1;
+      lastCompletionDate.value = today;
 
 
 
@@ -2207,8 +2208,8 @@ const checkStreakOnCompletion = async () => {
 
         if (lastDate !== todayDate) {
 
-          streak.value += 1; // Start a ne   sw streak
-          lastCompletionDate.value = today; // Update completion date
+          // streak.value += 1; // Start a ne   sw streak
+          // lastCompletionDate.value = today; // Update completion date
         }
       } else {
         // Reset streak if no tasks are completed
