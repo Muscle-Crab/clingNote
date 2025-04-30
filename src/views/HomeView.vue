@@ -1674,6 +1674,7 @@ const announceNextTask = (completedIndex) => {
 const showFullScreenAnimation = ref(false);
 
 const checkAllTasksCompleted = async () => {
+
   const allCompleted = selectedDayRoutine.value.every(task => task.completed);
 
   if (allCompleted) {
@@ -1738,7 +1739,7 @@ const updateStreakOnCompletion = async () => {
         return;
       }
 
-      // Only increase streak if today not already updated
+
       streak.value += 1;
       lastCompletionDate.value = today;
 
@@ -2194,12 +2195,9 @@ const getStreakIcon = (streak) => {
 // Function to check for streak continuation
 const checkStreakOnCompletion = async () => {
   if (!userId.value) return;
-
-  const completionPercentage = calculateCompletionPercentage();
-  const today = new Date().toISOString().split('T')[0]; // Current date
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
-  const yesterdayStr = yesterday.toISOString().split('T')[0]; // Yesterday's date
+
 
   try {
     const streakDocRef = doc(db, 'streaks', userId.value);
@@ -2208,26 +2206,7 @@ const checkStreakOnCompletion = async () => {
     if (streakDocSnapshot.exists()) {
       const data = streakDocSnapshot.data();
       lastCompletionDate.value = data.lastCompletionDate || null;
-      streak.value = data.streak || 0;
-
-      if (completionPercentage === 100) { d
-        // Increment streak if all tasks completed and the last completion date has passed
-        const lastDate = new Date(lastCompletionDate.value);
-        const todayDate = new Date(today);
-
-        if (lastDate !== todayDate) {
-
-          // streak.value += 1; // Start a ne   sw streak
-          // lastCompletionDate.value = today; // Update completion date
-        }
-      } else {
-        // Reset streak if no tasks are completed
-        // if (lastCompletionDate.value !== today && lastCompletionDate.value !== yesterdayStr) {
-        //   streak.value = Math.max(streak.value - 1, 0); // Reduce streak, min 0
-        //   lastCompletionDate.value = yesterdayStr; // Mark last missed day
-        // }
-      }
-
+      streak.value = data.streak || 0
       await updateStreakInFirestore(); // Save changes
       checkForBadges();
       updateMotivationalMessage();
@@ -2298,25 +2277,26 @@ const checkIfTasksCompleted = async (dateStr) => {
   return false;
 };
 
-watch(currentDate, async () => {
-  const todayStr = new Date().toISOString().split('T')[0];
 
-  const streakDocRef = doc(db, 'streaks', userId.value);
-  const streakDocSnap = await getDoc(streakDocRef);
-
-  if (streakDocSnap.exists()) {
-    const data = streakDocSnap.data();
-    const lastChecked = data.lastCheckedDate;
-
-    if (lastChecked !== todayStr) {
-      await checkTasksAndReduceStreak(); // already defined
-      await updateDoc(streakDocRef, {
-        lastCheckedDate: todayStr,
-        updatedAt: serverTimestamp()
-      });
-    }
-  }
-});
+// watch(currentDate, async () => {
+//   const todayStr = new Date().toISOString().split('T')[0];
+//
+//   const streakDocRef = doc(db, 'streaks', userId.value);
+//   const streakDocSnap = await getDoc(streakDocRef);
+//
+//   if (streakDocSnap.exists()) {
+//     const data = streakDocSnap.data();
+//     const lastChecked = data.lastCheckedDate;
+//
+//     if (lastChecked !== todayStr) {
+//       await checkTasksAndReduceStreak(); // already defined
+//       await updateDoc(streakDocRef, {
+//         lastCheckedDate: todayStr,
+//         updatedAt: serverTimestamp()
+//       });
+//     }
+//   }
+// });
 
 // Run the check daily at midnight
 const startDailyCheck = () => {
