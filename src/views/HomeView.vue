@@ -2312,10 +2312,10 @@ const startDailyCheck = () => {
   }, timeToMidnight);
 };
 
-// Start the daily check when the component is mounted
-onMounted(() => {
-  startDailyCheck();
-});
+// // Start the daily check when the component is mounted
+// onMounted(() => {
+//   startDailyCheck();
+// });
 
 const fetchStreakOnLoad = async () => {
   if (!userId.value) return; // Ensure user is logged in
