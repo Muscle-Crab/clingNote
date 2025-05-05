@@ -1097,30 +1097,44 @@ const resetTasksToIncomplete = async () => {
       return;
     }
 
-    // Fetch the actual tasks for this day
     const existingTasks = docSnap.data().tasks || [];
+
+    // Only reset if there are completed tasks to avoid unnecessary updates
+    const hasCompletedTasks = existingTasks.some(task => task.completed);
+    if (!hasCompletedTasks) {
+      console.log(`No completed tasks to reset for ${selectedDay.day}.`);
+      return;
+    }
 
     const resetTasks = existingTasks.map(task => ({
       ...task,
       completed: false
     }));
 
+    // Prevent streak logic from triggering on past days
+    const todayIndex = new Date().getDay(); // 0 (Sun) - 6 (Sat)
+    const isPastDay = selectedDayIndex.value < todayIndex;
+
     // Update Firestore
     await updateDoc(selectedDayDocRef, {
       tasks: resetTasks,
-      updatedAt: serverTimestamp()
+      updatedAt: serverTimestamp(),
+      ...(isPastDay && { skipStreakUpdate: true }) // optional flag if you use it elsewhere
     });
 
-    // If we're currently viewing this day, update the UI
     if (days[selectedDayIndex.value].day === selectedDay.day) {
       selectedDayRoutine.value = resetTasks;
     }
 
-    console.log(`All tasks for ${selectedDay.day} reset to incomplete.`);
+    console.log(`✅ Tasks for ${selectedDay.day} were reset to incomplete.`);
   } catch (error) {
-    console.error("Error resetting tasks:", error);
+    console.error("❌ Error resetting tasks:", error);
   }
 };
+
+
+
+
 
 
 
@@ -1637,25 +1651,16 @@ const handleDragEnd = async () => {
   }
 };
 const handleDayTabClick = async (index) => {
-  const today = new Date();
-  const selectedDateParts = days.value[index].date.split('-'); // format YYYY-MM-DD
-  const selectedDate = new Date(
-      selectedDateParts[0],
-      selectedDateParts[1] - 1,
-      selectedDateParts[2]
-  );
+  const todayIndex = new Date().getDay();
 
-  const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-
-  // Only reset if selected day is *before* today
-  if (selectedDate < todayMidnight) {
+  // If it's not today and not already selected, reset tasks to incomplete
+  if (index !== todayIndex && selectedDayIndex.value !== index) {
     selectedDayIndex.value = index;
     await resetTasksToIncomplete();
-  } else {
-    selectedDayIndex.value = index;
   }
 
-  selectDate(index); // Always update view
+  // Continue to load tasks and update date
+  selectDate(index);
 };
 
 const speak = (text) => {
