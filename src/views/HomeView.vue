@@ -420,6 +420,21 @@
 
         </div>
       </div>
+      <div v-if="youtubeModalOpen" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-white p-6 rounded-lg shadow-xl w-full max-w-md">
+          <h2 class="text-xl font-semibold mb-4">Attach YouTube Video</h2>
+          <input
+              type="url"
+              v-model="youtubeInput"
+              placeholder="https://www.youtube.com/watch?v=..."
+              class="w-full p-2 border rounded mb-4"
+          />
+          <div class="flex justify-end space-x-2">
+            <button @click="closeYouTubeModal" class="px-4 py-2 bg-gray-300 rounded">Cancel</button>
+            <button @click="saveYouTubeLink" class="px-4 py-2 bg-blue-600 text-white rounded">Save</button>
+          </div>
+        </div>
+      </div>
 
 
       <!-- Task Detail Modal -->
@@ -447,6 +462,22 @@
               <!-- Title -->
               <div class="flex items-center gap-3 text-2xl font-semibold text-gray-800 dark:text-white">
                 <span class="font-medium"></span> {{ taskDetail.title }}
+              </div>
+              <div v-if="taskDetail.youtubeURL" class="mt-3">
+                <iframe
+                    :src="`https://www.youtube.com/embed/${extractYouTubeID(taskDetail.youtubeURL)}`"
+                    class="w-full rounded-lg"
+                    height="250"
+                    frameborder="0"
+                    allowfullscreen
+                ></iframe>
+                <button
+                    @click="removeYouTubeLink"
+                    class="absolute top-2 right-2 bg-red-500 hover:bg-red-600 text-white rounded-full p-1 text-xs shadow-md group-hover:block"
+                    title="Remove video"
+                >
+                  ✕
+                </button>
               </div>
 
               <div v-if="taskDetail.imageURL" class="mt-3 relative group">
@@ -844,6 +875,13 @@
                           title="Start Timer"
                       >
                         ⏱️
+                      </button>
+                      <button
+                          @click="openYouTubeModal(index)"
+                          class="text-red-500 hover:text-red-700 text-xs sm:text-sm"
+                          title="Add YouTube Video"
+                      >
+                        <i class="fab fa-youtube text-xl"></i>
                       </button>
 
 
@@ -2762,6 +2800,75 @@ onMounted(() => {
     speak(`Only ${daysLeftInYear.value} days left in the year. Make them count.`);
   }, 3000); // Delay for dramatic effect
 });
+const youtubeModalOpen = ref(false);
+const selectedYouTubeTaskIndex = ref(null);
+const youtubeInput = ref('');
+const openYouTubeModal = (index) => {
+  selectedYouTubeTaskIndex.value = index;
+  youtubeInput.value = selectedDayRoutine.value[index].youtubeURL || '';
+  youtubeModalOpen.value = true;
+};
+
+const closeYouTubeModal = () => {
+  youtubeModalOpen.value = false;
+  youtubeInput.value = '';
+};
+
+const saveYouTubeLink = async () => {
+  const index = selectedYouTubeTaskIndex.value;
+  const task = selectedDayRoutine.value[index];
+  task.youtubeURL = youtubeInput.value;
+
+  const day = days[selectedDayIndex.value].day;
+  const docRef = doc(db, 'weeklyRoutines', `${userId.value}_${day}`);
+  const docSnap = await getDoc(docRef);
+  if (!docSnap.exists()) return;
+
+  const tasks = docSnap.data().tasks;
+  tasks[index] = task;
+
+  await updateDoc(docRef, { tasks });
+  selectedDayRoutine.value[index] = task;
+
+  closeYouTubeModal();
+};
+const extractYouTubeID = (url) => {
+  const match = url.match(/(?:\?v=|\/embed\/|\.be\/)([a-zA-Z0-9_-]{11})/);
+  return match ? match[1] : '';
+};
+const removeYouTubeLink = async () => {
+  if (!taskDetail.value?.youtubeURL) return;
+
+  const confirmed = confirm("Remove this YouTube video?");
+  if (!confirmed) return;
+
+  try {
+    const day = days[selectedDayIndex.value].day;
+    const docRef = doc(db, 'weeklyRoutines', `${userId.value}_${day}`);
+    const docSnap = await getDoc(docRef);
+
+    if (docSnap.exists()) {
+      const tasks = docSnap.data().tasks;
+      const index = tasks.findIndex(t =>
+          t.title === taskDetail.value.title &&
+          t.createdAt === taskDetail.value.createdAt
+      );
+
+      if (index !== -1) {
+        tasks[index].youtubeURL = null;
+
+        await updateDoc(docRef, { tasks });
+
+        selectedDayRoutine.value[index].youtubeURL = null;
+        taskDetail.value.youtubeURL = null;
+
+        console.log("YouTube link removed.");
+      }
+    }
+  } catch (error) {
+    console.error("Error removing YouTube link:", error);
+  }
+};
 
 </script>
 
