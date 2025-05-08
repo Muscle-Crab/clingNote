@@ -63,7 +63,16 @@
 
           </div>
         </div>
-        <SocialMediaAccess :completionPercentage="calculateCompletionPercentage(task)" />
+        <button
+            @click="copyFullWeekRoutine"
+            class="flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white font-semibold rounded-2xl shadow-md hover:from-green-600 hover:to-emerald-700 transition-all duration-300 transform hover:scale-105"
+        >
+          <i class="fas fa-dumbbell"></i>
+          <span>Copy Weekly Workout</span>
+        </button>
+
+
+        <!--        <SocialMediaAccess :completionPercentage="calculateCompletionPercentage(task)" />-->
       </div>
 
       <div v-if="showFullScreenAnimation" class="fixed inset-0 bg-gradient-to-br from-green-500 via-blue-500 to-purple-500 flex items-center justify-center z-50">
@@ -719,15 +728,24 @@
                     <div>
 
                       <div
-                          class="text-lg font-semibold text-gray-800"
+                          class="text-lg font-semibold text-gray-800 cursor-pointer hover:underline hover:text-blue-600 transition duration-150 flex items-center space-x-2"
                           :class="{ 'line-through text-gray-500': task.completed && isToday(selectedDayIndex) }"
                           @click="openTaskDetailModal(task)"
                       >
-                        {{ task.title }}<span v-if="task.imageURL || task.fileURL" class="ml-2 text-blue-500 text-sm">
-                       📄
-                      </span>
-
+  <span class="truncate max-w-[11rem]">
+    {{ task.title.length > 18 ? task.title.slice(0, 18) + '...' : task.title }}
+  </span>
+                        <span v-if="task.youtubeURL" class="text-red-500 text-sm" title="YouTube video attached">🎥</span>
+                        <span v-if="task.imageURL" class="text-green-600 text-sm" title="Image attached">🖼️</span>
+                        <span v-if="task.fileURL" class="text-blue-600 text-sm" title="File attached">📄</span>
                       </div>
+
+
+
+
+
+
+
                       <div v-if="task.reminder?.date && task.reminder?.time" class="text-sm text-gray-500 mt-1">
                         <div v-if="task.reminder?.date && task.reminder?.time" class="text-sm text-gray-500 mt-1">
                           📅 {{ formatShortDate(task.reminder.date) }} • ⏰ {{ formatTime(task.reminder.time) }}
@@ -2869,6 +2887,162 @@ const removeYouTubeLink = async () => {
     console.error("Error removing YouTube link:", error);
   }
 };
+const defaultWorkoutWeek = {
+  Sun: [],
+  Mon: [
+    {
+      title: "Push-ups – 1 set to failure",
+      youtubeURL: "https://www.youtube.com/watch?v=IODxDxX7oi4",
+      type: "recurring",
+      completed: false
+    },
+    {
+      title: "Resistance Band Chest Press – 1 slow, intense set to burn",
+      youtubeURL: "https://www.youtube.com/watch?v=j3ccNPK-P4U",
+      type: "recurring",
+      completed: false
+    },
+    {
+      title: "Resistance Band Triceps Pushdown – 1 slow, deep set to burn",
+      youtubeURL: "https://www.youtube.com/watch?v=Y3CDzx-oj3k",
+      type: "recurring",
+      completed: false
+    }
+  ],
+  Tue: [
+    {
+      title: "Pull-ups – 1 set to failure (or assisted)",
+      youtubeURL: "https://www.youtube.com/watch?v=eGo4IYlbE5g",
+      type: "recurring",
+      completed: false
+    },
+    {
+      title: "Resistance Band Rows – 1 heavy set to burn",
+      youtubeURL: "https://www.youtube.com/watch?v=LSkyinhmA8k",
+      type: "recurring",
+      completed: false
+    },
+    {
+      title: "Resistance Band Bicep Curls – 1 controlled burnout set",
+      youtubeURL: "https://www.youtube.com/watch?v=pXS-fSPWpk8",
+      type: "recurring",
+      completed: false
+    }
+  ],
+  Wed: [
+    {
+      title: "Resistance Band Squats – 1 slow, deep set to burn",
+      youtubeURL: "https://www.youtube.com/watch?v=duP-UZsfOaQ",
+      type: "recurring",
+      completed: false
+    },
+    {
+      title: "Resistance Band Deadlifts – 1 controlled set",
+      youtubeURL: "https://www.youtube.com/watch?v=MG3ja0zVXuk",
+      type: "recurring",
+      completed: false
+    },
+    {
+      title: "Resistance Band Hamstring Curls – 1 high-rep set to fatigue",
+      youtubeURL: "https://www.youtube.com/watch?v=LtTcXXgeRYo",
+      type: "recurring",
+      completed: false
+    }
+  ],
+  Thu: [
+    {
+      title: "Resistance Band Shoulder Press – 1 long, slow set to fatigue",
+      youtubeURL: "https://www.youtube.com/watch?v=0rLjkQweIDg",
+      type: "recurring",
+      completed: false
+    },
+    {
+      title: "Resistance Band Lateral Raises – 1 set until you can’t lift anymore",
+      youtubeURL: "https://www.youtube.com/watch?v=yfNg5sFndbw",
+      type: "recurring",
+      completed: false
+    },
+    {
+      title: "Resistance Band Shrugs – 1 burnout set",
+      youtubeURL: "https://www.youtube.com/watch?v=CTAeFLD0Xgc",
+      type: "recurring",
+      completed: false
+    }
+  ],
+  Fri: [
+    {
+      title: "Incline Push-ups – 1 set to failure",
+      youtubeURL: "https://www.youtube.com/watch?v=cfns5VDVVvk",
+      type: "recurring",
+      completed: false
+    },
+    {
+      title: "Resistance Band Incline Press – 1 full burn set",
+      youtubeURL: "https://www.youtube.com/watch?v=uEy0X8UmfCk",
+      type: "recurring",
+      completed: false
+    },
+    {
+      title: "Resistance Band Bicep Curls (alternating arms) – 1 deep burnout set",
+      youtubeURL: "https://www.youtube.com/watch?v=F-GJJ0bPF7U",
+      type: "recurring",
+      completed: false
+    }
+  ],
+  Sat: [
+    {
+      title: "Sit-ups – 1 set to failure",
+      youtubeURL: "https://www.youtube.com/watch?v=1fbU_MkV7NE",
+      type: "recurring",
+      completed: false
+    },
+    {
+      title: "Resistance Band Russian Twists – 1 slow, controlled set",
+      youtubeURL: "https://www.youtube.com/watch?v=NeAtimSCxsY",
+      type: "recurring",
+      completed: false
+    },
+    {
+      title: "Resistance Band Woodchoppers – 1 per side to fatigue",
+      youtubeURL: "https://www.youtube.com/watch?v=G5V3a5v3vJY",
+      type: "recurring",
+      completed: false
+    }
+  ]
+};
+
+
+
+
+const copyFullWeekRoutine = async () => {
+  if (!userId.value) return alert("Please log in");
+
+  try {
+    for (const [day, workouts] of Object.entries(defaultWorkoutWeek)) {
+      const docRef = doc(db, "weeklyRoutines", `${userId.value}_${day}`);
+      await setDoc(docRef, {
+        tasks: workouts.map(workout => ({
+          ...workout,
+          createdAt: new Date().toISOString(),
+          userId: userId.value,
+          labels: ["Workout"],
+          important: false,
+          notes: "",
+        })),
+        updatedAt: serverTimestamp(),
+      });
+    }
+
+    alert("✅ Weekly workout routine copied!");
+    if (selectedDayIndex.value !== -1) fetchSelectedDayRoutine();
+  } catch (err) {
+    console.error("Error copying workout routine:", err);
+    alert("❌ Failed to copy routine.");
+  }
+};
+
+
+
 
 </script>
 
