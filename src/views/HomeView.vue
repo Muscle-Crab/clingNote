@@ -480,13 +480,7 @@
                     frameborder="0"
                     allowfullscreen
                 ></iframe>
-                <button
-                    @click="removeYouTubeLink"
-                    class="absolute top-2 right-2 bg-red-500 hover:bg-red-600 text-white rounded-full p-1 text-xs shadow-md group-hover:block"
-                    title="Remove video"
-                >
-                  ✕
-                </button>
+
               </div>
 
               <div v-if="taskDetail.imageURL" class="mt-3 relative group">
@@ -2854,39 +2848,7 @@ const extractYouTubeID = (url) => {
   const match = url.match(/(?:\?v=|\/embed\/|\.be\/)([a-zA-Z0-9_-]{11})/);
   return match ? match[1] : '';
 };
-const removeYouTubeLink = async () => {
-  if (!taskDetail.value?.youtubeURL) return;
 
-  const confirmed = confirm("Remove this YouTube video?");
-  if (!confirmed) return;
-
-  try {
-    const day = days[selectedDayIndex.value].day;
-    const docRef = doc(db, 'weeklyRoutines', `${userId.value}_${day}`);
-    const docSnap = await getDoc(docRef);
-
-    if (docSnap.exists()) {
-      const tasks = docSnap.data().tasks;
-      const index = tasks.findIndex(t =>
-          t.title === taskDetail.value.title &&
-          t.createdAt === taskDetail.value.createdAt
-      );
-
-      if (index !== -1) {
-        tasks[index].youtubeURL = null;
-
-        await updateDoc(docRef, { tasks });
-
-        selectedDayRoutine.value[index].youtubeURL = null;
-        taskDetail.value.youtubeURL = null;
-
-        console.log("YouTube link removed.");
-      }
-    }
-  } catch (error) {
-    console.error("Error removing YouTube link:", error);
-  }
-};
 const defaultWorkoutWeek = {
   Sun: [],
   Mon: [
