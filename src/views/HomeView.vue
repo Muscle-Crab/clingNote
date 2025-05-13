@@ -63,18 +63,47 @@
 
           </div>
         </div>
-        <button
-            @click="copyFullWeekRoutine"
-            class="flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white font-semibold rounded-2xl shadow-md hover:from-green-600 hover:to-emerald-700 transition-all duration-300 transform hover:scale-105"
-        >
-          <i class="fas fa-dumbbell"></i>
-          <span>Copy Weekly Workout</span>
+        <button @click="openWorkoutModal" class="bg-indigo-600 text-white px-4 py-2 rounded-full shadow-md hover:bg-indigo-700">
+          Generate Weekly Routine 💪
         </button>
 
 
         <!--        <SocialMediaAccess :completionPercentage="calculateCompletionPercentage(task)" />-->
       </div>
+      <div v-if="showWorkoutModal" class="fixed inset-0 bg-black bg-opacity-40 flex justify-center items-center z-50">
+        <div class="bg-white p-6 rounded-lg shadow-xl w-full max-w-lg">
+          <h2 class="text-xl font-semibold mb-4">Customize Your Workout</h2>
 
+          <!-- Example fields -->
+          <label class="block mb-2">Goal:</label>
+          <select v-model="workoutPreferences.goal" class="w-full p-2 border rounded mb-4">
+            <option>Build Muscle</option>
+            <option>Lose Fat</option>
+            <option>General Fitness</option>
+          </select>
+          <label class="block mb-2">Equipment Type:</label>
+          <select v-model="workoutPreferences.equipment" class="w-full p-2 border rounded mb-4">
+            <option>None</option>
+            <option>Resistance Bands</option>
+            <option>Resistance Bands + Equipment</option>
+            <option>Full Gym</option>
+          </select>
+          <label class="block mb-2">Max Workouts Per Day:</label>
+          <select v-model="workoutPreferences.maxPerDay" class="w-full p-2 border rounded mb-4">
+            <option v-for="n in 5" :key="n" :value="n">{{ n }}</option>
+          </select>
+
+          <label class="block mb-2">Duration (min):</label>
+          <input type="number" v-model="workoutPreferences.duration" class="w-full p-2 border rounded mb-4" />
+
+          <!-- Add other fields similarly -->
+
+          <div class="flex justify-end gap-2">
+            <button @click="closeWorkoutModal" class="px-4 py-2 bg-gray-300 rounded">Cancel</button>
+            <button @click="generateWorkoutRoutine" class="px-4 py-2 bg-green-600 text-white rounded">Generate</button>
+          </div>
+        </div>
+      </div>
       <div v-if="showFullScreenAnimation" class="fixed inset-0 bg-gradient-to-br from-green-500 via-blue-500 to-purple-500 flex items-center justify-center z-50">
         <div class="text-center">
 
@@ -688,121 +717,121 @@
             <!-- Conveyor Wrapper -->
             <div class="overflow-hidden relative h-[80vh] overflow-y-auto" ref="scrollContainer">
               <div >
-            <draggable
-                handle=".drag-handle"
-                :animation="150"
-                v-model="selectedDayRoutine"
-                tag="div"
-                class="tasks-list space-y-2"
-                ghost-class="ghost"
-                drag-class="drag"
-                @end="handleDragEnd"
-            >
-              <template #item="{ element: task, index }">
-                <div   v-if="(!task.completed || (isToday(selectedDayIndex) && showCompleted))"
-                    class="task-card bg-white rounded-xl shadow-lg p-5 relative hover:shadow-xl transition-shadow duration-300"
-                       :class="{
+                <draggable
+                    handle=".drag-handle"
+                    :animation="150"
+                    v-model="selectedDayRoutine"
+                    tag="div"
+                    class="tasks-list space-y-2"
+                    ghost-class="ghost"
+                    drag-class="drag"
+                    @end="handleDragEnd"
+                >
+                  <template #item="{ element: task, index }">
+                    <div   v-if="(!task.completed || (isToday(selectedDayIndex) && showCompleted))"
+                           class="task-card bg-white rounded-xl shadow-lg p-5 relative hover:shadow-xl transition-shadow duration-300"
+                           :class="{
   'bg-gray-200': task.completed && isToday(selectedDayIndex),
   'border-red-600 border-2 shadow-lg': task.important, // NEW visual for important
   'draggable': taskIsDragging
 }"
-                >
-                  <div class="flex items-center ">
-                    <!-- Drag Icon -->
-                    <div>
-                      <div
-                          :style="{ backgroundColor: generateRandomColor() }"
-                          class="w-10 h-10 rounded-full flex items-center justify-center mr-3 shadow-sm"
-                      >
-                        <i class="fas fa-arrows-alt text-white drag-handle"></i>
-                      </div>
-                    </div>
+                    >
+                      <div class="flex items-center ">
+                        <!-- Drag Icon -->
+                        <div>
+                          <div
+                              :style="{ backgroundColor: generateRandomColor() }"
+                              class="w-10 h-10 rounded-full flex items-center justify-center mr-3 shadow-sm"
+                          >
+                            <i class="fas fa-arrows-alt text-white drag-handle"></i>
+                          </div>
+                        </div>
 
-                    <!-- Task Title and Time -->
-                    <div>
+                        <!-- Task Title and Time -->
+                        <div>
 
-                      <div
-                          class="text-lg font-semibold text-gray-800 cursor-pointer hover:underline hover:text-blue-600 transition duration-150 flex items-center space-x-2"
-                          :class="{ 'line-through text-gray-500': task.completed && isToday(selectedDayIndex) }"
-                          @click="openTaskDetailModal(task)"
-                      >
+                          <div
+                              class="text-lg font-semibold text-gray-800 cursor-pointer hover:underline hover:text-blue-600 transition duration-150 flex items-center space-x-2"
+                              :class="{ 'line-through text-gray-500': task.completed && isToday(selectedDayIndex) }"
+                              @click="openTaskDetailModal(task)"
+                          >
   <span class="truncate max-w-[11rem]">
     {{ task.title.length > 18 ? task.title.slice(0, 18) + '...' : task.title }}
   </span>
-                        <span v-if="task.youtubeURL" class="text-red-500 text-sm" title="YouTube video attached">🎥</span>
-                        <span v-if="task.imageURL" class="text-green-600 text-sm" title="Image attached">🖼️</span>
-                        <span v-if="task.fileURL" class="text-blue-600 text-sm" title="File attached">📄</span>
+                            <span v-if="task.youtubeURL" class="text-red-500 text-sm" title="YouTube video attached">🎥</span>
+                            <span v-if="task.imageURL" class="text-green-600 text-sm" title="Image attached">🖼️</span>
+                            <span v-if="task.fileURL" class="text-blue-600 text-sm" title="File attached">📄</span>
+                          </div>
+
+
+
+
+
+
+
+                          <div v-if="task.reminder?.date && task.reminder?.time" class="text-sm text-gray-500 mt-1">
+                            <div v-if="task.reminder?.date && task.reminder?.time" class="text-sm text-gray-500 mt-1">
+                              📅 {{ formatShortDate(task.reminder.date) }} • ⏰ {{ formatTime(task.reminder.time) }}
+                            </div>
+
+                          </div>
+
+
+
+
+
+                          <div class="absolute top-2 right-2 bg-blue-100  px-2 py-1 rounded-full text-xs font-bold flex items-center ">
+                            <span>10</span>
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 24 24">
+                              <circle cx="12" cy="12" r="10" fill="gold" />
+                              <circle cx="12" cy="12" r="8" fill="goldenrod" />
+                              <circle cx="9" cy="9" r="3" fill="rgba(255, 255, 255, 0.4)" />
+                              <text x="12" y="16" font-size="12" text-anchor="middle" fill="white" font-family="Arial" font-weight="bold">
+                                $
+                              </text>
+                            </svg>
+
+                          </div>
+
+                          <!--                    <div v-if="task.time" class="text-sm text-gray-400">{{ task.time }}</div>-->
+                          <!-- User Icon and Name with Spinning Icon -->
+                          <div class="flex items-center space-x-2 text-xs">
+                            <!-- Incomplete Task Indicator -->
+                            <div v-if="!task.completed && isToday(selectedDayIndex)" class="text-yellow-500">
+                              <i class="fas fa-circle"></i> Incomplete
+                            </div>
+                            <button
+                                @click="toggleTaskImportance(index)"
+                                class="text-xl hover:scale-110 transition-transform"
+                                :title="task.important ? 'Marked as Important' : 'Mark as Important'"
+                            >
+                              <i :class="task.important ? 'fas fa-fire text-red-500' : 'fas fa-fire text-gray-400'" />
+                            </button>
+                            <div>
+                              <!-- Button to Open Modal -->
+
+
+                              <!-- Modal -->
+
+
+                            </div>
+                            <!--                        &lt;!&ndash; In Progress Task Indicator &ndash;&gt;-->
+                            <!--                        <div v-if="isToday(selectedDayIndex) && index === topIncompleteTaskIndex" class="text-blue-500 flex items-center">-->
+                            <!--                          <i class="fas fa-hourglass-half animate-spin-slow mr-1"></i> In Progress-->
+                            <!--                        </div>-->
+
+                            <!-- Completed Task Indicator -->
+                            <div v-if="task.completed && isToday(selectedDayIndex)"  class="text-green-500">
+                              <i class="fas fa-check-circle"></i> Completed
+                            </div>
+
+                          </div>
+
+                        </div>
                       </div>
 
-
-
-
-
-
-
-                      <div v-if="task.reminder?.date && task.reminder?.time" class="text-sm text-gray-500 mt-1">
-                        <div v-if="task.reminder?.date && task.reminder?.time" class="text-sm text-gray-500 mt-1">
-                          📅 {{ formatShortDate(task.reminder.date) }} • ⏰ {{ formatTime(task.reminder.time) }}
-                        </div>
-
-                      </div>
-
-
-
-
-
-                      <div class="absolute top-2 right-2 bg-blue-100  px-2 py-1 rounded-full text-xs font-bold flex items-center ">
-                        <span>10</span>
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 24 24">
-                          <circle cx="12" cy="12" r="10" fill="gold" />
-                          <circle cx="12" cy="12" r="8" fill="goldenrod" />
-                          <circle cx="9" cy="9" r="3" fill="rgba(255, 255, 255, 0.4)" />
-                          <text x="12" y="16" font-size="12" text-anchor="middle" fill="white" font-family="Arial" font-weight="bold">
-                            $
-                          </text>
-                        </svg>
-
-                      </div>
-
-                      <!--                    <div v-if="task.time" class="text-sm text-gray-400">{{ task.time }}</div>-->
-                      <!-- User Icon and Name with Spinning Icon -->
-                      <div class="flex items-center space-x-2 text-xs">
-                        <!-- Incomplete Task Indicator -->
-                        <div v-if="!task.completed && isToday(selectedDayIndex)" class="text-yellow-500">
-                          <i class="fas fa-circle"></i> Incomplete
-                        </div>
-                        <button
-                            @click="toggleTaskImportance(index)"
-                            class="text-xl hover:scale-110 transition-transform"
-                            :title="task.important ? 'Marked as Important' : 'Mark as Important'"
-                        >
-                          <i :class="task.important ? 'fas fa-fire text-red-500' : 'fas fa-fire text-gray-400'" />
-                        </button>
-                        <div>
-                          <!-- Button to Open Modal -->
-
-
-                          <!-- Modal -->
-
-
-                        </div>
-<!--                        &lt;!&ndash; In Progress Task Indicator &ndash;&gt;-->
-<!--                        <div v-if="isToday(selectedDayIndex) && index === topIncompleteTaskIndex" class="text-blue-500 flex items-center">-->
-<!--                          <i class="fas fa-hourglass-half animate-spin-slow mr-1"></i> In Progress-->
-<!--                        </div>-->
-
-                        <!-- Completed Task Indicator -->
-                        <div v-if="task.completed && isToday(selectedDayIndex)"  class="text-green-500">
-                          <i class="fas fa-check-circle"></i> Completed
-                        </div>
-
-                      </div>
-
-                    </div>
-                  </div>
-
-                  <!-- Task Labels -->
-                  <div class="flex flex-wrap gap-2 mb-3">
+                      <!-- Task Labels -->
+                      <div class="flex flex-wrap gap-2 mb-3">
      <span
          v-for="(label, index) in task.labels"
          :key="index"
@@ -813,117 +842,117 @@
                 ? 'bg-green-500 text-white'
                 : 'bg-gray-200 text-gray-600'
             ]"
-               >
+     >
             {{ label }}
         </span>
-                  </div>
+                      </div>
 
-                  <!-- User Icon and Name Inline with Task Actions -->
-                  <div class="flex items-center justify-between mb-3 space-x-4">
-                    <!-- User Icon and Name -->
-                    <div class="flex items-center space-x-2 relative">
+                      <!-- User Icon and Name Inline with Task Actions -->
+                      <div class="flex items-center justify-between mb-3 space-x-4">
+                        <!-- User Icon and Name -->
+                        <div class="flex items-center space-x-2 relative">
+
+
+                        </div>
+
+                        <!-- Task Actions -->
+                        <div class="flex items-center space-x-2">
+
+                          <!-- Task Completion Radio Button -->
+                          <button
+                              v-if="isToday(selectedDayIndex)"
+                              @click="toggleTaskCompletion(index)"
+                              class="absolute top-2 left-2 focus:outline-none"
+                          >
+                            <i
+                                :class="task.completed ? 'fas fa-dot-circle text-green-500' : 'far fa-circle text-gray-400'"
+                                class="text-xl transition-all duration-300 ease-in-out"
+                            ></i>
+                          </button>
+
+                          <button
+                              @click="openModal('calendar', index, task.title)"
+                              class="rounded-md text-xs sm:text-sm"
+                          >
+                            📅
+                          </button>
+
+                          <button
+                              @click="deleteTask(index)"
+                              class="text-red-500 hover:text-red-700 text-xs sm:text-sm"
+                          >
+                            🗑️
+                          </button>
+
+                          <button
+                              @click="openTransferModal(index)"
+                              class="text-blue-500 hover:text-blue-700 text-xs sm:text-sm"
+                          >
+                            🔄
+                          </button>
+
+                          <button
+                              @click="openWontDoModal(index)"
+                              class="text-orange-500 hover:text-orange-700 text-xs sm:text-sm"
+                          >
+                            🚫
+                          </button>
+                          <button @click="triggerImageUpload(index)">
+                            📎
+                          </button>
+                          <input
+                              type="file"
+                              :ref="'fileInput_' + index"
+                              accept="image/*,.pdf,.doc,.docx,.txt"
+                              @change="handleUpload($event, index)"
+                              class="hidden"
+                          />
+
+
+
+                          <button
+                              @click="showTimerModal = true"
+                              class="text-orange-500 hover:text-orange-700 text-xs sm:text-sm"
+                              title="Start Timer"
+                          >
+                            ⏱️
+                          </button>
+                          <button
+                              @click="openYouTubeModal(index)"
+                              class="text-red-500 hover:text-red-700 text-xs sm:text-sm"
+                              title="Add YouTube Video"
+                          >
+                            <i class="fab fa-youtube text-xl"></i>
+                          </button>
+
+
+                        </div>
+                      </div>
+
+
+                      <div
+                          class="absolute bottom-2 left-2 w-5 h-5 flex items-center justify-center bg-gray-300 rounded-full text-xs font-bold text-gray-800 shadow-sm"
+                      >
+                        {{ index + 1 }}
+                      </div>
+
+                      <!-- Notification -->
+                      <div
+                          v-if="showNotification"
+                          class="notification-popup bg-green-500 text-white px-4 py-2 rounded-md absolute top-4 right-4 shadow-lg"
+                      >
+                        Create successfully
+                      </div>
+                      <div v-if="transferNotification" class="fixed top-5 right-5 bg-blue-500 text-white px-4 py-2 rounded-lg shadow-lg transition-opacity duration-300">
+                        {{ transferNotification }}
+                      </div>
 
 
                     </div>
 
-                    <!-- Task Actions -->
-                    <div class="flex items-center space-x-2">
+                  </template>
 
-                      <!-- Task Completion Radio Button -->
-                      <button
-                          v-if="isToday(selectedDayIndex)"
-                          @click="toggleTaskCompletion(index)"
-                          class="absolute top-2 left-2 focus:outline-none"
-                      >
-                        <i
-                            :class="task.completed ? 'fas fa-dot-circle text-green-500' : 'far fa-circle text-gray-400'"
-                            class="text-xl transition-all duration-300 ease-in-out"
-                        ></i>
-                      </button>
-
-                      <button
-                          @click="openModal('calendar', index, task.title)"
-                          class="rounded-md text-xs sm:text-sm"
-                      >
-                        📅
-                      </button>
-
-                      <button
-                          @click="deleteTask(index)"
-                          class="text-red-500 hover:text-red-700 text-xs sm:text-sm"
-                      >
-                        🗑️
-                      </button>
-
-                      <button
-                          @click="openTransferModal(index)"
-                          class="text-blue-500 hover:text-blue-700 text-xs sm:text-sm"
-                      >
-                        🔄
-                      </button>
-
-                      <button
-                          @click="openWontDoModal(index)"
-                          class="text-orange-500 hover:text-orange-700 text-xs sm:text-sm"
-                      >
-                        🚫
-                      </button>
-                      <button @click="triggerImageUpload(index)">
-                        📎
-                      </button>
-                      <input
-                          type="file"
-                          :ref="'fileInput_' + index"
-                          accept="image/*,.pdf,.doc,.docx,.txt"
-                          @change="handleUpload($event, index)"
-                          class="hidden"
-                      />
-
-
-
-                      <button
-                          @click="showTimerModal = true"
-                          class="text-orange-500 hover:text-orange-700 text-xs sm:text-sm"
-                          title="Start Timer"
-                      >
-                        ⏱️
-                      </button>
-                      <button
-                          @click="openYouTubeModal(index)"
-                          class="text-red-500 hover:text-red-700 text-xs sm:text-sm"
-                          title="Add YouTube Video"
-                      >
-                        <i class="fab fa-youtube text-xl"></i>
-                      </button>
-
-
-                    </div>
-                  </div>
-
-
-                  <div
-                      class="absolute bottom-2 left-2 w-5 h-5 flex items-center justify-center bg-gray-300 rounded-full text-xs font-bold text-gray-800 shadow-sm"
-                  >
-                    {{ index + 1 }}
-                  </div>
-
-                  <!-- Notification -->
-                  <div
-                      v-if="showNotification"
-                      class="notification-popup bg-green-500 text-white px-4 py-2 rounded-md absolute top-4 right-4 shadow-lg"
-                  >
-                    Create successfully
-                  </div>
-                  <div v-if="transferNotification" class="fixed top-5 right-5 bg-blue-500 text-white px-4 py-2 rounded-lg shadow-lg transition-opacity duration-300">
-                    {{ transferNotification }}
-                  </div>
-
-
-                </div>
-
-              </template>
-
-            </draggable>
+                </draggable>
               </div>
             </div>
 
@@ -934,8 +963,8 @@
             >
               <img
                   src="@/assets/free.svg"
-              alt="Idle Time Illustration"
-              class="w-64 h-64 mb-4"
+                  alt="Idle Time Illustration"
+                  class="w-64 h-64 mb-4"
               />
               <h2 class="text-2xl font-bold text-gray-700">It's Idle Time 🧘</h2>
               <p class="text-gray-500 mt-2 text-sm text-center px-4 max-w-md">
@@ -975,10 +1004,8 @@ import { doc, setDoc, serverTimestamp, getDoc, updateDoc,getFirestore} from 'fir
 const modalOpen = ref(false);
 import axios from 'axios';
 import { deleteObject } from "firebase/storage";
-import TimeTracker from "@/components/TimeTracker.vue";
-import SocialMediaAccess from "@/components/SocialMediaAccess.vue"
-import { getCurrentInstance } from 'vue';
 
+import { getCurrentInstance } from 'vue';
 
 const { proxy } = getCurrentInstance();
 
@@ -1832,7 +1859,7 @@ const updateStreakOnCompletion = async () => {
 
 const closeFullScreenAnimation = () => {
   showFullScreenAnimation.value = false;
- fetchSelectedDayRoutine()
+  fetchSelectedDayRoutine()
 };
 
 
@@ -2848,143 +2875,83 @@ const extractYouTubeID = (url) => {
   const match = url.match(/(?:\?v=|\/embed\/|\.be\/)([a-zA-Z0-9_-]{11})/);
   return match ? match[1] : '';
 };
+const showWorkoutModal = ref(false);
+const workoutPreferences = reactive({
+  goal: 'General Fitness',
+  duration: 20,
+  equipment: 'None',
+  fitnessLevel: 'Beginner',
+  focusArea: 'Full Body',
+  intensity: 'Moderate',
+  daysPerWeek: 6,
+  maxPerDay: 3, // default
+  style: '',
+  targetAudience: '',
+  timeOfDay: ''
+});
 
-const defaultWorkoutWeek = {
-  Sun: [],
-  Mon: [
-    {
-      title: "Push-ups – 1 set to failure",
-      youtubeURL: "https://www.youtube.com/watch?v=IODxDxX7oi4",
-      type: "recurring",
-      completed: false
-    },
-    {
-      title: "Resistance Band Chest Press – 1 slow, intense set to burn",
-      youtubeURL: "https://www.youtube.com/watch?v=j3ccNPK-P4U",
-      type: "recurring",
-      completed: false
-    },
-    {
-      title: "Resistance Band Triceps Pushdown – 1 slow, deep set to burn",
-      youtubeURL: "https://www.youtube.com/watch?v=Y3CDzx-oj3k",
-      type: "recurring",
-      completed: false
-    }
-  ],
-  Tue: [
-    {
-      title: "Pull-ups – 1 set to failure (or assisted)",
-      youtubeURL: "https://www.youtube.com/watch?v=eGo4IYlbE5g",
-      type: "recurring",
-      completed: false
-    },
-    {
-      title: "Resistance Band Rows – 1 heavy set to burn",
-      youtubeURL: "https://www.youtube.com/watch?v=LSkyinhmA8k",
-      type: "recurring",
-      completed: false
-    },
-    {
-      title: "Resistance Band Bicep Curls – 1 controlled burnout set",
-      youtubeURL: "https://www.youtube.com/watch?v=pXS-fSPWpk8",
-      type: "recurring",
-      completed: false
-    }
-  ],
-  Wed: [
-    {
-      title: "Resistance Band Squats – 1 slow, deep set to burn",
-      youtubeURL: "https://www.youtube.com/watch?v=duP-UZsfOaQ",
-      type: "recurring",
-      completed: false
-    },
-    {
-      title: "Resistance Band Deadlifts – 1 controlled set",
-      youtubeURL: "https://www.youtube.com/watch?v=MG3ja0zVXuk",
-      type: "recurring",
-      completed: false
-    },
-    {
-      title: "Resistance Band Hamstring Curls – 1 high-rep set to fatigue",
-      youtubeURL: "https://www.youtube.com/watch?v=LtTcXXgeRYo",
-      type: "recurring",
-      completed: false
-    }
-  ],
-  Thu: [
-    {
-      title: "Resistance Band Shoulder Press – 1 long, slow set to fatigue",
-      youtubeURL: "https://www.youtube.com/watch?v=0rLjkQweIDg",
-      type: "recurring",
-      completed: false
-    },
-    {
-      title: "Resistance Band Lateral Raises – 1 set until you can’t lift anymore",
-      youtubeURL: "https://www.youtube.com/watch?v=yfNg5sFndbw",
-      type: "recurring",
-      completed: false
-    },
-    {
-      title: "Resistance Band Shrugs – 1 burnout set",
-      youtubeURL: "https://www.youtube.com/watch?v=CTAeFLD0Xgc",
-      type: "recurring",
-      completed: false
-    }
-  ],
-  Fri: [
-    {
-      title: "Incline Push-ups – 1 set to failure",
-      youtubeURL: "https://www.youtube.com/watch?v=cfns5VDVVvk",
-      type: "recurring",
-      completed: false
-    },
-    {
-      title: "Resistance Band Incline Press – 1 full burn set",
-      youtubeURL: "https://www.youtube.com/watch?v=uEy0X8UmfCk",
-      type: "recurring",
-      completed: false
-    },
-    {
-      title: "Resistance Band Bicep Curls (alternating arms) – 1 deep burnout set",
-      youtubeURL: "https://www.youtube.com/watch?v=F-GJJ0bPF7U",
-      type: "recurring",
-      completed: false
-    }
-  ],
-  Sat: [
-    {
-      title: "Sit-ups – 1 set to failure",
-      youtubeURL: "https://www.youtube.com/watch?v=1fbU_MkV7NE",
-      type: "recurring",
-      completed: false
-    },
-    {
-      title: "Resistance Band Russian Twists – 1 slow, controlled set",
-      youtubeURL: "https://www.youtube.com/watch?v=NeAtimSCxsY",
-      type: "recurring",
-      completed: false
-    },
-    {
-      title: "Resistance Band Woodchoppers – 1 per side to fatigue",
-      youtubeURL: "https://www.youtube.com/watch?v=G5V3a5v3vJY",
-      type: "recurring",
-      completed: false
-    }
-  ]
+
+const openWorkoutModal = () => {
+  showWorkoutModal.value = true;
+};const closeWorkoutModal = () => {
+  showWorkoutModal.value = false;
+};
+
+const generateWorkoutRoutine = async () => {
+  closeWorkoutModal();
+  isLoading.value = true;
+
+  let equipmentDetails = '';
+  if (workoutPreferences.equipment === 'None') {
+    equipmentDetails = 'No equipment at all';
+  } else if (workoutPreferences.equipment === 'Resistance Bands') {
+    equipmentDetails = 'Only resistance bands';
+  } else if (workoutPreferences.equipment === 'Resistance Bands + Equipment') {
+    equipmentDetails = 'Resistance bands with dumbbells or kettlebells';
+  } else {
+    equipmentDetails = 'Full gym equipment';
+  }
+
+  const prompt = `Create a ${workoutPreferences.daysPerWeek}-day workout routine for someone who wants to train with: ${equipmentDetails}.
+Goal: ${workoutPreferences.goal}, Duration: ${workoutPreferences.duration} minutes, Fitness Level: ${workoutPreferences.fitnessLevel}, Focus: ${workoutPreferences.focusArea}, Intensity: ${workoutPreferences.intensity}, Style: ${workoutPreferences.style || 'any'}.
+Limit to a maximum of ${workoutPreferences.maxPerDay} workouts per day.
+Return in JSON format like:
+{
+  "Mon": [{ "title": "...", "youtubeURL": "...", "type": "recurring", "completed": false }],
+  ...
+}`;
+
+  try {
+    const response = await axios.post("https://api.openai.com/v1/chat/completions", {
+      model: "gpt-4",
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.7
+    }, {
+      headers: {
+        Authorization: `Bearer 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
+`,
+        "Content-Type": "application/json"
+      }
+    });
+
+    const result = JSON.parse(response.data.choices[0].message.content);
+    applyGeneratedRoutine(result);
+  } catch (err) {
+    console.error("AI Error:", err);
+    alert("Failed to generate workout routine.");
+  } finally {
+    isLoading.value = false;
+  }
 };
 
 
-
-
-const copyFullWeekRoutine = async () => {
-  if (!userId.value) return alert("Please log in");
-
+const applyGeneratedRoutine = async (generatedWeek) => {
   try {
-    for (const [day, workouts] of Object.entries(defaultWorkoutWeek)) {
+    for (const [day, tasks] of Object.entries(generatedWeek)) {
       const docRef = doc(db, "weeklyRoutines", `${userId.value}_${day}`);
       await setDoc(docRef, {
-        tasks: workouts.map(workout => ({
-          ...workout,
+        tasks: tasks.map(task => ({
+          ...task,
           createdAt: new Date().toISOString(),
           userId: userId.value,
           labels: ["Workout"],
@@ -2995,15 +2962,12 @@ const copyFullWeekRoutine = async () => {
       });
     }
 
-    alert("✅ Weekly workout routine copied!");
+    alert("✅ Your AI workout routine is ready!");
     if (selectedDayIndex.value !== -1) fetchSelectedDayRoutine();
   } catch (err) {
-    console.error("Error copying workout routine:", err);
-    alert("❌ Failed to copy routine.");
+    console.error("Error applying AI routine:", err);
   }
 };
-
-
 
 
 </script>
@@ -3043,7 +3007,6 @@ const copyFullWeekRoutine = async () => {
 }
 
 
-
 .badge-display span {
   font-size: 2rem;
 }
@@ -3078,6 +3041,7 @@ const copyFullWeekRoutine = async () => {
 .animate-spin-slow {
   animation: spin 3s linear infinite;
 }
+
 .streak-icon {
   animation: pulse 1.5s infinite;
   transition: transform 0.3s ease-in-out;
@@ -3097,15 +3061,30 @@ const copyFullWeekRoutine = async () => {
 }
 
 @keyframes pulseWave {
-  0%, 100% { height: 0.5rem; }
-  50% { height: 2rem; }
+  0%, 100% {
+    height: 0.5rem;
+  }
+  50% {
+    height: 2rem;
+  }
 }
+
 .animate-pulse {
   animation: pulseWave 1s ease-in-out infinite;
 }
-.delay-100 { animation-delay: 0.1s; }
-.delay-200 { animation-delay: 0.2s; }
-.delay-300 { animation-delay: 0.3s; }
+
+.delay-100 {
+  animation-delay: 0.1s;
+}
+
+.delay-200 {
+  animation-delay: 0.2s;
+}
+
+.delay-300 {
+  animation-delay: 0.3s;
+}
+
 @keyframes conveyorScrollDown {
   0% {
     transform: translateY(-50%);
@@ -3119,6 +3098,7 @@ const copyFullWeekRoutine = async () => {
   animation: conveyorScrollDown 30s linear infinite;
   will-change: transform;
 }
+
 .animate-conveyor:hover {
   animation: none !important; /* Fully stops the animation */
   transform: translateY(0%) !important; /* Resets to natural position (top) */
@@ -3138,6 +3118,7 @@ const copyFullWeekRoutine = async () => {
 .animate-pulse-slow {
   animation: pulseSlow 2s infinite;
 }
+
 @keyframes spinSlow {
   from {
     transform: rotate(0deg);
@@ -3153,3 +3134,4 @@ const copyFullWeekRoutine = async () => {
 }
 
 </style>
+
