@@ -1,3 +1,6 @@
+
+
+
 <template>
   <div ref="scrollContainer" class="h-[100vh] overflow-auto bg-gray-200 p-3"  >
     <div v-if="isLoading" class="fixed inset-0 bg-gradient-to-br from-green-500 via-blue-500 to-purple-500 flex items-center justify-center z-50">
@@ -2911,6 +2914,7 @@ const generateWorkoutRoutine = async () => {
   } else {
     equipmentDetails = 'Full gym equipment';
   }
+  const OPENAI_API_KEY = process.env.VUE_APP_OPENAI_API_KEY;
 
   const prompt = `Create a ${workoutPreferences.daysPerWeek}-day workout routine for someone who wants to train with: ${equipmentDetails}.
 Goal: ${workoutPreferences.goal}, Duration: ${workoutPreferences.duration} minutes, Fitness Level: ${workoutPreferences.fitnessLevel}, Focus: ${workoutPreferences.focusArea}, Intensity: ${workoutPreferences.intensity}, Style: ${workoutPreferences.style || 'any'}.
@@ -2924,12 +2928,11 @@ Return in JSON format like:
   try {
     const response = await axios.post("https://api.openai.com/v1/chat/completions", {
       model: "gpt-4",
-      messages: [{ role: "user", content: prompt }],
+      messages: [{role: "user", content: prompt}],
       temperature: 0.7
     }, {
       headers: {
-        Authorization: `Bearer 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
-`,
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
         "Content-Type": "application/json"
       }
     });
@@ -3134,4 +3137,5 @@ const applyGeneratedRoutine = async (generatedWeek) => {
 }
 
 </style>
+
 
