@@ -3,14 +3,21 @@ require('dotenv').config();
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY)
 const admin = require('firebase-admin');
 const crypto = require('crypto');
-const serviceAccount = require('./serviceAccountKey.json'); // ✅ Explicit path
 
+const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+
+// ✅ Decode Firebase key from base64
+const decoded = Buffer.from(process.env.GOOGLE_APPLICATION_CREDENTIALS_BASE64, 'base64').toString('utf8');
+const serviceAccount = JSON.parse(decoded);
+
+// ✅ Initialize Firebase safely
 if (!admin.apps.length) {
     admin.initializeApp({
         credential: admin.credential.cert(serviceAccount),
     });
 }
-const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
 
 exports.handler = async (event) => {
     const sig = event.headers['stripe-signature'];
