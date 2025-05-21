@@ -1,6 +1,4 @@
-
-
-
+462!
 <template>
   <div ref="scrollContainer" class="h-[100vh] overflow-auto bg-gray-200 p-3"  >
     <div v-if="isLoading" class="fixed inset-0 bg-gradient-to-br from-green-500 via-blue-500 to-purple-500 flex items-center justify-center z-50">
@@ -66,9 +64,18 @@
 
           </div>
         </div>
-        <button @click="openWorkoutModal" class="bg-indigo-600 text-white px-4 py-2 rounded-full shadow-md hover:bg-indigo-700">
+        <button
+            v-if="!hasPaid"
+            @click="redirectToCheckout"
+            class="bg-green-600 text-white px-4 py-2 rounded-full shadow-md hover:bg-green-700 mt-2"
+        >
+          Unlock AI Routine Access 💳
+        </button>
+        <button v-else
+                @click="openWorkoutModal" class="bg-indigo-600 text-white px-4 py-2 rounded-full shadow-md hover:bg-indigo-700">
           Generate Weekly Routine 💪
         </button>
+
 
 
         <!--        <SocialMediaAccess :completionPercentage="calculateCompletionPercentage(task)" />-->
@@ -1880,10 +1887,15 @@ onMounted(() => {
     selectedDayIndex.value = todayIndex;
   }
 });
-onAuthStateChanged(auth, (user) => {
+const hasPaid = ref(false);
+onAuthStateChanged(auth, async (user) => {
   if (user) {
-    userId.value = user.uid; // Set user ID when the user logs in
-    console.log('User ID:', userId.value);
+    userId.value = user.uid;
+    const userDocRef = doc(db, 'users', user.uid);
+    const userSnap = await getDoc(userDocRef);
+    if (userSnap.exists()) {
+      hasPaid.value = userSnap.data().hasPaid === true;
+    }
 
     // Fetch tasks and streak after user ID is set
     fetchStreakOnLoad(); // Ensure this runs after userId is set
@@ -2972,6 +2984,26 @@ const applyGeneratedRoutine = async (generatedWeek) => {
   }
 };
 
+const redirectToCheckout = async () => {
+  try {
+    const response = await fetch('/.netlify/functions/create-checkout-session', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ userId: userId.value }),
+    });
+
+    const data = await response.json();
+    if (data?.url) {
+      window.location.href = data.url;
+    } else {
+      console.error('Invalid response from checkout session:', data);
+    }
+  } catch (error) {
+    console.error('Error redirecting to checkout:', error);
+  }
+};
 
 </script>
 

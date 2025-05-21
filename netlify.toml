@@ -1,4 +1,15 @@
-[[redirect]]
+[build]
+publish = "dist"  # or "build" if using Vite or React
+functions = "netlify/functions"
+
+[[redirects]]
 from = "/*"
 to = "/index.html"
 status = 200
+
+[functions]
+node_bundler = "esbuild"
+
+[functions."stripe-webhook"]
+included_files = ["netlify/functions/serviceAccountKey.json"]
+external_node_modules = ["stripe", "firebase-admin", "@opentelemetry/api"]

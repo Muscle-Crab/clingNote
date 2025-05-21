@@ -1,0 +1,84 @@
+[debug] [2025-02-20T00:15:47.531Z] ----------------------------------------------------------------------
+[debug] [2025-02-20T00:15:47.534Z] Command:       /usr/local/bin/node /usr/local/bin/firebase init functions
+[debug] [2025-02-20T00:15:47.535Z] CLI Version:   13.29.2
+[debug] [2025-02-20T00:15:47.535Z] Platform:      darwin
+[debug] [2025-02-20T00:15:47.535Z] Node Version:  v20.11.1
+[debug] [2025-02-20T00:15:47.536Z] Time:          Wed Feb 19 2025 19:15:47 GMT-0500 (Eastern Standard Time)
+[debug] [2025-02-20T00:15:47.536Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2025-02-20T00:15:47.539Z] >>> [apiv2][query] GET https://firebase-public.firebaseio.com/cli.json [none]
+[debug] [2025-02-20T00:15:47.918Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2025-02-20T00:15:47.919Z] > authorizing via signed-in user (ds7513635@gmail.com)
+[info] 
+     ######## #### ########  ######## ########     ###     ######  ########
+     ##        ##  ##     ## ##       ##     ##  ##   ##  ##       ##
+     ######    ##  ########  ######   ########  #########  ######  ######
+     ##        ##  ##    ##  ##       ##     ## ##     ##       ## ##
+     ##       #### ##     ## ######## ########  ##     ##  ######  ########
+
+You're about to initialize a Firebase project in this directory:
+
+  /Users/daltonsmith/Documents/my-pushalert-app
+
+Before we get started, keep in mind:
+
+  * You are initializing within an existing Firebase project directory
+
+[info] 
+=== Project Setup
+[info] 
+[info] First, let's associate this project directory with a Firebase project.
+[info] You can create multiple project aliases by running firebase use --add, 
+[info] but for now we'll just set up a default project.
+[info] 
+[debug] [2025-02-20T00:15:47.928Z] Using project from CLI flag: clingnote-463b4
+[debug] [2025-02-20T00:15:47.929Z] Checked if tokens are valid: false, expires at: 1738142316956
+[debug] [2025-02-20T00:15:47.930Z] Checked if tokens are valid: false, expires at: 1738142316956
+[debug] [2025-02-20T00:15:47.930Z] > refreshing access token with scopes: []
+[debug] [2025-02-20T00:15:47.934Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
+[debug] [2025-02-20T00:15:47.934Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2025-02-20T00:15:48.268Z] <<< [apiv2][status] GET https://firebase-public.firebaseio.com/cli.json 200
+[debug] [2025-02-20T00:15:48.268Z] <<< [apiv2][body] GET https://firebase-public.firebaseio.com/cli.json {"cloudBuildErrorAfter":1594252800000,"cloudBuildWarnAfter":1590019200000,"defaultNode10After":1594252800000,"minVersion":"3.0.5","node8DeploysDisabledAfter":1613390400000,"node8RuntimeDisabledAfter":1615809600000,"node8WarnAfter":1600128000000}
+[debug] [2025-02-20T00:15:48.321Z] <<< [apiv2][status] POST https://www.googleapis.com/oauth2/v3/token 200
+[debug] [2025-02-20T00:15:48.323Z] <<< [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2025-02-20T00:15:48.364Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/clingnote-463b4 [none]
+[debug] [2025-02-20T00:15:48.893Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/clingnote-463b4 200
+[debug] [2025-02-20T00:15:48.893Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/clingnote-463b4 {"projectId":"clingnote-463b4","projectNumber":"168239327702","displayName":"ClingNote","name":"projects/clingnote-463b4","resources":{"hostingSite":"clingnote-463b4","realtimeDatabaseInstance":"clingnote-463b4-default-rtdb","locationId":"us-central"},"state":"ACTIVE","etag":"1_38e2f2e5-67fc-4f48-a211-949c63563425"}
+[info] i  Using project clingnote-463b4 (ClingNote) 
+[info] 
+=== Functions Setup
+[debug] [2025-02-20T00:15:48.909Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2025-02-20T00:15:48.909Z] > authorizing via signed-in user (ds7513635@gmail.com)
+[debug] [2025-02-20T00:15:48.909Z] [iam] checking project clingnote-463b4 for permissions ["firebase.projects.get"]
+[debug] [2025-02-20T00:15:48.910Z] Checked if tokens are valid: true, expires at: 1740014147324
+[debug] [2025-02-20T00:15:48.910Z] Checked if tokens are valid: true, expires at: 1740014147324
+[debug] [2025-02-20T00:15:48.910Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/clingnote-463b4:testIamPermissions [none]
+[debug] [2025-02-20T00:15:48.910Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/clingnote-463b4:testIamPermissions x-goog-quota-user=projects/clingnote-463b4
+[debug] [2025-02-20T00:15:48.910Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/clingnote-463b4:testIamPermissions {"permissions":["firebase.projects.get"]}
+[debug] [2025-02-20T00:15:49.510Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/clingnote-463b4:testIamPermissions 200
+[debug] [2025-02-20T00:15:49.510Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/clingnote-463b4:testIamPermissions {"permissions":["firebase.projects.get"]}
+[debug] [2025-02-20T00:15:49.510Z] Checked if tokens are valid: true, expires at: 1740014147324
+[debug] [2025-02-20T00:15:49.510Z] Checked if tokens are valid: true, expires at: 1740014147324
+[debug] [2025-02-20T00:15:49.510Z] Checked if tokens are valid: true, expires at: 1740014147324
+[debug] [2025-02-20T00:15:49.510Z] Checked if tokens are valid: true, expires at: 1740014147324
+[debug] [2025-02-20T00:15:49.511Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/clingnote-463b4/services/cloudfunctions.googleapis.com [none]
+[debug] [2025-02-20T00:15:49.511Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/clingnote-463b4/services/cloudfunctions.googleapis.com x-goog-quota-user=projects/clingnote-463b4
+[debug] [2025-02-20T00:15:49.512Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/clingnote-463b4/services/runtimeconfig.googleapis.com [none]
+[debug] [2025-02-20T00:15:49.512Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/clingnote-463b4/services/runtimeconfig.googleapis.com x-goog-quota-user=projects/clingnote-463b4
+[debug] [2025-02-20T00:15:51.000Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/clingnote-463b4/services/runtimeconfig.googleapis.com 200
+[debug] [2025-02-20T00:15:51.000Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/clingnote-463b4/services/runtimeconfig.googleapis.com [omitted]
+[debug] [2025-02-20T00:15:51.001Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/clingnote-463b4/services/cloudfunctions.googleapis.com 200
+[debug] [2025-02-20T00:15:51.001Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/clingnote-463b4/services/cloudfunctions.googleapis.com [omitted]
+[info] 
+Detected existing codebase(s): default
+
+[info] Let's create a new codebase for your functions.
+[info] A directory corresponding to the codebase will be created in your project
+[info] with sample code pre-configured.
+
+[info] See https://firebase.google.com/docs/functions/organize-functions for
+[info] more information on organizing your functions using codebases.
+
+[info] Functions can be deployed with firebase deploy.
+
+[error] functions.source must be unique but 'functions' was used more than once.
