@@ -1,3 +1,4 @@
+// create-checkout-session.js
 
 require('dotenv').config();
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY) // Replace with your Stripe test key
@@ -16,7 +17,7 @@ exports.handler = async (event) => {
                         product_data: {
                             name: 'AI Routine Access',
                         },
-                        unit_amount: 200, // $5.00
+                        unit_amount: 800, // $5.00
                     },
                     quantity: 1,
                 },
@@ -24,8 +25,8 @@ exports.handler = async (event) => {
             metadata: {
                 userId, // <--- Store for webhook access
             },
-            success_url: 'https://clingnote.netlify.app/?userId=' + userId,
-            cancel_url: 'https://clingnote.netlify.app/payment-cancelled',
+            success_url: 'http://localhost:8888/payment-success?userId=' + userId,
+            cancel_url: 'http://localhost:8888/payment-cancelled',
         });
 
         return {
