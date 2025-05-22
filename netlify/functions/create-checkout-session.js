@@ -25,8 +25,8 @@ exports.handler = async (event) => {
             metadata: {
                 userId, // <--- Store for webhook access
             },
-            success_url: 'http://localhost:8888/payment-success?userId=' + userId,
-            cancel_url: 'http://localhost:8888/payment-cancelled',
+            success_url: 'https://clingnote.netlify.app/payment-success?userId=' + userId,
+            cancel_url: 'https://clingnote.netlify.app/payment-cancelled',
         });
 
         return {
