@@ -17,7 +17,7 @@ exports.handler = async (event) => {
                         product_data: {
                             name: 'AI Routine Access',
                         },
-                        unit_amount: 5.79, // $5.00
+                        unit_amount: 500, // $5.00
                     },
                     quantity: 1,
                 },
