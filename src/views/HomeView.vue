@@ -790,18 +790,7 @@
 
 
 
-                          <div class="absolute top-2 right-2 bg-blue-100  px-2 py-1 rounded-full text-xs font-bold flex items-center ">
-                            <span>10</span>
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 24 24">
-                              <circle cx="12" cy="12" r="10" fill="gold" />
-                              <circle cx="12" cy="12" r="8" fill="goldenrod" />
-                              <circle cx="9" cy="9" r="3" fill="rgba(255, 255, 255, 0.4)" />
-                              <text x="12" y="16" font-size="12" text-anchor="middle" fill="white" font-family="Arial" font-weight="bold">
-                                $
-                              </text>
-                            </svg>
 
-                          </div>
 
                           <!--                    <div v-if="task.time" class="text-sm text-gray-400">{{ task.time }}</div>-->
                           <!-- User Icon and Name with Spinning Icon -->
@@ -869,16 +858,21 @@
                         <div class="flex items-center space-x-2">
 
                           <!-- Task Completion Radio Button -->
-                          <button
+                          <div
                               v-if="isToday(selectedDayIndex)"
-                              @click="toggleTaskCompletion(index)"
-                              class="absolute top-2 left-2 focus:outline-none"
+                              class="absolute top-2 right-2 flex items-center"
                           >
-                            <i
-                                :class="task.completed ? 'fas fa-dot-circle text-green-500' : 'far fa-circle text-gray-400'"
-                                class="text-xl transition-all duration-300 ease-in-out"
-                            ></i>
-                          </button>
+                            <input
+                                :id="`checkbox-${index}`"
+                                type="checkbox"
+                                :checked="task.completed"
+                                @change="toggleTaskCompletion(index)"
+                                class="w-4 h-4 text-green-600 bg-gray-100 border-gray-300 rounded-sm focus:ring-green-500 dark:focus:ring-green-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
+                            />
+
+                          </div>
+
+
 
                           <button
                               @click="openModal('calendar', index, task.title)"
@@ -1641,7 +1635,7 @@ const toggleTaskCompletion = async (index) => {
   checkAllTasksCompleted();
   await saveDailyPerformance();
   selectedDayRoutine.value = selectedDayRoutine.value.filter(task => !task.completed || showCompleted);
-  showCompleted.value = false;
+  showCompleted.value = true;
 };
 
 const wontDoModalOpen = ref(false);
