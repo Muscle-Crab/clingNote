@@ -1,4 +1,4 @@
-462!
+
 <template>
   <div ref="scrollContainer" class="h-[100vh] overflow-auto bg-gray-200 p-3"  >
     <div v-if="isLoading" class="fixed inset-0 bg-gradient-to-br from-green-500 via-blue-500 to-purple-500 flex items-center justify-center z-50">
@@ -730,7 +730,7 @@
                 <draggable
                     handle=".drag-handle"
                     :animation="150"
-                    v-model="selectedDayRoutine"
+                    :list="sortedSelectedDayRoutine"
                     tag="div"
                     class="tasks-list space-y-2"
                     ghost-class="ghost"
@@ -858,21 +858,16 @@
                         <div class="flex items-center space-x-2">
 
                           <!-- Task Completion Radio Button -->
-                          <div
+                          <button
                               v-if="isToday(selectedDayIndex)"
-                              class="absolute top-2 right-2 flex items-center"
+                              @click="() => toggleTaskCompletion(getOriginalIndex(task))"
+                              class="absolute top-2 right-2 focus:outline-none"
                           >
-                            <input
-                                :id="`checkbox-${index}`"
-                                type="checkbox"
-                                :checked="task.completed"
-                                @change="toggleTaskCompletion(index)"
-                                class="w-4 h-4 text-green-600 bg-gray-100 border-gray-300 rounded-sm focus:ring-green-500 dark:focus:ring-green-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
-                            />
-
-                          </div>
-
-
+                            <i
+                                :class="task.completed ? 'fas fa-dot-circle text-green-500' : 'far fa-circle text-gray-400'"
+                                class="text-xl transition-all duration-300 ease-in-out"
+                            ></i>
+                          </button>
 
                           <button
                               @click="openModal('calendar', index, task.title)"
@@ -1540,15 +1535,15 @@ const updateRoutine = () => {
 };
 
 const sortedSelectedDayRoutine = computed(() => {
-  return selectedDayRoutine.value.slice().sort((a, b) => {
-    // If both tasks have the same completion status, sort by time
-    if (a.completed === b.completed) {
-      return new Date('1970/01/01 ' + a.time) - new Date('1970/01/01 ' + b.time);
+  return [...selectedDayRoutine.value].sort((a, b) => {
+    // Sort completed tasks first
+    if (a.completed !== b.completed) {
+      return a.completed ? -1 : 1;
     }
-    // If task A is completed and task B is not, A comes first
-    return a.completed ? -1 : 1;
+    return 0; // preserve order otherwise
   });
 });
+
 
 const deleteTask = async (index) => {
   const confirmed = confirm("Are you sure you want to delete this task?");
@@ -2997,6 +2992,12 @@ const redirectToCheckout = async () => {
   } catch (error) {
     console.error('Error redirecting to checkout:', error);
   }
+};
+const getOriginalIndex = (task) => {
+  return selectedDayRoutine.value.findIndex(t =>
+      t.title === task.title &&
+      t.createdAt === task.createdAt
+  );
 };
 
 </script>
