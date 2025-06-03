@@ -71,49 +71,24 @@
         >
           Unlock AI Routine Access 💳
         </button>
-        <button v-else
-                @click="openWorkoutModal" class="bg-indigo-600 text-white px-4 py-2 rounded-full shadow-md hover:bg-indigo-700">
-          Generate Weekly Routine 💪
-        </button>
-
-
-
-        <!--        <SocialMediaAccess :completionPercentage="calculateCompletionPercentage(task)" />-->
-      </div>
-      <div v-if="showWorkoutModal" class="fixed inset-0 bg-black bg-opacity-40 flex justify-center items-center z-50">
-        <div class="bg-white p-6 rounded-lg shadow-xl w-full max-w-lg">
-          <h2 class="text-xl font-semibold mb-4">Customize Your Workout</h2>
-
-          <!-- Example fields -->
-          <label class="block mb-2">Goal:</label>
-          <select v-model="workoutPreferences.goal" class="w-full p-2 border rounded mb-4">
-            <option>Build Muscle</option>
-            <option>Lose Fat</option>
-            <option>General Fitness</option>
-          </select>
-          <label class="block mb-2">Equipment Type:</label>
-          <select v-model="workoutPreferences.equipment" class="w-full p-2 border rounded mb-4">
-            <option>None</option>
-            <option>Resistance Bands</option>
-            <option>Resistance Bands + Equipment</option>
-            <option>Full Gym</option>
-          </select>
-          <label class="block mb-2">Max Workouts Per Day:</label>
-          <select v-model="workoutPreferences.maxPerDay" class="w-full p-2 border rounded mb-4">
-            <option v-for="n in 5" :key="n" :value="n">{{ n }}</option>
-          </select>
-
-          <label class="block mb-2">Duration (min):</label>
-          <input type="number" v-model="workoutPreferences.duration" class="w-full p-2 border rounded mb-4" />
-
-          <!-- Add other fields similarly -->
-
-          <div class="flex justify-end gap-2">
-            <button @click="closeWorkoutModal" class="px-4 py-2 bg-gray-300 rounded">Cancel</button>
-            <button @click="generateWorkoutRoutine" class="px-4 py-2 bg-green-600 text-white rounded">Generate</button>
+        <!-- Smart Prompt Inline -->
+        <div class="w-full max-w-2xl mx-auto mt-4 px-4">
+          <div class="bg-white border border-gray-300 rounded-full px-5 py-3 flex items-center shadow-sm hover:shadow-md transition-shadow duration-300">
+            <input
+                v-model="smartPrompt"
+                @keyup.enter="submitSmartPrompt"
+                placeholder="Describe the list you want to create..."
+                class="flex-1 bg-transparent text-gray-800 text-base md:text-lg outline-none placeholder-gray-500"
+            />
+            <button @click="triggerHandwritingUpload" class="ml-3 text-blue-600 hover:text-blue-800 transition-colors">
+              <i class="fas fa-camera"></i>
+            </button>
           </div>
         </div>
+
+
       </div>
+
       <div v-if="showFullScreenAnimation" class="fixed inset-0 bg-gradient-to-br from-green-500 via-blue-500 to-purple-500 flex items-center justify-center z-50">
         <div class="text-center">
 
@@ -228,8 +203,7 @@
       </div>
       <!-- Modal toggle button -->
       <!-- Floating Add Task + Voice Input Buttons -->
-      <div class="fixed bottom-10 left-1/2 transform -translate-x-1/2 z-50 flex flex-col items-center space-y-4">
-
+      <div class="fixed bottom-10 left-1/2 transform -translate-x-1/2 z-50 flex flex-row items-center space-x-4">
         <!-- Add Task Button -->
         <router-link
             :to="userId ? '#' : '/login'"
@@ -243,25 +217,31 @@
           </svg>
         </router-link>
 
-        <!-- Voice Input Button (Pulses when listening) -->
+
+        <input
+            ref="handwritingInput"
+            type="file"
+            accept="image/*"
+            @change="handleHandwritingUpload"
+            class="hidden"
+        />
+
+        <!-- Voice Input Button -->
         <button
             @click="startVoiceInput"
             class="relative w-16 h-16 flex items-center justify-center bg-white border-2 border-blue-500 text-blue-600 rounded-full shadow-xl hover:bg-blue-100 transition duration-300"
             title="Add Task with Voice"
         >
-          <!-- Pulse effect when listening -->
-          <span
-              v-if="listening"
-              class="absolute inset-0 animate-ping bg-green-400 rounded-full opacity-50"
-          ></span>
-
-          <!-- Mic Icon -->
+    <span
+        v-if="listening"
+        class="absolute inset-0 animate-ping bg-green-400 rounded-full opacity-50"
+    ></span>
           <svg xmlns="http://www.w3.org/2000/svg" class="w-7 h-7 z-10 relative" viewBox="0 0 24 24" fill="currentColor">
             <path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2Z"/>
           </svg>
         </button>
-
       </div>
+
       <div v-if="showTimerModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
         <div class="bg-white rounded-xl shadow-xl p-6 w-96">
           <h3 class="text-xl font-semibold mb-4">Set a Timer</h3>
@@ -698,7 +678,7 @@
               alt="No tasks illustration"
               class="w-48 h-48 mb-6"
           />
-          <h2 class="text-lg font-semibold text-gray-700">No tasks found!</h2>
+          <h2 class="text-lg font-semibold text-gray-700">No list item</h2>
           <p class="text-sm text-gray-500 mt-2">You don’t have any tasks for this day. Add a new task to get started.</p>
 
         </div>
@@ -2879,99 +2859,90 @@ const extractYouTubeID = (url) => {
   const match = url.match(/(?:\?v=|\/embed\/|\.be\/)([a-zA-Z0-9_-]{11})/);
   return match ? match[1] : '';
 };
-const showWorkoutModal = ref(false);
-const workoutPreferences = reactive({
-  goal: 'General Fitness',
-  duration: 20,
-  equipment: 'None',
-  fitnessLevel: 'Beginner',
-  focusArea: 'Full Body',
-  intensity: 'Moderate',
-  daysPerWeek: 6,
-  maxPerDay: 3, // default
-  style: '',
-  targetAudience: '',
-  timeOfDay: ''
-});
 
-
-const openWorkoutModal = () => {
-  showWorkoutModal.value = true;
-};const closeWorkoutModal = () => {
-  showWorkoutModal.value = false;
+const triggerHandwritingUpload = () => {
+  proxy.$refs.handwritingInput.click();
 };
 
-const generateWorkoutRoutine = async () => {
-  closeWorkoutModal();
-  isLoading.value = true;
-
-  let equipmentDetails = '';
-  if (workoutPreferences.equipment === 'None') {
-    equipmentDetails = 'No equipment at all';
-  } else if (workoutPreferences.equipment === 'Resistance Bands') {
-    equipmentDetails = 'Only resistance bands';
-  } else if (workoutPreferences.equipment === 'Resistance Bands + Equipment') {
-    equipmentDetails = 'Resistance bands with dumbbells or kettlebells';
-  } else {
-    equipmentDetails = 'Full gym equipment';
-  }
+const handleHandwritingUpload = async (event) => {
+  const file = event.target.files[0];
   const OPENAI_API_KEY = process.env.VUE_APP_OPENAI_API_KEY;
+  if (!file) return;
 
-  const prompt = `Create a ${workoutPreferences.daysPerWeek}-day workout routine for someone who wants to train with: ${equipmentDetails}.
-Goal: ${workoutPreferences.goal}, Duration: ${workoutPreferences.duration} minutes, Fitness Level: ${workoutPreferences.fitnessLevel}, Focus: ${workoutPreferences.focusArea}, Intensity: ${workoutPreferences.intensity}, Style: ${workoutPreferences.style || 'any'}.
-Limit to a maximum of ${workoutPreferences.maxPerDay} workouts per day.
-Return in JSON format like:
-{
-  "Mon": [{ "title": "...", "youtubeURL": "...", "type": "recurring", "completed": false }],
-  ...
-}`;
+  const reader = new FileReader();
+  reader.onload = async () => {
+    const base64Image = reader.result.split(',')[1];
 
-  try {
-    const response = await axios.post("https://api.openai.com/v1/chat/completions", {
-      model: "gpt-4",
-      messages: [{role: "user", content: prompt}],
-      temperature: 0.7
-    }, {
-      headers: {
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
-        "Content-Type": "application/json"
+    try {
+      const response = await axios.post(
+          'https://api.openai.com/v1/chat/completions',
+          {
+            model: 'gpt-4o',
+            messages: [
+              {
+                role: 'user',
+                content: [
+                  { type: 'text', text: 'Extract a clean to-do list from this image. Only return JSON like: { "tasks": ["item1", "item2"] }' },
+                  { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${base64Image}` } }
+                ]
+              }
+            ],
+            temperature: 0.3,
+            max_tokens: 1000
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${OPENAI_API_KEY}`,
+              'Content-Type': 'application/json'
+            }
+          }
+      );
+
+      let raw = response.data.choices[0].message.content.trim();
+
+// Remove markdown code block if present
+      if (raw.startsWith("```")) {
+        raw = raw.replace(/```json|```/g, "").trim();
       }
-    });
 
-    const result = JSON.parse(response.data.choices[0].message.content);
-    applyGeneratedRoutine(result);
-  } catch (err) {
-    console.error("AI Error:", err);
-    alert("Failed to generate workout routine.");
-  } finally {
-    isLoading.value = false;
-  }
-};
+      const parsed = JSON.parse(raw);
+      saveHandwrittenTasks(parsed.tasks);
 
-
-const applyGeneratedRoutine = async (generatedWeek) => {
-  try {
-    for (const [day, tasks] of Object.entries(generatedWeek)) {
-      const docRef = doc(db, "weeklyRoutines", `${userId.value}_${day}`);
-      await setDoc(docRef, {
-        tasks: tasks.map(task => ({
-          ...task,
-          createdAt: new Date().toISOString(),
-          userId: userId.value,
-          labels: ["Workout"],
-          important: false,
-          notes: "",
-        })),
-        updatedAt: serverTimestamp(),
-      });
+    } catch (err) {
+      console.error("❌ Image analysis failed:", err);
+      alert("Could not extract tasks. Make sure it's a clear list.");
     }
+  };
 
-    alert("✅ Your AI workout routine is ready!");
-    if (selectedDayIndex.value !== -1) fetchSelectedDayRoutine();
-  } catch (err) {
-    console.error("Error applying AI routine:", err);
-  }
+  reader.readAsDataURL(file);
 };
+
+
+const saveHandwrittenTasks = async (tasks) => {
+  const today = days[selectedDayIndex.value].day;
+  const docRef = doc(db, 'weeklyRoutines', `${userId.value}_${today}`);
+  const snapshot = await getDoc(docRef);
+  const existing = snapshot.exists() ? snapshot.data().tasks || [] : [];
+
+  const formatted = tasks.map(t => ({
+    title: t,
+    completed: false,
+    type: 'recurring',
+    createdAt: new Date().toISOString()
+  }));
+
+  await setDoc(docRef, {
+    tasks: [...existing, ...formatted],
+    updatedAt: serverTimestamp()
+  });
+
+  fetchSelectedDayRoutine(); // Refresh
+  alert(`📝 Added ${formatted.length} tasks from handwritten list.`);
+};
+
+
+
+
 
 const redirectToCheckout = async () => {
   try {
@@ -2999,6 +2970,53 @@ const getOriginalIndex = (task) => {
       t.createdAt === task.createdAt
   );
 };
+const smartPrompt = ref('');
+let smartRecognition;
+
+const submitSmartPrompt = async () => {
+  if (!smartPrompt.value.trim()) return;
+  await convertPromptToTasks(smartPrompt.value.trim());
+  smartPrompt.value = '';
+};
+
+
+const convertPromptToTasks = async (promptText) => {
+  const OPENAI_API_KEY = process.env.VUE_APP_OPENAI_API_KEY;
+  try {
+    const response = await axios.post(
+        'https://api.openai.com/v1/chat/completions',
+        {
+          model: 'gpt-4o',
+          messages: [
+            {
+              role: 'user',
+              content: `Convert the following input into a list of to-do tasks. Return valid JSON in this format: { "tasks": [ "task1", "task2", ... ] }.
+Input: "${promptText}"`
+            }
+          ],
+          temperature: 0.3,
+          max_tokens: 500
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${OPENAI_API_KEY}`,
+            'Content-Type': 'application/json'
+          }
+        }
+    );
+
+    let content = response.data.choices[0].message.content.trim();
+    if (content.startsWith("```")) content = content.replace(/```json|```/g, "").trim();
+
+    const parsed = JSON.parse(content);
+    if (parsed.tasks?.length) {
+      saveHandwrittenTasks(parsed.tasks);
+    }
+  } catch (err) {
+    console.error("Failed to convert input to tasks:", err);
+    alert("Could not understand your input.");
+  }
+};
 
 </script>
 
@@ -3012,9 +3030,7 @@ const getOriginalIndex = (task) => {
   cursor: move;
 }
 
-.ghost {
-  visibility: hidden;
-}
+
 
 .draggable {
   cursor: grab;
@@ -3124,15 +3140,7 @@ const getOriginalIndex = (task) => {
   }
 }
 
-.animate-conveyor {
-  animation: conveyorScrollDown 30s linear infinite;
-  will-change: transform;
-}
 
-.animate-conveyor:hover {
-  animation: none !important; /* Fully stops the animation */
-  transform: translateY(0%) !important; /* Resets to natural position (top) */
-}
 
 @keyframes pulseSlow {
   0%, 100% {
@@ -3145,9 +3153,6 @@ const getOriginalIndex = (task) => {
   }
 }
 
-.animate-pulse-slow {
-  animation: pulseSlow 2s infinite;
-}
 
 @keyframes spinSlow {
   from {
@@ -3164,5 +3169,6 @@ const getOriginalIndex = (task) => {
 }
 
 </style>
+
 
 
