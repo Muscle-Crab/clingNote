@@ -64,13 +64,13 @@
 
           </div>
         </div>
-        <button
-            v-if="!hasPaid"
-            @click="redirectToCheckout"
-            class="bg-green-600 text-white px-4 py-2 rounded-full shadow-md hover:bg-green-700 mt-2"
-        >
-          Unlock AI Routine Access 💳
-        </button>
+<!--        <button-->
+<!--            v-if="!hasPaid"-->
+<!--            @click="redirectToCheckout"-->
+<!--            class="bg-green-600 text-white px-4 py-2 rounded-full shadow-md hover:bg-green-700 mt-2"-->
+<!--        >-->
+<!--          Unlock AI Routine Access 💳-->
+<!--        </button>-->
         <!-- Smart Prompt Inline -->
         <div class="w-full max-w-2xl mx-auto mt-4 px-4">
           <div class="bg-white border border-gray-300 rounded-full px-5 py-3 flex items-center shadow-sm hover:shadow-md transition-shadow duration-300">
