@@ -1,4 +1,3 @@
-
 <template>
   <div ref="scrollContainer" class="h-[100vh] overflow-auto bg-gray-200 p-3"  >
     <div v-if="isLoading" class="fixed inset-0 bg-gradient-to-br from-green-500 via-blue-500 to-purple-500 flex items-center justify-center z-50">
@@ -46,6 +45,7 @@
           </div>
         </div>
 
+
         <!-- Icon and Credits on the right -->
         <div class="flex flex-col items-center sm:items-end">
           <div class="text-sm font-medium text-blue-500 flex items-center">
@@ -73,16 +73,35 @@
 <!--        </button>-->
         <!-- Smart Prompt Inline -->
         <div class="w-full max-w-2xl mx-auto mt-4 px-4">
-          <div class="bg-white border border-gray-300 rounded-full px-5 py-3 flex items-center shadow-sm hover:shadow-md transition-shadow duration-300">
-            <input
-                v-model="smartPrompt"
-                @keyup.enter="submitSmartPrompt"
-                placeholder="Describe the list you want to create..."
-                class="flex-1 bg-transparent text-gray-800 text-base md:text-lg outline-none placeholder-gray-500"
-            />
-            <button @click="triggerHandwritingUpload" class="ml-3 text-blue-600 hover:text-blue-800 transition-colors">
+          <div class="bg-white border border-gray-300 rounded-xl px-2 py-3 flex items-end gap-3 shadow-md focus-within:ring-2 focus-within:ring-blue-500 transition">
+    <textarea
+        v-model="smartPrompt"
+        @keyup.enter="submitSmartPrompt"
+        placeholder="Describe the list you want to create...'"
+        rows="1"
+        @input="$event.target.style.height = 'auto'; $event.target.style.height = $event.target.scrollHeight + 'px';"
+        class="flex-1 resize-none overflow-hidden bg-transparent text-gray-800 text-base leading-relaxed outline-none placeholder-gray-400"
+    ></textarea>
+
+
+
+            <!-- Action buttons -->
+            <button
+                @click="triggerHandwritingUpload"
+                class="text-gray-500 hover:text-blue-600 transition-colors"
+                title="Upload Image"
+            >
               <i class="fas fa-camera"></i>
             </button>
+            <button
+                @click="submitSmartPrompt"
+                class="text-gray-500 hover:text-blue-600 transition-colors"
+                title="Upload Image"
+            >
+              <i class="fas fa-paper-plane"></i>
+            </button>
+
+
           </div>
         </div>
 
@@ -1514,15 +1533,6 @@ const updateRoutine = () => {
 
 };
 
-const sortedSelectedDayRoutine = computed(() => {
-  return [...selectedDayRoutine.value].sort((a, b) => {
-    // Sort completed tasks first
-    if (a.completed !== b.completed) {
-      return a.completed ? -1 : 1;
-    }
-    return 0; // preserve order otherwise
-  });
-});
 
 
 const deleteTask = async (index) => {
@@ -1543,10 +1553,6 @@ const deleteTask = async (index) => {
     console.error('Error deleting task:', error);
   }
 };
-// Computed property to get the index of the top-most incomplete task
-const topIncompleteTaskIndex = computed(() => {
-  return selectedDayRoutine.value.findIndex((task) => !task.completed);
-});
 
 const toggleTaskCompletion = async (index) => {
   const task = { ...selectedDayRoutine.value[index] }; // Create a copy of the task to avoid direct mutation
@@ -1987,85 +1993,15 @@ const addNewTask = async () => {
 };
 
 
-const speakDailyReport = async () => {
-  const today = new Date();
-  const yesterday = new Date(today);
-  yesterday.setDate(yesterday.getDate() - 1);
-  const yesterdayStr = yesterday.toISOString().split('T')[0];
-
-  const docRef = doc(db, 'dailyReports', `${userId.value}_${yesterdayStr}`);
-  const snapshot = await getDoc(docRef);
-
-  let yesterdayCompleted = 0;
-  let yesterdayTotal = 0;
-  let streakGained = false;
-
-  if (snapshot.exists()) {
-    const data = snapshot.data();
-    yesterdayCompleted = data.completedTasks;
-    yesterdayTotal = data.totalTasks;
-    streakGained = data.streakGained;
-  }
-
-  const todayTotal = selectedDayRoutine.value.length;
-
-  const message = `Yesterday, you completed ${yesterdayCompleted} of ${yesterdayTotal} tasks.
-    Today you have ${todayTotal} task${todayTotal === 1 ? '' : 's'}.
-    ${streakGained ? '🔥 Great job on earning a streak!' : '🌱 No streak gained, but today is a new chance!'}`;
-
-  speak(message);
-};
 
 
 
-
-const showDailyReportPopup = ref(false);
-const lastSpokenDate = ref(localStorage.getItem("lastSpokenDate") || null);
-onMounted(() => {
-  const todayStr = new Date().toISOString().split("T")[0];
-
-  if (lastSpokenDate.value !== todayStr) {
-    showDailyReportPopup.value = true; // show popup
-  }
-});
-watch(selectedDayIndex, () => {
-  const todayStr = new Date().toISOString().split("T")[0];
-
-  if (lastSpokenDate.value !== todayStr && isToday(selectedDayIndex.value)) {
-    showDailyReportPopup.value = true;
-  }
-});
 
 const userCredits = ref(0);
-const playDailyReport = () => {
-  speakDailyReport(); // Call your existing function
-  const todayStr = new Date().toISOString().split("T")[0];
-  localStorage.setItem("lastSpokenDate", todayStr);
-  lastSpokenDate.value = todayStr;
-  showDailyReportPopup.value = false;
-};
-const dismissReportPopup = () => {
-  const todayStr = new Date().toISOString().split("T")[0];
-  localStorage.setItem("lastSpokenDate", todayStr);
-  lastSpokenDate.value = todayStr;
-  showDailyReportPopup.value = false;
-};
 
-const updateCreditsInFirestore = async () => {
-  const userDocRef = doc(db, 'users', userId.value);
 
-  try {
-    await updateDoc(userDocRef, {
-      credits: userCredits.value,
-      updatedAt: serverTimestamp(),
-    });
-    console.log('Credits updated in Firestore');
-  } catch (error) {
-    console.error('Error updating credits:', error);
-  }
-};
 
-watch(userCredits, updateCreditsInFirestore);
+
 const fetchUserCredits = async () => {
   if (!userId.value) return;
 
@@ -3017,6 +2953,8 @@ Input: "${promptText}"`
     alert("Could not understand your input.");
   }
 };
+
+
 
 </script>
 
