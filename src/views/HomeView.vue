@@ -3047,7 +3047,9 @@ Input: "${promptText}"`
 .drag {
   transform: rotate(5deg);
 }
-
+.ghost {
+  visibility: hidden;
+}
 .streak-display {
   background-color: #fef3c7;
 }
