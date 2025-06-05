@@ -868,60 +868,74 @@
                             ></i>
                           </button>
 
+                          <!-- Toggle Button -->
                           <button
-                              @click="openModal('calendar', index, task.title)"
-                              class="rounded-md text-xs sm:text-sm"
+
+                              @click="toggleIcons(index)"
+                              class="text-gray-600 hover:text-blue-600 text-sm px-2"
+                              title="More Options"
                           >
-                            📅
+                            <svg class="w-5 h-5" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 16 3">
+                              <path d="M2 0a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Zm6.041 0a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3ZM14 0a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Z"/>
+                            </svg>
                           </button>
 
-                          <button
-                              @click="deleteTask(index)"
-                              class="text-red-500 hover:text-red-700 text-xs sm:text-sm"
-                          >
-                            🗑️
-                          </button>
+                          <!-- Conditionally Visible Actions -->
+                          <div v-if="iconVisibility[index]" class="flex flex-wrap items-center gap-2 mt-2">
+                            <button
+                                @click="openModal('calendar', index, task.title)"
+                                class="rounded-md text-xs sm:text-sm"
+                            >
+                              📅
+                            </button>
 
-                          <button
-                              @click="openTransferModal(index)"
-                              class="text-blue-500 hover:text-blue-700 text-xs sm:text-sm"
-                          >
-                            🔄
-                          </button>
+                            <button
+                                @click="deleteTask(index)"
+                                class="text-red-500 hover:text-red-700 text-xs sm:text-sm"
+                            >
+                              🗑️
+                            </button>
 
-                          <button
-                              @click="openWontDoModal(index)"
-                              class="text-orange-500 hover:text-orange-700 text-xs sm:text-sm"
-                          >
-                            🚫
-                          </button>
-                          <button @click="triggerImageUpload(index)">
-                            📎
-                          </button>
-                          <input
-                              type="file"
-                              :ref="'fileInput_' + index"
-                              accept="image/*,.pdf,.doc,.docx,.txt"
-                              @change="handleUpload($event, index)"
-                              class="hidden"
-                          />
+                            <button
+                                @click="openTransferModal(index)"
+                                class="text-blue-500 hover:text-blue-700 text-xs sm:text-sm"
+                            >
+                              🔄
+                            </button>
 
+                            <button
+                                @click="openWontDoModal(index)"
+                                class="text-orange-500 hover:text-orange-700 text-xs sm:text-sm"
+                            >
+                              🚫
+                            </button>
 
+                            <button @click="triggerImageUpload(index)" class="text-xs sm:text-sm">📎</button>
+                            <input
+                                type="file"
+                                :ref="'fileInput_' + index"
+                                accept="image/*,.pdf,.doc,.docx,.txt"
+                                @change="handleUpload($event, index)"
+                                class="hidden"
+                            />
 
-                          <button
-                              @click="showTimerModal = true"
-                              class="text-orange-500 hover:text-orange-700 text-xs sm:text-sm"
-                              title="Start Timer"
-                          >
-                            ⏱️
-                          </button>
-                          <button
-                              @click="openYouTubeModal(index)"
-                              class="text-red-500 hover:text-red-700 text-xs sm:text-sm"
-                              title="Add YouTube Video"
-                          >
-                            <i class="fab fa-youtube text-xl"></i>
-                          </button>
+                            <button
+                                @click="showTimerModal = true"
+                                class="text-orange-500 hover:text-orange-700 text-xs sm:text-sm"
+                                title="Start Timer"
+                            >
+                              ⏱️
+                            </button>
+
+                            <button
+                                @click="openYouTubeModal(index)"
+                                class="text-red-500 hover:text-red-700 text-xs sm:text-sm"
+                                title="Add YouTube Video"
+                            >
+                              <i class="fab fa-youtube text-xl"></i>
+                            </button>
+                          </div>
+
 
 
                         </div>
@@ -2959,6 +2973,11 @@ Input: "${promptText}"`
     console.error("Failed to convert input to tasks:", err);
     alert("Could not understand your input.");
   }
+};
+const iconVisibility = ref({});
+
+const toggleIcons = (index) => {
+  iconVisibility.value[index] = !iconVisibility.value[index];
 };
 
 
