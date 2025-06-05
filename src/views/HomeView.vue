@@ -2818,9 +2818,16 @@ const handleHandwritingUpload = async (event) => {
               {
                 role: 'user',
                 content: [
-                  { type: 'text', text: 'Extract a clean to-do list from this image. Only return JSON like: { "tasks": ["item1", "item2"] }' },
-                  { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${base64Image}` } }
+                  {
+                    type: 'text',
+                    text: `You're a smart grocery list assistant. Based on this image, extract the grocery items someone would need to cook this dish. Return only valid JSON like: { "tasks": ["item1", "item2", ...] }`
+                  },
+                  {
+                    type: 'image_url',
+                    image_url: { url: `data:image/jpeg;base64,${base64Image}` }
+                  }
                 ]
+
               }
             ],
             temperature: 0.3,
