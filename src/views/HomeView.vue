@@ -869,16 +869,7 @@
                           </button>
 
                           <!-- Toggle Button -->
-                          <button
 
-                              @click="toggleIcons(index)"
-                              class="text-gray-600 hover:text-blue-600 text-sm px-2"
-                              title="More Options"
-                          >
-                            <svg class="w-5 h-5" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 16 3">
-                              <path d="M2 0a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Zm6.041 0a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3ZM14 0a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Z"/>
-                            </svg>
-                          </button>
 
                           <!-- Conditionally Visible Actions -->
                           <div v-if="iconVisibility[index]" class="flex flex-wrap items-center gap-2 mt-2">
@@ -935,7 +926,16 @@
                               <i class="fab fa-youtube text-xl"></i>
                             </button>
                           </div>
+                          <button
 
+                              @click="toggleIcons(index)"
+                              class="text-gray-600 hover:text-blue-600 text-sm px-2"
+                              title="More Options"
+                          >
+                            <svg class="w-5 h-5" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 16 3">
+                              <path d="M2 0a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Zm6.041 0a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3ZM14 0a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Z"/>
+                            </svg>
+                          </button>
 
 
                         </div>
