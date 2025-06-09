@@ -57,6 +57,13 @@
               Chat
             </router-link>
           </li>
+          <li class="flex items-center space-x-3">
+            <i class="fas fa-comments text-gray-800 dark:text-gray-200"></i>
+            <router-link to="/privacy-policy"
+                         class="text-gray-800 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-500 font-medium">
+              Privacy Policy
+            </router-link>
+          </li>
 
           <!-- Admin Only Routes -->
           <template v-if="userEmail === 'ds7513635@gmail.com'">

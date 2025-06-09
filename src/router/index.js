@@ -8,6 +8,7 @@ import Landing from '../views/landing.vue';
 import TermsandCondition from '../views/TermsandCondition.vue';
 import Pickup from '../views/Pickup.vue';
 import Addiction from "@/views/addiction.vue";
+import sub from "@/views/Subscription.vue";
 
 const routes = [
   {
@@ -36,7 +37,8 @@ const routes = [
   {
     path: '/payment-success',
     name: 'payment-success',
-    component: () => import('../views/PaymentSuccess.vue')
+    component: () => import('../views/PaymentSuccess.vue'),
+    meta: { requiresAuth: true }
   },
   {
     path: '/profile/:userId',
@@ -86,6 +88,15 @@ const routes = [
     path: '/register',
     name: 'Register',
     component: RegisterPage
+  },
+  {
+    path: '/subscription',
+    name: 'subscription',
+    component: sub
+  },{
+    path: '/privacy-policy',
+    name: 'subscription',
+    component: () => import('../views/privacy-policy.vue')
   }
 ];
 
