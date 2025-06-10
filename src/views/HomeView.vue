@@ -2875,7 +2875,8 @@ const handleHandwritingUpload = async (event) => {
                 content: [
                   {
                     type: 'text',
-                    text: `You're a smart grocery list assistant. Based on this image, extract the grocery items someone would need to cook this dish. Return only valid JSON like: { "tasks": ["item1", "item2", ...] }`
+                    text: `You're an AI handwriting interpreter. Extract all handwritten grocery or shopping list items from this image. Ignore logos, backgrounds, printed text, or cartoons. Return only this JSON format: { "tasks": ["item1", "item2", "..."] }. The handwriting may be joined, cursive, or angled.
+ }`
                   },
                   {
                     type: 'image_url',
@@ -2974,15 +2975,6 @@ const showPaymentModal = ref(false);
 const submitSmartPrompt = async () => {
   if (!smartPrompt.value.trim()) return;
 
-  if (!hasPaid.value) {
-    showPaymentModal.value = true;
-    return;
-  }
-
-  if (userCredits.value <= 0) {
-    showPaymentModal.value = true;
-    return;
-  }
 
   await deductCredit(); // Deduct before generating
   await convertPromptToTasks(smartPrompt.value.trim());
@@ -2993,6 +2985,15 @@ const submitSmartPrompt = async () => {
 
 const convertPromptToTasks = async (promptText) => {
   const OPENAI_API_KEY = process.env.VUE_APP_OPENAI_API_KEY;
+  if (!hasPaid.value) {
+    showPaymentModal.value = true;
+    return;
+  }
+
+  if (userCredits.value <= 0) {
+    showPaymentModal.value = true;
+    return;
+  }
   try {
     const response = await axios.post(
         'https://api.openai.com/v1/chat/completions',
