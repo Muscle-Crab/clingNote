@@ -10,7 +10,7 @@ exports.handler = async (event) => {
             mode: 'subscription', // Monthly subscription
             line_items: [
                 {
-                    price: 'price_1RX1V6F1Lys3ABJJIncJKxHA', // ✅ Your recurring price
+                    price: 'price_1RYKpGF1Lys3ABJJGNeprBeX', // ✅ Your recurring price
                     quantity: 1,
                 },
             ],
