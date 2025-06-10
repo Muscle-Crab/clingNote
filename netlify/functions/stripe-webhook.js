@@ -37,16 +37,22 @@ exports.handler = async (event) => {
     if (stripeEvent.type === 'checkout.session.completed') {
         const session = stripeEvent.data.object;
         const userId = session.metadata.userId;
+        const subscriptionId = session.subscription;
 
         try {
             const db = admin.firestore();
-            await db.collection('users').doc(userId).set({ hasPaid: true }, { merge: true });
+            await db.collection('users').doc(userId).set({
+                hasPaid: true,
+                subscriptionId: subscriptionId // ✅ Store subscription ID
+            }, { merge: true });
+
             console.log(`✅ Payment recorded for user ${userId}`);
         } catch (error) {
             console.error("❌ Firestore update failed:", error);
             return { statusCode: 500, body: "Firestore error" };
         }
     }
+
 
     return { statusCode: 200, body: "✅ Webhook received" };
 };

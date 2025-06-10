@@ -45,6 +45,29 @@
           </div>
         </div>
 
+        <div v-if="!hasPaid && showPaymentModal" class="fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center">
+          <div class="bg-white rounded-xl shadow-2xl p-8 max-w-md w-full text-center space-y-6">
+            <h2 class="text-2xl font-bold text-gray-800">Unlock AI Routine Access</h2>
+            <p class="text-gray-600">Get unlimited access to personalized AI-generated routines for only <span class="font-semibold text-blue-600">$5/month</span>.</p>
+            <ul class="text-left text-sm text-gray-500 mt-4 space-y-1">
+              <li>✅ Unlimited AI routine generation</li>
+              <li>✅ Priority reminders & scheduling</li>
+              <li>✅ Voice/image input support</li>
+            </ul>
+            <button
+                @click="redirectToCheckout"
+                class="mt-6 bg-blue-600 text-white px-6 py-3 rounded-full hover:bg-blue-700 transition duration-300 shadow-lg"
+            >
+              Subscribe Now 💳
+            </button>
+            <button
+                @click="showPaymentModal = false"
+                class="text-sm text-gray-500 hover:underline mt-2 block"
+            >
+              Maybe later
+            </button>
+          </div>
+        </div>
 
         <!-- Icon and Credits on the right -->
         <div class="flex flex-col items-center sm:items-end">
@@ -2811,6 +2834,10 @@ const extractYouTubeID = (url) => {
 };
 
 const triggerHandwritingUpload = () => {
+  if (!hasPaid.value) {
+    showPaymentModal.value = true;
+    return;
+  }
   proxy.$refs.handwritingInput.click();
 };
 
@@ -2929,9 +2956,13 @@ const getOriginalIndex = (task) => {
 };
 const smartPrompt = ref('');
 let smartRecognition;
-
+const showPaymentModal = ref(false);
 const submitSmartPrompt = async () => {
   if (!smartPrompt.value.trim()) return;
+  if (!hasPaid.value) {
+    showPaymentModal.value = true;
+    return;
+  }
   await convertPromptToTasks(smartPrompt.value.trim());
   smartPrompt.value = '';
 };

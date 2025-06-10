@@ -8,7 +8,7 @@ import Landing from '../views/landing.vue';
 import TermsandCondition from '../views/TermsandCondition.vue';
 import Pickup from '../views/Pickup.vue';
 import Addiction from "@/views/addiction.vue";
-import sub from "@/views/Subscription.vue";
+import sub from "@/views/Subs.vue";
 
 const routes = [
   {
@@ -90,12 +90,12 @@ const routes = [
     component: RegisterPage
   },
   {
-    path: '/subscription',
-    name: 'subscription',
-    component: sub
+    path: '/sub',
+    name: 'subs',
+    component: () => import('../views/Subs.vue')
   },{
     path: '/privacy-policy',
-    name: 'subscription',
+    name: 'privacy',
     component: () => import('../views/privacy-policy.vue')
   }
 ];
