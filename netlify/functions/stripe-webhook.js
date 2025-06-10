@@ -1,11 +1,9 @@
-// /.netlify/functions/stripe-webhook.js
 require('dotenv').config();
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY)
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const admin = require('firebase-admin');
 const crypto = require('crypto');
 
 const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
-
 
 // ✅ Decode Firebase key from base64
 const decoded = Buffer.from(process.env.GOOGLE_APPLICATION_CREDENTIALS_BASE64, 'base64').toString('utf8');
@@ -17,7 +15,6 @@ if (!admin.apps.length) {
         credential: admin.credential.cert(serviceAccount),
     });
 }
-
 
 exports.handler = async (event) => {
     const sig = event.headers['stripe-signature'];
@@ -34,25 +31,28 @@ exports.handler = async (event) => {
         };
     }
 
+    // ✅ Handle successful one-time payment
     if (stripeEvent.type === 'checkout.session.completed') {
         const session = stripeEvent.data.object;
         const userId = session.metadata.userId;
-        const subscriptionId = session.subscription;
+        const creditsToAdd = parseInt(session.metadata.credits || 10); // default to 10 credits if not passed
 
         try {
             const db = admin.firestore();
-            await db.collection('users').doc(userId).set({
-                hasPaid: true,
-                subscriptionId: subscriptionId // ✅ Store subscription ID
-            }, { merge: true });
+            const userRef = db.collection('users').doc(userId);
 
-            console.log(`✅ Payment recorded for user ${userId}`);
+            await db.runTransaction(async (t) => {
+                const userDoc = await t.get(userRef);
+                const currentCredits = userDoc.exists ? (userDoc.data().credits || 0) : 0;
+                t.set(userRef, { credits: currentCredits + creditsToAdd }, { merge: true });
+            });
+
+            console.log(`✅ Added ${creditsToAdd} credits for user ${userId}`);
         } catch (error) {
             console.error("❌ Firestore update failed:", error);
             return { statusCode: 500, body: "Firestore error" };
         }
     }
-
 
     return { statusCode: 200, body: "✅ Webhook received" };
 };

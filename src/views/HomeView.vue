@@ -2846,6 +2846,17 @@ const handleHandwritingUpload = async (event) => {
   const OPENAI_API_KEY = process.env.VUE_APP_OPENAI_API_KEY;
   if (!file) return;
 
+  if (!hasPaid.value) {
+    showPaymentModal.value = true;
+    return;
+  }
+
+  if (userCredits.value <= 0) {
+    alert("You have no credits left.");
+    return;
+  }
+
+  await deductCredit();
   const reader = new FileReader();
   reader.onload = async () => {
     const base64Image = reader.result.split(',')[1];
@@ -2959,13 +2970,22 @@ let smartRecognition;
 const showPaymentModal = ref(false);
 const submitSmartPrompt = async () => {
   if (!smartPrompt.value.trim()) return;
+
   if (!hasPaid.value) {
     showPaymentModal.value = true;
     return;
   }
+
+  if (userCredits.value <= 0) {
+    alert("You have no credits left.");
+    return;
+  }
+
+  await deductCredit(); // Deduct before generating
   await convertPromptToTasks(smartPrompt.value.trim());
   smartPrompt.value = '';
 };
+
 
 
 const convertPromptToTasks = async (promptText) => {
@@ -3010,7 +3030,56 @@ const iconVisibility = ref({});
 const toggleIcons = (index) => {
   iconVisibility.value[index] = !iconVisibility.value[index];
 };
+const deductCredit = async () => {
+  if (!userId.value) return;
+  const userDocRef = doc(db, 'users', userId.value);
+  const snapshot = await getDoc(userDocRef);
+  if (!snapshot.exists()) return;
 
+  const currentCredits = snapshot.data().credits || 0;
+  const newCredits = Math.max(currentCredits - 1, 0); // Prevent negative credits
+
+  await updateDoc(userDocRef, { credits: newCredits });
+  userCredits.value = newCredits;
+  console.log('🔻 Deducted 1 credit. New total:', newCredits);
+};
+
+onAuthStateChanged(auth, async (user) => {
+  if (user) {
+    userId.value = user.uid;
+    const userDocRef = doc(db, 'users', user.uid);
+    const userSnap = await getDoc(userDocRef);
+
+    if (userSnap.exists()) {
+      const data = userSnap.data();
+      hasPaid.value = data.hasPaid ?? false;
+      userCredits.value = data.credits ?? 5;
+
+      // ✅ If credits missing, patch it
+      if (data.credits === undefined) {
+        await updateDoc(userDocRef, { credits: 5 });
+        console.log("✅ Default credits set.");
+      }
+    } else {
+      // ✅ Create the doc with defaults
+      await setDoc(userDocRef, {
+        hasPaid: false,
+        credits: 5,
+        createdAt: serverTimestamp(),
+      });
+      hasPaid.value = false;
+      userCredits.value = 5;
+      console.log("🆕 Created user doc with default credits.");
+    }
+
+    fetchStreakOnLoad();
+    selectedDayIndex.value = new Date().getDay();
+    fetchSelectedDayRoutine();
+  } else {
+    userId.value = null;
+    selectedDayRoutine.value = [];
+  }
+});
 
 
 </script>

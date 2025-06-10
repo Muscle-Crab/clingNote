@@ -1,5 +1,5 @@
 require('dotenv').config();
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY) // Replace with your Stripe test key
 
 exports.handler = async (event) => {
     try {
@@ -7,18 +7,24 @@ exports.handler = async (event) => {
 
         const session = await stripe.checkout.sessions.create({
             payment_method_types: ['card'],
-            mode: 'subscription', // Monthly subscription
+            mode: 'payment',
             line_items: [
                 {
-                    price: 'price_1RYKpGF1Lys3ABJJGNeprBeX', // ✅ Your recurring price
+                    price_data: {
+                        currency: 'usd',
+                        product_data: {
+                            name: 'AI Routine Access',
+                        },
+                        unit_amount: 500, // $5.00
+                    },
                     quantity: 1,
                 },
             ],
             metadata: {
-                userId,
+                userId, // <--- Store for webhook access
             },
-            success_url: 'http://localhost:8080/payment-success?userId=' + userId,
-            cancel_url: 'http://localhost:8080/payment-cancelled',
+            success_url: 'https://clingnote.netlify.app/payment-success?userId=' + userId,
+            cancel_url: 'https://clingnote.netlify.app/payment-cancelled',
         });
 
         return {
@@ -33,3 +39,4 @@ exports.handler = async (event) => {
         };
     }
 };
+
