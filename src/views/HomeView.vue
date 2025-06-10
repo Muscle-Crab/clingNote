@@ -3032,17 +3032,26 @@ const toggleIcons = (index) => {
 };
 const deductCredit = async () => {
   if (!userId.value) return;
+
   const userDocRef = doc(db, 'users', userId.value);
   const snapshot = await getDoc(userDocRef);
   if (!snapshot.exists()) return;
 
   const currentCredits = snapshot.data().credits || 0;
-  const newCredits = Math.max(currentCredits - 1, 0); // Prevent negative credits
+  const newCredits = Math.max(currentCredits - 1, 0); // Prevent negative
+  const stillPaid = newCredits > 0;
 
-  await updateDoc(userDocRef, { credits: newCredits });
+  await updateDoc(userDocRef, {
+    credits: newCredits,
+    hasPaid: stillPaid, // ✅ Set to false if no credits remain
+  });
+
   userCredits.value = newCredits;
-  console.log('🔻 Deducted 1 credit. New total:', newCredits);
+  hasPaid.value = stillPaid;
+
+  console.log(`🔻 Deducted 1 credit. New total: ${newCredits}. hasPaid: ${stillPaid}`);
 };
+
 
 onAuthStateChanged(auth, async (user) => {
   if (user) {
