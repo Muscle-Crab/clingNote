@@ -2855,7 +2855,7 @@ const handleHandwritingUpload = async (event) => {
   }
 
   if (userCredits.value <= 0) {
-    alert("You have no credits left.");
+    showPaymentModal.value = true;
     return;
   }
 
@@ -2980,7 +2980,7 @@ const submitSmartPrompt = async () => {
   }
 
   if (userCredits.value <= 0) {
-    alert("You have no credits left.");
+    showPaymentModal.value = true;
     return;
   }
 
@@ -3055,7 +3055,6 @@ const deductCredit = async () => {
   console.log(`🔻 Deducted 1 credit. New total: ${newCredits}. hasPaid: ${stillPaid}`);
 };
 
-
 onAuthStateChanged(auth, async (user) => {
   if (user) {
     userId.value = user.uid;
@@ -3064,26 +3063,30 @@ onAuthStateChanged(auth, async (user) => {
 
     if (userSnap.exists()) {
       const data = userSnap.data();
-      hasPaid.value = data.hasPaid ?? false;
+      hasPaid.value = data.hasPaid ?? true;
       userCredits.value = data.credits ?? 5;
 
-      // ✅ If credits missing, patch it
+      // Patch missing credits if needed
       if (data.credits === undefined) {
-        await updateDoc(userDocRef, { credits: 5 });
+        await updateDoc(userDocRef, {
+          credits: 5,
+          hasPaid: true
+        });
         console.log("✅ Default credits set.");
       }
     } else {
-      // ✅ Create the doc with defaults
+      // Create user with default values
       await setDoc(userDocRef, {
-        hasPaid: false,
+        hasPaid: true,
         credits: 5,
         createdAt: serverTimestamp(),
       });
-      hasPaid.value = false;
+      hasPaid.value = true; // ✅ Fix: match what's stored
       userCredits.value = 5;
-      console.log("🆕 Created user doc with default credits.");
+      console.log("🆕 Created user doc with default credits and hasPaid = true");
     }
 
+    // Proceed with fetching data
     fetchStreakOnLoad();
     selectedDayIndex.value = new Date().getDay();
     fetchSelectedDayRoutine();
@@ -3092,6 +3095,7 @@ onAuthStateChanged(auth, async (user) => {
     selectedDayRoutine.value = [];
   }
 });
+
 
 
 </script>
