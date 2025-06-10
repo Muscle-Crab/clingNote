@@ -47,18 +47,20 @@
 
         <div v-if="!hasPaid && showPaymentModal" class="fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center">
           <div class="bg-white rounded-xl shadow-2xl p-8 max-w-md w-full text-center space-y-6">
-            <h2 class="text-2xl font-bold text-gray-800">Unlock AI Routine Access</h2>
-            <p class="text-gray-600">Get unlimited access to personalized AI-generated routines for only <span class="font-semibold text-blue-600">$5/month</span>.</p>
+            <h2 class="text-2xl font-bold text-gray-800">Out of Credits</h2>
+            <p class="text-gray-600">
+              Get back to generating AI routines, grocery lists, workouts and more by refilling your credits.
+            </p>
             <ul class="text-left text-sm text-gray-500 mt-4 space-y-1">
-              <li>✅ Unlimited AI routine generation</li>
-              <li>✅ Priority reminders & scheduling</li>
-              <li>✅ Voice/image input support</li>
+              <li>💡 15 credits = 15 AI generations</li>
+              <li>✅ Works with prompts, voice, and image uploads</li>
+              <li>⚡ Instant access after payment</li>
             </ul>
             <button
                 @click="redirectToCheckout"
-                class="mt-6 bg-blue-600 text-white px-6 py-3 rounded-full hover:bg-blue-700 transition duration-300 shadow-lg"
+                class="mt-6 bg-green-600 text-white px-6 py-3 rounded-full hover:bg-green-700 transition duration-300 shadow-lg"
             >
-              Subscribe Now 💳
+              Buy 15 Credits – $5💎
             </button>
             <button
                 @click="showPaymentModal = false"
@@ -68,6 +70,7 @@
             </button>
           </div>
         </div>
+
 
         <!-- Icon and Credits on the right -->
         <div class="flex flex-col items-center sm:items-end">
