@@ -44,8 +44,13 @@ exports.handler = async (event) => {
             await db.runTransaction(async (t) => {
                 const userDoc = await t.get(userRef);
                 const currentCredits = userDoc.exists ? (userDoc.data().credits || 0) : 0;
-                t.set(userRef, { credits: currentCredits + creditsToAdd }, { merge: true });
+
+                t.set(userRef, {
+                    credits: currentCredits + creditsToAdd,
+                    hasPaid: true, // ✅ Mark user as paid
+                }, { merge: true });
             });
+
 
             console.log(`✅ Added ${creditsToAdd} credits for user ${userId}`);
         } catch (error) {
