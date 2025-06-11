@@ -73,32 +73,25 @@
 
 
         <!-- Icon and Credits on the right -->
-        <div class="flex flex-col items-center sm:items-end">
-          <div class="text-sm font-medium text-blue-500 flex items-center">
-            <!-- Display message when idle time is not yet available -->
-            <span v-if="pointsAccumulated < totalPoints && !isNaN(pointsAccumulated) && !isNaN(totalPoints)">
-      You need
-      <span class="text-yellow-500 font-semibold">
-        💰{{ totalPoints - pointsAccumulated }}
-      </span>
-      more points to earn idle time.
-    </span>
-            <!-- Display message when idle time is available -->
-            <span v-else class="text-green-500 font-semibold">
-      Idle time is now available! 🎉
-    </span>
+<!--        <div class="flex flex-col items-center sm:items-end">-->
+<!--          <div class="text-sm font-medium text-blue-500 flex items-center">-->
+<!--            &lt;!&ndash; Display message when idle time is not yet available &ndash;&gt;-->
+<!--            <span v-if="pointsAccumulated < totalPoints && !isNaN(pointsAccumulated) && !isNaN(totalPoints)">-->
+<!--      You need-->
+<!--      <span class="text-yellow-500 font-semibold">-->
+<!--        💰{{ totalPoints - pointsAccumulated }}-->
+<!--      </span>-->
+<!--      more points to earn idle time.-->
+<!--    </span>-->
+<!--            &lt;!&ndash; Display message when idle time is available &ndash;&gt;-->
+<!--            <span v-else class="text-green-500 font-semibold">-->
+<!--      Idle time is now available! 🎉-->
+<!--    </span>-->
 
-          </div>
-        </div>
-<!--        <button-->
-<!--            v-if="!hasPaid"-->
-<!--            @click="redirectToCheckout"-->
-<!--            class="bg-green-600 text-white px-4 py-2 rounded-full shadow-md hover:bg-green-700 mt-2"-->
-<!--        >-->
-<!--          Unlock AI Routine Access 💳-->
-<!--        </button>-->
-        <!-- Smart Prompt Inline -->
-        <div class="w-full max-w-2xl mx-auto mt-4 px-4">
+<!--          </div>-->
+<!--        </div>-->
+
+        <div class="w-full max-w-2xl mx-auto  px-4">
           <div class="bg-white border border-gray-300 rounded-xl px-2 py-3 flex items-end gap-3 shadow-md focus-within:ring-2 focus-within:ring-blue-500 transition">
     <textarea
         v-model="smartPrompt"
@@ -2811,7 +2804,7 @@ const openYouTubeModal = (index) => {
 const closeYouTubeModal = () => {
   youtubeModalOpen.value = false;
   youtubeInput.value = '';
-};
+}
 
 const saveYouTubeLink = async () => {
   const index = selectedYouTubeTaskIndex.value;
@@ -2843,7 +2836,7 @@ const triggerHandwritingUpload = () => {
   }
   proxy.$refs.handwritingInput.click();
 };
-
+const showPaymentModal = ref('')
 const handleHandwritingUpload = async (event) => {
   const file = event.target.files[0];
   const OPENAI_API_KEY = process.env.VUE_APP_OPENAI_API_KEY;
@@ -2875,7 +2868,7 @@ const handleHandwritingUpload = async (event) => {
                 content: [
                   {
                     type: 'text',
-                    text: `You're an AI handwriting interpreter. Extract all handwritten grocery or shopping list items from this image. Ignore logos, backgrounds, printed text, or cartoons. Return only this JSON format: { "tasks": ["item1", "item2", "..."] }. The handwriting may be joined, cursive, or angled.
+                    text: `You're an AI handwriting interpreter. Extract all handwritten  list items from this image. Ignore logos, backgrounds, printed text, or cartoons. Return only this JSON format: { "tasks": ["item1", "item2", "..."] }. The handwriting may be joined, cursive, or angled.
  }`
                   },
                   {
@@ -2971,15 +2964,23 @@ const getOriginalIndex = (task) => {
 };
 const smartPrompt = ref('');
 let smartRecognition;
-const showPaymentModal = ref(false);
 const submitSmartPrompt = async () => {
   if (!smartPrompt.value.trim()) return;
 
+  isLoading.value = true; // 👉 Start loading
 
-  await deductCredit(); // Deduct before generating
-  await convertPromptToTasks(smartPrompt.value.trim());
-  smartPrompt.value = '';
+  try {
+    await convertPromptToTasks(smartPrompt.value.trim()); // 🧠 Generate tasks first
+    await deductCredit(); // ✅ Deduct credit only if generation succeeds
+    smartPrompt.value = '';
+  } catch (error) {
+    console.error("❌ Task generation failed:", error);
+    alert("Failed to generate tasks.");
+  } finally {
+    isLoading.value = false; // ✅ Stop loading
+  }
 };
+
 
 
 
