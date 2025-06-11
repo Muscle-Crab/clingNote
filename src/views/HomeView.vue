@@ -2992,8 +2992,8 @@ const convertPromptToTasks = async (promptText) => {
           messages: [
             {
               role: 'user',
-              content: `You're a smart grocery assistant. Based on the input, return only the list of items someone would need to get or use. Return valid JSON in this format: { "tasks": [ "task1", "task2", ... ] }.
-Input: "${promptText}"`
+              content: `You are an intelligent assistant that helps users turn ideas into actionable list items. Based on the input, return a clean structured list in valid JSON format like: { "tasks": ["item 1", "item 2", ...] }. Ignore explanations and only return the JSON. Input: "${promptText}"`
+
             }
           ],
           temperature: 0.3,
