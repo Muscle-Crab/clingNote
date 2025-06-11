@@ -35,7 +35,7 @@ exports.handler = async (event) => {
     if (stripeEvent.type === 'checkout.session.completed') {
         const session = stripeEvent.data.object;
         const userId = session.metadata.userId;
-        const creditsToAdd = parseInt(session.metadata.credits || 10); // default to 10 credits if not passed
+        const creditsToAdd = parseInt(session.metadata.credits || 25); // default to 10 credits if not passed
 
         try {
             const db = admin.firestore();

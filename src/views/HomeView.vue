@@ -79,24 +79,7 @@
         </div>
 
 
-        <!-- Icon and Credits on the right -->
-<!--        <div class="flex flex-col items-center sm:items-end">-->
-<!--          <div class="text-sm font-medium text-blue-500 flex items-center">-->
-<!--            &lt;!&ndash; Display message when idle time is not yet available &ndash;&gt;-->
-<!--            <span v-if="pointsAccumulated < totalPoints && !isNaN(pointsAccumulated) && !isNaN(totalPoints)">-->
-<!--      You need-->
-<!--      <span class="text-yellow-500 font-semibold">-->
-<!--        💰{{ totalPoints - pointsAccumulated }}-->
-<!--      </span>-->
-<!--      more points to earn idle time.-->
-<!--    </span>-->
-<!--            &lt;!&ndash; Display message when idle time is available &ndash;&gt;-->
-<!--            <span v-else class="text-green-500 font-semibold">-->
-<!--      Idle time is now available! 🎉-->
-<!--    </span>-->
 
-<!--          </div>-->
-<!--        </div>-->
 
         <div class="w-full max-w-2xl mx-auto  px-4">
           <div class="bg-white border border-gray-300 rounded-xl px-2 py-3 flex items-end gap-3 shadow-md focus-within:ring-2 focus-within:ring-blue-500 transition">
