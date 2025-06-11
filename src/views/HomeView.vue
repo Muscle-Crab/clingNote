@@ -722,15 +722,13 @@
                 </h3>
               </h3>
 
-              <button @click="showCompleted = !showCompleted">
-                <i
-                    :class="{
-            'fas fa-eye text-gray-500': showCompleted,
-            'fas fa-eye-slash text-gray-500': !showCompleted,
-          }"
-                    class="text-xl"
-                ></i>
-              </button>
+              <div class="flex justify-end items-center  ">
+                <button @click="clearTasksForToday" class="  text-white px-3 py-2 rounded-lg ">🗑️</button>
+                <button @click="showCompleted = !showCompleted">
+                  <i :class="showCompleted ? 'fas fa-eye text-gray-500' : 'fas fa-eye-slash text-gray-500'" class="text-xl"></i>
+                </button>
+              </div>
+
             </div>
             <!-- Conveyor Wrapper -->
             <div class="overflow-hidden relative h-[80vh] overflow-y-auto" ref="scrollContainer">
@@ -1021,7 +1019,7 @@ import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'fire
 import data from '@/data.json';
 import draggable from "vuedraggable";
 import {db} from '@/firebaseConfig'; // Assuming you have imported the Firebase setup file and exported the db instance
-import { doc, setDoc, serverTimestamp, getDoc, updateDoc,getFirestore} from 'firebase/firestore';
+import { doc, setDoc, serverTimestamp, getDoc, updateDoc,getFirestore, deleteDoc} from 'firebase/firestore';
 const modalOpen = ref(false);
 import axios from 'axios';
 import { deleteObject } from "firebase/storage";
@@ -2910,7 +2908,8 @@ const saveHandwrittenTasks = async (tasks) => {
     title: t,
     completed: false,
     type: 'recurring',
-    createdAt: new Date().toISOString()
+    createdAt: new Date().toISOString
+    ()
   }));
 
   await setDoc(docRef, {
@@ -3087,6 +3086,25 @@ onAuthStateChanged(auth, async (user) => {
     selectedDayRoutine.value = [];
   }
 });
+const clearTasksForToday = async () => {
+  if (!userId.value || selectedDayIndex.value === -1) return;
+
+  const confirmDelete = confirm("Are you sure you want to delete all tasks for today?");
+  if (!confirmDelete) return;
+
+  const selectedDay = days[selectedDayIndex.value].day;
+  const docRef = doc(db, 'weeklyRoutines', `${userId.value}_${selectedDay}`);
+
+  try {
+    await deleteDoc(docRef);
+    selectedDayRoutine.value = []; // Clear UI
+    wontDoTasks.value = [];        // Also clear Won't Do list
+    console.log("✅ All tasks deleted for today.");
+  } catch (error) {
+    console.error("❌ Failed to delete all tasks:", error);
+    alert("Something went wrong while deleting tasks.");
+  }
+};
 
 
 
