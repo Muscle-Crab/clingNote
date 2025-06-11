@@ -30,19 +30,26 @@
             </div>
           </div>
 
-          <!-- Streak and Credits Information -->
-          <div class="flex flex-col">
-            <h2 class="text-sm font-semibold text-gray-800">
-              🔥<span class="text-blue-600">{{ streak }}</span> days
-            </h2>
-            <p v-if="streak === 0" class="text-xs text-red-500 font-medium mt-1">
-              No streak yet!
-            </p>
+          <div class="flex flex-col sm:flex-row sm:items-center sm:space-x-6 text-sm">
+            <!-- Streak Info -->
+            <div class="flex items-center space-x-2">
+              <span class="text-gray-500">🔥</span>
+              <span class="text-gray-600">Streak</span>
+              <span class="font-semibold text-blue-600">{{ streak }} day<span v-if="streak !== 1">s</span></span>
+            </div>
 
-            <p v-else class="text-xs text-gray-600 mt-1">
-              {{ motivationalMessage }}
-            </p>
+            <!-- Divider (for larger screens) -->
+            <span class="hidden sm:inline-block w-px h-5 bg-gray-300"></span>
+
+            <!-- Credits Info -->
+            <div class="flex items-center space-x-2 mt-1 sm:mt-0">
+              <span class="text-gray-500">💎</span>
+              <span class="text-gray-600">Credits</span>
+              <span class="font-semibold text-blue-600">{{ userCredits }}</span>
+            </div>
           </div>
+
+
         </div>
 
         <div v-if="!hasPaid && showPaymentModal" class="fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center">
@@ -52,7 +59,7 @@
               Get back to generating AI routines, grocery lists, workouts and more by refilling your credits.
             </p>
             <ul class="text-left text-sm text-gray-500 mt-4 space-y-1">
-              <li>💡 15 credits = 15 AI generations</li>
+              <li>💡 30 credits = 30 AI generations</li>
               <li>✅ Works with prompts, voice, and image uploads</li>
               <li>⚡ Instant access after payment</li>
             </ul>
@@ -2852,7 +2859,8 @@ const handleHandwritingUpload = async (event) => {
     return;
   }
 
-  await deductCredit();
+  isLoading.value = true; // ⏳ Start loading
+
   const reader = new FileReader();
   reader.onload = async () => {
     const base64Image = reader.result.split(',')[1];
@@ -2868,15 +2876,13 @@ const handleHandwritingUpload = async (event) => {
                 content: [
                   {
                     type: 'text',
-                    text: `You're an AI handwriting interpreter. Extract all handwritten  list items from this image. Ignore logos, backgrounds, printed text, or cartoons. Return only this JSON format: { "tasks": ["item1", "item2", "..."] }. The handwriting may be joined, cursive, or angled.
- }`
+                    text: `You're an AI handwriting interpreter. Extract all handwritten list items from this image. Ignore logos, backgrounds, printed text, or cartoons. Return only this JSON format: { "tasks": ["item1", "item2", "..."] }. The handwriting may be joined, cursive, or angled.`
                   },
                   {
                     type: 'image_url',
                     image_url: { url: `data:image/jpeg;base64,${base64Image}` }
                   }
                 ]
-
               }
             ],
             temperature: 0.3,
@@ -2891,23 +2897,24 @@ const handleHandwritingUpload = async (event) => {
       );
 
       let raw = response.data.choices[0].message.content.trim();
-
-// Remove markdown code block if present
       if (raw.startsWith("```")) {
         raw = raw.replace(/```json|```/g, "").trim();
       }
 
       const parsed = JSON.parse(raw);
-      saveHandwrittenTasks(parsed.tasks);
-
+      await saveHandwrittenTasks(parsed.tasks);
+      await deductCredit(); // ✅ Only deduct if successful
     } catch (err) {
       console.error("❌ Image analysis failed:", err);
       alert("Could not extract tasks. Make sure it's a clear list.");
+    } finally {
+      isLoading.value = false; // ✅ Always stop loading
     }
   };
 
   reader.readAsDataURL(file);
 };
+
 
 
 const saveHandwrittenTasks = async (tasks) => {
