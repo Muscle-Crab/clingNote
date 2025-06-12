@@ -2992,10 +2992,19 @@ const convertPromptToTasks = async (promptText) => {
           messages: [
             {
               role: 'user',
-              content: `You are an intelligent assistant that helps users turn ideas into actionable list items. Based on the input, return a clean structured list in valid JSON format like: { "tasks": ["item 1", "item 2", ...] }. Ignore explanations and only return the JSON. Input: "${promptText}"`
+              content: `You are an intelligent assistant that transforms any list-related idea into a clear, structured checklist. The list can be for anything: routines, travel, shopping, recipes, study, cleaning, or goals.
 
+Your job is to extract only the list items from the input and return them in clean JSON format like this:
+{
+  "tasks": ["item 1", "item 2", "item 3"]
+}
+
+Do not include explanations, formatting, or markdown. Only return the JSON object.
+
+Input: "${promptText}"`
             }
           ],
+
           temperature: 0.3,
           max_tokens: 500
         },
