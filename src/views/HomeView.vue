@@ -775,7 +775,7 @@
     {{ task.title.length > 18 ? task.title.slice(0, 18) + '...' : task.title }}
   </span>
                             <span v-if="task.youtubeURL" class="text-red-500 text-sm" title="YouTube video attached">🎥</span>
-                            <span v-if="task.imageURL" class="text-green-600 text-sm" title="Image attached">🖼️</span>
+
                             <span v-if="task.fileURL" class="text-blue-600 text-sm" title="File attached">📄</span>
                           </div>
 
@@ -815,13 +815,21 @@
 
                         </div>
                       </div>
-                      <div  @click="openTaskDetailModal(task)" v-if="task.imageURL" class="w-full rounded-md overflow-hidden">
+                      <div
+                          @click="openTaskDetailModal(task)"
+                          v-if="task.imageURL"
+                          class="w-16 h-16 rounded-md overflow-hidden border border-gray-300 shadow-sm flex items-center justify-center bg-white"
+                      >
                         <img
                             :src="task.imageURL"
-                            alt="Task Image"
-                            class="w-full h-24 object-cover rounded-md border border-gray-300 shadow-sm"
+                            alt="Product Image"
+                            class="w-full h-full object-contain"
                         />
                       </div>
+
+
+
+
                       <!-- Task Labels -->
                       <div class="flex flex-wrap gap-2 mb-3">
      <span
