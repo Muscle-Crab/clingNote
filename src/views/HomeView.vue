@@ -1575,7 +1575,7 @@ const toggleTaskCompletion = async (index) => {
       await sendNotificationToPlayer(userName, "completed");
     }
   } else {
-    userCredits.value -= 10; // Deduct credits if task is marked incomplete
+
     console.log(`Credits deducted: 10. Total credits: ${userCredits.value}`);
   }
 
