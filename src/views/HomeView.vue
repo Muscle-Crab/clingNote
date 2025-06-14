@@ -756,7 +756,7 @@
                         <!-- Drag Icon -->
                         <div>
                           <div
-                              :style="{ backgroundColor: generateRandomColor() }"
+                              style="background-color: deepskyblue"
                               class="w-10 h-10 rounded-full flex items-center justify-center mr-3 shadow-sm"
                           >
                             <i class="fas fa-arrows-alt text-white drag-handle"></i>
@@ -782,21 +782,12 @@
 
 
 
-
-
-
                           <div v-if="task.reminder?.date && task.reminder?.time" class="text-sm text-gray-500 mt-1">
                             <div v-if="task.reminder?.date && task.reminder?.time" class="text-sm text-gray-500 mt-1">
                               📅 {{ formatShortDate(task.reminder.date) }} • ⏰ {{ formatTime(task.reminder.time) }}
                             </div>
 
                           </div>
-
-
-
-
-
-
 
                           <!--                    <div v-if="task.time" class="text-sm text-gray-400">{{ task.time }}</div>-->
                           <!-- User Icon and Name with Spinning Icon -->
@@ -812,29 +803,25 @@
                             >
                               <i :class="task.important ? 'fas fa-fire text-red-500' : 'fas fa-fire text-gray-400'" />
                             </button>
-                            <div>
-                              <!-- Button to Open Modal -->
 
-
-                              <!-- Modal -->
-
-
-                            </div>
-                            <!--                        &lt;!&ndash; In Progress Task Indicator &ndash;&gt;-->
-                            <!--                        <div v-if="isToday(selectedDayIndex) && index === topIncompleteTaskIndex" class="text-blue-500 flex items-center">-->
-                            <!--                          <i class="fas fa-hourglass-half animate-spin-slow mr-1"></i> In Progress-->
-                            <!--                        </div>-->
 
                             <!-- Completed Task Indicator -->
                             <div v-if="task.completed && isToday(selectedDayIndex)"  class="text-green-500">
                               <i class="fas fa-check-circle"></i> Completed
                             </div>
 
+
                           </div>
 
                         </div>
                       </div>
-
+                      <div  @click="openTaskDetailModal(task)" v-if="task.imageURL" class="w-full rounded-md overflow-hidden">
+                        <img
+                            :src="task.imageURL"
+                            alt="Task Image"
+                            class="w-full h-24 object-cover rounded-md border border-gray-300 shadow-sm"
+                        />
+                      </div>
                       <!-- Task Labels -->
                       <div class="flex flex-wrap gap-2 mb-3">
      <span
