@@ -15,19 +15,6 @@
           <label for="password" class="sr-only">Password</label>
           <input id="password" name="password" type="password" v-model="password" required placeholder="Password" class="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm">
         </div>
-        <div>
-          <label for="dob" class="sr-only">Date of Birth</label>
-          <input id="dob" name="dob" type="date" v-model="dob" required placeholder="Date of Birth" class="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm">
-        </div>
-        <div>
-          <label for="gender" class="sr-only">Gender</label>
-          <select id="gender" name="gender" v-model="gender" required class="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm">
-            <option value="" disabled selected>Select your gender</option>
-            <option value="male">Male</option>
-            <option value="female">Female</option>
-            <option value="other">Other</option>
-          </select>
-        </div>
         <div v-if="errorMessage" class="text-red-500 bg-red-100 border border-red-400 px-4 py-2 rounded mb-4">
           {{ errorMessage }}
         </div>
@@ -70,10 +57,7 @@ const gender = ref('');
 const avatar = ref(null);
 const isSubmitting = ref(false);
 
-const handleAvatarChange = (event) => {
-  const file = event.target.files[0];
-  avatar.value = file;
-};
+
 const errorMessage = ref(''); // Add error message state
 
 const getFriendlyErrorMessage = (error) => {
@@ -91,33 +75,7 @@ const getFriendlyErrorMessage = (error) => {
 
   return errorMap[error.code] || "An unexpected error occurred. Please try again.";
 };
-const sendNotificationToPlayer = async (userName, action) => {
-  const headers = {
-    'Authorization': 'Bearer ZDZiZDk0NTktMjUwZS00NTQ4LWFhOTItNjBiZDZiMjVhYzYy', // Replace with your actual API key
-    'Content-Type': 'application/json'
-  };
 
-  const actionMessages = {
-    created: {
-      content: `${userName} has signed up! 🎉`,
-      heading: "New User Registration"
-    }
-  };
-
-  const data = {
-    "app_id": "fc206a71-7d65-4cfa-b8b2-0c10548e1476", // Replace with your actual OneSignal app ID
-    "include_player_ids": ["ff823cf5-aef7-4363-82f7-33c1de7ce02e"], // Replace with the player's device ID
-    "contents": { "en": actionMessages[action]?.content || "A new user has registered." },
-    "headings": { "en": actionMessages[action]?.heading || "Notification" }
-  };
-
-  try {
-    await axios.post('https://onesignal.com/api/v1/notifications', data, { headers });
-    console.log('Notification sent successfully');
-  } catch (error) {
-    console.error('Error sending notification:', error);
-  }
-};
 
 const registerUser = async () => {
   errorMessage.value = ''; // Reset error message
@@ -131,13 +89,14 @@ const registerUser = async () => {
       email: user.email,
       name: name.value,
       dob: dob.value,
+      credits: 15, // 👈 Assign default credits here
+      hasPaid: true,
       gender: gender.value,
     };
 
     await setDoc(doc(db, 'users', user.uid), userData);
 
-    // Send notification after successful signup
-    await sendNotificationToPlayer(name.value, "created");
+
 
     email.value = '';
     password.value = '';

@@ -1,64 +1,75 @@
 <template>
-  <div class="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-    <div class="bg-white p-8 rounded shadow-md max-w-md w-full">
-      <h2 class="text-3xl font-extrabold text-gray-900 text-center mb-6">Login</h2>
+  <div class="min-h-screen bg-gray-100 dark:bg-gray-900 flex items-center justify-center px-4">
+    <div class="bg-white dark:bg-gray-800 shadow-lg rounded-2xl w-full max-w-md p-6 sm:p-8">
+      <!-- Header -->
+      <h2 class="text-2xl sm:text-3xl font-bold text-center text-gray-800 dark:text-white mb-6">
+        Welcome Back 👋
+      </h2>
 
       <!-- 📌 Bookmark Prompt -->
-      <div v-if="showBookmarkPrompt" class="bg-yellow-100 border border-yellow-300 text-yellow-800 p-4 rounded mb-6 text-sm">
+      <div v-if="showBookmarkPrompt" class="bg-yellow-100 dark:bg-yellow-200/10 border border-yellow-300 dark:border-yellow-500 text-yellow-800 dark:text-yellow-300 p-4 rounded-md text-sm mb-6">
         <p v-if="isIos">To bookmark this app, tap the <strong>Share</strong> icon and choose <strong>"Add to Home Screen"</strong>.</p>
         <p v-else-if="isAndroid">To bookmark this app, tap the <strong>⋮ menu</strong> and select <strong>"Add to Home screen"</strong>.</p>
         <p v-else>Press <strong>Ctrl+D</strong> (Windows) or <strong>Cmd+D</strong> (Mac) to bookmark this app.</p>
-        <button @click="showBookmarkPrompt = false" class="mt-2 text-blue-600 hover:underline">Dismiss</button>
+        <button @click="showBookmarkPrompt = false" class="mt-3 text-blue-600 hover:underline dark:text-blue-400">Dismiss</button>
       </div>
 
+      <!-- Login Form -->
       <form @submit.prevent="loginUser" class="space-y-4">
-        <!-- Login Fields -->
         <div>
           <label for="email-address" class="sr-only">Email address</label>
-          <input id="email-address" name="email" type="email" v-model="email" required placeholder="Email address"
-                 class="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm">
+          <input id="email-address" type="email" v-model="email" required
+                 class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 placeholder-gray-400 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                 placeholder="Email address" />
         </div>
         <div>
           <label for="password" class="sr-only">Password</label>
-          <input id="password" name="password" type="password" v-model="password" required placeholder="Password" class="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm">
+          <input id="password" type="password" v-model="password" required
+                 class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 placeholder-gray-400 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                 placeholder="Password" />
         </div>
+
+        <!-- Submit -->
         <div>
-          <button type="submit" :disabled="isSubmitting" class="w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-            <span class="mr-2">
-              <svg class="h-5 w-5 text-indigo-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                <path fill-rule="evenodd" d="M6 9V7a5 5 0 0 1 10 0v2h2a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1h2z" clip-rule="evenodd" />
-              </svg>
-            </span>
+          <button type="submit" :disabled="isSubmitting"
+                  class="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed">
+            <svg class="h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 11c0-1.104.896-2 2-2s2 .896 2 2v1h1a1 1 0 011 1v6a1 1 0 01-1 1H8a1 1 0 01-1-1v-6a1 1 0 011-1h1v-1c0-1.104.896-2 2-2s2 .896 2 2z" />
+            </svg>
             <span>Login</span>
           </button>
         </div>
+
+        <!-- Google Sign-in -->
         <div>
-          <button @click.prevent="signInWithGoogle" class="w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">
-            <span class="mr-2">
-              <img src="https://img.icons8.com/color/48/000000/google-logo.png" alt="Google Icon" class="h-5 w-5"/>
-            </span>
+          <button @click.prevent="signInWithGoogle"
+                  class="w-full flex items-center justify-center gap-3 px-4 py-2 rounded-lg bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-600 text-sm font-medium">
+            <img src="https://img.icons8.com/color/48/000000/google-logo.png" class="h-5 w-5" alt="Google" />
             <span>Sign in with Google</span>
           </button>
-          <p class="text-sm text-gray-600 dark:text-gray-300 mt-4">
+          <p class="text-xs text-gray-500 dark:text-gray-400 mt-4 text-center">
             By continuing, you agree to our
-            <router-link to="/terms" class="text-blue-600 hover:underline">
-              Terms & Conditions
-            </router-link>.
+            <router-link to="/terms" class="text-blue-600 hover:underline dark:text-blue-400">Terms & Conditions</router-link>.
           </p>
-
         </div>
-        <div v-if="errorMessage" class="text-red-500 text-sm">{{ errorMessage }}</div>
+
+        <!-- Error -->
+        <div v-if="errorMessage" class="text-red-500 text-sm text-center">{{ errorMessage }}</div>
       </form>
-      <div class="mt-4 text-sm text-center">
-        Don't have an account? <a href="#" class="text-indigo-600 hover:underline"><router-link to="/register">Register</router-link></a>
+
+      <!-- Register Link -->
+      <div class="mt-6 text-sm text-center text-gray-600 dark:text-gray-300">
+        Don't have an account?
+        <router-link to="/register" class="text-indigo-600 hover:underline dark:text-indigo-400">Register</router-link>
       </div>
     </div>
   </div>
 </template>
+
 <script setup>
 import { ref, onMounted } from 'vue';
 import { signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { auth, db } from '@/firebaseConfig';
 import { useRouter } from 'vue-router';
 
@@ -121,14 +132,28 @@ const signInWithGoogle = async () => {
     console.log('Google sign-in successful:', user.email);
 
     const userRef = doc(db, 'users', user.uid);
-    await setDoc(userRef, {
-      uid: user.uid,
-      name: user.displayName,
-      email: user.email,
-      profilePicture: user.photoURL,
-      provider: user.providerId,
-      lastLogin: new Date(),
-    });
+    const userSnap = await getDoc(userRef);
+
+    if (!userSnap.exists()) {
+      // First time sign-in — assign credits and hasPaid
+      await setDoc(userRef, {
+        uid: user.uid,
+        name: user.displayName,
+        email: user.email,
+        profilePicture: user.photoURL,
+        provider: user.providerId,
+        lastLogin: new Date(),
+        credits: 15,
+        hasPaid: true,
+      });
+      console.log("🎉 New user created with credits and hasPaid set.");
+    } else {
+      // Returning user — update last login only
+      await setDoc(userRef, {
+        lastLogin: new Date(),
+      }, { merge: true });
+      console.log("✅ Existing user, last login updated.");
+    }
 
     router.push('/');
   } catch (error) {

@@ -3061,30 +3061,16 @@ onAuthStateChanged(auth, async (user) => {
     const userDocRef = doc(db, 'users', user.uid);
     const userSnap = await getDoc(userDocRef);
 
-    if (userSnap.exists()) {
-      const data = userSnap.data();
-      hasPaid.value = data.hasPaid ?? true;
-      userCredits.value = data.credits ?? 5;
+    if (!userSnap.exists()) {
 
-      // Patch missing credits if needed
-      if (data.credits === undefined) {
-        await updateDoc(userDocRef, {
-          credits: 5,
-          hasPaid: true
-        });
-        console.log("✅ Default credits set.");
-      }
+      console.log("🆕 New user – default credits set.");
     } else {
-      // Create user with default values
-      await setDoc(userDocRef, {
-        hasPaid: true,
-        credits: 5,
-        createdAt: serverTimestamp(),
-      });
-      hasPaid.value = true; // ✅ Fix: match what's stored
-      userCredits.value = 5;
-      console.log("🆕 Created user doc with default credits and hasPaid = true");
+      const data = userSnap.data();
+      hasPaid.value = data.hasPaid === true;
+      userCredits.value = typeof data.credits === "number" ? data.credits : 0;
+      console.log("👤 Existing user – credits loaded:", userCredits.value);
     }
+
 
     // Proceed with fetching data
     fetchStreakOnLoad();
