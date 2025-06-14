@@ -67,7 +67,7 @@
                 @click="redirectToCheckout"
                 class="mt-6 bg-green-600 text-white px-6 py-3 rounded-full hover:bg-green-700 transition duration-300 shadow-lg"
             >
-              Buy 15 Credits – $5💎
+              Buy 30 Credits – $5💎
             </button>
             <button
                 @click="showPaymentModal = false"
