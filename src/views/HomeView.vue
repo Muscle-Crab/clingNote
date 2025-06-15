@@ -818,12 +818,12 @@
                       <div
                           @click="openTaskDetailModal(task)"
                           v-if="task.imageURL"
-                          class="w-16 h-16 rounded-md overflow-hidden border border-gray-300 shadow-sm flex items-center justify-center bg-white"
+                          class="w-16 h-16 rounded-lg overflow-hidden border border-gray-300 shadow-sm bg-white"
                       >
                         <img
                             :src="task.imageURL"
-                            alt="Product Image"
-                            class="w-full h-full object-contain"
+                            alt="Task Image"
+                            class="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
                         />
                       </div>
 
@@ -2890,6 +2890,29 @@ const handleHandwritingUpload = async (event) => {
   reader.readAsDataURL(file);
 };
 
+const fetchImageURL = async (query) => {
+  const UNSPLASH_ACCESS_KEY = "T2U---vjy9dd98hEz35rP4-Zb8g8LjP-HYnx..."; // Your key
+
+  try {
+    const response = await axios.get("https://api.unsplash.com/search/photos", {
+      params: { query, per_page: 1 },
+      headers: {
+        Authorization: `Client-ID T2U--vjy9dd98hEz35rP4-Zb8g8LjP-HYnxtkSf4Gsw`
+      }
+    });
+
+    const results = response.data.results;
+    if (results.length > 0) {
+      return results[0].urls.small; // or .regular
+    } else {
+      console.warn("No image found for:", query);
+      return null;
+    }
+  } catch (error) {
+    console.error("Image fetch failed:", error);
+    return null;
+  }
+};
 
 
 const saveHandwrittenTasks = async (tasks) => {
@@ -2898,12 +2921,15 @@ const saveHandwrittenTasks = async (tasks) => {
   const snapshot = await getDoc(docRef);
   const existing = snapshot.exists() ? snapshot.data().tasks || [] : [];
 
-  const formatted = tasks.map(t => ({
-    title: t,
-    completed: false,
-    type: 'recurring',
-    createdAt: new Date().toISOString
-    ()
+  const formatted = await Promise.all(tasks.map(async (t) => {
+    const imageURL = await fetchImageURL(t);
+    return {
+      title: t,
+      completed: false,
+      type: 'recurring',
+      imageURL,
+      createdAt: new Date().toISOString()
+    };
   }));
 
   await setDoc(docRef, {
@@ -2912,11 +2938,8 @@ const saveHandwrittenTasks = async (tasks) => {
   });
 
   fetchSelectedDayRoutine(); // Refresh
-  alert(`📝 Added ${formatted.length} tasks from handwritten list.`);
+  alert(`📝 Added ${formatted.length} tasks from list with images.`);
 };
-
-
-
 
 
 const redirectToCheckout = async () => {
