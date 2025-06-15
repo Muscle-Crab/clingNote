@@ -86,29 +86,44 @@
     <textarea
         v-model="smartPrompt"
         @keyup.enter="submitSmartPrompt"
-        placeholder="Describe the list you want to create...'"
+        placeholder="I need a list of items for...'"
         rows="1"
         @input="$event.target.style.height = 'auto'; $event.target.style.height = $event.target.scrollHeight + 'px';"
         class="flex-1 resize-none overflow-hidden bg-transparent text-gray-800 text-base leading-relaxed outline-none placeholder-gray-400"
     ></textarea>
 
+            <!-- Action Buttons Wrapper -->
+            <div class="flex items-center space-x-1">
+              <!-- Send Button -->
+              <button
+                  @click="submitSmartPrompt"
+                  class="p-2 rounded-full bg-blue-600 hover:bg-blue-700 text-white transition duration-200"
+                  title="Send"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none"
+                     viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M5 10l7-7m0 0l7 7m-7-7v18" />
+                </svg>
+              </button>
+
+              <!-- Upload Image Button -->
+              <button
+                  @click="triggerHandwritingUpload"
+                  class="p-2 rounded-full bg-blue-600 hover:bg-blue-700 text-white transition duration-200"
+                  title="Upload Image"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none"
+                     viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M3 7h2l2-3h10l2 3h2a1 1 0 011 1v11a1 1 0 01-1 1H3a1 1 0 01-1-1V8a1 1 0 011-1zm9 3a4 4 0 100 8 4 4 0 000-8z" />
+                </svg>
+              </button>
+            </div>
 
 
-            <!-- Action buttons -->
-            <button
-                @click="triggerHandwritingUpload"
-                class="text-gray-500 hover:text-blue-600 transition-colors"
-                title="Upload Image"
-            >
-              <i class="fas fa-camera"></i>
-            </button>
-            <button
-                @click="submitSmartPrompt"
-                class="text-gray-500 hover:text-blue-600 transition-colors"
-                title="Upload Image"
-            >
-              <i class="fas fa-paper-plane"></i>
-            </button>
+
+
 
 
           </div>
