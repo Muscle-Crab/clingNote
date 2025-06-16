@@ -98,6 +98,11 @@ const routes = [
     name: 'privacy',
     component: () => import('../views/privacy-policy.vue')
   }
+  ,{
+    path: '/mealPlan',
+    name: 'MealPlan',
+    component: () => import('../views/MealPlan.vue')
+  }
 ];
 
 const router = createRouter({

@@ -15,9 +15,9 @@
 <!--          {{ userEmail }}-->
 <!--        </div>-->
 
-          <div class="flex items-center space-x-3">
+          <div  v-if="userEmail" class="flex items-center space-x-3">
             <img
-                v-if="avatarURL"
+                v-if="avatarURL "
                 :src="avatarURL"
                 alt="Avatar"
                 class="w-10 h-10 rounded-full border object-cover"
@@ -103,6 +103,13 @@
               <router-link to="/addiction"
                            class="text-gray-800 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-500 font-medium">
                 Addiction
+              </router-link>
+            </li>
+            <li class="flex items-center space-x-3">
+              <i class="fas fa-heartbeat text-gray-800 dark:text-gray-200"></i>
+              <router-link to="/mealPlan"
+                           class="text-gray-800 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-500 font-medium">
+                Meal Tracker
               </router-link>
             </li>
           </template>
