@@ -771,8 +771,8 @@
                         <!-- Drag Icon -->
                         <div>
                           <div
-                              style="background-color: deepskyblue"
-                              class="w-10 h-10 rounded-full flex items-center justify-center mr-3 shadow-sm"
+
+                              class="w-10 h-10 rounded-full flex items-center justify-center mr-3 shadow-sm bg-blue-500"
                           >
                             <i class="fas fa-arrows-alt text-white drag-handle"></i>
                           </div>
