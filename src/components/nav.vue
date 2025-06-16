@@ -8,11 +8,28 @@
           <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M1 1h15M1 7h15M1 13h15"/>
         </svg>
       </button>
-      <!-- Display user's email -->
-      <router-link :to="'/profile/' + userId">
-        <div v-if="userEmail" class="text-gray-800 dark:text-gray-200">
-          {{ userEmail }}
-        </div>
+      <!-- Display user's email and profile picture -->
+      <router-link :to="'/profile/' + userId" class="flex items-center space-x-3">
+
+<!--        <div v-if="userEmail" class="text-gray-800 dark:text-gray-200">-->
+<!--          {{ userEmail }}-->
+<!--        </div>-->
+
+          <div class="flex items-center space-x-3">
+            <img
+                v-if="avatarURL"
+                :src="avatarURL"
+                alt="Avatar"
+                class="w-10 h-10 rounded-full border object-cover"
+            />
+            <img
+                v-else
+                src="https://ui-avatars.com/api/?name=User&background=4F46E5&color=fff&rounded=true"
+                alt="Default Avatar"
+                class="w-10 h-10 rounded-full border object-cover"
+            />
+          </div>
+
       </router-link>
     </div>
 
@@ -106,13 +123,23 @@
 
 <script setup>
 import { ref, onMounted } from 'vue';
-import { auth } from '@/firebaseConfig';
 import { useRouter } from 'vue-router';
+import { auth, db } from '@/firebaseConfig';
+import { doc, getDoc } from 'firebase/firestore';
 
 const router = useRouter();
 const sidebarOpen = ref(false);
 const userEmail = ref(null);
 const userId = ref(null);
+const avatarURL = ref(null); // New: Avatar URL from Firestore
+
+const toggleSidebar = () => {
+  sidebarOpen.value = !sidebarOpen.value;
+};
+
+const closeSidebar = () => {
+  sidebarOpen.value = false;
+};
 
 const logout = async () => {
   try {
@@ -123,59 +150,39 @@ const logout = async () => {
     console.error('Error logging out:', error.message);
   }
 };
+
 onMounted(() => {
   if (window.innerWidth > 768) {
     sidebarOpen.value = true;
   }
 
-  // ✅ Use only onAuthStateChanged to reliably get the user ID
-  auth.onAuthStateChanged((user) => {
+  auth.onAuthStateChanged(async (user) => {
     if (user) {
       console.log("[AUTH] User logged in:", user.uid);
       userEmail.value = user.email;
       userId.value = user.uid;
+
+      try {
+        const userDocRef = doc(db, 'users', user.uid);
+        const userDocSnap = await getDoc(userDocRef);
+        if (userDocSnap.exists()) {
+          avatarURL.value = userDocSnap.data().avatarURL || null;
+        } else {
+          console.warn("No user document found in Firestore.");
+        }
+      } catch (err) {
+        console.error("Error fetching avatar:", err.message);
+      }
     } else {
       console.log("[AUTH] User not logged in");
       userEmail.value = null;
       userId.value = null;
-    }
-  });
-});
-
-
-console.log("Current User ID:", auth.currentUser?.uid);
-
-const toggleSidebar = () => {
-  sidebarOpen.value = !sidebarOpen.value;
-};
-
-const closeSidebar = () => {
-  sidebarOpen.value = false;
-};
-
-onMounted(() => {
-  if (window.innerWidth > 768) {
-    sidebarOpen.value = true;
-  }
-
-  const user = auth.currentUser;
-  if (user) {
-    userEmail.value = user.email;
-    userId.value = user.uid;
-  }
-
-  // Auth state changes
-  auth.onAuthStateChanged((user) => {
-    if (user) {
-      userEmail.value = user.email;
-      userId.value = user.uid;
-    } else {
-      userEmail.value = null;
-      userId.value = null;
+      avatarURL.value = null;
     }
   });
 });
 </script>
+
 
 <style scoped>
 /* Customize the sidebar or add responsive styles here if needed */
