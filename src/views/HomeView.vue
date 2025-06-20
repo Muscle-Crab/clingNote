@@ -1782,12 +1782,13 @@ const checkAllTasksCompleted = async () => {
     fetchSelectedDayRoutine()// 🔥 Update streak progression
     await saveDailyPerformance();
 
-    // 🗑 Remove one-time tasks & reset recurring tasks
-    selectedDayRoutine.value = selectedDayRoutine.value.filter(task => {
-      if (task.type === "one-time") {
-        return false; // Remove from array (will also be removed from Firestore)
+    selectedDayRoutine.value = selectedDayRoutine.value.map(task => {
+      if (task.type === "recurring") {
+        return { ...task, completed: true }; // reset to incomplete
       }
-    });
+      return null; // mark one-time task for removal
+    }).filter(task => task !== null); // keep only recurring
+
 
     // 🔄 Update Firestore
     try {
