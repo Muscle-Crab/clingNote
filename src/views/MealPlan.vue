@@ -330,7 +330,8 @@ async function processNutrients(foods) {
     image: imageURL,
     nutrients: { ...dailyNutrients }
   })
-
+// ✅ Speak the alerts after data is processed
+  if (alerts.value.length) speakAlerts()
 
 }
 
@@ -511,6 +512,24 @@ onMounted(() => {
     }
   })
 })
+function speakAlerts() {
+  if (!alerts.value.length) return;
+
+  // ✅ Stop any ongoing speech before starting a new one
+  if (window.speechSynthesis.speaking) {
+    window.speechSynthesis.cancel();
+  }
+
+  const message = `Warning. ${alerts.value.join('. ')}`;
+  const utterance = new SpeechSynthesisUtterance(message);
+  utterance.lang = 'en-US';
+  utterance.rate = 1;
+  utterance.pitch = 1;
+  utterance.volume = 1;
+
+  window.speechSynthesis.speak(utterance);
+}
+
 
 </script>
 
