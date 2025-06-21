@@ -39,19 +39,19 @@
     </div>
 
     <!-- Manual Entry -->
-    <div class="flex items-center gap-2">
-      <input
-          v-model="manualFood"
-          placeholder="Enter food"
-          class="flex-1 px-4 py-2 rounded-md bg-gray-800 border border-gray-700 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-      />
-      <button
-          @click="addManualFood"
-          class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition shadow"
-      >
-        Add
-      </button>
-    </div>
+<!--    <div class="flex items-center gap-2">-->
+<!--      <input-->
+<!--          v-model="manualFood"-->
+<!--          placeholder="Enter food"-->
+<!--          class="flex-1 px-4 py-2 rounded-md bg-gray-800 border border-gray-700 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"-->
+<!--      />-->
+<!--      <button-->
+<!--          @click="addManualFood"-->
+<!--          class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition shadow"-->
+<!--      >-->
+<!--        Add-->
+<!--      </button>-->
+<!--    </div>-->
 
     <!-- Health Alerts -->
     <div v-if="alerts.length" class="bg-red-900/30 border border-red-600 text-red-400 p-4 rounded-lg shadow-inner">
@@ -277,23 +277,25 @@ async function processNutrients(foods) {
       }
     }
 
-    mealHistory.value.push({
-      name: foods.map(f => f.name).join(', '), // e.g., "Beef Stew, Carrot, Potato"
-      image: imageURL
-    })
+
 
   }
-
+  mealHistory.value.push({
+    name: foods.map(f => f.name).join(', '), // e.g., "Beef Stew, Carrot, Potato"
+    image: imageURL
+  })
   syncDisplayNutrients()
   updateWeeklyData()
 
   await addDoc(collection(db, 'meals'), {
     userId: userId.value,
     date: new Date().toISOString().split('T')[0], // 'YYYY-MM-DD'
+    week: getWeekNumber(new Date()),              // ✅ Add this
     foods: foods.map(f => f.name),
     image: imageURL,
     nutrients: { ...dailyNutrients }
   })
+
 
 }
 
@@ -315,18 +317,53 @@ function getDiagnosis(nutrient) {
   return risks[nutrient] || 'nutrient overload'
 }
 
-function updateWeeklyData() {
-  const today = new Date().getDay()
-  const dayMap = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-  const day = dayMap[today]
-  const entry = weeklyData.find(d => d.day === day)
-  if (entry) {
-    entry.Carbs = displayNutrients.Carbs
-    entry.Protein = displayNutrients.Protein
-    entry.Fat = displayNutrients.Fat
-    entry.Percent = Math.round((entry.Carbs + entry.Protein + entry.Fat) / 3)
-  }
+async function loadWeeklyData() {
+  if (!userId.value) return
+
+  const currentWeek = getWeekNumber(new Date())
+
+  const q = query(
+      collection(db, 'meals'),
+      where('userId', '==', userId.value),
+      where('week', '==', currentWeek)
+  )
+
+  const snapshot = await getDocs(q)
+  if (snapshot.empty) return
+
+  // Reset before aggregating
+  resetWeeklyData()
+
+  snapshot.forEach(docSnap => {
+    const data = docSnap.data()
+    const dayStr = new Date(data.date).toLocaleDateString('en-US', { weekday: 'short' }) // "Mon", "Tue", etc.
+
+    const entry = weeklyData.find(d => d.day === dayStr)
+    const n = data.nutrients || {}
+    if (entry) {
+      entry.Carbs += Math.round((n.Carbs || 0) / 300 * 100)
+      entry.Protein += Math.round((n.Protein || 0) / 150 * 100)
+      entry.Fat += Math.round((n.Fat || 0) / 70 * 100)
+    }
+  })
+
+  weeklyData.forEach(day => {
+    day.Percent = Math.round((day.Carbs + day.Protein + day.Fat) / 3)
+  })
 }
+onMounted(() => {
+  onAuthStateChanged(auth, (user) => {
+    if (user) {
+      userId.value = user.uid
+      checkForReset()
+      loadTodayMeal()
+      loadWeeklyData() // ✅ Also load weekly stats
+    } else {
+      console.log('User not logged in')
+    }
+  })
+})
+
 
 function resetDailyData() {
   for (const key in dailyNutrients) {
@@ -344,6 +381,19 @@ function resetWeeklyData() {
     day.Fat = 0
     day.Percent = 0
   })
+}
+// DELETE this whole function ↓
+function updateWeeklyData() {
+  const today = new Date().getDay()
+  const dayMap = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+  const day = dayMap[today]
+  const entry = weeklyData.find(d => d.day === day)
+  if (entry) {
+    entry.Carbs = displayNutrients.Carbs
+    entry.Protein = displayNutrients.Protein
+    entry.Fat = displayNutrients.Fat
+    entry.Percent = Math.round((entry.Carbs + entry.Protein + entry.Fat) / 3)
+  }
 }
 
 function getWeekNumber(date) {
