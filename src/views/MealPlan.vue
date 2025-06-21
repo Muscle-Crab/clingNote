@@ -2,12 +2,15 @@
   <div class="p-6 max-w-xl mx-auto text-gray-100 bg-gradient-to-br from-gray-900 to-gray-800 min-h-screen space-y-8 font-sans">
     <!-- Title -->
     <h1 class="text-3xl sm:text-4xl font-extrabold text-center tracking-tight">📊 Track Daily Nutrients with AI</h1>
-
     <!-- Fullscreen Loading Overlay -->
-    <div v-if="isLoading" class="fixed inset-0 z-50 backdrop-blur-sm bg-black/70 flex flex-col items-center justify-center space-y-4">
+    <div
+        v-if="isLoading"
+        class="fixed inset-0 z-50 bg-black/90 flex flex-col items-center justify-center space-y-4"
+    >
       <div class="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
       <p class="text-lg font-medium text-white animate-pulse">Analyzing image...</p>
     </div>
+
 
     <!-- Image Upload Card -->
     <div class="bg-gray-800/70 backdrop-blur rounded-xl p-5 shadow-lg flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -28,14 +31,22 @@
         </label>
       </div>
 
+
       <!-- Analyze Button -->
       <button
           @click="analyzeImage"
-          :disabled="!image"
-          class="px-5 py-2 rounded-lg bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-semibold shadow-md hover:opacity-90 disabled:opacity-40 transition duration-200"
+          :disabled="!image || isLoading"
+          :class="[
+    'px-5 py-2 rounded-lg text-white font-semibold shadow-md transition duration-200',
+    (!image || isLoading)
+      ? 'bg-gray-600 cursor-not-allowed'
+      : 'bg-gradient-to-r from-blue-500 to-indigo-600 hover:opacity-90'
+  ]"
       >
         🔍 Analyze
       </button>
+
+
     </div>
 
     <!-- Manual Entry -->
@@ -289,7 +300,7 @@ async function processNutrients(foods) {
 
   await addDoc(collection(db, 'meals'), {
     userId: userId.value,
-    date: new Date().toISOString().split('T')[0], // 'YYYY-MM-DD'
+    date: new Date().toLocaleDateString('en-CA'), // Format: YYYY-MM-DD
     week: getWeekNumber(new Date()),              // ✅ Add this
     foods: foods.map(f => f.name),
     image: imageURL,
@@ -405,7 +416,8 @@ function getWeekNumber(date) {
 }
 
 function checkForReset() {
-  const todayStr = new Date().toISOString().split('T')[0]
+  const todayStr = new Date().toLocaleDateString('en-CA')
+
   const today = new Date()
   const currentWeek = getWeekNumber(today)
   const lastReset = localStorage.getItem('lastResetDate')
@@ -424,7 +436,7 @@ function checkForReset() {
 
 async function loadTodayMeal() {
   if (!userId.value) return
-  const todayStr = new Date().toISOString().split('T')[0]
+  const todayStr = new Date().toLocaleDateString('en-CA')
 
   const q = query(
       collection(db, 'meals'),
