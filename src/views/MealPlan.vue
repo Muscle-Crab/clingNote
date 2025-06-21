@@ -347,7 +347,10 @@ async function loadWeeklyData() {
 
   snapshot.forEach(docSnap => {
     const data = docSnap.data()
-    const dayStr = new Date(data.date).toLocaleDateString('en-US', { weekday: 'short' }) // "Mon", "Tue", etc.
+    const [year, month, day] = data.date.split('-')
+    const localDate = new Date(+year, +month - 1, +day)
+    const dayStr = localDate.toLocaleDateString('en-US', { weekday: 'short' })
+
 
     const entry = weeklyData.find(d => d.day === dayStr)
     const n = data.nutrients || {}
