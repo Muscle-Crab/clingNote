@@ -94,30 +94,7 @@
       </div>
     </div>
 
-    <!-- Weekly Summary -->
-    <div class="bg-gray-800/80 backdrop-blur p-5 rounded-xl shadow-md">
-      <h2 class="text-lg font-semibold mb-4">📆 Weekly Summary</h2>
-      <div class="text-sm space-y-2 font-mono">
-        <div class="flex justify-between font-semibold text-gray-300 border-b border-gray-600 pb-1">
-          <span class="w-12">Day</span>
-          <span class="w-14">Carbs</span>
-          <span class="w-16">Protein</span>
-          <span class="w-10">Fat</span>
-          <span class="w-8 text-right">%</span>
-        </div>
-        <div
-            v-for="day in weeklyData"
-            :key="day.day"
-            class="flex justify-between items-center text-gray-400"
-        >
-          <span class="w-12">{{ day.day }}</span>
-          <span class="w-14 text-blue-400">{{ day.Carbs }}%</span>
-          <span class="w-16 text-purple-300">{{ day.Protein }}%</span>
-          <span class="w-10 text-yellow-400">{{ day.Fat }}%</span>
-          <span class="w-8 text-right">{{ day.Percent || 0 }}%</span>
-        </div>
-      </div>
-    </div>
+
 
     <!-- Meal History -->
     <div class="bg-gray-800/80 backdrop-blur p-5 rounded-xl shadow-md">
@@ -126,7 +103,8 @@
         <div
             v-for="(item, idx) in mealHistory"
             :key="idx"
-            class="flex items-center gap-4 p-3 rounded-lg border border-gray-700 bg-gray-900/50"
+            @click="selectedMeal = item"
+            class="flex items-center gap-4 p-3 rounded-lg border border-gray-700 bg-gray-900/50 cursor-pointer hover:bg-gray-800 transition"
         >
           <img
               v-if="item.image"
@@ -134,10 +112,45 @@
               alt="Meal Image"
               class="w-14 h-14 object-cover rounded shadow"
           />
-          <span class="text-sm text-gray-300 truncate">{{ item.name }}</span>
+          <div class="flex-1">
+            <span class="text-sm text-gray-300 block font-medium truncate">{{ item.name }}</span>
+            <span class="text-xs text-gray-400">Click to view details</span>
+          </div>
         </div>
       </div>
     </div>
+    <!-- Meal Detail Modal -->
+    <div
+        v-if="selectedMeal"
+        class="fixed inset-0 z-50 bg-black/70 flex items-center justify-center"
+        @click.self="selectedMeal = null"
+    >
+      <div class="bg-gray-900 text-white rounded-xl p-6 max-w-md w-full shadow-lg space-y-4">
+        <div class="flex justify-between items-center">
+          <h3 class="text-xl font-bold">🍱 Meal Details</h3>
+          <button @click="selectedMeal = null" class="text-gray-400 hover:text-white text-2xl">&times;</button>
+        </div>
+
+        <img v-if="selectedMeal.image" :src="selectedMeal.image" class="w-full h-40 object-cover rounded-md" />
+
+        <div>
+          <p class="mb-1 text-sm"><strong>Foods:</strong></p>
+          <ul class="list-disc list-inside text-sm text-gray-300 mb-3">
+            <li v-for="(food, i) in selectedMeal.foods" :key="i">{{ food.name }}</li>
+          </ul>
+        </div>
+
+        <div>
+          <p class="mb-1 text-sm"><strong>Nutrients:</strong></p>
+          <div v-for="(val, key) in selectedMeal.nutrients" :key="key" class="flex justify-between border-b border-gray-700 py-1 text-sm">
+            <span>{{ key }}</span>
+            <span>{{ val }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+
   </div>
 </template>
 
@@ -158,6 +171,7 @@ const userId = ref(null)
 const displayNutrients = reactive({ Carbs: 0, Protein: 0, Fat: 0 })
 const previewImageURL = ref(null)
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage'
+const selectedMeal = ref(null)
 
 const weeklyData = reactive([
   { day: 'Sun', Carbs: 0, Protein: 0, Fat: 0, Percent: 0 },
@@ -292,9 +306,12 @@ async function processNutrients(foods) {
 
   }
   mealHistory.value.push({
-    name: foods.map(f => f.name).join(', '), // e.g., "Beef Stew, Carrot, Potato"
-    image: imageURL
+    name: foods.map(f => f.name).join(', '),
+    image: imageURL,
+    foods: foods, // Full food objects
+    nutrients: { ...dailyNutrients } // Store a copy
   })
+
   syncDisplayNutrients()
   updateWeeklyData()
 
@@ -463,8 +480,11 @@ async function loadTodayMeal() {
 
     mealHistory.value.push({
       name: foods.join(', '),
-      image: data.image || null
+      image: data.image || null,
+      nutrients: data.nutrients || {},
+      foods: foods.map(name => ({ name })) // fallback if you didn't save full objects
     })
+
   })
 
   syncDisplayNutrients()
