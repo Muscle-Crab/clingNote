@@ -276,15 +276,6 @@ If no label is visible, do your best to estimate. Do not explain anything. Outpu
       image: imageURL
     })
 
-    // Save to Firestore
-    await addDoc(collection(db, 'meals'), {
-      userId: userId.value,
-      date: new Date().toLocaleDateString('en-CA'),
-      week: getWeekNumber(new Date()),
-      foods: result.foods,
-      nutrients: result.nutrients,
-      image: imageURL
-    })
 
     if (alerts.value.length) speakAlerts()
 
