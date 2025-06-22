@@ -207,10 +207,26 @@ async function analyzeImage() {
               content: [
                 {
                   type: 'text',
-                  text: `List all foods in this image and estimate their nutrient content (Calories, Protein, Fat, Carbs, Sugar, Sodium, Fiber, VitaminC, VitaminD). Return a JSON array like:
-[
-  {"name": "Banana", "Calories": 100, "Carbs": 27, "Protein": 1.3, "Fat": 0.3, "Sugar": 14, "Sodium": 1, "Fiber": 3.1, "VitaminC": 8.7, "VitaminD": 0}
-]`
+                  text: `You are analyzing a product image like a smoothie or drink. If it shows a visible nutrition label, extract the values **exactly as shown**. Return the full nutrient data per container (not per 100g).
+
+Return JSON like:
+{
+  "foods": ["Bolthouse Farms Blue Goodness Smoothie"],
+  "nutrients": {
+    "Calories": 260,
+    "Carbs": 62,
+    "Protein": 1,
+    "Fat": 0,
+    "Sugar": 52,
+    "Sodium": 30,
+    "Fiber": 3,
+    "VitaminC": 140,
+    "VitaminD": 0
+  }
+}
+
+If no label is visible, do your best to estimate. Do not explain anything. Output only JSON.`
+
                 },
                 {
                   type: 'image_url',
@@ -229,10 +245,52 @@ async function analyzeImage() {
       content = content.replace(/```(?:json)?/g, '').trim()
     }
 
-    const foods = JSON.parse(content)
-    await processNutrients(foods)
+    let result
+    try {
+      result = JSON.parse(content)
+    } catch (parseError) {
+      console.error('Failed to parse JSON:', content)
+      alerts.value.push('GPT returned invalid JSON. Try uploading a clearer or simpler meal image.')
+      return
+    }
+
+    // Upload image to Firebase Storage
+    let imageURL = null
+    if (image.value) {
+      const storage = getStorage()
+      const fileName = `${userId.value}_${Date.now()}_${image.value.name}`
+      const imgRef = storageRef(storage, `mealImages/${fileName}`)
+      await uploadBytes(imgRef, image.value)
+      imageURL = await getDownloadURL(imgRef)
+    }
+
+    // Save nutrient data
+    const enrichedFood = { ...result.nutrients, name: result.foods.join(', ') }
+    await processNutrients([enrichedFood], imageURL)
+
+    // Store in meal history
+    mealHistory.value.push({
+      name: result.foods.join(', '),
+      nutrients: result.nutrients,
+      foods: result.foods.map(name => ({ name })),
+      image: imageURL
+    })
+
+    // Save to Firestore
+    await addDoc(collection(db, 'meals'), {
+      userId: userId.value,
+      date: new Date().toLocaleDateString('en-CA'),
+      week: getWeekNumber(new Date()),
+      foods: result.foods,
+      nutrients: result.nutrients,
+      image: imageURL
+    })
+
+    if (alerts.value.length) speakAlerts()
+
   } catch (err) {
     console.error('Image analysis failed:', err)
+    alerts.value.push('Unable to analyze the image. Try uploading a clearer photo with visible foods.')
   } finally {
     isLoading.value = false
   }
@@ -277,18 +335,8 @@ async function addManualFood() {
   previewImageURL.value = ''
 }
 
-async function processNutrients(foods) {
+async function processNutrients(foods, imageURL = null) {
   alerts.value = []
-
-  // Upload image to Firebase Storage
-  let imageURL = null
-  if (image.value) {
-    const storage = getStorage()
-    const fileName = `${userId.value}_${Date.now()}_${image.value.name}`
-    const imgRef = storageRef(storage, `mealImages/${fileName}`)
-    await uploadBytes(imgRef, image.value)
-    imageURL = await getDownloadURL(imgRef)
-  }
 
   for (const food of foods) {
     for (const key in food) {
@@ -299,32 +347,23 @@ async function processNutrients(foods) {
         }
       }
     }
-
-
-
   }
-  mealHistory.value.push({
-    name: foods.map(f => f.name).join(', '),
-    image: imageURL,
-    foods: foods, // Full food objects
-    nutrients: { ...dailyNutrients } // Store a copy
-  })
 
   syncDisplayNutrients()
   updateWeeklyData()
 
   await addDoc(collection(db, 'meals'), {
     userId: userId.value,
-    date: new Date().toLocaleDateString('en-CA'), // Format: YYYY-MM-DD
-    week: getWeekNumber(new Date()),              // ✅ Add this
+    date: new Date().toLocaleDateString('en-CA'),
+    week: getWeekNumber(new Date()),
     foods: foods.map(f => f.name),
     image: imageURL,
     nutrients: { ...dailyNutrients }
   })
-// ✅ Speak the alerts after data is processed
-  if (alerts.value.length) speakAlerts()
 
+  if (alerts.value.length) speakAlerts()
 }
+
 
 
 function syncDisplayNutrients() {
@@ -520,6 +559,7 @@ function speakAlerts() {
 
   window.speechSynthesis.speak(utterance);
 }
+
 
 
 </script>
