@@ -586,7 +586,26 @@ const handleAnalyzeClick = async () => {
   await analyzeImage();
 };
 
+const redirectToCheckout = async () => {
+  try {
+    const response = await fetch('/.netlify/functions/create-checkout-session', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ userId: userId.value }),
+    });
 
+    const data = await response.json();
+    if (data?.url) {
+      window.location.href = data.url;
+    } else {
+      console.error('Invalid response from checkout session:', data);
+    }
+  } catch (error) {
+    console.error('Error redirecting to checkout:', error);
+  }
+};
 
 </script>
 
