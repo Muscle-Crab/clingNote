@@ -208,10 +208,7 @@ function formatNutrient(val, key) {
 }
 
 async function analyzeImage() {
-  if (credits.value <= 0) {
-    await redirectToCheckout();
-    return;
-  }
+
 
   isLoading.value = true;
   try {
