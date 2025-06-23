@@ -40,17 +40,19 @@
         </label>
 
         <button
+            v-if="image"
             @click="handleAnalyzeClick"
-            :disabled="!image || isLoading"
+            :disabled="isLoading"
             :class="[
     'w-full py-2 rounded-md text-white font-medium text-sm transition',
-    (!image || isLoading)
+    isLoading
       ? 'bg-gray-600 cursor-not-allowed'
       : 'bg-gradient-to-r from-blue-500 to-indigo-600 hover:opacity-90'
   ]"
-            :title="credits <= 0 ? 'No credits left. Click to buy more.' : ''"
+            :title="credits <= 0 ? 'You need to buy more credits to use this feature.' : ''"
         >
-          🔍 Analyze
+          <span v-if="credits > 0">🔍 Analyze</span>
+          <span v-else>💳 Buy Credits to Analyze</span>
         </button>
 
 
