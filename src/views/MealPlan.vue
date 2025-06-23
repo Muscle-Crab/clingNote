@@ -1,6 +1,7 @@
 <template>
-  <div class="px-3 py-4 sm:px-4 max-w-md mx-auto text-gray-100 bg-gradient-to-br from-gray-900 to-gray-800 min-h-screen font-sans space-y-6">
-    <!-- Title -->
+  <div class="px-0 sm:px-0 w-full text-gray-100 bg-gradient-to-br from-gray-900 to-gray-800 min-h-screen font-sans space-y-6">
+
+  <!-- Title -->
     <h1 class="text-xl sm:text-3xl font-bold text-center tracking-tight">📊 Track Daily Nutrients</h1>
 
     <!-- Loading Overlay -->
