@@ -40,7 +40,7 @@
         <router-link to="/">
           <a href="#" class="flex items-center space-x-3 rtl:space-x-reverse">
             <img src="@/assets/logo.png" class="h-8" alt="Cling Note Logo"/>
-            <span class="self-center text-2xl font-semibold whitespace-nowrap dark:text-white">Cling Note</span>
+            <span class="self-center text-2xl font-semibold whitespace-nowrap dark:text-white">Clingnote</span>
           </a>
         </router-link>
         <button @click="closeSidebar" type="button"
@@ -74,13 +74,7 @@
               Chat
             </router-link>
           </li>
-          <li class="flex items-center space-x-3">
-            <i class="fas fa-comments text-gray-800 dark:text-gray-200"></i>
-            <router-link to="/privacy-policy"
-                         class="text-gray-800 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-500 font-medium">
-              Privacy Policy
-            </router-link>
-          </li>
+
 
           <!-- Admin Only Routes -->
           <template v-if="userEmail === 'ds7513635@gmail.com'">
@@ -91,28 +85,32 @@
                 About
               </router-link>
             </li>
-            <li class="flex items-center space-x-3">
-              <i class="fas fa-rocket text-gray-800 dark:text-gray-200"></i>
-              <router-link to="/landing"
-                           class="text-gray-800 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-500 font-medium">
-                Landing
-              </router-link>
-            </li>
-            <li class="flex items-center space-x-3">
-              <i class="fas fa-heartbeat text-gray-800 dark:text-gray-200"></i>
-              <router-link to="/addiction"
-                           class="text-gray-800 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-500 font-medium">
-                Addiction
-              </router-link>
-            </li>
-            <li class="flex items-center space-x-3">
-              <i class="fas fa-heartbeat text-gray-800 dark:text-gray-200"></i>
-              <router-link to="/mealPlan"
-                           class="text-gray-800 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-500 font-medium">
-                Meal Tracker
-              </router-link>
-            </li>
           </template>
+
+          <!-- Addiction -->
+          <li class="flex items-center space-x-3">
+            <i class="fas fa-ban text-gray-800 dark:text-gray-200"></i>
+            <router-link to="/addiction"
+                         class="text-gray-800 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-500 font-medium">
+              Addiction
+            </router-link>
+          </li>
+
+          <!-- Meal Tracker -->
+          <li class="flex items-center space-x-3">
+            <i class="fas fa-utensils text-gray-800 dark:text-gray-200"></i>
+            <router-link to="/mealPlan"
+                         class="text-gray-800 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-500 font-medium">
+              Meal Tracker
+            </router-link>
+          </li>
+          <li class="flex items-center space-x-3">
+            <i class="fas fa-user-shield text-gray-800 dark:text-gray-200"></i>
+            <router-link to="/privacy-policy"
+                         class="text-gray-800 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-500 font-medium">
+              Privacy Policy
+            </router-link>
+          </li>
 
           <!-- Logout -->
           <li class="flex items-center space-x-3">
@@ -122,6 +120,7 @@
               Logout
             </button>
           </li>
+
         </ul>
       </nav>
     </aside>
