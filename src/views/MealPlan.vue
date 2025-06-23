@@ -209,7 +209,6 @@ function formatNutrient(val, key) {
 
 async function analyzeImage() {
   if (credits.value <= 0) {
-    alert('You are out of credits. Redirecting to purchase more.');
     await redirectToCheckout();
     return;
   }
@@ -584,7 +583,6 @@ function speakAlerts() {
 }
 const handleAnalyzeClick = async () => {
   if (credits.value <= 0) {
-    alert('You have 0 credits. Redirecting to purchase more.');
     await redirectToCheckout();
     return;
   }
