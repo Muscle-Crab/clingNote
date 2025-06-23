@@ -1,123 +1,134 @@
 <template>
-  <div class="px-0 sm:px-0 w-full text-gray-100 bg-gradient-to-br from-gray-900 to-gray-800 min-h-screen font-sans space-y-6">
+  <div class="pt-16 px-4 sm:px-6 w-full text-gray-100 bg-gradient-to-br from-gray-900 to-gray-800 min-h-screen font-sans space-y-6">
+    <div >
 
-  <!-- Title -->
-    <h1 class="text-xl sm:text-3xl font-bold text-center tracking-tight">📊 Track Daily Nutrients</h1>
-
-    <!-- Loading Overlay -->
-    <div v-if="isLoading" class="fixed inset-0 z-50 bg-black/90 flex flex-col items-center justify-center gap-4">
-      <div class="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-      <p class="text-base font-medium text-white animate-pulse">Analyzing image...</p>
-    </div>
-
-    <!-- Upload Section -->
-    <div class="bg-gray-800/70 backdrop-blur rounded-lg p-4 shadow text-white space-y-3">
-      <div class="text-center">
-        <h2 class="text-base font-semibold">📤 Upload Your Meal</h2>
-        <p class="text-xs text-gray-400">Tap or drag an image of your meal</p>
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between text-center sm:text-left space-y-2 sm:space-y-0">
+        <h1 class="text-xl sm:text-3xl font-bold tracking-tight">
+          📊 Track Daily Nutrients
+        </h1>
+        <div class="text-sm sm:text-base font-medium text-blue-400">
+          🔋 Credits Remaining: <span class="font-semibold text-blue-300">{{ credits }}</span>
+        </div>
       </div>
 
-      <label class="flex flex-col items-center justify-center border-2 border-dashed border-blue-500/40 hover:border-blue-400 transition rounded-lg p-4 cursor-pointer bg-gray-900/40">
-        <input type="file" @change="onImageUpload" accept="image/*" class="hidden" />
-        <div v-if="previewImageURL" class="w-28 h-28 rounded-md overflow-hidden border border-gray-700 shadow mb-2">
-          <img :src="previewImageURL" class="w-full h-full object-cover" />
-        </div>
-        <div v-else class="flex flex-col items-center gap-1 text-blue-400">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                  d="M3 15a4 4 0 104 4H5a2 2 0 01-2-2v-2a2 2 0 012-2h2a4 4 0 00-4-4m9-4l3 3m0 0l-3 3m3-3H4" />
-          </svg>
-          <span class="text-xs font-medium">Click to upload</span>
-        </div>
-      </label>
 
-      <button
-          @click="analyzeImage"
-          :disabled="!image || isLoading"
-          :class="[
-          'w-full py-2 rounded-md text-white font-medium text-sm transition',
-          (!image || isLoading)
-            ? 'bg-gray-600 cursor-not-allowed'
-            : 'bg-gradient-to-r from-blue-500 to-indigo-600 hover:opacity-90'
-        ]"
-      >
-        🔍 Analyze
-      </button>
-    </div>
+      <!-- Loading Overlay -->
+      <div v-if="isLoading" class="fixed inset-0 z-50 bg-black/90 flex flex-col items-center justify-center gap-4">
+        <div class="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+        <p class="text-base font-medium text-white animate-pulse">Analyzing image...</p>
+      </div>
 
-    <!-- Health Alerts -->
-    <div v-if="alerts.length" class="bg-red-900/30 border border-red-600 text-red-400 p-3 rounded-lg text-sm shadow-inner space-y-2">
-      <h3 class="font-bold text-red-300">⚠️ Alerts</h3>
-      <ul class="list-disc list-inside">
-        <li v-for="(alert, index) in alerts" :key="index">{{ alert }}</li>
-      </ul>
-    </div>
-
-    <!-- Daily Nutrients -->
-    <div class="bg-gray-800/80 backdrop-blur p-4 rounded-lg shadow space-y-3">
-      <h2 class="text-base font-semibold">🚨 Daily Nutrients</h2>
-      <div v-for="(value, key) in displayNutrients" :key="key" class="space-y-1">
-        <div class="flex justify-between text-xs">
-          <span>{{ key }}</span>
-          <span>{{ value }}%</span>
+      <!-- Upload Section -->
+      <div class="bg-gray-800/70 backdrop-blur rounded-lg p-4 shadow text-white space-y-3">
+        <div class="text-center">
+          <h2 class="text-base font-semibold">📤 Upload Your Meal</h2>
+          <p class="text-xs text-gray-400">Tap or drag an image of your meal</p>
         </div>
-        <div class="w-full h-2 bg-gray-700 rounded overflow-hidden">
-          <div
-              :class="{
+
+        <label class="flex flex-col items-center justify-center border-2 border-dashed border-blue-500/40 hover:border-blue-400 transition rounded-lg p-4 cursor-pointer bg-gray-900/40">
+          <input type="file" @change="onImageUpload" accept="image/*" class="hidden" />
+          <div v-if="previewImageURL" class="w-28 h-28 rounded-md overflow-hidden border border-gray-700 shadow mb-2">
+            <img :src="previewImageURL" class="w-full h-full object-cover" />
+          </div>
+          <div v-else class="flex flex-col items-center gap-1 text-blue-400">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M3 15a4 4 0 104 4H5a2 2 0 01-2-2v-2a2 2 0 012-2h2a4 4 0 00-4-4m9-4l3 3m0 0l-3 3m3-3H4" />
+            </svg>
+            <span class="text-xs font-medium">Click to upload</span>
+          </div>
+        </label>
+
+        <button
+            @click="handleAnalyzeClick"
+            :disabled="!image || isLoading"
+            :class="[
+    'w-full py-2 rounded-md text-white font-medium text-sm transition',
+    (!image || isLoading)
+      ? 'bg-gray-600 cursor-not-allowed'
+      : 'bg-gradient-to-r from-blue-500 to-indigo-600 hover:opacity-90'
+  ]"
+            :title="credits <= 0 ? 'No credits left. Click to buy more.' : ''"
+        >
+          🔍 Analyze
+        </button>
+
+
+      </div>
+
+      <!-- Health Alerts -->
+      <div v-if="alerts.length" class="bg-red-900/30 border border-red-600 text-red-400 p-3 rounded-lg text-sm shadow-inner space-y-2">
+        <h3 class="font-bold text-red-300">⚠️ Alerts</h3>
+        <ul class="list-disc list-inside">
+          <li v-for="(alert, index) in alerts" :key="index">{{ alert }}</li>
+        </ul>
+      </div>
+
+      <!-- Daily Nutrients -->
+      <div class="bg-gray-800/80 backdrop-blur p-4 rounded-lg shadow space-y-3">
+        <h2 class="text-base font-semibold">🚨 Daily Nutrients</h2>
+        <div v-for="(value, key) in displayNutrients" :key="key" class="space-y-1">
+          <div class="flex justify-between text-xs">
+            <span>{{ key }}</span>
+            <span>{{ value }}%</span>
+          </div>
+          <div class="w-full h-2 bg-gray-700 rounded overflow-hidden">
+            <div
+                :class="{
               'bg-blue-500': key === 'Carbs',
               'bg-purple-400': key === 'Protein',
               'bg-yellow-400': key === 'Fat'
             }"
-              class="h-2"
-              :style="{ width: value + '%' }"
-          ></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Meal History -->
-    <div class="bg-gray-800/80 backdrop-blur p-4 rounded-lg shadow space-y-2">
-      <h2 class="text-base font-semibold mb-1">🍽 Meal History</h2>
-      <div class="space-y-2">
-        <div
-            v-for="(item, idx) in mealHistory"
-            :key="idx"
-            @click="selectedMeal = item"
-            class="flex items-center gap-3 p-2 rounded-md border border-gray-700 bg-gray-900/40 hover:bg-gray-800 transition cursor-pointer"
-        >
-          <img v-if="item.image" :src="item.image" class="w-12 h-12 object-cover rounded shadow" />
-          <div class="flex-1 min-w-0">
-            <span class="block text-sm font-medium truncate text-gray-300">{{ item.name }}</span>
-            <span class="text-xs text-gray-400">Tap to view</span>
+                class="h-2"
+                :style="{ width: value + '%' }"
+            ></div>
           </div>
         </div>
       </div>
-    </div>
 
-    <!-- Meal Details Modal -->
-    <div
-        v-if="selectedMeal"
-        class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center px-3 py-6"
-        @click.self="selectedMeal = null"
-    >
-      <div class="bg-gradient-to-br from-gray-800/90 to-gray-900/90 backdrop-blur-lg border border-white/10 text-white rounded-2xl p-5 w-full max-w-md max-h-full overflow-y-auto shadow-2xl space-y-5">
-        <div class="flex justify-between items-center border-b border-white/10 pb-2">
-          <h3 class="text-lg font-semibold tracking-tight">🍱 Meal Details</h3>
-          <button @click="selectedMeal = null" class="text-white/60 hover:text-white text-2xl">&times;</button>
+      <!-- Meal History -->
+      <div class="bg-gray-800/80 backdrop-blur p-4 rounded-lg shadow space-y-2">
+        <h2 class="text-base font-semibold mb-1">🍽 Meal History</h2>
+        <div class="space-y-2">
+          <div
+              v-for="(item, idx) in mealHistory"
+              :key="idx"
+              @click="selectedMeal = item"
+              class="flex items-center gap-3 p-2 rounded-md border border-gray-700 bg-gray-900/40 hover:bg-gray-800 transition cursor-pointer"
+          >
+            <img v-if="item.image" :src="item.image" class="w-12 h-12 object-cover rounded shadow" />
+            <div class="flex-1 min-w-0">
+              <span class="block text-sm font-medium truncate text-gray-300">{{ item.name }}</span>
+              <span class="text-xs text-gray-400">Tap to view</span>
+            </div>
+          </div>
         </div>
+      </div>
 
-        <img v-if="selectedMeal.image" :src="selectedMeal.image" class="w-full h-40 object-cover rounded-lg border border-white/10 shadow" />
+      <!-- Meal Details Modal -->
+      <div
+          v-if="selectedMeal"
+          class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center px-3 py-6"
+          @click.self="selectedMeal = null"
+      >
+        <div class="bg-gradient-to-br from-gray-800/90 to-gray-900/90 backdrop-blur-lg border border-white/10 text-white rounded-2xl p-5 w-full max-w-md max-h-full overflow-y-auto shadow-2xl space-y-5">
+          <div class="flex justify-between items-center border-b border-white/10 pb-2">
+            <h3 class="text-lg font-semibold tracking-tight">🍱 Meal Details</h3>
+            <button @click="selectedMeal = null" class="text-white/60 hover:text-white text-2xl">&times;</button>
+          </div>
 
-        <div>
-          <p class="text-sm text-white/70 font-medium mb-1">Foods:</p>
-          <ul class="list-disc list-inside text-sm text-white/90 space-y-1">
-            <li v-for="(food, i) in selectedMeal.foods" :key="i">{{ food.name }}</li>
-          </ul>
-        </div>
+          <img v-if="selectedMeal.image" :src="selectedMeal.image" class="w-full h-40 object-cover rounded-lg border border-white/10 shadow" />
 
-        <div>
-          <p class="text-sm text-white/70 font-medium mb-1">Nutrients:</p>
-          <div class="flex flex-wrap gap-2">
+          <div>
+            <p class="text-sm text-white/70 font-medium mb-1">Foods:</p>
+            <ul class="list-disc list-inside text-sm text-white/90 space-y-1">
+              <li v-for="(food, i) in selectedMeal.foods" :key="i">{{ food.name }}</li>
+            </ul>
+          </div>
+
+          <div>
+            <p class="text-sm text-white/70 font-medium mb-1">Nutrients:</p>
+            <div class="flex flex-wrap gap-2">
             <span
                 v-for="(val, key) in selectedMeal.nutrients"
                 :key="key"
@@ -125,11 +136,13 @@
             >
               {{ key }}: {{ formatNutrient(val, key) }}
             </span>
+            </div>
           </div>
         </div>
       </div>
     </div>
   </div>
+
 </template>
 
 
@@ -138,7 +151,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { db, auth} from '@/firebaseConfig.js'
-import { collection, addDoc, query, where, orderBy, limit, getDocs } from 'firebase/firestore'
+import { collection, addDoc, query, where, orderBy, limit, getDocs, doc, getDoc, updateDoc} from 'firebase/firestore'
 import axios from 'axios'
 import { onAuthStateChanged } from 'firebase/auth'
 const openaiKey = process.env.VUE_APP_OPENAI_API_KEY
@@ -195,9 +208,15 @@ function formatNutrient(val, key) {
 }
 
 async function analyzeImage() {
-  isLoading.value = true
+  if (credits.value <= 0) {
+    alert('You are out of credits. Redirecting to purchase more.');
+    await redirectToCheckout();
+    return;
+  }
+
+  isLoading.value = true;
   try {
-    const base64 = await toBase64(image.value)
+    const base64 = await toBase64(image.value);
     const res = await axios.post(
         'https://api.openai.com/v1/chat/completions',
         {
@@ -227,7 +246,6 @@ Return JSON like:
 }
 
 If no label is visible, do your best to estimate. Do not explain anything. Output only JSON.`
-
                 },
                 {
                   type: 'image_url',
@@ -239,35 +257,35 @@ If no label is visible, do your best to estimate. Do not explain anything. Outpu
           max_tokens: 1000
         },
         { headers: { Authorization: `Bearer ${openaiKey}` } }
-    )
+    );
 
-    let content = res.data.choices[0].message.content.trim()
+    let content = res.data.choices[0].message.content.trim();
     if (content.startsWith('```')) {
-      content = content.replace(/```(?:json)?/g, '').trim()
+      content = content.replace(/```(?:json)?/g, '').trim();
     }
 
-    let result
+    let result;
     try {
-      result = JSON.parse(content)
+      result = JSON.parse(content);
     } catch (parseError) {
-      console.error('Failed to parse JSON:', content)
-      alerts.value.push('GPT returned invalid JSON. Try uploading a clearer or simpler meal image.')
-      return
+      console.error('Failed to parse JSON:', content);
+      alerts.value.push('GPT returned invalid JSON. Try uploading a clearer or simpler meal image.');
+      return;
     }
 
     // Upload image to Firebase Storage
-    let imageURL = null
+    let imageURL = null;
     if (image.value) {
-      const storage = getStorage()
-      const fileName = `${userId.value}_${Date.now()}_${image.value.name}`
-      const imgRef = storageRef(storage, `mealImages/${fileName}`)
-      await uploadBytes(imgRef, image.value)
-      imageURL = await getDownloadURL(imgRef)
+      const storage = getStorage();
+      const fileName = `${userId.value}_${Date.now()}_${image.value.name}`;
+      const imgRef = storageRef(storage, `mealImages/${fileName}`);
+      await uploadBytes(imgRef, image.value);
+      imageURL = await getDownloadURL(imgRef);
     }
 
     // Save nutrient data
-    const enrichedFood = { ...result.nutrients, name: result.foods.join(', ') }
-    await processNutrients([enrichedFood], imageURL)
+    const enrichedFood = { ...result.nutrients, name: result.foods.join(', ') };
+    await processNutrients([enrichedFood], imageURL);
 
     // Store in meal history
     mealHistory.value.push({
@@ -275,18 +293,25 @@ If no label is visible, do your best to estimate. Do not explain anything. Outpu
       nutrients: result.nutrients,
       foods: result.foods.map(name => ({ name })),
       image: imageURL
-    })
+    });
 
+    // ✅ Deduct 1 credit
+    const userRef = doc(db, 'users', userId.value);
+    await updateDoc(userRef, {
+      credits: credits.value - 1
+    });
+    credits.value -= 1;
 
-    if (alerts.value.length) speakAlerts()
+    if (alerts.value.length) speakAlerts();
 
   } catch (err) {
-    console.error('Image analysis failed:', err)
-    alerts.value.push('Unable to analyze the image. Try uploading a clearer photo with visible foods.')
+    console.error('Image analysis failed:', err);
+
   } finally {
-    isLoading.value = false
+    isLoading.value = false;
   }
 }
+
 
 
 function toBase64(file) {
@@ -412,18 +437,24 @@ async function loadWeeklyData() {
     day.Percent = Math.round((day.Carbs + day.Protein + day.Fat) / 3)
   })
 }
-onMounted(() => {
-  onAuthStateChanged(auth, (user) => {
-    if (user) {
-      userId.value = user.uid
-      checkForReset()
-      loadTodayMeal()
-      loadWeeklyData() // ✅ Also load weekly stats
-    } else {
-      console.log('User not logged in')
+const credits = ref(0)
+
+
+onAuthStateChanged(auth, async (user) => {
+  if (user) {
+    userId.value = user.uid
+    checkForReset()
+    loadTodayMeal()
+    loadWeeklyData()
+    const userDoc = await getDoc(doc(db, 'users', user.uid))
+    if (userDoc.exists()) {
+      credits.value = userDoc.data().credits || 0
     }
-  })
+  } else {
+    console.log('User not logged in')
+  }
 })
+
 
 
 function resetDailyData() {
@@ -551,6 +582,14 @@ function speakAlerts() {
 
   window.speechSynthesis.speak(utterance);
 }
+const handleAnalyzeClick = async () => {
+  if (credits.value <= 0) {
+    alert('You have 0 credits. Redirecting to purchase more.');
+    await redirectToCheckout();
+    return;
+  }
+  await analyzeImage();
+};
 
 
 
