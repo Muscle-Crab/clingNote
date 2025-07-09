@@ -3170,7 +3170,7 @@ const generateWeeklyRoutine = async () => {
       { title: '20 Russian Twists', youtubeURL: russianTwistURL }
     ],
     Wed: [
-      { title: '12 Pushups', youtubeURL: pushupsURL },
+      { title: '15 Pushups', youtubeURL: pushupsURL },
       { title: '20 Mountain Climbers', youtubeURL: mtClimberURL },
       { title: '30-sec Side Plank (each side)', youtubeURL: plankURL }
     ],
@@ -3186,9 +3186,9 @@ const generateWeeklyRoutine = async () => {
       { title: '15 Jumping Jacks', youtubeURL: jumpingJackURL }
     ],
     Sat: [
-      { title: '5 Pushups (AMRAP - 10 min)', youtubeURL: pushupsURL },
-      { title: '10 Squats (AMRAP - 10 min)', youtubeURL: squatsURL },
-      { title: '10 Sit-ups (AMRAP - 10 min)', youtubeURL: situpsURL }
+      { title: '15 Pushups (AMRAP - 10 min)', youtubeURL: pushupsURL },
+      { title: '25 Squats (AMRAP - 10 min)', youtubeURL: squatsURL },
+      { title: '30 Sit-ups (AMRAP - 10 min)', youtubeURL: situpsURL }
     ]
   };
 
