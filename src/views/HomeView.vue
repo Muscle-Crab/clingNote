@@ -1,5 +1,5 @@
 <template>
-  <div ref="scrollContainer" class="h-[100vh] overflow-auto bg-gray-200 p-3"  >
+  <div ref="scrollContainer" class="h-[100vh] overflow-auto bg-gray-100 p-3"  >
     <div v-if="isLoading" class="fixed inset-0 bg-gradient-to-br from-green-500 via-blue-500 to-purple-500 flex items-center justify-center z-50">
       <div class="text-center">
         <h1 class="text-4xl font-bold text-white animate-bounce">👋 Welcome!</h1>
@@ -80,6 +80,10 @@
 
 
 
+        <button @click="generateWeeklyRoutine"
+                class="bg-blue-600 text-white px-4 py-2 rounded-xl shadow hover:bg-green-700 mb-2">
+          Generate Workout Routine
+        </button>
 
         <div class="w-full max-w-2xl mx-auto  px-4">
           <div class="bg-white border border-gray-300 rounded-xl px-2 py-3 flex items-end gap-3 shadow-md focus-within:ring-2 focus-within:ring-blue-500 transition">
@@ -727,7 +731,7 @@
         </div>
         <div v-else>
           <div class="scroll-container overflow-y-auto h-[80vh]">
-            <div v-if="selectedDayIndex === new Date().getDay()" class="flex items-center justify-between cursor-pointer my-2" >
+            <div  class="flex items-center justify-between cursor-pointer my-2" >
               <h3 class="text-xl font-bold text-gray-900 flex items-center gap-2">
                 <h3 class="text-xl font-bold text-gray-900 flex items-center gap-2">
                   <span class=" tracking-wide text-gray-600">Completed</span>
@@ -789,7 +793,7 @@
   <span class="truncate max-w-[11rem]">
     {{ task.title.length > 18 ? task.title.slice(0, 18) + '...' : task.title }}
   </span>
-                            <span v-if="task.youtubeURL" class="text-red-500 text-sm" title="YouTube video attached">🎥</span>
+
 
                             <span v-if="task.fileURL" class="text-blue-600 text-sm" title="File attached">📄</span>
                           </div>
@@ -830,6 +834,15 @@
 
                         </div>
                       </div>
+                      <div v-if="task.youtubeURL" class="w-24 h-14 rounded-lg overflow-hidden border border-gray-300 shadow-sm mt-2">
+                        <img
+                            :src="`https://img.youtube.com/vi/${extractYouTubeID(task.youtubeURL)}/0.jpg`"
+                            alt="YouTube Thumbnail"
+                            class="w-full h-full object-cover cursor-pointer transition-transform duration-300 hover:scale-105"
+                            @click="openTaskDetailModal(task)"
+                        />
+                      </div>
+
                       <div
                           @click="openTaskDetailModal(task)"
                           v-if="task.imageURL"
@@ -3132,6 +3145,58 @@ const clearTasksForToday = async () => {
     console.error("❌ Failed to delete all tasks:", error);
     alert("Something went wrong while deleting tasks.");
   }
+};
+const generateWeeklyRoutine = async () => {
+  const pushupsURL = 'https://www.youtube.com/watch?v=IODxDxX7oi4';
+  const situpsURL = 'https://www.youtube.com/watch?v=1fbU_MkV7NE';
+  const squatsURL = 'https://www.youtube.com/watch?v=aclHkVaku9U';
+
+  const daysToGenerate = days.filter(day => day.day !== 'Sun');
+
+  for (const day of daysToGenerate) {
+    const docRef = doc(db, 'weeklyRoutines', `${userId.value}_${day.day}`);
+    const snapshot = await getDoc(docRef);
+    const existingTasks = snapshot.exists() ? snapshot.data().tasks || [] : [];
+
+    const newTasks = [
+      {
+        title: '30 Pushups',
+        youtubeURL: pushupsURL,
+        completed: false,
+        important: false,
+        type: 'recurring',
+        createdAt: new Date().toISOString()
+      },
+      {
+        title: '30 Situps',
+        youtubeURL: situpsURL,
+        completed: false,
+        important: false,
+        type: 'recurring',
+        createdAt: new Date().toISOString()
+      },
+      {
+        title: '30 Squats',
+        youtubeURL: squatsURL,
+        completed: false,
+        important: false,
+        type: 'recurring',
+        createdAt: new Date().toISOString()
+      }
+    ];
+
+    await setDoc(docRef, {
+      tasks: [...existingTasks, ...newTasks],
+      updatedAt: serverTimestamp()
+    });
+
+    // Update the UI if it's the currently selected day
+    if (days[selectedDayIndex.value].day === day.day) {
+      fetchSelectedDayRoutine();
+    }
+  }
+
+  alert('✅ Weekly workout routine created!');
 };
 
 
