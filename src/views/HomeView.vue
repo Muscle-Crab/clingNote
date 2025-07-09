@@ -3150,54 +3150,80 @@ const generateWeeklyRoutine = async () => {
   const pushupsURL = 'https://www.youtube.com/watch?v=IODxDxX7oi4';
   const situpsURL = 'https://www.youtube.com/watch?v=1fbU_MkV7NE';
   const squatsURL = 'https://www.youtube.com/watch?v=aclHkVaku9U';
+  const plankURL = 'https://www.youtube.com/watch?v=pSHjTRCQxIw';
+  const lungesURL = 'https://www.youtube.com/watch?v=QOVaHwm-Q6U';
+  const mtClimberURL = 'https://www.youtube.com/watch?v=nmwgirgXLYM';
+  const russianTwistURL = 'https://www.youtube.com/watch?v=wkD8rjkodUI';
+  const gluteBridgeURL = 'https://www.youtube.com/watch?v=wPM8icPu6H8';
+  const jumpingJackURL = 'https://www.youtube.com/watch?v=c4DAnQ6DtF8';
+  const vUpsURL = 'https://www.youtube.com/watch?v=DfVArP2V6kg';
+
+  const routineMap = {
+    Mon: [
+      { title: '30 Pushups', youtubeURL: pushupsURL },
+      { title: '30-sec Plank', youtubeURL: plankURL },
+      { title: '20 Situps', youtubeURL: situpsURL }
+    ],
+    Tue: [
+      { title: '30 Squats', youtubeURL: squatsURL },
+      { title: '15 Lunges each leg', youtubeURL: lungesURL },
+      { title: '20 Russian Twists', youtubeURL: russianTwistURL }
+    ],
+    Wed: [
+      { title: '12 Pushups', youtubeURL: pushupsURL },
+      { title: '20 Mountain Climbers', youtubeURL: mtClimberURL },
+      { title: '30-sec Side Plank (each side)', youtubeURL: plankURL }
+    ],
+    Thu: [
+      { title: '40 Squats', youtubeURL: squatsURL },
+      { title: '10 Glute Bridges (each leg)', youtubeURL: gluteBridgeURL },
+      { title: '20 V-Ups', youtubeURL: vUpsURL }
+    ],
+    Fri: [
+      { title: '10 Pushups', youtubeURL: pushupsURL },
+      { title: '20 Squats', youtubeURL: squatsURL },
+      { title: '30-sec Plank', youtubeURL: plankURL },
+      { title: '15 Jumping Jacks', youtubeURL: jumpingJackURL }
+    ],
+    Sat: [
+      { title: '5 Pushups (AMRAP - 10 min)', youtubeURL: pushupsURL },
+      { title: '10 Squats (AMRAP - 10 min)', youtubeURL: squatsURL },
+      { title: '10 Sit-ups (AMRAP - 10 min)', youtubeURL: situpsURL }
+    ]
+  };
 
   const daysToGenerate = days.filter(day => day.day !== 'Sun');
 
   for (const day of daysToGenerate) {
+    const taskList = routineMap[day.day];
+    if (!taskList) continue;
+
     const docRef = doc(db, 'weeklyRoutines', `${userId.value}_${day.day}`);
     const snapshot = await getDoc(docRef);
     const existingTasks = snapshot.exists() ? snapshot.data().tasks || [] : [];
 
-    const newTasks = [
-      {
-        title: '30 Pushups',
-        youtubeURL: pushupsURL,
-        completed: false,
-        important: false,
-        type: 'recurring',
-        createdAt: new Date().toISOString()
-      },
-      {
-        title: '30 Situps',
-        youtubeURL: situpsURL,
-        completed: false,
-        important: false,
-        type: 'recurring',
-        createdAt: new Date().toISOString()
-      },
-      {
-        title: '30 Squats',
-        youtubeURL: squatsURL,
-        completed: false,
-        important: false,
-        type: 'recurring',
-        createdAt: new Date().toISOString()
-      }
-    ];
+    const newTasks = taskList.map(task => ({
+      ...task,
+      completed: false,
+      important: false,
+      type: 'recurring',
+      createdAt: new Date().toISOString()
+    }));
 
     await setDoc(docRef, {
       tasks: [...existingTasks, ...newTasks],
       updatedAt: serverTimestamp()
     });
 
-    // Update the UI if it's the currently selected day
     if (days[selectedDayIndex.value].day === day.day) {
       fetchSelectedDayRoutine();
     }
   }
 
-  alert('✅ Weekly workout routine created!');
+  alert('✅ 6-Day No Equipment Weekly Challenge Created!');
 };
+
+
 
 
 
