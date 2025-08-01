@@ -1048,7 +1048,7 @@ import axios from 'axios';
 import { deleteObject } from "firebase/storage";
 
 import { getCurrentInstance } from 'vue';
-
+import { getAuth } from "firebase/auth";
 const { proxy } = getCurrentInstance();
 
 const currentTime = ref([]);
@@ -1325,35 +1325,43 @@ const scheduleNotification = async (task, reminder) => {
 };
 
 const sendNotificationToPlayer = async (userName, action) => {
+  const auth = getAuth();
+  const currentUser = auth.currentUser;
+
+  // Do not send notification if the user is excluded
+  if (currentUser?.email === 'ds7513635@gmail.com') {
+    console.log("⛔ Notification skipped for excluded email:", currentUser.email);
+    return;
+  }
+
   const headers = {
-    'Authorization': 'Bearer ZDZiZDk0NTktMjUwZS00NTQ4LWFhOTItNjBiZDZiMjVhYzYy', // Replace with your actual API key
+    'Authorization': 'Bearer ZDZiZDk0NTktMjUwZS00NTQ4LWFhOTItNjBiZDZiMjVhYzYy', // OneSignal API Key
     'Content-Type': 'application/json'
   };
 
-  // Define the content and heading based on the action
   const actionMessages = {
     created: {
       content: `${userName} created a new task!`,
       heading: "New Task Alert"
     },
     completed: {
-      content: `${userName} completed a task!`,
-      heading: "Task Completed"
+      content: `${userName} completed a workout`,
+      heading: "Workout Completed"
     }
   };
 
   const data = {
-    "app_id": "fc206a71-7d65-4cfa-b8b2-0c10548e1476", // Replace with your actual OneSignal app ID
-    "include_player_ids": ["121ecc8a-8a68-4c12-8378-d37ae2648c96"], // Replace with the user's device/player ID
-    "contents": { "en": actionMessages[action]?.content || "An action was performed." },
-    "headings": { "en": actionMessages[action]?.heading || "Notification" }
+    app_id: "fc206a71-7d65-4cfa-b8b2-0c10548e1476", // OneSignal App ID
+    included_segments: ['All'], // ✅ Send to all users
+    contents: { en: actionMessages[action]?.content || "An action was performed." },
+    headings: { en: actionMessages[action]?.heading || "Notification" }
   };
 
   try {
     await axios.post('https://onesignal.com/api/v1/notifications', data, { headers });
-    console.log('Notification sent successfully');
+    console.log('✅ Notification sent to all users');
   } catch (error) {
-    console.error('Error sending notification:', error);
+    console.error('❌ Error sending notification:', error.response?.data || error.message);
   }
 };
 
