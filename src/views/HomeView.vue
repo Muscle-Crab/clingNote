@@ -1616,7 +1616,7 @@ const toggleTaskCompletion = async (index) => {
     announceNextTask(index); // Pass the index of the completed task
     const userName = await fetchUserName(userId.value);
     if (userName) {
-      await sendNotificationToPlayer(userName, "completed");
+      // await sendNotificationToPlayer(userName, "completed");
     }
   } else {
 
@@ -2037,7 +2037,7 @@ const addNewTask = async () => {
 
     const userName = await fetchUserName(userId.value);
     if (userName) {
-      await sendNotificationToPlayer(userName, "created");
+      // await sendNotificationToPlayer(userName, "created");
     }
   } catch (error) {
     console.error('Error adding task:', error);
