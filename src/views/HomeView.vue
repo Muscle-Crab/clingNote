@@ -1,270 +1,229 @@
 <template>
-  <div ref="scrollContainer" class="h-[100vh] overflow-auto bg-gray-100 p-3"  >
-    <div v-if="isLoading" class="fixed inset-0 bg-gradient-to-br from-green-500 via-blue-500 to-purple-500 flex items-center justify-center z-50">
-      <div class="text-center">
-        <h1 class="text-4xl font-bold text-white animate-bounce">👋 Welcome!</h1>
-        <p class="text-lg text-white mt-4">Setting up your tasks...</p>
-        <div class="mt-6 w-12 h-12 border-4 border-white border-t-transparent rounded-full animate-spin mx-auto"></div>
+  <div ref="scrollContainer" class="scroll-container   bg-gray-100 ">
+    <div v-if="isLoading" class="loading-overlay">
+      <div class="loading-content">
+        <h1 class="loading-title">👋 Welcome!</h1>
+        <p class="loading-text">Setting up your tasks...</p>
+        <div class="loading-spinner"></div>
       </div>
     </div>
 
     <div v-else>
-
-
-
-
-      <div
-          class="streak-display p-3 rounded shadow-sm mb-2 flex flex-col sm:flex-row items-center sm:justify-between"
-          :class="{
-    'bg-yellow-50': streak < 3,
-    'bg-green-50': streak >= 3 && streak < 7,
-    'bg-blue-50': streak >= 7
-  }"
-      >
-        <!-- Streak on the left -->
-        <div class="flex items-center space-x-3 w-full sm:w-auto mb-1 sm:mb-0">
-          <!-- Streak Icon -->
-          <div class="flex items-center justify-center w-10 h-10 bg-blue-100 text-blue-600 rounded-full">
-            <div class="streak-icon">
-              {{ getStreakIcon(streak) }}
+      <div class="streak-prompt-container max-w-4xl mx-auto p-4 sm:p-6">
+        <!-- Streak and Credits Display -->
+        <div
+            class="streak-card rounded-lg p-4 sm:p-6 shadow-sm"
+            :class="{
+        'bg-red-50': streak < 3,
+        'bg-yellow-50': streak >= 3 && streak < 7,
+        'bg-green-50': streak >= 7
+      }"
+        >
+          <div class="flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div class="flex items-center gap-3">
+              <div class="text-2xl sm:text-3xl">{{ getStreakIcon(streak) }}</div>
+              <div class="flex flex-col">
+                <div class="flex items-center gap-2">
+                  <span class="text-sm sm:text-base font-semibold text-gray-600">🔥 Streak</span>
+                  <span class="text-sm sm:text-base font-bold text-gray-900">
+                {{ streak }} day<span v-if="streak !== 1">s</span>
+              </span>
+                </div>
+                <div class="flex items-center gap-2 mt-1">
+                  <span class="text-sm sm:text-base font-semibold text-gray-600">💎 Credits</span>
+                  <span class="text-sm sm:text-base font-bold text-gray-900">{{ userCredits }}</span>
+                </div>
+              </div>
             </div>
           </div>
-
-          <div class="flex flex-col sm:flex-row sm:items-center sm:space-x-6 text-sm">
-            <!-- Streak Info -->
-            <div class="flex items-center space-x-2">
-              <span class="text-gray-500">🔥</span>
-              <span class="text-gray-600">Streak</span>
-              <span class="font-semibold text-blue-600">{{ streak }} day<span v-if="streak !== 1">s</span></span>
-            </div>
-
-            <!-- Divider (for larger screens) -->
-            <span class="hidden sm:inline-block w-px h-5 bg-gray-300"></span>
-
-            <!-- Credits Info -->
-            <div class="flex items-center space-x-2 mt-1 sm:mt-0">
-              <span class="text-gray-500">💎</span>
-              <span class="text-gray-600">Credits</span>
-              <span class="font-semibold text-blue-600">{{ userCredits }}</span>
-            </div>
-          </div>
-
-
         </div>
 
-        <div v-if="!hasPaid && showPaymentModal" class="fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center">
-          <div class="bg-white rounded-xl shadow-2xl p-8 max-w-md w-full text-center space-y-6">
-            <h2 class="text-2xl font-bold text-gray-800">Out of Credits</h2>
-            <p class="text-gray-600">
-              Get back to generating AI routines, grocery lists, workouts and more by refilling your credits.
+        <!-- Payment Modal -->
+        <div
+            v-if="showPaymentModal"
+            class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+        >
+          <div class="bg-white rounded-lg p-4 sm:p-6 w-full max-w-md mx-4">
+            <h2 class="text-xl sm:text-2xl font-bold text-gray-900 mb-4">Out of Credits</h2>
+            <p class="text-sm sm:text-base text-gray-600 mb-4">
+              Pay a one-time $2 fee to continue generating AI routines, grocery lists, workouts, and more.
             </p>
-            <ul class="text-left text-sm text-gray-500 mt-4 space-y-1">
-              <li>💡 30 credits = 30 AI generations</li>
+            <ul class="text-sm sm:text-base text-gray-600 mb-6 space-y-2">
+              <li>💡 Quick access with a small $2 fee</li>
               <li>✅ Works with prompts, voice, and image uploads</li>
               <li>⚡ Instant access after payment</li>
             </ul>
             <button
                 @click="redirectToCheckout"
-                class="mt-6 bg-green-600 text-white px-6 py-3 rounded-full hover:bg-green-700 transition duration-300 shadow-lg"
+                class="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 transition text-sm sm:text-base"
             >
-              Buy 30 Credits – $5💎
+              Continue – $2 💎
             </button>
             <button
                 @click="showPaymentModal = false"
-                class="text-sm text-gray-500 hover:underline mt-2 block"
+                class="w-full text-gray-600 mt-2 hover:text-gray-800 transition text-sm sm:text-base"
             >
               Maybe later
             </button>
           </div>
         </div>
 
-
-
-        <button @click="generateWeeklyRoutine"
-                class="bg-blue-600 text-white px-4 py-2 rounded-xl shadow hover:bg-green-700 mb-2">
+        <!-- Generate Workout Routine Button -->
+        <button
+            @click="hasPaid ? generateWeeklyRoutine() : showPaymentModal = true"
+            class="mt-4 w-full bg-green-600 text-white py-2 sm:py-3 px-4 rounded-md font-semibold text-sm sm:text-base"
+            :class="{ 'hover:bg-green-700': hasPaid }"
+        >
           Generate Workout Routine
         </button>
 
-        <div class="w-full max-w-2xl mx-auto  px-4">
-          <div class="bg-white border border-gray-300 rounded-xl px-2 py-3 flex items-end gap-3 shadow-md focus-within:ring-2 focus-within:ring-blue-500 transition">
-    <textarea
-        v-model="smartPrompt"
-        @keyup.enter="submitSmartPrompt"
-        placeholder="I need a list of items for...'"
-        rows="1"
-        @input="$event.target.style.height = 'auto'; $event.target.style.height = $event.target.scrollHeight + 'px';"
-        class="flex-1 resize-none overflow-hidden bg-transparent text-gray-800 text-base leading-relaxed outline-none placeholder-gray-400"
-    ></textarea>
 
-            <!-- Action Buttons Wrapper -->
-            <div class="flex items-center space-x-1">
-              <!-- Send Button -->
-              <button
-                  @click="submitSmartPrompt"
-                  class="p-2 rounded-full bg-blue-600 hover:bg-blue-700 text-white transition duration-200"
-                  title="Send"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none"
-                     viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M5 10l7-7m0 0l7 7m-7-7v18" />
-                </svg>
-              </button>
-
-              <!-- Upload Image Button -->
-              <button
-                  @click="triggerHandwritingUpload"
-                  class="p-2 rounded-full bg-blue-600 hover:bg-blue-700 text-white transition duration-200"
-                  title="Upload Image"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none"
-                     viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M3 7h2l2-3h10l2 3h2a1 1 0 011 1v11a1 1 0 01-1 1H3a1 1 0 01-1-1V8a1 1 0 011-1zm9 3a4 4 0 100 8 4 4 0 000-8z" />
-                </svg>
-              </button>
-            </div>
-
-
-
-
-
-
-          </div>
-        </div>
-
-
+        <!-- Smart Prompt Input -->
+<!--        <div class="mt-4">-->
+<!--          <div class="flex items-start bg-gray-100 rounded-md p-2 sm:p-3">-->
+<!--        <textarea-->
+<!--            v-model="smartPrompt"-->
+<!--            @keyup.enter="submitSmartPrompt"-->
+<!--            placeholder="I need a list of items for..."-->
+<!--            rows="1"-->
+<!--            @input="$event.target.style.height = 'auto'; $event.target.style.height = $event.target.scrollHeight + 'px';"-->
+<!--            class="flex-1 bg-transparent border-none outline-none resize-none text-sm sm:text-base text-gray-900 placeholder-gray-500"-->
+<!--        ></textarea>-->
+<!--            <div class="flex gap-2 ml-2">-->
+<!--              <button-->
+<!--                  @click="submitSmartPrompt"-->
+<!--                  class="p-2 text-gray-600 hover:text-blue-600 transition"-->
+<!--                  title="Send"-->
+<!--              >-->
+<!--                <svg-->
+<!--                    xmlns="http://www.w3.org/2000/svg"-->
+<!--                    class="w-5 h-5 sm:w-6 sm:h-6"-->
+<!--                    fill="none"-->
+<!--                    viewBox="0 0 24 24"-->
+<!--                    stroke="currentColor"-->
+<!--                >-->
+<!--                  <path-->
+<!--                      stroke-linecap="round"-->
+<!--                      stroke-linejoin="round"-->
+<!--                      stroke-width="2"-->
+<!--                      d="M5 10l7-7m0 0l7 7m-7-7v18"-->
+<!--                  />-->
+<!--                </svg>-->
+<!--              </button>-->
+<!--              <button-->
+<!--                  @click="triggerHandwritingUpload"-->
+<!--                  class="p-2 text-gray-600 hover:text-green-600 transition"-->
+<!--                  title="Upload Image"-->
+<!--              >-->
+<!--                <svg-->
+<!--                    xmlns="http://www.w3.org/2000/svg"-->
+<!--                    class="w-5 h-5 sm:w-6 sm:h-6"-->
+<!--                    fill="none"-->
+<!--                    viewBox="0 0 24 24"-->
+<!--                    stroke="currentColor"-->
+<!--                >-->
+<!--                  <path-->
+<!--                      stroke-linecap="round"-->
+<!--                      stroke-linejoin="round"-->
+<!--                      stroke-width="2"-->
+<!--                      d="M3 7h2l2-3h10l2 3h2a1 1 0 011 1v11a1 1 0 01-1 1H3a1 1 0 01-1-1V8a1 1 0 011-1zm9 3a4 4 0 100 8 4 4 0 000-8z"-->
+<!--                  />-->
+<!--                </svg>-->
+<!--              </button>-->
+<!--            </div>-->
+<!--          </div>-->
+<!--        </div>-->
       </div>
 
-      <div v-if="showFullScreenAnimation" class="fixed inset-0 bg-gradient-to-br from-green-500 via-blue-500 to-purple-500 flex items-center justify-center z-50">
-        <div class="text-center">
-
-          <h1 class="text-4xl font-bold text-white animate-bounce">🎉 All Tasks Completed! 🔥<span class="text-yellow-600">{{ streak }}</span> days</h1>
-          <p class="text-lg text-white mt-4">Congratulations on completing all your tasks!</p>
+      <div v-if="showFullScreenAnimation" class="completion-overlay">
+        <div class="completion-content">
+          <h1 class="completion-title">🎉 All Tasks Completed! 🔥<span class="streak-highlight">{{ streak }}</span> days</h1>
+          <p class="completion-text">Congratulations on completing all your tasks!</p>
           <button
               @click="closeFullScreenAnimation"
-              class="mt-6 px-6 py-3 bg-white text-blue-600 font-semibold rounded-lg shadow-lg hover:bg-blue-100"
+              class="completion-button"
           >
             Close
           </button>
         </div>
       </div>
-      <!-- Calendar display -->
-      <div class="calendar-task-card
-      bg-gray-100 rounded-2xl mb-2 shadow-lg p-2 mb-2 w-full max-w-4xl mx-auto"
 
-
-      >
-        <!-- Calendar Section -->
-        <div class="calendar-section mb-2">
-          <div class="current-date font-bold text-gray-900 mb-4">
-
-            <span>
- <div class="flex items-center justify-between w-full">
-  <span class="text-gray-900 font-bold">{{ currentDate }}</span>
-<span class="ml-3 inline-block bg-red-100 text-red-700 text-sm font-semibold px-2 py-1 rounded-lg shadow-sm border border-red-300">
-  <span class="inline-block animate-spin-slow">⏳</span> {{ daysLeftInYear }} days left
-</span>
-
-</div>
-
-</span>
-
-
+      <div class="calendar-task-card">
+        <div class="calendar-section">
+          <div class="current-date">
+            <div class="date-wrapper">
+              <span class="date-text">{{ currentDate }}</span>
+              <span class="days-left">
+                <span class="animate-spin-slow">⏳</span> {{ daysLeftInYear }} days left
+              </span>
+            </div>
           </div>
-          <div class="grid grid-cols-7 gap-3">
+          <div class="calendar-grid">
             <div
                 v-for="(day, index) in days"
                 :key="index"
-                class="day-container flex flex-col items-center justify-center p-3 rounded-lg cursor-pointer transition-all duration-300"
+                class="day-container"
                 :class="{
-          'bg-gray-100 border border-gray-300': !isToday(index) && !isSelected(index),
-          'bg-blue-200 text-white': isSelected(index),
-          'bg-blue-500 text-white font-bold shadow-inner': isToday(index)
-        }"
+                'day-default': !isToday(index) && !isSelected(index),
+                'day-selected': isSelected(index),
+                'day-today': isToday(index)
+              }"
                 @click="handleDayTabClick(index)"
             >
-              <div class="text-lg">{{ day.day }}</div>
-              <div class="text-sm">{{ day.date }}</div>
+              <div class="day-name">{{ day.day }}</div>
+              <div class="day-date">{{ day.date }}</div>
             </div>
           </div>
         </div>
 
-        <!-- Task Completion Section -->
-
-        <div class="milestone-journey w-full h-auto relative p-6   rounded-lg ">
-          <!-- Animated Progress Bar -->
-          <div class="relative w-full h-[2px] bg-gray-300 rounded-full">
+        <div class="milestone-journey">
+          <div class="progress-bar">
             <div
-                class="absolute h-full bg-blue-500 transition-all duration-700 ease-out"
+                class="progress-fill"
                 :style="{ width: calculateCompletionPercentage(task) + '%' }"
             ></div>
           </div>
-
-          <!-- Milestones with icons and labels -->
           <div
               v-for="(milestone, index) in milestones"
               :key="index"
-              class="flex flex-col items-center absolute top-0 transform -translate-x-1/2"
+              class="milestone"
               :style="{
-      left: index === 0
-        ? '0%'    /* First icon aligns perfectly to the left */
-        : index === milestones.length - 1
-        ? '100%'  /* Last icon aligns perfectly to the right */
-        : `${milestone.position}%`,
-      transform: index === 0
-        ? 'translateX(0)' /* Remove extra margin for the first icon */
-        : index === milestones.length - 1
-        ? 'translateX(-100%)' /* Adjust for the last icon */
-        : 'translateX(-50%)',
-    }"
+              left: index === 0 ? '0%' : index === milestones.length - 1 ? '100%' : `${milestone.position}%`,
+              transform: index === 0 ? 'translateX(0)' : index === milestones.length - 1 ? 'translateX(-100%)' : 'translateX(-50%)'
+            }"
           >
-            <!-- Milestone Icon -->
             <div
-                class="w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center mb-1 transition-transform duration-500"
+                class="milestone-icon"
                 :class="{
-    'bg-blue-500 scale-110': calculateCompletionPercentage(task) > 0 && calculateCompletionPercentage(task) >= milestone.percent,
-    'bg-gray-400 scale-100': calculateCompletionPercentage(task) <= 0 || calculateCompletionPercentage(task) < milestone.percent,
-  }"
+                'milestone-active': calculateCompletionPercentage(task) > 0 && calculateCompletionPercentage(task) >= milestone.percent,
+                'milestone-inactive': calculateCompletionPercentage(task) <= 0 || calculateCompletionPercentage(task) < milestone.percent
+              }"
             >
               <div
-                  class="text-xl sm:text-2xl transition-transform duration-500"
+                  class="milestone-icon-inner"
                   :class="{ 'animate-bounce': calculateCompletionPercentage(task) > 0 && calculateCompletionPercentage(task) >= milestone.percent }"
               >
                 {{ milestone.icon }}
               </div>
             </div>
-
-
-
           </div>
-
-          <!-- Percentage Display -->
-          <div class="absolute top-[-8rem] right-4 bg-blue-100 text-blue-600 px-4 py-1 rounded-full shadow-md text-sm sm:text-base">
+          <div class="progress-text">
             Progress: {{ calculateCompletionPercentage(task) }}%
           </div>
         </div>
-
-
-
       </div>
-      <!-- Modal toggle button -->
-      <!-- Floating Add Task + Voice Input Buttons -->
-      <div class="fixed bottom-10 left-1/2 transform -translate-x-1/2 z-50 flex flex-row items-center space-x-4">
-        <!-- Add Task Button -->
+
+      <div class="floating-buttons">
         <router-link
             :to="userId ? '#' : '/login'"
-            @click.native.prevent="userId && openModal('task')"
-            class="relative flex items-center justify-center w-16 h-16 bg-blue-600 text-white rounded-full shadow-xl hover:scale-105 transition-transform duration-300"
-            title="Add Task"
+            @click.prevent="userId && openModal('task')"
+            class="add-task-button"
         >
-          <span class="absolute inset-0 bg-blue-500 rounded-full opacity-50"></span>
-          <svg class="w-7 h-7 z-10 relative" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <span class="button-overlay"></span>
+          <svg class="button-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="4" d="M12 4v16m8-8H4" />
           </svg>
         </router-link>
-
-
         <input
             ref="handwritingInput"
             type="file"
@@ -272,175 +231,135 @@
             @change="handleHandwritingUpload"
             class="hidden"
         />
-
-        <!-- Voice Input Button -->
         <button
             @click="startVoiceInput"
-            class="relative w-16 h-16 flex items-center justify-center bg-white border-2 border-blue-500 text-blue-600 rounded-full shadow-xl hover:bg-blue-100 transition duration-300"
-            title="Add Task with Voice"
+            class="voice-button"
         >
-    <span
-        v-if="listening"
-        class="absolute inset-0 animate-ping bg-green-400 rounded-full opacity-50"
-    ></span>
-          <svg xmlns="http://www.w3.org/2000/svg" class="w-7 h-7 z-10 relative" viewBox="0 0 24 24" fill="currentColor">
+          <span
+              v-if="listening"
+              class="voice-pulse"
+          ></span>
+          <svg xmlns="http://www.w3.org/2000/svg" class="button-icon" viewBox="0 0 24 24" fill="currentColor">
             <path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2Z"/>
           </svg>
         </button>
       </div>
 
-      <div v-if="showTimerModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div class="bg-white rounded-xl shadow-xl p-6 w-96">
-          <h3 class="text-xl font-semibold mb-4">Set a Timer</h3>
-          <label class="block mb-2 text-gray-700">Select duration:</label>
-          <select v-model="selectedTimerDuration" class="w-full mb-4 p-2 rounded border">
+      <div v-if="showTimerModal" class="modal-overlay">
+        <div class="timer-modal">
+          <h3 class="modal-title">Set a Timer</h3>
+          <label class="modal-label">Select duration:</label>
+          <select v-model="selectedTimerDuration" class="modal-select">
             <option value="5">5 minutes</option>
             <option value="10">10 minutes</option>
             <option value="15">15 minutes</option>
             <option value="30">30 minutes</option>
             <option value="60">1 hour</option>
           </select>
-          <div class="flex justify-end gap-2">
-            <button @click="showTimerModal = false" class="px-4 py-2 mm bg-gray-300 rounded">Cancel</button>
-            <button @click="startTimer" class="px-4 py-2 bg-blue-500 text-white rounded">Start</button>
+          <div class="modal-buttons">
+            <button @click="showTimerModal = false" class="modal-cancel">Cancel</button>
+            <button @click="startTimer" class="modal-action">Start</button>
           </div>
         </div>
       </div>
-      <div v-if="wontDoModalOpen" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
-        <div class="bg-white p-5 rounded-lg shadow-lg w-96">
-          <h2 class="text-lg font-semibold mb-4">Mark as "Won't Do"</h2>
 
-          <p class="text-gray-700 mb-2">Why won't you do this task?</p>
-          <textarea v-model="wontDoReason" class="w-full border rounded-md p-2 mb-3"></textarea>
-
-          <div class="flex justify-end mt-4">
-            <button @click="wontDoModalOpen = false" class="mr-2 px-4 py-2 bg-red-300 rounded-md">
-              <i class="fa fa-times"></i> <!-- Cancel icon -->
+      <div v-if="wontDoModalOpen" class="modal-overlay">
+        <div class="wont-do-modal">
+          <h2 class="modal-title">Mark as "Won't Do"</h2>
+          <p class="modal-text">Why won't you do this task?</p>
+          <textarea v-model="wontDoReason" class="modal-textarea"></textarea>
+          <div class="modal-buttons">
+            <button @click="wontDoModalOpen = false" class="modal-cancel">
+              <i class="fa fa-times"></i>
             </button>
-            <button @click="markTaskAsWontDo" class="px-4 py-2 bg-blue-300 rounded-md">
-              <i class="fa fa-check"></i> <!-- Confirm icon -->
+            <button @click="markTaskAsWontDo" class="modal-action">
+              <i class="fa fa-check"></i>
             </button>
-
           </div>
         </div>
       </div>
-      <div v-if="transferModalOpen" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
-        <div class="bg-white p-5 rounded-lg shadow-lg w-96">
-          <h2 class="text-lg font-semibold mb-4">Select a Day to Transfer</h2>
 
-          <label for="transferDay" class="block mb-2 text-gray-700">Choose a day:</label>
-          <select v-model="selectedTransferDay" id="transferDay" class="w-full border border-gray-300 rounded-md p-2">
+      <div v-if="transferModalOpen" class="modal-overlay">
+        <div class="transfer-modal">
+          <h2 class="modal-title">Select a Day to Transfer</h2>
+          <label for="transferDay" class="modal-label">Choose a day:</label>
+          <select v-model="selectedTransferDay" id="transferDay" class="modal-select">
             <option v-for="(day, index) in days" :key="index" :value="index" :disabled="index === selectedDayIndex">
               {{ day.day }} - {{ day.date }}
             </option>
           </select>
-
-          <div class="flex justify-end mt-4">
-            <button @click="closeTransferModal" class="mr-2 px-4 py-2 bg-gray-300 rounded-md">Cancel</button>
-            <button @click="transferTask()" class="px-4 py-2 bg-blue-500 text-white rounded-md">Transfer</button>
+          <div class="modal-buttons">
+            <button @click="closeTransferModal" class="modal-cancel">Cancel</button>
+            <button @click="transferTask()" class="modal-action">Transfer</button>
           </div>
         </div>
       </div>
 
-      <!-- Main modal -->
-      <div
-          v-if="modalOpen"
-          class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50 p-4"
-      >
-        <!-- Modal Content -->
-        <div
-            class="bg-white w-full max-w-lg md:max-w-xl lg:max-w-2xl rounded-lg shadow-lg flex flex-col"
-            style="max-height: 80vh; overflow-y: auto;"
-        >
-
-          <!-- Modal Header (Fixed) -->
-          <div class="flex justify-between items-center p-4 border-b bg-gray-100">
-            <h3 class="text-lg font-semibold text-gray-900">Add Task</h3>
-            <button @click="closeModal" class="text-gray-500 hover:text-gray-700 text-2xl">
-              ✕
-            </button>
+      <div v-if="modalOpen" class="modal-overlay">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h3 class="modal-title">Add Task</h3>
+            <button @click="closeModal" class="modal-close">✕</button>
           </div>
-
-          <!-- Scrollable Modal Body -->
-          <form @submit.prevent="addNewTask" class="flex flex-col flex-1 bg-white dark:bg-gray-900 rounded-2xl shadow-lg">
-            <!-- Content -->
-            <div class="p-6 flex-1 overflow-y-auto max-h-[60vh] space-y-6">
-
-              <!-- Task Input -->
-              <div>
-                <label for="newTask" class="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Task Name</label>
+          <form @submit.prevent="addNewTask" class="modal-form">
+            <div class="modal-body">
+              <div class="form-group">
+                <label for="newTask" class="form-label">Task Name</label>
                 <input
                     type="text"
                     v-model="newTask.title"
                     id="newTask"
-                    class="w-full rounded-xl px-4 py-3 bg-gray-100 dark:bg-gray-800 border border-transparent focus:ring-2 focus:ring-blue-500 text-sm dark:text-white"
+                    class="form-input"
                     placeholder="Enter task name"
                     required
                 />
               </div>
-
-              <!-- DateTime Picker -->
-              <div>
-                <label for="reminderDateTime" class="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Reminder</label>
+              <div class="form-group">
+                <label for="reminderDateTime" class="form-label">Reminder</label>
                 <input
                     type="datetime-local"
                     v-model="newTask.reminder.datetime"
                     id="reminderDateTime"
-                    class="w-full rounded-xl px-4 py-3 bg-gray-100 dark:bg-gray-800 border border-transparent focus:ring-2 focus:ring-blue-500 text-sm dark:text-white"
+                    class="form-input"
                 />
               </div>
-
-              <!-- Recurring Icon Toggle -->
-              <div class="flex items-center space-x-3">
-    <span class="text-sm font-medium text-gray-700 dark:text-gray-200">
-      {{ newTask.type === 'recurring' ? 'Recurring' : 'One-Time' }}
-    </span>
-
+              <div class="recurring-toggle">
+                <span class="recurring-label">
+                  {{ newTask.type === 'recurring' ? 'Recurring' : 'One-Time' }}
+                </span>
                 <button
                     type="button"
                     @click="toggleRecurring"
-                    :class="[
-        'rounded-full p-2 transition-all',
-        newTask.type === 'recurring'
-          ? 'bg-blue-500 text-white shadow-md'
-          : 'bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300'
-      ]"
+                    :class="['toggle-button', newTask.type === 'recurring' ? 'toggle-active' : 'toggle-inactive']"
                 >
                   <i :class="newTask.type === 'recurring' ? 'fas fa-sync-alt' : 'fas fa-dot-circle'"></i>
                 </button>
               </div>
-
-              <!-- Advanced Options Toggle -->
-              <div @click="showAdvanced = !showAdvanced" class="flex items-center justify-between text-blue-600 cursor-pointer font-medium">
+              <div @click="showAdvanced = !showAdvanced" class="advanced-toggle">
                 <span>Advanced Options</span>
                 <i :class="showAdvanced ? 'fas fa-chevron-up' : 'fas fa-chevron-down'"></i>
               </div>
-
-              <!-- Advanced Section -->
               <transition name="fade">
-                <div v-if="showAdvanced" class="space-y-4 text-sm text-gray-700 dark:text-gray-200">
-                  <!-- Select Days -->
-                  <div>
-                    <label class="block font-medium mb-1">Select Days</label>
-                    <div class="flex flex-wrap gap-2">
+                <div v-if="showAdvanced" class="advanced-section">
+                  <div class="form-group">
+                    <label class="form-label">Select Days</label>
+                    <div class="days-checkboxes">
                       <label
                           v-for="(day, index) in days"
                           :key="index"
-                          class="flex items-center gap-2 text-sm"
+                          class="day-checkbox"
                       >
-                        <input type="checkbox" :id="'day-' + index" :value="day" v-model="newTask.selectedDays" class="accent-blue-500" />
+                        <input type="checkbox" :id="'day-' + index" :value="day" v-model="newTask.selectedDays" class="checkbox-input" />
                         {{ day.day }}
                       </label>
                     </div>
                   </div>
-
-                  <!-- Position -->
-                  <div>
-                    <label for="taskPosition" class="block font-medium mb-1">Insert Position</label>
+                  <div class="form-group">
+                    <label for="taskPosition" class="form-label">Insert Position</label>
                     <select
                         v-model="newTask.position"
                         id="taskPosition"
-                        class="w-full rounded-xl px-4 py-2 bg-gray-100 dark:bg-gray-800 border border-transparent focus:ring-2 focus:ring-blue-500"
+                        class="form-select"
                     >
                       <option :value="0">First</option>
                       <option
@@ -452,585 +371,423 @@
                       </option>
                     </select>
                   </div>
-
-                  <!-- Labels -->
-                  <div>
-                    <label for="newTaskLabels" class="block font-medium mb-1">Labels</label>
+                  <div class="form-group">
+                    <label for="newTaskLabels" class="form-label">Labels</label>
                     <input
                         type="text"
                         v-model="newTask.labels"
                         id="newTaskLabels"
-                        class="w-full rounded-xl px-4 py-2 bg-gray-100 dark:bg-gray-800 border border-transparent focus:ring-2 focus:ring-blue-500"
+                        class="form-input"
                         placeholder="e.g., Work, Fitness"
                     />
                   </div>
-
-                  <!-- Notes -->
-                  <div>
-                    <label for="newTaskNotes" class="block font-medium mb-1">Notes</label>
+                  <div class="form-group">
+                    <label for="newTaskNotes" class="form-label">Notes</label>
                     <textarea
                         v-model="newTask.notes"
                         id="newTaskNotes"
-                        class="w-full rounded-xl px-4 py-2 bg-gray-100 dark:bg-gray-800 border border-transparent focus:ring-2 focus:ring-blue-500"
+                        class="form-textarea"
                         placeholder="Add more details..."
                     ></textarea>
                   </div>
                 </div>
               </transition>
-
-              <!-- Error Message -->
-              <div v-if="error" class="text-red-500 text-sm">{{ error }}</div>
+              <div v-if="error" class="error-message">{{ error }}</div>
             </div>
-
-            <!-- Footer -->
-            <div class="bg-gray-50 dark:bg-gray-800 px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex justify-end">
-              <button
-                  type="submit"
-                  class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2 rounded-xl transition-shadow shadow-md"
-              >
-                Add Task
-              </button>
+            <div class="modal-footer">
+              <button type="submit" class="submit-button">Add Task</button>
             </div>
           </form>
-
         </div>
       </div>
-      <div v-if="youtubeModalOpen" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div class="bg-white p-6 rounded-lg shadow-xl w-full max-w-md">
-          <h2 class="text-xl font-semibold mb-4">Attach YouTube Video</h2>
+
+      <div v-if="youtubeModalOpen" class="modal-overlay">
+        <div class="youtube-modal">
+          <h2 class="modal-title">Attach YouTube Video</h2>
           <input
               type="url"
               v-model="youtubeInput"
               placeholder="https://www.youtube.com/watch?v=..."
-              class="w-full p-2 border rounded mb-4"
+              class="modal-input"
           />
-          <div class="flex justify-end space-x-2">
-            <button @click="closeYouTubeModal" class="px-4 py-2 bg-gray-300 rounded">Cancel</button>
-            <button @click="saveYouTubeLink" class="px-4 py-2 bg-blue-600 text-white rounded">Save</button>
+          <div class="modal-buttons">
+            <button @click="closeYouTubeModal" class="modal-cancel">Cancel</button>
+            <button @click="saveYouTubeLink" class="modal-action">Save</button>
           </div>
         </div>
       </div>
 
-
-      <!-- Task Detail Modal -->
-      <div v-if="taskDetailModalOpen" id="task-detail-modal" tabindex="-1" aria-hidden="true"
-           class="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto overflow-x-hidden bg-black bg-opacity-50">
-        <div class="relative p-4 w-full max-w-md max-h-full">
-          <div class="relative bg-white rounded-2xl shadow-lg dark:bg-gray-800">
-            <!-- Header -->
-            <div class="flex items-center justify-between p-5 border-b border-gray-200 dark:border-gray-700 rounded-t">
-              <h3 class="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                <svg class="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor"
-                     stroke-width="2" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4"></path></svg>
-                Task Details
-              </h3>
-              <button @click="closeTaskDetailModal"
-                      class="text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg p-1 transition">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2"
-                     viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round"
-                                               d="M6 18L18 6M6 6l12 12" /></svg>
+      <div v-if="taskDetailModalOpen" class="modal-overlay">
+        <div class="task-detail-modal">
+          <div class="modal-header">
+            <h3 class="modal-title">Task Details</h3>
+            <button @click="closeTaskDetailModal" class="modal-close">
+              <svg class="close-icon" fill="none" stroke="currentColor" stroke-width="2"
+                   viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round"
+                                             d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+          </div>
+          <div class="modal-body">
+            <div class="task-title">{{ taskDetail.title }}</div>
+            <div v-if="taskDetail.youtubeURL" class="youtube-embed">
+              <iframe
+                  :src="`https://www.youtube.com/embed/${extractYouTubeID(taskDetail.youtubeURL)}`"
+                  class="youtube-frame"
+                  height="250"
+                  frameborder="0"
+                  allowfullscreen
+              ></iframe>
+            </div>
+            <div v-if="taskDetail.imageURL" class="task-image-container">
+              <img
+                  :src="taskDetail.imageURL"
+                  class="task-image"
+                  alt="Task Image"
+                  @click="showImagePreview = true"
+              />
+              <button
+                  @click="removeTaskAttachment('imageURL')"
+                  class="remove-attachment"
+                  title="Remove image"
+              >
+                ✕
               </button>
             </div>
-
-            <!-- Body -->
-            <div class="p-5 space-y-4 text-sm text-gray-700 dark:text-gray-200">
-              <!-- Title -->
-              <div class="flex items-center gap-3 text-2xl font-semibold text-gray-800 dark:text-white">
-                <span class="font-medium"></span> {{ taskDetail.title }}
-              </div>
-              <div v-if="taskDetail.youtubeURL" class="mt-3">
-                <iframe
-                    :src="`https://www.youtube.com/embed/${extractYouTubeID(taskDetail.youtubeURL)}`"
-                    class="w-full rounded-lg"
-                    height="250"
-                    frameborder="0"
-                    allowfullscreen
-                ></iframe>
-
-              </div>
-
-              <div v-if="taskDetail.imageURL" class="mt-3 relative group">
-                <img
-                    :src="taskDetail.imageURL"
-                    class="rounded-lg max-h-60 object-contain w-full cursor-pointer"
-                    alt="Task Image"
-                    @click="showImagePreview = true"
-                />
-                <button
-                    @click="removeTaskAttachment('imageURL')"
-                    class="absolute top-2 right-2 bg-red-500 hover:bg-red-600 text-white rounded-full p-1 text-xs shadow-md group-hover:block"
-                    title="Remove image"
+            <div v-if="taskDetail.fileURL" class="task-file-container">
+              <div class="file-link">
+                📄
+                <a
+                    :href="taskDetail.fileURL"
+                    target="_blank"
+                    class="file-anchor"
                 >
-                  ✕
-                </button>
+                  {{ taskDetail.fileName || 'Download File' }}
+                </a>
               </div>
-
-              <!-- PDF or Other File PREVIEW -->
-              <div v-if="taskDetail.fileURL" class="mt-3 relative group">
-                <div class="flex items-center space-x-2 p-2 bg-gray-100 rounded shadow">
-                  📄
-                  <a
-                      :href="taskDetail.fileURL"
-                      target="_blank"
-                      class="text-blue-600 hover:underline"
+              <button
+                  @click="removeTaskAttachment('fileURL')"
+                  class="remove-attachment"
+                  title="Remove file"
+              >
+                ✕
+              </button>
+            </div>
+            <div v-if="taskDetail.reminder?.date && taskDetail.reminder?.time" class="task-detail-item">
+              <svg class="detail-icon" fill="none" stroke="currentColor"
+                   stroke-width="2" viewBox="0 0 24 24"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2z"/></svg>
+              <span class="detail-label">Reminder:</span> {{ formatShortDate(taskDetail.reminder.date) }} at {{ formatTime(taskDetail.reminder.time) }}
+            </div>
+            <div v-if="taskDetail.notes" class="task-detail-item">
+              <svg class="detail-icon" fill="none" stroke="currentColor"
+                   stroke-width="2" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9l7 7v9a2 2 0 0 1-2 2z"/></svg>
+              <div>
+                <div class="detail-label">Notes:</div>
+                <div class="detail-text">{{ taskDetail.notes }}</div>
+              </div>
+            </div>
+            <div v-if="taskDetail.labels?.length" class="task-detail-item">
+              <svg class="detail-icon" fill="none" stroke="currentColor"
+                   stroke-width="2" viewBox="0 0 24 24"><path d="M7 7h10v10H7z"/></svg>
+              <div>
+                <div class="detail-label">Labels:</div>
+                <div class="labels-container">
+                  <span
+                      v-for="(label, index) in taskDetail.labels"
+                      :key="index"
+                      @click="toggleLabelHighlight(label)"
+                      :class="['label', activeLabels.includes(label) ? 'label-active' : 'label-inactive']"
                   >
-                    {{ taskDetail.fileName || 'Download File' }}
-                  </a>
-                </div>
-                <button
-                    @click="removeTaskAttachment('fileURL')"
-                    class="absolute top-2 right-2 bg-red-500 hover:bg-red-600 text-white rounded-full p-1 text-xs shadow-md group-hover:block"
-                    title="Remove file"
-                >
-                  ✕
-                </button>
-              </div>
-              <!-- Reminder -->
-              <div v-if="taskDetail.reminder?.date && taskDetail.reminder?.time" class="flex items-center gap-3">
-                <svg class="w-5 h-5 text-gray-500 dark:text-gray-300" fill="none" stroke="currentColor"
-                     stroke-width="2" viewBox="0 0 24 24"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2z"/></svg>
-                <span class="font-medium">Reminder:</span> {{ formatShortDate(taskDetail.reminder.date) }} at {{ formatTime(taskDetail.reminder.time) }}
-              </div>
-
-
-              <!-- Notes -->
-              <div v-if="taskDetail.notes" class="flex items-start gap-3">
-                <svg class="w-5 h-5 text-gray-500 dark:text-gray-300" fill="none" stroke="currentColor"
-                     stroke-width="2" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9l7 7v9a2 2 0 0 1-2 2z"/></svg>
-                <div>
-                  <div class="font-medium">Notes:</div>
-                  <div class="text-gray-600 dark:text-gray-400">{{ taskDetail.notes }}</div>
+                    {{ label }}
+                  </span>
                 </div>
               </div>
-
-              <div v-if="taskDetail.labels?.length" class="flex items-start gap-3">
-                <svg class="w-5 h-5 text-gray-500 dark:text-gray-300" fill="none" stroke="currentColor"
-                     stroke-width="2" viewBox="0 0 24 24"><path d="M7 7h10v10H7z"/></svg>
-                <div>
-                  <div class="font-medium">Labels:</div>
-                  <div class="flex flex-wrap gap-2 mt-1">
-      <span
-          v-for="(label, index) in taskDetail.labels"
-          :key="index"
-          @click="toggleLabelHighlight(label)"
-          :class="[
-          'px-3 py-1 text-xs rounded-full cursor-pointer font-medium transition',
-          activeLabels.includes(label)
-            ? 'bg-green-500 text-white'
-            : 'bg-gray-200 text-gray-800 dark:bg-gray-600 dark:text-gray-100'
-        ]"
-      >
-        {{ label }}
-      </span>
-                  </div>
-                </div>
-              </div>
-
             </div>
-
-            <!-- Footer -->
-            <div class="p-4 border-t border-gray-200 dark:border-gray-700 text-right">
-              <button @click="closeTaskDetailModal"
-                      class="inline-flex items-center justify-center text-white bg-blue-600 hover:bg-blue-700 focus:ring-4 focus:ring-blue-300 font-medium rounded-lg text-sm px-5 py-2 dark:bg-blue-500 dark:hover:bg-blue-600 dark:focus:ring-blue-700">
-                Close
-              </button>
-            </div>
+          </div>
+          <div class="modal-footer">
+            <button @click="closeTaskDetailModal" class="modal-action">Close</button>
           </div>
         </div>
       </div>
 
-
-      <!-- Fullscreen Image Preview -->
-      <div
-          v-if="showImagePreview"
-          class="fixed inset-0 bg-black bg-opacity-80 z-50 flex items-center justify-center"
-          @click="showImagePreview = false"
-      >
+      <div v-if="showImagePreview" class="image-preview" @click="showImagePreview = false">
         <img
             :src="taskDetail.imageURL"
-            class="max-w-full max-h-full rounded-xl shadow-lg border-4 border-white"
+            class="preview-image"
             alt="Full Image Preview"
         />
       </div>
 
-      <div v-if="isModalOpen" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
-        <div class="bg-white p-5 rounded-lg shadow-lg w-96">
-          <h2 class="text-lg font-semibold mb-4">Add Reminder</h2>
-
-          <p class="text-md font-medium mb-3">
-            Task: <span class="font-semibold text-blue-600">{{ selectedTaskTitle }}</span>
+      <div v-if="isModalOpen" class="modal-overlay">
+        <div class="reminder-modal">
+          <h2 class="modal-title">Add Reminder</h2>
+          <p class="modal-text">
+            Task: <span class="task-name">{{ selectedTaskTitle }}</span>
           </p>
-
           <form @submit.prevent="handleAddReminder">
-            <label for="reminderDate" class="block mb-2">Date:</label>
-            <input type="date" v-model="reminder.date" id="reminderDate" class="w-full border-gray-300 rounded-md p-2 mb-2" required>
-
-            <label for="reminderTime" class="block mb-2">Time:</label>
-            <input type="time" v-model="reminder.time" id="reminderTime" class="w-full border-gray-300 rounded-md p-2 mb-2" required>
-            <label for="reminderRepeat" class="block mb-2">Repeat:</label>
-            <select v-model="reminder.repeat" id="reminderRepeat" class="w-full border-gray-300 rounded-md p-2 mb-2">
+            <label for="reminderDate" class="modal-label">Date:</label>
+            <input type="date" v-model="reminder.date" id="reminderDate" class="modal-input" required>
+            <label for="reminderTime" class="modal-label">Time:</label>
+            <input type="time" v-model="reminder.time" id="reminderTime" class="modal-input" required>
+            <label for="reminderRepeat" class="modal-label">Repeat:</label>
+            <select v-model="reminder.repeat" id="reminderRepeat" class="modal-select">
               <option value="">No Repeat</option>
               <option value="daily">Daily</option>
               <option value="weekly">Weekly</option>
               <option value="monthly">Monthly</option>
               <option value="yearly">Yearly</option>
             </select>
-            <div class="flex justify-end mt-4">
-              <button @click="closeModal" type="button" class="mr-2 px-4 py-2 bg-gray-300 rounded-md">Cancel</button>
-              <button type="submit" class="px-4 py-2 bg-blue-500 text-white rounded-md">Add to Calendar</button>
+            <div class="modal-buttons">
+              <button @click="closeModal" type="button" class="modal-cancel">Cancel</button>
+              <button type="submit" class="modal-action">Add to Calendar</button>
             </div>
           </form>
         </div>
       </div>
-      <!-- Voice Input Modal -->
-      <div
-          v-if="listening"
-          class="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center"
-      >
-        <div class="bg-white rounded-xl shadow-2xl px-6 py-8 w-full max-w-sm text-center relative">
-          <!-- ❌ Cancel Button -->
+
+      <div v-if="listening" class="modal-overlay">
+        <div class="voice-modal">
           <button
               @click="cancelVoiceInput"
-              class="absolute top-3 right-3 text-gray-400 hover:text-red-500 text-xl font-bold"
+              class="voice-cancel"
               title="Cancel"
           >
             ✕
           </button>
-
-          <!-- Visual Voice Waveform -->
-          <div class="flex space-x-1 justify-center mb-4 mt-2">
-            <div class="w-2 h-6 bg-green-400 animate-pulse rounded"></div>
-            <div class="w-2 h-4 bg-green-400 animate-pulse rounded delay-100"></div>
-            <div class="w-2 h-8 bg-green-400 animate-pulse rounded delay-200"></div>
-            <div class="w-2 h-5 bg-green-400 animate-pulse rounded delay-300"></div>
+          <div class="voice-waveform">
+            <div class="wave-bar"></div>
+            <div class="wave-bar delay-100"></div>
+            <div class="wave-bar delay-200"></div>
+            <div class="wave-bar delay-300"></div>
           </div>
-
-          <!-- Transcribed Text -->
-          <p class="text-base font-medium text-gray-700">
-            Listening: "<span class="text-blue-600">{{ liveTranscript }}</span>"
+          <p class="voice-transcript">
+            Listening: "<span class="transcript-text">{{ liveTranscript }}</span>"
           </p>
-
-          <p class="text-xs text-gray-400 mt-2">Speak now, your task is being transcribed...</p>
+          <p class="voice-hint">Speak now, your task is being transcribed...</p>
         </div>
       </div>
 
-
-
-
-      <!-- Daily routine tasks -->
-      <div class="daily-routine   min-h-screen">
-        <div v-if="selectedDayRoutine?.length === 0" class="flex flex-col items-center justify-center mt-16">
+      <div class="daily-routine">
+        <div v-if="selectedDayRoutine?.length === 0" class="no-tasks">
           <img
               src="https://cdn.pixabay.com/photo/2017/02/01/11/12/bulb-2029707_640.png"
               alt="No tasks illustration"
-              class="w-48 h-48 mb-6"
+              class="no-tasks-image"
           />
-          <h2 class="text-lg font-semibold text-gray-700">No list item</h2>
-          <p class="text-sm text-gray-500 mt-2">You don’t have any tasks for this day. Add a new task to get started.</p>
-
+          <h2 class="no-tasks-title">No list item</h2>
+          <p class="no-tasks-text">You don’t have any tasks for this day. Add a new task to get started.</p>
         </div>
         <div v-else>
-          <div class="scroll-container overflow-y-auto h-[80vh]">
-            <div  class="flex items-center justify-between cursor-pointer my-2" >
-              <h3 class="text-xl font-bold text-gray-900 flex items-center gap-2">
-                <h3 class="text-xl font-bold text-gray-900 flex items-center gap-2">
-                  <span class=" tracking-wide text-gray-600">Completed</span>
-                  <span class="text-sm font-medium bg-blue-100 text-blue-600 px-3 py-1 rounded-full">
-        {{ completedTaskCount }}/{{ selectedDayRoutine?.length }}
-    </span>
-                </h3>
-              </h3>
-
-              <div class="flex justify-end items-center  ">
-                <button @click="clearTasksForToday" class="  text-white px-3 py-2 rounded-lg ">🗑️</button>
-                <button @click="showCompleted = !showCompleted">
-                  <i :class="showCompleted ? 'fas fa-eye text-gray-500' : 'fas fa-eye-slash text-gray-500'" class="text-xl"></i>
-                </button>
-              </div>
-
+          <div class="tasks-header">
+            <h3 class="tasks-title">
+              <span class="completed-label">Completed</span>
+              <span class="completion-count">
+                {{ completedTaskCount }}/{{ selectedDayRoutine?.length }}
+              </span>
+            </h3>
+            <div class="tasks-actions">
+              <button @click="clearTasksForToday" class="clear-button">🗑️</button>
+              <button @click="showCompleted = !showCompleted">
+                <i :class="showCompleted ? 'fas fa-eye text-gray-500' : 'fas fa-eye-slash text-gray-500'" class="toggle-icon"></i>
+              </button>
             </div>
-            <!-- Conveyor Wrapper -->
-            <div class="overflow-hidden relative h-[80vh] overflow-y-auto" ref="scrollContainer">
-              <div >
-                <draggable
-                    handle=".drag-handle"
-                    :animation="150"
-                    v-model="selectedDayRoutine"
-                    tag="div"
-                    class="tasks-list space-y-2"
-                    ghost-class="ghost"
-                    drag-class="drag"
-                    @end="handleDragEnd"
-                >
-                  <template #item="{ element: task, index }">
-                    <div   v-if="(!task.completed || (isToday(selectedDayIndex) && showCompleted))"
-                           class="task-card bg-white rounded-xl shadow-lg p-5 relative hover:shadow-xl transition-shadow duration-300"
-                           :class="{
-  'bg-gray-200': task.completed && isToday(selectedDayIndex),
-  'border-red-600 border-2 shadow-lg': task.important, // NEW visual for important
-  'draggable': taskIsDragging
-}"
-                    >
-                      <div class="flex items-center ">
-                        <!-- Drag Icon -->
-                        <div>
-                          <div
-
-                              class="w-10 h-10 rounded-full flex items-center justify-center mr-3 shadow-sm bg-blue-500"
-                          >
-                            <i class="fas fa-arrows-alt text-white drag-handle"></i>
-                          </div>
-                        </div>
-
-                        <!-- Task Title and Time -->
-                        <div>
-
-                          <div
-                              class="text-lg font-semibold text-gray-800 cursor-pointer hover:underline hover:text-blue-600 transition duration-150 flex items-center space-x-2"
-                              :class="{ 'line-through text-gray-500': task.completed && isToday(selectedDayIndex) }"
-                              @click="openTaskDetailModal(task)"
-                          >
-  <span class="truncate max-w-[11rem]">
-    {{ task.title.length > 18 ? task.title.slice(0, 18) + '...' : task.title }}
-  </span>
-
-
-                            <span v-if="task.fileURL" class="text-blue-600 text-sm" title="File attached">📄</span>
-                          </div>
-
-
-
-
-                          <div v-if="task.reminder?.date && task.reminder?.time" class="text-sm text-gray-500 mt-1">
-                            <div v-if="task.reminder?.date && task.reminder?.time" class="text-sm text-gray-500 mt-1">
-                              📅 {{ formatShortDate(task.reminder.date) }} • ⏰ {{ formatTime(task.reminder.time) }}
-                            </div>
-
-                          </div>
-
-                          <!--                    <div v-if="task.time" class="text-sm text-gray-400">{{ task.time }}</div>-->
-                          <!-- User Icon and Name with Spinning Icon -->
-                          <div class="flex items-center space-x-2 text-xs">
-                            <!-- Incomplete Task Indicator -->
-                            <div v-if="!task.completed && isToday(selectedDayIndex)" class="text-yellow-500">
-                              <i class="fas fa-circle"></i> Incomplete
-                            </div>
-                            <button
-                                @click="toggleTaskImportance(index)"
-                                class="text-xl hover:scale-110 transition-transform"
-                                :title="task.important ? 'Marked as Important' : 'Mark as Important'"
-                            >
-                              <i :class="task.important ? 'fas fa-fire text-red-500' : 'fas fa-fire text-gray-400'" />
-                            </button>
-
-
-                            <!-- Completed Task Indicator -->
-                            <div v-if="task.completed && isToday(selectedDayIndex)"  class="text-green-500">
-                              <i class="fas fa-check-circle"></i> Completed
-                            </div>
-
-
-                          </div>
-
-                        </div>
-                      </div>
-                      <div v-if="task.youtubeURL" class="w-24 h-14 rounded-lg overflow-hidden border border-gray-300 shadow-sm mt-2">
-                        <img
-                            :src="`https://img.youtube.com/vi/${extractYouTubeID(task.youtubeURL)}/0.jpg`"
-                            alt="YouTube Thumbnail"
-                            class="w-full h-full object-cover cursor-pointer transition-transform duration-300 hover:scale-105"
-                            @click="openTaskDetailModal(task)"
-                        />
-                      </div>
-
-                      <div
-                          @click="openTaskDetailModal(task)"
-                          v-if="task.imageURL"
-                          class="w-16 h-16 rounded-lg overflow-hidden border border-gray-300 shadow-sm bg-white"
-                      >
-                        <img
-                            :src="task.imageURL"
-                            alt="Task Image"
-                            class="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
-                        />
-                      </div>
-
-
-
-
-                      <!-- Task Labels -->
-                      <div class="flex flex-wrap gap-2 mb-3">
-     <span
-         v-for="(label, index) in task.labels"
-         :key="index"
-         @click="toggleLabelHighlight(label)"
-         :class="[
-              'inline-block rounded-full px-3 py-1 text-xs font-medium cursor-pointer',
-              activeLabels.includes(label)
-                ? 'bg-green-500 text-white'
-                : 'bg-gray-200 text-gray-600'
-            ]"
-     >
-            {{ label }}
-        </span>
-                      </div>
-
-                      <!-- User Icon and Name Inline with Task Actions -->
-                      <div class="flex items-center justify-between mb-3 space-x-4">
-                        <!-- User Icon and Name -->
-                        <div class="flex items-center space-x-2 relative">
-
-
-                        </div>
-
-                        <!-- Task Actions -->
-                        <div class="flex items-center space-x-2">
-
-                          <!-- Task Completion Radio Button -->
-                          <button
-                              v-if="isToday(selectedDayIndex)"
-                              @click="() => toggleTaskCompletion(getOriginalIndex(task))"
-                              class="absolute top-2 right-2 focus:outline-none"
-                          >
-                            <i
-                                :class="task.completed ? 'fas fa-dot-circle text-green-500' : 'far fa-circle text-gray-400'"
-                                class="text-xl transition-all duration-300 ease-in-out"
-                            ></i>
-                          </button>
-
-                          <!-- Toggle Button -->
-
-
-                          <!-- Conditionally Visible Actions -->
-                          <div v-if="iconVisibility[index]" class="flex flex-wrap items-center gap-2 mt-2">
-                            <button
-                                @click="openModal('calendar', index, task.title)"
-                                class="rounded-md text-xs sm:text-sm"
-                            >
-                              📅
-                            </button>
-
-                            <button
-                                @click="deleteTask(index)"
-                                class="text-red-500 hover:text-red-700 text-xs sm:text-sm"
-                            >
-                              🗑️
-                            </button>
-
-                            <button
-                                @click="openTransferModal(index)"
-                                class="text-blue-500 hover:text-blue-700 text-xs sm:text-sm"
-                            >
-                              🔄
-                            </button>
-
-                            <button
-                                @click="openWontDoModal(index)"
-                                class="text-orange-500 hover:text-orange-700 text-xs sm:text-sm"
-                            >
-                              🚫
-                            </button>
-
-                            <button @click="triggerImageUpload(index)" class="text-xs sm:text-sm">📎</button>
-                            <input
-                                type="file"
-                                :ref="'fileInput_' + index"
-                                accept="image/*,.pdf,.doc,.docx,.txt"
-                                @change="handleUpload($event, index)"
-                                class="hidden"
-                            />
-
-                            <button
-                                @click="showTimerModal = true"
-                                class="text-orange-500 hover:text-orange-700 text-xs sm:text-sm"
-                                title="Start Timer"
-                            >
-                              ⏱️
-                            </button>
-
-                            <button
-                                @click="openYouTubeModal(index)"
-                                class="text-red-500 hover:text-red-700 text-xs sm:text-sm"
-                                title="Add YouTube Video"
-                            >
-                              <i class="fab fa-youtube text-xl"></i>
-                            </button>
-                          </div>
-                          <button
-
-                              @click="toggleIcons(index)"
-                              class="text-gray-600 hover:text-blue-600 text-sm px-2"
-                              title="More Options"
-                          >
-                            <svg class="w-5 h-5" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 16 3">
-                              <path d="M2 0a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Zm6.041 0a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3ZM14 0a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Z"/>
-                            </svg>
-                          </button>
-
-
-                        </div>
-                      </div>
-
-
-                      <div
-                          class="absolute bottom-2 left-2 w-5 h-5 flex items-center justify-center bg-gray-300 rounded-full text-xs font-bold text-gray-800 shadow-sm"
-                      >
-                        {{ index + 1 }}
-                      </div>
-
-                      <!-- Notification -->
-                      <div
-                          v-if="showNotification"
-                          class="notification-popup bg-green-500 text-white px-4 py-2 rounded-md absolute top-4 right-4 shadow-lg"
-                      >
-                        Create successfully
-                      </div>
-                      <div v-if="transferNotification" class="fixed top-5 right-5 bg-blue-500 text-white px-4 py-2 rounded-lg shadow-lg transition-opacity duration-300">
-                        {{ transferNotification }}
-                      </div>
-
-
-                    </div>
-
-                  </template>
-
-                </draggable>
-              </div>
-            </div>
-
-            <!-- Idle Time Illustration -->
-            <div
-                v-if="selectedDayRoutine?.length > 0 && selectedDayRoutine?.every(task => task.completed) && !showCompleted"
-                class="flex flex-col items-center justify-center mt-10"
+          </div>
+          <div class="tasks-container">
+            <draggable
+                handle=".drag-handle"
+                :animation="150"
+                v-model="selectedDayRoutine"
+                tag="div"
+                class="tasks-list"
+                ghost-class="ghost"
+                drag-class="drag"
+                @end="handleDragEnd"
             >
-              <img
-                  src="@/assets/free.svg"
-                  alt="Idle Time Illustration"
-                  class="w-64 h-64 mb-4"
-              />
-              <h2 class="text-2xl font-bold text-gray-700">It's Idle Time 🧘</h2>
-              <p class="text-gray-500 mt-2 text-sm text-center px-4 max-w-md">
-                You’ve completed all your tasks for today. Take a break and enjoy your free time!
-              </p>
-            </div>
-            <div v-if="wontDoTasks.length != 0 && !selectedDayRoutine?.every(task => task.completed)" class=" p-3 bg-red-100 rounded-lg">
-              <h3 class="text-lg font-semibold text-red-700">Won't Do Tasks</h3>
-              <ul>
-                <li v-for="(task, index) in wontDoTasks" :key="index" class="flex  items-center bg-white p-2 rounded-md mt-2">
-                  <button @click="undoWontDo(index)" class="text-green-500 hover:text-green-700">
-                    <i class="fas fa-undo"></i>
-                  </button>
-                  <span class="ml-2">{{ task.title }} - {{ task.wontDoReason }}</span>
-
-                </li>
-              </ul>
-            </div>
+              <template #item="{ element: task, index }">
+                <div
+                    v-if="(!task.completed || (isToday(selectedDayIndex) && showCompleted))"
+                    class="task-card"
+                    :class="{ 'task-completed': task.completed && isToday(selectedDayIndex), 'task-important': task.important, 'draggable': taskIsDragging }"
+                >
+                  <div class="task-content">
+                    <div class="drag-icon">
+                      <div class="drag-icon-inner">
+                        <i class="fas fa-arrows-alt drag-handle"></i>
+                      </div>
+                    </div>
+                    <div class="task-details">
+                      <div
+                          class="task-title-text"
+                          :class="{ 'task-completed-text': task.completed && isToday(selectedDayIndex) }"
+                          @click="openTaskDetailModal(task)"
+                      >
+                        <span class="title-text">
+                          {{ task.title.length > 18 ? task.title.slice(0, 18) + '...' : task.title }}
+                        </span>
+                        <span v-if="task.fileURL" class="file-indicator" title="File attached">📄</span>
+                      </div>
+                      <div v-if="task.reminder?.date && task.reminder?.time" class="task-reminder">
+                        📅 {{ formatShortDate(task.reminder.date) }} • ⏰ {{ formatTime(task.reminder.time) }}
+                      </div>
+                      <div class="task-status">
+                        <div v-if="!task.completed && isToday(selectedDayIndex)" class="status-incomplete">
+                          <i class="fas fa-circle"></i> Incomplete
+                        </div>
+                        <button
+                            @click="toggleTaskImportance(index)"
+                            class="importance-toggle"
+                            :title="task.important ? 'Marked as Important' : 'Mark as Important'"
+                        >
+                          <i :class="task.important ? 'fas fa-fire text-red-500' : 'fas fa-fire text-gray-400'" />
+                        </button>
+                        <div v-if="task.completed && isToday(selectedDayIndex)" class="status-completed">
+                          <i class="fas fa-check-circle"></i> Completed
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div v-if="task.youtubeURL" class="task-youtube">
+                    <img
+                        :src="`https://img.youtube.com/vi/${extractYouTubeID(task.youtubeURL)}/0.jpg`"
+                        alt="YouTube Thumbnail"
+                        class="youtube-thumbnail"
+                        @click="openTaskDetailModal(task)"
+                    />
+                  </div>
+                  <div
+                      @click="openTaskDetailModal(task)"
+                      v-if="task.imageURL"
+                      class="task-image"
+                  >
+                    <img
+                        :src="task.imageURL"
+                        alt="Task Image"
+                        class="image-preview"
+                    />
+                  </div>
+                  <div class="task-labels">
+                    <span
+                        v-for="(label, index) in task.labels"
+                        :key="index"
+                        @click="toggleLabelHighlight(label)"
+                        :class="['task-label', activeLabels.includes(label) ? 'label-active' : 'label-inactive']"
+                    >
+                      {{ label }}
+                    </span>
+                  </div>
+                  <div class="task-footer">
+                    <div class="user-info"></div>
+                    <div class="task-actions">
+                      <button
+                          v-if="isToday(selectedDayIndex)"
+                          @click="() => toggleTaskCompletion(getOriginalIndex(task))"
+                          class="completion-toggle"
+                      >
+                        <i
+                            :class="task.completed ? 'fas fa-dot-circle text-green-500' : 'far fa-circle text-gray-400'"
+                            class="completion-icon"
+                        ></i>
+                      </button>
+                      <div v-if="iconVisibility[index]" class="action-buttons">
+                        <button
+                            @click="openModal('calendar', index, task.title)"
+                            class="action-icon"
+                        >
+                          📅
+                        </button>
+                        <button
+                            @click="deleteTask(index)"
+                            class="action-icon delete-icon"
+                        >
+                          🗑️
+                        </button>
+                        <button
+                            @click="openTransferModal(index)"
+                            class="action-icon transfer-icon"
+                        >
+                          🔄
+                        </button>
+                        <button
+                            @click="openWontDoModal(index)"
+                            class="action-icon wont-do-icon"
+                        >
+                          🚫
+                        </button>
+                        <button @click="triggerImageUpload(index)" class="action-icon">📎</button>
+                        <input
+                            type="file"
+                            :ref="'fileInput_' + index"
+                            accept="image/*,.pdf,.doc,.docx,.txt"
+                            @change="handleUpload($event, index)"
+                            class="hidden"
+                        />
+                        <button
+                            @click="showTimerModal = true"
+                            class="action-icon timer-icon"
+                            title="Start Timer"
+                        >
+                          ⏱️
+                        </button>
+                        <button
+                            @click="openYouTubeModal(index)"
+                            class="action-icon youtube-icon"
+                            title="Add YouTube Video"
+                        >
+                          <i class="fab fa-youtube"></i>
+                        </button>
+                      </div>
+                      <button
+                          @click="toggleIcons(index)"
+                          class="more-options"
+                          title="More Options"
+                      >
+                        <svg class="more-icon" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 16 3">
+                          <path d="M2 0a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Zm6.041 0a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3ZM14 0a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Z"/>
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                  <div class="task-index">{{ index + 1 }}</div>
+                  <div
+                      v-if="showNotification"
+                      class="notification-popup"
+                  >
+                    Create successfully
+                  </div>
+                  <div v-if="transferNotification" class="transfer-notification">
+                    {{ transferNotification }}
+                  </div>
+                </div>
+              </template>
+            </draggable>
+          </div>
+          <div
+              v-if="selectedDayRoutine?.length > 0 && selectedDayRoutine?.every(task => task.completed) && !showCompleted"
+              class="idle-section"
+          >
+            <img
+                src="@/assets/free.svg"
+                alt="Idle Time Illustration"
+                class="idle-image"
+            />
+            <h2 class="idle-title">It's Idle Time 🧘</h2>
+            <p class="idle-text">
+              You’ve completed all your tasks for today. Take a break and enjoy your free time!
+            </p>
+          </div>
+          <div v-if="wontDoTasks.length != 0 && !selectedDayRoutine?.every(task => task.completed)" class="wont-do-section">
+            <h3 class="wont-do-title">Won't Do Tasks</h3>
+            <ul>
+              <li v-for="(task, index) in wontDoTasks" :key="index" class="wont-do-item">
+                <button @click="undoWontDo(index)" class="undo-button">
+                  <i class="fas fa-undo"></i>
+                </button>
+                <span class="wont-do-text">{{ task.title }} - {{ task.wontDoReason }}</span>
+              </li>
+            </ul>
           </div>
         </div>
       </div>
-
     </div>
-
   </div>
 </template>
 
@@ -3237,156 +2994,1273 @@ const generateWeeklyRoutine = async () => {
 
 </script>
 
-
 <style scoped>
-.notification-popup {
-  transition: opacity 0.5s ease-in-out;
+
+
+
+.scroll-container {
+position: relative;
+max-width: 100%;
+margin: 0 auto;
+padding: 0;
+overflow-x: hidden;
 }
 
-.tasks-list {
-  cursor: move;
+.loading-overlay {
+position: fixed;
+top: 0;
+left: 0;
+right: 0;
+bottom: 0;
+background: rgba(0, 0, 0, 0.7);
+display: flex;
+justify-content: center;
+align-items: center;
+z-index: 50;
 }
 
-
-
-.draggable {
-  cursor: grab;
+.loading-content {
+text-align: center;
+color: white;
 }
 
-.task-card {
-  padding: 1rem;
-  margin: 0; /* remove vertical gaps */
-  border-bottom: 1px solid #ccc;
-  border-left: 3px solid red;
-  border-right: 3px solid blue;
+.loading-title {
+font-size: 2rem;
+font-weight: bold;
+margin-bottom: 1rem;
 }
 
-.drag {
-  transform: rotate(5deg);
-}
-.ghost {
-  visibility: hidden;
-}
-.streak-display {
-  background-color: #fef3c7;
+.loading-text {
+font-size: 1.2rem;
+margin-bottom: 1.5rem;
 }
 
-
-.badge-display span {
-  font-size: 2rem;
-}
-
-.badge-icon {
-  display: inline-block;
-  font-size: 2rem;
-  animation: pulse 1.5s infinite;
-}
-
-@keyframes pulse {
-  0% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.2);
-  }
-  100% {
-    transform: scale(1);
-  }
+.loading-spinner {
+width: 40px;
+height: 40px;
+border: 4px solid #fff;
+border-top-color: #3b82f6;
+border-radius: 50%;
+animation: spin 1s linear infinite;
 }
 
 @keyframes spin {
-  0% {
-    transform: rotate(0deg);
-  }
-  100% {
-    transform: rotate(360deg);
-  }
+to {
+transform: rotate(360deg);
+}
 }
 
-.animate-spin-slow {
-  animation: spin 3s linear infinite;
+.streak-display {
+display: flex;
+justify-content: space-between;
+align-items: center;
+padding: 1rem;
+margin: 1rem;
+border-radius: 0.5rem;
+box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.streak-low {
+background-color: #fef2f2;
+}
+
+.streak-medium {
+background-color: #fefcbf;
+}
+
+.streak-high {
+background-color: #d1fae5;
+}
+
+.streak-info {
+display: flex;
+align-items: center;
+gap: 1rem;
+}
+
+.streak-icon-container {
+display: flex;
+align-items: center;
 }
 
 .streak-icon {
-  animation: pulse 1.5s infinite;
-  transition: transform 0.3s ease-in-out;
+font-size: 2rem;
 }
 
-.streak-icon:hover {
-  transform: scale(1.1);
+.streak-details {
+display: flex;
+align-items: center;
+gap: 1rem;
 }
 
-@keyframes pulse {
-  0%, 100% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.1);
-  }
+.streak-count, .credits-info {
+display: flex;
+align-items: center;
+gap: 0.5rem;
 }
 
-@keyframes pulseWave {
-  0%, 100% {
-    height: 0.5rem;
-  }
-  50% {
-    height: 2rem;
-  }
+.streak-emoji, .credits-emoji {
+font-size: 1.25rem;
 }
 
-.animate-pulse {
-  animation: pulseWave 1s ease-in-out infinite;
+.streak-label, .credits-label {
+font-size: 0.875rem;
+color: #6b7280;
 }
 
-.delay-100 {
-  animation-delay: 0.1s;
+.streak-value, .credits-value {
+font-size: 1rem;
+font-weight: 600;
 }
 
-.delay-200 {
-  animation-delay: 0.2s;
+.divider {
+height: 1.5rem;
+width: 1px;
+background-color: #d1d5db;
 }
 
-.delay-300 {
-  animation-delay: 0.3s;
+.payment-modal-overlay {
+position: fixed;
+top: 0;
+left: 0;
+right: 0;
+bottom: 0;
+background: rgba(0, 0, 0, 0.5);
+display: flex;
+justify-content: center;
+align-items: center;
+z-index: 50;
 }
 
-@keyframes conveyorScrollDown {
-  0% {
-    transform: translateY(-50%);
-  }
-  100% {
-    transform: translateY(0%);
-  }
+.payment-modal {
+background: white;
+padding: 1.5rem;
+border-radius: 0.5rem;
+width: 90%;
+max-width: 400px;
+text-align: center;
 }
 
-
-
-@keyframes pulseSlow {
-  0%, 100% {
-    transform: scale(1);
-    opacity: 1;
-  }
-  50% {
-    transform: scale(1.05);
-    opacity: 0.85;
-  }
+.payment-title {
+font-size: 1.5rem;
+font-weight: bold;
+margin-bottom: 1rem;
 }
 
+.payment-text {
+font-size: 1rem;
+color: #4b5563;
+margin-bottom: 1rem;
+}
 
-@keyframes spinSlow {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+.payment-features {
+text-align: left;
+margin-bottom: 1.5rem;
+color: #4b5563;
+}
+
+.payment-features li {
+margin-bottom: 0.5rem;
+}
+
+.payment-button {
+background-color: #3b82f6;
+color: white;
+padding: 0.75rem 1.5rem;
+border-radius: 0.375rem;
+font-weight: 500;
+margin-bottom: 1rem;
+width: 100%;
+cursor: pointer;
+}
+
+.payment-button:hover {
+background-color: #2563eb;
+}
+
+.payment-cancel {
+color: #6b7280;
+background: none;
+border: none;
+cursor: pointer;
+}
+
+.payment-cancel:hover {
+color: #4b5563;
+}
+
+.generate-button {
+background-color: #10b981;
+color: white;
+padding: 0.75rem 1.5rem;
+border-radius: 0.375rem;
+font-weight: 500;
+margin: 1rem;
+width: calc(100% - 2rem);
+cursor: pointer;
+}
+
+.generate-button:hover {
+background-color: #059669;
+}
+
+.prompt-container {
+padding: 1rem;
+}
+
+.prompt-input-wrapper {
+display: flex;
+align-items: center;
+background: #f3f4f6;
+border-radius: 0.375rem;
+padding: 0.5rem;
+}
+
+.prompt-textarea {
+flex: 1;
+background: transparent;
+border: none;
+outline: none;
+resize: none;
+font-size: 1rem;
+color: #1f2937;
+min-height: 2.5rem;
+}
+
+.prompt-actions {
+display: flex;
+gap: 0.5rem;
+}
+
+.action-button {
+background: none;
+border: none;
+cursor: pointer;
+padding: 0.5rem;
+}
+
+.action-icon {
+width: 1.5rem;
+height: 1.5rem;
+}
+
+.send-button:hover .action-icon {
+stroke: #3b82f6;
+}
+
+.upload-button:hover .action-icon {
+stroke: #10b981;
+}
+
+.completion-overlay {
+position: fixed;
+top: 0;
+left: 0;
+right: 0;
+bottom: 0;
+background: rgba(0, 0, 0, 0.7);
+display: flex;
+justify-content: center;
+align-items: center;
+z-index: 50;
+}
+
+.completion-content {
+background: white;
+padding: 2rem;
+border-radius: 0.5rem;
+text-align: center;
+}
+
+.completion-title {
+font-size: 1.5rem;
+font-weight: bold;
+margin-bottom: 1rem;
+}
+
+.streak-highlight {
+color: #ef4444;
+}
+
+.completion-text {
+font-size: 1rem;
+color: #4b5563;
+margin-bottom: 1.5rem;
+}
+
+.completion-button {
+background-color: #3b82f6;
+color: white;
+padding: 0.75rem 1.5rem;
+border-radius: 0.375rem;
+font-weight: 500;
+cursor: pointer;
+}
+
+.completion-button:hover {
+background-color: #2563eb;
+}
+
+.calendar-task-card {
+margin: 1rem;
+}
+
+.calendar-section {
+background: white;
+border-radius: 0.5rem;
+padding: 1rem;
+box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.current-date {
+display: flex;
+justify-content: space-between;
+align-items: center;
+margin-bottom: 1rem;
+}
+
+.date-wrapper {
+display: flex;
+flex-direction: column;
+}
+
+.date-text {
+font-size: 1.25rem;
+font-weight: 600;
+}
+
+.days-left {
+font-size: 0.875rem;
+color: #6b7280;
 }
 
 .animate-spin-slow {
-  display: inline-block;
-  animation: spinSlow 2s linear infinite;
+display: inline-block;
+animation: spin 3s linear infinite;
 }
 
+.calendar-grid {
+display: grid;
+grid-template-columns: repeat(7, 1fr);
+gap: 0.5rem;
+}
+
+.day-container {
+text-align: center;
+padding: 0.5rem;
+cursor: pointer;
+border-radius: 0.375rem;
+}
+
+.day-default {
+background: #f3f4f6;
+}
+
+.day-selected {
+background: #3b82f6;
+color: white;
+}
+
+.day-today {
+border: 2px solid #ef4444;
+}
+
+.day-name {
+font-size: 0.875rem;
+font-weight: 500;
+}
+
+.day-date {
+font-size: 0.75rem;
+}
+
+.milestone-journey {
+position: relative;
+margin-top: 1rem;
+}
+
+.progress-bar {
+height: 0.5rem;
+background: #e5e7eb;
+border-radius: 0.25rem;
+overflow: hidden;
+}
+
+.progress-fill {
+height: 100%;
+background: #10b981;
+transition: width 0.3s ease;
+}
+
+.milestone {
+position: absolute;
+top: -1.5rem;
+text-align: center;
+}
+
+.milestone-icon {
+font-size: 1.5rem;
+}
+
+.milestone-active .milestone-icon-inner {
+color: #10b981;
+}
+
+.milestone-inactive .milestone-icon-inner {
+color: #9ca3af;
+}
+
+.animate-bounce {
+animation: bounce 1s infinite;
+}
+
+@keyframes bounce {
+0%, 100% {
+transform: translateY(0);
+}
+50% {
+transform: translateY(-5px);
+}
+}
+
+.progress-text {
+text-align: center;
+font-size: 0.875rem;
+color: #4b5563;
+margin-top: 0.5rem;
+}
+
+.floating-buttons {
+position: fixed;
+bottom: 1rem;
+right: 1rem;
+display: flex;
+flex-direction: column;
+gap: 0.5rem;
+z-index: 40;
+}
+
+.add-task-button, .voice-button {
+position: relative;
+width: 3rem;
+height: 3rem;
+background: #3b82f6;
+color: white;
+border-radius: 50%;
+display: flex;
+justify-content: center;
+align-items: center;
+box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+cursor: pointer;
+}
+
+.add-task-button:hover, .voice-button:hover {
+background: #2563eb;
+}
+
+.button-overlay {
+position: absolute;
+top: 0;
+left: 0;
+width: 100%;
+height: 100%;
+border-radius: 50%;
+background: rgba(0, 0, 0, 0.1);
+opacity: 0;
+transition: opacity 0.3s;
+}
+
+.add-task-button:hover .button-overlay {
+opacity: 1;
+}
+
+.button-icon {
+width: 1.5rem;
+height: 1.5rem;
+}
+
+.voice-pulse {
+position: absolute;
+width: 100%;
+height: 100%;
+background: rgba(59, 130, 246, 0.3);
+border-radius: 50%;
+animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+0% {
+transform: scale(1);
+opacity: 1;
+}
+100% {
+transform: scale(1.5);
+opacity: 0;
+}
+}
+
+.hidden {
+display: none;
+}
+
+.modal-overlay {
+position: fixed;
+top: 0;
+left: 0;
+right: 0;
+bottom: 0;
+background: rgba(0, 0, 0, 0.5);
+display: flex;
+justify-content: center;
+align-items: center;
+z-index: 50;
+}
+
+.timer-modal, .wont-do-modal, .transfer-modal, .modal-content, .youtube-modal, .task-detail-modal, .reminder-modal {
+background: white;
+padding: 1.5rem;
+border-radius: 0.5rem;
+width: 90%;
+max-width: 400px;
+}
+
+.modal-title {
+font-size: 1.25rem;
+font-weight: 600;
+margin-bottom: 1rem;
+}
+
+.modal-label {
+font-size: 0.875rem;
+color: #4b5563;
+margin-bottom: 0.5rem;
+display: block;
+}
+
+.modal-select, .modal-input {
+width: 100%;
+padding: 0.5rem;
+border: 1px solid #d1d5db;
+border-radius: 0.375rem;
+margin-bottom: 1rem;
+}
+
+.modal-buttons {
+display: flex;
+justify-content: flex-end;
+gap: 0.5rem;
+}
+
+.modal-cancel, .modal-action {
+padding: 0.5rem 1rem;
+border-radius: 0.375rem;
+cursor: pointer;
+}
+
+.modal-cancel {
+background: #e5e7eb;
+color: #1f2937;
+}
+
+.modal-cancel:hover {
+background: #d1d5db;
+}
+
+.modal-action {
+background: #3b82f6;
+color: white;
+}
+
+.modal-action:hover {
+background: #2563eb;
+}
+
+.modal-textarea {
+width: 100%;
+padding: 0.5rem;
+border: 1px solid #d1d5db;
+border-radius: 0.375rem;
+resize: vertical;
+min-height: 100px;
+}
+
+.modal-close {
+background: none;
+border: none;
+font-size: 1rem;
+cursor: pointer;
+color: #6b7280;
+}
+
+.modal-close:hover {
+color: #4b5563;
+}
+
+.modal-header {
+display: flex;
+justify-content: space-between;
+align-items: center;
+margin-bottom: 1rem;
+}
+
+.modal-form {
+display: flex;
+flex-direction: column;
+}
+
+.modal-body {
+margin-bottom: 1rem;
+}
+
+.form-group {
+margin-bottom: 1rem;
+}
+
+.form-label {
+font-size: 0.875rem;
+color: #4b5563;
+margin-bottom: 0.5rem;
+display: block;
+}
+
+.form-input, .form-select, .form-textarea {
+width: 100%;
+padding: 0.5rem;
+border: 1px solid #d1d5db;
+border-radius: 0.375rem;
+}
+
+.form-textarea {
+resize: vertical;
+min-height: 100px;
+}
+
+.recurring-toggle {
+display: flex;
+align-items: center;
+gap: 0.5rem;
+margin-bottom: 1rem;
+}
+
+.recurring-label {
+font-size: 0.875rem;
+color: #4b5563;
+}
+
+.toggle-button {
+padding: 0.5rem;
+border-radius: 0.375rem;
+cursor: pointer;
+}
+
+.toggle-active {
+background: #10b981;
+color: white;
+}
+
+.toggle-inactive {
+background: #e5e7eb;
+color: #4b5563;
+}
+
+.advanced-toggle {
+cursor: pointer;
+display: flex;
+justify-content: space-between;
+align-items: center;
+padding: 0.5rem;
+background: #f3f4f6;
+border-radius: 0.375rem;
+margin-bottom: 1rem;
+}
+
+.advanced-section {
+margin-bottom: 1rem;
+}
+
+.days-checkboxes {
+display: flex;
+flex-wrap: wrap;
+gap: 0.5rem;
+}
+
+.day-checkbox {
+display: flex;
+align-items: center;
+gap: 0.25rem;
+}
+
+.checkbox-input {
+width: 1rem;
+height: 1rem;
+}
+
+.error-message {
+color: #ef4444;
+font-size: 0.875rem;
+margin-top: 0.5rem;
+}
+
+.fade-enter-active, .fade-leave-active {
+transition: opacity 0.3s;
+}
+
+.fade-enter-from, .fade-leave-to {
+opacity: 0;
+}
+
+.modal-footer {
+display: flex;
+justify-content: flex-end;
+}
+
+.submit-button {
+background: #3b82f6;
+color: white;
+padding: 0.5rem 1rem;
+border-radius: 0.375rem;
+cursor: pointer;
+}
+
+.submit-button:hover {
+background: #2563eb;
+}
+
+.youtube-embed {
+margin-bottom: 1rem;
+}
+
+.youtube-frame {
+width: 100%;
+border-radius: 0.375rem;
+}
+
+.task-image-container {
+position: relative;
+margin-bottom: 1rem;
+}
+
+.task-image {
+width: 100%;
+border-radius: 0.375rem;
+cursor: pointer;
+}
+
+.remove-attachment {
+position: absolute;
+top: 0.5rem;
+right: 0.5rem;
+background: rgba(0, 0, 0, 0.7);
+color: white;
+border-radius: 50%;
+width: 1.5rem;
+height: 1.5rem;
+display: flex;
+justify-content: center;
+align-items: center;
+cursor: pointer;
+}
+
+.task-file-container {
+display: flex;
+align-items: center;
+gap: 0.5rem;
+margin-bottom: 1rem;
+}
+
+.file-link {
+display: flex;
+align-items: center;
+gap: 0.5rem;
+}
+
+.file-anchor {
+color: #3b82f6;
+text-decoration: underline;
+}
+
+.task-detail-item {
+display: flex;
+align-items: center;
+gap: 0.5rem;
+margin-bottom: 0.5rem;
+}
+
+.detail-icon {
+width: 1.25rem;
+height: 1.25rem;
+}
+
+.detail-label {
+font-weight: 600;
+color: #4b5563;
+}
+
+.detail-text {
+color: #4b5563;
+}
+
+.labels-container {
+display: flex;
+flex-wrap: wrap;
+gap: 0.5rem;
+}
+
+.label {
+padding: 0.25rem 0.5rem;
+border-radius: 0.375rem;
+font-size: 0.75rem;
+}
+
+.label-active {
+background: #3b82f6;
+color: white;
+}
+
+.label-inactive {
+background: #e5e7eb;
+color: #4b5563;
+}
+
+.image-preview {
+position: fixed;
+top: 0;
+left: 0;
+right: 0;
+bottom: 0;
+background: rgba(0, 0, 0, 0.8);
+display: flex;
+justify-content: center;
+align-items: center;
+z-index: 60;
+}
+
+.preview-image {
+max-width: 90%;
+max-height: 90%;
+border-radius: 0.5rem;
+}
+
+.voice-modal {
+background: white;
+padding: 1.5rem;
+border-radius: 0.5rem;
+text-align: center;
+width: 90%;
+max-width: 400px;
+}
+
+.voice-cancel {
+position: absolute;
+top: 0.5rem;
+right: 0.5rem;
+background: none;
+border: none;
+font-size: 1rem;
+cursor: pointer;
+color: #6b7280;
+}
+
+.voice-cancel:hover {
+color: #4b5563;
+}
+
+.voice-waveform {
+display: flex;
+justify-content: center;
+gap: 0.25rem;
+margin-bottom: 1rem;
+}
+
+.wave-bar {
+width: 0.5rem;
+height: 2rem;
+background: #3b82f6;
+animation: wave 0.5s infinite alternate;
+}
+
+.wave-bar.delay-100 {
+animation-delay: 0.1s;
+}
+
+.wave-bar.delay-200 {
+animation-delay: 0.2s;
+}
+
+.wave-bar.delay-300 {
+animation-delay: 0.3s;
+}
+
+@keyframes wave {
+0% {
+transform: scaleY(0.5);
+}
+100% {
+transform: scaleY(1);
+}
+}
+
+.voice-transcript {
+font-size: 1rem;
+color: #4b5563;
+margin-bottom: 0.5rem;
+}
+
+.transcript-text {
+font-weight: 600;
+}
+
+.voice-hint {
+font-size: 0.875rem;
+color: #6b7280;
+}
+
+.daily-routine {
+padding: 1rem;
+}
+
+.no-tasks {
+text-align: center;
+padding: 2rem;
+}
+
+.no-tasks-image {
+width: 150px;
+margin: 0 auto;
+}
+
+.no-tasks-title {
+font-size: 1.5rem;
+font-weight: 600;
+margin: 1rem 0;
+}
+
+.no-tasks-text {
+font-size: 1rem;
+color: #6b7280;
+}
+
+.tasks-header {
+display: flex;
+justify-content: space-between;
+align-items: center;
+margin-bottom: 1rem;
+}
+
+.tasks-title {
+font-size: 1.25rem;
+font-weight: 600;
+}
+
+.completed-label {
+color: #4b5563;
+}
+
+.completion-count {
+color: #10b981;
+}
+
+.tasks-actions {
+display: flex;
+gap: 0.5rem;
+}
+
+.clear-button, .tasks-actions button {
+background: none;
+border: none;
+cursor: pointer;
+font-size: 1rem;
+}
+
+.clear-button:hover, .tasks-actions button:hover {
+color: #3b82f6;
+}
+
+.toggle-icon {
+font-size: 1rem;
+}
+
+.tasks-container {
+margin-bottom: 1rem;
+}
+
+.tasks-list {
+display: flex;
+flex-direction: column;
+gap: 0.5rem;
+}
+
+.task-card {
+background: white;
+border: 1px solid #e5e7eb;
+border-radius: 0.5rem;
+padding: 1rem;
+box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.task-completed {
+background: #d1fae5;
+}
+
+.task-important {
+border-left: 4px solid #ef4444;
+}
+
+.draggable {
+cursor: move;
+}
+
+.task-content {
+display: flex;
+align-items: center;
+gap: 0.5rem;
+}
+
+.drag-icon {
+display: flex;
+align-items: center;
+}
+
+.drag-icon-inner {
+cursor: move;
+}
+
+.drag-handle {
+font-size: 1rem;
+color: #6b7280;
+}
+
+.task-details {
+flex: 1;
+}
+
+.task-title-text {
+font-size: 1rem;
+font-weight: 500;
+cursor: pointer;
+}
+
+.task-completed-text {
+text-decoration: line-through;
+color: #6b7280;
+}
+
+.title-text {
+margin-right: 0.5rem;
+}
+
+.file-indicator {
+font-size: 0.875rem;
+color: #4b5563;
+}
+
+.task-reminder {
+font-size: 0.75rem;
+color: #6b7280;
+margin-top: 0.25rem;
+}
+
+.task-status {
+display: flex;
+align-items: center;
+gap: 0.5rem;
+margin-top: 0.25rem;
+}
+
+.status-incomplete, .status-completed {
+font-size: 0.75rem;
+color: #6b7280;
+}
+
+.status-completed {
+color: #10b981;
+}
+
+.importance-toggle, .completion-toggle {
+background: none;
+border: none;
+cursor: pointer;
+}
+
+.importance-toggle .fas, .completion-toggle .fas, .completion-toggle .far {
+font-size: 1rem;
+}
+
+.task-youtube {
+margin-top: 0.5rem;
+}
+
+.youtube-thumbnail {
+width: 100%;
+border-radius: 0.375rem;
+cursor: pointer;
+}
+
+.task-image {
+margin-top: 0.5rem;
+}
+
+.image-preview {
+width: 100%;
+border-radius: 0.375rem;
+}
+
+.task-labels {
+display: flex;
+flex-wrap: wrap;
+gap: 0.5rem;
+margin-top: 0.5rem;
+}
+
+.task-label {
+padding: 0.25rem 0.5rem;
+border-radius: 0.375rem;
+font-size: 0.75rem;
+}
+
+.task-footer {
+display: flex;
+justify-content: space-between;
+align-items: center;
+margin-top: 0.5rem;
+}
+
+.task-actions {
+display: flex;
+gap: 0.5rem;
+}
+
+.action-icon {
+background: none;
+border: none;
+font-size: 1rem;
+cursor: pointer;
+color: #6b7280;
+}
+
+.action-icon:hover {
+color: #3b82f6;
+}
+
+.delete-icon:hover {
+color: #ef4444;
+}
+
+.transfer-icon:hover {
+color: #10b981;
+}
+
+.wont-do-icon:hover {
+color: #f59e0b;
+}
+
+.timer-icon:hover {
+color: #8b5cf6;
+}
+
+.youtube-icon:hover {
+color: #ff0000;
+}
+
+.more-options {
+background: none;
+border: none;
+cursor: pointer;
+}
+
+.more-icon {
+width: 1.25rem;
+height: 1.25rem;
+color: #6b7280;
+}
+
+.notification-popup, .transfer-notification {
+position: fixed;
+bottom: 1rem;
+left: 1rem;
+background: #10b981;
+color: white;
+padding: 0.5rem 1rem;
+border-radius: 0.375rem;
+z-index: 50;
+}
+
+.task-index {
+position: absolute;
+top: 0.5rem;
+left: 0.5rem;
+font-size: 0.75rem;
+color: #6b7280;
+}
+
+.ghost {
+opacity: 0.5;
+background: #c8ebfb;
+}
+
+.drag {
+box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+}
+
+.idle-section {
+text-align: center;
+padding: 2rem;
+}
+
+.idle-image {
+width: 150px;
+margin: 0 auto;
+}
+
+.idle-title {
+font-size: 1.5rem;
+font-weight: 600;
+margin: 1rem 0;
+}
+
+.idle-text {
+font-size: 1rem;
+color: #6b7280;
+}
+
+.wont-do-section {
+margin-top: 1rem;
+}
+
+.wont-do-title {
+font-size: 1.25rem;
+font-weight: 600;
+margin-bottom: 0.5rem;
+}
+
+.wont-do-item {
+display: flex;
+align-items: center;
+gap: 0.5rem;
+margin-bottom: 0.5rem;
+}
+
+.undo-button {
+background: none;
+border: none;
+cursor: pointer;
+color: #3b82f6;
+}
+
+.undo-button:hover {
+color: #2563eb;
+}
+
+.wont-do-text {
+font-size: 0.875rem;
+color: #6b7280;
+}
+
+@media (min-width: 640px) {
+.divider {
+display: inline-block;
+}
+}
 </style>
 
 

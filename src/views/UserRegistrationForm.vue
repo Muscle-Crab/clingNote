@@ -133,7 +133,7 @@ const registerUser = async () => {
       dob: dob.value,
       gender: gender.value,
       credits: 15,
-      hasPaid: true,
+      hasPaid: false,
       avatarURL,
     };
 
