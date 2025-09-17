@@ -1,5 +1,5 @@
 <template>
-  <div ref="scrollContainer" class="scroll-container   bg-gray-100 ">
+  <div ref="scrollContainer" class="scroll-container bg-gray-100 h-screen overflow-y-auto ">
     <div v-if="isLoading" class="loading-overlay">
       <div class="loading-content">
         <h1 class="loading-title">👋 Welcome!</h1>
@@ -148,7 +148,7 @@
         </div>
       </div>
 
-      <div class="calendar-task-card">
+      <div class="calendar-task-card sticky top-0 z-30 bg-white/90 backdrop-blur-sm border-b border-gray-200">
         <div class="calendar-section">
           <div class="current-date">
             <div class="date-wrapper">
@@ -4261,6 +4261,19 @@ color: #6b7280;
 display: inline-block;
 }
 }
+.scroll-container {
+  height: 100vh;
+  overflow-y: auto;
+}
+.calendar-task-card {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(6px);
+  border-bottom: 1px solid #e5e7eb; /* gray-200 */
+}
+
 </style>
 
 
