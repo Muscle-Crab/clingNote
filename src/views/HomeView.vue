@@ -2584,8 +2584,20 @@ const closeYouTubeModal = () => {
 
 const saveYouTubeLink = async () => {
   const index = selectedYouTubeTaskIndex.value;
+  const url = youtubeInput.value.trim();
+
+  // Validate URL
+  const isValidYouTubeURL = url.match(
+      /^(https?:\/\/)?(www\.)?(youtube\.com\/(watch\?v=|embed\/|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/
+  );
+
+  if (!isValidYouTubeURL) {
+    alert('Please enter a valid YouTube or YouTube Shorts URL.');
+    return;
+  }
+
   const task = selectedDayRoutine.value[index];
-  task.youtubeURL = youtubeInput.value;
+  task.youtubeURL = url;
 
   const day = days[selectedDayIndex.value].day;
   const docRef = doc(db, 'weeklyRoutines', `${userId.value}_${day}`);
@@ -2601,10 +2613,11 @@ const saveYouTubeLink = async () => {
   closeYouTubeModal();
 };
 const extractYouTubeID = (url) => {
-  const match = url.match(/(?:\?v=|\/embed\/|\.be\/)([a-zA-Z0-9_-]{11})/);
+  // Handle regular YouTube URLs (watch?v=) and Shorts URLs (/shorts/)
+  const regex = /(?:\?v=|\/embed\/|\.be\/|\/shorts\/)([a-zA-Z0-9_-]{11})/;
+  const match = url.match(regex);
   return match ? match[1] : '';
 };
-
 const triggerHandwritingUpload = () => {
   if (!hasPaid.value) {
     showPaymentModal.value = true;
@@ -2912,52 +2925,65 @@ const clearTasksForToday = async () => {
   }
 };
 const generateWeeklyRoutine = async () => {
-  const pushupsURL = 'https://www.youtube.com/watch?v=IODxDxX7oi4';
-  const situpsURL = 'https://www.youtube.com/watch?v=1fbU_MkV7NE';
+  const bicepsCurlURL = 'https://youtube.com/shorts/GW33A9LuhEM?si=iq81gm3B-G03f3g9';
+  const chestPressURL = 'https://youtube.com/shorts/zcbXxYgb-CU?si=u-R8vhkZyoTx4dhE';
+  const tricepsExtensionURL = 'https://youtube.com/shorts/fL26cjEQd_0?si=J8O6lJj9eCLGGIfe';
+  const backRowURL = 'https://youtube.com/shorts/-o85-MnlVbg?si=FTFv6diD5ibZI0pr';
+  const shoulderPressURL = 'https://www.youtube.com/watch?v=NtaPROZOcmM';
   const squatsURL = 'https://www.youtube.com/watch?v=aclHkVaku9U';
-  const plankURL = 'https://www.youtube.com/watch?v=pSHjTRCQxIw';
-  const lungesURL = 'https://www.youtube.com/watch?v=QOVaHwm-Q6U';
-  const mtClimberURL = 'https://www.youtube.com/watch?v=nmwgirgXLYM';
-  const russianTwistURL = 'https://www.youtube.com/watch?v=wkD8rjkodUI';
   const gluteBridgeURL = 'https://www.youtube.com/watch?v=wPM8icPu6H8';
-  const jumpingJackURL = 'https://www.youtube.com/watch?v=c4DAnQ6DtF8';
-  const vUpsURL = 'https://www.youtube.com/watch?v=DfVArP2V6kg';
+  const pushupsURL = 'https://www.youtube.com/watch?v=IODxDxX7oi4';
+  const plankURL = 'https://www.youtube.com/watch?v=pSHjTRCQxIw';
+  const situpsURL = 'https://www.youtube.com/watch?v=1fbU_MkV7NE';
 
+  // Big 3 every day + 2 resistance extras, Sun = rest
   const routineMap = {
     Mon: [
       { title: '30 Pushups', youtubeURL: pushupsURL },
-      { title: '30-sec Plank', youtubeURL: plankURL },
-      { title: '20 Situps', youtubeURL: situpsURL }
+      { title: '30 Situps', youtubeURL: situpsURL },
+      { title: '30 Squats', youtubeURL: squatsURL },
+      { title: '20 Chest Presses', youtubeURL: chestPressURL },
+      { title: '20 Triceps Extensions', youtubeURL: tricepsExtensionURL }
     ],
     Tue: [
+      { title: '30 Pushups', youtubeURL: pushupsURL },
+      { title: '30 Situps', youtubeURL: situpsURL },
       { title: '30 Squats', youtubeURL: squatsURL },
-      { title: '15 Lunges each leg', youtubeURL: lungesURL },
-      { title: '20 Russian Twists', youtubeURL: russianTwistURL }
+      { title: '20 Back Rows', youtubeURL: backRowURL },
+      { title: '20 Biceps Curls', youtubeURL: bicepsCurlURL }
     ],
     Wed: [
-      { title: '15 Pushups', youtubeURL: pushupsURL },
-      { title: '20 Mountain Climbers', youtubeURL: mtClimberURL },
-      { title: '30-sec Side Plank (each side)', youtubeURL: plankURL }
+      { title: '30 Pushups', youtubeURL: pushupsURL },
+      { title: '30 Situps', youtubeURL: situpsURL },
+      { title: '30 Squats', youtubeURL: squatsURL },
+      { title: '20 Shoulder Presses', youtubeURL: shoulderPressURL },
+      { title: '20 Chest Presses', youtubeURL: chestPressURL }
     ],
     Thu: [
-      { title: '40 Squats', youtubeURL: squatsURL },
-      { title: '10 Glute Bridges (each leg)', youtubeURL: gluteBridgeURL },
-      { title: '20 V-Ups', youtubeURL: vUpsURL }
+      { title: '30 Pushups', youtubeURL: pushupsURL },
+      { title: '30 Situps', youtubeURL: situpsURL },
+      { title: '30 Squats', youtubeURL: squatsURL },
+      { title: '20 Triceps Extensions', youtubeURL: tricepsExtensionURL },
+      { title: '20 Shoulder Presses', youtubeURL: shoulderPressURL }
     ],
     Fri: [
-      { title: '10 Pushups', youtubeURL: pushupsURL },
-      { title: '20 Squats', youtubeURL: squatsURL },
-      { title: '30-sec Plank', youtubeURL: plankURL },
-      { title: '15 Jumping Jacks', youtubeURL: jumpingJackURL }
+      { title: '30 Pushups', youtubeURL: pushupsURL },
+      { title: '30 Situps', youtubeURL: situpsURL },
+      { title: '30 Squats', youtubeURL: squatsURL },
+      { title: '20 Back Rows', youtubeURL: backRowURL },
+      { title: '20 Biceps Curls', youtubeURL: bicepsCurlURL }
     ],
     Sat: [
-      { title: '15 Pushups (AMRAP - 10 min)', youtubeURL: pushupsURL },
-      { title: '25 Squats (AMRAP - 10 min)', youtubeURL: squatsURL },
-      { title: '30 Sit-ups (AMRAP - 10 min)', youtubeURL: situpsURL }
-    ]
+      { title: '30 Pushups', youtubeURL: pushupsURL },
+      { title: '30 Situps', youtubeURL: situpsURL },
+      { title: '30 Squats', youtubeURL: squatsURL },
+      { title: '20 Glute Bridges (each leg)', youtubeURL: gluteBridgeURL },
+      { title: '60-sec Plank', youtubeURL: plankURL }
+    ],
+    Sun: [] // Rest day
   };
 
-  const daysToGenerate = days.filter(day => day.day !== 'Sun');
+  const daysToGenerate = days.filter(day => day.day !== 'Sun'); // exclude Sunday
 
   for (const day of daysToGenerate) {
     const taskList = routineMap[day.day];
@@ -2972,6 +2998,7 @@ const generateWeeklyRoutine = async () => {
       completed: false,
       important: false,
       type: 'recurring',
+      focus: 'resistance',
       createdAt: new Date().toISOString()
     }));
 
@@ -2985,8 +3012,12 @@ const generateWeeklyRoutine = async () => {
     }
   }
 
-  alert('✅ 6-Day No Equipment Weekly Challenge Created!');
+  alert('✅ 6-Day Resistance Plan Created (Sun = Rest)!');
 };
+
+
+
+
 
 
 
