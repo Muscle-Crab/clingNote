@@ -653,17 +653,17 @@
                         @click="openTaskDetailModal(task)"
                     />
                   </div>
-                  <div
-                      @click="openTaskDetailModal(task)"
-                      v-if="task.imageURL"
-                      class="task-image"
-                  >
-                    <img
-                        :src="task.imageURL"
-                        alt="Task Image"
-                        class="image-preview"
-                    />
-                  </div>
+<!--                  <div-->
+<!--                      @click="openTaskDetailModal(task)"-->
+<!--                      v-if="task.imageURL"-->
+<!--                      class="task-image"-->
+<!--                  >-->
+<!--                    <img-->
+<!--                        :src="task.imageURL"-->
+<!--                        alt="Task Image"-->
+<!--                        class="image-preview"-->
+<!--                    />-->
+<!--                  </div>-->
                   <div class="task-labels">
                     <span
                         v-for="(label, index) in task.labels"
