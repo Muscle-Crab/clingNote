@@ -1,7 +1,3 @@
-New
-
-
-
 <template>
   <div ref="scrollContainer" class="h-[100vh] overflow-auto bg-gray-200 p-3"  >
     <div v-if="isLoading" class="fixed inset-0 bg-gradient-to-br from-green-500 via-blue-500 to-purple-500 flex items-center justify-center z-50">
