@@ -534,7 +534,7 @@
                   </div>
 
                   <div v-if="task.reminder?.date && task.reminder?.time" class="task-reminder">
-                    📅 {{ formatShortDate(task.reminder.date) }} · ⏰ {{ formatTime(task.reminder.time) }}
+                    📅 {{ formatShortDate(task.reminder.date) }}· ⏰ {{ formatTime(task.reminder.time) }}
                   </div>
 
                   <div class="task-meta-row">
