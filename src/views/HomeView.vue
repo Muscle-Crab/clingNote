@@ -527,7 +527,9 @@
                     >
                       {{ task.title.length > 28 ? task.title.slice(0, 28) + '…' : task.title }}
                     </span>
-
+                    <span v-if="task.timerActive" class="task-timer-left">
+                      ⏳  {{ getTaskTimeLeft(task) }}
+                    </span>
                     <span v-if="task.youtubeURL" class="task-attachment" title="Video">🎥</span>
                     <span v-if="task.imageURL" class="task-attachment" title="Image">🖼️</span>
                     <span v-if="task.fileURL" class="task-attachment" title="File">📄</span>
@@ -576,7 +578,8 @@
                     <button @click="openYouTubeModal(index)" class="action-btn" title="Video">🎥</button>
                     <button @click="triggerImageUpload(index)" class="action-btn" title="Attach file">📎</button>
                     <input type="file" :ref="'fileInput_' + index" accept="image/*,.pdf,.doc,.docx,.txt" @change="handleUpload($event, index)" class="hidden-input" />
-                    <button @click="showTimerModal = true" class="action-btn" title="Timer">⏱️</button>
+<!--                    <button @click="showTimerModal = true" class="action-btn" title="Timer">⏱️</button>-->
+                    <button @click="openTaskTimerModal(index)" class="action-btn" title="Start Task">▶️</button>
                     <button @click="openWontDoModal(index)" class="action-btn action-btn--warn" title="Won't do">🚫</button>
                     <button @click="deleteTask(index)" class="action-btn action-btn--danger" title="Delete">🗑️</button>
                   </div>
@@ -668,6 +671,92 @@ const openTransferModal = (index) => {
 };
 
 
+const selectedTimerTaskIndex = ref(null);
+const nowTick = ref(Date.now());
+
+let timerInterval = null;
+
+const openTaskTimerModal = (index) => {
+  selectedTimerTaskIndex.value = index;
+  selectedTimerDuration.value = 5;
+  showTimerModal.value = true;
+};
+
+
+const saveSelectedDayTasks = async () => {
+  if (!userId.value || selectedDayIndex.value === -1) return;
+
+  const selectedDayDocRef = doc(
+      db,
+      "weeklyRoutines",
+      `${userId.value}_${days[selectedDayIndex.value].day}`
+  );
+
+  await updateDoc(selectedDayDocRef, {
+    tasks: selectedDayRoutine.value,
+    updatedAt: serverTimestamp(),
+  });
+};
+
+const getTaskTimeLeft = (task) => {
+  if (!task.timerEndTime) return "";
+
+  const end = new Date(task.timerEndTime).getTime();
+  const remaining = Math.max(0, end - nowTick.value);
+
+  const totalSeconds = Math.floor(remaining / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+};
+
+const startCountdownWatcher = () => {
+  if (timerInterval) return;
+
+  timerInterval = setInterval(async () => {
+    nowTick.value = Date.now();
+
+    for (let i = selectedDayRoutine?.value?.length - 1; i >= 0; i--) {
+      const task = selectedDayRoutine.value[i];
+
+      if (
+          task.timerActive &&
+          task.timerEndTime &&
+          new Date(task.timerEndTime).getTime() <= Date.now()
+      ) {
+        await autoMarkTaskAsWontDo(i);
+      }
+    }
+  }, 1000);
+};
+onMounted(() => {
+  startCountdownWatcher();
+});
+const autoMarkTaskAsWontDo = async (index) => {
+  const task = {
+    ...selectedDayRoutine.value[index],
+    timerActive: false,
+    wontDoReason: "Time exceeded",
+    autoWontDo: true,
+  };
+
+  selectedDayRoutine.value.splice(index, 1);
+  wontDoTasks.value.push(task);
+
+  await saveSelectedDayTasks();
+
+  const wontDoDocRef = doc(
+      db,
+      "wontDoTasks",
+      `${userId.value}_${days[selectedDayIndex.value].day}`
+  );
+
+  await setDoc(wontDoDocRef, {
+    tasks: wontDoTasks.value,
+    updatedAt: serverTimestamp(),
+  });
+};
 const closeTransferModal = () => {
   transferModalOpen.value = false;
   selectedTransferTaskIndex.value = null;
@@ -1116,7 +1205,7 @@ const editedTask = ref({title: '', time: '', priority: 'low', labels: [], notes:
 const searchQuery = ref('');
 
 const generateRandomColor = () => {
-  return '#' + Math.floor(Math.random() * 16777215).toString(16);
+  return 'grey' ;
 };
 
 const getCurrentDate = () => {
@@ -1198,40 +1287,29 @@ const showTimerModal = ref(false);
 const selectedTimerDuration = ref(5); // default to 5 minutes
 
 const startTimer = async () => {
+  if (selectedTimerTaskIndex.value === null) return;
+
+  const index = selectedTimerTaskIndex.value;
+  const now = Date.now();
+  const durationMs = Number(selectedTimerDuration.value) * 60 * 1000;
+  const endTime = now + durationMs;
+
+  const task = {
+    ...selectedDayRoutine.value[index],
+    timerActive: true,
+    timerStartedAt: new Date(now).toISOString(),
+    timerEndTime: new Date(endTime).toISOString(),
+    timerDurationMinutes: Number(selectedTimerDuration.value),
+  };
+
+  selectedDayRoutine.value[index] = task;
+
+  await saveSelectedDayTasks();
+
   showTimerModal.value = false;
-  const now = new Date();
-  const endTime = new Date(now.getTime() + selectedTimerDuration.value * 60000); // in ms
+  selectedTimerTaskIndex.value = null;
 
-  const formattedEndTime = endTime.toISOString();
-  const formattedText = `${selectedTimerDuration.value} minute timer completed!`;
-
-  const playerId = window.OneSignal.User.PushSubscription.id;
-
-  if (!playerId) {
-    alert("OneSignal not initialized");
-    return;
-  }
-
-  const headers = {
-    'Authorization': 'Bearer ZDZiZDk0NTktMjUwZS00NTQ4LWFhOTItNjBiZDZiMjVhYzYy',
-    'Content-Type': 'application/json'
-  };
-
-  const notificationData = {
-    app_id: "fc206a71-7d65-4cfa-b8b2-0c10548e1476",
-    include_player_ids: [playerId],
-    contents: { en: formattedText },
-    headings: { en: "⏰ Timer Finished" },
-    send_after: formattedEndTime
-  };
-
-  try {
-    await axios.post('https://onesignal.com/api/v1/notifications', notificationData, { headers });
-    alert(`Timer set for ${selectedTimerDuration.value} minutes! Notification will appear when done.`);
-  } catch (error) {
-    console.error('Failed to schedule timer:', error);
-    alert("Timer scheduling failed.");
-  }
+  startCountdownWatcher();
 };
 const isToday = (index) => {
   return index === new Date().getDay();
@@ -3472,6 +3550,13 @@ const applyGeneratedRoutine = async (generatedWeek) => {
   animation: ping 1s cubic-bezier(0, 0, 0.2, 1) infinite;
 }
 @keyframes ping { 75%, 100% { transform: scale(1.5); opacity: 0; } }
+.task-timer-left {
+  margin-top: 6px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #f59e0b;
+}
+
 </style>
 
 
