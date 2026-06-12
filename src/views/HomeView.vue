@@ -1,4 +1,3 @@
-
 <template>
   <div ref="scrollContainer" class="app-root">
 
@@ -129,7 +128,32 @@
           </div>
         </div>
       </header>
+      <div class="grid grid-cols-5 gap-1 mb-3">
+        <div class="bg-slate-900/80 rounded-xl py-2 text-center">
+          <p class="text-[10px] text-slate-400">Total</p>
+          <p class="text-sm font-bold text-white">{{ timeStats.totalDayTime }}</p>
+        </div>
 
+        <div class="bg-slate-900/80 rounded-xl py-2 text-center">
+          <p class="text-[10px] text-emerald-400">Prod</p>
+          <p class="text-sm font-bold text-white">{{ timeStats.productiveTime }}</p>
+        </div>
+
+        <div class="bg-slate-900/80 rounded-xl py-2 text-center">
+          <p class="text-[10px] text-yellow-400">Gap</p>
+          <p class="text-sm font-bold text-white">{{ timeStats.gapTime }}</p>
+        </div>
+
+        <div class="bg-slate-900/80 rounded-xl py-2 text-center">
+          <p class="text-[10px] text-blue-400">Done</p>
+          <p class="text-sm font-bold text-white">{{ timeStats.completedTasks }}</p>
+        </div>
+
+        <div class="bg-slate-900/80 rounded-xl py-2 text-center">
+          <p class="text-[10px] text-red-400">Miss</p>
+          <p class="text-sm font-bold text-white">{{ timeStats.missedTasks }}</p>
+        </div>
+      </div>
       <!-- ─── Workout Modal ─── -->
       <div v-if="showWorkoutModal" class="modal-backdrop">
         <div class="modal-box">
@@ -265,6 +289,7 @@
                 <label class="field-label">Task name</label>
                 <input type="text" v-model="newTask.title" class="field-input" placeholder="What needs doing?" required />
               </div>
+
               <div class="field-group">
                 <label class="field-label">Reminder</label>
                 <input type="datetime-local" v-model="newTask.reminder.datetime" class="field-input" />
@@ -1207,7 +1232,53 @@ const searchQuery = ref('');
 const generateRandomColor = () => {
   return 'grey' ;
 };
+const timeStats = computed(() => {
+  const start = daySession.value.startTime
+      ? new Date(daySession.value.startTime.seconds ? daySession.value.startTime.seconds * 1000 : daySession.value.startTime)
+      : null;
 
+  const end = daySession.value.ended
+      ? new Date(daySession.value.endTime?.seconds ? daySession.value.endTime.seconds * 1000 : daySession.value.endTime)
+      : new Date();
+
+  if (!start) {
+    return {
+      totalDayTime: "0m",
+      productiveTime: "0m",
+      gapTime: "0m",
+      completedTasks: 0,
+      missedTasks: wontDoTasks.value.length
+    };
+  }
+
+  const totalMs = end - start;
+
+  const productiveMs = selectedDayRoutine.value.reduce((sum, task) => {
+    if (task.completed && task.timerStartedAt && task.timerEndTime) {
+      return sum + (new Date(task.timerEndTime) - new Date(task.timerStartedAt));
+    }
+    return sum;
+  }, 0);
+
+  const gapMs = Math.max(0, totalMs - productiveMs);
+
+  return {
+    totalDayTime: formatDuration(totalMs),
+    productiveTime: formatDuration(productiveMs),
+    gapTime: formatDuration(gapMs),
+    completedTasks: selectedDayRoutine.value.filter(t => t.completed).length,
+    missedTasks: wontDoTasks.value.length
+  };
+});
+
+const formatDuration = (ms) => {
+  const minutes = Math.floor(ms / 60000);
+  const hrs = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+
+  if (hrs > 0) return `${hrs}h ${mins}m`;
+  return `${mins}m`;
+};
 const getCurrentDate = () => {
   const today = new Date();
   const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
@@ -3556,7 +3627,33 @@ const applyGeneratedRoutine = async (generatedWeek) => {
   font-weight: 700;
   color: #f59e0b;
 }
+.time-summary-card {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+  padding: 16px;
+  margin: 16px 0;
+  border-radius: 20px;
+  background: #111827;
+  color: white;
+}
 
+.time-summary-card div {
+  background: rgba(255,255,255,0.08);
+  padding: 12px;
+  border-radius: 14px;
+  text-align: center;
+}
+
+.time-summary-card span {
+  display: block;
+  font-size: 12px;
+  color: #9ca3af;
+}
+
+.time-summary-card strong {
+  font-size: 18px;
+}
 </style>
 
 
