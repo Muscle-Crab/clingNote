@@ -91,18 +91,11 @@
         </div>
 
         <div class="header-right">
+
           <div class="day-controls">
 
             <button
-                v-if="!daySession.started || daySession.ended"
-                @click="startDay"
-                class="btn-day btn-start"
-            >
-              🌅 Start Day
-            </button>
-
-            <button
-                v-else
+                v-if="daySession.started && !daySession.ended"
                 @click="endDay"
                 class="btn-day btn-end"
             >
@@ -112,6 +105,7 @@
           </div>
 
           <div class="session-times">
+
     <span
         v-if="daySession.startedAtText"
         class="session-time started"
@@ -125,7 +119,9 @@
             >
       ■ {{ daySession.endedAtText }}
     </span>
+
           </div>
+
         </div>
       </header>
       <div class="grid grid-cols-5 gap-1 mb-3">
@@ -529,7 +525,8 @@
       </div>
 
       <!-- ─── Task List ─── -->
-      <section class="task-section">
+      <section v-if="daySession.started && !daySession.ended"
+               class="task-section">
         <div v-if="selectedDayRoutine?.length === 0" class="empty-state">
           <div class="empty-icon">✦</div>
           <h2 class="empty-title">Nothing here yet</h2>
@@ -575,7 +572,7 @@
                 </div>
 
                 <!-- Center: main content -->
-                <div class="task-body">
+                <div class="task-body" >
                   <div class="task-title-row">
                     <!-- Completion toggle -->
                     <button
@@ -680,7 +677,30 @@
           </div>
         </div>
       </section>
+      <section
+          v-else
+          class="task-section day-not-started"
+      >
+        <div class="empty-state">
+          <div class="empty-icon">🌅</div>
 
+          <h2 class="empty-title">
+            Start Your Day
+          </h2>
+
+          <p class="empty-sub">
+            Your tasks will appear after you press
+            <strong>Start Day</strong>.
+          </p>
+
+          <button
+              @click="startDay"
+              class="btn-primary"
+          >
+            🌅 Start Day
+          </button>
+        </div>
+      </section>
       <!-- ─── FAB Buttons ─── -->
       <div class="fab-group">
         <router-link
