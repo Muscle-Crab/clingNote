@@ -1310,8 +1310,8 @@ const timeStats = computed(() => {
   const totalMs = end - start;
 
   const productiveMs = selectedDayRoutine.value.reduce((sum, task) => {
-    if (task.completed && task.timerStartedAt && task.timerEndTime) {
-      return sum + (new Date(task.timerEndTime) - new Date(task.timerStartedAt));
+    if (task.completed && task.timerStartedAt && task.completedAt) {
+      return sum + (new Date(task.completedAt) - new Date(task.timerStartedAt));
     }
     return sum;
   }, 0);
@@ -1546,17 +1546,20 @@ const toggleTaskCompletion = async (index) => {
   task.completed = !task.completed; // Toggle the completed state
   startSpinning(index);
   if (task.completed) {
-    userCredits.value += 10; // Award 10 credits for completing a task
+    task.completedAt = new Date().toISOString();
+    task.timerActive = false;
+
+    userCredits.value += 10;
     console.log(`Credits earned: 10. Total credits: ${userCredits.value}`);
-    // speak(`Great job! You completed the task: ${task.title}.`);
-    announceNextTask(index); // Pass the index of the completed task
+    announceNextTask(index);
+
     const userName = await fetchUserName(userId.value);
     if (userName) {
       await sendNotificationToPlayer(userName, "completed");
     }
   } else {
-    userCredits.value -= 10; // Deduct credits if task is marked incomplete
-    console.log(`Credits deducted: 10. Total credits: ${userCredits.value}`);
+    task.completedAt = null;
+    userCredits.value -= 10;
   }
 
   // Remove one-time tasks from the UI immediately
