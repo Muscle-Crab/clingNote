@@ -1310,12 +1310,11 @@ const timeStats = computed(() => {
   const totalMs = end - start;
 
   const productiveMs = selectedDayRoutine.value.reduce((sum, task) => {
-    if (task.completed && task.timerStartedAt && task.completedAt) {
-      return sum + (new Date(task.completedAt) - new Date(task.timerStartedAt));
+    if (task.completed && task.timerStartedAt && task.timerStoppedAt) {
+      return sum + (new Date(task.timerStoppedAt) - new Date(task.timerStartedAt));
     }
     return sum;
   }, 0);
-
   const gapMs = Math.max(0, totalMs - productiveMs);
 
   return {
@@ -1546,11 +1545,13 @@ const toggleTaskCompletion = async (index) => {
   task.completed = !task.completed; // Toggle the completed state
   startSpinning(index);
   if (task.completed) {
-    task.completedAt = new Date().toISOString();
+    const completedNow = new Date().toISOString();
+
+    task.completedAt = completedNow;
     task.timerActive = false;
+    task.timerStoppedAt = completedNow;
 
     userCredits.value += 10;
-    console.log(`Credits earned: 10. Total credits: ${userCredits.value}`);
     announceNextTask(index);
 
     const userName = await fetchUserName(userId.value);
@@ -1559,6 +1560,8 @@ const toggleTaskCompletion = async (index) => {
     }
   } else {
     task.completedAt = null;
+    task.timerStoppedAt = null;
+    task.timerActive = false;
     userCredits.value -= 10;
   }
 
