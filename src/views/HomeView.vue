@@ -213,23 +213,65 @@
       <div v-if="showTimerModal" class="modal-backdrop">
         <div class="modal-box modal-box--sm">
           <div class="modal-header">
-            <h2 class="modal-title">⏱ Set timer</h2>
+            <h2 class="modal-title">⏱ Set Timer</h2>
           </div>
+
           <div class="modal-body">
-            <div class="field-group">
-              <label class="field-label">Duration </label>
-              <select v-model="selectedTimerDuration" class="field-select">
-                <option value="5">5 minutes</option>
-                <option value="10">10 minutes</option>
-                <option value="15">15 minutes</option>
-                <option value="30">30 minutes</option>
-                <option value="60">1 hour</option>
-              </select>
+
+            <div class="timer-picker">
+
+              <!-- Hours -->
+              <div class="picker-column">
+                <label class="field-label">Hours</label>
+                <select v-model="selectedTimerHours" class="picker-select">
+                  <option
+                      v-for="hour in 24"
+                      :key="hour - 1"
+                      :value="hour - 1"
+                  >
+                    {{ hour - 1 }}
+                  </option>
+                </select>
+              </div>
+
+              <!-- Minutes -->
+              <div class="picker-column">
+                <label class="field-label">Minutes</label>
+                <select v-model="selectedTimerMinutes" class="picker-select">
+                  <option
+                      v-for="minute in 60"
+                      :key="minute - 1"
+                      :value="minute - 1"
+                  >
+                    {{ minute - 1 }}
+                  </option>
+                </select>
+              </div>
+
             </div>
+
+            <div class="text-center mt-3">
+              <strong>
+                {{ selectedTimerHours }}h {{ selectedTimerMinutes }}m
+              </strong>
+            </div>
+
           </div>
+
           <div class="modal-footer">
-            <button @click="showTimerModal = false" class="btn-secondary">Cancel</button>
-            <button @click="startTimer" class="btn-primary">Start</button>
+            <button
+                @click="showTimerModal = false"
+                class="btn-secondary"
+            >
+              Cancel
+            </button>
+
+            <button
+                @click="startTimer"
+                class="btn-primary"
+            >
+              Start
+            </button>
           </div>
         </div>
       </div>
@@ -694,7 +736,8 @@ const openTransferModal = (index) => {
   selectedTransferTaskIndex.value = index;
   transferModalOpen.value = true;
 };
-
+const selectedTimerHours = ref(0);
+const selectedTimerMinutes = ref(5);
 
 const selectedTimerTaskIndex = ref(null);
 const nowTick = ref(Date.now());
@@ -703,10 +746,12 @@ let timerInterval = null;
 
 const openTaskTimerModal = (index) => {
   selectedTimerTaskIndex.value = index;
-  selectedTimerDuration.value = 5;
+
+  selectedTimerHours.value = 0;
+  selectedTimerMinutes.value = 5;
+
   showTimerModal.value = true;
 };
-
 
 const saveSelectedDayTasks = async () => {
   if (!userId.value || selectedDayIndex.value === -1) return;
@@ -730,10 +775,14 @@ const getTaskTimeLeft = (task) => {
   const remaining = Math.max(0, end - nowTick.value);
 
   const totalSeconds = Math.floor(remaining / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
+
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
 
-  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+  return `${hours.toString().padStart(2, "0")}:${minutes
+      .toString()
+      .padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
 };
 
 const startCountdownWatcher = () => {
@@ -1360,20 +1409,28 @@ const selectedTimerDuration = ref(5); // default to 5 minutes
 const startTimer = async () => {
   if (selectedTimerTaskIndex.value === null) return;
 
-  const index = selectedTimerTaskIndex.value;
+  const totalMinutes =
+      (Number(selectedTimerHours.value) * 60) +
+      Number(selectedTimerMinutes.value);
+
+  if (totalMinutes <= 0) {
+    alert("Please select a duration.");
+    return;
+  }
+
   const now = Date.now();
-  const durationMs = Number(selectedTimerDuration.value) * 60 * 1000;
+  const durationMs = totalMinutes * 60 * 1000;
   const endTime = now + durationMs;
 
   const task = {
-    ...selectedDayRoutine.value[index],
+    ...selectedDayRoutine.value[selectedTimerTaskIndex.value],
     timerActive: true,
     timerStartedAt: new Date(now).toISOString(),
     timerEndTime: new Date(endTime).toISOString(),
-    timerDurationMinutes: Number(selectedTimerDuration.value),
+    timerDurationMinutes: totalMinutes,
   };
 
-  selectedDayRoutine.value[index] = task;
+  selectedDayRoutine.value[selectedTimerTaskIndex.value] = task;
 
   await saveSelectedDayTasks();
 
@@ -3653,6 +3710,25 @@ const applyGeneratedRoutine = async (generatedWeek) => {
 
 .time-summary-card strong {
   font-size: 18px;
+}
+.timer-picker {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+}
+
+.picker-column {
+  flex: 1;
+}
+
+.picker-select {
+  width: 100%;
+  height: 180px;
+  overflow-y: auto;
+  font-size: 20px;
+  text-align: center;
+  border-radius: 12px;
+  padding: 10px;
 }
 </style>
 
