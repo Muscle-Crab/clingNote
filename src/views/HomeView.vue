@@ -217,7 +217,7 @@
           </div>
           <div class="modal-body">
             <div class="field-group">
-              <label class="field-label">Duration</label>
+              <label class="field-label">Duration </label>
               <select v-model="selectedTimerDuration" class="field-select">
                 <option value="5">5 minutes</option>
                 <option value="10">10 minutes</option>
