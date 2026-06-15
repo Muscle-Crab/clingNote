@@ -512,7 +512,7 @@
       </div>
 
       <!-- ─── Task List ─── -->
-      <section v-if="daySession.started && !daySession.ended"
+      <section v-if="canViewSelectedDayTasks"
                class="task-section">
         <div v-if="selectedDayRoutine?.length === 0" class="empty-state">
           <div class="empty-icon">✦</div>
@@ -665,7 +665,7 @@
         </div>
       </section>
       <section
-          v-else
+          v-else-if="isToday(selectedDayIndex)"
           class="task-section day-not-started"
       >
         <div class="empty-state">
@@ -2947,7 +2947,17 @@ const applyGeneratedRoutine = async (generatedWeek) => {
   }
 };
 
+const canViewSelectedDayTasks = computed(() => {
+  const todayIndex = new Date().getDay();
 
+  // Other days should always be viewable
+  if (selectedDayIndex.value !== todayIndex) {
+    return true;
+  }
+
+  // Today requires Start Day
+  return daySession.value.started && !daySession.value.ended;
+});
 </script>
 
 
