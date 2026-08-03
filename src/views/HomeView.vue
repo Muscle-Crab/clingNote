@@ -806,7 +806,7 @@ const startCountdownWatcher = () => {
           task.timerEndTime &&
           new Date(task.timerEndTime).getTime() <= Date.now()
       ) {
-        await autoMarkTaskAsWontDo(i);
+        await autoTransferTaskToTomorrow(i);
       }
     }
   }, 1000);
@@ -814,29 +814,59 @@ const startCountdownWatcher = () => {
 onMounted(() => {
   startCountdownWatcher();
 });
-const autoMarkTaskAsWontDo = async (index) => {
+const autoTransferTaskToTomorrow = async (index) => {
   const task = {
     ...selectedDayRoutine.value[index],
     timerActive: false,
-    wontDoReason: "Time exceeded",
-    autoWontDo: true,
+    timerStartedAt: null,
+    timerEndTime: null,
+
+    // Increase urgency
+    urgency: (selectedDayRoutine.value[index].urgency || 0) + 1,
+
+    // Optional visual flag
+    overdue: true,
   };
 
+  // Remove from today's list
   selectedDayRoutine.value.splice(index, 1);
-  wontDoTasks.value.push(task);
-
   await saveSelectedDayTasks();
 
-  const wontDoDocRef = doc(
+  // Tomorrow's day index
+  const tomorrowIndex = (selectedDayIndex.value + 1) % 7;
+  const tomorrowDay = days[tomorrowIndex].day;
+
+  const tomorrowDocRef = doc(
       db,
-      "wontDoTasks",
-      `${userId.value}_${days[selectedDayIndex.value].day}`
+      "weeklyRoutines",
+      `${userId.value}_${tomorrowDay}`
   );
 
-  await setDoc(wontDoDocRef, {
-    tasks: wontDoTasks.value,
-    updatedAt: serverTimestamp(),
-  });
+  const snap = await getDoc(tomorrowDocRef);
+
+  let tomorrowTasks = [];
+
+  if (snap.exists()) {
+    tomorrowTasks = snap.data().tasks || [];
+  }
+
+  // Put overdue task at the top
+  tomorrowTasks.unshift(task);
+
+  await setDoc(
+      tomorrowDocRef,
+      {
+        tasks: tomorrowTasks,
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+  );
+
+  transferNotification.value = `⏰ "${task.title}" moved to tomorrow (+1 urgency)`;
+
+  setTimeout(() => {
+    transferNotification.value = null;
+  }, 3000);
 };
 const closeTransferModal = () => {
   transferModalOpen.value = false;
