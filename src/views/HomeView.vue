@@ -75,42 +75,18 @@
       <!-- ─── Task List ─── -->
       <section v-if="canViewSelectedDayTasks"
                class="task-section">
-        <div v-if="selectedDayRoutine?.length === 0" class="empty-state">
-          <div class="empty-icon">✦</div>
-          <h2 class="empty-title">Nothing here yet</h2>
-          <p class="empty-sub">Tap the + button below to add your first task.</p>
-        </div>
+        <EmptyState v-if="selectedDayRoutine?.length === 0" />
+
 
         <div v-else class="task-list-wrap">
-          <div v-if="selectedDayIndex === new Date().getDay()" class="task-list-header">
-            <div class="task-count">
-              <span class="task-count-label">Today</span>
-              <span class="task-count-badge">{{ completedTaskCount }}/{{ selectedDayRoutine?.length }}</span>
-            </div>
-            <button @click="toggleSound" class="toggle-visibility" :aria-pressed="soundEnabled" :aria-label="soundEnabled ? 'Mute sounds' : 'Enable sounds'" :title="soundEnabled ? 'Sounds on' : 'Sounds off'">
-              <i :class="soundEnabled ? 'fas fa-volume-up' : 'fas fa-volume-mute'"></i>
-            </button>
-            <button @click="showCompleted = !showCompleted" class="toggle-visibility" :title="showCompleted ? 'Hide completed' : 'Show completed'">
-              <i :class="showCompleted ? 'fas fa-eye' : 'fas fa-eye-slash'"></i>
-            </button>
-          </div>
+          <TaskListHeader v-if="selectedDayIndex === new Date().getDay()" :completed="completedTaskCount" :total="selectedDayRoutine?.length"
+                          :sound-enabled="soundEnabled" :show-completed="showCompleted" @toggle-sound="toggleSound" @toggle-completed="showCompleted = !showCompleted" />
 
-          <div v-if="isViewingToday" class="load-summary" :class="'load-summary--' + todayLoad.level">
-            <span>⏱ <strong>{{ formatMinutes(todayLoad.minutes) }}</strong> planned · {{ todayLoad.count }} open</span>
-            <span class="load-hint">{{ todayLoad.hint }}<template v-if="todayLoad.unestimated"> · {{ todayLoad.unestimated }} without estimate</template></span>
-            <button type="button" class="link-btn" @click="showSchedule = !showSchedule" :aria-expanded="showSchedule">🗓 Schedule</button>
-          </div>
-          <div v-if="showSchedule" class="schedule-panel">
-            <p v-if="!schedule.blocks.length" class="schedule-empty">No tasks have a start time yet. Tap a task to set one.</p>
-            <ul v-else class="schedule-list">
-              <li v-for="b in schedule.blocks" :key="b.task.createdAt + b.task.title" :class="{ 'schedule-conflict': b.conflict, 'schedule-done': b.task.completed }">
-                <span class="schedule-time">{{ formatClock(b.start) }}<template v-if="b.end !== null"> – {{ formatClock(b.end) }}</template></span>
-                <span>{{ b.task.title }}</span>
-                <span v-if="b.conflict" class="schedule-flag">overlaps next</span>
-              </li>
-            </ul>
-            <p v-if="schedule.unscheduled.length" class="schedule-unsched">Unscheduled: {{ schedule.unscheduled.filter(t => !t.completed).length }}</p>
-          </div>
+
+          <LoadSummary v-if="isViewingToday" :load="todayLoad" :expanded="showSchedule" @toggle="showSchedule = !showSchedule" />
+
+          <TimeBlockSchedule v-if="showSchedule" :schedule="schedule" />
+
 
           <draggable
               handle=".drag-handle"
@@ -124,210 +100,30 @@
               @end="playSound('dragEnd'); handleDragEnd()"
           >
             <template #item="{ element: task, index }">
-              <div
+              <TaskCard
                   v-if="(!task.completed || (isToday(selectedDayIndex) && showCompleted))"
-                  class="task-card"
-                  :class="{
-                  'task-card--completed': task.completed && isToday(selectedDayIndex),
-                  'task-card--important': task.important
-                }"
-              >
-                <!-- Left: drag + avatar -->
-                <div class="task-left">
-                  <div class="task-avatar drag-handle" :style="{ background: generateRandomColor() }">
-                    <i class="fas fa-grip-vertical"></i>
-                  </div>
-                  <div class="task-index">{{ index + 1 }}</div>
-                </div>
-
-                <!-- Center: main content -->
-                <div class="task-body" @click="onCardTap(task, $event)">
-                  <div class="task-title-row">
-                    <!-- Completion toggle -->
-                    <button
-                        v-if="isToday(selectedDayIndex)"
-                        @click="toggleTaskCompletion(index)"
-                        class="task-check"
-                        :class="{ 'task-check--done': task.completed }"
-                    >
-                      <i :class="task.completed ? 'fas fa-check-circle' : 'far fa-circle'"></i>
-                    </button>
-
-                    <span
-                        class="task-title"
-                        :class="{ 'task-title--done': task.completed && isToday(selectedDayIndex) }"
-                        @click="openTaskDetailModal(task)"
-                    >
-                      {{ task.title.length > 28 ? task.title.slice(0, 28) + '…' : task.title }}
-                    </span>
-                    <span v-if="task.timerActive" class="task-timer-left">
-                      ⏳  {{ getTaskTimeLeft(task) }}
-                    </span>
-                    <span v-if="task.youtubeURL" class="task-attachment" title="Video">🎥</span>
-                    <span v-if="task.imageURL" class="task-attachment" title="Image">🖼️</span>
-                    <span v-if="task.fileURL" class="task-attachment" title="File">📄</span>
-                  </div>
-
-                  <div v-if="task.reminder?.date && task.reminder?.time" class="task-reminder">
-                    📅 {{ formatShortDate(task.reminder.date) }}· ⏰ {{ formatTime(task.reminder.time) }}
-                  </div>
-
-                  <div class="task-meta-row">
-
-                    <span v-if="task.completed && isToday(selectedDayIndex)" class="task-status task-status--done">Complete</span>
-                    <button @click="toggleTaskImportance(index)" class="importance-btn" :title="task.important ? 'Important' : 'Mark important'">
-                      <i :class="task.important ? 'fas fa-fire task-fire--on' : 'fas fa-fire task-fire--off'"></i>
-                    </button>
-                  </div>
-
-                  <!-- Planning chips -->
-                  <div v-if="estimateOf(task) || task.startTime || task.dueDate || (task.priority && task.priority !== 'low') || (task.status && task.status !== 'todo')" class="task-chips">
-                    <span v-if="task.priority && task.priority !== 'low'" class="chip" :class="'chip--' + task.priority">{{ task.priority }}</span>
-                    <span v-if="task.status && task.status !== 'todo'" class="chip">{{ task.status }}</span>
-                    <span v-if="task.dueDate" class="chip">Due {{ task.dueDate }}</span>
-                    <span v-if="estimateOf(task)" class="chip">⏱ {{ formatMinutes(estimateOf(task)) }}</span>
-                    <span v-if="task.startTime" class="chip">🕒 {{ formatClock(toMinutes(task.startTime)) }}<template v-if="estimateOf(task)"> – {{ formatClock(toMinutes(task.startTime) + estimateOf(task)) }}</template></span>
-                  </div>
-                  <div v-if="subtaskProgress(task).total" class="task-chips">
-                    <span class="chip chip--subtasks" :class="{ 'chip--subtasks-done': subtaskProgress(task).done === subtaskProgress(task).total }" title="Subtasks done">☑ {{ subtaskProgress(task).done }}/{{ subtaskProgress(task).total }}</span>
-                  </div>
-                  <div v-if="task.nextAction" class="task-next">→ {{ task.nextAction }}</div>
-                  <div v-if="task.notes && expandedKey !== taskKey(task)" class="task-note-preview">📝 {{ task.notes.length > 60 ? task.notes.slice(0, 60) + '…' : task.notes }}</div>
-
-                  <div v-if="expandedKey === taskKey(task)" class="task-expand">
-                    <div class="field-grid">
-                      <label class="mini-field"><span>Status</span>
-                        <select class="field-select" :value="task.status || 'todo'" @change="patchTask(index, task, { status: $event.target.value })">
-                          <option v-for="st in STATUSES" :key="st.value" :value="st.value">{{ st.label }}</option>
-                        </select></label>
-                      <label class="mini-field"><span>Priority</span>
-                        <select class="field-select" :value="task.priority || 'low'" @change="patchTask(index, task, { priority: $event.target.value })">
-                          <option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option>
-                        </select></label>
-                      <label class="mini-field"><span>Due date</span>
-                        <input type="date" class="field-input" :value="task.dueDate || ''" @change="patchTask(index, task, { dueDate: $event.target.value })" /></label>
-                      <label class="mini-field"><span>Start time</span>
-                        <input type="time" class="field-input" :value="task.startTime || ''" @change="patchTask(index, task, { startTime: $event.target.value })" /></label>
-                      <label class="mini-field"><span>Estimate (min)</span>
-                        <input type="number" min="0" step="5" class="field-input" :value="task.estimateMin || ''" @change="patchTask(index, task, { estimateMin: Number($event.target.value) || 0 })" /></label>
-                      <label class="mini-field"><span>Next action</span>
-                        <input type="text" class="field-input" :value="task.nextAction || ''" @change="patchTask(index, task, { nextAction: $event.target.value.trim() })" /></label>
-                    </div>
-                    <label class="mini-field"><span>Note</span>
-                      <textarea class="field-textarea" rows="2" :value="task.notes || ''" placeholder="Quick note…" @change="patchTask(index, task, { notes: $event.target.value })"></textarea></label>
-                    <SubtaskList :task="task" @change="onSubtaskPatch(index, task, { subtasks: $event })" @toggle-auto="onSubtaskPatch(index, task, { autoCompleteParent: $event })" />
-                  </div>
-
-                  <!-- Labels -->
-                  <div v-if="task.labels?.length" class="task-labels">
-                    <span
-                        v-for="(label, i) in task.labels"
-                        :key="i"
-                        @click="toggleLabelHighlight(label)"
-                        class="label-pill label-pill--sm"
-                        :class="{ 'label-pill--active': activeLabels.includes(label) }"
-                    >
-                      {{ label }}
-                    </span>
-                  </div>
-                </div>
-
-                <!-- Right: coin + actions -->
-                <div class="task-right">
-                  <div class="coin-badge">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="coin-svg" viewBox="0 0 24 24">
-                      <circle cx="12" cy="12" r="10" fill="#F59E0B"/>
-                      <circle cx="12" cy="12" r="8" fill="#D97706"/>
-                      <text x="12" y="16" font-size="10" text-anchor="middle" fill="white" font-family="Arial" font-weight="bold">$</text>
-                    </svg>
-                    <span class="coin-value">10</span>
-                  </div>
-
-                  <div class="task-actions">
-                    <button @click="openModal('calendar', index, task.title)" class="action-btn" title="Reminder">📅</button>
-                    <button @click="openTransferModal(index)" class="action-btn" title="Transfer">🔄</button>
-                    <button @click="openYouTubeModal(index)" class="action-btn" title="Video">🎥</button>
-                    <button @click="triggerImageUpload(index)" class="action-btn" title="Attach file">📎</button>
-                    <input type="file" :ref="'fileInput_' + index" accept="image/*,.pdf,.doc,.docx,.txt" @change="handleUpload($event, index)" class="hidden-input" />
-<!--                    <button @click="showTimerModal = true" class="action-btn" title="Timer">⏱️</button>-->
-                    <button @click="openTaskTimerModal(index)" class="action-btn" title="Start Task">▶️</button>
-                    <button @click="openWontDoModal(index)" class="action-btn action-btn--warn" title="Won't do">🚫</button>
-                    <button @click="deleteTask(index)" class="action-btn action-btn--danger" title="Delete">🗑️</button>
-                  </div>
-                </div>
-
-                <!-- Notification toast -->
-                <div v-if="showNotification" class="task-toast">Saved ✓</div>
-                <div v-if="transferNotification" class="task-toast task-toast--info">{{ transferNotification }}</div>
-              </div>
+                  :task="task" :index="index" :is-today-tab="isToday(selectedDayIndex)" :expanded="expandedKey === taskKey(task)"
+                  :active-labels="activeLabels" :now="nowTick" :show-notification="showNotification" :transfer-notification="transferNotification"
+                  @toggle-expand="toggleExpanded(task)" @toggle-complete="toggleTaskCompletion(index)" @open-detail="openTaskDetailModal(task)"
+                  @toggle-important="toggleTaskImportance(index)" @patch="patchTask(index, task, $event)" @subtask-patch="onSubtaskPatch(index, task, $event)"
+                  @toggle-label="toggleLabelHighlight" @open-reminder="openModal('calendar', index, task.title)" @transfer="openTransferModal(index)"
+                  @video="openYouTubeModal(index)" @upload="handleUpload($event, index)" @timer="openTaskTimerModal(index)"
+                  @wont-do="openWontDoModal(index)" @delete="deleteTask(index)"
+              />
             </template>
           </draggable>
 
-          <!-- All done idle state -->
-          <div
-              v-if="selectedDayRoutine?.length > 0 && selectedDayRoutine?.every(task => task.completed) && !showCompleted"
-              class="idle-state"
-          >
-            <img src="@/assets/free.svg" alt="Idle time" class="idle-img" />
-            <h2 class="idle-title">Idle time 🧘</h2>
-            <p class="idle-sub">All done. Rest well.</p>
-          </div>
+          <IdleState v-if="selectedDayRoutine?.length > 0 && selectedDayRoutine?.every(task => task.completed) && !showCompleted" />
 
-          <!-- Won't do list -->
-          <div v-if="wontDoTasks.length > 0 && !selectedDayRoutine?.every(task => task.completed)" class="wont-do-list">
-            <p class="wont-do-label">🚫 Skipped tasks</p>
-            <div v-for="(task, index) in wontDoTasks" :key="index" class="wont-do-item">
-              <button @click="undoWontDo(index)" class="wont-do-undo" title="Restore">↩</button>
-              <span class="wont-do-title">{{ task.title }}</span>
-              <span v-if="task.wontDoReason" class="wont-do-reason">— {{ task.wontDoReason }}</span>
-            </div>
-          </div>
+
+          <WontDoList v-if="wontDoTasks.length > 0 && !selectedDayRoutine?.every(task => task.completed)" :tasks="wontDoTasks" @undo="undoWontDo" />
+
         </div>
       </section>
-      <section
-          v-else-if="isToday(selectedDayIndex)"
-          class="task-section day-not-started"
-      >
-        <div class="empty-state">
-          <div class="empty-icon">🌅</div>
+      <StartDayPrompt v-else-if="isToday(selectedDayIndex)" @start="startDay" />
 
-          <h2 class="empty-title">
-            Start Your Day
-          </h2>
+      <FabButtons :user-id="userId" :listening="listening" @add="openModal('task')" @voice="startVoiceInput" />
 
-          <p class="empty-sub">
-            Your tasks will appear after you press
-            <strong>Start Day</strong>.
-          </p>
-
-          <button
-              @click="startDay"
-              class="btn-primary"
-          >
-            🌅 Start Day
-          </button>
-        </div>
-      </section>
-      <!-- ─── FAB Buttons ─── -->
-      <div class="fab-group">
-        <router-link
-            :to="userId ? '#' : '/login'"
-            @click.native.prevent="userId && openModal('task')"
-            class="fab fab-add"
-            title="Add task"
-        >
-          <svg class="fab-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/>
-          </svg>
-        </router-link>
-
-        <button @click="startVoiceInput" class="fab fab-voice" :class="{ 'fab-voice--listening': listening }" title="Voice input">
-          <span v-if="listening" class="fab-pulse"></span>
-          <svg xmlns="http://www.w3.org/2000/svg" class="fab-icon" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2Z"/>
-          </svg>
-        </button>
-      </div>
 
     </div>
   </div>
@@ -337,14 +133,22 @@
 import { ref, onMounted, onBeforeUnmount, computed, watch, reactive } from 'vue';
 import { useSounds } from '@/composables/useSounds';
 import { patchStoredTask, loadDayTasks, carryTasksToDay } from '@/composables/useDayPersistence';
-import { ACTIVE_CAP, STATUSES, taskKey, activeCount, estimateOf, formatClock, formatDuration as formatMinutes, loadSummary, buildSchedule, toMinutes } from '@/utils/taskPlanning';
-import { getTodayId, formatSessionTime, getCurrentDate, formatShortDate, formatTime, getOrdinalSuffix, getTodayDate, extractYouTubeID, isToday } from '@/utils/dateTime';
-import { getStreakIcon, badges } from '@/utils/gamification';
+import { ACTIVE_CAP, taskKey, activeCount, loadSummary, buildSchedule } from '@/utils/taskPlanning';
+import { getTodayId, formatSessionTime, getCurrentDate, formatTime, getTodayDate, isToday } from '@/utils/dateTime';
+import { badges } from '@/utils/gamification';
 import { scheduleNotification, sendNotificationToPlayer } from '@/composables/useNotifications';
 import { speak } from '@/composables/useSpeech';
-import { completionPercentage, computeTimeStats, daysLeftInYearFrom, taskTimeLeft } from '@/utils/dayStats';
-import { subtaskProgress, shouldAutoComplete, resetSubtasks } from '@/utils/subtasks';
-import SubtaskList from '@/components/home/SubtaskList.vue';
+import { completionPercentage, computeTimeStats, daysLeftInYearFrom } from '@/utils/dayStats';
+import { shouldAutoComplete, resetSubtasks } from '@/utils/subtasks';
+import EmptyState from '@/components/home/EmptyState.vue';
+import StartDayPrompt from '@/components/home/StartDayPrompt.vue';
+import TaskListHeader from '@/components/home/TaskListHeader.vue';
+import FabButtons from '@/components/home/FabButtons.vue';
+import IdleState from '@/components/home/IdleState.vue';
+import WontDoList from '@/components/home/WontDoList.vue';
+import LoadSummary from '@/components/home/LoadSummary.vue';
+import TaskCard from '@/components/home/TaskCard.vue';
+import TimeBlockSchedule from '@/components/home/TimeBlockSchedule.vue';
 import AddTaskModal from '@/components/home/AddTaskModal.vue';
 import CelebrationOverlay from '@/components/home/CelebrationOverlay.vue';
 import DayTabs from '@/components/home/DayTabs.vue';
@@ -371,10 +175,6 @@ import { doc, setDoc, serverTimestamp, getDoc, updateDoc,getFirestore} from 'fir
 const modalOpen = ref(false);
 import axios from 'axios';
 import { deleteObject } from "firebase/storage";
-
-import { getCurrentInstance } from 'vue';
-
-const { proxy } = getCurrentInstance();
 
 const currentTime = ref([]);
 const showAdvanced = ref(false)
@@ -852,9 +652,6 @@ const editingTask = ref(null);
 const editedTask = ref({title: '', time: '', priority: 'low', labels: [], notes: ''});
 const searchQuery = ref('');
 
-const generateRandomColor = () => {
-  return 'grey' ;
-};
 
 const generateWeekDates = () => {
   const today = new Date();
@@ -994,10 +791,6 @@ const selectDate = (index) => {
   updateRoutine();
   updateCurrentDate()
   fetchSelectedDayRoutine();
-};
-
-const isSelected = (index) => {
-  return index === selectedDayIndex.value;
 };
 
 const getSelectedDayRoutine = () => {
@@ -1725,7 +1518,6 @@ const selectedDayRoutine = ref([]);
 const timeStats = computed(() => computeTimeStats(daySession.value, selectedDayRoutine.value, wontDoTasks.value.length));
 const calculateCompletionPercentage = () => completionPercentage(selectedDayRoutine.value, wontDoTasks.value.length, selectedDayIndex.value);
 const daysLeftInYear = computed(() => daysLeftInYearFrom());
-const getTaskTimeLeft = (task) => taskTimeLeft(task, nowTick.value);
 const showNotification = ref(false);
 
 
@@ -2113,11 +1905,6 @@ const closeTaskDetailModal = () => {
   taskDetailModalOpen.value = false;
   taskDetail.value = {};
 };
-const triggerImageUpload = (index) => {
-  const inputRef = `fileInput_${index}`;
-  const input = proxy.$refs[inputRef];
-  if (input) input.click();
-};
 const handleUpload = async (event, taskIndex) => {
   const file = event.target.files[0];
   if (!file) return;
@@ -2449,8 +2236,7 @@ const showSchedule = ref(false);
 
 // Inline expand (tap card) + inline field editing, saved with the task
 const expandedKey = ref(null);
-const onCardTap = (task, event) => {
-  if (event.target.closest('button, input, textarea, select, .task-title, .label-pill, .task-expand')) return;
+const toggleExpanded = (task) => {
   expandedKey.value = expandedKey.value === taskKey(task) ? null : taskKey(task);
 };
 const patchTask = async (index, task, patch) => {
@@ -2529,14 +2315,6 @@ const finishShutdown = async (carry) => {
 
 .draggable {
   cursor: grab;
-}
-
-.task-card {
-  padding: 1rem;
-  margin: 0; /* remove vertical gaps */
-  border-bottom: 1px solid #ccc;
-  border-left: 3px solid red;
-  border-right: 3px solid blue;
 }
 
 .drag {
@@ -2714,40 +2492,8 @@ const finishShutdown = async (carry) => {
 
 /* ── Form fields ── */
 .field-group--row { display: flex; align-items: center; justify-content: space-between; }
-.field-input, .field-select, .field-textarea {
-  width: 100%;
-  background: #0f0f11;
-  border: 1px solid #2a2a2e;
-  border-radius: 10px;
-  padding: 10px 12px;
-  color: #e8e6e1;
-  font-family: inherit;
-  font-size: 0.9rem;
-  transition: border-color 0.2s;
-  box-sizing: border-box;
-}
-.field-input:focus, .field-select:focus, .field-textarea:focus {
-  outline: none;
-  border-color: #378ADD;
-}
-.field-textarea { min-height: 80px; resize: vertical; }
-.field-select { cursor: pointer; }
 
 /* ── Buttons ── */
-.btn-primary {
-  font-family: inherit;
-  font-size: 0.875rem;
-  font-weight: 600;
-  background: #378ADD;
-  color: white;
-  border: none;
-  border-radius: 10px;
-  padding: 9px 18px;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-.btn-primary:hover { background: #2a6db0; }
-.btn-primary.btn-lg { padding: 12px 28px; font-size: 1rem; border-radius: 12px; }
 
 .toggle-btn {
   background: #1e1e22;
@@ -2767,21 +2513,6 @@ const finishShutdown = async (carry) => {
 /* ── Task Detail ── */
 
 /* ── Labels ── */
-.label-pill {
-  display: inline-block;
-  padding: 3px 10px;
-  border-radius: 20px;
-  font-size: 0.72rem;
-  font-weight: 500;
-  background: #1e1e22;
-  border: 1px solid #2a2a2e;
-  color: #9a9891;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-.label-pill:hover { border-color: #378ADD; color: #7fb8f5; }
-.label-pill--active { background: #1e2a3a; border-color: #378ADD; color: #7fb8f5; }
-.label-pill--sm { font-size: 0.68rem; padding: 2px 8px; }
 
 /* ── Fullscreen celebration ── */
 @keyframes pop { }
@@ -2793,72 +2524,12 @@ const finishShutdown = async (carry) => {
 
 /* ── Task List ── */
 .task-section { }
-.empty-state { text-align: center; padding: 4rem 1rem; }
-.empty-icon { font-size: 3rem; color: #2a2a2e; margin-bottom: 1rem; }
-.empty-title { font-size: 1.1rem; font-weight: 600; color: #6b6a66; margin: 0; }
-.empty-sub { color: #4a4a4e; font-size: 0.875rem; margin-top: 0.5rem; }
-
-.task-list-header {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 0.5rem 0 0.75rem;
-}
-.task-count { display: flex; align-items: center; gap: 8px; }
-.task-count-label { font-weight: 600; font-size: 0.875rem; color: #6b6a66; }
-.task-count-badge {
-  font-size: 0.75rem; font-weight: 600; font-family: 'JetBrains Mono', monospace;
-  background: #1e2a3a; color: #7fb8f5;
-  padding: 2px 8px; border-radius: 20px;
-}
-.toggle-visibility {
-  background: none; border: none; color: #6b6a66;
-  cursor: pointer; font-size: 0.875rem; padding: 4px 8px;
-  transition: color 0.15s;
-}
-.toggle-visibility:hover { color: #e8e6e1; }
 
 .tasks-list { display: flex; flex-direction: column; gap: 8px; }
 .task-ghost { opacity: 0.3; background: #2a2a2e !important; }
 .task-dragging { transform: rotate(1.5deg); box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
 
 /* ── Task Card ── */
-.task-card {
-  background: #18181b;
-  border: 1px solid #2a2a2e;
-  border-radius: 14px;
-  padding: 0.875rem 1rem;
-  display: flex;
-  gap: 0.75rem;
-  align-items: flex-start;
-  position: relative;
-  transition: border-color 0.2s, background 0.2s;
-}
-.task-card:hover { border-color: #3a3a3e; }
-.task-card--completed { background: #111113; opacity: 0.65; }
-.task-card--important { border-left: 3px solid #ef4444; }
-
-.task-left { display: flex; flex-direction: column; align-items: center; gap: 6px; }
-.task-avatar {
-  width: 36px; height: 36px;
-  border-radius: 10px;
-  display: flex; align-items: center; justify-content: center;
-  cursor: grab;
-  color: rgba(255,255,255,0.7);
-  font-size: 0.8rem;
-  flex-shrink: 0;
-}
-.task-avatar:active { cursor: grabbing; }
-.task-index { font-size: 0.65rem; color: #4a4a4e; font-family: 'JetBrains Mono', monospace; }
-
-.task-body { flex: 1; min-width: 0; }
-.task-title-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.task-check {
-  background: none; border: none; cursor: pointer; padding: 0;
-  color: #4a4a4e; font-size: 1.1rem;
-  transition: color 0.15s;
-  flex-shrink: 0;
-}
-.task-check:hover { color: #4ade80; }
-.task-check--done { color: #4ade80; }
 .task-title {
   font-weight: 500;
   font-size: 0.9rem;
@@ -2867,118 +2538,14 @@ const finishShutdown = async (carry) => {
   transition: color 0.15s;
 }
 .task-title:hover { color: #7fb8f5; }
-.task-title--done { text-decoration: line-through; color: #4a4a4e !important; }
-.task-attachment { font-size: 0.75rem; }
-
-.task-reminder { font-size: 0.72rem; color: #6b6a66; margin-top: 4px; font-family: 'JetBrains Mono', monospace; }
-
-.task-meta-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
-.task-status {
-  font-size: 0.68rem; font-weight: 500;
-  padding: 2px 8px; border-radius: 20px;
-  letter-spacing: 0.04em;
-}
 .task-status--pending { background: #2a2a12; color: #ca8a04; border: 1px solid #3a3a1a; }
-.task-status--done    { background: #0d2217; color: #4ade80; border: 1px solid #14432a; }
-
-.importance-btn {
-  background: none; border: none; cursor: pointer;
-  font-size: 0.875rem; padding: 0;
-  transition: transform 0.15s;
-}
-.importance-btn:hover { transform: scale(1.2); }
-.task-fire--on  { color: #ef4444; }
-.task-fire--off { color: #3a3a3e; }
-.task-labels { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
-
-.task-right { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; flex-shrink: 0; }
-.coin-badge { display: flex; align-items: center; gap: 4px; }
-.coin-svg { width: 18px; height: 18px; }
-.coin-value { font-size: 0.75rem; font-weight: 600; color: #F59E0B; font-family: 'JetBrains Mono', monospace; }
-.task-actions { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; max-width: 120px; }
-.action-btn {
-  background: #1e1e22; border: 1px solid #2a2a2e;
-  border-radius: 7px; padding: 4px 6px;
-  font-size: 0.8rem; cursor: pointer;
-  transition: all 0.15s;
-  line-height: 1;
-}
-.action-btn:hover { border-color: #3a3a3e; background: #2a2a2e; }
-.action-btn--warn:hover  { border-color: #92400e; background: #1c1008; }
-.action-btn--danger:hover { border-color: #7f1d1d; background: #1c0808; }
-.hidden-input { display: none; }
-
-.task-toast {
-  position: absolute; top: 10px; right: 10px;
-  background: #14432a; color: #4ade80;
-  font-size: 0.72rem; font-weight: 600;
-  padding: 4px 10px; border-radius: 8px;
-  border: 1px solid #1a6040;
-}
-.task-toast--info { background: #1e2a3a; color: #7fb8f5; border-color: #2a3a5a; }
 
 /* ── Idle State ── */
-.idle-state { text-align: center; padding: 3rem 1rem; }
-.idle-img { width: 160px; height: 160px; opacity: 0.5; }
-.idle-title { font-size: 1.25rem; font-weight: 600; color: #6b6a66; margin: 0; }
-.idle-sub { color: #4a4a4e; font-size: 0.875rem; margin-top: 0.5rem; }
 
 /* ── Won't Do ── */
-.wont-do-list {
-  margin-top: 1rem;
-  background: #18181b;
-  border: 1px solid #3b0d0d;
-  border-radius: 12px;
-  padding: 0.875rem 1rem;
-}
-.wont-do-label { font-size: 0.75rem; font-weight: 600; color: #f87171; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 0.5rem; }
-.wont-do-item { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-top: 1px solid #2a2a2e; font-size: 0.875rem; }
-.wont-do-undo {
-  background: #0d2217; color: #4ade80;
-  border: 1px solid #14432a; border-radius: 6px;
-  padding: 2px 8px; font-size: 0.8rem; cursor: pointer;
-}
-.wont-do-title { font-weight: 500; }
-.wont-do-reason { color: #6b6a66; font-size: 0.8rem; }
 
 /* ── FAB ── */
-.fab-group {
-  position: fixed;
-  bottom: 28px; left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  gap: 16px;
-  z-index: 100;
-}
-.fab {
-  width: 56px; height: 56px;
-  border-radius: 50%;
-  display: flex; align-items: center; justify-content: center;
-  cursor: pointer;
-  transition: transform 0.2s;
-  border: none;
-  text-decoration: none;
-  position: relative;
-}
-.fab:hover { transform: scale(1.08); }
-.fab:active { transform: scale(0.95); }
-.fab-add { background: #378ADD; color: white; box-shadow: 0 4px 20px rgba(55, 138, 221, 0.4); }
-.fab-voice { background: #18181b; border: 2px solid #2a2a2e; color: #6b6a66; }
-.fab-voice--listening { border-color: #4ade80; color: #4ade80; }
-.fab-icon { width: 22px; height: 22px; z-index: 1; position: relative; }
-.fab-pulse {
-  position: absolute; inset: -2px;
-  border-radius: 50%;
-  background: rgba(74, 222, 128, 0.25);
-  animation: ping 1s cubic-bezier(0, 0, 0.2, 1) infinite;
-}
-@keyframes ping { 75% { transform: scale(1.5); opacity: 0; } }
-.task-timer-left {
-  margin-top: 6px;
-  font-size: 0.85rem;
-  font-weight: 700;
-  color: #f59e0b;
-}
+@keyframes ping { }
 .time-summary-card {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
@@ -3025,41 +2592,7 @@ const finishShutdown = async (carry) => {
 button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
   outline: 2px solid #7fb8f5; outline-offset: 2px;
 }
-.field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem; }
-.mini-field { display: flex; flex-direction: column; gap: 4px; font-size: 0.72rem; color: #a3a29d; margin-bottom: 0.5rem; }
-.task-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
-.chip { font-size: 0.7rem; padding: 2px 8px; border-radius: 20px; background: #232328; color: #c9c8c3; }
-.chip--high { background: #3b0d0d; color: #fca5a5; }
-.chip--medium { background: #3a2d0a; color: #fcd34d; }
-.task-next { margin-top: 6px; font-size: 0.8rem; color: #9cc7f7; }
-.task-note-preview { margin-top: 4px; font-size: 0.78rem; color: #a3a29d; line-height: 1.4; }
-.chip--subtasks { background: #12263a; color: #9cc7f7; }
-.chip--subtasks-done { background: #0f2a1c; color: #86efac; }
-.task-expand { margin-top: 10px; padding-top: 10px; border-top: 1px solid #2a2a2e; cursor: default; }
-.task-body { cursor: pointer; min-width: 0; }
-.load-summary {
-  display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1rem;
-  font-size: 0.8rem; color: #c9c8c3; background: #18181b; border: 1px solid #2a2a2e;
-  border-radius: 12px; padding: 0.5rem 0.875rem; margin-bottom: 0.75rem;
-}
-.load-hint { color: #86efac; }
-.load-summary--full .load-hint { color: #fcd34d; }
-.load-summary--over { border-color: #7f1d1d; }
-.load-summary--over .load-hint { color: #fca5a5; }
-.link-btn { background: none; border: none; color: #9cc7f7; cursor: pointer; font: inherit; text-decoration: underline; margin-left: auto; }
-.schedule-panel { background: #18181b; border: 1px solid #2a2a2e; border-radius: 12px; padding: 0.75rem 1rem; margin-bottom: 0.75rem; font-size: 0.8rem; color: #c9c8c3; }
-.schedule-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-.schedule-list li { display: flex; gap: 0.75rem; align-items: baseline; }
-.schedule-time { font-family: 'JetBrains Mono', monospace; color: #7fb8f5; min-width: 9.5rem; }
-.schedule-conflict .schedule-flag { color: #fca5a5; font-size: 0.7rem; }
-.schedule-done { opacity: 0.5; text-decoration: line-through; }
-.schedule-empty, .schedule-unsched { margin: 0; color: #a3a29d; }
-.schedule-unsched { margin-top: 6px; }
 .cap-warning { background: #3a2d0a; border: 1px solid #92400e; color: #fde68a; border-radius: 10px; padding: 0.75rem; font-size: 0.82rem; line-height: 1.5; margin-top: 0.75rem; }
-@media (max-width: 480px) {
-  .field-grid { grid-template-columns: 1fr; }
-  .schedule-time { min-width: 0; }
-}
 </style>
 
 

@@ -1,0 +1,105 @@
+// Server-side render smoke test: renders each src/components/home component with sample props and checks the HTML.
+// Catches runtime template errors (undefined props/helpers) without a browser. Run: node scripts/smoke-render.js
+const fs = require('fs');
+const path = require('path');
+const Module = require('module');
+const babel = require('@babel/core');
+const { parse, compileScript } = require('@vue/compiler-sfc');
+const src = path.join(__dirname, '..', 'src');
+
+const origResolve = Module._resolveFilename;
+Module._resolveFilename = function (req, ...rest) {
+  if (req.startsWith('@/')) req = path.join(src, req.slice(2));
+  return origResolve.call(this, req, ...rest);
+};
+const toCjs = (code, filename) => babel.transformSync(code, { filename, babelrc: false, configFile: false, presets: [[require.resolve('@babel/preset-env'), { targets: { node: 'current' }, modules: 'commonjs' }]] }).code;
+require.extensions['.vue'] = (mod, filename) => {
+  const { descriptor } = parse(fs.readFileSync(filename, 'utf8'), { filename });
+  const out = compileScript(descriptor, { id: 'smoke', inlineTemplate: true });
+  mod._compile(toCjs(out.content, filename), filename);
+};
+for (const ext of ['.svg', '.png', '.mp3', '.css']) require.extensions[ext] = (mod, filename) => { mod.exports = filename; }; // assets: stub
+const origJs = require.extensions['.js'];
+require.extensions['.js'] = (mod, filename) => {
+  if (filename.startsWith(src)) mod._compile(toCjs(fs.readFileSync(filename, 'utf8'), filename), filename);
+  else origJs(mod, filename);
+};
+
+const { createSSRApp } = require('vue');
+const { renderToString } = require('@vue/server-renderer');
+const load = (n) => { const m = require(path.join(src, 'components/home', n + '.vue')); return m.default || m; };
+
+const days = [{ day: 'Sun', date: '2026-10-11' }, { day: 'Mon', date: '2026-10-12' }];
+const task = { title: 'Write report', createdAt: '2026-10-17T10:00:00Z', completed: false, important: true, priority: 'high', status: 'in-progress',
+  dueDate: '2026-10-20', estimateMin: 30, startTime: '09:00', nextAction: 'Open doc', notes: 'n', labels: ['Work'],
+  subtasks: [{ id: 'a', title: 'Outline', done: true }, { id: 'b', title: 'Draft', done: false }], autoCompleteParent: true,
+  timerActive: true, timerEndTime: new Date(Date.now() + 90000).toISOString(), youtubeURL: 'https://youtu.be/abcdefghijk' };
+const milestones = [{ percent: 0, position: 0, icon: 'a' }, { percent: 50, position: 50, icon: 'b' }, { percent: 100, position: 100, icon: 'c' }];
+const cases = [
+  ['DayTabs', { days, selectedIndex: 0 }, ['Sun']],
+  ['ProgressBar', { percentage: 40, milestones }, ['40%']],
+  ['StreakHeader', { streak: 4, motivationalMessage: 'Go', pointsAccumulated: 10, totalPoints: 30, daySession: { started: true, ended: false, startedAtText: '9:00 AM' } }, ['4', '20 pts']],
+  ['TimeStatsBar', { stats: { totalDayTime: '1h', productiveTime: '2m', gapTime: '3m', completedTasks: 2, missedTasks: 1 } }, ['1h']],
+  ['ShutdownPrompt', { suggest: true, open: true, done: [task], openTasks: [{ ...task, completed: false }], carry: { 'x': true } }, ['Shutdown', 'Write report']],
+  ['WorkoutModal', { preferences: { goal: 'Lose Fat', equipment: 'None', maxPerDay: 3, duration: 20 } }, ['Customize Workout']],
+  ['CelebrationOverlay', { streak: 3 }, ['All done']],
+  ['TimerModal', { hours: 0, minutes: 5 }, ['Set Timer']],
+  ['WontDoModal', { reason: '' }, ['Won']],
+  ['TransferModal', { day: null, days, selectedDayIndex: 0 }, ['Mon']],
+  ['AddTaskModal', { newTask: { title: '', priority: 'low', selectedDays: [], reminder: {}, position: 0, labels: '', notes: '' }, repeatMode: 'weekly', showAdvanced: true, days, selectedDayRoutine: [task], error: 'oops', capWarning: true }, ['New task', 'oops', 'active tasks']],
+  ['YouTubeModal', { url: '' }, ['Attach video']],
+  ['TaskDetailModal', { task, activeLabels: ['Work'] }, ['Write report', 'embed/abcdefghijk']],
+  ['ImagePreview', { src: 'x.png' }, ['x.png']],
+  ['ReminderModal', { reminder: { date: '', time: '', repeat: '' }, taskTitle: 'T1' }, ['T1']],
+  ['VoiceModal', { transcript: 'hello' }, ['hello']],
+  ['LoadSummary', { load: { minutes: 90, count: 2, unestimated: 1, level: 'full', hint: 'Full day' }, expanded: false }, ['1h 30m', 'Full day']],
+  ['TimeBlockSchedule', { schedule: { blocks: [{ task, start: 540, end: 570, conflict: true }], unscheduled: [] } }, ['9:00 AM', 'overlaps next']],
+  ['IdleState', {}, ['Idle time']],
+  ['WontDoList', { tasks: [{ title: 'Skip me', wontDoReason: 'busy' }] }, ['Skip me', 'busy']],
+  ['FabButtons', { userId: 'u1', listening: true }, ['fab-add']],
+  ['SubtaskList', { task }, ['Outline', '(1/2)']],
+  ['TaskCard', { task, index: 0, isTodayTab: true, expanded: true, activeLabels: [], now: Date.now(), showNotification: true, transferNotification: 'moved' }, ['Write report', '1/2', 'Outline', 'task-expand', '00:01:', 'moved', 'Saved']],
+  ['TaskListHeader', { completed: 1, total: 3, soundEnabled: true, showCompleted: false }, ['1/3', 'Sounds on']],
+  ['EmptyState', {}, ['Nothing here yet']],
+  ['StartDayPrompt', {}, ['Start Day']],
+  ['TaskCard', { task: { title: 'Old task', completed: true }, index: 2, isTodayTab: true, expanded: false, activeLabels: [], now: 0 }, ['Old task', 'Complete']],
+];
+// subtask helpers (pure logic)
+const assert = require('assert');
+const st = require(path.join(src, 'utils/subtasks.js'));
+(() => {
+  let l = st.addSubtask(undefined, '  a ');
+  assert.strictEqual(l.length, 1); assert.strictEqual(l[0].title, 'a'); assert.strictEqual(l[0].done, false);
+  assert.strictEqual(st.addSubtask(l, '   ').length, 1, 'blank ignored');
+  l = st.addSubtask(l, 'b'); const [a, b] = l;
+  assert.notStrictEqual(a.id, b.id);
+  assert.deepStrictEqual(st.subtaskProgress({ subtasks: st.toggleSubtask(l, a.id) }), { done: 1, total: 2 });
+  assert.deepStrictEqual(st.subtaskProgress({}), { done: 0, total: 0 }, 'old tasks without subtasks');
+  assert.strictEqual(st.renameSubtask(l, b.id, 'c')[1].title, 'c');
+  assert.strictEqual(st.removeSubtask(l, a.id).length, 1);
+  const all = l.map((x) => ({ ...x, done: true }));
+  assert.strictEqual(st.shouldAutoComplete({ subtasks: all, autoCompleteParent: true }), true);
+  assert.strictEqual(st.shouldAutoComplete({ subtasks: all }), false, 'default off');
+  assert.strictEqual(st.shouldAutoComplete({ subtasks: all, autoCompleteParent: true, completed: true }), false);
+  assert.strictEqual(st.shouldAutoComplete({ subtasks: [], autoCompleteParent: true }), false, 'needs >=1 subtask');
+  assert.strictEqual(st.resetSubtasks({ subtasks: all }).subtasks.every((x) => !x.done), true);
+  const tp = require(path.join(src, 'utils/taskPlanning.js'));
+  assert.strictEqual(tp.activeCount([{ subtasks: all }, { completed: true }]), 1, 'subtasks do not count toward cap');
+  console.log('ok   utils/subtasks');
+})();
+(async () => {
+  let failed = 0;
+  const warn = console.warn; const warnings = [];
+  console.warn = (...a) => warnings.push(a.join(' '));
+  for (const [name, props, expects] of cases) {
+    try {
+      const html = await renderToString(createSSRApp(load(name), props));
+      const missing = expects.filter((e) => !html.includes(e));
+      if (missing.length) { failed++; console.log(`FAIL ${name}: missing ${JSON.stringify(missing)}`); } else console.log(`ok   ${name}`);
+    } catch (e) { failed++; console.log(`FAIL ${name}: ${String(e.message).slice(0, 300)}`); }
+  }
+  console.warn = warn;
+  const real = warnings.filter((w) => !/router-link|resolve component/i.test(w));
+  real.forEach((w) => console.log('warn:', w.split('\n')[0]));
+  process.exit(failed ? 1 : 0);
+})();

@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "serve": "vue-cli-service serve",
-    "build": "vue-cli-service build"
+    "build": "vue-cli-service build",
+    "check": "node scripts/check-sfc.js && node scripts/smoke-render.js"
   },
   "dependencies": {
     "@onesignal/onesignal-vue3": "^2.0.1",
