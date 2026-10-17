@@ -14,6 +14,32 @@
     </div>
 
     <div v-else class="content-wrap">
+      <div v-if="suggestShutdown" class="shutdown-banner" role="status">
+        <span>🌙 It's evening — wrap up the day?</span>
+        <button type="button" class="btn-primary" @click="openShutdown">Start shutdown</button>
+        <button type="button" class="link-btn" @click="shutdownDismissed = true">Not now</button>
+      </div>
+      <div v-if="shutdownOpen" class="modal-backdrop">
+        <div class="modal-box" role="dialog" aria-modal="true" aria-label="Shutdown ritual">
+          <div class="modal-header">
+            <h2 class="modal-title">🌙 Shutdown</h2>
+            <button @click="shutdownOpen = false" class="modal-close" aria-label="Close">✕</button>
+          </div>
+          <div class="modal-body">
+            <p class="shutdown-h">Done ({{ shutdownDone.length }})</p>
+            <ul class="shutdown-list"><li v-for="t in shutdownDone" :key="taskKey(t)">✓ {{ t.title }}</li>
+              <li v-if="!shutdownDone.length" class="muted">Nothing finished yet.</li></ul>
+            <p class="shutdown-h">Unfinished ({{ shutdownOpenTasks.length }}) — carry to tomorrow?</p>
+            <ul class="shutdown-list"><li v-for="t in shutdownOpenTasks" :key="taskKey(t)">
+              <label><input type="checkbox" v-model="shutdownCarry[taskKey(t)]" /> {{ t.title }}</label></li>
+              <li v-if="!shutdownOpenTasks.length" class="muted">All clear. 🎉</li></ul>
+          </div>
+          <div class="modal-footer">
+            <button class="btn-secondary" :disabled="shutdownBusy" @click="finishShutdown(false)">Finish day</button>
+            <button class="btn-primary" :disabled="shutdownBusy" @click="finishShutdown(true)">Carry selected &amp; finish</button>
+          </div>
+        </div>
+      </div>
       <!-- ─── Calendar & Progress ─── -->
       <section class="calendar-section">
         <div class="calendar-header">
@@ -93,6 +119,7 @@
         <div class="header-right">
 
           <div class="day-controls">
+            <button type="button" class="btn-day btn-shutdown" @click="openShutdown">🌙 Shutdown</button>
 
             <button
                 v-if="daySession.started && !daySession.ended"
@@ -319,11 +346,39 @@
                 <label class="field-label">Reminder</label>
                 <input type="datetime-local" v-model="newTask.reminder.datetime" class="field-input" />
               </div>
-              <div class="field-group field-group--row">
-                <span class="field-label">{{ newTask.type === 'recurring' ? 'Recurring' : 'One-time' }}</span>
-                <button type="button" @click="toggleRecurring" class="toggle-btn" :class="{ 'toggle-btn--on': newTask.type === 'recurring' }">
-                  <i :class="newTask.type === 'recurring' ? 'fas fa-sync-alt' : 'fas fa-dot-circle'"></i>
-                </button>
+              <div class="field-group">
+                <label class="field-label" for="nt-repeat">Repeat</label>
+                <select id="nt-repeat" v-model="repeatMode" class="field-select">
+                  <option value="daily">Daily</option>
+                  <option value="weekly">Weekly (on selected days)</option>
+                  <option value="once">Just once</option>
+                </select>
+              </div>
+              <div class="field-grid">
+                <div class="field-group">
+                  <label class="field-label" for="nt-priority">Priority</label>
+                  <select id="nt-priority" v-model="newTask.priority" class="field-select">
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                  </select>
+                </div>
+                <div class="field-group">
+                  <label class="field-label" for="nt-due">Due date</label>
+                  <input id="nt-due" type="date" v-model="newTask.dueDate" class="field-input" />
+                </div>
+                <div class="field-group">
+                  <label class="field-label" for="nt-start">Start time</label>
+                  <input id="nt-start" type="time" v-model="newTask.startTime" class="field-input" />
+                </div>
+                <div class="field-group">
+                  <label class="field-label" for="nt-est">Estimate (min)</label>
+                  <input id="nt-est" type="number" min="0" step="5" v-model="newTask.estimateMin" class="field-input" placeholder="30" />
+                </div>
+              </div>
+              <div class="field-group">
+                <label class="field-label" for="nt-next">Next action</label>
+                <input id="nt-next" type="text" v-model="newTask.nextAction" class="field-input" placeholder="The very next physical step" />
               </div>
 
               <div class="advanced-toggle" @click="showAdvanced = !showAdvanced">
@@ -352,17 +407,22 @@
                     </select>
                   </div>
                   <div class="field-group">
-                    <label class="field-label">Labels</label>
+                    <label class="field-label">Category / labels</label>
                     <input type="text" v-model="newTask.labels" class="field-input" placeholder="Work, Fitness, Health..." />
                   </div>
                   <div class="field-group">
-                    <label class="field-label">Notes</label>
+                    <label class="field-label">Note</label>
                     <textarea v-model="newTask.notes" class="field-textarea" placeholder="Extra details..."></textarea>
                   </div>
                 </div>
               </transition>
 
               <div v-if="error" class="error-msg">{{ error }}</div>
+              <div v-if="capWarning" class="cap-warning" role="alert">
+                <strong>You already have {{ ACTIVE_CAP }} active tasks today.</strong>
+                A shorter list gets finished more often. Move something, or add this one anyway.
+                <button type="button" class="btn-secondary cap-override" @click="addAnyway">Add anyway</button>
+              </div>
             </div>
             <div class="modal-footer">
               <button type="button" @click="closeModal" class="btn-secondary">Cancel</button>
@@ -526,9 +586,29 @@
               <span class="task-count-label">Today</span>
               <span class="task-count-badge">{{ completedTaskCount }}/{{ selectedDayRoutine?.length }}</span>
             </div>
+            <button @click="toggleSound" class="toggle-visibility" :aria-pressed="soundEnabled" :aria-label="soundEnabled ? 'Mute sounds' : 'Enable sounds'" :title="soundEnabled ? 'Sounds on' : 'Sounds off'">
+              <i :class="soundEnabled ? 'fas fa-volume-up' : 'fas fa-volume-mute'"></i>
+            </button>
             <button @click="showCompleted = !showCompleted" class="toggle-visibility" :title="showCompleted ? 'Hide completed' : 'Show completed'">
               <i :class="showCompleted ? 'fas fa-eye' : 'fas fa-eye-slash'"></i>
             </button>
+          </div>
+
+          <div v-if="isViewingToday" class="load-summary" :class="'load-summary--' + todayLoad.level">
+            <span>⏱ <strong>{{ formatMinutes(todayLoad.minutes) }}</strong> planned · {{ todayLoad.count }} open</span>
+            <span class="load-hint">{{ todayLoad.hint }}<template v-if="todayLoad.unestimated"> · {{ todayLoad.unestimated }} without estimate</template></span>
+            <button type="button" class="link-btn" @click="showSchedule = !showSchedule" :aria-expanded="showSchedule">🗓 Schedule</button>
+          </div>
+          <div v-if="showSchedule" class="schedule-panel">
+            <p v-if="!schedule.blocks.length" class="schedule-empty">No tasks have a start time yet. Tap a task to set one.</p>
+            <ul v-else class="schedule-list">
+              <li v-for="b in schedule.blocks" :key="b.task.createdAt + b.task.title" :class="{ 'schedule-conflict': b.conflict, 'schedule-done': b.task.completed }">
+                <span class="schedule-time">{{ formatClock(b.start) }}<template v-if="b.end !== null"> – {{ formatClock(b.end) }}</template></span>
+                <span>{{ b.task.title }}</span>
+                <span v-if="b.conflict" class="schedule-flag">overlaps next</span>
+              </li>
+            </ul>
+            <p v-if="schedule.unscheduled.length" class="schedule-unsched">Unscheduled: {{ schedule.unscheduled.filter(t => !t.completed).length }}</p>
           </div>
 
           <draggable
@@ -539,7 +619,8 @@
               class="tasks-list space-y-2"
               ghost-class="ghost"
               drag-class="drag"
-              @end="handleDragEnd"
+              @start="playSound('dragStart')"
+              @end="playSound('dragEnd'); handleDragEnd()"
           >
             <template #item="{ element: task, index }">
               <div
@@ -559,7 +640,7 @@
                 </div>
 
                 <!-- Center: main content -->
-                <div class="task-body" >
+                <div class="task-body" @click="onCardTap(task, $event)">
                   <div class="task-title-row">
                     <!-- Completion toggle -->
                     <button
@@ -596,6 +677,40 @@
                     <button @click="toggleTaskImportance(index)" class="importance-btn" :title="task.important ? 'Important' : 'Mark important'">
                       <i :class="task.important ? 'fas fa-fire task-fire--on' : 'fas fa-fire task-fire--off'"></i>
                     </button>
+                  </div>
+
+                  <!-- Planning chips -->
+                  <div v-if="estimateOf(task) || task.startTime || task.dueDate || (task.priority && task.priority !== 'low') || (task.status && task.status !== 'todo')" class="task-chips">
+                    <span v-if="task.priority && task.priority !== 'low'" class="chip" :class="'chip--' + task.priority">{{ task.priority }}</span>
+                    <span v-if="task.status && task.status !== 'todo'" class="chip">{{ task.status }}</span>
+                    <span v-if="task.dueDate" class="chip">Due {{ task.dueDate }}</span>
+                    <span v-if="estimateOf(task)" class="chip">⏱ {{ formatMinutes(estimateOf(task)) }}</span>
+                    <span v-if="task.startTime" class="chip">🕒 {{ formatClock(toMinutes(task.startTime)) }}<template v-if="estimateOf(task)"> – {{ formatClock(toMinutes(task.startTime) + estimateOf(task)) }}</template></span>
+                  </div>
+                  <div v-if="task.nextAction" class="task-next">→ {{ task.nextAction }}</div>
+                  <div v-if="task.notes && expandedKey !== taskKey(task)" class="task-note-preview">📝 {{ task.notes.length > 60 ? task.notes.slice(0, 60) + '…' : task.notes }}</div>
+
+                  <div v-if="expandedKey === taskKey(task)" class="task-expand">
+                    <div class="field-grid">
+                      <label class="mini-field"><span>Status</span>
+                        <select class="field-select" :value="task.status || 'todo'" @change="patchTask(index, task, { status: $event.target.value })">
+                          <option v-for="st in STATUSES" :key="st.value" :value="st.value">{{ st.label }}</option>
+                        </select></label>
+                      <label class="mini-field"><span>Priority</span>
+                        <select class="field-select" :value="task.priority || 'low'" @change="patchTask(index, task, { priority: $event.target.value })">
+                          <option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option>
+                        </select></label>
+                      <label class="mini-field"><span>Due date</span>
+                        <input type="date" class="field-input" :value="task.dueDate || ''" @change="patchTask(index, task, { dueDate: $event.target.value })" /></label>
+                      <label class="mini-field"><span>Start time</span>
+                        <input type="time" class="field-input" :value="task.startTime || ''" @change="patchTask(index, task, { startTime: $event.target.value })" /></label>
+                      <label class="mini-field"><span>Estimate (min)</span>
+                        <input type="number" min="0" step="5" class="field-input" :value="task.estimateMin || ''" @change="patchTask(index, task, { estimateMin: Number($event.target.value) || 0 })" /></label>
+                      <label class="mini-field"><span>Next action</span>
+                        <input type="text" class="field-input" :value="task.nextAction || ''" @change="patchTask(index, task, { nextAction: $event.target.value.trim() })" /></label>
+                    </div>
+                    <label class="mini-field"><span>Note</span>
+                      <textarea class="field-textarea" rows="2" :value="task.notes || ''" placeholder="Quick note…" @change="patchTask(index, task, { notes: $event.target.value })"></textarea></label>
                   </div>
 
                   <!-- Labels -->
@@ -714,7 +829,10 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed, watch, reactive } from 'vue';
+import { ref, onMounted, onBeforeUnmount, computed, watch, reactive } from 'vue';
+import { useSounds } from '@/composables/useSounds';
+import { patchStoredTask, loadDayTasks, carryTasksToDay } from '@/composables/useDayPersistence';
+import { ACTIVE_CAP, STATUSES, taskKey, activeCount, estimateOf, formatClock, formatDuration as formatMinutes, loadSummary, buildSchedule, toMinutes } from '@/utils/taskPlanning';
 import { auth } from '@/firebaseConfig'; // Assuming you have Firebase authentication configured
 import { onAuthStateChanged } from 'firebase/auth';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -1306,6 +1424,7 @@ const newTask = ref({
   selectedDays: [],
   position: 0,
   type: 'recurring',
+  dueDate: '', startTime: '', estimateMin: '', nextAction: '',
   reminder: { date: '', time: '', repeat: '' }  // Now defined
 });
 
@@ -1570,11 +1689,15 @@ const topIncompleteTaskIndex = computed(() => {
   return selectedDayRoutine.value.findIndex((task) => !task.completed);
 });
 
+const { soundEnabled, playSound, toggleSound, markUserCompletion, watchMilestones } = useSounds();
+
 const toggleTaskCompletion = async (index) => {
   const task = { ...selectedDayRoutine.value[index] }; // Create a copy of the task to avoid direct mutation
   task.completed = !task.completed; // Toggle the completed state
   startSpinning(index);
   if (task.completed) {
+    markUserCompletion();
+    playSound("complete");
     const completedNow = new Date().toISOString();
 
     task.completedAt = completedNow;
@@ -1917,6 +2040,8 @@ const addNewTask = async () => {
     return;
   }
 
+  if (isCapBlocked()) return;
+
   const selectedDays =
       newTask.value.selectedDays.length > 0
           ? newTask.value.selectedDays
@@ -1937,7 +2062,12 @@ const addNewTask = async () => {
     notes: newTask.value.notes,
     userId: userId.value,
     type: newTask.value.type,
-    createdAt: new Date().toISOString()
+    createdAt: new Date().toISOString(),
+    status: 'todo',
+    dueDate: newTask.value.dueDate || '',
+    startTime: newTask.value.startTime || '',
+    estimateMin: Number(newTask.value.estimateMin) || 0,
+    nextAction: (newTask.value.nextAction || '').trim()
   };
 
   // Parse datetime-local input if provided
@@ -1996,8 +2126,10 @@ const addNewTask = async () => {
       selectedDays: [],
       position: 0,
       reminder: { datetime: '', repeat: '' },
-      type: 'recurring'
+      type: 'recurring',
+      dueDate: '', startTime: '', estimateMin: '', nextAction: ''
     };
+    capWarning.value = false; capOverride.value = false;
     closeModal();
     error.value = '';
 
@@ -2988,6 +3120,103 @@ const canViewSelectedDayTasks = computed(() => {
   // Today requires Start Day
   return daySession.value.started && !daySession.value.ended;
 });
+
+// ─── Task planning (logic lives in @/utils/taskPlanning and @/composables) ───
+watchMilestones(() => calculateCompletionPercentage(), milestones, selectedDayIndex);
+
+const todayDayName = () => days[new Date().getDay()].day;
+const isViewingToday = computed(() => selectedDayIndex.value === new Date().getDay());
+
+// Repeat: Daily / Weekly / Once, built on the existing Recurring type + Days selection
+const repeatMode = computed({
+  get: () => newTask.value.type === 'one-time' ? 'once'
+      : (newTask.value.selectedDays.length === days.length ? 'daily' : 'weekly'),
+  set: (v) => {
+    if (v === 'once') { newTask.value.type = 'one-time'; newTask.value.selectedDays = []; }
+    else if (v === 'daily') { newTask.value.type = 'recurring'; newTask.value.selectedDays = [...days]; }
+    else { newTask.value.type = 'recurring'; newTask.value.selectedDays = []; }
+  }
+});
+
+// Daily cap of 3 active tasks (override available)
+const capWarning = ref(false);
+const capOverride = ref(false);
+const addsToToday = () => {
+  const todayName = todayDayName();
+  const sel = newTask.value.selectedDays;
+  return sel.length > 0 ? sel.some((d) => d.day === todayName) : isViewingToday.value;
+};
+const isCapBlocked = () => {
+  if (capOverride.value || !addsToToday()) return false;
+  if (activeCount(selectedDayRoutine.value) >= ACTIVE_CAP) { capWarning.value = true; return true; }
+  return false;
+};
+const addAnyway = () => { capOverride.value = true; capWarning.value = false; addNewTask(); };
+watch(modalOpen, (open) => { if (!open) { capWarning.value = false; capOverride.value = false; } });
+
+// Load summary + schedule
+const todayLoad = computed(() => loadSummary(selectedDayRoutine.value));
+const schedule = computed(() => buildSchedule(selectedDayRoutine.value));
+const showSchedule = ref(false);
+
+// Inline expand (tap card) + inline field editing, saved with the task
+const expandedKey = ref(null);
+const onCardTap = (task, event) => {
+  if (event.target.closest('button, input, textarea, select, .task-title, .label-pill, .task-expand')) return;
+  expandedKey.value = expandedKey.value === taskKey(task) ? null : taskKey(task);
+};
+const patchTask = async (index, task, patch) => {
+  try {
+    Object.assign(task, patch);
+    if (patch.estimateMin !== undefined) task.estimateMin = Number(patch.estimateMin) || 0;
+    await patchStoredTask(userId.value, days[selectedDayIndex.value].day, task, index, patch);
+  } catch (e) {
+    console.error('Error saving task field:', e);
+  }
+};
+
+// Shutdown ritual
+const clockTick = ref(Date.now());
+let clockTimer = setInterval(() => { clockTick.value = Date.now(); }, 60000);
+onBeforeUnmount(() => clearInterval(clockTimer));
+const suggestShutdown = computed(() =>
+  new Date(clockTick.value).getHours() >= 18 && !daySession.value.ended && !shutdownDismissed.value);
+const shutdownDismissed = ref(false);
+const shutdownOpen = ref(false);
+const shutdownDone = ref([]);
+const shutdownOpenTasks = ref([]);
+const shutdownCarry = ref({});
+const shutdownBusy = ref(false);
+const openShutdown = async () => {
+  shutdownOpen.value = true;
+  try {
+    const tasks = userId.value ? await loadDayTasks(userId.value, todayDayName()) : [];
+    shutdownDone.value = tasks.filter((t) => t.completed);
+    shutdownOpenTasks.value = tasks.filter((t) => !t.completed);
+    shutdownCarry.value = Object.fromEntries(shutdownOpenTasks.value.map((t) => [taskKey(t), true]));
+  } catch (e) { console.error('Shutdown load failed:', e); }
+};
+const finishShutdown = async (carry) => {
+  shutdownBusy.value = true;
+  try {
+    if (carry) {
+      const picked = shutdownOpenTasks.value.filter((t) => shutdownCarry.value[taskKey(t)]);
+      if (picked.length) {
+        const tomorrow = days[(new Date().getDay() + 1) % days.length].day;
+        await carryTasksToDay(userId.value, todayDayName(), tomorrow, picked, getTodayId());
+      }
+    }
+    try { await saveDailyPerformance(); } catch (e) { console.error(e); }
+    shutdownOpen.value = false;
+    shutdownDismissed.value = true;
+    if (daySession.value.started && !daySession.value.ended) await endDay(); // existing End Day logic
+    await fetchSelectedDayRoutine();
+  } catch (e) {
+    console.error('Shutdown failed:', e);
+  } finally {
+    shutdownBusy.value = false;
+  }
+};
 </script>
 
 
@@ -3882,6 +4111,51 @@ const canViewSelectedDayTasks = computed(() => {
 .timer-start {
   background: #2f8cff;
   color: white;
+}
+
+/* ── Planning / polish additions ── */
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
+  outline: 2px solid #7fb8f5; outline-offset: 2px;
+}
+.btn-shutdown { background: #1e2a3a; color: #9cc7f7; }
+.btn-shutdown:hover, .btn-day:hover { opacity: 0.85; }
+.field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem; }
+.mini-field { display: flex; flex-direction: column; gap: 4px; font-size: 0.72rem; color: #a3a29d; margin-bottom: 0.5rem; }
+.task-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.chip { font-size: 0.7rem; padding: 2px 8px; border-radius: 20px; background: #232328; color: #c9c8c3; }
+.chip--high { background: #3b0d0d; color: #fca5a5; }
+.chip--medium { background: #3a2d0a; color: #fcd34d; }
+.task-next { margin-top: 6px; font-size: 0.8rem; color: #9cc7f7; }
+.task-note-preview { margin-top: 4px; font-size: 0.78rem; color: #a3a29d; line-height: 1.4; }
+.task-expand { margin-top: 10px; padding-top: 10px; border-top: 1px solid #2a2a2e; cursor: default; }
+.task-body { cursor: pointer; min-width: 0; }
+.load-summary {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1rem;
+  font-size: 0.8rem; color: #c9c8c3; background: #18181b; border: 1px solid #2a2a2e;
+  border-radius: 12px; padding: 0.5rem 0.875rem; margin-bottom: 0.75rem;
+}
+.load-hint { color: #86efac; }
+.load-summary--full .load-hint { color: #fcd34d; }
+.load-summary--over { border-color: #7f1d1d; }
+.load-summary--over .load-hint { color: #fca5a5; }
+.link-btn { background: none; border: none; color: #9cc7f7; cursor: pointer; font: inherit; text-decoration: underline; margin-left: auto; }
+.schedule-panel { background: #18181b; border: 1px solid #2a2a2e; border-radius: 12px; padding: 0.75rem 1rem; margin-bottom: 0.75rem; font-size: 0.8rem; color: #c9c8c3; }
+.schedule-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.schedule-list li { display: flex; gap: 0.75rem; align-items: baseline; }
+.schedule-time { font-family: 'JetBrains Mono', monospace; color: #7fb8f5; min-width: 9.5rem; }
+.schedule-conflict .schedule-flag { color: #fca5a5; font-size: 0.7rem; }
+.schedule-done { opacity: 0.5; text-decoration: line-through; }
+.schedule-empty, .schedule-unsched { margin: 0; color: #a3a29d; }
+.schedule-unsched { margin-top: 6px; }
+.cap-warning { background: #3a2d0a; border: 1px solid #92400e; color: #fde68a; border-radius: 10px; padding: 0.75rem; font-size: 0.82rem; line-height: 1.5; margin-top: 0.75rem; }
+.cap-override { display: block; margin-top: 0.5rem; }
+.shutdown-banner { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; background: #1e2a3a; border: 1px solid #2c4666; color: #cfe3fb; border-radius: 12px; padding: 0.625rem 1rem; margin-bottom: 1rem; font-size: 0.85rem; }
+.shutdown-h { font-weight: 600; font-size: 0.85rem; margin: 0.5rem 0 0.25rem; }
+.shutdown-list { list-style: none; margin: 0 0 0.5rem; padding: 0; font-size: 0.85rem; line-height: 1.6; }
+.muted { color: #a3a29d; }
+@media (max-width: 480px) {
+  .field-grid { grid-template-columns: 1fr; }
+  .schedule-time { min-width: 0; }
 }
 </style>
 
