@@ -14,32 +14,10 @@
     </div>
 
     <div v-else class="content-wrap">
-      <div v-if="suggestShutdown" class="shutdown-banner" role="status">
-        <span>🌙 It's evening — wrap up the day?</span>
-        <button type="button" class="btn-primary" @click="openShutdown">Start shutdown</button>
-        <button type="button" class="link-btn" @click="shutdownDismissed = true">Not now</button>
-      </div>
-      <div v-if="shutdownOpen" class="modal-backdrop">
-        <div class="modal-box" role="dialog" aria-modal="true" aria-label="Shutdown ritual">
-          <div class="modal-header">
-            <h2 class="modal-title">🌙 Shutdown</h2>
-            <button @click="shutdownOpen = false" class="modal-close" aria-label="Close">✕</button>
-          </div>
-          <div class="modal-body">
-            <p class="shutdown-h">Done ({{ shutdownDone.length }})</p>
-            <ul class="shutdown-list"><li v-for="t in shutdownDone" :key="taskKey(t)">✓ {{ t.title }}</li>
-              <li v-if="!shutdownDone.length" class="muted">Nothing finished yet.</li></ul>
-            <p class="shutdown-h">Unfinished ({{ shutdownOpenTasks.length }}) — carry to tomorrow?</p>
-            <ul class="shutdown-list"><li v-for="t in shutdownOpenTasks" :key="taskKey(t)">
-              <label><input type="checkbox" v-model="shutdownCarry[taskKey(t)]" /> {{ t.title }}</label></li>
-              <li v-if="!shutdownOpenTasks.length" class="muted">All clear. 🎉</li></ul>
-          </div>
-          <div class="modal-footer">
-            <button class="btn-secondary" :disabled="shutdownBusy" @click="finishShutdown(false)">Finish day</button>
-            <button class="btn-primary" :disabled="shutdownBusy" @click="finishShutdown(true)">Carry selected &amp; finish</button>
-          </div>
-        </div>
-      </div>
+      <ShutdownPrompt :suggest="suggestShutdown" :open="shutdownOpen" :done="shutdownDone" :open-tasks="shutdownOpenTasks"
+                      v-model:carry="shutdownCarry" :busy="shutdownBusy"
+                      @start="openShutdown" @dismiss="shutdownDismissed = true" @close="shutdownOpen = false" @finish="finishShutdown" />
+
       <!-- ─── Calendar & Progress ─── -->
       <section class="calendar-section">
         <div class="calendar-header">
@@ -47,529 +25,52 @@
           <span class="days-left-badge">⏳ {{ daysLeftInYear }} days left in year</span>
         </div>
 
-        <!-- Day Tabs -->
-        <div class="day-tabs">
-          <button
-              v-for="(day, index) in days"
-              :key="index"
-              class="day-tab"
-              :class="{
-              'day-tab--today': isToday(index),
-              'day-tab--selected': isSelected(index)
-            }"
-              @click="handleDayTabClick(index)"
-          >
-            <span class="day-tab-name">{{ day.day }}</span>
-            <span class="day-tab-date">{{ day.date }}</span>
-          </button>
-        </div>
+        <DayTabs :days="days" :selected-index="selectedDayIndex" @select="handleDayTabClick" />
 
-        <!-- Progress Journey -->
-        <div class="progress-section">
-          <div class="progress-info">
-            <span class="progress-label">Progress</span>
-            <span class="progress-pct">{{ calculateCompletionPercentage() }}%</span>
-          </div>
-          <div class="progress-track">
-            <div class="progress-fill" :style="{ width: calculateCompletionPercentage() + '%' }"></div>
-          </div>
-          <div class="milestone-row">
-            <div
-                v-for="(milestone, index) in milestones"
-                :key="index"
-                class="milestone-dot"
-                :class="{
-                'milestone-dot--reached': calculateCompletionPercentage() >= milestone.percent
-              }"
-                :style="{ left: index === 0 ? '0%' : index === milestones.length - 1 ? 'calc(100% - 28px)' : `calc(${milestone.position}% - 14px)` }"
-                :title="milestone.icon + ' ' + milestone.percent + '%'"
-            >
-              <span class="milestone-icon">{{ milestone.icon }}</span>
-            </div>
-          </div>
-        </div>
+        <ProgressBar :percentage="calculateCompletionPercentage()" :milestones="milestones" />
+
       </section>
 
-      <!-- ─── Header / Streak Bar ─── -->
-      <header class="header-card" :class="{
-        'header-cold': streak < 3,
-        'header-warm': streak >= 3 && streak < 7,
-        'header-hot': streak >= 7
-      }">
-        <div class="header-left">
-          <div class="streak-badge">
-            <span class="streak-icon-wrap">{{ getStreakIcon(streak) }}</span>
-          </div>
-          <div class="streak-info">
-            <p class="streak-count">🔥 <span>{{ streak }}</span> day streak</p>
-            <p v-if="streak === 0" class="streak-sub streak-none">Start your streak today</p>
-            <p v-else class="streak-sub">{{ motivationalMessage }}</p>
-          </div>
-        </div>
+      <StreakHeader :streak="streak" :motivational-message="motivationalMessage" :points-accumulated="pointsAccumulated"
+                    :total-points="totalPoints" :day-session="daySession" @shutdown="openShutdown" @end-day="endDay" />
 
-        <div class="header-center">
-          <div v-if="pointsAccumulated < totalPoints && !isNaN(pointsAccumulated) && !isNaN(totalPoints)" class="points-pill points-needed">
-            💰 {{ totalPoints - pointsAccumulated }} pts to idle time
-          </div>
-          <div v-else class="points-pill points-ready">
-            🎉 Idle time unlocked!
-          </div>
-        </div>
+      <TimeStatsBar :stats="timeStats" />
 
-        <div class="header-right">
+      <WorkoutModal v-if="showWorkoutModal" :preferences="workoutPreferences" @close="closeWorkoutModal" @generate="generateWorkoutRoutine" />
 
-          <div class="day-controls">
-            <button type="button" class="btn-day btn-shutdown" @click="openShutdown">🌙 Shutdown</button>
-
-            <button
-                v-if="daySession.started && !daySession.ended"
-                @click="endDay"
-                class="btn-day btn-end"
-            >
-              🌙 End Day
-            </button>
-
-          </div>
-
-          <div class="session-times">
-
-    <span
-        v-if="daySession.startedAtText"
-        class="session-time started"
-    >
-      ▶ {{ daySession.startedAtText }}
-    </span>
-
-            <span
-                v-if="daySession.endedAtText"
-                class="session-time ended"
-            >
-      ■ {{ daySession.endedAtText }}
-    </span>
-
-          </div>
-
-        </div>
-      </header>
-      <div class="grid grid-cols-5 gap-1 mb-3">
-        <div class="bg-slate-900/80 rounded-xl py-2 text-center">
-          <p class="text-[10px] text-slate-400">Total</p>
-          <p class="text-sm font-bold text-white">{{ timeStats.totalDayTime }}</p>
-        </div>
-
-        <div class="bg-slate-900/80 rounded-xl py-2 text-center">
-          <p class="text-[10px] text-emerald-400">Prod</p>
-          <p class="text-sm font-bold text-white">{{ timeStats.productiveTime }}</p>
-        </div>
-
-        <div class="bg-slate-900/80 rounded-xl py-2 text-center">
-          <p class="text-[10px] text-yellow-400">Gap</p>
-          <p class="text-sm font-bold text-white">{{ timeStats.gapTime }}</p>
-        </div>
-
-        <div class="bg-slate-900/80 rounded-xl py-2 text-center">
-          <p class="text-[10px] text-blue-400">Done</p>
-          <p class="text-sm font-bold text-white">{{ timeStats.completedTasks }}</p>
-        </div>
-
-        <div class="bg-slate-900/80 rounded-xl py-2 text-center">
-          <p class="text-[10px] text-red-400">Miss</p>
-          <p class="text-sm font-bold text-white">{{ timeStats.missedTasks }}</p>
-        </div>
-      </div>
-      <!-- ─── Workout Modal ─── -->
-      <div v-if="showWorkoutModal" class="modal-backdrop">
-        <div class="modal-box">
-          <div class="modal-header">
-            <h2 class="modal-title">Customize Workout</h2>
-            <button @click="closeWorkoutModal" class="modal-close">✕</button>
-          </div>
-          <div class="modal-body">
-            <div class="field-group">
-              <label class="field-label">Goal</label>
-              <select v-model="workoutPreferences.goal" class="field-select">
-                <option>Build Muscle</option>
-                <option>Lose Fat</option>
-                <option>General Fitness</option>
-              </select>
-            </div>
-            <div class="field-group">
-              <label class="field-label">Equipment</label>
-              <select v-model="workoutPreferences.equipment" class="field-select">
-                <option>None</option>
-                <option>Resistance Bands</option>
-                <option>Resistance Bands + Equipment</option>
-                <option>Full Gym</option>
-              </select>
-            </div>
-            <div class="field-group">
-              <label class="field-label">Max per day</label>
-              <select v-model="workoutPreferences.maxPerDay" class="field-select">
-                <option v-for="n in 5" :key="n" :value="n">{{ n }}</option>
-              </select>
-            </div>
-            <div class="field-group">
-              <label class="field-label">Duration (min)</label>
-              <input type="number" v-model="workoutPreferences.duration" class="field-input" />
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button @click="closeWorkoutModal" class="btn-secondary">Cancel</button>
-            <button @click="generateWorkoutRoutine" class="btn-primary">Generate 💪</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- ─── All Tasks Complete Animation ─── -->
-      <div v-if="showFullScreenAnimation" class="fullscreen-celebration">
-        <div class="celebration-inner">
-          <div class="celebration-emoji">🎉</div>
-          <h1 class="celebration-title">All done!</h1>
-          <p class="celebration-streak">🔥 <span>{{ streak }}</span> day streak</p>
-          <p class="celebration-sub">Every task complete. Take a breath — you earned it.</p>
-          <button @click="closeFullScreenAnimation" class="btn-primary btn-lg">Continue</button>
-        </div>
-      </div>
+      <CelebrationOverlay v-if="showFullScreenAnimation" :streak="streak" @close="closeFullScreenAnimation" />
 
 
-      <!-- ─── Timer Modal ─── -->
-      <div v-if="showTimerModal" class="modal-backdrop">
-        <div class="timer-modal">
-          <div class="timer-header">
-            <h2>⏱ Set Timer</h2>
-            <button @click="showTimerModal = false" class="timer-close">×</button>
-          </div>
+      <TimerModal v-if="showTimerModal" v-model:hours="selectedTimerHours" v-model:minutes="selectedTimerMinutes" @close="showTimerModal = false" @start="startTimer" />
 
-          <div class="timer-body">
-            <div class="timer-picker">
-              <div class="timer-field">
-                <label>Hours</label>
-                <select v-model="selectedTimerHours">
-                  <option
-                      v-for="hour in 24"
-                      :key="hour - 1"
-                      :value="hour - 1"
-                  >
-                    {{ hour - 1 }}
-                  </option>
-                </select>
-              </div>
 
-              <div class="timer-field">
-                <label>Minutes</label>
-                <select v-model="selectedTimerMinutes">
-                  <option
-                      v-for="minute in 60"
-                      :key="minute - 1"
-                      :value="minute - 1"
-                  >
-                    {{ minute - 1 }}
-                  </option>
-                </select>
-              </div>
-            </div>
+      <WontDoModal v-if="wontDoModalOpen" v-model:reason="wontDoReason" @cancel="wontDoModalOpen = false" @confirm="markTaskAsWontDo" />
 
-            <div class="timer-preview">
-              {{ selectedTimerHours }}h {{ selectedTimerMinutes }}m
-            </div>
-          </div>
 
-          <div class="timer-footer">
-            <button @click="showTimerModal = false" class="timer-btn timer-cancel">
-              Cancel
-            </button>
+      <TransferModal v-if="transferModalOpen" v-model:day="selectedTransferDay" :days="days" :selected-day-index="selectedDayIndex" @close="closeTransferModal" @transfer="transferTask()" />
 
-            <button @click="startTimer" class="timer-btn timer-start">
-              Start
-            </button>
-          </div>
-        </div>
-      </div>
 
-      <!-- ─── Won't Do Modal ─── -->
-      <div v-if="wontDoModalOpen" class="modal-backdrop">
-        <div class="modal-box modal-box--sm">
-          <div class="modal-header">
-            <h2 class="modal-title">🚫 Won't do this?</h2>
-          </div>
-          <div class="modal-body">
-            <div class="field-group">
-              <label class="field-label">Reason</label>
-              <textarea v-model="wontDoReason" class="field-textarea" placeholder="Why are you skipping this?"></textarea>
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button @click="wontDoModalOpen = false" class="btn-secondary">Cancel</button>
-            <button @click="markTaskAsWontDo" class="btn-primary">Confirm</button>
-          </div>
-        </div>
-      </div>
+      <AddTaskModal v-if="modalOpen" :new-task="newTask" v-model:repeat-mode="repeatMode" v-model:show-advanced="showAdvanced"
+                    :days="days" :selected-day-routine="selectedDayRoutine" :error="error" :cap-warning="capWarning"
+                    @close="closeModal" @submit="addNewTask" @add-anyway="addAnyway" />
 
-      <!-- ─── Transfer Modal ─── -->
-      <div v-if="transferModalOpen" class="modal-backdrop">
-        <div class="modal-box modal-box--sm">
-          <div class="modal-header">
-            <h2 class="modal-title">🔄 Transfer task</h2>
-          </div>
-          <div class="modal-body">
-            <div class="field-group">
-              <label class="field-label">Move to</label>
-              <select v-model="selectedTransferDay" class="field-select">
-                <option v-for="(day, index) in days" :key="index" :value="index" :disabled="index === selectedDayIndex">
-                  {{ day.day }} — {{ day.date }}
-                </option>
-              </select>
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button @click="closeTransferModal" class="btn-secondary">Cancel</button>
-            <button @click="transferTask()" class="btn-primary">Transfer</button>
-          </div>
-        </div>
-      </div>
 
-      <!-- ─── Add Task Modal ─── -->
-      <div v-if="modalOpen" class="modal-backdrop">
-        <div class="modal-box">
-          <div class="modal-header">
-            <h2 class="modal-title">✦ New task</h2>
-            <button @click="closeModal" class="modal-close">✕</button>
-          </div>
-          <form @submit.prevent="addNewTask">
-            <div class="modal-body">
-              <div class="field-group">
-                <label class="field-label">Task name</label>
-                <input type="text" v-model="newTask.title" class="field-input" placeholder="What needs doing?" required />
-              </div>
+      <YouTubeModal v-if="youtubeModalOpen" v-model:url="youtubeInput" @close="closeYouTubeModal" @save="saveYouTubeLink" />
 
-              <div class="field-group">
-                <label class="field-label">Reminder</label>
-                <input type="datetime-local" v-model="newTask.reminder.datetime" class="field-input" />
-              </div>
-              <div class="field-group">
-                <label class="field-label" for="nt-repeat">Repeat</label>
-                <select id="nt-repeat" v-model="repeatMode" class="field-select">
-                  <option value="daily">Daily</option>
-                  <option value="weekly">Weekly (on selected days)</option>
-                  <option value="once">Just once</option>
-                </select>
-              </div>
-              <div class="field-grid">
-                <div class="field-group">
-                  <label class="field-label" for="nt-priority">Priority</label>
-                  <select id="nt-priority" v-model="newTask.priority" class="field-select">
-                    <option value="low">Low</option>
-                    <option value="medium">Medium</option>
-                    <option value="high">High</option>
-                  </select>
-                </div>
-                <div class="field-group">
-                  <label class="field-label" for="nt-due">Due date</label>
-                  <input id="nt-due" type="date" v-model="newTask.dueDate" class="field-input" />
-                </div>
-                <div class="field-group">
-                  <label class="field-label" for="nt-start">Start time</label>
-                  <input id="nt-start" type="time" v-model="newTask.startTime" class="field-input" />
-                </div>
-                <div class="field-group">
-                  <label class="field-label" for="nt-est">Estimate (min)</label>
-                  <input id="nt-est" type="number" min="0" step="5" v-model="newTask.estimateMin" class="field-input" placeholder="30" />
-                </div>
-              </div>
-              <div class="field-group">
-                <label class="field-label" for="nt-next">Next action</label>
-                <input id="nt-next" type="text" v-model="newTask.nextAction" class="field-input" placeholder="The very next physical step" />
-              </div>
 
-              <div class="advanced-toggle" @click="showAdvanced = !showAdvanced">
-                <span>Advanced options</span>
-                <i :class="showAdvanced ? 'fas fa-chevron-up' : 'fas fa-chevron-down'"></i>
-              </div>
+      <TaskDetailModal v-if="taskDetailModalOpen" :task="taskDetail" :active-labels="activeLabels"
+                       @close="closeTaskDetailModal" @preview="showImagePreview = true"
+                       @remove-attachment="removeTaskAttachment" @toggle-label="toggleLabelHighlight" />
 
-              <transition name="fade">
-                <div v-if="showAdvanced" class="advanced-body">
-                  <div class="field-group">
-                    <label class="field-label">Days</label>
-                    <div class="day-checkboxes">
-                      <label v-for="(day, index) in days" :key="index" class="day-check-label">
-                        <input type="checkbox" :value="day" v-model="newTask.selectedDays" class="day-check-input" />
-                        <span>{{ day.day }}</span>
-                      </label>
-                    </div>
-                  </div>
-                  <div class="field-group">
-                    <label class="field-label">Position</label>
-                    <select v-model="newTask.position" class="field-select">
-                      <option :value="0">First</option>
-                      <option v-for="(task, index) in selectedDayRoutine" :key="index" :value="index + 1">
-                        {{ index + 2 }}{{ getOrdinalSuffix(index + 2) }}
-                      </option>
-                    </select>
-                  </div>
-                  <div class="field-group">
-                    <label class="field-label">Category / labels</label>
-                    <input type="text" v-model="newTask.labels" class="field-input" placeholder="Work, Fitness, Health..." />
-                  </div>
-                  <div class="field-group">
-                    <label class="field-label">Note</label>
-                    <textarea v-model="newTask.notes" class="field-textarea" placeholder="Extra details..."></textarea>
-                  </div>
-                </div>
-              </transition>
 
-              <div v-if="error" class="error-msg">{{ error }}</div>
-              <div v-if="capWarning" class="cap-warning" role="alert">
-                <strong>You already have {{ ACTIVE_CAP }} active tasks today.</strong>
-                A shorter list gets finished more often. Move something, or add this one anyway.
-                <button type="button" class="btn-secondary cap-override" @click="addAnyway">Add anyway</button>
-              </div>
-            </div>
-            <div class="modal-footer">
-              <button type="button" @click="closeModal" class="btn-secondary">Cancel</button>
-              <button type="submit" class="btn-primary">Add task ✦</button>
-            </div>
-          </form>
-        </div>
-      </div>
+      <ImagePreview v-if="showImagePreview" :src="taskDetail.imageURL" @close="showImagePreview = false" />
 
-      <!-- ─── YouTube Modal ─── -->
-      <div v-if="youtubeModalOpen" class="modal-backdrop">
-        <div class="modal-box modal-box--sm">
-          <div class="modal-header">
-            <h2 class="modal-title">🎥 Attach video</h2>
-            <button @click="closeYouTubeModal" class="modal-close">✕</button>
-          </div>
-          <div class="modal-body">
-            <div class="field-group">
-              <label class="field-label">YouTube URL</label>
-              <input type="url" v-model="youtubeInput" class="field-input" placeholder="https://youtube.com/watch?v=..." />
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button @click="closeYouTubeModal" class="btn-secondary">Cancel</button>
-            <button @click="saveYouTubeLink" class="btn-primary">Attach</button>
-          </div>
-        </div>
-      </div>
 
-      <!-- ─── Task Detail Modal ─── -->
-      <div v-if="taskDetailModalOpen" class="modal-backdrop">
-        <div class="modal-box">
-          <div class="modal-header">
-            <h2 class="modal-title">Task details</h2>
-            <button @click="closeTaskDetailModal" class="modal-close">✕</button>
-          </div>
-          <div class="modal-body">
-            <h3 class="detail-title">{{ taskDetail.title }}</h3>
+      <ReminderModal v-if="isModalOpen" :reminder="reminder" :task-title="selectedTaskTitle" @close="closeModal" @submit="handleAddReminder" />
 
-            <div v-if="taskDetail.youtubeURL" class="detail-media">
-              <iframe
-                  :src="`https://www.youtube.com/embed/${extractYouTubeID(taskDetail.youtubeURL)}`"
-                  class="detail-video"
-                  height="220"
-                  frameborder="0"
-                  allowfullscreen
-              ></iframe>
-            </div>
 
-            <div v-if="taskDetail.imageURL" class="detail-media detail-image-wrap">
-              <img :src="taskDetail.imageURL" class="detail-image" @click="showImagePreview = true" />
-              <button @click="removeTaskAttachment('imageURL')" class="detail-remove">✕</button>
-            </div>
+      <VoiceModal v-if="listening" :transcript="liveTranscript" @cancel="cancelVoiceInput" />
 
-            <div v-if="taskDetail.fileURL" class="detail-file">
-              📄 <a :href="taskDetail.fileURL" target="_blank" class="detail-file-link">{{ taskDetail.fileName || 'Download file' }}</a>
-              <button @click="removeTaskAttachment('fileURL')" class="detail-remove">✕</button>
-            </div>
-
-            <div v-if="taskDetail.reminder?.date && taskDetail.reminder?.time" class="detail-row">
-              <span class="detail-row-icon">📅</span>
-              <span>{{ formatShortDate(taskDetail.reminder.date) }} at {{ formatTime(taskDetail.reminder.time) }}</span>
-            </div>
-
-            <div v-if="taskDetail.notes" class="detail-row detail-row--block">
-              <span class="detail-row-icon">📝</span>
-              <div>
-                <p class="detail-row-label">Notes</p>
-                <p class="detail-row-content">{{ taskDetail.notes }}</p>
-              </div>
-            </div>
-
-            <div v-if="taskDetail.labels?.length" class="detail-labels">
-              <span
-                  v-for="(label, index) in taskDetail.labels"
-                  :key="index"
-                  @click="toggleLabelHighlight(label)"
-                  class="label-pill"
-                  :class="{ 'label-pill--active': activeLabels.includes(label) }"
-              >
-                {{ label }}
-              </span>
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button @click="closeTaskDetailModal" class="btn-primary">Close</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- ─── Fullscreen Image Preview ─── -->
-      <div v-if="showImagePreview" class="image-preview-overlay" @click="showImagePreview = false">
-        <img :src="taskDetail.imageURL" class="image-preview-img" />
-      </div>
-
-      <!-- ─── Reminder Modal ─── -->
-      <div v-if="isModalOpen" class="modal-backdrop">
-        <div class="modal-box modal-box--sm">
-          <div class="modal-header">
-            <h2 class="modal-title">📅 Add reminder</h2>
-          </div>
-          <div class="modal-body">
-            <p class="reminder-task-name">{{ selectedTaskTitle }}</p>
-            <form @submit.prevent="handleAddReminder">
-              <div class="field-group">
-                <label class="field-label">Date</label>
-                <input type="date" v-model="reminder.date" class="field-input" required />
-              </div>
-              <div class="field-group">
-                <label class="field-label">Time</label>
-                <input type="time" v-model="reminder.time" class="field-input" required />
-              </div>
-              <div class="field-group">
-                <label class="field-label">Repeat</label>
-                <select v-model="reminder.repeat" class="field-select">
-                  <option value="">No repeat</option>
-                  <option value="daily">Daily</option>
-                  <option value="weekly">Weekly</option>
-                  <option value="monthly">Monthly</option>
-                  <option value="yearly">Yearly</option>
-                </select>
-              </div>
-              <div class="modal-footer" style="padding: 0; border: none; margin-top: 1rem;">
-                <button @click="closeModal" type="button" class="btn-secondary">Cancel</button>
-                <button type="submit" class="btn-primary">Save reminder</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      </div>
-
-      <!-- ─── Voice Input Modal ─── -->
-      <div v-if="listening" class="modal-backdrop">
-        <div class="modal-box modal-box--sm voice-modal">
-          <button @click="cancelVoiceInput" class="modal-close voice-cancel">✕</button>
-          <div class="voice-waves">
-            <span class="wave wave-1"></span>
-            <span class="wave wave-2"></span>
-            <span class="wave wave-3"></span>
-            <span class="wave wave-4"></span>
-            <span class="wave wave-5"></span>
-          </div>
-          <p class="voice-label">Listening...</p>
-          <p class="voice-transcript">"<span>{{ liveTranscript }}</span>"</p>
-          <p class="voice-hint">Speak your task clearly</p>
-        </div>
-      </div>
 
       <!-- ─── Task List ─── -->
       <section v-if="canViewSelectedDayTasks"
@@ -844,6 +345,22 @@ import { speak } from '@/composables/useSpeech';
 import { completionPercentage, computeTimeStats, daysLeftInYearFrom, taskTimeLeft } from '@/utils/dayStats';
 import { subtaskProgress, shouldAutoComplete, resetSubtasks } from '@/utils/subtasks';
 import SubtaskList from '@/components/home/SubtaskList.vue';
+import AddTaskModal from '@/components/home/AddTaskModal.vue';
+import CelebrationOverlay from '@/components/home/CelebrationOverlay.vue';
+import DayTabs from '@/components/home/DayTabs.vue';
+import ImagePreview from '@/components/home/ImagePreview.vue';
+import ProgressBar from '@/components/home/ProgressBar.vue';
+import ReminderModal from '@/components/home/ReminderModal.vue';
+import ShutdownPrompt from '@/components/home/ShutdownPrompt.vue';
+import StreakHeader from '@/components/home/StreakHeader.vue';
+import TaskDetailModal from '@/components/home/TaskDetailModal.vue';
+import TimeStatsBar from '@/components/home/TimeStatsBar.vue';
+import TimerModal from '@/components/home/TimerModal.vue';
+import TransferModal from '@/components/home/TransferModal.vue';
+import VoiceModal from '@/components/home/VoiceModal.vue';
+import WontDoModal from '@/components/home/WontDoModal.vue';
+import WorkoutModal from '@/components/home/WorkoutModal.vue';
+import YouTubeModal from '@/components/home/YouTubeModal.vue';
 import { auth } from '@/firebaseConfig'; // Assuming you have Firebase authentication configured
 import { onAuthStateChanged } from 'firebase/auth';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -3030,7 +2547,6 @@ const finishShutdown = async (carry) => {
   background-color: #fef3c7;
 }
 
-
 .badge-display span {
   font-size: 2rem;
 }
@@ -3042,24 +2558,12 @@ const finishShutdown = async (carry) => {
 }
 
 @keyframes pulse {
-  0% {
-    transform: scale(1);
-  }
   50% {
     transform: scale(1.2);
-  }
-  100% {
-    transform: scale(1);
   }
 }
 
 @keyframes spin {
-  0% {
-    transform: rotate(0deg);
-  }
-  100% {
-    transform: rotate(360deg);
-  }
 }
 
 .animate-spin-slow {
@@ -3076,18 +2580,12 @@ const finishShutdown = async (carry) => {
 }
 
 @keyframes pulse {
-  0%, 100% {
-    transform: scale(1);
-  }
   50% {
     transform: scale(1.1);
   }
 }
 
 @keyframes pulseWave {
-  0%, 100% {
-    height: 0.5rem;
-  }
   50% {
     height: 2rem;
   }
@@ -3110,12 +2608,6 @@ const finishShutdown = async (carry) => {
 }
 
 @keyframes conveyorScrollDown {
-  0% {
-    transform: translateY(-50%);
-  }
-  100% {
-    transform: translateY(0%);
-  }
 }
 
 .animate-conveyor {
@@ -3129,10 +2621,6 @@ const finishShutdown = async (carry) => {
 }
 
 @keyframes pulseSlow {
-  0%, 100% {
-    transform: scale(1);
-    opacity: 1;
-  }
   50% {
     transform: scale(1.05);
     opacity: 0.85;
@@ -3144,12 +2632,6 @@ const finishShutdown = async (carry) => {
 }
 
 @keyframes spinSlow {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
 }
 
 .animate-spin-slow {
@@ -3195,68 +2677,11 @@ const finishShutdown = async (carry) => {
 .splash-sub { color: #6b6a66; font-size: 0.9rem; margin: 0.5rem 0 1.5rem; }
 .splash-loader { width: 180px; height: 2px; background: #2a2a2e; border-radius: 2px; margin: 0 auto; overflow: hidden; }
 .splash-bar { height: 100%; background: #F59E0B; animation: load 2s ease infinite; }
-@keyframes load { 0% { width: 0%; margin-left: 0; } 50% { width: 80%; } 100% { width: 0%; margin-left: 100%; } }
-@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+@keyframes load { 50% { width: 80%; } }
+@keyframes pulse { 50% { opacity: 0.5; } }
 
 /* ── Header ── */
-.header-card {
-  background: #18181b;
-  border: 1px solid #2a2a2e;
-  border-radius: 16px;
-  padding: 1rem 1.25rem;
-  margin-bottom: 1rem;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 1rem;
-}
-.header-cold { border-left: 3px solid #6366f1; }
-.header-warm { border-left: 3px solid #F59E0B; }
-.header-hot  { border-left: 3px solid #ef4444; }
-
-.header-left { display: flex; align-items: center; gap: 0.75rem; flex: 1; min-width: 140px; }
-.streak-badge {
-  width: 40px; height: 40px;
-  background: #1e1e22;
-  border: 1px solid #2a2a2e;
-  border-radius: 12px;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 1.1rem;
-}
-.streak-info {}
-.streak-count { font-size: 0.9rem; font-weight: 600; margin: 0; }
-.streak-count span { color: #F59E0B; }
-.streak-sub { font-size: 0.75rem; color: #6b6a66; margin: 0; }
-.streak-none { color: #ef4444 !important; }
-
-.header-center { flex: 1; min-width: 140px; }
-.points-pill {
-  display: inline-block;
-  font-size: 0.75rem;
-  font-weight: 500;
-  padding: 4px 10px;
-  border-radius: 20px;
-}
-.points-needed { background: #1e1e22; color: #F59E0B; border: 1px solid #3a3a1a; }
-.points-ready  { background: #0d2217; color: #4ade80; border: 1px solid #14432a; }
-
-.header-right { display: flex; flex-direction: column; gap: 0.5rem; align-items: flex-end; }
-.day-controls { display: flex; gap: 0.5rem; }
-.btn-day {
-  font-family: inherit;
-  font-size: 0.8rem;
-  font-weight: 500;
-  padding: 6px 14px;
-  border-radius: 8px;
-  border: none;
-  cursor: pointer;
-  transition: opacity 0.2s;
-}
-.btn-day:disabled { opacity: 0.35; cursor: default; }
 .btn-start { background: #14432a; color: #4ade80; }
-.btn-end   { background: #3b0d0d; color: #f87171; }
-.session-times { display: flex; gap: 0.75rem; }
-.session-time { font-size: 0.72rem; color: #6b6a66; font-family: 'JetBrains Mono', monospace; }
 
 /* ── Calendar ── */
 .calendar-section {
@@ -3282,108 +2707,13 @@ const finishShutdown = async (carry) => {
   padding: 3px 8px;
   color: #ef4444;
 }
-.day-tabs { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; margin-bottom: 1.25rem; }
-.day-tab {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 8px 4px;
-  border-radius: 10px;
-  border: 1px solid #2a2a2e;
-  background: #1a1a1e;
-  cursor: pointer;
-  transition: all 0.15s;
-  color: #9a9891;
-  font-family: inherit;
-}
-.day-tab:hover { border-color: #3a3a3e; color: #e8e6e1; }
-.day-tab--selected { background: #1e2a3a; border-color: #378ADD; color: #7fb8f5; }
-.day-tab--today { background: #378ADD; border-color: #378ADD; color: #fff; font-weight: 600; }
-.day-tab-name { font-size: 0.7rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; }
-.day-tab-date { font-size: 0.8rem; font-weight: 500; margin-top: 2px; }
 
 /* ── Progress ── */
-.progress-section { padding-top: 0.75rem; }
-.progress-info { display: flex; justify-content: space-between; margin-bottom: 6px; }
-.progress-label { font-size: 0.75rem; color: #6b6a66; }
-.progress-pct { font-size: 0.75rem; font-weight: 600; color: #378ADD; font-family: 'JetBrains Mono', monospace; }
-.progress-track {
-  width: 100%; height: 4px;
-  background: #2a2a2e;
-  border-radius: 4px;
-  overflow: hidden;
-  margin-bottom: 16px;
-}
-.progress-fill { height: 100%; background: #378ADD; border-radius: 4px; transition: width 0.6s ease; }
-.milestone-row { position: relative; height: 36px; }
-.milestone-dot {
-  position: absolute;
-  top: 0;
-  width: 28px; height: 28px;
-  border-radius: 50%;
-  background: #2a2a2e;
-  border: 2px solid #3a3a3e;
-  display: flex; align-items: center; justify-content: center;
-  transition: all 0.4s;
-  font-size: 0.9rem;
-}
-.milestone-dot--reached {
-  background: #1e2a3a;
-  border-color: #378ADD;
-  transform: scale(1.15);
-}
 
 /* ── Modals ── */
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.72);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 200;
-  padding: 1rem;
-  backdrop-filter: blur(4px);
-}
-.modal-box {
-  background: #18181b;
-  border: 1px solid #2a2a2e;
-  border-radius: 20px;
-  width: 100%;
-  max-width: 480px;
-  max-height: 85vh;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-}
-.modal-box--sm { max-width: 360px; }
-.modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 1rem 1.25rem;
-  border-bottom: 1px solid #2a2a2e;
-}
-.modal-title { font-size: 1rem; font-weight: 600; margin: 0; }
-.modal-close {
-  background: none; border: none; color: #6b6a66; font-size: 1rem;
-  cursor: pointer; padding: 4px 8px; border-radius: 6px;
-  transition: color 0.15s;
-}
-.modal-close:hover { color: #e8e6e1; }
-.modal-body { padding: 1.25rem; flex: 1; }
-.modal-footer {
-  padding: 1rem 1.25rem;
-  border-top: 1px solid #2a2a2e;
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.75rem;
-}
 
 /* ── Form fields ── */
-.field-group { margin-bottom: 1rem; }
 .field-group--row { display: flex; align-items: center; justify-content: space-between; }
-.field-label { display: block; font-size: 0.78rem; font-weight: 500; color: #9a9891; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.06em; }
 .field-input, .field-select, .field-textarea {
   width: 100%;
   background: #0f0f11;
@@ -3418,19 +2748,6 @@ const finishShutdown = async (carry) => {
 }
 .btn-primary:hover { background: #2a6db0; }
 .btn-primary.btn-lg { padding: 12px 28px; font-size: 1rem; border-radius: 12px; }
-.btn-secondary {
-  font-family: inherit;
-  font-size: 0.875rem;
-  font-weight: 500;
-  background: #1e1e22;
-  color: #9a9891;
-  border: 1px solid #2a2a2e;
-  border-radius: 10px;
-  padding: 9px 18px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-.btn-secondary:hover { color: #e8e6e1; border-color: #3a3a3e; }
 
 .toggle-btn {
   background: #1e1e22;
@@ -3443,56 +2760,11 @@ const finishShutdown = async (carry) => {
 }
 .toggle-btn--on { background: #1e2a3a; border-color: #378ADD; color: #7fb8f5; }
 
-.advanced-toggle {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  color: #378ADD;
-  font-size: 0.875rem;
-  font-weight: 500;
-  cursor: pointer;
-  padding: 0.5rem 0;
-}
-.advanced-body { padding-top: 0.5rem; }
-
-.day-checkboxes { display: flex; flex-wrap: wrap; gap: 8px; }
-.day-check-label { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; cursor: pointer; }
-.day-check-input { accent-color: #378ADD; }
-
 /* ── Advanced / fade transition ── */
 .fade-enter-active, .fade-leave-active { transition: opacity 0.2s; }
 .fade-enter-from, .fade-leave-to { opacity: 0; }
 
 /* ── Task Detail ── */
-.detail-title { font-size: 1.2rem; font-weight: 600; margin-bottom: 1rem; }
-.detail-media { margin: 0.75rem 0; position: relative; }
-.detail-video { width: 100%; border-radius: 10px; }
-.detail-image-wrap { display: inline-block; }
-.detail-image { max-height: 200px; width: 100%; object-fit: contain; border-radius: 10px; cursor: zoom-in; }
-.detail-remove {
-  position: absolute; top: 8px; right: 8px;
-  background: #ef4444; color: white; border: none;
-  border-radius: 50%; width: 22px; height: 22px;
-  font-size: 0.7rem; cursor: pointer;
-}
-.detail-file {
-  display: flex; align-items: center; gap: 8px;
-  background: #1e1e22; border-radius: 8px; padding: 8px 12px;
-  font-size: 0.875rem; position: relative;
-}
-.detail-file-link { color: #7fb8f5; text-decoration: none; }
-.detail-row {
-  display: flex; align-items: flex-start; gap: 10px;
-  font-size: 0.875rem; padding: 8px 0;
-  border-top: 1px solid #2a2a2e;
-}
-.detail-row-icon { font-size: 1rem; flex-shrink: 0; }
-.detail-row-label { font-weight: 600; font-size: 0.78rem; color: #6b6a66; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
-.detail-row-content { color: #9a9891; }
-.detail-labels { display: flex; flex-wrap: wrap; gap: 6px; padding-top: 10px; border-top: 1px solid #2a2a2e; }
-
-.reminder-task-name { font-weight: 600; color: #7fb8f5; margin-bottom: 1rem; }
-.error-msg { color: #f87171; font-size: 0.85rem; padding: 0.5rem 0; }
 
 /* ── Labels ── */
 .label-pill {
@@ -3512,48 +2784,12 @@ const finishShutdown = async (carry) => {
 .label-pill--sm { font-size: 0.68rem; padding: 2px 8px; }
 
 /* ── Fullscreen celebration ── */
-.fullscreen-celebration {
-  position: fixed; inset: 0;
-  background: #0f0f11;
-  display: flex; align-items: center; justify-content: center;
-  z-index: 300;
-}
-.celebration-inner { text-align: center; }
-.celebration-emoji { font-size: 4rem; animation: pop 0.5s ease; }
-.celebration-title { font-size: 2.5rem; font-weight: 600; margin: 0.5rem 0; }
-.celebration-streak { font-size: 1.2rem; color: #F59E0B; margin-bottom: 0.5rem; }
-.celebration-streak span { font-weight: 700; }
-.celebration-sub { color: #6b6a66; margin-bottom: 2rem; }
-@keyframes pop { 0% { transform: scale(0.5); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+@keyframes pop { }
 
 /* ── Image Preview ── */
-.image-preview-overlay {
-  position: fixed; inset: 0;
-  background: rgba(0,0,0,0.9);
-  z-index: 400;
-  display: flex; align-items: center; justify-content: center;
-  cursor: zoom-out;
-}
-.image-preview-img { max-width: 90%; max-height: 90vh; border-radius: 12px; }
 
 /* ── Voice ── */
-.voice-modal { text-align: center; padding: 2rem 1.5rem; position: relative; }
-.voice-cancel { position: absolute; top: 12px; right: 12px; }
-.voice-waves { display: flex; gap: 4px; justify-content: center; margin-bottom: 1.5rem; align-items: flex-end; }
-.wave {
-  width: 4px; border-radius: 4px;
-  background: #4ade80;
-  animation: waveUp 0.8s ease infinite alternate;
-}
-.wave-1 { height: 16px; animation-delay: 0.0s; }
-.wave-2 { height: 24px; animation-delay: 0.1s; }
-.wave-3 { height: 32px; animation-delay: 0.2s; }
-.wave-4 { height: 20px; animation-delay: 0.3s; }
-.wave-5 { height: 12px; animation-delay: 0.4s; }
-@keyframes waveUp { from { transform: scaleY(0.5); } to { transform: scaleY(1); } }
-.voice-label { font-size: 1rem; font-weight: 600; margin-bottom: 0.5rem; }
-.voice-transcript { color: #7fb8f5; font-size: 0.9rem; margin-bottom: 0.5rem; }
-.voice-hint { font-size: 0.75rem; color: #6b6a66; }
+@keyframes waveUp { }
 
 /* ── Task List ── */
 .task-section { }
@@ -3736,7 +2972,7 @@ const finishShutdown = async (carry) => {
   background: rgba(74, 222, 128, 0.25);
   animation: ping 1s cubic-bezier(0, 0, 0.2, 1) infinite;
 }
-@keyframes ping { 75%, 100% { transform: scale(1.5); opacity: 0; } }
+@keyframes ping { 75% { transform: scale(1.5); opacity: 0; } }
 .task-timer-left {
   margin-top: 6px;
   font-size: 0.85rem;
@@ -3770,11 +3006,6 @@ const finishShutdown = async (carry) => {
 .time-summary-card strong {
   font-size: 18px;
 }
-.timer-picker {
-  display: flex;
-  gap: 16px;
-  justify-content: center;
-}
 
 .picker-column {
   flex: 1;
@@ -3790,112 +3021,10 @@ const finishShutdown = async (carry) => {
   padding: 10px;
 }
 
-.timer-modal {
-  width: min(92vw, 340px);
-  background: #16171d;
-  border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 24px;
-  overflow: hidden;
-  box-shadow: 0 24px 80px rgba(0,0,0,0.5);
-}
-
-.timer-header {
-  padding: 18px 20px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.timer-header h2 {
-  color: #fff;
-  font-size: 17px;
-  font-weight: 800;
-  margin: 0;
-}
-
-.timer-close {
-  background: #24262d;
-  color: #aaa;
-  border: none;
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  font-size: 20px;
-}
-
-.timer-body {
-  padding: 18px 20px 20px;
-  border-top: 1px solid rgba(255,255,255,0.06);
-  border-bottom: 1px solid rgba(255,255,255,0.06);
-}
-
-.timer-picker {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 14px;
-}
-
-.timer-field label {
-  display: block;
-  margin-bottom: 8px;
-  color: #9ca3af;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.timer-field select {
-  width: 100%;
-  height: 54px;
-  padding: 0 14px;
-  background: #22242b;
-  color: #fff;
-  border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 16px;
-  font-size: 18px;
-  font-weight: 800;
-  outline: none;
-}
-
-.timer-preview {
-  margin-top: 16px;
-  text-align: center;
-  color: #fff;
-  font-size: 18px;
-  font-weight: 900;
-}
-
-.timer-footer {
-  padding: 14px 20px;
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-}
-
-.timer-btn {
-  border: none;
-  border-radius: 14px;
-  padding: 11px 18px;
-  font-weight: 800;
-}
-
-.timer-cancel {
-  background: #23242b;
-  color: #b8bbc3;
-}
-
-.timer-start {
-  background: #2f8cff;
-  color: white;
-}
-
 /* ── Planning / polish additions ── */
 button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
   outline: 2px solid #7fb8f5; outline-offset: 2px;
 }
-.btn-shutdown { background: #1e2a3a; color: #9cc7f7; }
-.btn-shutdown:hover, .btn-day:hover { opacity: 0.85; }
 .field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem; }
 .mini-field { display: flex; flex-direction: column; gap: 4px; font-size: 0.72rem; color: #a3a29d; margin-bottom: 0.5rem; }
 .task-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
@@ -3927,11 +3056,6 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .schedule-empty, .schedule-unsched { margin: 0; color: #a3a29d; }
 .schedule-unsched { margin-top: 6px; }
 .cap-warning { background: #3a2d0a; border: 1px solid #92400e; color: #fde68a; border-radius: 10px; padding: 0.75rem; font-size: 0.82rem; line-height: 1.5; margin-top: 0.75rem; }
-.cap-override { display: block; margin-top: 0.5rem; }
-.shutdown-banner { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; background: #1e2a3a; border: 1px solid #2c4666; color: #cfe3fb; border-radius: 12px; padding: 0.625rem 1rem; margin-bottom: 1rem; font-size: 0.85rem; }
-.shutdown-h { font-weight: 600; font-size: 0.85rem; margin: 0.5rem 0 0.25rem; }
-.shutdown-list { list-style: none; margin: 0 0 0.5rem; padding: 0; font-size: 0.85rem; line-height: 1.6; }
-.muted { color: #a3a29d; }
 @media (max-width: 480px) {
   .field-grid { grid-template-columns: 1fr; }
   .schedule-time { min-width: 0; }
