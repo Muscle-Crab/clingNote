@@ -68,10 +68,10 @@
         <div class="progress-section">
           <div class="progress-info">
             <span class="progress-label">Progress</span>
-            <span class="progress-pct">{{ calculateCompletionPercentage(task) }}%</span>
+            <span class="progress-pct">{{ calculateCompletionPercentage() }}%</span>
           </div>
           <div class="progress-track">
-            <div class="progress-fill" :style="{ width: calculateCompletionPercentage(task) + '%' }"></div>
+            <div class="progress-fill" :style="{ width: calculateCompletionPercentage() + '%' }"></div>
           </div>
           <div class="milestone-row">
             <div
@@ -79,7 +79,7 @@
                 :key="index"
                 class="milestone-dot"
                 :class="{
-                'milestone-dot--reached': calculateCompletionPercentage(task) >= milestone.percent
+                'milestone-dot--reached': calculateCompletionPercentage() >= milestone.percent
               }"
                 :style="{ left: index === 0 ? '0%' : index === milestones.length - 1 ? 'calc(100% - 28px)' : `calc(${milestone.position}% - 14px)` }"
                 :title="milestone.icon + ' ' + milestone.percent + '%'"
@@ -837,6 +837,11 @@ import { ref, onMounted, onBeforeUnmount, computed, watch, reactive } from 'vue'
 import { useSounds } from '@/composables/useSounds';
 import { patchStoredTask, loadDayTasks, carryTasksToDay } from '@/composables/useDayPersistence';
 import { ACTIVE_CAP, STATUSES, taskKey, activeCount, estimateOf, formatClock, formatDuration as formatMinutes, loadSummary, buildSchedule, toMinutes } from '@/utils/taskPlanning';
+import { getTodayId, formatSessionTime, getCurrentDate, formatShortDate, formatTime, getOrdinalSuffix, getTodayDate, extractYouTubeID, isToday } from '@/utils/dateTime';
+import { getStreakIcon, badges } from '@/utils/gamification';
+import { scheduleNotification, sendNotificationToPlayer } from '@/composables/useNotifications';
+import { speak } from '@/composables/useSpeech';
+import { completionPercentage, computeTimeStats, daysLeftInYearFrom, taskTimeLeft } from '@/utils/dayStats';
 import { subtaskProgress, shouldAutoComplete, resetSubtasks } from '@/utils/subtasks';
 import SubtaskList from '@/components/home/SubtaskList.vue';
 import { auth } from '@/firebaseConfig'; // Assuming you have Firebase authentication configured
@@ -899,22 +904,6 @@ const saveSelectedDayTasks = async () => {
   });
 };
 
-const getTaskTimeLeft = (task) => {
-  if (!task.timerEndTime) return "";
-
-  const end = new Date(task.timerEndTime).getTime();
-  const remaining = Math.max(0, end - nowTick.value);
-
-  const totalSeconds = Math.floor(remaining / 1000);
-
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-
-  return `${hours.toString().padStart(2, "0")}:${minutes
-      .toString()
-      .padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
-};
 
 const startCountdownWatcher = () => {
   if (timerInterval) return;
@@ -1071,19 +1060,7 @@ const daySession = ref({
   endedAtText: "",
 });
 
-const getTodayId = () => {
-  return new Date().toLocaleDateString("en-CA");
-};
 
-const formatSessionTime = (date) => {
-  if (!date) return "";
-
-  return new Intl.DateTimeFormat("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  }).format(date);
-};
 
 const loadDaySession = async () => {
   if (!userId.value) return;
@@ -1314,89 +1291,7 @@ const fetchUserName = async (userId) => {
     return 'Error Fetching User';
   }
 };
-const scheduleNotification = async (task, reminder) => {
-  if (!task || !reminder.date || !reminder.time) {
-    console.error("Invalid task or reminder data");
-    return;
-  }
 
-  // Convert reminder.time to 12-hour format
-  const convertTo12HourFormat = (time24) => {
-    const [hours, minutes] = time24.split(':').map(Number);
-    const period = hours >= 12 ? 'PM' : 'AM';
-    const formattedHours = hours % 12 || 12; // Convert 0 or 12 to 12 AM/PM
-    return `${formattedHours}:${minutes.toString().padStart(2, '0')} ${period}`;
-  };
-
-  const formattedTime = convertTo12HourFormat(reminder.time);
-
-  const scheduledDateTime = new Date(`${reminder.date}T${reminder.time}:00`).toISOString();
-
-  const playerId = window.OneSignal.User.PushSubscription.id;
-
-  if (!playerId) {
-    console.error("Player ID not found. Make sure OneSignal is initialized.");
-    return;
-  }
-  const headers = {
-    'Authorization': 'Bearer ZDZiZDk0NTktMjUwZS00NTQ4LWFhOTItNjBiZDZiMjVhYzYy', // Replace with your OneSignal API key
-    'Content-Type': 'application/json'
-  };
-
-  const notificationData = {
-    "app_id": "fc206a71-7d65-4cfa-b8b2-0c10548e1476", // Replace with your OneSignal App ID
-    "include_player_ids": [playerId], // Replace with actual user player ID
-    "contents": { "en": `${task.title} at ${formattedTime}` },
-    "headings": { "en": "Task Reminder" },
-    "send_after": scheduledDateTime, // Schedule the notification
-  };
-
-  try {
-    await axios.post('https://onesignal.com/api/v1/notifications', notificationData, { headers });
-    console.log('Scheduled notification successfully');
-
-    // Display confirmation alert
-    alert(`Task "${task.title}" has been scheduled successfully for ${formattedTime}!`);
-
-
-  } catch (error) {
-    console.error('Error scheduling notification:', error);
-    alert("Failed to schedule the task. Please try again.");
-  }
-};
-
-const sendNotificationToPlayer = async (userName, action) => {
-  const headers = {
-    'Authorization': 'Bearer ZDZiZDk0NTktMjUwZS00NTQ4LWFhOTItNjBiZDZiMjVhYzYy', // Replace with your actual API key
-    'Content-Type': 'application/json'
-  };
-
-  // Define the content and heading based on the action
-  const actionMessages = {
-    created: {
-      content: `${userName} created a new task!`,
-      heading: "New Task Alert"
-    },
-    completed: {
-      content: `${userName} completed a task!`,
-      heading: "Task Completed"
-    }
-  };
-
-  const data = {
-    "app_id": "fc206a71-7d65-4cfa-b8b2-0c10548e1476", // Replace with your actual OneSignal app ID
-    "include_player_ids": ["5c526d24-effd-4c83-b93d-a4ef1af2f762"], // Replace with the user's device/player ID
-    "contents": { "en": actionMessages[action]?.content || "An action was performed." },
-    "headings": { "en": actionMessages[action]?.heading || "Notification" }
-  };
-
-  try {
-    await axios.post('https://onesignal.com/api/v1/notifications', data, { headers });
-    console.log('Notification sent successfully');
-  } catch (error) {
-    console.error('Error sending notification:', error);
-  }
-};
 
 
 
@@ -1443,57 +1338,7 @@ const searchQuery = ref('');
 const generateRandomColor = () => {
   return 'grey' ;
 };
-const timeStats = computed(() => {
-  const start = daySession.value.startTime
-      ? new Date(daySession.value.startTime.seconds ? daySession.value.startTime.seconds * 1000 : daySession.value.startTime)
-      : null;
 
-  const end = daySession.value.ended
-      ? new Date(daySession.value.endTime?.seconds ? daySession.value.endTime.seconds * 1000 : daySession.value.endTime)
-      : new Date();
-
-  if (!start) {
-    return {
-      totalDayTime: "0m",
-      productiveTime: "0m",
-      gapTime: "0m",
-      completedTasks: 0,
-      missedTasks: wontDoTasks.value.length
-    };
-  }
-
-  const totalMs = end - start;
-
-  const productiveMs = selectedDayRoutine.value.reduce((sum, task) => {
-    if (task.completed && task.timerStartedAt && task.timerStoppedAt) {
-      return sum + (new Date(task.timerStoppedAt) - new Date(task.timerStartedAt));
-    }
-    return sum;
-  }, 0);
-  const gapMs = Math.max(0, totalMs - productiveMs);
-
-  return {
-    totalDayTime: formatDuration(totalMs),
-    productiveTime: formatDuration(productiveMs),
-    gapTime: formatDuration(gapMs),
-    completedTasks: selectedDayRoutine.value.filter(t => t.completed).length,
-    missedTasks: wontDoTasks.value.length
-  };
-});
-
-const formatDuration = (ms) => {
-  const minutes = Math.floor(ms / 60000);
-  const hrs = Math.floor(minutes / 60);
-  const mins = minutes % 60;
-
-  if (hrs > 0) return `${hrs}h ${mins}m`;
-  return `${mins}m`;
-};
-const getCurrentDate = () => {
-  const today = new Date();
-  const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
-  return new Intl.DateTimeFormat('en-US', options).format(today);
-};
 const generateWeekDates = () => {
   const today = new Date();
   const currentDayIndex = today.getDay(); // 0 for Sunday, 1 for Monday, etc.
@@ -1600,9 +1445,6 @@ const startTimer = async () => {
 
   startCountdownWatcher();
 };
-const isToday = (index) => {
-  return index === new Date().getDay();
-};
 // Function to update the displayed current date
 const updateCurrentDate = () => {
   if (selectedDayIndex.value !== -1) {
@@ -1622,16 +1464,8 @@ const updateCurrentDate = () => {
 
 // Watch for tab (day) changes and update the current date
 watch(selectedDayIndex, updateCurrentDate);
-const milestoneMessages = {
-  7: "One week of success! 🌟",
-  15: "Halfway to a month! 🚀",
-  30: "Amazing! A full month streak! 🎖️"
-};
 
 // Function to get motivational messages for milestones
-const getMilestoneMessage = (streak) => {
-  return milestoneMessages[streak] || "Keep it going!";
-};
 // On mounted, set the initial date to today's tab
 onMounted(() => {
   const todayIndex = new Date().getDay();
@@ -1877,10 +1711,6 @@ const handleDayTabClick = async (index) => {
   selectDate(index);
 };
 
-const speak = (text) => {
-  const message = new SpeechSynthesisUtterance(text);
-  window.speechSynthesis.speak(message);
-};
 const announceNextTask = (completedIndex) => {
   const nextTask = selectedDayRoutine.value.find((task, index) => !task.completed && index !== completedIndex);
   if (nextTask) {
@@ -2246,19 +2076,8 @@ const fetchUserCredits = async () => {
 
 onMounted(fetchUserCredits);
 
-const formatShortDate = (date) => {
-  if (!date) return "";
-  const options = { month: "short", day: "numeric" }; // Example: "Feb 19"
-  return new Date(date).toLocaleDateString("en-US", options);
-};
 
 
-const formatTime = (time) => {
-  const [hours, minutes] = time.split(':');
-  const amPm = parseInt(hours) >= 12 ? 'PM' : 'AM';
-  const formattedHours = parseInt(hours) % 12 || 12;
-  return `${formattedHours}:${minutes} ${amPm}`;
-};
 
 const startEditingTask = (index) => {
   editingTask.value = index;
@@ -2332,19 +2151,6 @@ const filteredTasks = computed(() => {
   }
 });
 
-const calculateCompletionPercentage = (task) => {
-  const todayIndex = new Date().getDay(); // Get current day index
-  if (selectedDayIndex.value !== todayIndex) {
-    return 0; // Reset progress for non-today tabs
-  }
-
-  if (!selectedDayRoutine.value) return 0;
-
-  const totalTasks = selectedDayRoutine.value.length + wontDoTasks.value.length;
-  const completedTasks = selectedDayRoutine.value.filter(task => task.completed).length;
-
-  return totalTasks === 0 ? 0 : Math.round((completedTasks / totalTasks) * 100);
-};
 
 const fetchWontDoTasks = async () => {
   if (!userId.value || selectedDayIndex.value === -1) {
@@ -2399,21 +2205,14 @@ const lastCompletionDate = ref(null);
 const unlockedBadges = ref([]);
 const motivationalMessage = ref('');
 const selectedDayRoutine = ref([]);
+const timeStats = computed(() => computeTimeStats(daySession.value, selectedDayRoutine.value, wontDoTasks.value.length));
+const calculateCompletionPercentage = () => completionPercentage(selectedDayRoutine.value, wontDoTasks.value.length, selectedDayIndex.value);
+const daysLeftInYear = computed(() => daysLeftInYearFrom());
+const getTaskTimeLeft = (task) => taskTimeLeft(task, nowTick.value);
 const showNotification = ref(false);
-const streakIcons = [
-  '🌱', '🌞', '🌟', '🔥', '🏆', '🎯', '🚀', '🌈', '💎', '🎵',
-  '🌹', '🍀', '🦋', '🌻', '🌙', '✨', '🎉', '🎈', '🎂', '🍔',
-  '🍕', '🍩', '🍎', '🍉', '🥇', '🥂', '🌊', '🌌', '🪐', '🧠'
-];
 
 
 // Function to get the icon for the current streak day
-const getStreakIcon = (streak) => {
-  if (streak >= 30) {
-    return '🎖️'; // Special icon for streaks beyond 30 days
-  }
-  return streakIcons[streak - 1]; // Array is 0-indexed, so subtract 1
-};
 
 
 // Function to get the icon based on the current streak
@@ -2588,13 +2387,6 @@ const updateStreakInFirestore = async () => {
 };
 
 
-const badges = [
-  { name: "Seed Starter", days: 1, icon: "🌱" },
-  { name: "Sprouting Leaves", days: 3, icon: "🌿" },
-  { name: "Small Tree", days: 7, icon: "🌳" },
-  { name: "Mature Tree", days: 15, icon: "🌲" },
-  { name: "Peak Performer", days: 30, icon: "🏔️" }
-];
 
 onMounted(() => {
   fetchStreakOnLoad(); // Fetch streak when the app is loaded
@@ -2659,11 +2451,6 @@ onMounted(() => {
 
   checkStreakOnCompletion();
 });
-const formatDate = (date) => {
-  if (!date) return "";
-  const options = { weekday: "long", month: "short", day: "numeric", year: "numeric" };
-  return new Date(date).toLocaleDateString("en-US", options);
-};
 const milestones = ref([
   { label: '0%', percent: 0, position: 0, icon: '🌱' },      // Seed planted
   { label: '25%', percent: 25, position: 25, icon: '🌿' },   // Sprouting leaves
@@ -2671,21 +2458,9 @@ const milestones = ref([
   { label: '75%', percent: 75, position: 75, icon: '🌲' },   // Mature tree
   { label: '100%', percent: 100, position: 100, icon: '🏔️' } // Fully grown tree at the peak
 ]);
-const getOrdinalSuffix = (number) => {
-  const suffixes = ["th", "st", "nd", "rd"];
-  const v = number % 100;
-  return suffixes[(v - 20) % 10] || suffixes[v] || suffixes[0];
-};
 
 const spinningTasks = ref([]);
 
-const getTodayDate = () => {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0); // Reset time to midnight for accurate comparison
-  const formattedDate = today.toISOString().split('T')[0]; // Format as YYYY-MM-DD
-  console.log("Today's Date:", formattedDate); // Log the date for debugging
-  return formattedDate;
-};
 
 
 
@@ -2974,12 +2749,6 @@ function toggleLabelHighlight(label) {
   }
 }
 
-const daysLeftInYear = computed(() => {
-  const today = new Date();
-  const endOfYear = new Date(today.getFullYear(), 11, 31); // December 31
-  const diffTime = endOfYear - today;
-  return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-});
 onMounted(() => {
   setTimeout(() => {
     speak(`Only ${daysLeftInYear.value} days left in the year. Make them count.`);
@@ -3016,10 +2785,6 @@ const saveYouTubeLink = async () => {
   selectedDayRoutine.value[index] = task;
 
   closeYouTubeModal();
-};
-const extractYouTubeID = (url) => {
-  const match = url.match(/(?:\?v=|\/embed\/|\.be\/)([a-zA-Z0-9_-]{11})/);
-  return match ? match[1] : '';
 };
 const showWorkoutModal = ref(false);
 const workoutPreferences = reactive({
