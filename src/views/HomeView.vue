@@ -687,6 +687,9 @@
                     <span v-if="estimateOf(task)" class="chip">⏱ {{ formatMinutes(estimateOf(task)) }}</span>
                     <span v-if="task.startTime" class="chip">🕒 {{ formatClock(toMinutes(task.startTime)) }}<template v-if="estimateOf(task)"> – {{ formatClock(toMinutes(task.startTime) + estimateOf(task)) }}</template></span>
                   </div>
+                  <div v-if="subtaskProgress(task).total" class="task-chips">
+                    <span class="chip chip--subtasks" :class="{ 'chip--subtasks-done': subtaskProgress(task).done === subtaskProgress(task).total }" title="Subtasks done">☑ {{ subtaskProgress(task).done }}/{{ subtaskProgress(task).total }}</span>
+                  </div>
                   <div v-if="task.nextAction" class="task-next">→ {{ task.nextAction }}</div>
                   <div v-if="task.notes && expandedKey !== taskKey(task)" class="task-note-preview">📝 {{ task.notes.length > 60 ? task.notes.slice(0, 60) + '…' : task.notes }}</div>
 
@@ -711,6 +714,7 @@
                     </div>
                     <label class="mini-field"><span>Note</span>
                       <textarea class="field-textarea" rows="2" :value="task.notes || ''" placeholder="Quick note…" @change="patchTask(index, task, { notes: $event.target.value })"></textarea></label>
+                    <SubtaskList :task="task" @change="onSubtaskPatch(index, task, { subtasks: $event })" @toggle-auto="onSubtaskPatch(index, task, { autoCompleteParent: $event })" />
                   </div>
 
                   <!-- Labels -->
@@ -833,6 +837,8 @@ import { ref, onMounted, onBeforeUnmount, computed, watch, reactive } from 'vue'
 import { useSounds } from '@/composables/useSounds';
 import { patchStoredTask, loadDayTasks, carryTasksToDay } from '@/composables/useDayPersistence';
 import { ACTIVE_CAP, STATUSES, taskKey, activeCount, estimateOf, formatClock, formatDuration as formatMinutes, loadSummary, buildSchedule, toMinutes } from '@/utils/taskPlanning';
+import { subtaskProgress, shouldAutoComplete, resetSubtasks } from '@/utils/subtasks';
+import SubtaskList from '@/components/home/SubtaskList.vue';
 import { auth } from '@/firebaseConfig'; // Assuming you have Firebase authentication configured
 import { onAuthStateChanged } from 'firebase/auth';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -1260,7 +1266,7 @@ const resetTasksToIncomplete = async () => {
       return;
     }
 
-    const resetTasks = existingTasks.map(task => ({
+    const resetTasks = existingTasks.map(task => resetSubtasks({
       ...task,
       completed: false
     }));
@@ -1535,7 +1541,7 @@ const fetchSelectedDayRoutine = async () => {
 
       // If it's a past day, reset all tasks to incomplete
       if (isPastDay) {
-        tasks = tasks.map(task => ({
+        tasks = tasks.map(task => resetSubtasks({
           ...task,
           completed: false
         }));
@@ -3175,6 +3181,12 @@ const patchTask = async (index, task, patch) => {
   }
 };
 
+// Subtasks: saved through the same patch path; optionally complete the parent when all are done
+const onSubtaskPatch = async (index, task, patch) => {
+  await patchTask(index, task, patch);
+  if (shouldAutoComplete(task)) await toggleTaskCompletion(index);
+};
+
 // Shutdown ritual
 const clockTick = ref(Date.now());
 let clockTimer = setInterval(() => { clockTick.value = Date.now(); }, 60000);
@@ -4127,6 +4139,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .chip--medium { background: #3a2d0a; color: #fcd34d; }
 .task-next { margin-top: 6px; font-size: 0.8rem; color: #9cc7f7; }
 .task-note-preview { margin-top: 4px; font-size: 0.78rem; color: #a3a29d; line-height: 1.4; }
+.chip--subtasks { background: #12263a; color: #9cc7f7; }
+.chip--subtasks-done { background: #0f2a1c; color: #86efac; }
 .task-expand { margin-top: 10px; padding-top: 10px; border-top: 1px solid #2a2a2e; cursor: default; }
 .task-body { cursor: pointer; min-width: 0; }
 .load-summary {
