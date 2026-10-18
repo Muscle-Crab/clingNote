@@ -128,7 +128,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, onBeforeUnmount, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { auth, db } from '@/firebaseConfig';
 import { doc, getDoc } from 'firebase/firestore';
@@ -157,10 +157,22 @@ const logout = async () => {
   }
 };
 
+// Responsive sidebar: open (and pushing the page) from 768px up, a closed overlay below; follows window resizes.
+const mq = typeof window !== 'undefined' && window.matchMedia ? window.matchMedia('(min-width: 768px)') : null;
+const onMq = (e) => { sidebarOpen.value = e.matches; };
+const onEsc = (e) => { if (e.key === 'Escape' && !(mq && mq.matches)) sidebarOpen.value = false; };
+watch(sidebarOpen, (open) => { document.body.classList.toggle('sidebar-open', open); }, { immediate: true });
+watch(() => router.currentRoute.value.fullPath, () => { if (!(mq && mq.matches)) sidebarOpen.value = false; });
+onBeforeUnmount(() => {
+  if (mq) mq.removeEventListener('change', onMq);
+  document.removeEventListener('keydown', onEsc);
+  document.body.classList.remove('sidebar-open');
+});
+
 onMounted(() => {
-  if (window.innerWidth > 768) {
-    sidebarOpen.value = true;
-  }
+  sidebarOpen.value = mq ? mq.matches : window.innerWidth >= 768;
+  if (mq) mq.addEventListener('change', onMq);
+  document.addEventListener('keydown', onEsc);
 
   auth.onAuthStateChanged(async (user) => {
     if (user) {
@@ -190,6 +202,9 @@ onMounted(() => {
 </script>
 
 
-<style scoped>
-/* Customize the sidebar or add responsive styles here if needed */
+<style>
+/* From 768px up the open sidebar pushes the page instead of covering it; below that it is an overlay. */
+@media (min-width: 768px) {
+  body.sidebar-open #app { padding-left: 16rem; }
+}
 </style>

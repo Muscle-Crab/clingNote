@@ -245,6 +245,13 @@ pending.push((async () => {
   assert.ok(/<TimeStatsBar v-if="isViewingToday"/.test(hv), 'stats only on today');
   console.log('ok   progress / days-left / heading / stats-on-today');
 })();
+// responsive sidebar: matchMedia-driven, overlay below 768px, pushes page above
+(() => {
+  const nav = fs.readFileSync(path.join(src, 'components/nav.vue'), 'utf8');
+  assert.ok(/matchMedia\('\(min-width: 768px\)'\)/.test(nav) && /addEventListener\('change', onMq\)/.test(nav), 'reacts to viewport changes');
+  assert.ok(/@media \(min-width: 768px\)[\s\S]*sidebar-open #app \{ padding-left: 16rem/.test(nav), 'pushes content on wide screens only');
+  console.log('ok   nav responsive sidebar');
+})();
 (async () => {
   let failed = 0;
   const warn = console.warn; const warnings = [];
