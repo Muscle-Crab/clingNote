@@ -37,7 +37,7 @@
           </div>
         </header>
 
-        <DayTabs :days="days" :selected-index="selectedDayIndex" :scheduled-counts="scheduledCounts" @select="handleDayTabClick" />
+        <DayTabs :days="tabDays" :selected-index="selectedDayIndex" :scheduled-counts="scheduledCounts" @select="handleDayTabClick" />
 
         <ProgressBar :percentage="calculateCompletionPercentage()" :milestones="milestones" :done="completedTaskCount || 0" :total="selectedDayRoutine?.length || 0" />
 
@@ -164,7 +164,7 @@ import { scheduleNotification, sendNotificationToPlayer } from '@/composables/us
 import { speak } from '@/composables/useSpeech';
 import { completionPercentage, computeTimeStats, daysLeftInYearFrom } from '@/utils/dayStats';
 import { shouldAutoComplete, resetSubtasks } from '@/utils/subtasks';
-import { buildScheduledEntry, futureOf, dueOf, countsByDate, isValidDate, removeScheduled, rescheduleEntry } from '@/utils/scheduling';
+import { buildScheduledEntry, futureOf, dueOf, countsByDate, withWeekDates, isValidDate, removeScheduled, rescheduleEntry } from '@/utils/scheduling';
 import { mutateScheduled, materializeDueForToday } from '@/composables/useScheduledTasks';
 import ScheduledList from '@/components/home/ScheduledList.vue';
 import EmptyState from '@/components/home/EmptyState.vue';
@@ -1230,6 +1230,8 @@ const scheduledList = ref([]);
 const scheduledError = ref('');
 const todayStr = ref(getTodayId());
 const futureScheduled = computed(() => futureOf(scheduledList.value, todayStr.value));
+// Tabs need real dates (data.json days have empty `date`); recomputed when todayStr rolls over.
+const tabDays = computed(() => { void todayStr.value; return withWeekDates(days); });
 const scheduledCounts = computed(() => countsByDate(scheduledList.value, todayStr.value));
 
 let materializing = false;

@@ -161,6 +161,14 @@ const st = require(path.join(src, 'utils/subtasks.js'));
   assert.strictEqual(sc.pruneMaterialized([old, ...f], nowIso).length, 3);
   assert.strictEqual(sc.countsByDate([old], today)['2026-10-17'], undefined, 'materialized not shown');
   assert.strictEqual(sc.formatScheduledDate('2026-10-18', today), 'Tomorrow');
+  // week strip: real dates per tab index (Sat 2026-10-17 -> Sun 10-11 .. Sat 10-17), month/year rollover, dot lookup
+  assert.deepStrictEqual(sc.weekDates(new Date(2026, 9, 17, 23, 30)), ['2026-10-11', '2026-10-12', '2026-10-13', '2026-10-14', '2026-10-15', '2026-10-16', '2026-10-17']);
+  assert.deepStrictEqual(sc.weekDates(new Date(2026, 9, 11)).slice(0, 2), ['2026-10-11', '2026-10-12'], 'Sunday is index 0');
+  assert.deepStrictEqual(sc.weekDates(new Date(2026, 11, 31)), ['2026-12-27', '2026-12-28', '2026-12-29', '2026-12-30', '2026-12-31', '2027-01-01', '2027-01-02']);
+  const wd = sc.withWeekDates([{ day: 'Sun', date: '' }, { day: 'Mon', date: '' }, { day: 'Tue', date: '' }, { day: 'Wed', date: '' }, { day: 'Thu', date: '' }, { day: 'Fri', date: '' }, { day: 'Sat', date: '' }], new Date(2026, 9, 17));
+  assert.strictEqual(wd[0].date, '2026-10-11'); assert.strictEqual(wd[0].day, 'Sun');
+  const wc = sc.countsByDate([mk('x', '2026-10-17', '', 'x1'), mk('y', '2026-10-13', '', 'y1')], '2026-10-12');
+  assert.ok(wd.filter((d) => wc[d.date]).map((d) => d.day).join() === 'Tue,Sat', 'dots on Tue and Sat');
   console.log('ok   utils/scheduling');
 })();
 // Today sort/filter helpers (pure logic)

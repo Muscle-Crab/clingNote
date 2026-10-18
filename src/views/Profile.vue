@@ -80,7 +80,9 @@ onMounted(() => {
 
 // Method to format date of birth
 const formatDOB = (dob) => {
-  const date = new Date(dob);
+  if (!dob) return '';
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(dob) ? new Date(`${dob}T12:00:00`) : new Date(dob?.toDate ? dob.toDate() : dob);
+  if (Number.isNaN(date.getTime())) return '';
   return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 };
 

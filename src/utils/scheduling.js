@@ -92,3 +92,16 @@ export const formatScheduledDate = (s, todayStr) => {
   }
   return new Date(`${s}T12:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 };
+
+// Actual calendar dates (YYYY-MM-DD, local) of the Sun..Sat tabs for the week containing `now`.
+// Same math as the header: date = today + (tabIndex - today.getDay()).
+export const weekDates = (now = new Date()) => Array.from({ length: 7 }, (_, i) => {
+  const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + (i - now.getDay()));
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+});
+
+// Tabs with `date` filled from the computed week (data.json days carry empty dates).
+export const withWeekDates = (days, now = new Date()) => {
+  const dates = weekDates(now);
+  return (days || []).map((d, i) => ({ ...d, date: dates[i] || d.date }));
+};
