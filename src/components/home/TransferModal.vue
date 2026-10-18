@@ -9,7 +9,7 @@
           <label class="field-label">Move to</label>
           <select v-model="targetDay" class="field-select">
             <option v-for="(day, index) in days" :key="index" :value="index" :disabled="index === selectedDayIndex">
-              {{ day.day }} — {{ day.date }}
+              {{ day.day }}<template v-if="prettyDate(day.date)"> — {{ prettyDate(day.date) }}</template>
             </option>
           </select>
         </div>
@@ -24,6 +24,9 @@
 
 <script setup>
 const targetDay = defineModel('day');
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+// 'YYYY-MM-DD' -> 'Oct 18' (string math, no timezone shifts)
+const prettyDate = (d) => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(d || ''); return m ? `${MONTHS[Number(m[2]) - 1]} ${Number(m[3])}` : ''; };
 defineProps({
   days: { type: Array, required: true },
   selectedDayIndex: { type: Number, default: -1 },

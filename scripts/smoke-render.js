@@ -46,7 +46,7 @@ const cases = [
   ['CelebrationOverlay', { streak: 3 }, ['All done']],
   ['TimerModal', { hours: 0, minutes: 5 }, ['Set Timer']],
   ['WontDoModal', { reason: '' }, ['Won']],
-  ['TransferModal', { day: null, days, selectedDayIndex: 0 }, ['Mon']],
+  ['TransferModal', { day: null, days, selectedDayIndex: 0 }, ['Mon', 'Oct 12']],
   ['AddTaskModal', { newTask: { title: '', status: 'in-progress', priority: 'low', selectedDays: [], reminder: {}, position: 0, labels: '', notes: '' }, repeatMode: 'weekly', showAdvanced: true, days, selectedDayRoutine: [task], error: 'oops', capWarning: true }, ['New task', 'role="dialog"', 'aria-modal="true"', 'e.g. 30', 'oops', 'active tasks', 'Status', 'In progress', 'Waiting']],
   ['YouTubeModal', { url: '' }, ['Attach video']],
   ['TaskDetailModal', { task, activeLabels: ['Work'] }, ['Write report', 'embed/abcdefghijk']],
@@ -74,6 +74,8 @@ const cases = [
   ['StartDayPrompt', {}, ['Start Day']],
   // collapsed card with subtasks: n/m chip stays visible, editor + subtask input are not rendered
   ['TaskCard', { task, index: 0, isTodayTab: true, expanded: false, activeLabels: [], now: 0 }, ['1/2', 'chip--subtasks', 'task-chevron', 'aria-label="Show details"', 'aria-expanded="false"'], ['task-expand', 'Add a subtask', 'task-chevron--open']],
+  ['TaskCard', { task, index: 0, isTodayTab: true, dragDisabled: true, expanded: false, activeLabels: [], now: 0 }, ['drag-handle--disabled', 'Reordering is off']],
+  ['TaskCard', { task, index: 0, isTodayTab: true, expanded: false, activeLabels: [], now: 0 }, ['Drag to reorder'], ['drag-handle--disabled']],
   ['TaskCard', { task: { title: 'Old task', completed: true }, index: 2, isTodayTab: true, expanded: false, activeLabels: [], now: 0 }, ['Old task', 'Complete']],
 ];
 // subtask helpers (pure logic)

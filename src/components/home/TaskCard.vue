@@ -11,7 +11,9 @@
                 >
                   <!-- Left: drag + avatar -->
                   <div class="task-left">
-                    <div class="task-avatar drag-handle" :style="{ background: 'grey' }">
+                    <div class="task-avatar drag-handle" :class="{ 'drag-handle--disabled': dragDisabled }" :style="{ background: 'grey' }"
+                         :title="dragDisabled ? 'Reordering is off while a sort or filter is active (or on days other than today)' : 'Drag to reorder'"
+                         :aria-disabled="dragDisabled ? 'true' : 'false'">
                       <i class="fas fa-grip-vertical"></i>
                     </div>
                     <div class="task-index">{{ index + 1 }}</div>
@@ -165,6 +167,7 @@ import { formatShortDate, formatTime } from '@/utils/dateTime';
 import SubtaskList from '@/components/home/SubtaskList.vue';
 
 defineProps({
+  dragDisabled: { type: Boolean, default: false },
   task: { type: Object, required: true },
   index: { type: Number, required: true },
   isTodayTab: { type: Boolean, default: false },
@@ -206,6 +209,7 @@ const onCardTap = (event) => { // bound on the whole card (blank areas, chips, n
 </script>
 
 <style scoped>
+.drag-handle--disabled { opacity: .35; cursor: not-allowed !important; }
 .field-input, .field-select, .field-textarea { width: 100%; box-sizing: border-box; background: var(--c-bg); border: 1px solid var(--c-border); border-radius: var(--r); padding: 6px 8px; min-height: 32px; color: var(--c-text); font-family: inherit; font-size: var(--fs-md); transition: border-color .15s, background .15s; }
 .field-input:hover, .field-select:hover, .field-textarea:hover { background: var(--c-surface-2); }
 .field-input:focus, .field-select:focus, .field-textarea:focus { outline: none; border-color: var(--c-accent); box-shadow: 0 0 0 1px var(--c-accent); background: var(--c-bg); }

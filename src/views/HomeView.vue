@@ -59,7 +59,7 @@
       <WontDoModal v-if="wontDoModalOpen" v-model:reason="wontDoReason" @cancel="wontDoModalOpen = false" @confirm="markTaskAsWontDo" />
 
 
-      <TransferModal v-if="transferModalOpen" v-model:day="selectedTransferDay" :days="days" :selected-day-index="selectedDayIndex" @close="closeTransferModal" @transfer="transferTask()" />
+      <TransferModal v-if="transferModalOpen" v-model:day="selectedTransferDay" :days="tabDays" :selected-day-index="selectedDayIndex" @close="closeTransferModal" @transfer="transferTask()" />
 
 
       <AddTaskModal v-if="modalOpen" :new-task="newTask" v-model:repeat-mode="repeatMode" v-model:show-advanced="showAdvanced"
@@ -121,7 +121,7 @@
             <template #item="{ element: task, index }">
               <TaskCard
                   v-if="(!task.completed || (isViewingToday && showCompleted))"
-                  :task="task" :index="realIndex(task)" :is-today-tab="isViewingToday" :expanded="expandedKey === taskKey(task)"
+                  :task="task" :drag-disabled="!reorderable" :index="realIndex(task)" :is-today-tab="isViewingToday" :expanded="expandedKey === taskKey(task)"
                   :active-labels="activeLabels" :now="nowTick" :show-notification="showNotification" :transfer-notification="transferNotification"
                   @toggle-expand="toggleExpanded(task)" @toggle-complete="toggleTaskCompletion(realIndex(task))" @open-detail="openTaskDetailModal(task)"
                   @toggle-important="toggleTaskImportance(realIndex(task))" @patch="patchTask(realIndex(task), task, $event)" @subtask-patch="onSubtaskPatch(realIndex(task), task, $event)"
