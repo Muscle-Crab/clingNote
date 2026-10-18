@@ -1,15 +1,15 @@
 <template>
   <div class="modal-backdrop">
-    <div class="modal-box">
+    <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="nt-title" @keydown.esc="$emit('close')">
       <div class="modal-header">
-        <h2 class="modal-title">✦ New task</h2>
-        <button @click="$emit('close')" class="modal-close">✕</button>
+        <h2 id="nt-title" class="modal-title">✦ New task</h2>
+        <button type="button" @click="$emit('close')" class="modal-close" aria-label="Close">✕</button>
       </div>
       <form @submit.prevent="$emit('submit')">
         <div class="modal-body">
           <div class="field-group">
-            <label class="field-label">Task name</label>
-            <input type="text" v-model="newTask.title" class="field-input" placeholder="What needs doing?" required />
+            <label class="field-label" for="nt-name">Task name</label>
+            <input id="nt-name" ref="titleInput" type="text" v-model="newTask.title" class="field-input" placeholder="What needs doing?" required />
           </div>
 
           <div class="field-group">
@@ -57,7 +57,7 @@
             </div>
             <div class="field-group">
               <label class="field-label" for="nt-est">Estimate (min)</label>
-              <input id="nt-est" type="number" min="0" step="5" v-model="newTask.estimateMin" class="field-input" placeholder="30" />
+              <input id="nt-est" type="number" min="0" step="5" v-model="newTask.estimateMin" class="field-input" placeholder="e.g. 30" />
             </div>
           </div>
           <div class="field-group">
@@ -118,6 +118,7 @@
 </template>
 
 <script setup>
+import { ref, onMounted, nextTick } from 'vue';
 import { ACTIVE_CAP, STATUSES } from '@/utils/taskPlanning';
 import { getOrdinalSuffix } from '@/utils/dateTime';
 
@@ -133,9 +134,12 @@ const repeatMode = defineModel('repeatMode');
 const showAdvanced = defineModel('showAdvanced');
 const tomorrow = (() => { const d = new Date(); d.setDate(d.getDate() + 1); return d.toLocaleDateString('en-CA'); })();
 defineEmits(['close', 'submit', 'add-anyway']);
+const titleInput = ref(null);
+onMounted(() => nextTick(() => titleInput.value && titleInput.value.focus()));
 </script>
 
 <style scoped>
+.field-input::placeholder, .field-textarea::placeholder { color: var(--c-text-3, #6b6a66); opacity: .7; font-style: italic; }
 .modal-backdrop {
   position: fixed;
   inset: 0;

@@ -39,7 +39,7 @@
 
         <DayTabs :days="tabDays" :selected-index="selectedDayIndex" :scheduled-counts="scheduledCounts" @select="handleDayTabClick" />
 
-        <ProgressBar :percentage="calculateCompletionPercentage()" :milestones="milestones" :done="completedTaskCount || 0" :total="selectedDayRoutine?.length || 0" />
+        <ProgressBar :percentage="calculateCompletionPercentage()" :milestones="milestones" :done="completedTaskCount || 0" :total="dayTasks.length" />
 
       </section>
 
@@ -87,11 +87,11 @@
       <!-- ─── Task List ─── -->
       <section v-if="canViewSelectedDayTasks"
                class="task-section">
-        <EmptyState v-if="selectedDayRoutine?.length === 0" :show-add="true" @add="openModal('task')" />
+        <EmptyState v-if="dayTasks.length === 0" :show-add="true" @add="openModal('task')" />
 
 
         <div v-else class="task-list-wrap">
-          <TaskListHeader :label="isViewingToday ? 'Today' : FULL_DAY_NAMES[selectedDayIndex]" :is-today="isViewingToday" :completed="completedTaskCount" :total="selectedDayRoutine?.length"
+          <TaskListHeader :label="isViewingToday ? 'Today' : FULL_DAY_NAMES[selectedDayIndex]" :is-today="isViewingToday" :completed="completedTaskCount" :total="dayTasks.length"
                           :sound-enabled="soundEnabled" :show-completed="showCompleted" v-model:prefs="viewPrefs" @toggle-sound="toggleSound" @toggle-completed="showCompleted = !showCompleted" />
 
 
@@ -132,7 +132,7 @@
             </template>
           </draggable>
 
-          <IdleState v-if="selectedDayRoutine?.length > 0 && selectedDayRoutine?.every(task => task.completed) && !showCompleted" />
+          <IdleState v-if="dayTasks.length > 0 && dayTasks.every(task => task.completed) && !showCompleted" />
 
 
           <WontDoList v-if="wontDoTasks.length > 0 && !selectedDayRoutine?.every(task => task.completed)" :tasks="wontDoTasks" @undo="undoWontDo" />
@@ -155,6 +155,7 @@
 import { ref, onMounted, onBeforeUnmount, computed, watch, reactive } from 'vue';
 import { useSounds } from '@/composables/useSounds';
 import { patchStoredTask, loadDayTasks, carryTasksToDay } from '@/composables/useDayPersistence';
+import { activeFromForDay, isHiddenOnDate, seriesDays, withoutSeries } from '@/utils/repeat';
 import { useTaskViewPrefs } from '@/composables/useTaskViewPrefs';
 import { viewTasks, canReorder, normalizePrefs, visibleCount, shouldHandleShortcut } from '@/utils/taskView';
 import { ACTIVE_CAP, taskKey, activeCount, loadSummary, buildSchedule } from '@/utils/taskPlanning';
@@ -337,7 +338,7 @@ const transferNotification = ref(null);
 
 const isModalOpen = ref(false);
 const selectedTaskTitle = ref(""); // Stores the title of the selected task
-const reminder = ref({ date: "", time: "" });
+const reminder = ref({ date: "", time: "", repeat: "" });
 
 // Open Modal and Set Task Title
 
@@ -655,10 +656,14 @@ const showCompleted = ref(false);
 // ─── Today sort/filter (prefs in localStorage; logic in @/utils/taskView) ───
 const { prefs: viewPrefs } = useTaskViewPrefs();
 const effectivePrefs = computed(() => (new Date().getDay() === selectedDayIndex.value ? normalizePrefs(viewPrefs.value) : normalizePrefs(null)));
-const viewItems = computed(() => viewTasks(selectedDayRoutine.value, effectivePrefs.value));
+// Copies not active yet on the viewed date (e.g. a Daily task created today, on earlier days of this week) are hidden, never deleted.
+const viewTabDate = computed(() => tabDays.value[selectedDayIndex.value]?.date || '');
+const dayTasks = computed(() => selectedDayRoutine.value.filter((t) => !isHiddenOnDate(t, viewTabDate.value)));
+const hasHiddenCopies = computed(() => dayTasks.value.length !== selectedDayRoutine.value.length);
+const viewItems = computed(() => viewTasks(selectedDayRoutine.value, effectivePrefs.value).filter((i) => !isHiddenOnDate(i.task, viewTabDate.value)));
 const displayTasks = computed(() => viewItems.value.map((i) => i.task));
 const visibleTaskCount = computed(() => visibleCount(viewItems.value, showCompleted.value));
-const reorderable = computed(() => canReorder(effectivePrefs.value));
+const reorderable = computed(() => canReorder(effectivePrefs.value) && !hasHiddenCopies.value);
 const realIndex = (task) => (selectedDayRoutine.value || []).indexOf(task);
 const onReorder = (list) => { if (reorderable.value && Array.isArray(list)) selectedDayRoutine.value = list; };
 const reducedMotion = typeof window !== 'undefined' && window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)').matches : false;
@@ -679,23 +684,18 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onShortcutKey));
 // Close Modal
 const closeModal = () => {
   isModalOpen.value = false;
-  reminder.value = { date: "", time: "" };
+  reminder.value = { date: "", time: "", repeat: "" };
   modalOpen.value = false
 };
 const selectedDayIndex = ref(-1);
-const newTask = ref({
-  title: '',
-  time: '',
-  priority: 'low',
-  labels: [],
-  notes: '',
-  selectedDays: [],
-  position: 0,
-  type: 'recurring',
+// Fresh Add-task form. Repeat defaults to "Just once" (one-time); Daily/Weekly are opt-in.
+const blankTask = () => ({
+  title: '', time: '', priority: 'low', labels: [], notes: '', selectedDays: [], position: 0, type: 'one-time',
   dueDate: '', startTime: '', estimateMin: '', nextAction: '', status: 'todo',
   scheduleDate: '', scheduleTime: '',
-  reminder: { date: '', time: '', repeat: '' }  // Now defined
+  reminder: { datetime: '', repeat: '' },
 });
+const newTask = ref(blankTask());
 
 
 const error = ref('');
@@ -868,15 +868,32 @@ const sortedSelectedDayRoutine = computed(() => {
 const deleteTask = async (index) => {
   const confirmed = confirm("Are you sure you want to delete this task?");
   if (!confirmed) return;
-  const selectedDayDocRef = doc(db, 'weeklyRoutines', `${userId.value}_${days[selectedDayIndex.value].day}`);
+  const dayName = days[selectedDayIndex.value].day;
+  const selectedDayDocRef = doc(db, 'weeklyRoutines', `${userId.value}_${dayName}`);
+  const target = selectedDayRoutine.value[index];
 
   try {
-    selectedDayRoutine.value.splice(index, 1);
+    // Tasks created for several weekdays (Daily / ticked days) are separate copies sharing createdAt+title: offer to remove them all.
+    let alsoDays = [];
+    if (target && target.type === 'recurring' && target.createdAt) {
+      const byDay = {};
+      await Promise.all(days.map(async (d) => { if (d.day !== dayName) byDay[d.day] = await loadDayTasks(userId.value, d.day); }));
+      alsoDays = seriesDays(byDay, target, dayName);
+    }
+    const removeAll = alsoDays.length > 0 &&
+      confirm(`This task repeats on ${alsoDays.length} other day${alsoDays.length > 1 ? 's' : ''} (${alsoDays.join(', ')}).\n\nOK = delete it from all days\nCancel = delete only from this day`);
 
+    selectedDayRoutine.value.splice(index, 1);
     await updateDoc(selectedDayDocRef, {
       tasks: selectedDayRoutine.value,
       updatedAt: serverTimestamp()
     });
+    if (removeAll) {
+      for (const d of alsoDays) {
+        const cur = await loadDayTasks(userId.value, d);
+        await updateDoc(doc(db, 'weeklyRoutines', `${userId.value}_${d}`), { tasks: withoutSeries(cur, target), updatedAt: serverTimestamp() });
+      }
+    }
 
     console.log('Task deleted successfully');
   } catch (error) {
@@ -1272,8 +1289,7 @@ const submitScheduledTask = async () => {
   if (!entry) { error.value = 'Could not schedule this task.'; return; }
   try {
     scheduledList.value = await mutateScheduled(userId.value, (l) => [...l, entry]);
-    newTask.value = { title: '', time: '', priority: 'low', labels: [], notes: '', selectedDays: [], position: 0, reminder: { datetime: '', repeat: '' }, type: 'recurring',
-      dueDate: '', startTime: '', estimateMin: '', nextAction: '', status: 'todo', scheduleDate: '', scheduleTime: '' };
+    newTask.value = blankTask();
     capWarning.value = false; capOverride.value = false;
     closeModal();
     error.value = '';
@@ -1393,7 +1409,11 @@ const addNewTask = async () => {
       }
 
       const position = parseInt(newTask.value.position, 10);
-      existingTasks.splice(position, 0, task);
+      // copies for weekdays already past this week only start showing next week (not on past days of the current week)
+      const dayIdx = days.findIndex((d) => d.day === selectedDay.day);
+      const activeFrom = newTask.value.selectedDays.length > 0 && task.type === 'recurring' && dayIdx !== selectedDayIndex.value && dayIdx >= 0 ? activeFromForDay(dayIdx) : '';
+      const copy = activeFrom ? { ...task, activeFrom } : task;
+      existingTasks.splice(position, 0, copy);
 
       await setDoc(selectedDayDocRef, {
         tasks: existingTasks,
@@ -1411,19 +1431,7 @@ const addNewTask = async () => {
       await scheduleNotification(task, task.reminder);
     }
 
-    newTask.value = {
-      title: '',
-      time: '',
-      priority: 'low',
-      labels: [],
-      notes: '',
-      selectedDays: [],
-      position: 0,
-      reminder: { datetime: '', repeat: '' },
-      type: 'recurring',
-      dueDate: '', startTime: '', estimateMin: '', nextAction: '', status: 'todo',
-      scheduleDate: '', scheduleTime: ''
-    };
+    newTask.value = blankTask();
     capWarning.value = false; capOverride.value = false;
     closeModal();
     error.value = '';
@@ -1955,7 +1963,7 @@ const isSpinning = (index) => {
 };
 
 const completedTaskCount = computed(() => {
-  return selectedDayRoutine.value?.filter(task => task.completed).length;
+  return dayTasks.value.filter(task => task.completed).length;
 });
 const listening = ref(false);
 const voiceOpen = ref(false); // modal visibility (independent of whether recognition actually started)

@@ -10,11 +10,11 @@
     <ul v-if="subtasks.length" class="subtask-items">
       <li v-for="s in subtasks" :key="s.id" class="subtask-item" :class="{ 'subtask-item--done': s.done }">
         <input type="checkbox" :checked="s.done" :aria-label="'Done: ' + s.title" @change="$emit('change', toggleSubtask(subtasks, s.id))" />
-        <input v-if="editingId === s.id" v-model="editTitle" class="field-input subtask-edit" type="text"
+        <input v-if="editingId === s.id" v-model="editTitle" ref="editInput" class="field-input subtask-edit" type="text" aria-label="Subtask name"
                @keydown.enter.prevent="saveEdit(s)" @keydown.esc.prevent="editingId = null" @blur="saveEdit(s)" />
         <span v-else class="subtask-text" @dblclick="startEdit(s)">{{ s.title }}</span>
-        <button type="button" class="subtask-btn" title="Edit" @click="startEdit(s)">✏️</button>
-        <button type="button" class="subtask-btn" title="Delete" @click="$emit('change', removeSubtask(subtasks, s.id))">🗑️</button>
+        <button type="button" class="subtask-btn" title="Edit" aria-label="Edit subtask" @click="startEdit(s)">✏️</button>
+        <button type="button" class="subtask-btn" title="Delete" aria-label="Delete subtask" @click="$emit('change', removeSubtask(subtasks, s.id))">🗑️</button>
       </li>
     </ul>
     <form class="subtask-add" @submit.prevent="add">
@@ -25,7 +25,7 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, ref, nextTick } from 'vue';
 import { subtasksOf, subtaskProgress, addSubtask, renameSubtask, toggleSubtask, removeSubtask } from '@/utils/subtasks';
 
 const props = defineProps({ task: { type: Object, required: true } });
@@ -42,7 +42,11 @@ const add = () => {
   emit('change', addSubtask(subtasks.value, newTitle.value));
   newTitle.value = '';
 };
-const startEdit = (s) => { editingId.value = s.id; editTitle.value = s.title; };
+const editInput = ref(null);
+const startEdit = (s) => {
+  editingId.value = s.id; editTitle.value = s.title;
+  nextTick(() => { const el = Array.isArray(editInput.value) ? editInput.value[0] : editInput.value; if (el) { el.focus(); el.select(); } });
+};
 const saveEdit = (s) => {
   if (editingId.value !== s.id) return; // already saved/cancelled (blur after enter/esc)
   editingId.value = null;

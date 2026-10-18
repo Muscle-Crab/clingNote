@@ -24,7 +24,7 @@
                       <button
                           v-if="isTodayTab"
                           @click="$emit('toggle-complete')"
-                          class="task-check"
+                          class="task-check" :aria-label="task.completed ? 'Mark not done' : 'Mark done'"
                           :class="{ 'task-check--done': task.completed }"
                       >
                         <i :class="task.completed ? 'fas fa-check-circle' : 'far fa-circle'"></i>
@@ -52,7 +52,7 @@
                     <div class="task-meta-row">
 
                       <span v-if="task.completed && isTodayTab" class="task-status task-status--done">Complete</span>
-                      <button @click="$emit('toggle-important')" class="importance-btn" :title="task.important ? 'Important' : 'Mark important'">
+                      <button @click="$emit('toggle-important')" class="importance-btn" :title="task.important ? 'Important' : 'Mark important'" :aria-label="task.important ? 'Unmark important' : 'Mark important'" :aria-pressed="task.important ? 'true' : 'false'">
                         <i :class="task.important ? 'fas fa-fire task-fire--on' : 'fas fa-fire task-fire--off'"></i>
                       </button>
                     </div>
@@ -139,14 +139,14 @@
                     </button>
 
                     <div v-show="moreOpen" class="task-actions" @click.stop>
-                      <button @click="$emit('open-reminder')" class="action-btn" title="Reminder">📅</button>
-                      <button @click="$emit('transfer')" class="action-btn" title="Transfer">🔄</button>
-                      <button @click="$emit('video')" class="action-btn" title="Video">🎥</button>
-                      <button @click="fileInput && fileInput.click()" class="action-btn" title="Attach file">📎</button>
+                      <button @click="$emit('open-reminder')" class="action-btn" title="Reminder" aria-label="Add reminder">📅</button>
+                      <button @click="$emit('transfer')" class="action-btn" title="Transfer" aria-label="Transfer to another day">🔄</button>
+                      <button @click="$emit('video')" class="action-btn" title="Video" aria-label="Attach video">🎥</button>
+                      <button @click="fileInput && fileInput.click()" class="action-btn" title="Attach file" aria-label="Attach file">📎</button>
                       <input type="file" ref="fileInput" accept="image/*,.pdf,.doc,.docx,.txt" @change="$emit('upload', $event)" class="hidden-input" />
   <!--                    <button @click="showTimerModal = true" class="action-btn" title="Timer">⏱️</button>-->
-                                            <button @click="$emit('wont-do')" class="action-btn action-btn--warn" title="Won't do">🚫</button>
-                      <button @click="$emit('delete')" class="action-btn action-btn--danger" title="Delete">🗑️</button>
+                                            <button @click="$emit('wont-do')" class="action-btn action-btn--warn" title="Won't do" aria-label="Mark as won't do">🚫</button>
+                      <button @click="$emit('delete')" class="action-btn action-btn--danger" title="Delete" aria-label="Delete task">🗑️</button>
                     </div>
                   </div>
 

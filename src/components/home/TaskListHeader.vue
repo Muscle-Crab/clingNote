@@ -24,10 +24,10 @@
           <button v-if="!isDefaultPrefs(prefs)" class="sort-reset" @click="$emit('update:prefs', { sort: 'manual', filter: 'all' })">Reset</button>
         </div>
       </div>
-      <button v-if="isToday" @click="$emit('toggle-sound')" class="toggle-visibility" :aria-pressed="soundEnabled" :aria-label="soundEnabled ? 'Mute sounds' : 'Enable sounds'" :title="soundEnabled ? 'Sounds on' : 'Sounds off'">
+      <button v-if="isToday" @click="$emit('toggle-sound')" class="toggle-visibility" :aria-pressed="soundEnabled ? 'true' : 'false'" aria-label="Sounds" :title="soundEnabled ? 'Sounds on' : 'Sounds off'">
         <i :class="soundEnabled ? 'fas fa-volume-up' : 'fas fa-volume-mute'"></i>
       </button>
-      <button v-if="isToday" @click="$emit('toggle-completed')" class="toggle-visibility toggle-visibility--text" :aria-pressed="showCompleted" :title="showCompleted ? 'Hide completed' : 'Show completed'">
+      <button v-if="isToday" @click="$emit('toggle-completed')" class="toggle-visibility toggle-visibility--text" :aria-pressed="showCompleted ? 'true' : 'false'" :title="showCompleted ? 'Hide completed' : 'Show completed'">
         <i :class="showCompleted ? 'fas fa-eye' : 'fas fa-eye-slash'"></i>
         <span>{{ showCompleted ? 'Hide completed' : 'Show completed' }}</span>
       </button>

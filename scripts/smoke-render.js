@@ -47,7 +47,7 @@ const cases = [
   ['TimerModal', { hours: 0, minutes: 5 }, ['Set Timer']],
   ['WontDoModal', { reason: '' }, ['Won']],
   ['TransferModal', { day: null, days, selectedDayIndex: 0 }, ['Mon']],
-  ['AddTaskModal', { newTask: { title: '', status: 'in-progress', priority: 'low', selectedDays: [], reminder: {}, position: 0, labels: '', notes: '' }, repeatMode: 'weekly', showAdvanced: true, days, selectedDayRoutine: [task], error: 'oops', capWarning: true }, ['New task', 'oops', 'active tasks', 'Status', 'In progress', 'Waiting']],
+  ['AddTaskModal', { newTask: { title: '', status: 'in-progress', priority: 'low', selectedDays: [], reminder: {}, position: 0, labels: '', notes: '' }, repeatMode: 'weekly', showAdvanced: true, days, selectedDayRoutine: [task], error: 'oops', capWarning: true }, ['New task', 'role="dialog"', 'aria-modal="true"', 'e.g. 30', 'oops', 'active tasks', 'Status', 'In progress', 'Waiting']],
   ['YouTubeModal', { url: '' }, ['Attach video']],
   ['TaskDetailModal', { task, activeLabels: ['Work'] }, ['Write report', 'embed/abcdefghijk']],
   ['ImagePreview', { src: 'x.png' }, ['x.png']],
@@ -61,8 +61,8 @@ const cases = [
   ['WontDoList', { tasks: [{ title: 'Skip me', wontDoReason: 'busy' }] }, ['Skip me', 'busy']],
   ['FabButtons', { userId: 'u1', listening: true }, ['fab-add']],
   ['SubtaskList', { task }, ['Outline', '(1/2)']],
-  ['TaskCard', { task, index: 0, isTodayTab: true, expanded: true, activeLabels: [], now: Date.now(), showNotification: true, transferNotification: 'moved' }, ['Write report', '1/2', 'Outline', 'task-expand', '00:01:', 'moved', 'Saved', 'Add a subtask', 'Auto-complete task', 'Next action', 'Estimate (min)', 'chip--subtasks', 'Delete', 'task-chevron', 'aria-label="Show details"', 'aria-expanded="true"', 'task-chevron--open']],
-  ['TaskListHeader', { completed: 1, total: 3, soundEnabled: true, showCompleted: false }, ['1/3', 'Sounds on']],
+  ['TaskCard', { task, index: 0, isTodayTab: true, expanded: true, activeLabels: [], now: Date.now(), showNotification: true, transferNotification: 'moved' }, ['Write report', '1/2', 'Outline', 'task-expand', '00:01:', 'moved', 'Saved', 'Add a subtask', 'Auto-complete task', 'Next action', 'Estimate (min)', 'chip--subtasks', 'Delete', 'task-chevron', 'aria-label="Show details"', 'aria-expanded="true"', 'task-chevron--open', 'aria-label="Delete task"', 'aria-label="Add reminder"', 'aria-label="Transfer to another day"', 'aria-label="Attach video"', 'aria-label="Attach file"', 'aria-label="Mark as won', 'aria-pressed="true"']],
+  ['TaskListHeader', { completed: 1, total: 3, soundEnabled: true, showCompleted: false }, ['1/3', 'Sounds on', 'aria-pressed="true"', 'aria-label="Sounds"']],
   ['EmptyState', {}, ['Nothing here yet'], ['Add task']],
   ['EmptyState', { showAdd: true }, ['Nothing here yet', 'empty-add', 'Add task']],
   ['TaskListHeader', { completed: 0, total: 1, prefs: { sort: 'priority', filter: 'waiting' } }, ['aria-label="Sort and filter"', 'sort-btn--active', 'Show completed']],
@@ -262,6 +262,27 @@ pending.push((async () => {
   assert.strictEqual(outside, null, 'no top-level recognition.* assignments (crashed when unsupported)');
   assert.ok(/<VoiceModal v-if="voiceOpen"/.test(hv) && /voiceOpen\.value = true; \/\/ always show/.test(hv));
   console.log('ok   voice wiring');
+})();
+// Daily/multi-day copies: not shown on past days of this week, series lookup for delete-from-all, Add form defaults
+(() => {
+  const rp = require(path.join(src, 'utils/repeat.js'));
+  const thu = new Date(2026, 9, 15, 10); // Thursday 2026-10-15 (index 4); week Sun 10-11 .. Sat 10-17
+  assert.strictEqual(rp.activeFromForDay(4, thu), '', 'today: no limit');
+  assert.strictEqual(rp.activeFromForDay(6, thu), '', 'future day this week: no limit');
+  assert.strictEqual(rp.activeFromForDay(1, thu), '2026-10-19', 'Monday already passed -> next Monday');
+  assert.strictEqual(rp.activeFromForDay(0, new Date(2026, 9, 18)), '', 'Sunday is today');
+  assert.strictEqual(rp.activeFromForDay(5, new Date(2026, 11, 31)), '', 'Fri 2027-01-01 is ahead');
+  assert.strictEqual(rp.activeFromForDay(0, new Date(2026, 11, 31)), '2027-01-03', 'year rollover next-week date');
+  const t = { title: 'Stretch', createdAt: 'c', activeFrom: '2026-10-19' };
+  assert.ok(rp.isHiddenOnDate(t, '2026-10-12') && !rp.isHiddenOnDate(t, '2026-10-19') && !rp.isHiddenOnDate({ title: 'x' }, '2026-10-12'));
+  const by = { Mon: [{ title: 'Stretch', createdAt: 'c' }], Tue: [{ title: 'Stretch', createdAt: 'c' }, { title: 'Other', createdAt: 'd' }], Wed: [{ title: 'Stretch', createdAt: 'zzz' }], Sat: [] };
+  assert.deepStrictEqual(rp.seriesDays(by, { title: 'Stretch', createdAt: 'c' }, 'Sat'), ['Mon', 'Tue']);
+  assert.deepStrictEqual(rp.seriesDays(by, { title: 'Stretch' }, 'Sat'), [], 'legacy tasks without createdAt never match');
+  assert.deepStrictEqual(rp.withoutSeries(by.Tue, t).map((x) => x.title), ['Other']);
+  const hv = fs.readFileSync(path.join(src, 'views/HomeView.vue'), 'utf8');
+  assert.ok(/type: 'one-time',\s*\n\s*dueDate/.test(hv.slice(hv.indexOf('const blankTask'))), 'Add form defaults to Just once');
+  assert.ok(!/type: 'recurring',\s*\n?\s*dueDate/.test(hv), 'no other form reset reintroduces weekly default');
+  console.log('ok   utils/repeat + add-form defaults');
 })();
 (async () => {
   let failed = 0;
