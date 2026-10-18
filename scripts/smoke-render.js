@@ -25,6 +25,7 @@ require.extensions['.js'] = (mod, filename) => {
   else origJs(mod, filename);
 };
 
+const pending = []; let failedAsync = false; // async test blocks register here; the runner awaits them before exiting
 const { createSSRApp } = require('vue');
 const { renderToString } = require('@vue/server-renderer');
 const load = (n) => { const m = require(path.join(src, 'components/home', n + '.vue')); return m.default || m; };
@@ -202,6 +203,30 @@ const st = require(path.join(src, 'utils/subtasks.js'));
   assert.ok(!k({ ctrlKey: true }, false) && !k({ metaKey: true }, false) && !k({ key: 'm' }, false) && !k({ repeat: true }, false));
   console.log('ok   utils/taskView');
 })();
+// quick successive inline edits must all persist (serialized read-modify-write per day doc)
+pending.push((async () => {
+  const tp = require(path.join(src, 'utils/taskPatch.js'));
+  const store = { tasks: [{ createdAt: 'c1', title: 'A', status: 'todo', estimateMin: 0 }, { createdAt: 'c2', title: 'B' }] };
+  const readWrite = async (patchFn) => { const snap = JSON.parse(JSON.stringify(store.tasks)); await new Promise((r) => setTimeout(r, 15)); store.tasks = patchFn(snap); };
+  const enqueue = tp.createKeyedQueue();
+  const patch = (patchObj) => enqueue('doc', () => readWrite((snap) => tp.applyTaskPatch(snap, { createdAt: 'c1', title: 'A' }, 0, patchObj)));
+  await Promise.all([patch({ status: 'waiting' }), patch({ estimateMin: 45 }), patch({ nextAction: 'x' })]);
+  assert.deepStrictEqual([store.tasks[0].status, store.tasks[0].estimateMin, store.tasks[0].nextAction], ['waiting', 45, 'x'], 'all quick edits persist');
+  assert.strictEqual(store.tasks[1].title, 'B');
+  // without the queue the second write would clobber the first (documents why the queue exists)
+  store.tasks[0] = { createdAt: 'c1', title: 'A' };
+  const raw = (o) => readWrite((snap) => tp.applyTaskPatch(snap, { createdAt: 'c1', title: 'A' }, 0, o));
+  await Promise.all([raw({ status: 'waiting' }), raw({ estimateMin: 45 })]);
+  assert.ok(!(store.tasks[0].status && store.tasks[0].estimateMin), 'unqueued writes race');
+  // a failing job does not block the queue; different keys are independent
+  const q = tp.createKeyedQueue(); const order = [];
+  await Promise.allSettled([q('k', async () => { throw new Error('x'); }), q('k', async () => order.push(2))]);
+  assert.deepStrictEqual(order, [2]);
+  assert.strictEqual(tp.applyTaskPatch([{ title: 'z', createdAt: 'q' }], { title: 'nope' }, 5, {}), null, 'unknown task -> null');
+  assert.strictEqual(tp.applyTaskPatch([{ title: 'z' }], { title: 'nope' }, 0, { a: 1 })[0].a, 1, 'index fallback');
+  assert.ok(/createKeyedQueue/.test(fs.readFileSync(path.join(src, 'composables/useDayPersistence.js'), 'utf8')), 'patchStoredTask is queued');
+  console.log('ok   utils/taskPatch (serialized inline edits)');
+})().catch((e) => { console.log('FAIL taskPatch:', e.message); process.exitCode = 1; failedAsync = true; }));
 (async () => {
   let failed = 0;
   const warn = console.warn; const warnings = [];
@@ -214,6 +239,8 @@ const st = require(path.join(src, 'utils/subtasks.js'));
     } catch (e) { failed++; console.log(`FAIL ${name}: ${String(e.message).slice(0, 300)}`); }
   }
   console.warn = warn;
+  await Promise.all(pending);
+  if (failedAsync) failed++;
   const real = warnings.filter((w) => !/router-link|resolve component/i.test(w));
   real.forEach((w) => console.log('warn:', w.split('\n')[0]));
   process.exit(failed ? 1 : 0);

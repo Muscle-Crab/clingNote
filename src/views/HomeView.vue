@@ -2404,9 +2404,12 @@ const toggleExpanded = (task) => {
 };
 const patchTask = async (index, task, patch) => {
   try {
+    const before = { createdAt: task.createdAt, title: task.title }; // stored identity before this edit
+    const dayName = days[selectedDayIndex.value].day;
     Object.assign(task, patch);
     if (patch.estimateMin !== undefined) task.estimateMin = Number(patch.estimateMin) || 0;
-    await patchStoredTask(userId.value, days[selectedDayIndex.value].day, task, index, patch);
+    const saved = patch.estimateMin !== undefined ? { ...patch, estimateMin: task.estimateMin } : patch;
+    await patchStoredTask(userId.value, dayName, before, index, saved);
   } catch (e) {
     console.error('Error saving task field:', e);
   }

@@ -2,6 +2,7 @@
 import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/firebaseConfig';
 import { taskKey } from '@/utils/taskPlanning';
+import { createKeyedQueue, applyTaskPatch } from '@/utils/taskPatch';
 
 const dayRef = (userId, dayName) => doc(db, 'weeklyRoutines', `${userId}_${dayName}`);
 
@@ -11,17 +12,19 @@ export const loadDayTasks = async (userId, dayName) => {
 };
 
 // Merge `patch` into one stored task (matched by createdAt+title, falling back to index).
-export const patchStoredTask = async (userId, dayName, task, fallbackIndex, patch) => {
-  const ref = dayRef(userId, dayName);
-  const snap = await getDoc(ref);
-  if (!snap.exists()) return false;
-  const tasks = snap.data().tasks || [];
-  let i = tasks.findIndex((t) => taskKey(t) === taskKey(task));
-  if (i < 0) i = fallbackIndex;
-  if (!tasks[i]) return false;
-  tasks[i] = { ...tasks[i], ...patch };
-  await updateDoc(ref, { tasks, updatedAt: serverTimestamp() });
-  return true;
+// Writes to the same day doc are serialized so read-modify-write cycles of quick successive edits cannot overwrite each other.
+const enqueue = createKeyedQueue();
+export const patchStoredTask = (userId, dayName, task, fallbackIndex, patch) => {
+  const keyTask = { createdAt: task?.createdAt, title: task?.title }; // identity at call time, not at run time
+  return enqueue(`${userId}_${dayName}`, async () => {
+    const ref = dayRef(userId, dayName);
+    const snap = await getDoc(ref);
+    if (!snap.exists()) return false;
+    const tasks = applyTaskPatch(snap.data().tasks, keyTask, fallbackIndex, patch);
+    if (!tasks) return false;
+    await updateDoc(ref, { tasks, updatedAt: serverTimestamp() });
+    return true;
+  });
 };
 
 // Copy unfinished tasks to another day as one-time tasks (no duplicates if carried twice).
