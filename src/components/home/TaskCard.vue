@@ -123,15 +123,22 @@
                       <span class="coin-value">10</span>
                     </div>
 
-                    <div class="task-actions">
+                    <button type="button" class="task-play" title="Start Task" aria-label="Start Task" @click.stop="$emit('timer')">
+                      <i class="fas fa-play"></i>
+                    </button>
+                    <button type="button" class="task-more" :class="{ 'task-more--open': moreOpen }" title="More actions" aria-label="More actions"
+                        :aria-expanded="moreOpen ? 'true' : 'false'" @click.stop="moreOpen = !moreOpen">
+                      <i class="fas fa-ellipsis-h"></i>
+                    </button>
+
+                    <div v-show="moreOpen" class="task-actions" @click.stop>
                       <button @click="$emit('open-reminder')" class="action-btn" title="Reminder">📅</button>
                       <button @click="$emit('transfer')" class="action-btn" title="Transfer">🔄</button>
                       <button @click="$emit('video')" class="action-btn" title="Video">🎥</button>
                       <button @click="fileInput && fileInput.click()" class="action-btn" title="Attach file">📎</button>
                       <input type="file" ref="fileInput" accept="image/*,.pdf,.doc,.docx,.txt" @change="$emit('upload', $event)" class="hidden-input" />
   <!--                    <button @click="showTimerModal = true" class="action-btn" title="Timer">⏱️</button>-->
-                      <button @click="$emit('timer')" class="action-btn" title="Start Task">▶️</button>
-                      <button @click="$emit('wont-do')" class="action-btn action-btn--warn" title="Won't do">🚫</button>
+                                            <button @click="$emit('wont-do')" class="action-btn action-btn--warn" title="Won't do">🚫</button>
                       <button @click="$emit('delete')" class="action-btn action-btn--danger" title="Delete">🗑️</button>
                     </div>
                   </div>
@@ -163,6 +170,7 @@ defineProps({
 const emit = defineEmits(['toggle-expand', 'toggle-complete', 'open-detail', 'toggle-important', 'patch', 'subtask-patch',
   'toggle-label', 'open-reminder', 'transfer', 'video', 'upload', 'timer', 'wont-do', 'delete']);
 
+const moreOpen = ref(false);
 const fileInput = ref(null); // hidden <input type=file> for this card (was a string ref on HomeView)
 
 // Tap on the card body toggles the inline expansion, unless the tap hit an interactive element.
@@ -260,11 +268,45 @@ const onCardTap = (event) => { // bound on the whole card (blank areas, chips, n
 .task-note-preview { font-size: var(--fs-sm); color: var(--c-text-3); }
 .task-expand { margin-top: var(--sp-2); padding-top: var(--sp-3); border-top: 1px solid var(--c-border); cursor: default; }
 .load-summary--over { border-color: var(--c-danger-line); }
-@media (max-width: 600px) {
-  .task-card { flex-wrap: wrap; }
-  .task-body { flex: 1 1 calc(100% - 56px); }
-  .task-right { flex: 0 0 100%; justify-content: space-between; padding-left: 24px; }
-  .task-body > .task-chips { flex: 1 1 100%; justify-content: flex-start; }
+/* ── Compact issue-style row ── */
+.task-card { align-items: center; gap: var(--sp-2); padding: 6px var(--sp-2) 6px var(--sp-1); border-radius: var(--r-lg); border-left-width: 3px; box-shadow: none; }
+.task-left { padding: 0; }
+.task-index { display: none; }
+.task-avatar { width: 16px; height: 40px; font-size: 11px; opacity: .6; touch-action: none; }
+.task-body { gap: 2px var(--sp-2); padding: 2px 0; }
+.task-body > * { flex: 0 0 100%; }
+.task-body > .task-title-row { order: 1; flex: 1 1 100%; }
+.task-body > .task-reminder { order: 2; }
+.task-body > .task-meta-row { order: 3; flex: 0 0 auto; }
+.task-body > .task-chips { order: 4; flex: 0 1 auto; justify-content: flex-start; }
+.task-title-row { gap: var(--sp-2); }
+.task-title { font-size: var(--fs-md); font-weight: 600; line-height: 20px; word-break: break-word; }
+.task-check { width: 40px; height: 40px; margin: -8px -6px -8px -4px; display: inline-flex; align-items: center; justify-content: center; font-size: 22px; color: var(--c-border-strong); }
+.task-check:hover { color: var(--c-accent-text); }
+.task-check--done { color: var(--c-success); }
+.importance-btn { position: relative; padding: 0 2px; font-size: var(--fs-sm); }
+.importance-btn::before { content: ''; position: absolute; inset: -12px -6px; }
+.chip { border-radius: var(--r-pill); padding: 0 8px; line-height: 18px; font-size: var(--fs-xs); background: var(--c-surface-2); border-color: var(--c-border); color: var(--c-text-2); }
+.task-status { border-radius: var(--r-pill); padding: 0 8px; }
+.label-pill { border-radius: var(--r-pill); }
+.task-right { gap: 0; padding: 0; margin-left: auto; position: static; }
+.coin-badge { gap: 4px; padding: 0 var(--sp-2); height: 22px; margin-right: var(--sp-1); border-radius: var(--r-pill); background: var(--c-warn-soft); }
+.coin-svg { width: 12px; height: 12px; }
+.coin-value::after { content: ' pts'; }
+.task-play { width: 40px; height: 40px; display: inline-flex; align-items: center; justify-content: center; background: none; border: none; padding: 0; cursor: pointer; position: relative; font-size: 11px; color: var(--c-on-accent); }
+.task-play::before { content: ''; position: absolute; width: 32px; height: 32px; border-radius: 50%; background: var(--c-accent); transition: background .15s; }
+.task-play i { position: relative; margin-left: 2px; }
+.task-play:hover::before { background: var(--c-accent-hover); }
+.task-more, .task-chevron { width: 40px; height: 40px; border: none; background: none; border-radius: var(--r); color: var(--c-text-2); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; font-size: var(--fs-md); padding: 0; }
+.task-more:hover, .task-chevron:hover, .task-more--open { background: var(--c-surface-2); color: var(--c-text); }
+.task-actions { position: absolute; right: var(--sp-2); top: calc(100% - 4px); z-index: 20; display: flex; gap: 2px; max-width: none; opacity: 1; padding: var(--sp-1); background: var(--c-surface-2); border: 1px solid var(--c-border-strong); border-radius: var(--r-lg); box-shadow: 0 8px 24px rgba(0,0,0,.5); }
+.action-btn { width: 40px; height: 40px; font-size: var(--fs-lg); border-radius: var(--r); }
+.task-toast { top: -10px; }
+.task-expand { margin-top: var(--sp-2); }
+.field-input, .field-select, .field-textarea { min-height: 40px; }
+@media (max-width: 480px) {
   .field-grid { grid-template-columns: 1fr; }
+  .coin-value::after { content: ''; }
+  .task-actions { left: var(--sp-2); right: var(--sp-2); justify-content: space-between; }
 }
 </style>

@@ -9,6 +9,7 @@
       <svg class="fab-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/>
       </svg>
+      <span>Add task</span>
     </router-link>
 
     <button @click="$emit('voice')" class="fab fab-voice" :class="{ 'fab-voice--listening': listening }" title="Voice input">
@@ -29,42 +30,16 @@ defineEmits(['add', 'voice']);
 </script>
 
 <style scoped>
-.fab-group {
-  position: fixed;
-  bottom: 28px; left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  gap: 16px;
-  z-index: 100;
-}
-.fab {
-  width: 56px; height: 56px;
-  border-radius: 50%;
-  display: flex; align-items: center; justify-content: center;
-  cursor: pointer;
-  transition: transform 0.2s;
-  border: none;
-  text-decoration: none;
-  position: relative;
-}
-.fab:hover { transform: scale(1.08); }
-.fab:active { transform: scale(0.95); }
-.fab-add { background: var(--c-accent, #378ADD); color: white; box-shadow: 0 4px 20px rgba(55, 138, 221, 0.4); }
-.fab-voice { background: var(--c-surface, #18181b); border: 2px solid var(--c-border, #2a2a2e); color: var(--c-text-3, #6b6a66); }
-.fab-voice--listening { border-color: var(--c-success, #4ade80); color: var(--c-success, #4ade80); }
-.fab-icon { width: 22px; height: 22px; z-index: 1; position: relative; }
-.fab-pulse {
-  position: absolute; inset: -2px;
-  border-radius: 50%;
-  background: rgba(74, 222, 128, 0.25);
-  animation: ping 1s cubic-bezier(0, 0, 0.2, 1) infinite;
-}
-.chip--high { background: var(--c-danger-soft, #3b0d0d); color: var(--c-danger-text, #fca5a5); }
-.chip--medium { background: var(--c-warn-soft, #3a2d0a); color: var(--c-warn-text, #fcd34d); }
-.load-summary--over { border-color: var(--c-danger-line, #7f1d1d); }
-@keyframes ping { 75% { transform: scale(1.5); opacity: 0; } }
-.fab { box-shadow: var(--shadow-2); }
-.fab-add { background: var(--c-accent); box-shadow: var(--shadow-2); }
+.fab-group { position: fixed; bottom: 0; left: 0; right: 0; z-index: 100; display: flex; gap: var(--sp-3); justify-content: center; padding: var(--sp-5) max(var(--sp-3), calc((100vw - 540px) / 2)) calc(var(--sp-3) + env(safe-area-inset-bottom)); background: linear-gradient(to top, var(--c-bg) 55%, transparent); pointer-events: none; }
+.fab-group > * { pointer-events: auto; }
+.fab { height: 52px; display: flex; align-items: center; justify-content: center; gap: var(--sp-2); cursor: pointer; transition: transform .15s, background .15s; border: 1px solid transparent; text-decoration: none; position: relative; border-radius: 14px; font-size: var(--fs-lg); font-weight: 700; }
+.fab:active { transform: scale(.97); }
+.fab-add { flex: 1; background: var(--c-accent); color: var(--c-on-accent); box-shadow: 0 6px 20px rgba(79, 111, 240, .35); }
 .fab-add:hover { background: var(--c-accent-hover); }
-.fab-voice { border-width: 1px; }
+.fab-voice { width: 52px; flex: 0 0 52px; background: var(--c-surface); border-color: var(--c-border-strong); color: var(--c-text); }
+.fab-voice:hover { background: var(--c-surface-2); }
+.fab-voice--listening { border-color: var(--c-success); color: var(--c-success); }
+.fab-icon { width: 22px; height: 22px; z-index: 1; position: relative; }
+.fab-pulse { position: absolute; inset: -2px; border-radius: 14px; background: rgba(61, 220, 151, .25); animation: ping 1s cubic-bezier(0, 0, .2, 1) infinite; }
+@keyframes ping { 75% { transform: scale(1.3); opacity: 0; } }
 </style>

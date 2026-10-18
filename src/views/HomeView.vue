@@ -20,14 +20,26 @@
 
       <!-- ─── Calendar & Progress ─── -->
       <section class="calendar-section">
-        <div class="calendar-header">
-          <span class="current-date-label">{{ currentDate }}</span>
-          <span class="days-left-badge">⏳ {{ daysLeftInYear }} days left in year</span>
-        </div>
+        <header class="hero">
+          <div class="hero-text">
+            <p class="hero-date">{{ currentDate }}</p>
+            <h1 class="hero-title">Make today count.</h1>
+            <p class="hero-sub">{{ daysLeftInYear }} days left this year</p>
+          </div>
+          <div class="hero-menu">
+            <button type="button" class="hero-menu-btn" aria-label="Menu" :aria-expanded="menuOpen ? 'true' : 'false'" @click="menuOpen = !menuOpen">
+              <i class="fas fa-bars"></i>
+            </button>
+            <div v-if="menuOpen" class="hero-menu-pop" @click="menuOpen = false">
+              <button type="button" class="hero-menu-item" @click="openShutdown">🌙 Shutdown day</button>
+              <button type="button" class="hero-menu-item" @click="showSchedule = !showSchedule">🗓 {{ showSchedule ? 'Hide' : 'Show' }} schedule</button>
+            </div>
+          </div>
+        </header>
 
         <DayTabs :days="days" :selected-index="selectedDayIndex" @select="handleDayTabClick" />
 
-        <ProgressBar :percentage="calculateCompletionPercentage()" :milestones="milestones" />
+        <ProgressBar :percentage="calculateCompletionPercentage()" :milestones="milestones" :done="completedTaskCount || 0" :total="selectedDayRoutine?.length || 0" />
 
       </section>
 
@@ -1767,6 +1779,7 @@ onMounted(() => {
 
   checkStreakOnCompletion();
 });
+const menuOpen = ref(false);
 const milestones = ref([
   { label: '0%', percent: 0, position: 0, icon: '🌱' },      // Seed planted
   { label: '25%', percent: 25, position: 25, icon: '🌿' },   // Sprouting leaves
@@ -2429,36 +2442,36 @@ const finishShutdown = async (carry) => {
 /* ── Root ── */
 .app-root {
   /* ── Design tokens (dark, Atlassian-style neutrals + blue accent) ── */
-  --c-bg: #1D2125;
-  --c-surface: #22272B;
-  --c-surface-2: #2C333A;
-  --c-border: #38414A;
-  --c-border-strong: #596773;
-  --c-text: #DEE4EA;
-  --c-text-2: #B6C2CF;
-  --c-text-3: #8C9BAB;
-  --c-accent: #0C66E4;
-  --c-accent-hover: #0055CC;
-  --c-accent-text: #85B8FF;
-  --c-accent-soft: #09326C;
-  --c-accent-line: #1558BC;
+  --c-bg: #0B0D12;
+  --c-surface: #12151C;
+  --c-surface-2: #1A1E28;
+  --c-border: #252B38;
+  --c-border-strong: #3A4256;
+  --c-text: #EEF1F7;
+  --c-text-2: #B4BCCB;
+  --c-text-3: #8791A5;
+  --c-accent: #4F6FF0;
+  --c-accent-hover: #3F5DDB;
+  --c-accent-text: #8FA8FF;
+  --c-accent-soft: #19224A;
+  --c-accent-line: #34478F;
   --c-on-accent: #FFFFFF;
-  --c-success: #4BCE97;
-  --c-success-soft: #1C3329;
-  --c-success-line: #216E4E;
-  --c-warn: #F5CD47;
-  --c-warn-text: #F5CD47;
-  --c-warn-soft: #3A2C09;
-  --c-warn-line: #7F5F01;
-  --c-danger: #F87168;
-  --c-danger-text: #FD9891;
-  --c-danger-soft: #42221F;
-  --c-danger-line: #AE2E24;
+  --c-success: #3DDC97;
+  --c-success-soft: #10261D;
+  --c-success-line: #1E6B4A;
+  --c-warn: #F5B83D;
+  --c-warn-text: #F5C75F;
+  --c-warn-soft: #2B2209;
+  --c-warn-line: #7A5A12;
+  --c-danger: #F87171;
+  --c-danger-text: #FCA5A5;
+  --c-danger-soft: #2E1517;
+  --c-danger-line: #8F2A2A;
   --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-5: 24px;
-  --r: 3px;
-  --shadow-1: 0 1px 1px rgba(3,4,4,.5), 0 0 1px rgba(3,4,4,.5);
+  --r: 8px; --r-lg: 12px; --r-pill: 999px;
+  --shadow-1: none;
   --shadow-2: 0 8px 12px rgba(3,4,4,.36), 0 0 1px rgba(3,4,4,.5);
-  --fs-xs: 11px; --fs-sm: 12px; --fs-md: 14px; --fs-lg: 16px; --fs-xl: 20px;
+  --fs-xs: 11px; --fs-sm: 12px; --fs-md: 14px; --fs-lg: 16px; --fs-xl: 20px; --fs-2xl: 32px;
   --ring: 0 0 0 2px var(--c-accent-text);
   --font: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   min-height: 100vh;
@@ -2467,13 +2480,13 @@ const finishShutdown = async (carry) => {
   font-family: var(--font);
   font-size: var(--fs-md);
   line-height: 20px;
-  padding-bottom: 120px;
+  padding-bottom: 130px;
 }
 .app-root button, .app-root input, .app-root select, .app-root textarea { font-family: inherit; }
 .app-root * { transition-timing-function: ease; }
 
 .content-wrap {
-  max-width: 760px;
+  max-width: 540px;
   margin: 0 auto;
   padding: 1rem 1rem 2rem;
 }
@@ -2654,6 +2667,25 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .splash-bar { background: var(--c-accent); }
 @media (max-width: 600px) { .content-wrap { padding: var(--sp-3) var(--sp-2) var(--sp-5); } .time-summary-card { grid-template-columns: repeat(2, 1fr); } }
 
+
+/* ── Mobile-first dark redesign ── */
+.app-root { -webkit-tap-highlight-color: transparent; }
+.content-wrap { padding: var(--sp-5) var(--sp-4) var(--sp-5); }
+.calendar-section { background: none; border: none; box-shadow: none; padding: 0; margin-bottom: var(--sp-3); }
+.hero { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--sp-3); }
+.hero-text { min-width: 0; }
+.hero-date { margin: 0 0 var(--sp-2); font-family: 'JetBrains Mono', monospace; font-size: var(--fs-xs); letter-spacing: .08em; text-transform: uppercase; color: var(--c-text-3); }
+.hero-title { margin: 0; font-size: var(--fs-2xl); line-height: 1.1; font-weight: 800; letter-spacing: -.02em; color: var(--c-text); }
+.hero-sub { margin: var(--sp-2) 0 0; font-size: var(--fs-md); color: var(--c-text-2); }
+.hero-menu { position: relative; flex-shrink: 0; }
+.hero-menu-btn { width: 44px; height: 44px; border-radius: 50%; background: var(--c-surface-2); border: 1px solid var(--c-border-strong); color: var(--c-text); cursor: pointer; font-size: var(--fs-lg); }
+.hero-menu-btn:hover { background: var(--c-border); }
+.hero-menu-pop { position: absolute; right: 0; top: 52px; z-index: 30; min-width: 190px; padding: var(--sp-1); background: var(--c-surface-2); border: 1px solid var(--c-border-strong); border-radius: var(--r-lg); box-shadow: 0 8px 24px rgba(0,0,0,.5); }
+.hero-menu-item { display: block; width: 100%; min-height: 40px; text-align: left; padding: 0 var(--sp-3); background: none; border: none; border-radius: var(--r); color: var(--c-text); font-size: var(--fs-md); cursor: pointer; }
+.hero-menu-item:hover { background: var(--c-border); }
+.tasks-list { gap: var(--sp-2); }
+.cap-warning, .load-summary { border-radius: var(--r-lg); }
+@media (min-width: 700px) { .content-wrap { padding-top: 40px; } .hero-title { font-size: 40px; } }
 </style>
 
 
