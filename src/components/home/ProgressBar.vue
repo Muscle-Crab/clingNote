@@ -1,7 +1,7 @@
 <template>
   <div class="progress-section">
     <div class="progress-top">
-      <div class="progress-pct">{{ percentage }}<span class="progress-pct-sign">%</span></div>
+      <div class="progress-pct">{{ percentage }}%</div>
       <div class="progress-copy">
         <p class="progress-label">Daily progress</p>
         <p v-if="total !== null" class="progress-sub">{{ done }} of {{ total }} tasks complete</p>
@@ -47,7 +47,6 @@ const currentIcon = computed(() => {
 .progress-section { background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--r-lg); padding: var(--sp-4); }
 .progress-top { display: flex; align-items: center; gap: var(--sp-4); }
 .progress-pct { font-size: 44px; line-height: 1; font-weight: 800; letter-spacing: -.02em; color: var(--c-accent-text); font-variant-numeric: tabular-nums; }
-.progress-pct-sign { font-size: 28px; }
 .progress-copy { flex: 1; min-width: 0; padding-left: var(--sp-4); border-left: 1px solid var(--c-border); }
 .progress-label { margin: 0; font-size: var(--fs-lg); font-weight: 700; color: var(--c-text); }
 .progress-sub { margin: 2px 0 0; font-size: var(--fs-sm); color: var(--c-text-2); }
