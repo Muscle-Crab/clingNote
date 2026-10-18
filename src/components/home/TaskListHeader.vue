@@ -1,11 +1,11 @@
 <template>
   <div class="task-list-header">
     <div class="task-count">
-      <h2 class="task-count-label">Today</h2>
+      <h2 class="task-count-label">{{ label }}</h2>
       <span class="task-count-badge">{{ completed }}/{{ total }}</span>
     </div>
     <div class="header-actions">
-      <div class="sort-wrap">
+      <div v-if="isToday" ref="sortWrap" class="sort-wrap">
         <button @click="open = !open" class="toggle-visibility sort-btn" :class="{ 'sort-btn--active': !isDefaultPrefs(prefs) }" :aria-expanded="open" aria-haspopup="true" aria-label="Sort and filter" title="Sort and filter">
           <i class="fas fa-sort-amount-down"></i>
         </button>
@@ -24,10 +24,10 @@
           <button v-if="!isDefaultPrefs(prefs)" class="sort-reset" @click="$emit('update:prefs', { sort: 'manual', filter: 'all' })">Reset</button>
         </div>
       </div>
-      <button @click="$emit('toggle-sound')" class="toggle-visibility" :aria-pressed="soundEnabled" :aria-label="soundEnabled ? 'Mute sounds' : 'Enable sounds'" :title="soundEnabled ? 'Sounds on' : 'Sounds off'">
+      <button v-if="isToday" @click="$emit('toggle-sound')" class="toggle-visibility" :aria-pressed="soundEnabled" :aria-label="soundEnabled ? 'Mute sounds' : 'Enable sounds'" :title="soundEnabled ? 'Sounds on' : 'Sounds off'">
         <i :class="soundEnabled ? 'fas fa-volume-up' : 'fas fa-volume-mute'"></i>
       </button>
-      <button @click="$emit('toggle-completed')" class="toggle-visibility toggle-visibility--text" :aria-pressed="showCompleted" :title="showCompleted ? 'Hide completed' : 'Show completed'">
+      <button v-if="isToday" @click="$emit('toggle-completed')" class="toggle-visibility toggle-visibility--text" :aria-pressed="showCompleted" :title="showCompleted ? 'Hide completed' : 'Show completed'">
         <i :class="showCompleted ? 'fas fa-eye' : 'fas fa-eye-slash'"></i>
         <span>{{ showCompleted ? 'Hide completed' : 'Show completed' }}</span>
       </button>
@@ -36,10 +36,18 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, watch, onBeforeUnmount } from 'vue';
 import { SORT_OPTIONS, FILTER_OPTIONS, DEFAULT_PREFS, isDefaultPrefs, canReorder } from '@/utils/taskView';
 const open = ref(false);
+const sortWrap = ref(null);
+const onDocDown = (e) => { if (sortWrap.value && !sortWrap.value.contains(e.target)) open.value = false; };
+const onDocKey = (e) => { if (e.key === 'Escape') open.value = false; };
+const unbind = () => { document.removeEventListener('pointerdown', onDocDown, true); document.removeEventListener('keydown', onDocKey); };
+watch(open, (o) => { unbind(); if (o) { document.addEventListener('pointerdown', onDocDown, true); document.addEventListener('keydown', onDocKey); } });
+onBeforeUnmount(unbind);
 defineProps({
+  label: { type: String, default: 'Today' },
+  isToday: { type: Boolean, default: true }, // sort/filter/completed toggles only apply to today's list
   prefs: { type: Object, default: () => ({ ...DEFAULT_PREFS }) },
   completed: { type: Number, default: 0 },
   total: { type: Number, default: 0 },

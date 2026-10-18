@@ -1,5 +1,5 @@
 <template>
-  <div ref="scrollContainer" class="app-root">
+  <div ref="scrollContainer" class="app-root" :class="{ 'is-dragging': isDraggingTask }">
 
     <!-- Loading Screen -->
     <div v-if="isLoading" class="splash-screen">
@@ -91,7 +91,7 @@
 
 
         <div v-else class="task-list-wrap">
-          <TaskListHeader v-if="selectedDayIndex === new Date().getDay()" :completed="completedTaskCount" :total="selectedDayRoutine?.length"
+          <TaskListHeader :label="isViewingToday ? 'Today' : FULL_DAY_NAMES[selectedDayIndex]" :is-today="isViewingToday" :completed="completedTaskCount" :total="selectedDayRoutine?.length"
                           :sound-enabled="soundEnabled" :show-completed="showCompleted" v-model:prefs="viewPrefs" @toggle-sound="toggleSound" @toggle-completed="showCompleted = !showCompleted" />
 
 
@@ -115,8 +115,8 @@
               class="tasks-list space-y-2"
               ghost-class="ghost"
               drag-class="drag"
-              @start="playSound('dragStart')"
-              @end="playSound('dragEnd'); handleDragEnd()"
+              @start="onDragStart()"
+              @end="isDraggingTask = false; playSound('dragEnd'); handleDragEnd()"
           >
             <template #item="{ element: task, index }">
               <TaskCard
@@ -1225,7 +1225,7 @@ onAuthStateChanged(auth, async(user) => {
 
 const userId = ref(null);
 
-// ─── Scheduled tasks (own Firestore doc: scheduledTasks/{uid}; see utils/scheduling.js) ───
+// ─── Scheduled tasks (field scheduledTasks on users/{uid}; see utils/scheduling.js) ───
 const scheduledList = ref([]);
 const scheduledError = ref('');
 const todayStr = ref(getTodayId());
@@ -1245,7 +1245,7 @@ const runScheduledMaterialization = async () => {
     scheduledError.value = '';
     return res.added;
   } catch (e) {
-    console.error('Scheduled tasks unavailable (check Firestore rules for scheduledTasks):', e);
+    console.error('Scheduled tasks unavailable (check Firestore rules for users/{uid}):', e);
     scheduledError.value = 'Scheduled tasks could not be loaded.';
   } finally { materializing = false; }
 };
@@ -2352,6 +2352,14 @@ const canViewSelectedDayTasks = computed(() => {
 // ─── Task planning (logic lives in @/utils/taskPlanning and @/composables) ───
 watchMilestones(() => calculateCompletionPercentage(), milestones, selectedDayIndex);
 
+const FULL_DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const isDraggingTask = ref(false);
+const onDragStart = () => {
+  isDraggingTask.value = true;
+  const sel = window.getSelection && window.getSelection();
+  if (sel && sel.removeAllRanges) sel.removeAllRanges();
+  playSound('dragStart');
+};
 const todayDayName = () => days[new Date().getDay()].day;
 const isViewingToday = computed(() => selectedDayIndex.value === new Date().getDay());
 
@@ -2838,4 +2846,10 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .app-root *::-webkit-scrollbar-thumb:hover { background: var(--c-text-3, #8c9bab); }
 .app-root *::-webkit-scrollbar-corner { background: var(--c-surface, #22272b); }
 .app-root { color-scheme: dark; }
+
+/* Bottom padding so the floating Add bar (~88px + safe area) never covers the last rows */
+.app-root .content-wrap { padding-bottom: calc(140px + env(safe-area-inset-bottom)); }
+/* No text-selection highlight while dragging a card; inputs/editors stay selectable */
+.app-root.is-dragging, .app-root.is-dragging * { user-select: none; -webkit-user-select: none; }
+.app-root.is-dragging input, .app-root.is-dragging textarea { user-select: text; -webkit-user-select: text; }
 </style>

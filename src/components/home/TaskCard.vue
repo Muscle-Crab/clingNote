@@ -5,7 +5,8 @@
                     @click="onCardTap"
                     :class="{
                     'task-card--completed': task.completed && isTodayTab,
-                    'task-card--important': task.important
+                    'task-card--important': task.important,
+                    'task-card--menu': moreOpen
                   }"
                 >
                   <!-- Left: drag + avatar -->
@@ -156,7 +157,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, watch, onBeforeUnmount } from 'vue';
 import { STATUSES, taskKey, estimateOf, formatClock, formatDuration as formatMinutes, toMinutes } from '@/utils/taskPlanning';
 import { subtaskProgress } from '@/utils/subtasks';
 import { taskTimeLeft } from '@/utils/dayStats';
@@ -177,6 +178,14 @@ const emit = defineEmits(['toggle-expand', 'toggle-complete', 'open-detail', 'to
   'toggle-label', 'open-reminder', 'transfer', 'video', 'upload', 'timer', 'wont-do', 'delete', 'schedule']);
 
 const moreOpen = ref(false);
+// Close the "..." menu on Escape or any press outside the menu/its button.
+const onDocDown = (e) => { if (!e.target.closest || !e.target.closest('.task-actions, .task-more')) moreOpen.value = false; };
+const onDocKey = (e) => { if (e.key === 'Escape') moreOpen.value = false; };
+watch(moreOpen, (open) => {
+  if (open) { document.addEventListener('pointerdown', onDocDown, true); document.addEventListener('keydown', onDocKey); }
+  else { document.removeEventListener('pointerdown', onDocDown, true); document.removeEventListener('keydown', onDocKey); }
+});
+onBeforeUnmount(() => { document.removeEventListener('pointerdown', onDocDown, true); document.removeEventListener('keydown', onDocKey); });
 const schedDate = ref('');
 const schedTime = ref('');
 const tomorrow = (() => { const d = new Date(); d.setDate(d.getDate() + 1); return d.toLocaleDateString('en-CA'); })();
@@ -212,6 +221,9 @@ const onCardTap = (event) => { // bound on the whole card (blank areas, chips, n
 .task-card { cursor: pointer; position: relative; display: flex; gap: var(--sp-2); align-items: flex-start; padding: var(--sp-2) var(--sp-3); background: var(--c-surface); border: 1px solid var(--c-border); border-left: 3px solid transparent; border-radius: var(--r); box-shadow: var(--shadow-1); transition: background .15s, border-color .15s; }
 .task-card:hover { background: var(--c-surface-2); }
 .task-card--completed { opacity: .6; }
+/* opacity makes each completed card its own stacking context: lift the card whose menu is open above its siblings */
+.task-card--menu { z-index: 30; }
+.drag-handle { user-select: none; -webkit-user-select: none; }
 .task-card--important { border-left-color: var(--c-danger); }
 .task-left { display: flex; align-items: center; gap: var(--sp-2); padding-top: 2px; }
 .task-avatar { width: 16px; height: 24px; background: transparent !important; display: flex; align-items: center; justify-content: center; cursor: grab; color: var(--c-text-3); font-size: var(--fs-sm); flex-shrink: 0; }
