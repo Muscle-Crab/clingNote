@@ -60,7 +60,9 @@ const cases = [
   ['SubtaskList', { task }, ['Outline', '(1/2)']],
   ['TaskCard', { task, index: 0, isTodayTab: true, expanded: true, activeLabels: [], now: Date.now(), showNotification: true, transferNotification: 'moved' }, ['Write report', '1/2', 'Outline', 'task-expand', '00:01:', 'moved', 'Saved', 'Add a subtask', 'Auto-complete task', 'Next action', 'Estimate (min)', 'chip--subtasks', 'Delete', 'task-chevron', 'aria-label="Show details"', 'aria-expanded="true"', 'task-chevron--open']],
   ['TaskListHeader', { completed: 1, total: 3, soundEnabled: true, showCompleted: false }, ['1/3', 'Sounds on']],
-  ['EmptyState', {}, ['Nothing here yet']],
+  ['EmptyState', {}, ['Nothing here yet'], ['Add task']],
+  ['EmptyState', { showAdd: true }, ['Nothing here yet', 'empty-add', 'Add task']],
+  ['TaskListHeader', { completed: 0, total: 1, prefs: { sort: 'priority', filter: 'waiting' } }, ['aria-label="Sort and filter"', 'sort-btn--active', 'Show completed']],
   ['ScheduledList', { todayStr: '2026-10-17', tasks: [{ id: 'a', title: 'Pay rent', scheduledDate: '2026-10-18', scheduledTime: '09:30' }, { id: 'b', title: 'Dentist', scheduledDate: '2026-10-25', scheduledTime: '' }] }, ['Scheduled', 'sched-count', '>2<', 'aria-expanded="false"']],
   ['DayTabs', { days: [{ day: 'Sat', date: '2026-10-17' }], selectedIndex: 0, scheduledCounts: { '2026-10-17': 2 } }, ['day-tab-dot', '2 scheduled', '>17<']],
   ['TaskCard', { task: { ...task, type: 'one-time' }, index: 0, isTodayTab: true, expanded: true, activeLabels: [], now: 0 }, ['Schedule for later', 'Schedule date']],
@@ -148,6 +150,37 @@ const st = require(path.join(src, 'utils/subtasks.js'));
   assert.strictEqual(sc.countsByDate([old], today)['2026-10-17'], undefined, 'materialized not shown');
   assert.strictEqual(sc.formatScheduledDate('2026-10-18', today), 'Tomorrow');
   console.log('ok   utils/scheduling');
+})();
+// Today sort/filter helpers (pure logic)
+(() => {
+  const tv = require(path.join(src, 'utils/taskView.js'));
+  const T = [
+    { title: 'a', priority: 'low', status: 'waiting', startTime: '11:00' },
+    { title: 'b', priority: 'high', startTime: '09:00' },
+    { title: 'c', priority: 'medium', status: 'in-progress' },
+    { title: 'd', priority: 'high', status: 'todo', startTime: '09:00', completed: true },
+    { title: 'e' },
+  ];
+  const titles = (p) => tv.viewTasks(T, p).map((i) => i.task.title).join('');
+  assert.strictEqual(titles({}), 'abcde', 'default = manual');
+  assert.strictEqual(titles({ sort: 'bogus', filter: 'bogus' }), 'abcde', 'invalid prefs -> defaults');
+  assert.strictEqual(titles(undefined), 'abcde');
+  assert.strictEqual(titles({ sort: 'start' }), 'bdace', 'start time, missing last, stable');
+  assert.strictEqual(titles({ sort: 'priority' }), 'bdcae', 'priority, stable, missing last');
+  assert.strictEqual(titles({ sort: 'status' }), 'cbdea', 'status: in-progress, todo(default), waiting');
+  assert.strictEqual(titles({ filter: 'todo' }), 'bde', 'filter keeps completed for Show completed, default status = todo');
+  assert.strictEqual(titles({ filter: 'waiting', sort: 'priority' }), 'da');
+  assert.deepStrictEqual(tv.viewTasks(T, { sort: 'priority' }).map((i) => i.index), [1, 3, 2, 0, 4], 'original indexes preserved');
+  assert.strictEqual(T[0].title, 'a'); assert.strictEqual(T.length, 5, 'input not mutated');
+  assert.deepStrictEqual(tv.viewTasks(undefined, {}), []); assert.deepStrictEqual(tv.viewTasks(null, { sort: 'start' }), []);
+  assert.strictEqual(tv.visibleCount(tv.viewTasks(T, {}), false), 4); assert.strictEqual(tv.visibleCount(tv.viewTasks(T, {}), true), 5);
+  assert.ok(tv.canReorder({}) && !tv.canReorder({ sort: 'start' }) && !tv.canReorder({ filter: 'todo' }));
+  const k = (o, modal) => tv.shouldHandleShortcut({ key: 'n', target: { tagName: 'DIV' }, ...o }, modal);
+  assert.ok(k({}, false)); assert.ok(!k({}, true), 'modal open');
+  for (const tag of ['INPUT', 'TEXTAREA', 'SELECT']) assert.ok(!k({ target: { tagName: tag } }, false), tag);
+  assert.ok(!k({ target: { tagName: 'DIV', isContentEditable: true } }, false));
+  assert.ok(!k({ ctrlKey: true }, false) && !k({ metaKey: true }, false) && !k({ key: 'm' }, false) && !k({ repeat: true }, false));
+  console.log('ok   utils/taskView');
 })();
 (async () => {
   let failed = 0;

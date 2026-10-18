@@ -87,12 +87,12 @@
       <!-- ─── Task List ─── -->
       <section v-if="canViewSelectedDayTasks"
                class="task-section">
-        <EmptyState v-if="selectedDayRoutine?.length === 0" />
+        <EmptyState v-if="selectedDayRoutine?.length === 0" :show-add="true" @add="openModal('task')" />
 
 
         <div v-else class="task-list-wrap">
           <TaskListHeader v-if="selectedDayIndex === new Date().getDay()" :completed="completedTaskCount" :total="selectedDayRoutine?.length"
-                          :sound-enabled="soundEnabled" :show-completed="showCompleted" @toggle-sound="toggleSound" @toggle-completed="showCompleted = !showCompleted" />
+                          :sound-enabled="soundEnabled" :show-completed="showCompleted" v-model:prefs="viewPrefs" @toggle-sound="toggleSound" @toggle-completed="showCompleted = !showCompleted" />
 
 
           <LoadSummary v-if="isViewingToday" :load="todayLoad" :expanded="showSchedule" @toggle="showSchedule = !showSchedule" />
@@ -100,13 +100,17 @@
           <TimeBlockSchedule v-if="showSchedule" :schedule="schedule" />
 
 
+          <p v-if="viewPrefs.filter !== 'all' && isViewingToday && visibleTaskCount === 0" class="filter-empty">No tasks match this filter.</p>
+
           <draggable
               handle=".drag-handle"
               :item-key="taskKey"
               :prevent-on-filter="false"
               :fallback-tolerance="5"
-              :animation="150"
-              v-model="selectedDayRoutine"
+              :animation="reducedMotion ? 0 : 150"
+              :disabled="!reorderable"
+              :model-value="displayTasks"
+              @update:model-value="onReorder"
               tag="div"
               class="tasks-list space-y-2"
               ghost-class="ghost"
@@ -117,13 +121,13 @@
             <template #item="{ element: task, index }">
               <TaskCard
                   v-if="(!task.completed || (isToday(selectedDayIndex) && showCompleted))"
-                  :task="task" :index="index" :is-today-tab="isToday(selectedDayIndex)" :expanded="expandedKey === taskKey(task)"
+                  :task="task" :index="realIndex(task)" :is-today-tab="isToday(selectedDayIndex)" :expanded="expandedKey === taskKey(task)"
                   :active-labels="activeLabels" :now="nowTick" :show-notification="showNotification" :transfer-notification="transferNotification"
-                  @toggle-expand="toggleExpanded(task)" @toggle-complete="toggleTaskCompletion(index)" @open-detail="openTaskDetailModal(task)"
-                  @toggle-important="toggleTaskImportance(index)" @patch="patchTask(index, task, $event)" @subtask-patch="onSubtaskPatch(index, task, $event)"
-                  @toggle-label="toggleLabelHighlight" @open-reminder="openModal('calendar', index, task.title)" @transfer="openTransferModal(index)"
-                  @video="openYouTubeModal(index)" @upload="handleUpload($event, index)" @timer="openTaskTimerModal(index)"
-                  @wont-do="openWontDoModal(index)" @delete="deleteTask(index)" @schedule="scheduleExistingTask(index, task, $event)"
+                  @toggle-expand="toggleExpanded(task)" @toggle-complete="toggleTaskCompletion(realIndex(task))" @open-detail="openTaskDetailModal(task)"
+                  @toggle-important="toggleTaskImportance(realIndex(task))" @patch="patchTask(realIndex(task), task, $event)" @subtask-patch="onSubtaskPatch(realIndex(task), task, $event)"
+                  @toggle-label="toggleLabelHighlight" @open-reminder="openModal('calendar', realIndex(task), task.title)" @transfer="openTransferModal(realIndex(task))"
+                  @video="openYouTubeModal(realIndex(task))" @upload="handleUpload($event, realIndex(task))" @timer="openTaskTimerModal(realIndex(task))"
+                  @wont-do="openWontDoModal(realIndex(task))" @delete="deleteTask(realIndex(task))" @schedule="scheduleExistingTask(realIndex(task), task, $event)"
               />
             </template>
           </draggable>
@@ -151,6 +155,8 @@
 import { ref, onMounted, onBeforeUnmount, computed, watch, reactive } from 'vue';
 import { useSounds } from '@/composables/useSounds';
 import { patchStoredTask, loadDayTasks, carryTasksToDay } from '@/composables/useDayPersistence';
+import { useTaskViewPrefs } from '@/composables/useTaskViewPrefs';
+import { viewTasks, canReorder, normalizePrefs, visibleCount, shouldHandleShortcut } from '@/utils/taskView';
 import { ACTIVE_CAP, taskKey, activeCount, loadSummary, buildSchedule } from '@/utils/taskPlanning';
 import { getTodayId, formatSessionTime, getCurrentDate, formatTime, getTodayDate, isToday } from '@/utils/dateTime';
 import { badges } from '@/utils/gamification';
@@ -645,6 +651,28 @@ const openModal = (type = 'task', index = null, title = '') => {
 };
 
 const showCompleted = ref(false);
+
+// ─── Today sort/filter (prefs in localStorage; logic in @/utils/taskView) ───
+const { prefs: viewPrefs } = useTaskViewPrefs();
+const effectivePrefs = computed(() => (new Date().getDay() === selectedDayIndex.value ? normalizePrefs(viewPrefs.value) : normalizePrefs(null)));
+const viewItems = computed(() => viewTasks(selectedDayRoutine.value, effectivePrefs.value));
+const displayTasks = computed(() => viewItems.value.map((i) => i.task));
+const visibleTaskCount = computed(() => visibleCount(viewItems.value, showCompleted.value));
+const reorderable = computed(() => canReorder(effectivePrefs.value));
+const realIndex = (task) => (selectedDayRoutine.value || []).indexOf(task);
+const onReorder = (list) => { if (reorderable.value && Array.isArray(list)) selectedDayRoutine.value = list; };
+const reducedMotion = typeof window !== 'undefined' && window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)').matches : false;
+
+// "n" opens Add task (not while typing or when any modal/overlay is open)
+const anyModalOpen = computed(() => !!(modalOpen.value || isModalOpen.value || showWorkoutModal.value || showTimerModal.value || wontDoModalOpen.value ||
+  transferModalOpen.value || youtubeModalOpen.value || taskDetailModalOpen.value || showImagePreview.value || listening.value || shutdownOpen.value || showFullScreenAnimation.value));
+const onShortcutKey = (e) => {
+  if (!shouldHandleShortcut(e, anyModalOpen.value)) return;
+  e.preventDefault();
+  openModal('task');
+};
+onMounted(() => document.addEventListener('keydown', onShortcutKey));
+onBeforeUnmount(() => document.removeEventListener('keydown', onShortcutKey));
 
 
 
@@ -2797,6 +2825,11 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 
 
 <style>
+/* Respect the OS "reduce motion" setting: no transitions or animations anywhere in the app. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; animation-delay: 0s !important; transition-duration: 0.001ms !important; transition-delay: 0s !important; scroll-behavior: auto !important; }
+}
+.filter-empty { text-align: center; color: var(--c-text-3, #6b6a66); font-size: 0.875rem; padding: 1.5rem 0; margin: 0; }
 /* Dark scrollbars for the home view and its modals (unscoped: modal boxes live in child components). */
 .app-root, .app-root * { scrollbar-width: thin; scrollbar-color: var(--c-border-strong, #454f59) var(--c-surface, #22272b); }
 .app-root *::-webkit-scrollbar { width: 10px; height: 10px; }
