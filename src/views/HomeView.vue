@@ -37,7 +37,7 @@
           </div>
         </header>
 
-        <DayTabs :days="days" :selected-index="selectedDayIndex" @select="handleDayTabClick" />
+        <DayTabs :days="days" :selected-index="selectedDayIndex" :scheduled-counts="scheduledCounts" @select="handleDayTabClick" />
 
         <ProgressBar :percentage="calculateCompletionPercentage()" :milestones="milestones" :done="completedTaskCount || 0" :total="selectedDayRoutine?.length || 0" />
 
@@ -123,7 +123,7 @@
                   @toggle-important="toggleTaskImportance(index)" @patch="patchTask(index, task, $event)" @subtask-patch="onSubtaskPatch(index, task, $event)"
                   @toggle-label="toggleLabelHighlight" @open-reminder="openModal('calendar', index, task.title)" @transfer="openTransferModal(index)"
                   @video="openYouTubeModal(index)" @upload="handleUpload($event, index)" @timer="openTaskTimerModal(index)"
-                  @wont-do="openWontDoModal(index)" @delete="deleteTask(index)"
+                  @wont-do="openWontDoModal(index)" @delete="deleteTask(index)" @schedule="scheduleExistingTask(index, task, $event)"
               />
             </template>
           </draggable>
@@ -136,6 +136,9 @@
         </div>
       </section>
       <StartDayPrompt v-else-if="isToday(selectedDayIndex)" @start="startDay" />
+
+      <ScheduledList v-if="userId" :tasks="futureScheduled" :today-str="todayStr" :error="scheduledError"
+                     @move-today="moveScheduledToToday" @update="updateScheduledDate" @delete="deleteScheduled" />
 
       <FabButtons :user-id="userId" :listening="listening" @add="openModal('task')" @voice="startVoiceInput" />
 
@@ -155,6 +158,9 @@ import { scheduleNotification, sendNotificationToPlayer } from '@/composables/us
 import { speak } from '@/composables/useSpeech';
 import { completionPercentage, computeTimeStats, daysLeftInYearFrom } from '@/utils/dayStats';
 import { shouldAutoComplete, resetSubtasks } from '@/utils/subtasks';
+import { buildScheduledEntry, futureOf, dueOf, countsByDate, isValidDate, removeScheduled, rescheduleEntry } from '@/utils/scheduling';
+import { mutateScheduled, materializeDueForToday } from '@/composables/useScheduledTasks';
+import ScheduledList from '@/components/home/ScheduledList.vue';
 import EmptyState from '@/components/home/EmptyState.vue';
 import StartDayPrompt from '@/components/home/StartDayPrompt.vue';
 import TaskListHeader from '@/components/home/TaskListHeader.vue';
@@ -659,6 +665,7 @@ const newTask = ref({
   position: 0,
   type: 'recurring',
   dueDate: '', startTime: '', estimateMin: '', nextAction: '', status: 'todo',
+  scheduleDate: '', scheduleTime: '',
   reminder: { date: '', time: '', repeat: '' }  // Now defined
 });
 
@@ -1179,6 +1186,7 @@ onAuthStateChanged(auth, async(user) => {
     const todayIndex = new Date().getDay();
     if (todayIndex !== -1) {
       selectedDayIndex.value = todayIndex;
+      await runScheduledMaterialization(); // add due scheduled tasks to today before the list is fetched
       fetchSelectedDayRoutine(); // Fetch tasks for the current day
     }
   } else {
@@ -1188,6 +1196,99 @@ onAuthStateChanged(auth, async(user) => {
 });
 
 const userId = ref(null);
+
+// ─── Scheduled tasks (own Firestore doc: scheduledTasks/{uid}; see utils/scheduling.js) ───
+const scheduledList = ref([]);
+const scheduledError = ref('');
+const todayStr = ref(getTodayId());
+const futureScheduled = computed(() => futureOf(scheduledList.value, todayStr.value));
+const scheduledCounts = computed(() => countsByDate(scheduledList.value, todayStr.value));
+
+let materializing = false;
+const runScheduledMaterialization = async () => {
+  if (!userId.value || materializing) return;
+  materializing = true;
+  try {
+    todayStr.value = getTodayId();
+    const todayName = days[new Date().getDay()]?.day;
+    if (!todayName) return;
+    const res = await materializeDueForToday(userId.value, todayName, todayStr.value);
+    scheduledList.value = res.scheduled;
+    scheduledError.value = '';
+    return res.added;
+  } catch (e) {
+    console.error('Scheduled tasks unavailable (check Firestore rules for scheduledTasks):', e);
+    scheduledError.value = 'Scheduled tasks could not be loaded.';
+  } finally { materializing = false; }
+};
+const afterMaterialize = async () => {
+  const added = await runScheduledMaterialization();
+  if (added && selectedDayIndex.value === new Date().getDay()) await fetchSelectedDayRoutine();
+};
+watch(selectedDayIndex, () => { if (userId.value && dueOf(scheduledList.value, getTodayId()).length) afterMaterialize(); });
+const onVisible = () => { if (document.visibilityState === 'visible' && userId.value && getTodayId() !== todayStr.value) afterMaterialize(); };
+onMounted(() => document.addEventListener('visibilitychange', onVisible));
+onBeforeUnmount(() => document.removeEventListener('visibilitychange', onVisible));
+
+const submitScheduledTask = async () => {
+  const nt = newTask.value;
+  if (!isValidDate(nt.scheduleDate) || nt.scheduleDate <= getTodayId()) { error.value = 'Pick a date after today, or clear “Schedule for later”.'; return; }
+  const labels = typeof nt.labels === 'string' ? nt.labels.split(',').map(l => l.trim()).filter(Boolean) : (nt.labels || []);
+  const entry = buildScheduledEntry({
+    title: nt.title, important: false, time: '', priority: nt.priority, labels, notes: nt.notes, userId: userId.value,
+    status: nt.status || 'todo', dueDate: nt.dueDate || '', startTime: nt.startTime || '',
+    estimateMin: Number(nt.estimateMin) || 0, nextAction: (nt.nextAction || '').trim(),
+  }, nt.scheduleDate, nt.scheduleTime);
+  if (!entry) { error.value = 'Could not schedule this task.'; return; }
+  try {
+    scheduledList.value = await mutateScheduled(userId.value, (l) => [...l, entry]);
+    newTask.value = { title: '', time: '', priority: 'low', labels: [], notes: '', selectedDays: [], position: 0, reminder: { datetime: '', repeat: '' }, type: 'recurring',
+      dueDate: '', startTime: '', estimateMin: '', nextAction: '', status: 'todo', scheduleDate: '', scheduleTime: '' };
+    capWarning.value = false; capOverride.value = false;
+    closeModal();
+    error.value = '';
+  } catch (e) {
+    console.error('Error scheduling task:', e);
+    error.value = 'Could not save the scheduled task (permissions?). Nothing was changed.';
+  }
+};
+
+// Editor: move an existing one-time task from today's list to a future date.
+const scheduleExistingTask = async (index, task, { date, time }) => {
+  if (!userId.value || !isValidDate(date) || date <= getTodayId()) { alert('Pick a date after today.'); return; }
+  const entry = buildScheduledEntry({ ...task, userId: userId.value }, date, time);
+  if (!entry) return;
+  try {
+    scheduledList.value = await mutateScheduled(userId.value, (l) => [...l, entry]); // saved first, so a failure never loses the task
+    const dayName = days[selectedDayIndex.value].day;
+    const ref_ = doc(db, 'weeklyRoutines', `${userId.value}_${dayName}`);
+    const key = taskKey(task);
+    const cur = (await getDoc(ref_)).data()?.tasks || [];
+    await updateDoc(ref_, { tasks: cur.filter((t) => taskKey(t) !== key), updatedAt: serverTimestamp() });
+    selectedDayRoutine.value = selectedDayRoutine.value.filter((t) => taskKey(t) !== key);
+  } catch (e) {
+    console.error('Error scheduling task:', e);
+    alert('Could not schedule this task.');
+  }
+};
+
+const moveScheduledToToday = async (id) => {
+  if (!userId.value) return;
+  try {
+    scheduledList.value = await mutateScheduled(userId.value, (l) => rescheduleEntry(l, id, getTodayId(), ''));
+    await afterMaterialize();
+  } catch (e) { console.error(e); scheduledError.value = 'Could not move the task.'; }
+};
+const updateScheduledDate = async ({ id, date, time }) => {
+  if (!userId.value || !isValidDate(date) || date < getTodayId()) return;
+  try { scheduledList.value = await mutateScheduled(userId.value, (l) => rescheduleEntry(l, id, date, time)); if (date <= getTodayId()) await afterMaterialize(); }
+  catch (e) { console.error(e); scheduledError.value = 'Could not update the date.'; }
+};
+const deleteScheduled = async (id) => {
+  if (!userId.value || !confirm('Delete this scheduled task?')) return;
+  try { scheduledList.value = await mutateScheduled(userId.value, (l) => removeScheduled(l, id)); }
+  catch (e) { console.error(e); scheduledError.value = 'Could not delete the task.'; }
+};
 
 const addNewTask = async () => {
   if (!userId.value) {
@@ -1199,6 +1300,9 @@ const addNewTask = async () => {
     error.value = 'Task name cannot be empty';
     return;
   }
+
+  // Scheduled-for-later tasks go to their own doc and do not count toward today's cap.
+  if (newTask.value.scheduleDate) { await submitScheduledTask(); return; }
 
   if (isCapBlocked()) return;
 
@@ -1287,7 +1391,8 @@ const addNewTask = async () => {
       position: 0,
       reminder: { datetime: '', repeat: '' },
       type: 'recurring',
-      dueDate: '', startTime: '', estimateMin: '', nextAction: '', status: 'todo'
+      dueDate: '', startTime: '', estimateMin: '', nextAction: '', status: 'todo',
+      scheduleDate: '', scheduleTime: ''
     };
     capWarning.value = false; capOverride.value = false;
     closeModal();

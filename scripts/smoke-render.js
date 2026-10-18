@@ -61,6 +61,10 @@ const cases = [
   ['TaskCard', { task, index: 0, isTodayTab: true, expanded: true, activeLabels: [], now: Date.now(), showNotification: true, transferNotification: 'moved' }, ['Write report', '1/2', 'Outline', 'task-expand', '00:01:', 'moved', 'Saved', 'Add a subtask', 'Auto-complete task', 'Next action', 'Estimate (min)', 'chip--subtasks', 'Delete', 'task-chevron', 'aria-label="Show details"', 'aria-expanded="true"', 'task-chevron--open']],
   ['TaskListHeader', { completed: 1, total: 3, soundEnabled: true, showCompleted: false }, ['1/3', 'Sounds on']],
   ['EmptyState', {}, ['Nothing here yet']],
+  ['ScheduledList', { todayStr: '2026-10-17', tasks: [{ id: 'a', title: 'Pay rent', scheduledDate: '2026-10-18', scheduledTime: '09:30' }, { id: 'b', title: 'Dentist', scheduledDate: '2026-10-25', scheduledTime: '' }] }, ['Scheduled', 'sched-count', '>2<', 'aria-expanded="false"']],
+  ['DayTabs', { days: [{ day: 'Sat', date: '2026-10-17' }], selectedIndex: 0, scheduledCounts: { '2026-10-17': 2 } }, ['day-tab-dot', '2 scheduled', '>17<']],
+  ['TaskCard', { task: { ...task, type: 'one-time' }, index: 0, isTodayTab: true, expanded: true, activeLabels: [], now: 0 }, ['Schedule for later', 'Schedule date']],
+  ['TaskCard', { task: { ...task, type: 'recurring' }, index: 0, isTodayTab: true, expanded: true, activeLabels: [], now: 0 }, ['task-expand'], ['Schedule for later']],
   ['StartDayPrompt', {}, ['Start Day']],
   // collapsed card with subtasks: n/m chip stays visible, editor + subtask input are not rendered
   ['TaskCard', { task, index: 0, isTodayTab: true, expanded: false, activeLabels: [], now: 0 }, ['1/2', 'chip--subtasks', 'task-chevron', 'aria-label="Show details"', 'aria-expanded="false"'], ['task-expand', 'Add a subtask', 'task-chevron--open']],
@@ -101,6 +105,49 @@ const st = require(path.join(src, 'utils/subtasks.js'));
     assert.strictEqual(ds.computeTimeStats({ startTime: Date.now() - 60000 }, bad, 1).completedTasks, 0);
   }
   console.log('ok   undefined-routine guards');
+})();
+// scheduling helpers (pure logic): materialization must be idempotent and never touch future/materialized entries
+(() => {
+  const sc = require(path.join(src, 'utils/scheduling.js'));
+  const today = '2026-10-17', nowIso = '2026-10-17T12:00:00.000Z';
+  assert.ok(sc.isValidDate('2026-02-28') && !sc.isValidDate('2026-02-30') && !sc.isValidDate('26-1-1') && !sc.isValidDate(undefined));
+  assert.ok(sc.isValidTime('09:05') && !sc.isValidTime('9:5') && !sc.isValidTime('24:00'));
+  assert.strictEqual(sc.buildScheduledEntry({ title: ' ' }, today, ''), null, 'blank title');
+  assert.strictEqual(sc.buildScheduledEntry({ title: 'x' }, 'nope', ''), null, 'bad date');
+  const mk = (title, date, time, id) => sc.buildScheduledEntry({ title, priority: 'high', labels: ['a'] }, date, time, id);
+  const list = [mk('past', '2026-10-10', '', 'p'), mk('now', today, '08:30', 'n'), mk('later', '2026-10-18', '', 'l')];
+  assert.deepStrictEqual(sc.dueOf(list, today).map((e) => e.id), ['p', 'n']);
+  assert.deepStrictEqual(sc.futureOf(list, today).map((e) => e.id), ['l']);
+  const r1 = sc.materializeDue({ scheduled: list, todayStr: today, todayTasks: [{ title: 'existing', createdAt: 'c' }], nowIso });
+  assert.strictEqual(r1.toAdd.length, 2); assert.ok(r1.changed);
+  const [tp, tn] = r1.toAdd;
+  assert.strictEqual(tp.type, 'one-time'); assert.strictEqual(tp.completed, false); assert.strictEqual(tp.scheduledId, 'p'); assert.strictEqual(tp.priority, 'high');
+  assert.strictEqual(tp.reminder, undefined, 'no time -> no reminder');
+  assert.deepStrictEqual(tn.reminder, { date: today, time: '08:30', repeat: '' }); assert.strictEqual(tn.startTime, '08:30');
+  assert.notStrictEqual(sc.toTodayTask(list[0], today, 'x').createdAt, undefined);
+  assert.notStrictEqual(tp.createdAt, tn.createdAt, 'unique createdAt keeps taskKey unique');
+  assert.strictEqual(r1.scheduled.find((e) => e.id === 'l').materializedAt, undefined, 'future untouched');
+  assert.ok(r1.scheduled.filter((e) => e.id !== 'l').every((e) => e.materializedAt === nowIso));
+  // second run on updated data adds nothing
+  const r2 = sc.materializeDue({ scheduled: r1.scheduled, todayStr: today, todayTasks: r1.toAdd, nowIso });
+  assert.strictEqual(r2.toAdd.length, 0); assert.strictEqual(r2.changed, false);
+  // crash between writes: today's doc has the task but the entry is not marked -> not duplicated, gets marked
+  const r3 = sc.materializeDue({ scheduled: list, todayStr: today, todayTasks: r1.toAdd, nowIso });
+  assert.strictEqual(r3.toAdd.length, 0); assert.ok(r3.changed); assert.ok(r3.scheduled.filter((e) => e.id !== 'l').every(sc.isMaterialized));
+  assert.strictEqual(sc.materializeDue({ scheduled: undefined, todayStr: today, todayTasks: undefined, nowIso }).toAdd.length, 0);
+  // grouping, counts, edit, remove, prune
+  const f = [mk('b', '2026-10-20', '14:00', '1'), mk('a', '2026-10-20', '09:00', '2'), mk('c', '2026-10-19', '', '3')];
+  assert.deepStrictEqual(sc.futureOf(f, today).map((e) => e.id), ['3', '2', '1']);
+  assert.deepStrictEqual(sc.groupByDate(sc.futureOf(f, today)).map((g) => [g.date, g.tasks.length]), [['2026-10-19', 1], ['2026-10-20', 2]]);
+  assert.deepStrictEqual(sc.countsByDate(f, today), { '2026-10-19': 1, '2026-10-20': 2 });
+  assert.strictEqual(sc.rescheduleEntry(f, '1', '2026-11-01', '07:00').find((e) => e.id === '1').scheduledDate, '2026-11-01');
+  assert.strictEqual(sc.rescheduleEntry(f, '1', 'bad', '').find((e) => e.id === '1').scheduledDate, '2026-10-20', 'invalid date ignored');
+  assert.strictEqual(sc.removeScheduled(f, '1').length, 2);
+  const old = { ...mk('o', today, '', 'o'), materializedAt: '2026-01-01T00:00:00.000Z' };
+  assert.strictEqual(sc.pruneMaterialized([old, ...f], nowIso).length, 3);
+  assert.strictEqual(sc.countsByDate([old], today)['2026-10-17'], undefined, 'materialized not shown');
+  assert.strictEqual(sc.formatScheduledDate('2026-10-18', today), 'Tomorrow');
+  console.log('ok   utils/scheduling');
 })();
 (async () => {
   let failed = 0;

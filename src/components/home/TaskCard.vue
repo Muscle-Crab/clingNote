@@ -91,6 +91,12 @@
                       </div>
                       <label class="mini-field"><span>Note</span>
                         <textarea class="field-textarea" rows="2" :value="task.notes || ''" placeholder="Quick note…" @change="$emit('patch', { notes: $event.target.value })"></textarea></label>
+                      <div v-if="task.type === 'one-time' && isTodayTab && !task.completed" class="mini-field sched-field"><span>Schedule for later</span>
+                        <div class="sched-row-ed">
+                          <input type="date" class="field-input" :min="tomorrow" v-model="schedDate" aria-label="Schedule date" />
+                          <input type="time" class="field-input" v-model="schedTime" :disabled="!schedDate" aria-label="Schedule time (optional)" />
+                          <button type="button" class="btn-secondary" :disabled="!schedDate" @click="$emit('schedule', { date: schedDate, time: schedTime })">Schedule</button>
+                        </div></div>
                       <SubtaskList :task="task" @change="$emit('subtask-patch', { subtasks: $event })" @toggle-auto="$emit('subtask-patch', { autoCompleteParent: $event })" />
                     </div>
 
@@ -168,9 +174,12 @@ defineProps({
   transferNotification: { type: String, default: null },
 });
 const emit = defineEmits(['toggle-expand', 'toggle-complete', 'open-detail', 'toggle-important', 'patch', 'subtask-patch',
-  'toggle-label', 'open-reminder', 'transfer', 'video', 'upload', 'timer', 'wont-do', 'delete']);
+  'toggle-label', 'open-reminder', 'transfer', 'video', 'upload', 'timer', 'wont-do', 'delete', 'schedule']);
 
 const moreOpen = ref(false);
+const schedDate = ref('');
+const schedTime = ref('');
+const tomorrow = (() => { const d = new Date(); d.setDate(d.getDate() + 1); return d.toLocaleDateString('en-CA'); })();
 const fileInput = ref(null); // hidden <input type=file> for this card (was a string ref on HomeView)
 
 // Tap on the card body toggles the inline expansion, unless the tap hit an interactive element.
@@ -268,6 +277,9 @@ const onCardTap = (event) => { // bound on the whole card (blank areas, chips, n
 .task-note-preview { font-size: var(--fs-sm); color: var(--c-text-3); }
 .task-expand { margin-top: var(--sp-2); padding-top: var(--sp-3); border-top: 1px solid var(--c-border); cursor: default; }
 .load-summary--over { border-color: var(--c-danger-line); }
+.sched-row-ed { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.sched-row-ed .field-input { flex: 1 1 120px; width: auto; }
+.sched-row-ed .btn-secondary { height: 40px; }
 /* ── Compact issue-style row ── */
 .task-card { align-items: center; gap: var(--sp-2); padding: 6px var(--sp-2) 6px var(--sp-1); border-radius: var(--r-lg); border-left-width: 3px; box-shadow: none; }
 .task-left { padding: 0; }

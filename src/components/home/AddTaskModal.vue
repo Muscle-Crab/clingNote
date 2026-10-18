@@ -17,6 +17,14 @@
             <input type="datetime-local" v-model="newTask.reminder.datetime" class="field-input" />
           </div>
           <div class="field-group">
+            <label class="field-label" for="nt-sched-date">Schedule for later</label>
+            <div class="field-grid">
+              <input id="nt-sched-date" type="date" v-model="newTask.scheduleDate" :min="tomorrow" class="field-input" aria-label="Schedule date" />
+              <input type="time" v-model="newTask.scheduleTime" class="field-input" :disabled="!newTask.scheduleDate" aria-label="Schedule time (optional)" />
+            </div>
+            <p v-if="newTask.scheduleDate" class="field-hint">Hidden from today and the 3-task cap until {{ newTask.scheduleDate }}; added to your list that day as a one-time task.</p>
+          </div>
+          <div class="field-group">
             <label class="field-label" for="nt-repeat">Repeat</label>
             <select id="nt-repeat" v-model="repeatMode" class="field-select">
               <option value="daily">Daily</option>
@@ -123,6 +131,7 @@ defineProps({
 });
 const repeatMode = defineModel('repeatMode');
 const showAdvanced = defineModel('showAdvanced');
+const tomorrow = (() => { const d = new Date(); d.setDate(d.getDate() + 1); return d.toLocaleDateString('en-CA'); })();
 defineEmits(['close', 'submit', 'add-anyway']);
 </script>
 
@@ -258,4 +267,5 @@ defineEmits(['close', 'submit', 'add-anyway']);
 .field-input:focus, .field-select:focus, .field-textarea:focus { border-color: var(--c-accent); box-shadow: 0 0 0 1px var(--c-accent); outline: none; }
 .field-label { font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--c-text-3); }
 @media (max-width: 600px) { .modal-backdrop { align-items: flex-end; padding: 0; } .modal-box { max-width: none; max-height: 92vh; } .modal-header, .modal-body, .modal-footer { padding-left: var(--sp-4); padding-right: var(--sp-4); } }
+.field-hint { margin: 4px 0 0; font-size: var(--fs-xs); color: var(--c-text-3); }
 </style>
