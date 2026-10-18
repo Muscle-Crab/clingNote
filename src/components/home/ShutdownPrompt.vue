@@ -20,6 +20,7 @@
           <li v-if="!openTasks.length" class="muted">All clear. 🎉</li></ul>
       </div>
       <div class="modal-footer">
+        <button type="button" class="btn-secondary shutdown-cancel" @click="$emit('close')">Cancel</button>
         <button class="btn-secondary" :disabled="busy" @click="$emit('finish', false)">Finish day</button>
         <button class="btn-primary" :disabled="busy" @click="$emit('finish', true)">Carry selected &amp; finish</button>
       </div>
@@ -28,9 +29,10 @@
 </template>
 
 <script setup>
+import { watch, onBeforeUnmount } from 'vue';
 import { taskKey } from '@/utils/taskPlanning';
 
-defineProps({
+const props = defineProps({
   suggest: { type: Boolean, default: false },
   open: { type: Boolean, default: false },
   done: { type: Array, default: () => [] },
@@ -38,7 +40,11 @@ defineProps({
   carry: { type: Object, default: () => ({}) },
   busy: { type: Boolean, default: false },
 });
-defineEmits(['start', 'dismiss', 'close', 'finish', 'update:carry']);
+const emit = defineEmits(['start', 'dismiss', 'close', 'finish', 'update:carry']);
+// Escape closes the dialog (not while a finish is saving)
+const onKey = (e) => { if (e.key === 'Escape' && !props.busy) emit('close'); };
+watch(() => props.open, (o) => { if (typeof document === 'undefined') return; document.removeEventListener('keydown', onKey); if (o) document.addEventListener('keydown', onKey); }, { immediate: true });
+onBeforeUnmount(() => { if (typeof document !== 'undefined') document.removeEventListener('keydown', onKey); });
 </script>
 
 <style scoped>

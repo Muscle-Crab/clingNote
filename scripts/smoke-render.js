@@ -41,7 +41,7 @@ const cases = [
   ['ProgressBar', { percentage: 40, milestones }, ['40%']],
   ['StreakHeader', { streak: 4, motivationalMessage: 'Go', pointsAccumulated: 10, totalPoints: 30, daySession: { started: true, ended: false, startedAtText: '9:00 AM' } }, ['4', '20 pts']],
   ['TimeStatsBar', { stats: { totalDayTime: '1h', productiveTime: '2m', gapTime: '3m', completedTasks: 2, missedTasks: 1 } }, ['1h']],
-  ['ShutdownPrompt', { suggest: true, open: true, done: [task], openTasks: [{ ...task, completed: false }], carry: { 'x': true } }, ['Shutdown', 'Write report']],
+  ['ShutdownPrompt', { suggest: true, open: true, done: [task], openTasks: [{ ...task, completed: false }], carry: { 'x': true } }, ['Shutdown', 'Write report', 'shutdown-cancel', 'Cancel']],
   ['WorkoutModal', { preferences: { goal: 'Lose Fat', equipment: 'None', maxPerDay: 3, duration: 20 } }, ['Customize Workout']],
   ['CelebrationOverlay', { streak: 3 }, ['All done']],
   ['TimerModal', { hours: 0, minutes: 5 }, ['Set Timer']],
