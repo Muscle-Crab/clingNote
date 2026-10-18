@@ -58,12 +58,12 @@ const cases = [
   ['WontDoList', { tasks: [{ title: 'Skip me', wontDoReason: 'busy' }] }, ['Skip me', 'busy']],
   ['FabButtons', { userId: 'u1', listening: true }, ['fab-add']],
   ['SubtaskList', { task }, ['Outline', '(1/2)']],
-  ['TaskCard', { task, index: 0, isTodayTab: true, expanded: true, activeLabels: [], now: Date.now(), showNotification: true, transferNotification: 'moved' }, ['Write report', '1/2', 'Outline', 'task-expand', '00:01:', 'moved', 'Saved', 'Add a subtask', 'Auto-complete task', 'Next action', 'Estimate (min)', 'chip--subtasks', 'Delete']],
+  ['TaskCard', { task, index: 0, isTodayTab: true, expanded: true, activeLabels: [], now: Date.now(), showNotification: true, transferNotification: 'moved' }, ['Write report', '1/2', 'Outline', 'task-expand', '00:01:', 'moved', 'Saved', 'Add a subtask', 'Auto-complete task', 'Next action', 'Estimate (min)', 'chip--subtasks', 'Delete', 'task-chevron', 'aria-label="Show details"', 'aria-expanded="true"', 'task-chevron--open']],
   ['TaskListHeader', { completed: 1, total: 3, soundEnabled: true, showCompleted: false }, ['1/3', 'Sounds on']],
   ['EmptyState', {}, ['Nothing here yet']],
   ['StartDayPrompt', {}, ['Start Day']],
   // collapsed card with subtasks: n/m chip stays visible, editor + subtask input are not rendered
-  ['TaskCard', { task, index: 0, isTodayTab: true, expanded: false, activeLabels: [], now: 0 }, ['1/2', 'chip--subtasks'], ['task-expand', 'Add a subtask']],
+  ['TaskCard', { task, index: 0, isTodayTab: true, expanded: false, activeLabels: [], now: 0 }, ['1/2', 'chip--subtasks', 'task-chevron', 'aria-label="Show details"', 'aria-expanded="false"'], ['task-expand', 'Add a subtask', 'task-chevron--open']],
   ['TaskCard', { task: { title: 'Old task', completed: true }, index: 2, isTodayTab: true, expanded: false, activeLabels: [], now: 0 }, ['Old task', 'Complete']],
 ];
 // subtask helpers (pure logic)

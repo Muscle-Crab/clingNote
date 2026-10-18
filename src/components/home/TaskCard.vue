@@ -1,6 +1,7 @@
 <template>
                 <div
                     class="task-card"
+                    @mousedown="onCardDown"
                     @click="onCardTap"
                     :class="{
                     'task-card--completed': task.completed && isTodayTab,
@@ -109,6 +110,10 @@
 
                   <!-- Right: coin + actions -->
                   <div class="task-right">
+                    <button type="button" class="task-chevron" :class="{ 'task-chevron--open': expanded }" aria-label="Show details"
+                        :aria-expanded="expanded ? 'true' : 'false'" :title="expanded ? 'Hide details' : 'Show details'" @click.stop="$emit('toggle-expand')">
+                      <i class="fas fa-chevron-down"></i>
+                    </button>
                     <div class="coin-badge">
                       <svg xmlns="http://www.w3.org/2000/svg" class="coin-svg" viewBox="0 0 24 24">
                         <circle cx="12" cy="12" r="10" fill="#F59E0B"/>
@@ -161,10 +166,15 @@ const emit = defineEmits(['toggle-expand', 'toggle-complete', 'open-detail', 'to
 const fileInput = ref(null); // hidden <input type=file> for this card (was a string ref on HomeView)
 
 // Tap on the card body toggles the inline expansion, unless the tap hit an interactive element.
+let downPos = null;
+const onCardDown = (e) => { downPos = { x: e.clientX, y: e.clientY }; };
 const onCardTap = (event) => { // bound on the whole card (blank areas, chips, next-action line, coin/right side)
-  // A real drag never produces a click (Sortable only starts from .drag-handle), so no extra drag bookkeeping is needed.
   if (event.target.closest('button, input, textarea, select, a, label, .task-title, .label-pill, .task-expand, .drag-handle')) return;
-  if (window.getSelection && String(window.getSelection()).length) return; // finishing a text selection, not a tap
+  // Only a click that ends a *drag-select* inside this card is ignored; a stale selection elsewhere must not block taps.
+  if (downPos && Math.hypot(event.clientX - downPos.x, event.clientY - downPos.y) > 5) {
+    const sel = window.getSelection && window.getSelection();
+    if (sel && !sel.isCollapsed && String(sel).length && event.currentTarget.contains(sel.anchorNode)) return;
+  }
   emit('toggle-expand');
 };
 </script>
@@ -219,6 +229,10 @@ const onCardTap = (event) => { // bound on the whole card (blank areas, chips, n
 .label-pill:hover { border-color: var(--c-accent); color: var(--c-accent-text); }
 .label-pill--active { background: var(--c-accent-soft); border-color: var(--c-accent-line); color: var(--c-accent-text); }
 .label-pill--sm { font-size: var(--fs-xs); }
+.task-chevron { flex-shrink: 0; width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; background: var(--c-surface-2); border: 1px solid var(--c-border); border-radius: var(--r); color: var(--c-text-2); cursor: pointer; font-size: var(--fs-sm); position: relative; z-index: 1; }
+.task-chevron:hover { background: var(--c-border); color: var(--c-text); }
+.task-chevron i { transition: transform .15s; pointer-events: none; }
+.task-chevron--open i { transform: rotate(180deg); }
 .task-right { display: flex; align-items: center; gap: var(--sp-2); flex-shrink: 0; padding-top: 1px; }
 .coin-badge { display: flex; align-items: center; gap: var(--sp-1); }
 .coin-svg { width: 14px; height: 14px; }

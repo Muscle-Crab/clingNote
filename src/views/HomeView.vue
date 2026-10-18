@@ -90,6 +90,9 @@
 
           <draggable
               handle=".drag-handle"
+              :item-key="taskKey"
+              :prevent-on-filter="false"
+              :fallback-tolerance="5"
               :animation="150"
               v-model="selectedDayRoutine"
               tag="div"
@@ -538,14 +541,15 @@ const transferTask = async () => {
     console.error('Error transferring task:', error);
   }
 };
-const resetTasksToIncomplete = async () => {
-  if (!userId.value || selectedDayIndex.value === -1) return;
+const resetTasksToIncomplete = async (dayIndex = selectedDayIndex.value, isCurrent = () => true) => {
+  if (!userId.value || dayIndex === -1) return;
 
-  const selectedDay = days[selectedDayIndex.value];
+  const selectedDay = days[dayIndex];
   const selectedDayDocRef = doc(db, 'weeklyRoutines', `${userId.value}_${selectedDay.day}`);
 
   try {
     const docSnap = await getDoc(selectedDayDocRef);
+    if (!isCurrent()) return; // user already moved to another tab
     if (!docSnap.exists()) {
       console.warn("No tasks to reset for this day.");
       return;
@@ -567,7 +571,7 @@ const resetTasksToIncomplete = async () => {
 
     // Prevent streak logic from triggering on past days
     const todayIndex = new Date().getDay(); // 0 (Sun) - 6 (Sat)
-    const isPastDay = selectedDayIndex.value < todayIndex;
+    const isPastDay = dayIndex < todayIndex;
 
     // Update Firestore
     await updateDoc(selectedDayDocRef, {
@@ -576,7 +580,7 @@ const resetTasksToIncomplete = async () => {
       ...(isPastDay && { skipStreakUpdate: true }) // optional flag if you use it elsewhere
     });
 
-    if (days[selectedDayIndex.value].day === selectedDay.day) {
+    if (isCurrent() && days[selectedDayIndex.value].day === selectedDay.day) {
       selectedDayRoutine.value = resetTasks;
     }
 
@@ -680,7 +684,13 @@ onMounted(() => {
   console.log('Generated days array:', days.value);
 });
 
-const currentDate = ref(getCurrentDate());
+// Header date is derived from the one source of truth (selectedDayIndex) so it can never lag behind the active tab.
+const currentDate = computed(() => {
+  if (selectedDayIndex.value === -1) return getCurrentDate();
+  const d = new Date();
+  d.setDate(d.getDate() + (selectedDayIndex.value - d.getDay()));
+  return new Intl.DateTimeFormat('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }).format(d);
+});
 
 let weeklyRoutines = [];
 
@@ -708,12 +718,13 @@ const fetchSelectedDayRoutine = async () => {
           completed: false
         }));
 
+        if (seq !== fetchSeq) return; // stale: no daily-reset write for a day that is no longer selected
         await updateDoc(selectedDayDocRef, {
           tasks: tasks,
           updatedAt: serverTimestamp()
         });
+        if (seq !== fetchSeq) return;
       }
-
 
       selectedDayRoutine.value = tasks;
     } else {
@@ -721,7 +732,7 @@ const fetchSelectedDayRoutine = async () => {
     }
   } catch (error) {
     console.error('Error fetching tasks for the selected day:', error);
-    selectedDayRoutine.value = [];
+    if (seq === fetchSeq) selectedDayRoutine.value = [];
   }
 };
 
@@ -763,19 +774,7 @@ const startTimer = async () => {
   startCountdownWatcher();
 };
 // Function to update the displayed current date
-const updateCurrentDate = () => {
-  if (selectedDayIndex.value !== -1) {
-    const selectedDay = days.value[selectedDayIndex.value];
-    if (selectedDay && selectedDay.date) {
-      // Parse the date safely to avoid time zone issues
-      const [year, month, day] = selectedDay.date.split('-'); // Split YYYY-MM-DD
-      const fullDate = new Date(year, month - 1, day); // Create a Date object with zero-based month
-
-      const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
-      currentDate.value = new Intl.DateTimeFormat('en-US', options).format(fullDate);
-    }
-  }
-};
+const updateCurrentDate = () => {}; // kept for callers: currentDate is now a computed of selectedDayIndex
 
 
 
@@ -789,11 +788,11 @@ onMounted(() => {
   selectedDayIndex.value = todayIndex; // Initialize to today's tab
   updateCurrentDate(); // Update the displayed current date
 });
+// Synchronous: selection (and so header date, isSelected, tab highlight) flips immediately; updateRoutine starts the
+// single async fetch whose result only applies while it is still the latest (fetchSeq guard).
 const selectDate = (index) => {
   selectedDayIndex.value = index;
-  updateRoutine();
-  updateCurrentDate()
-  fetchSelectedDayRoutine();
+  updateRoutine(); // clears the old day's list and kicks off the (sequence-guarded) fetch
 };
 
 const getSelectedDayRoutine = () => {
@@ -1011,17 +1010,17 @@ const handleDragEnd = async () => {
     console.error('Error updating task order:', error);
   }
 };
+let tabSeq = 0; // latest tab click wins; older async work must not touch selection or routine
 const handleDayTabClick = async (index) => {
+  const seq = ++tabSeq;
   const todayIndex = new Date().getDay();
+  const needsReset = index !== todayIndex && selectedDayIndex.value !== index;
 
-  // If it's not today and not already selected, reset tasks to incomplete
-  if (index !== todayIndex && selectedDayIndex.value !== index) {
-    selectedDayIndex.value = index;
-    await resetTasksToIncomplete();
+  selectDate(index); // synchronous selection first (previously the await below let an older click land last)
+
+  if (needsReset) {
+    await resetTasksToIncomplete(index, () => seq === tabSeq && selectedDayIndex.value === index);
   }
-
-  // Continue to load tasks and update date
-  selectDate(index);
 };
 
 const announceNextTask = (completedIndex) => {
