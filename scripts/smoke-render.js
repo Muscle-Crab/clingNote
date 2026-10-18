@@ -227,6 +227,24 @@ pending.push((async () => {
   assert.ok(/createKeyedQueue/.test(fs.readFileSync(path.join(src, 'composables/useDayPersistence.js'), 'utf8')), 'patchStoredTask is queued');
   console.log('ok   utils/taskPatch (serialized inline edits)');
 })().catch((e) => { console.log('FAIL taskPatch:', e.message); process.exitCode = 1; failedAsync = true; }));
+// progress %, days left and hero heading are driven by explicit/reactive "today" inputs
+(() => {
+  const ds = require(path.join(src, 'utils/dayStats.js'));
+  const r = [{ completed: true }, { completed: true }, { completed: true }, { completed: true }, {}, {}, {}];
+  assert.strictEqual(ds.completionPercentage(r, 0, 6, 6), 57, '4 of 7 done on today is 57%, not 0');
+  assert.strictEqual(ds.completionPercentage(r, 0, 5, 6), 0, 'non-today tab');
+  assert.strictEqual(ds.completionPercentage(r, 0, 0, 0), 57, 'Sunday works too');
+  assert.strictEqual(ds.completionPercentage(r, undefined, 2, 2), 57, 'missing wont-do count');
+  assert.strictEqual(ds.completionPercentage([{ completed: true }, null], 0, 1, 1), 50, 'null entries tolerated');
+  assert.strictEqual(ds.daysLeftInYearFrom(new Date(2026, 9, 18, 0, 3)), 75);
+  assert.strictEqual(ds.daysLeftInYearFrom(new Date(2026, 9, 18, 0, 3)) - 1, ds.daysLeftInYearFrom(new Date(2026, 9, 19, 0, 3)), 'rolls over by one at midnight');
+  assert.strictEqual(ds.heroTitleFor(0, 0), 'Make today count.');
+  assert.strictEqual(ds.heroTitleFor(6, 0), 'Plan your Saturday'); assert.strictEqual(ds.heroTitleFor(1, 3), 'Looking back at Monday');
+  const hv = fs.readFileSync(path.join(src, 'views/HomeView.vue'), 'utf8');
+  assert.ok(/daysLeftInYearFrom\(new Date\(calendarNow\.value\)\)/.test(hv), 'days left is reactive');
+  assert.ok(/<TimeStatsBar v-if="isViewingToday"/.test(hv), 'stats only on today');
+  console.log('ok   progress / days-left / heading / stats-on-today');
+})();
 (async () => {
   let failed = 0;
   const warn = console.warn; const warnings = [];

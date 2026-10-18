@@ -23,7 +23,7 @@
         <header class="hero">
           <div class="hero-text">
             <p class="hero-date">{{ currentDate }}</p>
-            <h1 class="hero-title">Make today count.</h1>
+            <h1 class="hero-title">{{ heroTitle }}</h1>
             <p class="hero-sub">{{ daysLeftInYear }} days left this year</p>
           </div>
           <div class="hero-menu">
@@ -46,7 +46,7 @@
       <StreakHeader :streak="streak" :motivational-message="motivationalMessage" :points-accumulated="pointsAccumulated"
                     :total-points="totalPoints" :day-session="daySession" @shutdown="openShutdown" @end-day="endDay" />
 
-      <TimeStatsBar :stats="timeStats" />
+      <TimeStatsBar v-if="isViewingToday" :stats="timeStats" />
 
       <WorkoutModal v-if="showWorkoutModal" :preferences="workoutPreferences" @close="closeWorkoutModal" @generate="generateWorkoutRoutine" />
 
@@ -120,8 +120,8 @@
           >
             <template #item="{ element: task, index }">
               <TaskCard
-                  v-if="(!task.completed || (isToday(selectedDayIndex) && showCompleted))"
-                  :task="task" :index="realIndex(task)" :is-today-tab="isToday(selectedDayIndex)" :expanded="expandedKey === taskKey(task)"
+                  v-if="(!task.completed || (isViewingToday && showCompleted))"
+                  :task="task" :index="realIndex(task)" :is-today-tab="isViewingToday" :expanded="expandedKey === taskKey(task)"
                   :active-labels="activeLabels" :now="nowTick" :show-notification="showNotification" :transfer-notification="transferNotification"
                   @toggle-expand="toggleExpanded(task)" @toggle-complete="toggleTaskCompletion(realIndex(task))" @open-detail="openTaskDetailModal(task)"
                   @toggle-important="toggleTaskImportance(realIndex(task))" @patch="patchTask(realIndex(task), task, $event)" @subtask-patch="onSubtaskPatch(realIndex(task), task, $event)"
@@ -139,7 +139,7 @@
 
         </div>
       </section>
-      <StartDayPrompt v-else-if="isToday(selectedDayIndex)" @start="startDay" />
+      <StartDayPrompt v-else-if="isViewingToday" @start="startDay" />
 
       <ScheduledList v-if="userId" :tasks="futureScheduled" :today-str="todayStr" :error="scheduledError"
                      @move-today="moveScheduledToToday" @update="updateScheduledDate" @delete="deleteScheduled" />
@@ -162,7 +162,7 @@ import { getTodayId, formatSessionTime, getCurrentDate, formatTime, getTodayDate
 import { badges } from '@/utils/gamification';
 import { scheduleNotification, sendNotificationToPlayer } from '@/composables/useNotifications';
 import { speak } from '@/composables/useSpeech';
-import { completionPercentage, computeTimeStats, daysLeftInYearFrom } from '@/utils/dayStats';
+import { completionPercentage, computeTimeStats, daysLeftInYearFrom, heroTitleFor } from '@/utils/dayStats';
 import { shouldAutoComplete, resetSubtasks } from '@/utils/subtasks';
 import { buildScheduledEntry, futureOf, dueOf, countsByDate, withWeekDates, isValidDate, removeScheduled, rescheduleEntry } from '@/utils/scheduling';
 import { mutateScheduled, materializeDueForToday } from '@/composables/useScheduledTasks';
@@ -1670,8 +1670,24 @@ const selectedDayRoutine = computed({
   set: (v) => { selectedDayRoutineRaw.value = Array.isArray(v) ? v : []; },
 });
 const timeStats = computed(() => computeTimeStats(daySession.value, selectedDayRoutine.value, wontDoTasks.value.length));
-const calculateCompletionPercentage = () => completionPercentage(selectedDayRoutine.value, wontDoTasks.value.length, selectedDayIndex.value);
-const daysLeftInYear = computed(() => daysLeftInYearFrom());
+// Reactive calendar clock: "today" (index, days left, headings) re-evaluates at midnight, on tab focus and on visibility change.
+const calendarNow = ref(Date.now());
+const refreshCalendar = () => { calendarNow.value = Date.now(); };
+let calendarTimer = null;
+onMounted(() => {
+  calendarTimer = setInterval(refreshCalendar, 30000);
+  document.addEventListener('visibilitychange', refreshCalendar);
+  window.addEventListener('focus', refreshCalendar);
+});
+onBeforeUnmount(() => {
+  clearInterval(calendarTimer);
+  document.removeEventListener('visibilitychange', refreshCalendar);
+  window.removeEventListener('focus', refreshCalendar);
+});
+const todayIdx = computed(() => new Date(calendarNow.value).getDay());
+const calculateCompletionPercentage = () => completionPercentage(selectedDayRoutine.value, wontDoTasks.value.length, selectedDayIndex.value, todayIdx.value);
+const daysLeftInYear = computed(() => daysLeftInYearFrom(new Date(calendarNow.value)));
+const heroTitle = computed(() => heroTitleFor(selectedDayIndex.value, todayIdx.value));
 const showNotification = ref(false);
 
 
@@ -2363,7 +2379,7 @@ const onDragStart = () => {
   playSound('dragStart');
 };
 const todayDayName = () => days[new Date().getDay()].day;
-const isViewingToday = computed(() => selectedDayIndex.value === new Date().getDay());
+const isViewingToday = computed(() => selectedDayIndex.value === todayIdx.value);
 
 // Repeat: Daily / Weekly / Once, built on the existing Recurring type + Days selection
 const repeatMode = computed({

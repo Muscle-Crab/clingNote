@@ -9,8 +9,9 @@ export const formatElapsed = (ms) => {
 };
 
 // Progress % for the selected day: only top-level tasks (subtasks never count); 0 for non-today tabs.
-export const completionPercentage = (routine, wontDoCount, selectedDayIndex) => {
-  const todayIndex = new Date().getDay(); // Get current day index
+// `todayIndex` is passed by the caller from a reactive clock so a stale/rolled-over day can't zero the percentage.
+export const completionPercentage = (routine, wontDoCount, selectedDayIndex, todayIndex = new Date().getDay()) => {
+  wontDoCount = Number(wontDoCount) || 0;
   if (selectedDayIndex !== todayIndex) {
     return 0; // Reset progress for non-today tabs
   }
@@ -18,7 +19,7 @@ export const completionPercentage = (routine, wontDoCount, selectedDayIndex) => 
   if (!routine) return 0;
 
   const totalTasks = routine.length + wontDoCount;
-  const completedTasks = routine.filter(task => task.completed).length;
+  const completedTasks = routine.filter(task => task && task.completed).length;
 
   return totalTasks === 0 ? 0 : Math.round((completedTasks / totalTasks) * 100);
 };
@@ -85,4 +86,12 @@ export const taskTimeLeft = (task, nowMs) => {
   return `${hours.toString().padStart(2, "0")}:${minutes
       .toString()
       .padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
+};
+
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+// Hero heading: motivational on today, weekday-appropriate on other days of the (Sun..Sat) week.
+export const heroTitleFor = (selectedIndex, todayIndex) => {
+  if (selectedIndex === todayIndex || selectedIndex < 0 || selectedIndex > 6) return 'Make today count.';
+  const name = WEEKDAYS[selectedIndex];
+  return selectedIndex < todayIndex ? `Looking back at ${name}` : `Plan your ${name}`;
 };
