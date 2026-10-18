@@ -24,6 +24,8 @@ export const completionPercentage = (routine, wontDoCount, selectedDayIndex) => 
 };
 
 export const computeTimeStats = (daySession, routine, wontDoCount) => {
+  routine = Array.isArray(routine) ? routine : [];
+  daySession = daySession || {};
   const start = daySession.startTime
       ? new Date(daySession.startTime.seconds ? daySession.startTime.seconds * 1000 : daySession.startTime)
       : null;
