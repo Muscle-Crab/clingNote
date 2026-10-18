@@ -5,7 +5,7 @@
       <li v-for="b in schedule.blocks" :key="b.task.createdAt + b.task.title" :class="{ 'schedule-conflict': b.conflict, 'schedule-done': b.task.completed }">
         <span class="schedule-time">{{ formatClock(b.start) }}<template v-if="b.end !== null"> – {{ formatClock(b.end) }}</template></span>
         <span>{{ b.task.title }}</span>
-        <span v-if="b.conflict" class="schedule-flag">overlaps next</span>
+        <span v-if="b.conflict" class="schedule-flag">overlaps another</span>
       </li>
     </ul>
     <p v-if="schedule.unscheduled.length" class="schedule-unsched">Unscheduled: {{ schedule.unscheduled.filter(t => !t.completed).length }}</p>

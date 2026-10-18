@@ -59,9 +59,11 @@ export const buildSchedule = (tasks) => {
     blocks.push({ task: t, start, end: dur ? start + dur : null, dur });
   });
   blocks.sort((a, b) => a.start - b.start);
-  blocks.forEach((b, i) => {
-    const next = blocks[i + 1];
-    b.conflict = !!(b.end !== null && next && b.end > next.start);
+  // flag every block that overlaps any other block (not just its immediate neighbour)
+  blocks.forEach((b) => { b.conflict = false; });
+  blocks.forEach((a, i) => {
+    if (a.end === null) return;
+    for (let j = i + 1; j < blocks.length && blocks[j].start < a.end; j++) { a.conflict = true; blocks[j].conflict = true; }
   });
   return { blocks, unscheduled };
 };

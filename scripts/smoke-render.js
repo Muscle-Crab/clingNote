@@ -56,7 +56,7 @@ const cases = [
   ['VoiceModal', { supported: false }, ['t supported', 'Close'], ['Listening']],
   ['VoiceModal', { error: 'Microphone access was blocked.' }, ['Microphone access was blocked.', 'role="alert"'], ['Speak your task']],
   ['LoadSummary', { load: { minutes: 90, count: 2, unestimated: 1, level: 'full', hint: 'Full day' }, expanded: false }, ['1h 30m', 'Full day']],
-  ['TimeBlockSchedule', { schedule: { blocks: [{ task, start: 540, end: 570, conflict: true }], unscheduled: [] } }, ['9:00 AM', 'overlaps next']],
+  ['TimeBlockSchedule', { schedule: { blocks: [{ task, start: 540, end: 570, conflict: true }], unscheduled: [] } }, ['9:00 AM', 'overlaps another']],
   ['IdleState', {}, ['Idle time']],
   ['WontDoList', { tasks: [{ title: 'Skip me', wontDoReason: 'busy' }] }, ['Skip me', 'busy']],
   ['FabButtons', { userId: 'u1', listening: true }, ['fab-add']],
@@ -283,6 +283,18 @@ pending.push((async () => {
   assert.ok(/type: 'one-time',\s*\n\s*dueDate/.test(hv.slice(hv.indexOf('const blankTask'))), 'Add form defaults to Just once');
   assert.ok(!/type: 'recurring',\s*\n?\s*dueDate/.test(hv), 'no other form reset reintroduces weekly default');
   console.log('ok   utils/repeat + add-form defaults');
+})();
+// schedule overlap: every task overlapping any other is flagged (not only the one before the next)
+(() => {
+  const tp = require(path.join(src, 'utils/taskPlanning.js'));
+  const mk = (t, start, est) => ({ title: t, startTime: start, estimateMin: est });
+  const c = (list) => tp.buildSchedule(list).blocks.map((b) => b.task.title + (b.conflict ? '!' : '')).join(',');
+  assert.strictEqual(c([mk('long', '09:00', 180), mk('a', '09:30', 15), mk('b', '10:00', 15)]), 'long!,a!,b!', 'long task overlaps both later ones');
+  assert.strictEqual(c([mk('a', '09:00', 30), mk('b', '09:30', 30), mk('c', '10:00', 30)]), 'a,b,c', 'back-to-back is not an overlap');
+  assert.strictEqual(c([mk('a', '09:00', 60), mk('b', '09:30', 15), mk('c', '12:00', 30)]), 'a!,b!,c');
+  assert.strictEqual(c([mk('a', '09:00', 0), mk('b', '09:00', 30)]), 'a,b', 'no estimate -> no end -> no overlap claim');
+  assert.strictEqual(c([]), '');
+  console.log('ok   schedule overlap flags');
 })();
 (async () => {
   let failed = 0;
