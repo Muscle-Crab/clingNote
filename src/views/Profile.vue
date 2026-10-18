@@ -88,7 +88,9 @@ const formatDOB = (dob) => {
 const saveUserData = async () => {
   try {
     const docRef = doc(db, 'users', route.currentRoute.value.params.userId);
-    await updateDoc(docRef, editedUserData.value);
+    // scheduledTasks is owned by useScheduledTasks; never write back a stale copy
+    const { scheduledTasks: _omit, ...editable } = editedUserData.value;
+    await updateDoc(docRef, editable);
     userData.value = { ...editedUserData.value };
     editMode.value = false;
   } catch (error) {

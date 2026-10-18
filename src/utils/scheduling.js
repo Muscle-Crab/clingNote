@@ -1,5 +1,5 @@
 // Pure helpers for "schedule for later" tasks. Scheduled tasks live in their own Firestore doc
-// (scheduledTasks/{userId} -> { tasks: [...] }) and never touch weeklyRoutines until their date arrives.
+// (users/{userId}.scheduledTasks -> { tasks: [...] }) and never touch weeklyRoutines until their date arrives.
 // Entry shape: { id, title, ...task fields, scheduledDate: 'YYYY-MM-DD', scheduledTime: 'HH:MM'|'', materializedAt?: ISO }
 
 export const isValidDate = (s) => {
