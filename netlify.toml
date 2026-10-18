@@ -13,3 +13,9 @@ node_bundler = "esbuild"
 [functions."stripe-webhook"]
 included_files = ["netlify/functions/serviceAccountKey.json"]
 external_node_modules = ["stripe", "firebase-admin", "@opentelemetry/api"]
+
+# Explicitly allow microphone (voice input) for our own origin
+[[headers]]
+for = "/*"
+[headers.values]
+Permissions-Policy = "microphone=(self), camera=()"

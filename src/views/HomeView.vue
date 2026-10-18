@@ -1339,18 +1339,20 @@ const deleteScheduled = async (id) => {
 const addNewTask = async () => {
   if (!userId.value) {
     error.value = 'You must be logged in to add a task';
-    return;
+    return false;
   }
 
   if (newTask.value.title.trim() === '') {
     error.value = 'Task name cannot be empty';
-    return;
+    return false;
   }
 
   // Scheduled-for-later tasks go to their own doc and do not count toward today's cap.
-  if (newTask.value.scheduleDate) { await submitScheduledTask(); return; }
+  if (newTask.value.scheduleDate) { await submitScheduledTask(); return true; }
 
-  if (isCapBlocked()) return;
+  if (isCapBlocked()) return false;
+
+  if (selectedDayIndex.value < 0 || !days[selectedDayIndex.value]) { error.value = 'Still loading your week, try again in a moment'; return false; }
 
   const selectedDays =
       newTask.value.selectedDays.length > 0
@@ -1394,6 +1396,7 @@ const addNewTask = async () => {
     };
   }
 
+  let addedOk = false;
   try {
     for (const selectedDay of selectedDays) {
       const selectedDayDocRef = doc(
@@ -1435,6 +1438,7 @@ const addNewTask = async () => {
     capWarning.value = false; capOverride.value = false;
     closeModal();
     error.value = '';
+    addedOk = true;
 
     const userName = await fetchUserName(userId.value);
     if (userName) {
@@ -1443,6 +1447,7 @@ const addNewTask = async () => {
   } catch (error) {
     console.error('Error adding task:', error);
   }
+  return addedOk;
 };
 
 
@@ -1969,13 +1974,15 @@ const listening = ref(false);
 const voiceOpen = ref(false); // modal visibility (independent of whether recognition actually started)
 const voiceError = ref('');
 let recognition = null;
+let pendingVoiceText = '';
+let voiceSubmitting = false;
 const liveTranscript = ref('');
 const voiceSupported = typeof window !== 'undefined' && ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window);
 // Initialize SpeechRecognition only if supported (every property access stays inside this guard)
 if (voiceSupported) {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   recognition = new SpeechRecognition();
-  recognition.lang = 'en-US';
+  recognition.lang = (typeof navigator !== 'undefined' && navigator.language) || 'en-US';
   recognition.interimResults = true;
   recognition.maxAlternatives = 1;
 
@@ -1983,44 +1990,79 @@ if (voiceSupported) {
   recognition.onerror = (event) => {
     console.error("Speech recognition error:", event.error);
     listening.value = false;
+    if (event.error === 'aborted') return; // we stopped it ourselves (cancel / restart): not a failure
     voiceError.value = event.error === 'not-allowed' || event.error === 'service-not-allowed'
       ? 'Microphone access was blocked. Allow it in your browser settings and try again.'
       : event.error === 'no-speech' ? "Didn't catch anything. Try again."
       : 'Voice input failed (' + (event.error || 'unknown') + ').';
   };
-  recognition.onend = () => { listening.value = false; };
+  recognition.onend = () => {
+    listening.value = false;
+    // iOS Safari often ends without ever flagging a result final: use what we heard instead of dropping it.
+    if (voiceOpen.value && !voiceError.value && pendingVoiceText.trim()) submitVoiceTask(pendingVoiceText);
+  };
   recognition.onresult = (event) => {
     let transcript = '';
-    for (let i = event.resultIndex; i < event.results.length; ++i) {
+    for (let i = 0; i < event.results.length; ++i) {
       transcript += event.results[i][0].transcript;
     }
-    liveTranscript.value = transcript.trim();
-
+    transcript = transcript.trim();
+    liveTranscript.value = transcript;
+    pendingVoiceText = transcript;
     if (event.results[event.results.length - 1].isFinal) {
-      newTask.value.title = transcript.trim();
-      addNewTask();
-      liveTranscript.value = '';
-      voiceOpen.value = false;
-      recognition.stop();
+      try { recognition.stop(); } catch (e) { /* already stopped */ }
+      submitVoiceTask(transcript);
     }
   };
 } else {
   console.warn("Speech recognition not supported in this browser.");
 }
+// Turn a finished transcript into a task using a fresh form (never leftover Add-form state).
+const submitVoiceTask = async (text) => {
+  const title = (text || '').trim();
+  pendingVoiceText = '';
+  if (voiceSubmitting || !title) return;
+  voiceSubmitting = true;
+  try {
+    newTask.value = { ...blankTask(), title };
+    const ok = await addNewTask();
+    liveTranscript.value = '';
+    if (ok) { voiceOpen.value = false; return; }
+    if (!userId.value) { voiceError.value = 'Sign in to add tasks by voice.'; return; }
+    // Blocked (e.g. the active-task cap warning): hand the text to the Add form so the user sees why and can "Add anyway".
+    voiceOpen.value = false;
+    modalOpen.value = true;
+  } catch (e) {
+    console.error('Voice task failed:', e);
+    voiceError.value = 'Could not add the task. Please try again.';
+  } finally { voiceSubmitting = false; }
+};
 const cancelVoiceInput = () => {
   if (recognition) { try { recognition.stop(); } catch (e) { /* not started */ } }
   listening.value = false;
   voiceOpen.value = false;
   voiceError.value = '';
   liveTranscript.value = '';
+  pendingVoiceText = '';
 };
 
 const startVoiceInput = () => {
   voiceOpen.value = true; // always show the modal, even when recognition is unavailable
   liveTranscript.value = '';
   voiceError.value = '';
+  pendingVoiceText = '';
   if (!recognition) return;
-  try { recognition.start(); } catch (e) { if (e && e.name !== 'InvalidStateError') voiceError.value = 'Could not start voice input.'; }
+  try { recognition.start(); }
+  catch (e) {
+    if (e && e.name === 'InvalidStateError') {
+      // A previous session is still winding down (common on iOS): abort it and retry shortly instead of showing a dead "Listening..."
+      try { recognition.abort(); } catch (e2) { /* ignore */ }
+      setTimeout(() => {
+        if (!voiceOpen.value) return;
+        try { recognition.start(); } catch (e3) { voiceError.value = 'Could not start voice input. Close this and try again.'; }
+      }, 300);
+    } else voiceError.value = 'Could not start voice input.';
+  }
 };
 
 function toggleRecurring() {
