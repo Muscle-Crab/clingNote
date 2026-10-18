@@ -46,7 +46,7 @@ const cases = [
   ['TimerModal', { hours: 0, minutes: 5 }, ['Set Timer']],
   ['WontDoModal', { reason: '' }, ['Won']],
   ['TransferModal', { day: null, days, selectedDayIndex: 0 }, ['Mon']],
-  ['AddTaskModal', { newTask: { title: '', priority: 'low', selectedDays: [], reminder: {}, position: 0, labels: '', notes: '' }, repeatMode: 'weekly', showAdvanced: true, days, selectedDayRoutine: [task], error: 'oops', capWarning: true }, ['New task', 'oops', 'active tasks']],
+  ['AddTaskModal', { newTask: { title: '', status: 'in-progress', priority: 'low', selectedDays: [], reminder: {}, position: 0, labels: '', notes: '' }, repeatMode: 'weekly', showAdvanced: true, days, selectedDayRoutine: [task], error: 'oops', capWarning: true }, ['New task', 'oops', 'active tasks', 'Status', 'In progress', 'Waiting']],
   ['YouTubeModal', { url: '' }, ['Attach video']],
   ['TaskDetailModal', { task, activeLabels: ['Work'] }, ['Write report', 'embed/abcdefghijk']],
   ['ImagePreview', { src: 'x.png' }, ['x.png']],
@@ -58,10 +58,12 @@ const cases = [
   ['WontDoList', { tasks: [{ title: 'Skip me', wontDoReason: 'busy' }] }, ['Skip me', 'busy']],
   ['FabButtons', { userId: 'u1', listening: true }, ['fab-add']],
   ['SubtaskList', { task }, ['Outline', '(1/2)']],
-  ['TaskCard', { task, index: 0, isTodayTab: true, expanded: true, activeLabels: [], now: Date.now(), showNotification: true, transferNotification: 'moved' }, ['Write report', '1/2', 'Outline', 'task-expand', '00:01:', 'moved', 'Saved']],
+  ['TaskCard', { task, index: 0, isTodayTab: true, expanded: true, activeLabels: [], now: Date.now(), showNotification: true, transferNotification: 'moved' }, ['Write report', '1/2', 'Outline', 'task-expand', '00:01:', 'moved', 'Saved', 'Add a subtask', 'Auto-complete task', 'Next action', 'Estimate (min)', 'chip--subtasks', 'Delete']],
   ['TaskListHeader', { completed: 1, total: 3, soundEnabled: true, showCompleted: false }, ['1/3', 'Sounds on']],
   ['EmptyState', {}, ['Nothing here yet']],
   ['StartDayPrompt', {}, ['Start Day']],
+  // collapsed card with subtasks: n/m chip stays visible, editor + subtask input are not rendered
+  ['TaskCard', { task, index: 0, isTodayTab: true, expanded: false, activeLabels: [], now: 0 }, ['1/2', 'chip--subtasks'], ['task-expand', 'Add a subtask']],
   ['TaskCard', { task: { title: 'Old task', completed: true }, index: 2, isTodayTab: true, expanded: false, activeLabels: [], now: 0 }, ['Old task', 'Complete']],
 ];
 // subtask helpers (pure logic)
@@ -87,14 +89,27 @@ const st = require(path.join(src, 'utils/subtasks.js'));
   assert.strictEqual(tp.activeCount([{ subtasks: all }, { completed: true }]), 1, 'subtasks do not count toward cap');
   console.log('ok   utils/subtasks');
 })();
+// rapid day switching can leave the routine undefined: every pure consumer must tolerate it
+(() => {
+  const ds = require(path.join(src, 'utils/dayStats.js'));
+  const tp = require(path.join(src, 'utils/taskPlanning.js'));
+  for (const bad of [undefined, null]) {
+    assert.strictEqual(tp.loadSummary(bad).count, 0);
+    assert.deepStrictEqual(tp.buildSchedule(bad).blocks, []);
+    assert.strictEqual(ds.completionPercentage(bad, 0, new Date().getDay()), 0);
+    assert.strictEqual(ds.computeTimeStats(undefined, bad, 0).completedTasks, 0);
+    assert.strictEqual(ds.computeTimeStats({ startTime: Date.now() - 60000 }, bad, 1).completedTasks, 0);
+  }
+  console.log('ok   undefined-routine guards');
+})();
 (async () => {
   let failed = 0;
   const warn = console.warn; const warnings = [];
   console.warn = (...a) => warnings.push(a.join(' '));
-  for (const [name, props, expects] of cases) {
+  for (const [name, props, expects, forbidden = []] of cases) {
     try {
       const html = await renderToString(createSSRApp(load(name), props));
-      const missing = expects.filter((e) => !html.includes(e));
+      const missing = expects.filter((e) => !html.includes(e)).concat(forbidden.filter((e) => html.includes(e)).map((e) => '!' + e));
       if (missing.length) { failed++; console.log(`FAIL ${name}: missing ${JSON.stringify(missing)}`); } else console.log(`ok   ${name}`);
     } catch (e) { failed++; console.log(`FAIL ${name}: ${String(e.message).slice(0, 300)}`); }
   }

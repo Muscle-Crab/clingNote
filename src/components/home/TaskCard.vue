@@ -1,6 +1,7 @@
 <template>
                 <div
-                                      class="task-card"
+                    class="task-card"
+                    @click="onCardTap"
                     :class="{
                     'task-card--completed': task.completed && isTodayTab,
                     'task-card--important': task.important
@@ -15,7 +16,7 @@
                   </div>
 
                   <!-- Center: main content -->
-                  <div class="task-body" @click="onCardTap">
+                  <div class="task-body">
                     <div class="task-title-row">
                       <!-- Completion toggle -->
                       <button
@@ -160,8 +161,10 @@ const emit = defineEmits(['toggle-expand', 'toggle-complete', 'open-detail', 'to
 const fileInput = ref(null); // hidden <input type=file> for this card (was a string ref on HomeView)
 
 // Tap on the card body toggles the inline expansion, unless the tap hit an interactive element.
-const onCardTap = (event) => {
-  if (event.target.closest('button, input, textarea, select, .task-title, .label-pill, .task-expand')) return;
+const onCardTap = (event) => { // bound on the whole card (blank areas, chips, next-action line, coin/right side)
+  // A real drag never produces a click (Sortable only starts from .drag-handle), so no extra drag bookkeeping is needed.
+  if (event.target.closest('button, input, textarea, select, a, label, .task-title, .label-pill, .task-expand, .drag-handle')) return;
+  if (window.getSelection && String(window.getSelection()).length) return; // finishing a text selection, not a tap
   emit('toggle-expand');
 };
 </script>
@@ -179,7 +182,7 @@ const onCardTap = (event) => {
 .btn-primary:disabled, .btn-secondary:disabled { opacity: .5; cursor: not-allowed; }
 
 .drag { transform: rotate(2deg); }
-.task-card { position: relative; display: flex; gap: var(--sp-2); align-items: flex-start; padding: var(--sp-2) var(--sp-3); background: var(--c-surface); border: 1px solid var(--c-border); border-left: 3px solid transparent; border-radius: var(--r); box-shadow: var(--shadow-1); transition: background .15s, border-color .15s; }
+.task-card { cursor: pointer; position: relative; display: flex; gap: var(--sp-2); align-items: flex-start; padding: var(--sp-2) var(--sp-3); background: var(--c-surface); border: 1px solid var(--c-border); border-left: 3px solid transparent; border-radius: var(--r); box-shadow: var(--shadow-1); transition: background .15s, border-color .15s; }
 .task-card:hover { background: var(--c-surface-2); }
 .task-card--completed { opacity: .6; }
 .task-card--important { border-left-color: var(--c-danger); }

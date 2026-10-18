@@ -34,6 +34,12 @@
               </select>
             </div>
             <div class="field-group">
+              <label class="field-label" for="nt-status">Status</label>
+              <select id="nt-status" v-model="newTask.status" class="field-select">
+                <option v-for="st in STATUSES" :key="st.value" :value="st.value">{{ st.label }}</option>
+              </select>
+            </div>
+            <div class="field-group">
               <label class="field-label" for="nt-due">Due date</label>
               <input id="nt-due" type="date" v-model="newTask.dueDate" class="field-input" />
             </div>
@@ -104,7 +110,7 @@
 </template>
 
 <script setup>
-import { ACTIVE_CAP } from '@/utils/taskPlanning';
+import { ACTIVE_CAP, STATUSES } from '@/utils/taskPlanning';
 import { getOrdinalSuffix } from '@/utils/dateTime';
 
 // newTask is the reactive form object owned by HomeView; the form edits it in place via v-model.

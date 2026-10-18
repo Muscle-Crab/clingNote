@@ -642,7 +642,7 @@ const newTask = ref({
   selectedDays: [],
   position: 0,
   type: 'recurring',
-  dueDate: '', startTime: '', estimateMin: '', nextAction: '',
+  dueDate: '', startTime: '', estimateMin: '', nextAction: '', status: 'todo',
   reminder: { date: '', time: '', repeat: '' }  // Now defined
 });
 
@@ -684,14 +684,17 @@ const currentDate = ref(getCurrentDate());
 
 let weeklyRoutines = [];
 
+let fetchSeq = 0; // rapid day switching: only the latest fetch may write the routine
 const fetchSelectedDayRoutine = async () => {
   if (!userId.value || selectedDayIndex.value === -1) return;
+  const seq = ++fetchSeq;
 
   const selectedDay = days[selectedDayIndex.value];
   const selectedDayDocRef = doc(db, 'weeklyRoutines', `${userId.value}_${selectedDay.day}`);
 
   try {
     const selectedDayDocSnapshot = await getDoc(selectedDayDocRef);
+    if (seq !== fetchSeq) return; // a newer day was selected meanwhile
 
     if (selectedDayDocSnapshot.exists()) {
       let tasks = selectedDayDocSnapshot.data().tasks || [];
@@ -794,7 +797,7 @@ const selectDate = (index) => {
 };
 
 const getSelectedDayRoutine = () => {
-  return selectedDayIndex.value !== -1 ? weeklyRoutines?.tasks : [];
+  return (selectedDayIndex.value !== -1 && weeklyRoutines?.tasks) || [];
 };
 
 
@@ -1209,7 +1212,7 @@ const addNewTask = async () => {
     userId: userId.value,
     type: newTask.value.type,
     createdAt: new Date().toISOString(),
-    status: 'todo',
+    status: newTask.value.status || 'todo',
     dueDate: newTask.value.dueDate || '',
     startTime: newTask.value.startTime || '',
     estimateMin: Number(newTask.value.estimateMin) || 0,
@@ -1273,7 +1276,7 @@ const addNewTask = async () => {
       position: 0,
       reminder: { datetime: '', repeat: '' },
       type: 'recurring',
-      dueDate: '', startTime: '', estimateMin: '', nextAction: ''
+      dueDate: '', startTime: '', estimateMin: '', nextAction: '', status: 'todo'
     };
     capWarning.value = false; capOverride.value = false;
     closeModal();
@@ -1514,7 +1517,12 @@ const streak = ref(0);
 const lastCompletionDate = ref(null);
 const unlockedBadges = ref([]);
 const motivationalMessage = ref('');
-const selectedDayRoutine = ref([]);
+// Always an array: day switches / failed loads can hand back undefined, and many consumers read .length/.filter.
+const selectedDayRoutineRaw = ref([]);
+const selectedDayRoutine = computed({
+  get: () => (Array.isArray(selectedDayRoutineRaw.value) ? selectedDayRoutineRaw.value : []),
+  set: (v) => { selectedDayRoutineRaw.value = Array.isArray(v) ? v : []; },
+});
 const timeStats = computed(() => computeTimeStats(daySession.value, selectedDayRoutine.value, wontDoTasks.value.length));
 const calculateCompletionPercentage = () => completionPercentage(selectedDayRoutine.value, wontDoTasks.value.length, selectedDayIndex.value);
 const daysLeftInYear = computed(() => daysLeftInYearFrom());
@@ -2651,3 +2659,14 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 
 
 
+
+<style>
+/* Dark scrollbars for the home view and its modals (unscoped: modal boxes live in child components). */
+.app-root, .app-root * { scrollbar-width: thin; scrollbar-color: var(--c-border-strong, #454f59) var(--c-surface, #22272b); }
+.app-root *::-webkit-scrollbar { width: 10px; height: 10px; }
+.app-root *::-webkit-scrollbar-track { background: var(--c-surface, #22272b); }
+.app-root *::-webkit-scrollbar-thumb { background: var(--c-border-strong, #454f59); border-radius: 6px; border: 2px solid var(--c-surface, #22272b); }
+.app-root *::-webkit-scrollbar-thumb:hover { background: var(--c-text-3, #8c9bab); }
+.app-root *::-webkit-scrollbar-corner { background: var(--c-surface, #22272b); }
+.app-root { color-scheme: dark; }
+</style>
