@@ -1,23 +1,35 @@
 <template>
   <div class="modal-backdrop">
-    <div class="modal-box modal-box--sm voice-modal">
-      <button @click="$emit('cancel')" class="modal-close voice-cancel">✕</button>
-      <div class="voice-waves">
-        <span class="wave wave-1"></span>
-        <span class="wave wave-2"></span>
-        <span class="wave wave-3"></span>
-        <span class="wave wave-4"></span>
-        <span class="wave wave-5"></span>
-      </div>
-      <p class="voice-label">Listening...</p>
-      <p class="voice-transcript">"<span>{{ transcript }}</span>"</p>
-      <p class="voice-hint">Speak your task clearly</p>
+    <div class="modal-box modal-box--sm voice-modal" role="dialog" aria-modal="true" aria-label="Voice input" @keydown.esc="$emit('cancel')">
+      <button @click="$emit('cancel')" class="modal-close voice-cancel" aria-label="Close">✕</button>
+      <template v-if="!supported">
+        <p class="voice-label">Voice input isn't supported</p>
+        <p class="voice-hint">This browser can't do speech recognition. Try Chrome, Edge or Safari, or add the task with the keyboard.</p>
+      </template>
+      <template v-else>
+        <div class="voice-waves">
+          <span class="wave wave-1"></span>
+          <span class="wave wave-2"></span>
+          <span class="wave wave-3"></span>
+          <span class="wave wave-4"></span>
+          <span class="wave wave-5"></span>
+        </div>
+        <p class="voice-label">{{ error ? 'Voice input stopped' : 'Listening...' }}</p>
+        <p v-if="error" class="voice-error" role="alert">{{ error }}</p>
+        <p v-else class="voice-transcript">"<span>{{ transcript }}</span>"</p>
+        <p v-if="!error" class="voice-hint">Speak your task clearly</p>
+      </template>
+      <button v-if="!supported || error" type="button" class="btn-secondary voice-close-btn" @click="$emit('cancel')">Close</button>
     </div>
   </div>
 </template>
 
 <script setup>
-defineProps({ transcript: { type: String, default: '' } });
+defineProps({
+  transcript: { type: String, default: '' },
+  supported: { type: Boolean, default: true },
+  error: { type: String, default: '' },
+});
 defineEmits(['cancel']);
 </script>
 
@@ -66,6 +78,8 @@ defineEmits(['cancel']);
 .wave-5 { height: 12px; animation-delay: 0.4s; }
 .voice-label { font-size: 1rem; font-weight: 600; margin-bottom: 0.5rem; }
 .voice-transcript { color: var(--c-accent-text, #7fb8f5); font-size: 0.9rem; margin-bottom: 0.5rem; }
+.voice-error { color: var(--c-danger-text, #f87171); font-size: 0.85rem; margin-bottom: 0.75rem; }
+.voice-close-btn { margin-top: 1rem; }
 .voice-hint { font-size: 0.75rem; color: var(--c-text-3, #6b6a66); }
 @keyframes waveUp { from { transform: scaleY(0.5); } to { transform: scaleY(1); } }
 

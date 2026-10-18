@@ -52,7 +52,9 @@ const cases = [
   ['TaskDetailModal', { task, activeLabels: ['Work'] }, ['Write report', 'embed/abcdefghijk']],
   ['ImagePreview', { src: 'x.png' }, ['x.png']],
   ['ReminderModal', { reminder: { date: '', time: '', repeat: '' }, taskTitle: 'T1' }, ['T1']],
-  ['VoiceModal', { transcript: 'hello' }, ['hello']],
+  ['VoiceModal', { transcript: 'hello' }, ['hello', 'Listening', 'role="dialog"'], ['not supported']],
+  ['VoiceModal', { supported: false }, ['t supported', 'Close'], ['Listening']],
+  ['VoiceModal', { error: 'Microphone access was blocked.' }, ['Microphone access was blocked.', 'role="alert"'], ['Speak your task']],
   ['LoadSummary', { load: { minutes: 90, count: 2, unestimated: 1, level: 'full', hint: 'Full day' }, expanded: false }, ['1h 30m', 'Full day']],
   ['TimeBlockSchedule', { schedule: { blocks: [{ task, start: 540, end: 570, conflict: true }], unscheduled: [] } }, ['9:00 AM', 'overlaps next']],
   ['IdleState', {}, ['Idle time']],
@@ -251,6 +253,15 @@ pending.push((async () => {
   assert.ok(/matchMedia\('\(min-width: 768px\)'\)/.test(nav) && /addEventListener\('change', onMq\)/.test(nav), 'reacts to viewport changes');
   assert.ok(/@media \(min-width: 768px\)[\s\S]*sidebar-open #app \{ padding-left: 16rem/.test(nav), 'pushes content on wide screens only');
   console.log('ok   nav responsive sidebar');
+})();
+// voice: no recognition property access outside the support guard; modal opens independent of recognition
+(() => {
+  const hv = fs.readFileSync(path.join(src, 'views/HomeView.vue'), 'utf8');
+  const guard = hv.slice(hv.indexOf('if (voiceSupported) {'), hv.indexOf('} else {\n  console.warn("Speech recognition not supported'));
+  const outside = hv.replace(guard, '').match(/^recognition\.[a-zA-Z]+ ?=/gm);
+  assert.strictEqual(outside, null, 'no top-level recognition.* assignments (crashed when unsupported)');
+  assert.ok(/<VoiceModal v-if="voiceOpen"/.test(hv) && /voiceOpen\.value = true; \/\/ always show/.test(hv));
+  console.log('ok   voice wiring');
 })();
 (async () => {
   let failed = 0;

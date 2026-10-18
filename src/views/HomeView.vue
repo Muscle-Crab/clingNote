@@ -81,7 +81,7 @@
       <ReminderModal v-if="isModalOpen" :reminder="reminder" :task-title="selectedTaskTitle" @close="closeModal" @submit="handleAddReminder" />
 
 
-      <VoiceModal v-if="listening" :transcript="liveTranscript" @cancel="cancelVoiceInput" />
+      <VoiceModal v-if="voiceOpen" :transcript="liveTranscript" :supported="voiceSupported" :error="voiceError" @cancel="cancelVoiceInput" />
 
 
       <!-- ─── Task List ─── -->
@@ -665,7 +665,7 @@ const reducedMotion = typeof window !== 'undefined' && window.matchMedia ? windo
 
 // "n" opens Add task (not while typing or when any modal/overlay is open)
 const anyModalOpen = computed(() => !!(modalOpen.value || isModalOpen.value || showWorkoutModal.value || showTimerModal.value || wontDoModalOpen.value ||
-  transferModalOpen.value || youtubeModalOpen.value || taskDetailModalOpen.value || showImagePreview.value || listening.value || shutdownOpen.value || showFullScreenAnimation.value));
+  transferModalOpen.value || youtubeModalOpen.value || taskDetailModalOpen.value || showImagePreview.value || voiceOpen.value || shutdownOpen.value || showFullScreenAnimation.value));
 const onShortcutKey = (e) => {
   if (!shouldHandleShortcut(e, anyModalOpen.value)) return;
   e.preventDefault();
@@ -1958,64 +1958,61 @@ const completedTaskCount = computed(() => {
   return selectedDayRoutine.value?.filter(task => task.completed).length;
 });
 const listening = ref(false);
-let recognition;
+const voiceOpen = ref(false); // modal visibility (independent of whether recognition actually started)
+const voiceError = ref('');
+let recognition = null;
 const liveTranscript = ref('');
-// Initialize SpeechRecognition only if supported
-if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+const voiceSupported = typeof window !== 'undefined' && ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window);
+// Initialize SpeechRecognition only if supported (every property access stays inside this guard)
+if (voiceSupported) {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   recognition = new SpeechRecognition();
   recognition.lang = 'en-US';
-  recognition.interimResults = false;
+  recognition.interimResults = true;
   recognition.maxAlternatives = 1;
 
-  recognition.onstart = () => {
-    listening.value = true;
-  };
-
+  recognition.onstart = () => { listening.value = true; voiceError.value = ''; };
   recognition.onerror = (event) => {
     console.error("Speech recognition error:", event.error);
     listening.value = false;
+    voiceError.value = event.error === 'not-allowed' || event.error === 'service-not-allowed'
+      ? 'Microphone access was blocked. Allow it in your browser settings and try again.'
+      : event.error === 'no-speech' ? "Didn't catch anything. Try again."
+      : 'Voice input failed (' + (event.error || 'unknown') + ').';
   };
-
-  recognition.onend = () => {
-    listening.value = false;
-  };
-
+  recognition.onend = () => { listening.value = false; };
   recognition.onresult = (event) => {
-    const transcript = event.results[0][0].transcript.trim();
-    liveTranscript.value = transcript;
-    newTask.value.title = transcript;
-    addNewTask(); // Your existing save function
-    recognition.stop();
+    let transcript = '';
+    for (let i = event.resultIndex; i < event.results.length; ++i) {
+      transcript += event.results[i][0].transcript;
+    }
+    liveTranscript.value = transcript.trim();
+
+    if (event.results[event.results.length - 1].isFinal) {
+      newTask.value.title = transcript.trim();
+      addNewTask();
+      liveTranscript.value = '';
+      voiceOpen.value = false;
+      recognition.stop();
+    }
   };
 } else {
   console.warn("Speech recognition not supported in this browser.");
 }
-recognition.interimResults = true;
-
-recognition.onresult = (event) => {
-  let transcript = '';
-  for (let i = event.resultIndex; i < event.results.length; ++i) {
-    transcript += event.results[i][0].transcript;
-  }
-
-  liveTranscript.value = transcript.trim();
-
-  if (event.results[event.results.length - 1].isFinal) {
-    newTask.value.title = transcript.trim();
-    addNewTask();
-    liveTranscript.value = null
-    recognition.stop();
-  }
-};
 const cancelVoiceInput = () => {
-  if (recognition) recognition.stop();
+  if (recognition) { try { recognition.stop(); } catch (e) { /* not started */ } }
   listening.value = false;
+  voiceOpen.value = false;
+  voiceError.value = '';
   liveTranscript.value = '';
 };
 
 const startVoiceInput = () => {
-  if (recognition) recognition.start();
+  voiceOpen.value = true; // always show the modal, even when recognition is unavailable
+  liveTranscript.value = '';
+  voiceError.value = '';
+  if (!recognition) return;
+  try { recognition.start(); } catch (e) { if (e && e.name !== 'InvalidStateError') voiceError.value = 'Could not start voice input.'; }
 };
 
 function toggleRecurring() {
