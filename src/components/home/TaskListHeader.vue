@@ -29,16 +29,20 @@ defineEmits(['toggle-sound', 'toggle-completed']);
   padding: 0.5rem 0 0.75rem;
 }
 .task-count { display: flex; align-items: center; gap: 8px; }
-.task-count-label { font-weight: 600; font-size: 0.875rem; color: #6b6a66; }
+.task-count-label { font-weight: 600; font-size: 0.875rem; color: var(--c-text-3, #6b6a66); }
 .task-count-badge {
   font-size: 0.75rem; font-weight: 600; font-family: 'JetBrains Mono', monospace;
-  background: #1e2a3a; color: #7fb8f5;
-  padding: 2px 8px; border-radius: 20px;
+  background: var(--c-accent-soft, #1e2a3a); color: var(--c-accent-text, #7fb8f5);
+  padding: 2px 8px; border-radius: var(--r, 3px);
 }
 .toggle-visibility {
-  background: none; border: none; color: #6b6a66;
+  background: none; border: none; color: var(--c-text-3, #6b6a66);
   cursor: pointer; font-size: 0.875rem; padding: 4px 8px;
   transition: color 0.15s;
 }
-.toggle-visibility:hover { color: #e8e6e1; }
+.toggle-visibility:hover { color: var(--c-text, #e8e6e1); }
+.task-count-label { font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+.task-count-badge { padding: 0 6px; line-height: 16px; background: var(--c-surface-2); color: var(--c-text-2); border-radius: 8px; }
+.toggle-visibility { font-size: var(--fs-sm); border-radius: var(--r); }
+.toggle-visibility:hover { background: var(--c-surface-2); }
 </style>

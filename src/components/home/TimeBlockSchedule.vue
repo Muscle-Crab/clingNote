@@ -19,17 +19,20 @@ defineProps({ schedule: { type: Object, required: true } });
 </script>
 
 <style scoped>
-.chip--high { background: #3b0d0d; color: #fca5a5; }
-.chip--medium { background: #3a2d0a; color: #fcd34d; }
-.load-summary--over { border-color: #7f1d1d; }
-.schedule-panel { background: #18181b; border: 1px solid #2a2a2e; border-radius: 12px; padding: 0.75rem 1rem; margin-bottom: 0.75rem; font-size: 0.8rem; color: #c9c8c3; }
-.schedule-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-.schedule-list li { display: flex; gap: 0.75rem; align-items: baseline; }
-.schedule-time { font-family: 'JetBrains Mono', monospace; color: #7fb8f5; min-width: 9.5rem; }
-.schedule-conflict .schedule-flag { color: #fca5a5; font-size: 0.7rem; }
-.schedule-done { opacity: 0.5; text-decoration: line-through; }
-.schedule-empty, .schedule-unsched { margin: 0; color: #a3a29d; }
-.schedule-unsched { margin-top: 6px; }
-@media (max-width: 480px) {
-  .schedule-time { min-width: 0; } }
+.chip--high { background: var(--c-danger-soft); color: var(--c-danger-text); }
+.chip--medium { background: var(--c-warn-soft); color: var(--c-warn-text); }
+.load-summary--over { border-color: var(--c-danger-line); }
+.schedule-panel { background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--r); padding: var(--sp-2) var(--sp-3); margin-bottom: var(--sp-3); font-size: var(--fs-sm); color: var(--c-text-2); box-shadow: var(--shadow-1); }
+.schedule-list { list-style: none; margin: 0; padding: 0 0 0 var(--sp-3); border-left: 2px solid var(--c-border); display: flex; flex-direction: column; }
+.schedule-list li { position: relative; display: flex; gap: var(--sp-3); align-items: baseline; padding: 6px var(--sp-2); border-bottom: 1px solid var(--c-border); font-size: var(--fs-md); color: var(--c-text); transition: background .15s; }
+.schedule-list li:last-child { border-bottom: none; }
+.schedule-list li:hover { background: var(--c-surface-2); }
+.schedule-list li::before { content: ''; position: absolute; left: -19px; top: 14px; width: 8px; height: 8px; border-radius: 50%; background: var(--c-accent); border: 2px solid var(--c-surface); }
+.schedule-time { font-family: 'JetBrains Mono', monospace; font-size: var(--fs-sm); color: var(--c-accent-text); min-width: 9.5rem; }
+.schedule-conflict::before { background: var(--c-danger) !important; }
+.schedule-conflict .schedule-flag { color: var(--c-danger-text); font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; margin-left: auto; }
+.schedule-done { opacity: .5; text-decoration: line-through; }
+.schedule-empty, .schedule-unsched { margin: 0; color: var(--c-text-3); }
+.schedule-unsched { margin-top: var(--sp-2); }
+@media (max-width: 480px) { .schedule-time { min-width: 0; } .schedule-list li { flex-wrap: wrap; gap: var(--sp-1) var(--sp-2); } }
 </style>

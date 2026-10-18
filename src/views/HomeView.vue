@@ -2417,19 +2417,56 @@ const finishShutdown = async (carry) => {
   animation: spinSlow 2s linear infinite;
 }
 /* ── Fonts ── */
-@import url('https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
 /* ── Root ── */
 .app-root {
+  /* ── Design tokens (dark, Atlassian-style neutrals + blue accent) ── */
+  --c-bg: #1D2125;
+  --c-surface: #22272B;
+  --c-surface-2: #2C333A;
+  --c-border: #38414A;
+  --c-border-strong: #596773;
+  --c-text: #DEE4EA;
+  --c-text-2: #B6C2CF;
+  --c-text-3: #8C9BAB;
+  --c-accent: #0C66E4;
+  --c-accent-hover: #0055CC;
+  --c-accent-text: #85B8FF;
+  --c-accent-soft: #09326C;
+  --c-accent-line: #1558BC;
+  --c-on-accent: #FFFFFF;
+  --c-success: #4BCE97;
+  --c-success-soft: #1C3329;
+  --c-success-line: #216E4E;
+  --c-warn: #F5CD47;
+  --c-warn-text: #F5CD47;
+  --c-warn-soft: #3A2C09;
+  --c-warn-line: #7F5F01;
+  --c-danger: #F87168;
+  --c-danger-text: #FD9891;
+  --c-danger-soft: #42221F;
+  --c-danger-line: #AE2E24;
+  --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-5: 24px;
+  --r: 3px;
+  --shadow-1: 0 1px 1px rgba(3,4,4,.5), 0 0 1px rgba(3,4,4,.5);
+  --shadow-2: 0 8px 12px rgba(3,4,4,.36), 0 0 1px rgba(3,4,4,.5);
+  --fs-xs: 11px; --fs-sm: 12px; --fs-md: 14px; --fs-lg: 16px; --fs-xl: 20px;
+  --ring: 0 0 0 2px var(--c-accent-text);
+  --font: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   min-height: 100vh;
-  background: #0f0f11;
-  color: #e8e6e1;
-  font-family: 'Instrument Sans', sans-serif;
+  background: var(--c-bg);
+  color: var(--c-text);
+  font-family: var(--font);
+  font-size: var(--fs-md);
+  line-height: 20px;
   padding-bottom: 120px;
 }
+.app-root button, .app-root input, .app-root select, .app-root textarea { font-family: inherit; }
+.app-root * { transition-timing-function: ease; }
 
 .content-wrap {
-  max-width: 680px;
+  max-width: 760px;
   margin: 0 auto;
   padding: 1rem 1rem 2rem;
 }
@@ -2438,7 +2475,7 @@ const finishShutdown = async (carry) => {
 .splash-screen {
   position: fixed;
   inset: 0;
-  background: #0f0f11;
+  background: var(--c-bg, #0f0f11);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2447,25 +2484,25 @@ const finishShutdown = async (carry) => {
 .splash-inner { text-align: center; }
 .splash-logo {
   font-size: 3rem;
-  color: #F59E0B;
+  color: var(--c-warn, #F59E0B);
   margin-bottom: 1rem;
   animation: pulse 1.5s ease infinite;
 }
-.splash-title { font-size: 1.6rem; font-weight: 600; color: #e8e6e1; margin: 0; }
-.splash-sub { color: #6b6a66; font-size: 0.9rem; margin: 0.5rem 0 1.5rem; }
-.splash-loader { width: 180px; height: 2px; background: #2a2a2e; border-radius: 2px; margin: 0 auto; overflow: hidden; }
-.splash-bar { height: 100%; background: #F59E0B; animation: load 2s ease infinite; }
+.splash-title { font-size: 1.6rem; font-weight: 600; color: var(--c-text, #e8e6e1); margin: 0; }
+.splash-sub { color: var(--c-text-3, #6b6a66); font-size: 0.9rem; margin: 0.5rem 0 1.5rem; }
+.splash-loader { width: 180px; height: 2px; background: var(--c-border, #2a2a2e); border-radius: var(--r, 3px); margin: 0 auto; overflow: hidden; }
+.splash-bar { height: 100%; background: var(--c-warn, #F59E0B); animation: load 2s ease infinite; }
 @keyframes load { 50% { width: 80%; } }
 @keyframes pulse { 50% { opacity: 0.5; } }
 
 /* ── Header ── */
-.btn-start { background: #14432a; color: #4ade80; }
+.btn-start { background: var(--c-success-soft, #14432a); color: var(--c-success, #4ade80); }
 
 /* ── Calendar ── */
 .calendar-section {
-  background: #18181b;
-  border: 1px solid #2a2a2e;
-  border-radius: 16px;
+  background: var(--c-surface, #18181b);
+  border: 1px solid var(--c-border, #2a2a2e);
+  border-radius: var(--r, 3px);
   padding: 1rem 1.25rem;
   margin-bottom: 1rem;
 }
@@ -2479,11 +2516,11 @@ const finishShutdown = async (carry) => {
 .days-left-badge {
   font-size: 0.72rem;
   font-weight: 500;
-  background: #1e1e22;
-  border: 1px solid #2a2a2e;
-  border-radius: 8px;
+  background: var(--c-surface-2, #1e1e22);
+  border: 1px solid var(--c-border, #2a2a2e);
+  border-radius: var(--r, 3px);
   padding: 3px 8px;
-  color: #ef4444;
+  color: var(--c-danger, #ef4444);
 }
 
 /* ── Progress ── */
@@ -2496,15 +2533,15 @@ const finishShutdown = async (carry) => {
 /* ── Buttons ── */
 
 .toggle-btn {
-  background: #1e1e22;
-  border: 1px solid #2a2a2e;
-  border-radius: 8px;
+  background: var(--c-surface-2, #1e1e22);
+  border: 1px solid var(--c-border, #2a2a2e);
+  border-radius: var(--r, 3px);
   padding: 6px 12px;
-  color: #6b6a66;
+  color: var(--c-text-3, #6b6a66);
   cursor: pointer;
   transition: all 0.2s;
 }
-.toggle-btn--on { background: #1e2a3a; border-color: #378ADD; color: #7fb8f5; }
+.toggle-btn--on { background: var(--c-accent-soft, #1e2a3a); border-color: var(--c-accent, #378ADD); color: var(--c-accent-text, #7fb8f5); }
 
 /* ── Advanced / fade transition ── */
 .fade-enter-active, .fade-leave-active { transition: opacity 0.2s; }
@@ -2526,7 +2563,7 @@ const finishShutdown = async (carry) => {
 .task-section { }
 
 .tasks-list { display: flex; flex-direction: column; gap: 8px; }
-.task-ghost { opacity: 0.3; background: #2a2a2e !important; }
+.task-ghost { opacity: 0.3; background: var(--c-border, #2a2a2e) !important; }
 .task-dragging { transform: rotate(1.5deg); box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
 
 /* ── Task Card ── */
@@ -2534,11 +2571,11 @@ const finishShutdown = async (carry) => {
   font-weight: 500;
   font-size: 0.9rem;
   cursor: pointer;
-  color: #e8e6e1;
+  color: var(--c-text, #e8e6e1);
   transition: color 0.15s;
 }
-.task-title:hover { color: #7fb8f5; }
-.task-status--pending { background: #2a2a12; color: #ca8a04; border: 1px solid #3a3a1a; }
+.task-title:hover { color: var(--c-accent-text, #7fb8f5); }
+.task-status--pending { background: var(--c-warn-soft, #2a2a12); color: var(--c-warn-text, #ca8a04); border: 1px solid var(--c-warn-line, #3a3a1a); }
 
 /* ── Idle State ── */
 
@@ -2552,22 +2589,22 @@ const finishShutdown = async (carry) => {
   gap: 12px;
   padding: 16px;
   margin: 16px 0;
-  border-radius: 20px;
-  background: #111827;
+  border-radius: var(--r, 3px);
+  background: var(--c-surface, #111827);
   color: white;
 }
 
 .time-summary-card div {
   background: rgba(255,255,255,0.08);
   padding: 12px;
-  border-radius: 14px;
+  border-radius: var(--r, 3px);
   text-align: center;
 }
 
 .time-summary-card span {
   display: block;
   font-size: 12px;
-  color: #9ca3af;
+  color: var(--c-text-2, #9ca3af);
 }
 
 .time-summary-card strong {
@@ -2584,15 +2621,32 @@ const finishShutdown = async (carry) => {
   overflow-y: auto;
   font-size: 20px;
   text-align: center;
-  border-radius: 12px;
+  border-radius: var(--r, 3px);
   padding: 10px;
 }
 
 /* ── Planning / polish additions ── */
 button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
-  outline: 2px solid #7fb8f5; outline-offset: 2px;
+  outline: 2px solid var(--c-accent-text); outline-offset: 1px;
 }
-.cap-warning { background: #3a2d0a; border: 1px solid #92400e; color: #fde68a; border-radius: 10px; padding: 0.75rem; font-size: 0.82rem; line-height: 1.5; margin-top: 0.75rem; }
+.cap-warning { background: var(--c-warn-soft, #3a2d0a); border: 1px solid var(--c-warn-line, #92400e); color: var(--c-warn-text, #fde68a); border-radius: var(--r, 3px); padding: 0.75rem; font-size: 0.82rem; line-height: 1.5; margin-top: 0.75rem; }
+
+/* ── Jira-style layout polish ── */
+.calendar-section { background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--r); box-shadow: var(--shadow-1); padding: var(--sp-3) var(--sp-4); margin-bottom: var(--sp-4); }
+.current-date-label { font-size: var(--fs-lg); font-weight: 600; }
+.days-left-badge { font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; background: var(--c-danger-soft); border: 1px solid var(--c-danger-line); border-radius: var(--r); padding: 0 6px; line-height: 18px; color: var(--c-danger-text); }
+.tasks-list { gap: var(--sp-1); }
+.toggle-btn { border-radius: var(--r); font-size: var(--fs-md); }
+.btn-start { background: var(--c-success-soft); color: var(--c-success); }
+.cap-warning { border-radius: var(--r); font-size: var(--fs-sm); }
+.time-summary-card { background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--r); gap: var(--sp-2); padding: var(--sp-3); margin: var(--sp-3) 0; }
+.time-summary-card div { background: var(--c-surface-2); border-radius: var(--r); padding: var(--sp-2); }
+.time-summary-card span { font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--c-text-3); }
+.time-summary-card strong { font-size: var(--fs-lg); }
+.splash-logo, .splash-bar { color: var(--c-accent-text); }
+.splash-bar { background: var(--c-accent); }
+@media (max-width: 600px) { .content-wrap { padding: var(--sp-3) var(--sp-2) var(--sp-5); } .time-summary-card { grid-template-columns: repeat(2, 1fr); } }
+
 </style>
 
 

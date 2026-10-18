@@ -51,23 +51,31 @@ const saveEdit = (s) => {
 </script>
 
 <style scoped>
-/* shared look (HomeView's scoped styles don't reach into child components) */
-.field-input { width: 100%; background: #0f0f11; border: 1px solid #2a2a2e; border-radius: 10px; padding: 10px 12px; color: #e8e6e1; font-family: inherit; font-size: 0.9rem; transition: border-color 0.2s; box-sizing: border-box; }
-.field-input:focus { outline: none; border-color: #378ADD; }
-.btn-secondary { font-family: inherit; font-size: 0.875rem; font-weight: 500; background: #1e1e22; color: #9a9891; border: 1px solid #2a2a2e; border-radius: 10px; padding: 9px 18px; cursor: pointer; transition: all 0.2s; }
-.btn-secondary:hover { color: #e8e6e1; border-color: #3a3a3e; }
-.btn-secondary:disabled { opacity: 0.5; cursor: default; }
-.subtask-list { margin: 0.25rem 0 0.75rem; }
-.subtask-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 0.72rem; color: #a3a29d; margin-bottom: 6px; }
-.subtask-auto { display: flex; align-items: center; gap: 4px; cursor: pointer; }
-.subtask-items { list-style: none; margin: 0 0 6px; padding: 0; display: flex; flex-direction: column; gap: 4px; }
-.subtask-item { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; color: #e8e6e1; }
-.subtask-item--done .subtask-text { text-decoration: line-through; color: #77767a; }
+.field-input, .field-select, .field-textarea { width: 100%; box-sizing: border-box; background: var(--c-bg); border: 1px solid var(--c-border); border-radius: var(--r); padding: 6px 8px; min-height: 32px; color: var(--c-text); font-family: inherit; font-size: var(--fs-md); transition: border-color .15s, background .15s; }
+.field-input:hover, .field-select:hover, .field-textarea:hover { background: var(--c-surface-2); }
+.field-input:focus, .field-select:focus, .field-textarea:focus { outline: none; border-color: var(--c-accent); box-shadow: 0 0 0 1px var(--c-accent); background: var(--c-bg); }
+.field-textarea { min-height: 64px; resize: vertical; }
+.btn-primary, .btn-secondary { font-family: inherit; font-size: var(--fs-md); font-weight: 500; border-radius: var(--r); padding: 0 12px; height: 32px; cursor: pointer; border: 1px solid transparent; transition: background .15s, border-color .15s; }
+.btn-primary { background: var(--c-accent); color: var(--c-on-accent); }
+.btn-primary:hover { background: var(--c-accent-hover); }
+.btn-secondary { background: var(--c-surface-2); color: var(--c-text-2); }
+.btn-secondary:hover { background: var(--c-border); color: var(--c-text); }
+.btn-primary:disabled, .btn-secondary:disabled { opacity: .5; cursor: not-allowed; }
+
+.subtask-list { margin: var(--sp-2) 0 var(--sp-3); padding-left: var(--sp-4); border-left: 2px solid var(--c-border); }
+.subtask-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--c-text-3); margin-bottom: var(--sp-2); }
+.subtask-auto { display: flex; align-items: center; gap: var(--sp-1); cursor: pointer; text-transform: none; letter-spacing: 0; font-weight: 400; }
+.subtask-items { list-style: none; margin: 0 0 var(--sp-2); padding: 0; display: flex; flex-direction: column; }
+.subtask-item { display: flex; align-items: center; gap: var(--sp-2); font-size: var(--fs-md); color: var(--c-text); padding: 2px var(--sp-1); border-radius: var(--r); transition: background .15s; }
+.subtask-item:hover { background: var(--c-surface-2); }
+.subtask-item input[type="checkbox"], .subtask-auto input { accent-color: var(--c-accent); width: 14px; height: 14px; margin: 0; cursor: pointer; flex-shrink: 0; }
+.subtask-item--done .subtask-text { text-decoration: line-through; color: var(--c-text-3); }
 .subtask-text { flex: 1; min-width: 0; word-break: break-word; }
-.subtask-edit { flex: 1; padding: 4px 8px; }
-.subtask-btn { background: none; border: none; cursor: pointer; font-size: 0.8rem; opacity: 0.7; padding: 2px; }
-.subtask-btn:hover { opacity: 1; }
-.subtask-add { display: flex; gap: 6px; }
-.subtask-add .field-input { flex: 1; padding: 6px 10px; }
-.subtask-add-btn { padding: 4px 12px; }
+.subtask-edit { flex: 1; padding: 2px 6px; min-height: 24px; }
+.subtask-btn { background: none; border: none; cursor: pointer; font-size: var(--fs-sm); opacity: 0; padding: 2px 4px; border-radius: var(--r); }
+.subtask-item:hover .subtask-btn, .subtask-btn:focus-visible { opacity: .8; }
+.subtask-btn:hover { opacity: 1; background: var(--c-border); }
+.subtask-add { display: flex; gap: var(--sp-2); }
+.subtask-add .field-input { flex: 1; }
+.subtask-add-btn { padding: 0 12px; }
 </style>

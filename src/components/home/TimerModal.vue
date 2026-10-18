@@ -78,9 +78,9 @@ defineEmits(['close', 'start']);
 }
 .timer-modal {
   width: min(92vw, 340px);
-  background: #16171d;
+  background: var(--c-surface, #16171d);
   border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 24px;
+  border-radius: var(--r, 3px);
   overflow: hidden;
   box-shadow: 0 24px 80px rgba(0,0,0,0.5);
 }
@@ -91,14 +91,14 @@ defineEmits(['close', 'start']);
   align-items: center;
 }
 .timer-header h2 {
-  color: #fff;
+  color: var(--c-on-accent, #fff);
   font-size: 17px;
   font-weight: 800;
   margin: 0;
 }
 .timer-close {
-  background: #24262d;
-  color: #aaa;
+  background: var(--c-surface-2, #24262d);
+  color: var(--c-text-2, #aaa);
   border: none;
   width: 30px;
   height: 30px;
@@ -118,7 +118,7 @@ defineEmits(['close', 'start']);
 .timer-field label {
   display: block;
   margin-bottom: 8px;
-  color: #9ca3af;
+  color: var(--c-text-2, #9ca3af);
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.08em;
@@ -128,10 +128,10 @@ defineEmits(['close', 'start']);
   width: 100%;
   height: 54px;
   padding: 0 14px;
-  background: #22242b;
-  color: #fff;
+  background: var(--c-surface-2, #22242b);
+  color: var(--c-on-accent, #fff);
   border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 16px;
+  border-radius: var(--r, 3px);
   font-size: 18px;
   font-weight: 800;
   outline: none;
@@ -139,7 +139,7 @@ defineEmits(['close', 'start']);
 .timer-preview {
   margin-top: 16px;
   text-align: center;
-  color: #fff;
+  color: var(--c-on-accent, #fff);
   font-size: 18px;
   font-weight: 900;
 }
@@ -151,16 +151,16 @@ defineEmits(['close', 'start']);
 }
 .timer-btn {
   border: none;
-  border-radius: 14px;
+  border-radius: var(--r, 3px);
   padding: 11px 18px;
   font-weight: 800;
 }
 .timer-cancel {
-  background: #23242b;
-  color: #b8bbc3;
+  background: var(--c-surface-2, #23242b);
+  color: var(--c-text-2, #b8bbc3);
 }
 .timer-start {
-  background: #2f8cff;
+  background: var(--c-accent, #2f8cff);
   color: white;
 }
 </style>

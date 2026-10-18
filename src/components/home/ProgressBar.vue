@@ -32,33 +32,13 @@ defineProps({
 </script>
 
 <style scoped>
-.progress-section { padding-top: 0.75rem; }
-.progress-info { display: flex; justify-content: space-between; margin-bottom: 6px; }
-.progress-label { font-size: 0.75rem; color: #6b6a66; }
-.progress-pct { font-size: 0.75rem; font-weight: 600; color: #378ADD; font-family: 'JetBrains Mono', monospace; }
-.progress-track {
-  width: 100%; height: 4px;
-  background: #2a2a2e;
-  border-radius: 4px;
-  overflow: hidden;
-  margin-bottom: 16px;
-}
-.progress-fill { height: 100%; background: #378ADD; border-radius: 4px; transition: width 0.6s ease; }
-.milestone-row { position: relative; height: 36px; }
-.milestone-dot {
-  position: absolute;
-  top: 0;
-  width: 28px; height: 28px;
-  border-radius: 50%;
-  background: #2a2a2e;
-  border: 2px solid #3a3a3e;
-  display: flex; align-items: center; justify-content: center;
-  transition: all 0.4s;
-  font-size: 0.9rem;
-}
-.milestone-dot--reached {
-  background: #1e2a3a;
-  border-color: #378ADD;
-  transform: scale(1.15);
-}
+.progress-section { padding-top: var(--sp-2); }
+.progress-info { display: flex; justify-content: space-between; margin-bottom: var(--sp-1); }
+.progress-label { font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--c-text-3); }
+.progress-pct { font-size: var(--fs-sm); font-weight: 600; color: var(--c-accent-text); font-family: 'JetBrains Mono', monospace; }
+.progress-track { width: 100%; height: 4px; background: var(--c-surface-2); border-radius: 2px; overflow: hidden; margin-bottom: var(--sp-3); }
+.progress-fill { height: 100%; background: var(--c-accent); border-radius: 2px; transition: width .5s ease; }
+.milestone-row { position: relative; height: 28px; }
+.milestone-dot { position: absolute; top: 0; width: 28px; height: 28px; box-sizing: border-box; border-radius: 50%; background: var(--c-surface-2); border: 2px solid var(--c-border); display: flex; align-items: center; justify-content: center; transition: all .3s; font-size: var(--fs-md); filter: grayscale(1); opacity: .7; }
+.milestone-dot--reached { background: var(--c-accent-soft); border-color: var(--c-accent); filter: none; opacity: 1; }
 </style>

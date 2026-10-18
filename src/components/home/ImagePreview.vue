@@ -17,5 +17,5 @@ defineEmits(['close']);
   display: flex; align-items: center; justify-content: center;
   cursor: zoom-out;
 }
-.image-preview-img { max-width: 90%; max-height: 90vh; border-radius: 12px; }
+.image-preview-img { max-width: 90%; max-height: 90vh; border-radius: var(--r, 3px); }
 </style>
