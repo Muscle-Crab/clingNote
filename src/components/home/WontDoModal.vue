@@ -2,24 +2,27 @@
   <div class="modal-backdrop">
     <div class="modal-box modal-box--sm">
       <div class="modal-header">
-        <h2 class="modal-title">🚫 Won't do this?</h2>
+        <h2 class="modal-title">{{ strict ? "🗣️ Why didn't you?" : "🚫 Won't do this?" }}</h2>
       </div>
       <div class="modal-body">
         <div class="field-group">
           <label class="field-label">Reason</label>
           <textarea v-model="reason" class="field-textarea" placeholder="Why are you skipping this?"></textarea>
+          <p v-if="strict" class="field-hint">Required. A real reason, at least {{ MIN_REASON }} characters. It goes in your procrastination log.</p>
         </div>
       </div>
       <div class="modal-footer">
         <button @click="$emit('cancel')" class="btn-secondary">Cancel</button>
-        <button @click="$emit('confirm')" class="btn-primary">Confirm</button>
+        <button @click="$emit('confirm')" class="btn-primary" :disabled="strict && !validReason(reason)">Confirm</button>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
+import { validReason, MIN_REASON } from '@/utils/strictBoss';
 const reason = defineModel('reason');
+defineProps({ strict: { type: Boolean, default: false } });
 defineEmits(['cancel', 'confirm']);
 </script>
 
@@ -128,4 +131,5 @@ defineEmits(['cancel', 'confirm']);
 .field-input:focus, .field-select:focus, .field-textarea:focus { border-color: var(--c-accent); box-shadow: 0 0 0 1px var(--c-accent); outline: none; }
 .field-label { font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--c-text-3); }
 @media (max-width: 600px) { .modal-backdrop { align-items: flex-end; padding: 0; } .modal-box { max-width: none; max-height: 92vh; } .modal-header, .modal-body, .modal-footer { padding-left: var(--sp-4); padding-right: var(--sp-4); } }
+.field-hint { margin: 4px 0 0; font-size: var(--fs-xs, 12px); color: var(--c-text-3, #9ca3af); }
 </style>

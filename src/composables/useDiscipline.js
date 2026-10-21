@@ -13,7 +13,10 @@ export const discRef = (uid) => doc(db, 'discipline', uid);
 
 export const loadDisciplineSettings = async (uid) => {
   const s = await getDoc(settingsRef(uid));
-  return normSettings(s.exists() ? s.data().discipline : null);
+  const stored = s.exists() ? s.data().discipline : null;
+  // First run: strict defaults are on. Persist them with enabledOn = today so nothing is settled retroactively.
+  if (!stored) return saveDisciplineSettings(uid, normSettings(null));
+  return normSettings(stored);
 };
 
 export const saveDisciplineSettings = async (uid, settings) => {

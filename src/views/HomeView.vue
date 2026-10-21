@@ -52,6 +52,12 @@
       <div v-if="disciplineWarning" class="disc-warning" :class="'disc-warning--' + disciplineWarning" role="alert">
         ⚠️ {{ disciplineWarning === '30m' ? '30 minutes' : '2 hours' }} until your {{ disciplineSettings.deadline }} deadline — {{ streakProgress }}/{{ DAILY_STREAK_MIN }} done
       </div>
+      <template v-if="strictOn">
+        <BossBanner v-if="bossWatchingMsg" kind="watching" :text="bossWatchingMsg" />
+        <BossBanner v-if="idleNudge" kind="idle" :text="idleNudge" dismissible @dismiss="idleNudge = null" />
+        <BossBanner v-else-if="bossMsg && bossMsg.phase !== 'verdict'" :kind="bossMsg.kind" :text="bossMsg.text" />
+      </template>
+      <VerdictOverlay v-if="verdictScreen" :v="verdictScreen.v" :text="verdictScreen.text" :date="verdictScreen.date" @close="dismissVerdict" />
       <DramaOverlay v-if="lossScreen" variant="lost" title="Streak lost" button="I'll do better"
                     :subtitle="`You missed your deadline. ${lossScreen.lostStreak ? lossScreen.lostStreak + '-day streak gone. ' : ''}${lossScreen.penalty} pts.`" @close="dismissLoss" />
 
@@ -75,10 +81,10 @@
       <TimerModal v-if="showTimerModal" v-model:hours="selectedTimerHours" v-model:minutes="selectedTimerMinutes" @close="showTimerModal = false" @start="startTimer" />
 
 
-      <WontDoModal v-if="wontDoModalOpen" v-model:reason="wontDoReason" @cancel="wontDoModalOpen = false" @confirm="markTaskAsWontDo" />
+      <WontDoModal v-if="wontDoModalOpen" v-model:reason="wontDoReason" :strict="strictOn" @cancel="wontDoModalOpen = false" @confirm="markTaskAsWontDo" />
 
 
-      <TransferModal v-if="transferModalOpen" v-model:day="selectedTransferDay" :days="tabDays" :selected-day-index="selectedDayIndex" @close="closeTransferModal" @transfer="transferTask()" />
+      <TransferModal v-if="transferModalOpen" v-model:day="selectedTransferDay" v-model:reason="deferReason" :strict="strictOn" :carry-count="selectedDayRoutine?.[selectedTransferTaskIndex]?.carryCount || 0" :days="tabDays" :selected-day-index="selectedDayIndex" @close="closeTransferModal" @transfer="transferTask()" />
 
 
       <AddTaskModal v-if="modalOpen" :new-task="newTask" v-model:repeat-mode="repeatMode" v-model:show-advanced="showAdvanced"
@@ -184,10 +190,13 @@ import { ACTIVE_CAP, taskKey, activeCount, loadSummary, buildSchedule } from '@/
 import { getTodayId, formatSessionTime, getCurrentDate, formatTime, getTodayDate, isToday } from '@/utils/dateTime';
 import { badges } from '@/utils/gamification';
 import { recordMonthlyToggle, awardFinishedMonth } from '@/composables/useMonthlyStats';
-import { loadDisciplineSettings, settleDeadlines, clearLossPending, loadDisciplineState, setBossForDay, setBossCleared, tryFreeze } from '@/composables/useDiscipline';
+import { loadDisciplineSettings, settleDeadlines, clearLossPending, loadDisciplineState, setBossForDay, setBossCleared, tryFreeze, logDiscipline, patchDisciplineState } from '@/composables/useDiscipline';
 import { levelFor, rewardsFor } from '@/utils/rewards';
 import { defaultSettings as defaultDiscipline, warningFor, isPastDeadline, streakGate, BOSS_BONUS } from '@/utils/discipline';
 import DramaOverlay from '@/components/discipline/DramaOverlay.vue';
+import BossBanner from '@/components/discipline/BossBanner.vue';
+import VerdictOverlay from '@/components/discipline/VerdictOverlay.vue';
+import { bossMessage, validReason, carryTask, canAddTask, watchingBlockers, isIdle, verdict as dayVerdict, line as bossLine, IDLE_MINUTES } from '@/utils/strictBoss';
 import MorningReport from '@/components/home/MorningReport.vue';
 import { buildRecap, reportDue, prevDay } from '@/utils/dailyReport';
 import { monthKey, prevMonthKey } from '@/utils/ranking';
@@ -318,6 +327,8 @@ const autoTransferTaskToTomorrow = async (index) => {
     // Optional visual flag
     overdue: true,
   };
+
+  if (strictOn.value) Object.assign(task, carryTask(task));
 
   // Remove from today's list
   selectedDayRoutine.value.splice(index, 1);
@@ -542,6 +553,7 @@ const transferTask = async () => {
     return;
   }
 
+  if (strictOn.value && !validReason(deferReason.value)) return;
   const currentDayIndex = selectedDayIndex.value;
   const targetDayIndex = selectedTransferDay.value;
   if (currentDayIndex === targetDayIndex) {
@@ -563,8 +575,14 @@ const transferTask = async () => {
     let targetTasks = targetDayDocSnapshot.exists() ? targetDayDocSnapshot.data().tasks : [];
 
     // Remove the task from the current day and add it to the selected day
-    const [task] = currentTasks.splice(selectedTransferTaskIndex.value, 1);
-    if (!task) return;
+    const [rawTask] = currentTasks.splice(selectedTransferTaskIndex.value, 1);
+    if (!rawTask) return;
+    const task = strictOn.value ? carryTask(rawTask) : rawTask;
+    if (strictOn.value) {
+      logStrict('deferred', `${task.title} → ${targetDay}: ${deferReason.value.trim()}`);
+      if (task.bossWatching && !rawTask.bossWatching) logStrict('boss-watching', task.title);
+      deferReason.value = '';
+    }
 
     targetTasks.push(task);
 
@@ -1026,6 +1044,8 @@ const openWontDoModal = (index) => {
 };
 const markTaskAsWontDo = async () => {
   if (selectedWontDoTaskIndex.value === null) return;
+  if (strictOn.value && !validReason(wontDoReason.value)) return; // "why didn't you?" is mandatory in strict mode
+  if (strictOn.value) logStrict('skipped', `${selectedDayRoutine.value[selectedWontDoTaskIndex.value]?.title}: ${wontDoReason.value.trim()}`);
 
   const task = {
     ...selectedDayRoutine.value[selectedWontDoTaskIndex.value],
@@ -1213,8 +1233,9 @@ const onBossToggle = async (task) => {
   if (task.completed) bossVictory.value = { title: task.title };
 };
 const runDiscipline = async () => {
-  if (!userId.value || !disciplineSettings.value.enabled) { disciplineWarning.value = null; return; }
+  if (!userId.value || !disciplineSettings.value.enabled) { disciplineWarning.value = null; bossMsg.value = null; return; }
   const now = new Date(); const today = localDateStr(now);
+  runStrictBoss(now, today);
   const w = warningFor(now, today, disciplineSettings.value.deadline, streakStatus.value === 'done');
   disciplineWarning.value = w;
   if (w) {
@@ -1235,6 +1256,47 @@ const runDiscipline = async () => {
     if (r?.missed?.length) await checkStreakOnCompletion();
   } catch (e) { console.error('Discipline settle failed:', e); }
 };
+// ---- Strict Boss Mode ----
+const strictOn = computed(() => !!(disciplineSettings.value.enabled && disciplineSettings.value.strict));
+const bossMsg = ref(null);
+const idleNudge = ref(null);
+const verdictScreen = ref(null);
+const deferReason = ref('');
+const lastActive = ref(Date.now());
+const markActive = () => { lastActive.value = Date.now(); };
+const logStrict = (type, detail) => { if (userId.value) logDiscipline(userId.value, type, localDateStr(), detail).catch((e) => console.error('Boss log failed:', e)); };
+const bossWatchingMsg = computed(() => {
+  if (!strictOn.value || !isToday(selectedDayIndex.value)) return null;
+  const b = watchingBlockers(selectedDayRoutine.value);
+  return b.length ? bossLine('watching', { title: b[0].title }) : null;
+});
+const runStrictBoss = (now, today) => {
+  if (!strictOn.value) { bossMsg.value = null; idleNudge.value = null; return; }
+  const done = streakProgress.value; const min = DAILY_STREAK_MIN; const deadline = disciplineSettings.value.deadline;
+  bossMsg.value = bossMessage(now, today, deadline, done, min);
+  const open = isToday(selectedDayIndex.value) ? (selectedDayRoutine.value || []).filter((t) => !t.completed && t.status !== 'pending').length : 0;
+  if (!idleNudge.value && !anyModalOpen.value && isIdle(lastActive.value, now.getTime(), open)) {
+    idleNudge.value = bossLine('idle', { open, idle: IDLE_MINUTES }, String(now.getHours()));
+    lastActive.value = now.getTime(); // next nudge after another idle stretch
+    try { if (typeof Notification !== 'undefined' && Notification.permission === 'granted' && document.hidden) new Notification('Boss: focus check', { body: idleNudge.value }); } catch (e) { /* optional */ }
+  }
+  if (bossMsg.value?.phase === 'verdict' && discState.value.lastVerdictDate !== today && !verdictScreen.value) {
+    const v = dayVerdict({ done, min, total: (selectedDayRoutine.value || []).filter((t) => t.status !== 'pending').length });
+    verdictScreen.value = { v, text: bossMsg.value.text, date: today };
+  }
+};
+const dismissVerdict = async () => {
+  const s = verdictScreen.value; verdictScreen.value = null;
+  if (!s || !userId.value) return;
+  discState.value = { ...discState.value, lastVerdictDate: s.date };
+  try {
+    await patchDisciplineState(userId.value, { lastVerdictDate: s.date, lastVerdict: { date: s.date, passed: s.v.passed, grade: s.v.grade, done: s.v.done } });
+    if (!s.v.passed) await logDiscipline(userId.value, 'verdict-failed', s.date, `${s.v.done}/${s.v.min}, grade ${s.v.grade}`);
+  } catch (e) { console.error('Verdict save failed:', e); }
+};
+const ACTIVITY_EVENTS = ['pointerdown', 'keydown', 'scroll', 'touchstart'];
+onMounted(() => ACTIVITY_EVENTS.forEach((e) => window.addEventListener(e, markActive, { passive: true })));
+onBeforeUnmount(() => ACTIVITY_EVENTS.forEach((e) => window.removeEventListener(e, markActive)));
 // ---- Levels / milestone rewards ----
 const levelUp = ref(null);
 const rewardScreen = ref(null);
@@ -1466,6 +1528,11 @@ const addNewTask = async () => {
   if (newTask.value.scheduleDate) { await submitScheduledTask(); return true; }
 
   if (isCapBlocked()) return false;
+
+  if (addsToToday()) {
+    const gate = canAddTask(selectedDayRoutine.value, newTask.value, strictOn.value);
+    if (!gate.ok) { error.value = `${gate.message} (High-priority tasks are still allowed.)`; return false; }
+  }
 
   if (selectedDayIndex.value < 0 || !days[selectedDayIndex.value]) { error.value = 'Still loading your week, try again in a moment'; return false; }
 
@@ -2621,7 +2688,7 @@ const finishShutdown = async (carry) => {
       const picked = shutdownOpenTasks.value.filter((t) => shutdownCarry.value[taskKey(t)]);
       if (picked.length) {
         const tomorrow = days[(new Date().getDay() + 1) % days.length].day;
-        await carryTasksToDay(userId.value, todayDayName(), tomorrow, picked, getTodayId());
+        await carryTasksToDay(userId.value, todayDayName(), tomorrow, strictOn.value ? picked.map(carryTask) : picked, getTodayId());
       }
     }
     try { await saveDailyPerformance(); } catch (e) { console.error(e); }
