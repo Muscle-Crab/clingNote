@@ -47,6 +47,10 @@
                 <option v-for="st in STATUSES" :key="st.value" :value="st.value">{{ st.label }}</option>
               </select>
             </div>
+            <div v-if="newTask.status === 'pending'" class="field-group">
+              <label class="field-label" for="nt-pending-on">Pending on</label>
+              <input id="nt-pending-on" type="text" v-model="newTask.pendingOn" class="field-input" placeholder="e.g. Apple review" />
+            </div>
             <div class="field-group">
               <label class="field-label" for="nt-due">Due date</label>
               <input id="nt-due" type="date" v-model="newTask.dueDate" class="field-input" />

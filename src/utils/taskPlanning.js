@@ -4,7 +4,10 @@ export const STATUSES = [
   { value: 'todo', label: 'To do' },
   { value: 'in-progress', label: 'In progress' },
   { value: 'waiting', label: 'Waiting' },
+  { value: 'pending', label: 'Pending' },
 ];
+// Pending = blocked on something external (task.pendingOn, e.g. 'Apple review'): no overdue/nag carry, no streak effect.
+export const isPending = (t) => t?.status === 'pending';
 
 export const taskKey = (t) => `${t?.createdAt || ''}|${t?.title || ''}`;
 export const isActive = (t) => !t?.completed;

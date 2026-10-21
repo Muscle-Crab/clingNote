@@ -18,7 +18,7 @@ export const DEFAULT_PREFS = { sort: 'manual', filter: 'all' };
 const SORT_VALUES = SORT_OPTIONS.map((o) => o.value);
 const FILTER_VALUES = FILTER_OPTIONS.map((o) => o.value);
 const PRIORITY_RANK = { high: 0, medium: 1, low: 2 };
-const STATUS_RANK = { 'in-progress': 0, todo: 1, waiting: 2 };
+const STATUS_RANK = { 'in-progress': 0, todo: 1, waiting: 2, pending: 3 };
 
 export const normalizePrefs = (p) => ({
   sort: SORT_VALUES.includes(p?.sort) ? p.sort : DEFAULT_PREFS.sort,
@@ -49,7 +49,7 @@ export function viewTasks(tasks, prefs) {
       return x - y;
     },
     priority: (a, b) => rank(PRIORITY_RANK, a.task?.priority, 3) - rank(PRIORITY_RANK, b.task?.priority, 3),
-    status: (a, b) => rank(STATUS_RANK, statusOf(a.task), 3) - rank(STATUS_RANK, statusOf(b.task), 3),
+    status: (a, b) => rank(STATUS_RANK, statusOf(a.task), 4) - rank(STATUS_RANK, statusOf(b.task), 4),
   }[sort];
   // stable: ties keep manual order
   return items.sort((a, b) => cmp(a, b) || a.index - b.index);

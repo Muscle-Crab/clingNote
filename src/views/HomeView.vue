@@ -262,6 +262,7 @@ const startCountdownWatcher = () => {
 
       if (
           task.timerActive &&
+          task.status !== 'pending' && // pending tasks never auto-carry as overdue
           task.timerEndTime &&
           new Date(task.timerEndTime).getTime() <= Date.now()
       ) {
@@ -692,7 +693,7 @@ const selectedDayIndex = ref(-1);
 // Fresh Add-task form. Repeat defaults to "Just once" (one-time); Daily/Weekly are opt-in.
 const blankTask = () => ({
   title: '', time: '', priority: 'low', labels: [], notes: '', selectedDays: [], position: 0, type: 'one-time',
-  dueDate: '', startTime: '', estimateMin: '', nextAction: '', status: 'todo',
+  dueDate: '', startTime: '', estimateMin: '', nextAction: '', status: 'todo', pendingOn: '',
   scheduleDate: '', scheduleTime: '',
   reminder: { datetime: '', repeat: '' },
 });
@@ -1247,7 +1248,7 @@ const submitScheduledTask = async () => {
   const labels = typeof nt.labels === 'string' ? nt.labels.split(',').map(l => l.trim()).filter(Boolean) : (nt.labels || []);
   const entry = buildScheduledEntry({
     title: nt.title, important: false, time: '', priority: nt.priority, labels, notes: nt.notes, userId: userId.value,
-    status: nt.status || 'todo', dueDate: nt.dueDate || '', startTime: nt.startTime || '',
+    status: nt.status || 'todo', pendingOn: nt.status === 'pending' ? (nt.pendingOn || '').trim() : '', dueDate: nt.dueDate || '', startTime: nt.startTime || '',
     estimateMin: Number(nt.estimateMin) || 0, nextAction: (nt.nextAction || '').trim(),
   }, nt.scheduleDate, nt.scheduleTime);
   if (!entry) { error.value = 'Could not schedule this task.'; return; }
@@ -1340,6 +1341,7 @@ const addNewTask = async () => {
     type: newTask.value.type,
     createdAt: new Date().toISOString(),
     status: newTask.value.status || 'todo',
+    pendingOn: newTask.value.status === 'pending' ? (newTask.value.pendingOn || '').trim() : '',
     dueDate: newTask.value.dueDate || '',
     startTime: newTask.value.startTime || '',
     estimateMin: Number(newTask.value.estimateMin) || 0,
@@ -2443,7 +2445,7 @@ const openShutdown = async () => {
   try {
     const tasks = userId.value ? await loadDayTasks(userId.value, todayDayName()) : [];
     shutdownDone.value = tasks.filter((t) => t.completed);
-    shutdownOpenTasks.value = tasks.filter((t) => !t.completed);
+    shutdownOpenTasks.value = tasks.filter((t) => !t.completed && t.status !== 'pending'); // pending: no carry/nag
     shutdownCarry.value = Object.fromEntries(shutdownOpenTasks.value.map((t) => [taskKey(t), true]));
   } catch (e) { console.error('Shutdown load failed:', e); }
 };

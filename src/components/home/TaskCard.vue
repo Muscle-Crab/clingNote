@@ -54,15 +54,16 @@
                     <div class="task-meta-row">
 
                       <span v-if="task.completed && isTodayTab" class="task-status task-status--done">Complete</span>
+                      <span v-else-if="task.status === 'pending'" class="task-status task-status--pending" :title="task.pendingOn ? 'Pending on ' + task.pendingOn : 'Pending'">Pending</span>
                       <button @click="$emit('toggle-important')" class="importance-btn" :title="task.important ? 'Important' : 'Mark important'" :aria-label="task.important ? 'Unmark important' : 'Mark important'" :aria-pressed="task.important ? 'true' : 'false'">
                         <i :class="task.important ? 'fas fa-fire task-fire--on' : 'fas fa-fire task-fire--off'"></i>
                       </button>
                     </div>
 
                     <!-- Planning chips -->
-                    <div v-if="estimateOf(task) || task.startTime || task.dueDate || (task.priority && task.priority !== 'low') || (task.status && task.status !== 'todo')" class="task-chips">
+                    <div v-if="estimateOf(task) || task.startTime || task.dueDate || (task.priority && task.priority !== 'low') || (task.status && task.status !== 'todo' && task.status !== 'pending')" class="task-chips">
                       <span v-if="task.priority && task.priority !== 'low'" class="chip" :class="'chip--' + task.priority">{{ task.priority }}</span>
-                      <span v-if="task.status && task.status !== 'todo'" class="chip">{{ task.status }}</span>
+                      <span v-if="task.status && task.status !== 'todo' && task.status !== 'pending'" class="chip">{{ task.status }}</span>
                       <span v-if="task.dueDate" class="chip">Due {{ task.dueDate }}</span>
                       <span v-if="estimateOf(task)" class="chip">⏱ {{ formatMinutes(estimateOf(task)) }}</span>
                       <span v-if="task.startTime" class="chip">🕒 {{ formatClock(toMinutes(task.startTime)) }}<template v-if="estimateOf(task)"> – {{ formatClock(toMinutes(task.startTime) + estimateOf(task)) }}</template></span>
@@ -70,6 +71,7 @@
                     <div v-if="subtaskProgress(task).total" class="task-chips">
                       <span class="chip chip--subtasks" :class="{ 'chip--subtasks-done': subtaskProgress(task).done === subtaskProgress(task).total }" title="Subtasks done">☑ {{ subtaskProgress(task).done }}/{{ subtaskProgress(task).total }}</span>
                     </div>
+                    <div v-if="task.status === 'pending' && task.pendingOn" class="task-next task-pending-on">⏳ Pending on {{ task.pendingOn }}</div>
                     <div v-if="task.nextAction" class="task-next">→ {{ task.nextAction }}</div>
                     <div v-if="task.notes && !expanded" class="task-note-preview">📝 {{ task.notes.length > 60 ? task.notes.slice(0, 60) + '…' : task.notes }}</div>
 
@@ -89,6 +91,8 @@
                           <input type="time" class="field-input" :value="task.startTime || ''" @change="$emit('patch', { startTime: $event.target.value })" /></label>
                         <label class="mini-field"><span>Estimate (min)</span>
                           <input type="number" min="0" step="5" class="field-input" :value="task.estimateMin || ''" @change="$emit('patch', { estimateMin: Number($event.target.value) || 0 })" /></label>
+                        <label v-if="task.status === 'pending'" class="mini-field"><span>Pending on</span>
+                          <input type="text" class="field-input" :value="task.pendingOn || ''" placeholder="e.g. Apple review" @change="$emit('patch', { pendingOn: $event.target.value.trim() })" /></label>
                         <label class="mini-field"><span>Next action</span>
                           <input type="text" class="field-input" :value="task.nextAction || ''" @change="$emit('patch', { nextAction: $event.target.value.trim() })" /></label>
                       </div>
