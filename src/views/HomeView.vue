@@ -43,7 +43,7 @@
 
       </section>
 
-      <StreakHeader :streak="streak" :best-streak="bestStreak" :streak-status="streakStatus" :motivational-message="motivationalMessage" :points-accumulated="pointsAccumulated"
+      <StreakHeader :streak="streak" :best-streak="bestStreak" :streak-status="streakStatus" :streak-progress="streakProgress" :streak-min="DAILY_STREAK_MIN" :motivational-message="motivationalMessage" :points-accumulated="pointsAccumulated"
                     :total-points="totalPoints" :day-session="daySession" @shutdown="openShutdown" @end-day="endDay" />
 
       <TimeStatsBar v-if="isViewingToday" :stats="timeStats" />
@@ -161,7 +161,7 @@ import { viewTasks, canReorder, normalizePrefs, visibleCount, shouldHandleShortc
 import { ACTIVE_CAP, taskKey, activeCount, loadSummary, buildSchedule } from '@/utils/taskPlanning';
 import { getTodayId, formatSessionTime, getCurrentDate, formatTime, getTodayDate, isToday } from '@/utils/dateTime';
 import { badges } from '@/utils/gamification';
-import { recordCompletion, evaluateStreak, localDateStr, ALLOWED_GAP_DAYS } from '@/utils/streak';
+import { applyTaskToggle, evaluateStreak, localDateStr, ALLOWED_GAP_DAYS, DAILY_STREAK_MIN } from '@/utils/streak';
 import { scheduleNotification, sendNotificationToPlayer } from '@/composables/useNotifications';
 import { speak } from '@/composables/useSpeech';
 import { completionPercentage, computeTimeStats, daysLeftInYearFrom, heroTitleFor } from '@/utils/dayStats';
@@ -915,7 +915,6 @@ const toggleTaskCompletion = async (index) => {
   startSpinning(index);
   if (task.completed) {
     markUserCompletion();
-    if (isToday(selectedDayIndex.value) && task.status !== 'pending') updateStreakOnCompletion();
     playSound("complete");
     const completedNow = new Date().toISOString();
 
@@ -936,6 +935,8 @@ const toggleTaskCompletion = async (index) => {
     task.timerActive = false;
     userCredits.value -= 10;
   }
+
+  if (isToday(selectedDayIndex.value)) updateStreakOnCompletion(task); // both directions; pending ignored in applyTaskToggle
 
   // Remove one-time tasks from the UI immediately
   if (task.type === "one-time") {
@@ -1142,18 +1143,19 @@ const checkAllTasksCompleted = async () => {
 // A day counts once >=1 task is completed (local date). See src/utils/streak.js.
 const streakGap = () => Number(userSettingsStreakGap.value) || ALLOWED_GAP_DAYS;
 const applyStreakState = (st) => {
-  streak.value = st.streak; bestStreak.value = st.bestStreak; lastCompletionDate.value = st.lastCompletionDate;
-  streakStatus.value = evaluateStreak(st, localDateStr(), streakGap()).status;
+  const ev = evaluateStreak(st, localDateStr(), streakGap());
+  streak.value = ev.streak; bestStreak.value = ev.bestStreak; lastCompletionDate.value = ev.lastCompletionDate;
+  streakStatus.value = ev.status; streakProgress.value = ev.progress;
   try { localStorage.setItem(`streakCache_${userId.value}`, JSON.stringify(st)); } catch (e) { /* cache only */ }
 };
-const updateStreakOnCompletion = async () => {
-  if (!userId.value) return;
+// Called when a task on today's tab is (un)completed; counts distinct non-pending tasks toward DAILY_STREAK_MIN.
+const updateStreakOnCompletion = async (task) => {
+  if (!userId.value || !task) return;
   const streakDocRef = doc(db, 'streaks', userId.value);
   try {
     const snap = await getDoc(streakDocRef);
     const prev = snap.exists() ? snap.data() : null;
-    const next = recordCompletion(prev, localDateStr(), streakGap());
-    if (prev && prev.lastCompletionDate === next.lastCompletionDate && prev.streak === next.streak && prev.bestStreak === next.bestStreak) { applyStreakState(next); return; }
+    const next = applyTaskToggle(prev, localDateStr(), { key: taskKey(task), completed: !!task.completed, pending: task.status === 'pending' }, streakGap());
     await setDoc(streakDocRef, { ...next, updatedAt: serverTimestamp() }, { merge: true });
     applyStreakState(next);
     checkForBadges();
@@ -1641,6 +1643,7 @@ watch(wontDoTasks, () => {
 const streak = ref(0);
 const lastCompletionDate = ref(null);
 const bestStreak = ref(0);
+const streakProgress = ref(0); // distinct non-pending tasks completed today
 const streakStatus = ref('none'); // none | done | at-risk | broken
 const userSettingsStreakGap = ref(ALLOWED_GAP_DAYS); // allowed days between counted days (1 = no skips)
 const unlockedBadges = ref([]);
@@ -1690,7 +1693,7 @@ const checkStreakOnCompletion = async () => {
     const data = snap.data();
     unlockedBadges.value = data.unlockedBadges || [];
     const ev = evaluateStreak(data, localDateStr(), streakGap());
-    const st = { streak: ev.streak, bestStreak: ev.bestStreak, lastCompletionDate: ev.lastCompletionDate };
+    const { status, progress, min, ...st } = ev; // eslint-disable-line no-unused-vars
     if (ev.status === 'broken' && data.streak) await setDoc(streakDocRef, { ...st, updatedAt: serverTimestamp() }, { merge: true });
     else if ((data.bestStreak || 0) < ev.bestStreak) await setDoc(streakDocRef, { bestStreak: ev.bestStreak }, { merge: true });
     applyStreakState(st);
@@ -2191,7 +2194,7 @@ const saveDailyPerformance = async () => {
   const completedCount = selectedDayRoutine.value.filter(task => task.completed).length;
   const totalCount = selectedDayRoutine.value.length + wontDoTasks.value.length;
 
-  const streakGained = completedCount > 0; // a day counts with >=1 completed task
+  const streakGained = streakProgress.value >= DAILY_STREAK_MIN; // distinct non-pending tasks completed today (one-time tasks leave the list once done)
 
   await setDoc(docRef, {
     userId: userId.value,

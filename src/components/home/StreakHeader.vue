@@ -10,8 +10,8 @@
         </div>
         <div class="streak-info">
           <p class="streak-count">🔥 <span>{{ streak }}</span> day streak</p>
-          <p v-if="streak === 0" class="streak-sub streak-none">Start your streak today<span v-if="bestStreak"> · Best {{ bestStreak }}</span></p>
-          <p v-else-if="streakStatus === 'at-risk'" class="streak-sub streak-at-risk">⚠️ Streak at risk — complete a task today · Best {{ bestStreak }}</p>
+          <p v-if="streakStatus === 'at-risk'" class="streak-sub streak-at-risk">⚠️ {{ streak ? 'Streak at risk' : 'Building today' }} — {{ streakProgress }}/{{ streakMin }} today<span v-if="bestStreak"> · Best {{ bestStreak }}</span></p>
+          <p v-else-if="streak === 0" class="streak-sub streak-none">Complete {{ streakMin }} tasks to start your streak<span v-if="bestStreak"> · Best {{ bestStreak }}</span></p>
           <p v-else class="streak-sub">{{ motivationalMessage }}<span v-if="bestStreak"> · Best {{ bestStreak }}</span></p>
         </div>
       </div>
@@ -69,6 +69,8 @@ defineProps({
   streak: { type: Number, default: 0 },
   bestStreak: { type: Number, default: 0 },
   streakStatus: { type: String, default: 'none' },
+  streakProgress: { type: Number, default: 0 },
+  streakMin: { type: Number, default: 5 },
   motivationalMessage: { type: String, default: '' },
   pointsAccumulated: { type: Number, default: 0 },
   totalPoints: { type: Number, default: 0 },
