@@ -192,6 +192,7 @@ import MorningReport from '@/components/home/MorningReport.vue';
 import { buildRecap, reportDue, prevDay } from '@/utils/dailyReport';
 import { monthKey, prevMonthKey } from '@/utils/ranking';
 import { applyTaskToggle, evaluateStreak, localDateStr, dayDiff, ALLOWED_GAP_DAYS, DAILY_STREAK_MIN } from '@/utils/streak';
+import { askAi } from '@/composables/useAi';
 import { scheduleNotification, sendNotificationToPlayer, linkPushUser } from '@/composables/useNotifications';
 import { speak } from '@/composables/useSpeech';
 import { completionPercentage, computeTimeStats, daysLeftInYearFrom, heroTitleFor } from '@/utils/dayStats';
@@ -233,7 +234,6 @@ import draggable from "vuedraggable";
 import {db} from '@/firebaseConfig'; // Assuming you have imported the Firebase setup file and exported the db instance
 import { doc, setDoc, serverTimestamp, getDoc, updateDoc,getFirestore} from 'firebase/firestore';
 const modalOpen = ref(false);
-import axios from 'axios';
 import { deleteObject } from "firebase/storage";
 
 const currentTime = ref([]);
@@ -1631,18 +1631,10 @@ const dismissReportPopup = () => {
   showDailyReportPopup.value = false;
 };
 
+// Credits are paid currency: only the server (Stripe webhook / AI function) changes them now.
+// Task-completion +10/-10 stays a local display value and is no longer written to users/{uid}.
 const updateCreditsInFirestore = async () => {
-  const userDocRef = doc(db, 'users', userId.value);
-
-  try {
-    await updateDoc(userDocRef, {
-      credits: userCredits.value,
-      updatedAt: serverTimestamp(),
-    });
-    console.log('Credits updated in Firestore');
-  } catch (error) {
-    console.error('Error updating credits:', error);
-  }
+  /* intentionally no client write (blocked by firestore.rules.tight) */
 };
 
 watch(userCredits, updateCreditsInFirestore);
@@ -2471,7 +2463,6 @@ const generateWorkoutRoutine = async () => {
   } else {
     equipmentDetails = 'Full gym equipment';
   }
-  const OPENAI_API_KEY = process.env.VUE_APP_OPENAI_API_KEY;
 
   const prompt = `Create a ${workoutPreferences.daysPerWeek}-day workout routine for someone who wants to train with: ${equipmentDetails}.
 Goal: ${workoutPreferences.goal}, Duration: ${workoutPreferences.duration} minutes, Fitness Level: ${workoutPreferences.fitnessLevel}, Focus: ${workoutPreferences.focusArea}, Intensity: ${workoutPreferences.intensity}, Style: ${workoutPreferences.style || 'any'}.
@@ -2483,18 +2474,8 @@ Return in JSON format like:
 }`;
 
   try {
-    const response = await axios.post("https://api.openai.com/v1/chat/completions", {
-      model: "gpt-4",
-      messages: [{role: "user", content: prompt}],
-      temperature: 0.7
-    }, {
-      headers: {
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
-        "Content-Type": "application/json"
-      }
-    });
-
-    const result = JSON.parse(response.data.choices[0].message.content);
+    const response = await askAi('workout', { ...workoutPreferences }); // prompt is built server-side
+    const result = JSON.parse(response.content);
     applyGeneratedRoutine(result);
   } catch (err) {
     console.error("AI Error:", err);

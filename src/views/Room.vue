@@ -436,7 +436,7 @@ watch(audioRef, (newVal) => {
 // Fetch users collection from Firestore
 const fetchUsers = async () => {
   try {
-    const querySnapshot = await getDocs(collection(db, 'users'));
+    const querySnapshot = await getDocs(collection(db, 'publicProfiles'));
     users.value = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   } catch (error) {
     console.error('Error fetching users: ', error);
@@ -820,9 +820,9 @@ const fetchRoomData = async () => {
     });
 
     // Fetch all users
-    const usersSnapshot = await getDocs(collection(db, 'users'));
+    const usersSnapshot = await getDocs(collection(db, 'publicProfiles'));
     usersSnapshot.forEach(doc => {
-      selectedRoom.value.participants.push({ id: doc.id, ...doc.data() });
+      selectedRoom.value.participants.push({ id: doc.id, ...doc.data(), avatar: doc.data().avatarURL });
     });
 
     loading.value = false;

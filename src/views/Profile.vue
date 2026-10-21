@@ -16,7 +16,7 @@
         <p class="text-sm font-medium text-gray-600 mt-1">{{ userData.email }}</p>
         <p class="text-sm font-medium text-gray-600">{{ userData.gender }}</p>
         <p class="text-sm font-medium text-gray-600">{{ formatDOB(userData.dob) }}</p>
-        <button @click="editMode = true" class="mt-4 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+        <button v-if="isOwn" @click="editMode = true" class="mt-4 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
           Edit
         </button>
       </div>
@@ -46,6 +46,7 @@
 </template>
 
 <script setup>
+import { syncPublicProfile } from '@/composables/usePublicProfile';
 import { ref, onMounted } from 'vue';
 import { getFirestore, doc, getDoc, updateDoc } from 'firebase/firestore';
 import { useRouter } from 'vue-router';
@@ -55,11 +56,15 @@ const route = useRouter();
 const userData = ref(null);
 const editedUserData = ref(null);
 const editMode = ref(false);
+const isOwn = ref(false);
 
 // Fetch user data from Firestore
 const fetchUserData = async () => {
   try {
-    const docRef = doc(db, 'users', route.currentRoute.value.params.userId);
+    const targetId = route.currentRoute.value.params.userId;
+    const own = !!auth.currentUser && auth.currentUser.uid === targetId;
+    isOwn.value = own;
+    const docRef = doc(db, own ? 'users' : 'publicProfiles', targetId); // other users: public fields only
     const docSnap = await getDoc(docRef);
 
     if (docSnap.exists()) {
@@ -93,6 +98,7 @@ const saveUserData = async () => {
     // scheduledTasks is owned by useScheduledTasks; never write back a stale copy
     const { scheduledTasks: _omit, ...editable } = editedUserData.value;
     await updateDoc(docRef, editable);
+    syncPublicProfile(route.currentRoute.value.params.userId, editable).catch(() => {});
     userData.value = { ...editedUserData.value };
     editMode.value = false;
   } catch (error) {

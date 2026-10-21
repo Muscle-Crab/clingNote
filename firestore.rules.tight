@@ -1,0 +1,167 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // TIGHT ruleset (strict-boss branch). Publish this file.
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Helper function to check if user owns the document
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && request.auth.token.admin == true;
+    }
+
+    // Fields only the server (Stripe webhook / AI function, admin SDK) may change
+    function billingKeys() {
+      return ['hasPaid', 'premium', 'credits', 'subscription', 'subscriptionId', 'subscriptionStatus', 'stripeCustomerId', 'admin', 'role'];
+    }
+
+    // Users collection - private to the owner. Other users' names/avatars come from /publicProfiles.
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      // Signup may set the starter 15 credits, nothing else billing-related
+      allow create: if isOwner(userId)
+        && request.resource.data.keys().hasAny(['hasPaid', 'premium', 'subscription', 'subscriptionId', 'subscriptionStatus', 'stripeCustomerId', 'admin', 'role']) == false
+        && (!('credits' in request.resource.data) || request.resource.data.credits == 15);
+      allow update: if isOwner(userId)
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(billingKeys());
+      allow delete: if isOwner(userId) || isAdmin();
+    }
+
+    // Public profile (name, avatar, pickup attendance) readable by signed-in users
+    match /publicProfiles/{userId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isOwner(userId)
+        && request.resource.data.keys().hasOnly(['name', 'avatarURL', 'attending', 'updatedAt']);
+      // Pickup board: any signed-in user may toggle attendance only
+      allow update: if isAuthenticated()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['attending']);
+      allow delete: if isOwner(userId) || isAdmin();
+    }
+
+    // Posts collection
+    match /posts/{postId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update: if isAuthenticated() && (
+        (resource.data.userId == request.auth.uid && request.resource.data.userId == request.auth.uid)
+        || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['comments', 'reactions', 'readComments']));
+      allow delete: if isAuthenticated() && request.auth.uid == resource.data.userId;
+    }
+
+    // Rooms collection - owner (user_id) edits/approves/deletes; others may only append a join request
+    match /rooms/{roomId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.resource.data.user_id == request.auth.uid
+        && request.resource.data.approvedUsers == [request.auth.uid];
+      allow update: if isAuthenticated() && (
+        (resource.data.user_id == request.auth.uid && request.resource.data.user_id == request.auth.uid)
+        || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['requests'])
+            && request.resource.data.requests.size() == resource.data.requests.size() + 1
+            && !(request.auth.uid in resource.data.approvedUsers)));
+      allow delete: if isAuthenticated() && resource.data.user_id == request.auth.uid;
+    }
+
+    // Tasks collection - unused by the app
+    match /tasks/{taskId} {
+      allow read, write: if false;
+    }
+
+    // Weekly Routines - routineId format: {userId}_{dayName}
+    match /weeklyRoutines/{routineId} {
+      allow read, write: if isAuthenticated() && request.auth.uid == routineId.split('_')[0];
+    }
+
+    // Captains collection
+    match /captains/{captainId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Game collection (incl. game/turnState)
+    match /game/{gameId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Streaks - doc id is the uid
+    match /streaks/{userId} {
+      allow read, write: if isOwner(userId);
+    }
+
+    // Won't Do Tasks - users can only access their own
+    match /wontDoTasks/{userId_day} {
+      allow read, write: if isAuthenticated() && 
+        request.auth.uid == userId_day.split("_")[0];
+    }
+    
+    // Daily Reports - users can only access their own
+    match /dailyReports/{reportId} {
+      allow read, write: if isAuthenticated() &&
+        request.auth.uid == reportId.split('_')[0];
+    }
+    
+    // NoFap subcollection
+    match /users/{userId}/nofap/{docId} {
+      allow read, write: if isOwner(userId);
+    }
+    
+    // Meals collection
+    match /meals/{mealId} {
+      allow read, update, delete: if isAuthenticated() && request.auth.uid == resource.data.userId;
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+    }
+    
+    // User Settings
+    match /userSettings/{userId} {
+      allow read, write: if isOwner(userId);
+    }
+    
+    // ===== NEW GAMIFICATION COLLECTIONS =====
+    
+    // User Ranks - users can read/write their own rank data
+    match /userRanks/{userId} {
+      allow read, write: if isOwner(userId);
+    }
+    
+    // Badges/Achievements - users can read/write their own badges
+    match /badges/{userId} {
+      allow read, write: if isOwner(userId);
+    }
+    
+    // ===== ADDED (streak-fix release): paths not covered by existing rules =====
+
+    // Monthly ranking: public leaderboard summary. Authed users read opted-in entries (+ always their own); owner writes.
+    match /monthlyStats/{month}/users/{uid} {
+      allow read: if isAuthenticated() && (resource.data.optIn == true || request.auth.uid == uid);
+      allow write: if isOwner(uid) && month.matches('^[0-9]{4}-[0-9]{2}$');
+    }
+
+    // Monthly ranking: per-user private detail (task keys, point adjustments)
+    match /monthlyStats/{month}/private/{uid} {
+      allow read, write: if isOwner(uid);
+    }
+
+    // Discipline Mode state (deadline settlement, log, boss, breaks, XP, theme, freezes)
+    match /discipline/{uid} {
+      allow read, write: if isOwner(uid);
+    }
+
+    // Calendar feed tokens: owner creates/deletes own token; only the server (admin SDK) reads them
+    match /icsTokens/{token} {
+      allow create: if isAuthenticated() && token.matches('^[a-f0-9]{48}$')
+                    && request.resource.data.uid == request.auth.uid;
+      allow delete: if isAuthenticated() && resource.data.uid == request.auth.uid;
+      allow read, update: if false;
+    }
+
+    // Default deny all other collections
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -128,6 +128,7 @@
 </template>
 
 <script setup>
+import { syncPublicProfile } from '@/composables/usePublicProfile';
 import { ref, onMounted, onBeforeUnmount, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { auth, db } from '@/firebaseConfig';
@@ -185,6 +186,7 @@ onMounted(() => {
         const userDocSnap = await getDoc(userDocRef);
         if (userDocSnap.exists()) {
           avatarURL.value = userDocSnap.data().avatarURL || null;
+          syncPublicProfile(user.uid, userDocSnap.data()).catch(() => {}); // others only ever read publicProfiles
         } else {
           console.warn("No user document found in Firestore.");
         }
