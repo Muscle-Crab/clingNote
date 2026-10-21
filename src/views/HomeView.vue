@@ -63,6 +63,8 @@
       <DramaOverlay v-if="rewardScreen && !levelUp" variant="reward" :title="`${rewardScreen.days}-day streak!`" button="Nice"
                     :subtitle="`Reward unlocked: ${rewardScreen.label}`" @close="rewardScreen = null" />
 
+      <MorningReport v-if="morningRecap && isViewingToday" :recap="morningRecap" @close="morningRecap = null" />
+
       <TimeStatsBar v-if="isViewingToday" :stats="timeStats" />
 
       <WorkoutModal v-if="showWorkoutModal" :preferences="workoutPreferences" @close="closeWorkoutModal" @generate="generateWorkoutRoutine" />
@@ -183,6 +185,8 @@ import { loadDisciplineSettings, settleDeadlines, clearLossPending, loadDiscipli
 import { levelFor, rewardsFor } from '@/utils/rewards';
 import { defaultSettings as defaultDiscipline, warningFor, isPastDeadline, streakGate, BOSS_BONUS } from '@/utils/discipline';
 import DramaOverlay from '@/components/discipline/DramaOverlay.vue';
+import MorningReport from '@/components/home/MorningReport.vue';
+import { buildRecap, reportDue, prevDay } from '@/utils/dailyReport';
 import { monthKey, prevMonthKey } from '@/utils/ranking';
 import { applyTaskToggle, evaluateStreak, localDateStr, dayDiff, ALLOWED_GAP_DAYS, DAILY_STREAK_MIN } from '@/utils/streak';
 import { scheduleNotification, sendNotificationToPlayer, linkPushUser } from '@/composables/useNotifications';
@@ -1247,6 +1251,21 @@ const checkProgression = (st) => {
 };
 const playerLevel = ref(levelFor(0));
 const dismissLoss = async () => { lossScreen.value = null; try { await clearLossPending(userId.value); } catch (e) { /* retry next open */ } };
+// ---- Morning report: first open after 8 AM local, once per day ----
+const morningRecap = ref(null);
+const maybeShowMorningReport = async () => {
+  if (!userId.value) return;
+  const now = new Date(); const today = localDateStr(now);
+  const k = `morningReport_${userId.value}`;
+  try { if (!reportDue(today, now.getHours(), localStorage.getItem(k))) return; } catch (e) { return; }
+  try {
+    const yName = days[new Date(`${prevDay(today)}T12:00:00`).getDay()].day;
+    const tName = days[now.getDay()].day;
+    const [sd, y, t] = await Promise.all([getDoc(doc(db, 'streaks', userId.value)), loadDayTasks(userId.value, yName), loadDayTasks(userId.value, tName)]);
+    morningRecap.value = buildRecap({ today, streakDoc: sd.exists() ? sd.data() : {}, yesterdayTasks: y, todayTasks: t, min: DAILY_STREAK_MIN, now });
+    localStorage.setItem(k, today);
+  } catch (e) { console.error('Morning report failed:', e); }
+};
 let disciplineTimer = null;
 const startDiscipline = async () => {
   try { disciplineSettings.value = await loadDisciplineSettings(userId.value); } catch (e) { return; }
@@ -1312,6 +1331,7 @@ onAuthStateChanged(auth, async(user) => {
     // Fetch tasks and streak after user ID is set
     fetchStreakOnLoad(); // Ensure this runs after userId is set
     startDiscipline();
+    maybeShowMorningReport();
     awardFinishedMonth(user.uid, prevMonthKey(monthKey(localDateStr()))).catch(() => {}); // month-end badges for last month
 
     const todayIndex = new Date().getDay();
@@ -2544,6 +2564,7 @@ const toggleExpanded = (task) => {
   expandedKey.value = expandedKey.value === taskKey(task) ? null : taskKey(task);
 };
 const patchTask = async (index, task, patch) => {
+  if (patch.status === 'pending' && !task.pendingSince) patch = { ...patch, pendingSince: new Date().toISOString() }; // wait time for the morning report
   try {
     const before = { createdAt: task.createdAt, title: task.title }; // stored identity before this edit
     const dayName = days[selectedDayIndex.value].day;

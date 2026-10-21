@@ -13,6 +13,12 @@
       <p v-if="saved" class="muted">Saved ✓</p>
     </section>
     <section class="disc-card">
+      <h2 class="disc-h">🌅 Morning report</h2>
+      <p class="muted">Every day after 8 AM the app shows yesterday's recap when you first open it. Turn this on to also get it as a push notification.</p>
+      <label class="disc-row"><input type="checkbox" :checked="morningPush" @change="setMorningPush($event.target.checked)" /> Push the report at 8 AM ({{ tz }})</label>
+    </section>
+
+    <section class="disc-card">
       <h2 class="disc-h">👹 Evening boss</h2>
       <p class="muted">Open a task on today's list and tap “Make this the evening boss”. Subtasks drain its HP. With Discipline Mode on, your day won't count toward the streak until the boss is cleared. Clearing it: +{{ BOSS_BONUS }} pts.</p>
     </section>
@@ -70,7 +76,7 @@ import { DAILY_STREAK_MIN } from '@/utils/streak';
 import { MISSED_DEADLINE_PENALTY, BOSS_BONUS, BREAK_PER_TASK, BREAK_ALL_DONE, defaultSettings } from '@/utils/discipline';
 import { loadDisciplineSettings, saveDisciplineSettings, loadDisciplineState, patchDisciplineState } from '@/composables/useDiscipline';
 import { levelFor, rewardsFor, MILESTONES } from '@/utils/rewards';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { shareCardData } from '@/utils/rewards';
 import { tierFor, monthKey } from '@/utils/ranking';
 import { localDateStr } from '@/utils/streak';
@@ -125,6 +131,7 @@ onMounted(() => onAuthStateChanged(auth, async (u) => {
   dstate.value = await loadDisciplineState(uid.value);
   const sd = await getDoc(doc(db, 'streaks', uid.value));
   best.value = sd.exists() ? (sd.data().bestStreak || sd.data().streak || 0) : 0;
+  try { const us = await getDoc(doc(db, 'userSettings', uid.value)); morningPush.value = !!(us.exists() && us.data().morningReport?.enabled); } catch (e) { /* ignore */ }
   /* phase-load */
 }));
 </script>

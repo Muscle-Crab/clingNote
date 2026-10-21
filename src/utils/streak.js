@@ -24,6 +24,7 @@ const norm = (s) => ({
   dayDone: Array.isArray(s?.dayDone) ? [...new Set(s.dayDone)] : [],
   prev: s?.prev || null,
   counted: Array.isArray(s?.counted) ? s.counted.slice(-62) : [], // recent counted local dates
+  lastDay: s?.lastDay || null, // { date, count } of the previous active day
 });
 export const COUNTED_KEEP = 62;
 const addCounted = (list, d) => [...list.filter((x) => x !== d), d].slice(-COUNTED_KEEP);
@@ -48,7 +49,8 @@ export const applyTaskToggle = (state, today, { key, completed, pending = false,
   if (pending || !key) return s;
   const done = new Set(s.dayDate === today ? s.dayDone : []);
   if (completed) done.add(key); else done.delete(key);
-  s = { ...s, dayDate: today, dayDone: [...done], prev: s.dayDate === today ? s.prev : null };
+  const lastDay = s.dayDate && s.dayDate !== today ? { date: s.dayDate, count: s.dayDone.length } : (state?.lastDay || null); // for the morning report
+  s = { ...s, dayDate: today, dayDone: [...done], prev: s.dayDate === today ? s.prev : null, lastDay };
   if (done.size >= min && gate) return recordCompletion(s, today, gap);
   if (s.lastCompletionDate === today && s.prev) return { ...s, ...s.prev, prev: null, counted: s.counted.filter((d) => d !== today) }; // undo today
   return s;

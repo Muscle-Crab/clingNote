@@ -14,6 +14,10 @@ node_bundler = "esbuild"
 included_files = ["netlify/functions/serviceAccountKey.json"]
 external_node_modules = ["stripe", "firebase-admin", "@opentelemetry/api"]
 
+[functions."daily-report"]
+schedule = "@hourly"
+external_node_modules = ["firebase-admin"]
+
 [functions."send-notification"]
 external_node_modules = ["firebase-admin"]
 
