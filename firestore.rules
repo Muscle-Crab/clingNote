@@ -22,6 +22,12 @@ service cloud.firestore {
     match /users/{uid} {
       allow read, write: if request.auth != null && request.auth.uid == uid;
     }
+    // Calendar feed tokens: owner may create/delete their own; nobody reads them from the client (server uses admin SDK)
+    match /icsTokens/{token} {
+      allow create: if request.auth != null && request.resource.data.uid == request.auth.uid && token.matches('^[a-f0-9]{48}$');
+      allow delete: if request.auth != null && resource.data.uid == request.auth.uid;
+      allow read, update: if false;
+    }
     // Settings (incl. discipline toggle/deadline): owner-only
     match /userSettings/{uid} {
       allow read, write: if request.auth != null && request.auth.uid == uid;

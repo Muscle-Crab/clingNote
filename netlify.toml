@@ -18,6 +18,9 @@ external_node_modules = ["stripe", "firebase-admin", "@opentelemetry/api"]
 schedule = "@hourly"
 external_node_modules = ["firebase-admin"]
 
+[functions."calendar"]
+external_node_modules = ["firebase-admin"]
+
 [functions."send-notification"]
 external_node_modules = ["firebase-admin"]
 

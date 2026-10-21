@@ -8,6 +8,22 @@
     <p v-if="error" class="up-error" role="alert">{{ error }}</p>
     <p v-if="loading" class="muted">Loading…</p>
 
+    <section class="up-card">
+      <h2 class="up-h">📆 Calendar feed</h2>
+      <p class="muted">Subscribe in Apple Calendar or Google Calendar to see scheduled, repeating and due-dated tasks. Read-only, refreshes about hourly. Anyone with the link can see your task titles, so keep it private; rotate it if it leaks.</p>
+      <template v-if="feed">
+        <input class="up-input up-feed" readonly :value="feed.https" aria-label="Calendar feed URL" @focus="$event.target.select()" />
+        <div class="up-actions">
+          <a :href="feed.webcal" class="up-btn up-btn--primary">Subscribe (Apple)</a>
+          <button type="button" class="up-btn" @click="copyFeed">{{ copied ? 'Copied ✓' : 'Copy URL' }}</button>
+          <button type="button" class="up-btn" @click="rotate">New link</button>
+          <button type="button" class="up-btn up-btn--danger" @click="revoke">Revoke</button>
+        </div>
+        <p class="muted">Google Calendar: Other calendars → + → From URL → paste the link.</p>
+      </template>
+      <button v-else type="button" class="up-btn up-btn--primary" :disabled="feedBusy" @click="rotate">Create private feed link</button>
+    </section>
+
     <section v-if="templates.length" class="up-card">
       <h2 class="up-h">🔁 Repeating</h2>
       <div v-for="t in templates" :key="t.id" class="up-row">
@@ -59,8 +75,15 @@ import { auth } from '@/firebaseConfig';
 import { localDateStr } from '@/utils/streak';
 import { futureOf, groupByDate, formatScheduledDate, isTemplate, describeRecurrence, nextOccurrences, sundayOf, visibleFrom, removeScheduled, rescheduleEntry, WEEKDAYS, isValidDate } from '@/utils/scheduling';
 import { loadScheduled, mutateScheduled } from '@/composables/useScheduledTasks';
+import { loadFeedToken, rotateFeedToken, revokeFeedToken, feedUrls } from '@/composables/useCalendarFeed';
 
 const uid = ref(null);
+const feed = ref(null);
+const feedBusy = ref(false);
+const copied = ref(false);
+const rotate = async () => { feedBusy.value = true; try { feed.value = feedUrls(await rotateFeedToken(uid.value)); } catch (e) { console.error(e); error.value = 'Could not create the feed link (rules?).'; } feedBusy.value = false; };
+const revoke = async () => { if (!confirm('Revoke the calendar link? Subscribed calendars will stop updating.')) return; try { await revokeFeedToken(uid.value); feed.value = null; } catch (e) { console.error(e); error.value = 'Could not revoke.'; } };
+const copyFeed = async () => { try { await navigator.clipboard.writeText(feed.value.https); copied.value = true; setTimeout(() => { copied.value = false; }, 1500); } catch (e) { /* select manually */ } };
 const list = ref([]);
 const loading = ref(true);
 const error = ref('');
@@ -94,6 +117,7 @@ onMounted(() => onAuthStateChanged(auth, async (u) => {
   if (!uid.value) return;
   try {
     list.value = await loadScheduled(uid.value);
+    loadFeedToken(uid.value).then((t) => { feed.value = feedUrls(t); }).catch(() => {});
     draft.value = Object.fromEntries(list.value.filter(isTemplate).map((t) => [t.id, { title: t.title, freq: t.recurrence.freq, days: [...(t.recurrence.days || [])], dayOfMonth: t.recurrence.dayOfMonth || 1 }]));
   } catch (e) { console.error(e); error.value = 'Scheduled tasks could not be loaded.'; }
   loading.value = false;
@@ -118,5 +142,6 @@ onMounted(() => onAuthStateChanged(auth, async (u) => {
 .up-btn--primary { background: var(--c-primary, #6366f1); color: #fff; border-color: transparent; }
 .up-btn--danger { color: #b91c1c; border-color: #fca5a5; }
 .up-error { color: #b91c1c; }
+.up-feed { width: 100%; margin: 6px 0; font-size: .8rem; }
 .muted { color: var(--c-text-3, #64748b); font-size: .85rem; }
 </style>

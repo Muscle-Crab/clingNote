@@ -103,6 +103,7 @@
                         <label class="mini-field"><span>Next action</span>
                           <input type="text" class="field-input" :value="task.nextAction || ''" @change="$emit('patch', { nextAction: $event.target.value.trim() })" /></label>
                       </div>
+                      <button type="button" class="cal-btn" @click="downloadTaskIcs(task, todayYmd)">📅 Add to calendar</button>
                       <button v-if="isTodayTab && !task.completed" type="button" class="boss-btn" @click="$emit('set-boss')">{{ task.boss ? '✖ Remove boss' : '👹 Make this the evening boss' }}</button>
                       <label class="mini-field"><span>Note</span>
                         <textarea class="field-textarea" rows="2" :value="task.notes || ''" placeholder="Quick note…" @change="$emit('patch', { notes: $event.target.value })"></textarea></label>
@@ -173,6 +174,7 @@
 <script setup>
 import { bossHp } from '@/utils/discipline';
 import { dueBadge } from '@/utils/scheduling';
+import { downloadTaskIcs } from '@/utils/ics';
 import { localDateStr } from '@/utils/streak';
 const todayYmd = localDateStr();
 import { ref, watch, onBeforeUnmount } from 'vue';
@@ -363,4 +365,5 @@ const onCardTap = (event) => { // bound on the whole card (blank areas, chips, n
 .chip--overdue { background: #fee2e2; color: #b91c1c; }
 .sub-bar { display: inline-block; vertical-align: middle; width: 64px; height: 6px; border-radius: 999px; background: var(--c-border, #e2e8f0); overflow: hidden; margin-left: 6px; }
 .sub-bar-fill { display: block; height: 100%; background: var(--c-success, #22c55e); transition: width .3s; }
+.cal-btn { margin: 6px 6px 6px 0; padding: 4px 10px; border-radius: 8px; border: 1px solid var(--c-border, #e2e8f0); background: transparent; font-weight: 600; }
 </style>
