@@ -7,7 +7,8 @@ export const MISSED_DEADLINE_PENALTY = -50;
 export const WARNINGS = [{ id: '2h', min: 120 }, { id: '30m', min: 30 }];
 export const LOG_KEEP = 200;
 
-export const defaultSettings = () => ({ enabled: false, deadline: DEFAULT_DEADLINE, enabledOn: null });
+// Strict defaults: Discipline on, 9 PM deadline, Strict Boss on (all toggleable in /discipline).
+export const defaultSettings = () => ({ enabled: true, deadline: DEFAULT_DEADLINE, enabledOn: null, strict: true });
 export const normSettings = (s) => ({ ...defaultSettings(), ...(s || {}), deadline: /^\d{2}:\d{2}$/.test(s?.deadline || '') ? s.deadline : DEFAULT_DEADLINE });
 
 export const deadlineAt = (dateStr, hhmm) => { const [y, m, d] = dateStr.split('-').map(Number); const [h, mi] = hhmm.split(':').map(Number); return new Date(y, m - 1, d, h, mi, 0, 0); };

@@ -125,6 +125,7 @@
 </template>
 
 <script setup>
+import { getPublicProfile } from '@/composables/usePublicProfile';
 import { sendBroadcast } from '@/composables/useNotifications';
 import {db, auth} from '@/firebaseConfig.js';
 import {ref, reactive, onMounted} from 'vue';
@@ -325,8 +326,8 @@ const approveRequest = async (roomId, userId) => {
     await loadRooms(); // Refresh the room data to update the UI
 
     // Send notification to the approved user
-    const user = (await getDoc(doc(db, 'users', userId))).data();
-    sendNotification('your request to join the room has been approved.', user.email);
+    const user = await getPublicProfile(userId); // never read other users' private docs/emails
+    sendNotification(`approved ${user?.name || 'a member'} to join the room.`, userId);
   } catch (error) {
     console.error('Error approving request:', error);
   }

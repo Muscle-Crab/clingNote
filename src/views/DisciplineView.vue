@@ -8,6 +8,9 @@
     <section class="disc-card">
       <label class="disc-row"><input type="checkbox" :checked="settings.enabled" @change="update({ enabled: $event.target.checked })" /> <strong>Discipline Mode</strong></label>
       <p class="muted">Finish {{ DAILY_STREAK_MIN }} tasks (not pending) by your deadline every day. Miss it: {{ MISSED_DEADLINE_PENALTY }} pts, streak dies, tier can drop.</p>
+      <label class="disc-row"><input type="checkbox" :checked="settings.strict" :disabled="!settings.enabled" @change="update({ strict: $event.target.checked })" /> <strong>Strict Boss</strong></label>
+      <p class="muted">The boss gives orders in the morning, calls you out at midday if fewer than 2 are done, warns you in the evening and gives a PASSED/FAILED verdict after the deadline. To skip or defer a task you have to say why. Each task gets one carry-over; after that it's overdue and blocks new non-urgent tasks. You get nudged after {{ IDLE_MINUTES }} min idle. Defaults: on, {{ DAILY_STREAK_MIN }} tasks, 9 PM.</p>
+      <p v-if="dstate.lastVerdict" class="muted">Last verdict ({{ dstate.lastVerdict.date }}): <strong>{{ dstate.lastVerdict.passed ? 'PASSED' : 'FAILED' }}</strong>, grade {{ dstate.lastVerdict.grade }}</p>
       <label class="disc-row">Daily deadline <input type="time" :value="settings.deadline" @change="update({ deadline: $event.target.value })" /></label>
       <button v-if="canNotify" type="button" class="disc-btn" @click="askNotify">🔔 Enable deadline notifications</button>
       <p v-if="saved" class="muted">Saved ✓</p>
@@ -69,6 +72,7 @@
 </template>
 
 <script setup>
+import { IDLE_MINUTES } from '@/utils/strictBoss';
 import { ref, computed, onMounted } from 'vue';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth, db } from '@/firebaseConfig';

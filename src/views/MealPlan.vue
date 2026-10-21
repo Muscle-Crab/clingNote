@@ -151,12 +151,11 @@
 
 
 <script setup>
+import { askAi } from '@/composables/useAi';
 import { ref, reactive, onMounted } from 'vue'
 import { db, auth} from '@/firebaseConfig.js'
-import { collection, addDoc, query, where, orderBy, limit, getDocs, doc, getDoc, updateDoc} from 'firebase/firestore'
-import axios from 'axios'
+import { collection, addDoc, query, where, orderBy, limit, getDocs, doc, getDoc } from 'firebase/firestore'
 import { onAuthStateChanged } from 'firebase/auth'
-const openaiKey = process.env.VUE_APP_OPENAI_API_KEY
 const image = ref(null)
 const manualFood = ref('')
 const mealHistory = ref([])
@@ -215,49 +214,9 @@ async function analyzeImage() {
   isLoading.value = true;
   try {
     const base64 = await toBase64(image.value);
-    const res = await axios.post(
-        'https://api.openai.com/v1/chat/completions',
-        {
-          model: 'gpt-4o',
-          messages: [
-            {
-              role: 'user',
-              content: [
-                {
-                  type: 'text',
-                  text: `You are analyzing a product image like a smoothie or drink. If it shows a visible nutrition label, extract the values **exactly as shown**. Return the full nutrient data per container (not per 100g).
+    const res = await askAi('meal-image', { imageBase64: base64 }); // server deducts 1 credit
 
-Return JSON like:
-{
-  "foods": ["Bolthouse Farms Blue Goodness Smoothie"],
-  "nutrients": {
-    "Calories": 260,
-    "Carbs": 62,
-    "Protein": 1,
-    "Fat": 0,
-    "Sugar": 52,
-    "Sodium": 30,
-    "Fiber": 3,
-    "VitaminC": 140,
-    "VitaminD": 0
-  }
-}
-
-If no label is visible, do your best to estimate. Do not explain anything. Output only JSON.`
-                },
-                {
-                  type: 'image_url',
-                  image_url: { url: `data:image/jpeg;base64,${base64}` }
-                }
-              ]
-            }
-          ],
-          max_tokens: 1000
-        },
-        { headers: { Authorization: `Bearer ${openaiKey}` } }
-    );
-
-    let content = res.data.choices[0].message.content.trim();
+    let content = res.content.trim();
     if (content.startsWith('```')) {
       content = content.replace(/```(?:json)?/g, '').trim();
     }
@@ -293,12 +252,8 @@ If no label is visible, do your best to estimate. Do not explain anything. Outpu
       image: imageURL
     });
 
-    // ✅ Deduct 1 credit
-    const userRef = doc(db, 'users', userId.value);
-    await updateDoc(userRef, {
-      credits: credits.value - 1
-    });
-    credits.value -= 1;
+    // Credit was deducted server-side by the AI function
+    if (typeof res.creditsLeft === 'number') credits.value = res.creditsLeft;
 
     if (alerts.value.length) speakAlerts();
 
@@ -324,22 +279,9 @@ function toBase64(file) {
 async function addManualFood() {
   if (!manualFood.value.trim()) return
 
-  const res = await axios.post(
-      'https://api.openai.com/v1/chat/completions',
-      {
-        model: 'gpt-4',
-        messages: [
-          {
-            role: 'user',
-            content: `Estimate these nutrients (Calories, Protein, Fat, Carbs, Sugar, Sodium, Fiber, VitaminC, VitaminD) for this food: ${manualFood.value}. Return a JSON object.`
-          }
-        ],
-        max_tokens: 500
-      },
-      { headers: { Authorization: `Bearer ${openaiKey}` } }
-  )
+  const res = await askAi('meal-text', { food: manualFood.value })
 
-  let content = res.data.choices[0].message.content.trim()
+  let content = res.content.trim()
   if (content.startsWith('```')) {
     content = content.replace(/```(?:json)?/g, '').trim()
   }

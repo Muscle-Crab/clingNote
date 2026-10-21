@@ -13,23 +13,32 @@
             </option>
           </select>
         </div>
+        <div v-if="strict" class="field-group">
+          <label class="field-label" for="defer-reason">🗣️ Why didn't you do it today?</label>
+          <textarea id="defer-reason" v-model="reason" class="field-textarea" placeholder="Required. It goes in your procrastination log."></textarea>
+          <p v-if="carryCount >= 1" class="field-hint">This task was already carried once. Defer again and it's marked overdue, and the boss blocks new non-urgent tasks until it's done.</p>
+        </div>
       </div>
       <div class="modal-footer">
         <button @click="$emit('close')" class="btn-secondary">Cancel</button>
-        <button @click="$emit('transfer')" class="btn-primary">Transfer</button>
+        <button @click="$emit('transfer')" class="btn-primary" :disabled="strict && !validReason(reason)">Transfer</button>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
+import { validReason } from '@/utils/strictBoss';
 const targetDay = defineModel('day');
+const reason = defineModel('reason');
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 // 'YYYY-MM-DD' -> 'Oct 18' (string math, no timezone shifts)
 const prettyDate = (d) => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(d || ''); return m ? `${MONTHS[Number(m[2]) - 1]} ${Number(m[3])}` : ''; };
 defineProps({
   days: { type: Array, required: true },
   selectedDayIndex: { type: Number, default: -1 },
+  strict: { type: Boolean, default: false },
+  carryCount: { type: Number, default: 0 },
 });
 defineEmits(['close', 'transfer']);
 </script>
@@ -139,4 +148,5 @@ defineEmits(['close', 'transfer']);
 .field-input:focus, .field-select:focus, .field-textarea:focus { border-color: var(--c-accent); box-shadow: 0 0 0 1px var(--c-accent); outline: none; }
 .field-label { font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--c-text-3); }
 @media (max-width: 600px) { .modal-backdrop { align-items: flex-end; padding: 0; } .modal-box { max-width: none; max-height: 92vh; } .modal-header, .modal-body, .modal-footer { padding-left: var(--sp-4); padding-right: var(--sp-4); } }
+.field-hint { margin: 4px 0 0; font-size: var(--fs-xs, 12px); color: var(--c-text-3, #9ca3af); }
 </style>

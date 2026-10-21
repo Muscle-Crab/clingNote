@@ -192,7 +192,7 @@ onAuthStateChanged(auth, (user) => {
 
 // Real-time listener for players and captains
 const fetchPlayers = async () => {
-  onSnapshot(collection(db, 'users'), (snapshot) => {
+  onSnapshot(collection(db, 'publicProfiles'), (snapshot) => { // public fields only (name, avatar, attendance)
     players.value = snapshot.docs.map((doc) => ({
       id: doc.id,
       ...doc.data(),
@@ -355,7 +355,7 @@ const deselectPlayer = async (captain, player) => {
 // Reset the game
 const resetGame = async () => {
   for (const player of players.value) {
-    await updateDoc(doc(db, 'users', player.id), { attending: null });
+    await updateDoc(doc(db, 'publicProfiles', player.id), { attending: null });
   }
 
   captains.value = [];
@@ -376,7 +376,7 @@ const toggleAttendance = async (player) => {
   if (!canToggleAttendance(player)) return;
 
   const newStatus = player.attending === 'Going' ? 'Not Going' : 'Going';
-  await updateDoc(doc(db, 'users', player.id), { attending: newStatus });
+  await updateDoc(doc(db, 'publicProfiles', player.id), { attending: newStatus });
 
   // If the player is marked as "Not Going" and they are picked by a captain, remove them from the captain's team
   if (newStatus === 'Not Going') {
