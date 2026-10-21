@@ -25,6 +25,12 @@ const routes = [
   },
 
   {
+    path: '/rankings',
+    name: 'rankings',
+    component: () => import('../views/RankingsView.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
     path: '/addiction',
     name: 'addiction',
     component: Addiction

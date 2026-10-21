@@ -5,7 +5,7 @@
   "scripts": {
     "serve": "vue-cli-service serve",
     "build": "vue-cli-service build",
-    "check": "node scripts/check-sfc.js && node scripts/smoke-render.js"
+    "check": "node scripts/check-sfc.js && node scripts/smoke-render.js && node scripts/test-streak.js && node scripts/test-ranking.js"
   },
   "dependencies": {
     "@onesignal/onesignal-vue3": "^2.0.1",

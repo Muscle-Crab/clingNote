@@ -32,6 +32,7 @@
             </button>
             <div v-if="menuOpen" class="hero-menu-pop" @click="menuOpen = false">
               <button type="button" class="hero-menu-item" @click="openShutdown">🌙 Shutdown day</button>
+              <router-link to="/rankings" class="hero-menu-item">🏆 Rankings</router-link>
               <button type="button" class="hero-menu-item" @click="showSchedule = !showSchedule">🗓 {{ showSchedule ? 'Hide' : 'Show' }} schedule</button>
             </div>
           </div>
@@ -161,6 +162,8 @@ import { viewTasks, canReorder, normalizePrefs, visibleCount, shouldHandleShortc
 import { ACTIVE_CAP, taskKey, activeCount, loadSummary, buildSchedule } from '@/utils/taskPlanning';
 import { getTodayId, formatSessionTime, getCurrentDate, formatTime, getTodayDate, isToday } from '@/utils/dateTime';
 import { badges } from '@/utils/gamification';
+import { recordMonthlyToggle, awardFinishedMonth } from '@/composables/useMonthlyStats';
+import { monthKey, prevMonthKey } from '@/utils/ranking';
 import { applyTaskToggle, evaluateStreak, localDateStr, ALLOWED_GAP_DAYS, DAILY_STREAK_MIN } from '@/utils/streak';
 import { scheduleNotification, sendNotificationToPlayer } from '@/composables/useNotifications';
 import { speak } from '@/composables/useSpeech';
@@ -1158,6 +1161,8 @@ const updateStreakOnCompletion = async (task) => {
     const next = applyTaskToggle(prev, localDateStr(), { key: taskKey(task), completed: !!task.completed, pending: task.status === 'pending' }, streakGap());
     await setDoc(streakDocRef, { ...next, updatedAt: serverTimestamp() }, { merge: true });
     applyStreakState(next);
+    recordMonthlyToggle(userId.value, localDateStr(), { key: taskKey(task), completed: !!task.completed, pending: task.status === 'pending' }, next.bestStreak)
+      .catch((e) => console.error('Monthly stats update failed:', e));
     checkForBadges();
     updateMotivationalMessage();
   } catch (error) {
@@ -1194,6 +1199,7 @@ onAuthStateChanged(auth, async(user) => {
     await loadDaySession();
     // Fetch tasks and streak after user ID is set
     fetchStreakOnLoad(); // Ensure this runs after userId is set
+    awardFinishedMonth(user.uid, prevMonthKey(monthKey(localDateStr()))).catch(() => {}); // month-end badges for last month
 
     const todayIndex = new Date().getDay();
     if (todayIndex !== -1) {
@@ -2840,6 +2846,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .hero-menu-pop { position: absolute; right: 0; top: 52px; z-index: 30; min-width: 190px; padding: var(--sp-1); background: var(--c-surface-2); border: 1px solid var(--c-border-strong); border-radius: var(--r-lg); box-shadow: 0 8px 24px rgba(0,0,0,.5); }
 .hero-menu-item { display: block; width: 100%; min-height: 40px; text-align: left; padding: 0 var(--sp-3); background: none; border: none; border-radius: var(--r); color: var(--c-text); font-size: var(--fs-md); cursor: pointer; }
 .hero-menu-item:hover { background: var(--c-border); }
+a.hero-menu-item { display: block; text-decoration: none; color: inherit; }
 .tasks-list { gap: var(--sp-2); }
 .cap-warning, .load-summary { border-radius: var(--r-lg); }
 @media (min-width: 700px) { .content-wrap { padding-top: 40px; } .hero-title { font-size: 40px; } }

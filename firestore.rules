@@ -1,0 +1,18 @@
+rules_version = '2';
+// Monthly ranking rules. NOTE: this file is not referenced by firebase.json yet and is NOT deployed.
+// Merge these match blocks into the project's live Firestore rules (from the console) before deploying,
+// otherwise other collections (weeklyRoutines, streaks, users, ...) would lose access.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /monthlyStats/{month}/users/{uid} {
+      // anyone signed in can read opted-in entries; users always read their own
+      allow read: if request.auth != null && (resource.data.optIn == true || request.auth.uid == uid);
+      allow write: if request.auth != null && request.auth.uid == uid
+        && month.matches('^[0-9]{4}-[0-9]{2}$')
+        && !('email' in request.resource.data);
+    }
+    match /monthlyStats/{month}/private/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+  }
+}
