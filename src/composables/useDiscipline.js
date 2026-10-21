@@ -68,3 +68,23 @@ export const setBossCleared = async (uid, date, cleared) => {
   await patchDisciplineState(uid, { bossClearedDate: cleared ? date : null });
   await addMonthlyAdjust(uid, date, `boss:${date}`, cleared ? BOSS_BONUS : null);
 };
+
+// Breaks: { date, usedMin, endsAt(ms), startedAt(ms), minutes } stored on discipline/{uid}.breaks; resets each local day.
+export const breaksToday = (st, today) => (st?.breaks?.date === today ? st.breaks : { date: today, usedMin: 0, endsAt: 0 });
+export const startBreak = async (uid, today, minutes) => {
+  const st = await loadDisciplineState(uid);
+  const b = breaksToday(st, today);
+  const now = Date.now();
+  const next = { ...b, usedMin: b.usedMin + minutes, startedAt: now, minutes, endsAt: now + minutes * 60000 };
+  await patchDisciplineState(uid, { breaks: next });
+  return next;
+};
+// End early: refund unused whole minutes.
+export const endBreak = async (uid, today) => {
+  const st = await loadDisciplineState(uid);
+  const b = breaksToday(st, today);
+  const leftMin = b.endsAt > Date.now() ? Math.floor((b.endsAt - Date.now()) / 60000) : 0;
+  const next = { ...b, usedMin: Math.max(0, b.usedMin - leftMin), endsAt: 0 };
+  await patchDisciplineState(uid, { breaks: next });
+  return next;
+};

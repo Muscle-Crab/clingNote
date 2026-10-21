@@ -60,3 +60,22 @@ export const streakGate = (settings, { bossSet = false, bossCleared = false, mis
   if (missedToday) return false;
   return !bossSet || bossCleared;
 };
+
+// ---- Phase 3: Earned breaks + app gate ----
+export const BREAK_PER_TASK = 2;
+export const BREAK_ALL_DONE = 10;
+export const breakStreakBonus = (streak) => (streak >= 30 ? 10 : streak >= 7 ? 5 : 0);
+// Minutes earned today. Day bonus + streak escalation (+5 at 7 days, +10 at 30) only once the daily minimum is hit.
+export const earnedBreakMinutes = (count, streak = 0, extraBonus = 0, min = 5) =>
+  count * BREAK_PER_TASK + (count >= min ? BREAK_ALL_DONE + breakStreakBonus(streak) + extraBonus : 0);
+
+// What the /gate screen shows. mode: 'on-break' | 'locked' | 'can-break' | 'no-minutes'.
+export const gateState = ({ count, earned, used = 0, now, today, deadline, breakEndsAt = 0, min = 5 }) => {
+  const available = Math.max(0, earned - used);
+  const t = now.getTime();
+  const msToDeadline = Math.max(0, deadlineAt(today, deadline).getTime() - t);
+  if (breakEndsAt && breakEndsAt > t) return { mode: 'on-break', remainingMs: breakEndsAt - t, available, msToDeadline };
+  if (count < min) return { mode: 'locked', left: min - count, available, msToDeadline };
+  return { mode: available > 0 ? 'can-break' : 'no-minutes', available, msToDeadline };
+};
+export const fmtCountdown = (ms) => { const s = Math.max(0, Math.round(ms / 1000)); const h = Math.floor(s / 3600); const m = Math.floor((s % 3600) / 60); const ss = s % 60; return h ? `${h}h ${String(m).padStart(2, '0')}m` : `${m}:${String(ss).padStart(2, '0')}`; };
