@@ -43,7 +43,7 @@
 
       </section>
 
-      <StreakHeader :streak="streak" :motivational-message="motivationalMessage" :points-accumulated="pointsAccumulated"
+      <StreakHeader :streak="streak" :best-streak="bestStreak" :streak-status="streakStatus" :motivational-message="motivationalMessage" :points-accumulated="pointsAccumulated"
                     :total-points="totalPoints" :day-session="daySession" @shutdown="openShutdown" @end-day="endDay" />
 
       <TimeStatsBar v-if="isViewingToday" :stats="timeStats" />
@@ -161,6 +161,7 @@ import { viewTasks, canReorder, normalizePrefs, visibleCount, shouldHandleShortc
 import { ACTIVE_CAP, taskKey, activeCount, loadSummary, buildSchedule } from '@/utils/taskPlanning';
 import { getTodayId, formatSessionTime, getCurrentDate, formatTime, getTodayDate, isToday } from '@/utils/dateTime';
 import { badges } from '@/utils/gamification';
+import { recordCompletion, evaluateStreak, localDateStr, ALLOWED_GAP_DAYS } from '@/utils/streak';
 import { scheduleNotification, sendNotificationToPlayer } from '@/composables/useNotifications';
 import { speak } from '@/composables/useSpeech';
 import { completionPercentage, computeTimeStats, daysLeftInYearFrom, heroTitleFor } from '@/utils/dayStats';
@@ -913,6 +914,7 @@ const toggleTaskCompletion = async (index) => {
   startSpinning(index);
   if (task.completed) {
     markUserCompletion();
+    if (isToday(selectedDayIndex.value) && task.status !== 'pending') updateStreakOnCompletion();
     playSound("complete");
     const completedNow = new Date().toISOString();
 
@@ -973,8 +975,6 @@ const toggleTaskCompletion = async (index) => {
     console.error("Error updating task completion:", error);
   }
 
-  // Check streak after toggling task completion
-  checkStreakOnCompletion();
   checkAllTasksCompleted();
   await saveDailyPerformance();
   selectedDayRoutine.value = selectedDayRoutine.value.filter(task => !task.completed || showCompleted);
@@ -1106,8 +1106,7 @@ const checkAllTasksCompleted = async () => {
     // 🎉 Show completion animation
     showFullScreenAnimation.value = true;
     speak("Congratulations! You are free to do whatever you want");
-    updateStreakOnCompletion();
-    fetchSelectedDayRoutine()// 🔥 Update streak progression
+    fetchSelectedDayRoutine();
     await saveDailyPerformance();
 
     // 🗑 Remove one-time tasks & reset recurring tasks
@@ -1139,58 +1138,23 @@ const checkAllTasksCompleted = async () => {
 };
 
 
+// A day counts once >=1 task is completed (local date). See src/utils/streak.js.
+const streakGap = () => Number(userSettingsStreakGap.value) || ALLOWED_GAP_DAYS;
+const applyStreakState = (st) => {
+  streak.value = st.streak; bestStreak.value = st.bestStreak; lastCompletionDate.value = st.lastCompletionDate;
+  streakStatus.value = evaluateStreak(st, localDateStr(), streakGap()).status;
+  try { localStorage.setItem(`streakCache_${userId.value}`, JSON.stringify(st)); } catch (e) { /* cache only */ }
+};
 const updateStreakOnCompletion = async () => {
-  if (!userId.value) {
-    console.log("No userId, skipping streak update");
-    return;
-  }
-
-  const today = new Date().toLocaleDateString('en-CA');
-  console.log('today',today)
+  if (!userId.value) return;
   const streakDocRef = doc(db, 'streaks', userId.value);
-
   try {
-    const streakDocSnapshot = await getDoc(streakDocRef);
-
-    if (streakDocSnapshot.exists()) {
-      const data = streakDocSnapshot.data();
-      lastCompletionDate.value = data.lastCompletionDate || null;
-      streak.value = data.streak || 0;
-
-
-
-      if (lastCompletionDate.value === today) {
-        console.log("🛑 Streak already updated today. Skipping...");
-        return;
-      }
-
-
-      streak.value += 1;
-      lastCompletionDate.value = today;
-
-
-
-      await updateDoc(streakDocRef, {
-        streak: streak.value,
-        lastCompletionDate: today,
-        updatedAt: serverTimestamp(),
-      });
-
-      console.log(`✅ Streak updated to ${streak.value}`);
-    } else {
-      // No streak document yet
-      await setDoc(streakDocRef, {
-        streak: 1,
-        lastCompletionDate: today,
-        updatedAt: serverTimestamp()
-      });
-
-      streak.value = 1;
-      lastCompletionDate.value = today;
-
-      console.log("🔥 New streak started at 1");
-    }
-
+    const snap = await getDoc(streakDocRef);
+    const prev = snap.exists() ? snap.data() : null;
+    const next = recordCompletion(prev, localDateStr(), streakGap());
+    if (prev && prev.lastCompletionDate === next.lastCompletionDate && prev.streak === next.streak && prev.bestStreak === next.bestStreak) { applyStreakState(next); return; }
+    await setDoc(streakDocRef, { ...next, updatedAt: serverTimestamp() }, { merge: true });
+    applyStreakState(next);
     checkForBadges();
     updateMotivationalMessage();
   } catch (error) {
@@ -1674,6 +1638,9 @@ watch(wontDoTasks, () => {
 // Reactive state for streak tracking
 const streak = ref(0);
 const lastCompletionDate = ref(null);
+const bestStreak = ref(0);
+const streakStatus = ref('none'); // none | done | at-risk | broken
+const userSettingsStreakGap = ref(ALLOWED_GAP_DAYS); // allowed days between counted days (1 = no skips)
 const unlockedBadges = ref([]);
 const motivationalMessage = ref('');
 // Always an array: day switches / failed loads can hand back undefined, and many consumers read .length/.filter.
@@ -1711,32 +1678,27 @@ const showNotification = ref(false);
 
 
 
-// Function to check for streak continuation
+// Evaluate streak for today: resets to 0 only after a full calendar day without a completion.
 const checkStreakOnCompletion = async () => {
   if (!userId.value) return;
-  const yesterday = new Date();
-  yesterday.setDate(yesterday.getDate() - 1);
-
-
   try {
     const streakDocRef = doc(db, 'streaks', userId.value);
-    const streakDocSnapshot = await getDoc(streakDocRef);
-
-    if (streakDocSnapshot.exists()) {
-      const data = streakDocSnapshot.data();
-      lastCompletionDate.value = data.lastCompletionDate || null;
-      streak.value = data.streak || 0
-      await updateStreakInFirestore(); // Save changes
-      checkForBadges();
-      updateMotivationalMessage();
-    }
+    const snap = await getDoc(streakDocRef);
+    if (!snap.exists()) { streakStatus.value = 'none'; return; }
+    const data = snap.data();
+    unlockedBadges.value = data.unlockedBadges || [];
+    const ev = evaluateStreak(data, localDateStr(), streakGap());
+    const st = { streak: ev.streak, bestStreak: ev.bestStreak, lastCompletionDate: ev.lastCompletionDate };
+    if (ev.status === 'broken' && data.streak) await setDoc(streakDocRef, { ...st, updatedAt: serverTimestamp() }, { merge: true });
+    else if ((data.bestStreak || 0) < ev.bestStreak) await setDoc(streakDocRef, { bestStreak: ev.bestStreak }, { merge: true });
+    applyStreakState(st);
+    updateMotivationalMessage();
   } catch (error) {
     console.error('Error updating streak:', error);
   }
 };
 
-
-
+// (legacy, not scheduled) old midnight reducer kept for reference
 // Function to check tasks and reduce streak
 const checkTasksAndReduceStreak = async () => {
   if (!userId.value) return;
@@ -1837,27 +1799,9 @@ const startDailyCheck = () => {
 // });
 
 const fetchStreakOnLoad = async () => {
-  if (!userId.value) return; // Ensure user is logged in
-
-  const streakDocRef = doc(db, 'streaks', userId.value); // Use userId as document ID
-
-  try {
-    const streakDocSnapshot = await getDoc(streakDocRef);
-
-    if (streakDocSnapshot.exists()) {
-      const data = streakDocSnapshot.data();
-      streak.value = data.streak || 0;
-      lastCompletionDate.value = data.lastCompletionDate || null;
-      unlockedBadges.value = data.unlockedBadges || [];
-      console.log('Streak and badges fetched:', streak.value, unlockedBadges.value);
-    } else {
-      console.log('No streak document found for this user');
-    }
-
-    updateMotivationalMessage();
-  } catch (error) {
-    console.error('Error fetching streak on load:', error);
-  }
+  if (!userId.value) return;
+  try { const c = JSON.parse(localStorage.getItem(`streakCache_${userId.value}`) || 'null'); if (c) applyStreakState(c); } catch (e) { /* ignore */ }
+  await checkStreakOnCompletion();
 };
 
 const updateStreakInFirestore = async () => {
@@ -1867,11 +1811,9 @@ const updateStreakInFirestore = async () => {
 
   try {
     await setDoc(streakDocRef, {
-      streak: streak.value,
-      lastCompletionDate: lastCompletionDate.value,
       unlockedBadges: unlockedBadges.value,
       updatedAt: serverTimestamp()
-    });
+    }, { merge: true });
     console.log('Streak updated in Firestore:', streak.value);
   } catch (error) {
     console.error('Error updating streak in Firestore:', error);
@@ -1896,7 +1838,7 @@ const updateMotivationalMessage = () => {
     motivationalMessage.value = "You're on fire! Keep it up!";
   } else if (streak.value >= 3) {
     motivationalMessage.value = "Great job! You're building a habit!";
-  } if (streak.value >= 1 && streak.value <= 3) {
+  } else if (streak.value >= 1) {
     motivationalMessage.value = "Good start! Keep going!";
   }
 };
@@ -2247,7 +2189,7 @@ const saveDailyPerformance = async () => {
   const completedCount = selectedDayRoutine.value.filter(task => task.completed).length;
   const totalCount = selectedDayRoutine.value.length + wontDoTasks.value.length;
 
-  const streakGained = totalCount > 0 && completedCount === totalCount;
+  const streakGained = completedCount > 0; // a day counts with >=1 completed task
 
   await setDoc(docRef, {
     userId: userId.value,
