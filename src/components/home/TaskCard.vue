@@ -64,7 +64,8 @@
                     <div v-if="estimateOf(task) || task.startTime || task.dueDate || (task.priority && task.priority !== 'low') || (task.status && task.status !== 'todo' && task.status !== 'pending')" class="task-chips">
                       <span v-if="task.priority && task.priority !== 'low'" class="chip" :class="'chip--' + task.priority">{{ task.priority }}</span>
                       <span v-if="task.status && task.status !== 'todo' && task.status !== 'pending'" class="chip">{{ task.status }}</span>
-                      <span v-if="task.dueDate" class="chip">Due {{ task.dueDate }}</span>
+                      <span v-if="task.scheduledFor" class="chip chip--due" :class="{ 'chip--overdue': task.scheduledFor < todayYmd }">{{ dueBadge(task, todayYmd) }}</span>
+                      <span v-else-if="task.dueDate" class="chip">Due {{ task.dueDate }}</span>
                       <span v-if="estimateOf(task)" class="chip">⏱ {{ formatMinutes(estimateOf(task)) }}</span>
                       <span v-if="task.startTime" class="chip">🕒 {{ formatClock(toMinutes(task.startTime)) }}<template v-if="estimateOf(task)"> – {{ formatClock(toMinutes(task.startTime) + estimateOf(task)) }}</template></span>
                     </div>
@@ -170,6 +171,9 @@
 
 <script setup>
 import { bossHp } from '@/utils/discipline';
+import { dueBadge } from '@/utils/scheduling';
+import { localDateStr } from '@/utils/streak';
+const todayYmd = localDateStr();
 import { ref, watch, onBeforeUnmount } from 'vue';
 import { STATUSES, taskKey, estimateOf, formatClock, formatDuration as formatMinutes, toMinutes } from '@/utils/taskPlanning';
 import { subtaskProgress } from '@/utils/subtasks';
@@ -354,4 +358,6 @@ const onCardTap = (event) => { // bound on the whole card (blank areas, chips, n
 .boss-hp-fill { height: 100%; background: linear-gradient(90deg, #ef4444, #b91c1c); transition: width .4s; }
 .boss-hp-num { font-size: var(--fs-xs, .7rem); font-variant-numeric: tabular-nums; color: #b91c1c; }
 .boss-btn { margin: 6px 0; padding: 4px 10px; border-radius: 8px; border: 1px solid #fca5a5; color: #b91c1c; background: #fff5f5; font-weight: 600; }
+.chip--due { background: var(--c-primary-soft, #eef2ff); color: var(--c-primary, #4f46e5); font-weight: 600; }
+.chip--overdue { background: #fee2e2; color: #b91c1c; }
 </style>

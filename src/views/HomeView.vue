@@ -32,6 +32,7 @@
             </button>
             <div v-if="menuOpen" class="hero-menu-pop" @click="menuOpen = false">
               <button type="button" class="hero-menu-item" @click="openShutdown">🌙 Shutdown day</button>
+              <router-link to="/upcoming" class="hero-menu-item">📅 Upcoming</router-link>
               <router-link to="/rankings" class="hero-menu-item">🏆 Rankings</router-link>
               <router-link to="/discipline" class="hero-menu-item">⚔️ Discipline Mode</router-link>
               <button type="button" class="hero-menu-item" @click="showSchedule = !showSchedule">🗓 {{ showSchedule ? 'Hide' : 'Show' }} schedule</button>
@@ -188,7 +189,7 @@ import { scheduleNotification, sendNotificationToPlayer } from '@/composables/us
 import { speak } from '@/composables/useSpeech';
 import { completionPercentage, computeTimeStats, daysLeftInYearFrom, heroTitleFor } from '@/utils/dayStats';
 import { shouldAutoComplete, resetSubtasks } from '@/utils/subtasks';
-import { buildScheduledEntry, futureOf, dueOf, countsByDate, withWeekDates, isValidDate, removeScheduled, rescheduleEntry } from '@/utils/scheduling';
+import { buildScheduledEntry, buildRecurringTemplate, isTaskVisibleOn, futureOf, dueOf, countsByDate, withWeekDates, isValidDate, removeScheduled, rescheduleEntry } from '@/utils/scheduling';
 import { mutateScheduled, materializeDueForToday } from '@/composables/useScheduledTasks';
 import ScheduledList from '@/components/home/ScheduledList.vue';
 import EmptyState from '@/components/home/EmptyState.vue';
@@ -716,7 +717,7 @@ const selectedDayIndex = ref(-1);
 const blankTask = () => ({
   title: '', time: '', priority: 'low', labels: [], notes: '', selectedDays: [], position: 0, type: 'one-time',
   dueDate: '', startTime: '', estimateMin: '', nextAction: '', status: 'todo', pendingOn: '',
-  scheduleDate: '', scheduleTime: '',
+  scheduleDate: '', scheduleTime: '', scheduleRepeat: '', scheduleDays: [],
   reminder: { datetime: '', repeat: '' },
 });
 const newTask = ref(blankTask());
@@ -1262,6 +1263,7 @@ const applyStreakState = (st) => {
 // Called when a task on today's tab is (un)completed; counts distinct non-pending tasks toward DAILY_STREAK_MIN.
 const updateStreakOnCompletion = async (task) => {
   if (!userId.value || !task) return;
+  if (!isTaskVisibleOn(task, localDateStr())) return; // scheduled task before its week: never counts (central visibility check)
   const streakDocRef = doc(db, 'streaks', userId.value);
   try {
     const snap = await getDoc(streakDocRef);
@@ -1342,7 +1344,7 @@ const runScheduledMaterialization = async () => {
     todayStr.value = getTodayId();
     const todayName = days[new Date().getDay()]?.day;
     if (!todayName) return;
-    const res = await materializeDueForToday(userId.value, todayName, todayStr.value);
+    const res = await materializeDueForToday(userId.value, todayName, todayStr.value, (ds) => days[new Date(`${ds}T12:00:00`).getDay()]?.day);
     scheduledList.value = res.scheduled;
     scheduledError.value = '';
     return res.added;
@@ -1362,16 +1364,21 @@ onBeforeUnmount(() => document.removeEventListener('visibilitychange', onVisible
 
 const submitScheduledTask = async () => {
   const nt = newTask.value;
-  if (!isValidDate(nt.scheduleDate) || nt.scheduleDate <= getTodayId()) { error.value = 'Pick a date after today, or clear “Schedule for later”.'; return; }
+  const repeating = !!nt.scheduleRepeat;
+  if (!isValidDate(nt.scheduleDate) || (repeating ? nt.scheduleDate < getTodayId() : nt.scheduleDate <= getTodayId())) { error.value = 'Pick a date after today, or clear “Schedule for later”.'; return; }
   const labels = typeof nt.labels === 'string' ? nt.labels.split(',').map(l => l.trim()).filter(Boolean) : (nt.labels || []);
-  const entry = buildScheduledEntry({
+  const fields = {
     title: nt.title, important: false, time: '', priority: nt.priority, labels, notes: nt.notes, userId: userId.value,
     status: nt.status || 'todo', pendingOn: nt.status === 'pending' ? (nt.pendingOn || '').trim() : '', dueDate: nt.dueDate || '', startTime: nt.startTime || '',
     estimateMin: Number(nt.estimateMin) || 0, nextAction: (nt.nextAction || '').trim(),
-  }, nt.scheduleDate, nt.scheduleTime);
+  };
+  const entry = repeating
+    ? buildRecurringTemplate({ ...fields, scheduledTime: nt.scheduleTime }, nt.scheduleDate, { freq: nt.scheduleRepeat, days: nt.scheduleDays })
+    : buildScheduledEntry(fields, nt.scheduleDate, nt.scheduleTime);
   if (!entry) { error.value = 'Could not schedule this task.'; return; }
   try {
     scheduledList.value = await mutateScheduled(userId.value, (l) => [...l, entry]);
+    afterMaterialize(); // a date in the current week (or a recurring occurrence) shows up right away
     newTask.value = blankTask();
     capWarning.value = false; capOverride.value = false;
     closeModal();

@@ -22,7 +22,18 @@
               <input id="nt-sched-date" type="date" v-model="newTask.scheduleDate" :min="tomorrow" class="field-input" aria-label="Schedule date" />
               <input type="time" v-model="newTask.scheduleTime" class="field-input" :disabled="!newTask.scheduleDate" aria-label="Schedule time (optional)" />
             </div>
-            <p v-if="newTask.scheduleDate" class="field-hint">Hidden from today and the 3-task cap until {{ newTask.scheduleDate }}; added to your list that day as a one-time task.</p>
+            <div v-if="newTask.scheduleDate" class="field-grid">
+              <select v-model="newTask.scheduleRepeat" class="field-select" aria-label="Repeat scheduled task">
+                <option value="">Doesn't repeat</option>
+                <option value="weekly">Weekly on…</option>
+                <option value="daily">Every day</option>
+                <option value="monthly">Monthly (same day)</option>
+              </select>
+            </div>
+            <div v-if="newTask.scheduleDate && newTask.scheduleRepeat === 'weekly'" class="sched-weekdays" role="group" aria-label="Repeat on weekdays">
+              <label v-for="(w, i) in WEEKDAYS" :key="w" class="sched-wd"><input type="checkbox" :value="i" v-model="newTask.scheduleDays" /> {{ w }}</label>
+            </div>
+            <p v-if="newTask.scheduleDate" class="field-hint">Hidden everywhere until the week of {{ newTask.scheduleDate }}; shows from that Monday with a due badge.<template v-if="newTask.scheduleRepeat"> Each occurrence is its own task.</template></p>
           </div>
           <div class="field-group">
             <label class="field-label" for="nt-repeat">Repeat</label>
@@ -124,6 +135,7 @@
 <script setup>
 import { ref, onMounted, nextTick } from 'vue';
 import { ACTIVE_CAP, STATUSES } from '@/utils/taskPlanning';
+import { WEEKDAYS } from '@/utils/scheduling';
 import { getOrdinalSuffix } from '@/utils/dateTime';
 
 // newTask is the reactive form object owned by HomeView; the form edits it in place via v-model.
@@ -276,4 +288,6 @@ onMounted(() => nextTick(() => titleInput.value && titleInput.value.focus()));
 .field-label { font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--c-text-3); }
 @media (max-width: 600px) { .modal-backdrop { align-items: flex-end; padding: 0; } .modal-box { max-width: none; max-height: 92vh; } .modal-header, .modal-body, .modal-footer { padding-left: var(--sp-4); padding-right: var(--sp-4); } }
 .field-hint { margin: 4px 0 0; font-size: var(--fs-xs); color: var(--c-text-3); }
+.sched-weekdays { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.sched-wd { font-size: var(--fs-xs, .8rem); display: flex; gap: 3px; align-items: center; }
 </style>

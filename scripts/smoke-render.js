@@ -134,7 +134,7 @@ const st = require(path.join(src, 'utils/subtasks.js'));
   assert.strictEqual(sc.buildScheduledEntry({ title: ' ' }, today, ''), null, 'blank title');
   assert.strictEqual(sc.buildScheduledEntry({ title: 'x' }, 'nope', ''), null, 'bad date');
   const mk = (title, date, time, id) => sc.buildScheduledEntry({ title, priority: 'high', labels: ['a'] }, date, time, id);
-  const list = [mk('past', '2026-10-10', '', 'p'), mk('now', today, '08:30', 'n'), mk('later', '2026-10-18', '', 'l')];
+  const list = [mk('past', '2026-10-10', '', 'p'), mk('now', today, '08:30', 'n'), mk('later', '2026-10-19', '', 'l')] // Mon of next week (2026-10-17 is a Saturday);
   assert.deepStrictEqual(sc.dueOf(list, today).map((e) => e.id), ['p', 'n']);
   assert.deepStrictEqual(sc.futureOf(list, today).map((e) => e.id), ['l']);
   const r1 = sc.materializeDue({ scheduled: list, todayStr: today, todayTasks: [{ title: 'existing', createdAt: 'c' }], nowIso });

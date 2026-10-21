@@ -21,10 +21,26 @@ export const buildScheduledEntry = (fields, date, time, id = makeScheduledId()) 
   return { ...rest, title, id, scheduledDate: date, scheduledTime: isValidTime(time) ? time : '' };
 };
 
+// ── Visibility (single source of truth) ──
+// A scheduled task becomes visible from Monday (local) of the Mon–Sun week containing its date.
+// Before that it is hidden everywhere (day lists, carry-over, streak, points, discipline/gate counts),
+// because it only exists in users/{uid}.scheduledTasks until it is materialized into a day list.
+const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const parse = (s) => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d, 12); }; // noon: DST-safe
+export const addDaysStr = (s, n) => { const d = parse(s); d.setDate(d.getDate() + n); return ymd(d); };
+export const mondayOf = (s) => { const d = parse(s); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return ymd(d); };
+export const sundayOf = (s) => addDaysStr(mondayOf(s), 6);
+export const visibleFrom = (dateStr) => mondayOf(dateStr);
+export const isScheduledVisible = (dateStr, todayStr) => !isValidDate(dateStr) || visibleFrom(dateStr) <= todayStr;
+// For tasks already in a day list: materialized scheduled tasks carry `scheduledFor`.
+export const isTaskVisibleOn = (task, todayStr) => !task?.scheduledFor || isScheduledVisible(task.scheduledFor, todayStr);
+
 export const isMaterialized = (e) => !!e?.materializedAt;
-export const upcomingOf = (list) => (list || []).filter((e) => e && !isMaterialized(e) && isValidDate(e.scheduledDate));
-export const dueOf = (list, todayStr) => upcomingOf(list).filter((e) => e.scheduledDate <= todayStr);
-export const futureOf = (list, todayStr) => upcomingOf(list).filter((e) => e.scheduledDate > todayStr)
+export const isTemplate = (e) => !!e?.recurrence;
+export const upcomingOf = (list) => (list || []).filter((e) => e && !isTemplate(e) && !isMaterialized(e) && isValidDate(e.scheduledDate));
+export const dueOf = (list, todayStr) => upcomingOf(list).filter((e) => isScheduledVisible(e.scheduledDate, todayStr));
+// "Upcoming" = due after the current week.
+export const futureOf = (list, todayStr) => upcomingOf(list).filter((e) => !isScheduledVisible(e.scheduledDate, todayStr))
   .sort((a, b) => (a.scheduledDate + (a.scheduledTime || '99:99')).localeCompare(b.scheduledDate + (b.scheduledTime || '99:99')));
 
 export const groupByDate = (entries) => {
@@ -38,12 +54,14 @@ export const groupByDate = (entries) => {
 };
 
 // { 'YYYY-MM-DD': count } of future scheduled tasks (week-strip dots).
-export const countsByDate = (list, todayStr) => futureOf(list, todayStr).reduce((m, e) => { m[e.scheduledDate] = (m[e.scheduledDate] || 0) + 1; return m; }, {});
+export const countsByDate = (list, todayStr) => (list || []).filter((e) => e && !isTemplate(e) && isValidDate(e.scheduledDate) && e.scheduledDate > todayStr).reduce((m, e) => { m[e.scheduledDate] = (m[e.scheduledDate] || 0) + 1; return m; }, {});
 
 // Turn a scheduled entry into a regular one-time task for today's list.
 export const toTodayTask = (entry, todayStr, createdAtIso) => {
   const { id, scheduledDate, scheduledTime, materializedAt, ...rest } = entry;
-  const task = { ...rest, completed: false, important: !!rest.important, type: 'one-time', createdAt: createdAtIso, scheduledId: id, scheduledFor: scheduledDate };
+  const { templateId, recurrence, generated, startDate, ...fields } = rest;
+  const task = { ...fields, completed: false, important: !!rest.important, type: 'one-time', createdAt: createdAtIso, scheduledId: id, scheduledFor: scheduledDate, dueDate: rest.dueDate || scheduledDate };
+  if (templateId) task.templateId = templateId;
   if (scheduledTime) {
     task.startTime = rest.startTime || scheduledTime;
     task.time = scheduledTime;
@@ -61,13 +79,13 @@ export const materializeDue = ({ scheduled, todayStr, todayTasks, nowIso }) => {
   const toAdd = [];
   let changed = false;
   const next = (scheduled || []).map((e) => {
-    if (!e || isMaterialized(e) || !isValidDate(e.scheduledDate) || e.scheduledDate > todayStr) return e;
+    if (!e || isTemplate(e) || isMaterialized(e) || !isValidDate(e.scheduledDate) || !isScheduledVisible(e.scheduledDate, todayStr)) return e;
     changed = true;
     if (!have.has(e.id)) {
       toAdd.push(toTodayTask(e, todayStr, new Date(base + toAdd.length).toISOString()));
       have.add(e.id);
     }
-    return { ...e, materializedAt: nowIso };
+    return { ...e, materializedAt: nowIso, materializedDate: todayStr };
   });
   return { toAdd, scheduled: next, changed };
 };
@@ -104,4 +122,79 @@ export const weekDates = (now = new Date()) => Array.from({ length: 7 }, (_, i) 
 export const withWeekDates = (days, now = new Date()) => {
   const dates = weekDates(now);
   return (days || []).map((d, i) => ({ ...d, date: dates[i] || d.date }));
+};
+
+// Badge text for a materialized task: 'Due Fri Oct 30' (or 'Due today' / 'Overdue · Fri Oct 30').
+export const dueBadge = (task, todayStr) => {
+  if (!task?.scheduledFor || !isValidDate(task.scheduledFor)) return '';
+  const label = parse(task.scheduledFor).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }).replace(',', '');
+  if (task.scheduledFor === todayStr) return 'Due today';
+  return task.scheduledFor < todayStr ? `Overdue · ${label}` : `Due ${label}`;
+};
+
+// Roll-forward: an unfinished scheduled task stays in front of you every day of its week until its date.
+// Returns entries whose materialized copy should move from `materializedDate`'s list to today's.
+// After the due date it stops moving and is treated like any other overdue task (shutdown carry-over).
+export const rollForwardOf = (list, todayStr) => (list || []).filter((e) => isMaterialized(e) && !isTemplate(e) && e.materializedDate
+  && e.materializedDate < todayStr && e.scheduledDate >= todayStr && mondayOf(e.materializedDate) === mondayOf(todayStr) && !e.done);
+
+// ── Recurrence ── template entry: { id, title, ..., recurrence: { freq: 'weekly'|'daily'|'monthly', days?: [0-6], dayOfMonth? }, startDate, generated: [dates] }
+export const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+export const occursOn = (tpl, dateStr) => {
+  const r = tpl?.recurrence;
+  if (!r || !isValidDate(dateStr) || (tpl.startDate && dateStr < tpl.startDate) || (r.until && dateStr > r.until)) return false;
+  const d = parse(dateStr);
+  if (r.freq === 'daily') return true;
+  if (r.freq === 'weekly') return (r.days || []).includes(d.getDay());
+  if (r.freq === 'monthly') { const dom = Number(r.dayOfMonth) || parse(tpl.startDate || dateStr).getDate(); const last = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate(); return d.getDate() === Math.min(dom, last); }
+  return false;
+};
+export const occurrencesBetween = (tpl, from, to, max = 400) => {
+  const out = [];
+  for (let d = from; d <= to && out.length < max; d = addDaysStr(d, 1)) if (occursOn(tpl, d)) out.push(d);
+  return out;
+};
+export const nextOccurrences = (tpl, afterDate, n = 4, horizonDays = 120) => occurrencesBetween(tpl, addDaysStr(afterDate, 1), addDaysStr(afterDate, horizonDays)).slice(0, n);
+export const instanceId = (templateId, date) => `${templateId}_${date}`;
+
+// Create an instance entry for each occurrence in the current (visible) week. Idempotent: keyed by templateId+date,
+// skipped if already generated or already present in the list.
+export const expandRecurring = (list, todayStr) => {
+  const items = list || [];
+  const have = new Set(items.map((e) => e?.id));
+  const weekStart = mondayOf(todayStr); const weekEnd = sundayOf(todayStr);
+  const added = [];
+  const next = items.map((e) => {
+    if (!isTemplate(e) || e.stopped) return e;
+    const gen = new Set(e.generated || []);
+    const from = e.startDate && e.startDate > weekStart ? e.startDate : weekStart;
+    let changed = false;
+    occurrencesBetween(e, from, weekEnd).forEach((date) => {
+      const id = instanceId(e.id, date);
+      if (gen.has(date) || have.has(id)) { if (!gen.has(date)) { gen.add(date); changed = true; } return; }
+      const { recurrence, generated, startDate, stopped, materializedAt, materializedDate, ...fields } = e;
+      added.push({ ...fields, id, templateId: e.id, scheduledDate: date });
+      have.add(id); gen.add(date); changed = true;
+    });
+    if (!changed) return e;
+    return { ...e, generated: [...gen].filter((d) => d >= addDaysStr(weekStart, -14)).sort() };
+  });
+  return { list: [...next, ...added], added };
+};
+
+export const buildRecurringTemplate = (fields, startDate, recurrence, id = makeScheduledId()) => {
+  const base = buildScheduledEntry(fields, startDate, fields?.scheduledTime || '', id);
+  if (!base || !recurrence?.freq) return null;
+  const r = { freq: recurrence.freq };
+  if (r.freq === 'weekly') { r.days = [...new Set((recurrence.days || []).map(Number))].filter((d) => d >= 0 && d <= 6).sort(); if (!r.days.length) r.days = [parse(startDate).getDay()]; }
+  if (r.freq === 'monthly') r.dayOfMonth = Number(recurrence.dayOfMonth) || parse(startDate).getDate();
+  const { scheduledDate, ...rest } = base;
+  return { ...rest, startDate, recurrence: r, generated: [] };
+};
+export const describeRecurrence = (r) => {
+  if (!r) return '';
+  if (r.freq === 'daily') return 'Every day';
+  if (r.freq === 'weekly') return `Every ${(r.days || []).map((d) => WEEKDAYS[d]).join(', ')}`;
+  if (r.freq === 'monthly') return `Monthly on day ${r.dayOfMonth}`;
+  return '';
 };
