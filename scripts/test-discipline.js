@@ -35,5 +35,7 @@ if (extra) {
 }
 const SC = await import(path.join(dir, 'shareCard.mjs'));
 t('procrastination log labels cover all logged types', () => { for (const k of ['missed-deadline', 'gate-open-locked', 'boss-failed', 'freeze-used']) assert.ok(SC.LOG_LABELS[k]); });
+const SB = await import(path.join(dir, 'subtasks.mjs'));
+t('subtasks: percent + auto-complete opt-in, shared with boss HP', () => { const tk = { subtasks: [{ id: 1, done: true }, { id: 2, done: false }] }; assert.equal(SB.subtaskPercent(tk), 50); assert.equal(D.bossHp(tk), 50); assert.equal(SB.subtaskPercent({}), 0); assert.ok(!SB.shouldAutoComplete(tk)); const all = { ...tk, subtasks: SB.toggleSubtask(tk.subtasks, 2), autoCompleteParent: true }; assert.ok(SB.shouldAutoComplete(all)); assert.ok(!SB.shouldAutoComplete({ ...all, autoCompleteParent: false })); });
 console.log(`${n} passed`);
 })().catch((e) => { console.error(e); process.exit(1); });

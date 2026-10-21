@@ -1,5 +1,6 @@
 // Pure Discipline Mode logic. All dates are local 'YYYY-MM-DD'; times local 'HH:MM'.
 import { dayDiff } from './streak';
+import { subtaskProgress } from './subtasks';
 
 export const DEFAULT_DEADLINE = '21:00';
 export const MISSED_DEADLINE_PENALTY = -50;
@@ -48,11 +49,11 @@ export const pushLog = (log, ...entries) => [...(log || []), ...entries].slice(-
 // ---- Phase 2: Evening boss ----
 export const BOSS_BONUS = 100;
 // HP 100 -> 0 as subtasks get done; a completed boss is at 0.
+// Reuses the generic subtask progress (any task can have a checklist; the boss just renders it as HP).
 export const bossHp = (task) => {
   if (task?.completed) return 0;
-  const subs = Array.isArray(task?.subtasks) ? task.subtasks : [];
-  if (!subs.length) return 100;
-  return Math.round((1 - subs.filter((s) => s.done).length / subs.length) * 100);
+  const { done, total } = subtaskProgress(task);
+  return total ? Math.round((1 - done / total) * 100) : 100;
 };
 // Can today's completions count toward the streak? Only gated when Discipline Mode is on.
 export const streakGate = (settings, { bossSet = false, bossCleared = false, missedToday = false } = {}) => {

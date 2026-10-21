@@ -71,6 +71,7 @@
                     </div>
                     <div v-if="subtaskProgress(task).total" class="task-chips">
                       <span class="chip chip--subtasks" :class="{ 'chip--subtasks-done': subtaskProgress(task).done === subtaskProgress(task).total }" title="Subtasks done">☑ {{ subtaskProgress(task).done }}/{{ subtaskProgress(task).total }}</span>
+                      <span v-if="!task.boss" class="sub-bar" role="progressbar" :aria-valuenow="subtaskPercent(task)" aria-valuemin="0" aria-valuemax="100" :aria-label="'Subtasks ' + subtaskPercent(task) + '% done'"><span class="sub-bar-fill" :style="{ width: subtaskPercent(task) + '%' }"></span></span>
                     </div>
                     <div v-if="task.boss && isTodayTab" class="boss-bar" :title="'Boss HP ' + bossHp(task) + '%'">
                       <span class="boss-label">👹 BOSS</span>
@@ -176,7 +177,7 @@ import { localDateStr } from '@/utils/streak';
 const todayYmd = localDateStr();
 import { ref, watch, onBeforeUnmount } from 'vue';
 import { STATUSES, taskKey, estimateOf, formatClock, formatDuration as formatMinutes, toMinutes } from '@/utils/taskPlanning';
-import { subtaskProgress } from '@/utils/subtasks';
+import { subtaskProgress, subtaskPercent } from '@/utils/subtasks';
 import { taskTimeLeft } from '@/utils/dayStats';
 import { formatShortDate, formatTime } from '@/utils/dateTime';
 import SubtaskList from '@/components/home/SubtaskList.vue';
@@ -360,4 +361,6 @@ const onCardTap = (event) => { // bound on the whole card (blank areas, chips, n
 .boss-btn { margin: 6px 0; padding: 4px 10px; border-radius: 8px; border: 1px solid #fca5a5; color: #b91c1c; background: #fff5f5; font-weight: 600; }
 .chip--due { background: var(--c-primary-soft, #eef2ff); color: var(--c-primary, #4f46e5); font-weight: 600; }
 .chip--overdue { background: #fee2e2; color: #b91c1c; }
+.sub-bar { display: inline-block; vertical-align: middle; width: 64px; height: 6px; border-radius: 999px; background: var(--c-border, #e2e8f0); overflow: hidden; margin-left: 6px; }
+.sub-bar-fill { display: block; height: 100%; background: var(--c-success, #22c55e); transition: width .3s; }
 </style>
