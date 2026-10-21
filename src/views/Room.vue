@@ -414,8 +414,8 @@
 </template>
 
 <script setup>
+import { sendBroadcast } from '@/composables/useNotifications';
 import { ref, onMounted, computed, watch} from 'vue';
-import axios from 'axios';
 import { db, auth, storage } from '@/firebaseConfig';
 import Skeleton from "@/components/Skeleton.vue";
 import { collection, getDoc, onSnapshot, getDocs, addDoc, serverTimestamp, deleteDoc, doc, updateDoc, arrayUnion } from 'firebase/firestore';
@@ -722,11 +722,6 @@ const createNewPost = async () => {
 
 
 const sendNotification = async (message, userName, postId, commentId = null, content = '') => {
-  const headers = {
-    'Authorization': 'Bearer ZDZiZDk0NTktMjUwZS00NTQ4LWFhOTItNjBiZDZiMjVhYzYy',
-    'Content-Type': 'application/json'
-
-  };
 
   let notificationMessage = `${userName} ${message}`;
   if (content) {
@@ -734,15 +729,13 @@ const sendNotification = async (message, userName, postId, commentId = null, con
   }
 
   const data = {
-    "app_id": "fc206a71-7d65-4cfa-b8b2-0c10548e1476",
     "included_segments": ["All"],
     "data": {"foo": "bar"},
     "contents": {"en": notificationMessage}
   };
 
   try {
-    const response = await axios.post('https://onesignal.com/api/v1/notifications', data, {headers});
-    console.log('Notification sent:', response.data);
+    await sendBroadcast(data.contents.en); // server-side; REST key no longer in the client
   } catch (error) {
     console.error('Error sending notification:', error);
   }

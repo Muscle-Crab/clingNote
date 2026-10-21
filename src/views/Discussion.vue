@@ -125,6 +125,7 @@
 </template>
 
 <script setup>
+import { sendBroadcast } from '@/composables/useNotifications';
 import {db, auth} from '@/firebaseConfig.js';
 import {ref, reactive, onMounted} from 'vue';
 import {
@@ -140,7 +141,6 @@ import {
   arrayRemove
 } from 'firebase/firestore';
 import {useRouter} from 'vue-router';
-import axios from 'axios';
 
 const router = useRouter();
 
@@ -365,22 +365,16 @@ const isApproved = (room) => {
 };
 
 const sendNotification = async (message, userId) => {
-  const headers = {
-    'Authorization': 'Bearer token="ZWY3MWJhMDUtNTU1Yi00NGViLThmNjItNDNhZTY0YzMwOGRh"',
-    'Content-Type': 'application/json'
-  };
-  const userName = auth.currentUser.displayName || auth.currentUser.email;
+  const userName = auth.currentUser.displayName || 'Someone'; // never broadcast emails
   const notificationMessage = `${userName} ${message}`;
   const data = {
-    "app_id": "65d866ad-f59c-4557-9d75-4ccf7fe60a47",
     "included_segments": ["All"],
     "data": {"foo": "bar"},
     "contents": {"en": notificationMessage}
   };
 
   try {
-    const response = await axios.post('https://onesignal.com/api/v1/notifications', data, {headers});
-    console.log('Notification sent:', response.data);
+    await sendBroadcast(data.contents.en); // server-side; REST key no longer in the client
   } catch (error) {
     console.error('Error sending notification:', error);
   }

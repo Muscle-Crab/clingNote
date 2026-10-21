@@ -159,11 +159,11 @@
 
 
 <script setup>
+import { sendBroadcast } from '@/composables/useNotifications';
 import { ref, computed, onMounted } from 'vue';
 import { db } from '@/firebaseConfig';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
 import { collection, onSnapshot, doc, updateDoc, setDoc } from 'firebase/firestore';
-import axios from 'axios'
 
 const players = ref([]);
 const captains = ref([]);
@@ -223,19 +223,13 @@ const fetchPlayers = async () => {
 };
 // Function to send notifications
 const sendNotification = async (message) => {
-  const headers = {
-    'Authorization': 'Bearer ZDZiZDk0NTktMjUwZS00NTQ4LWFhOTItNjBiZDZiMjVhYzYy',
-    'Content-Type': 'application/json'
-  };
   const data = {
-
-    "app_id": "fc206a71-7d65-4cfa-b8b2-0c10548e1476",  // Updated app ID
     "included_segments": ["All"],  // Sends to all users
     "contents": {"en": message}
   };
 
   try {
-    await axios.post('https://onesignal.com/api/v1/notifications', data, { headers });
+    await sendBroadcast(data.contents.en); // server-side; REST key no longer in the client
     console.log('Notification sent:', message);
   } catch (error) {
     console.error('Error sending notification:', error);

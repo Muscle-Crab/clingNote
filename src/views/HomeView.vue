@@ -185,7 +185,7 @@ import { defaultSettings as defaultDiscipline, warningFor, isPastDeadline, strea
 import DramaOverlay from '@/components/discipline/DramaOverlay.vue';
 import { monthKey, prevMonthKey } from '@/utils/ranking';
 import { applyTaskToggle, evaluateStreak, localDateStr, dayDiff, ALLOWED_GAP_DAYS, DAILY_STREAK_MIN } from '@/utils/streak';
-import { scheduleNotification, sendNotificationToPlayer } from '@/composables/useNotifications';
+import { scheduleNotification, sendNotificationToPlayer, linkPushUser } from '@/composables/useNotifications';
 import { speak } from '@/composables/useSpeech';
 import { completionPercentage, computeTimeStats, daysLeftInYearFrom, heroTitleFor } from '@/utils/dayStats';
 import { shouldAutoComplete, resetSubtasks } from '@/utils/subtasks';
@@ -1306,6 +1306,7 @@ onMounted(() => {
 onAuthStateChanged(auth, async(user) => {
   if (user) {
     userId.value = user.uid; // Set user ID when the user logs in
+    linkPushUser(user.uid); // OneSignal external_id = uid, so server-side 'self' pushes reach only this user
     console.log('User ID:', userId.value);
     await loadDaySession();
     // Fetch tasks and streak after user ID is set
