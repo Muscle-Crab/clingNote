@@ -14,12 +14,17 @@
           <span class="wave wave-4"></span>
           <span class="wave wave-5"></span>
         </div>
-        <p class="voice-label">{{ error ? 'Voice input stopped' : 'Listening...' }}</p>
+        <p class="voice-label">{{ error ? 'Voice input stopped' : 'Listening… hands-free' }}</p>
         <p v-if="error" class="voice-error" role="alert">{{ error }}</p>
         <p v-else class="voice-transcript">"<span>{{ transcript }}</span>"</p>
-        <p v-if="!error" class="voice-hint">Speak your task clearly</p>
+        <p v-if="!error" class="voice-hint">Say a task and pause — it saves automatically. Say “and then” or “next” to add several at once.</p>
+        <p v-if="capability === 'partial'" class="voice-hint">On iPhone/Safari the mic restarts after each phrase; if it stops, tap the mic again.</p>
+        <ul v-if="added.length" class="voice-added">
+          <li v-for="e in added" :key="e.id">✓ {{ e.title }} <button v-if="e.undoUntil" type="button" class="voice-undo" @click="$emit('undo', e)">Undo</button></li>
+        </ul>
+        <button type="button" class="btn-secondary voice-close-btn" @click="$emit('cancel')">Done</button>
       </template>
-      <button v-if="!supported || error" type="button" class="btn-secondary voice-close-btn" @click="$emit('cancel')">Close</button>
+      <button v-if="!supported" type="button" class="btn-secondary voice-close-btn" @click="$emit('cancel')">Close</button>
     </div>
   </div>
 </template>
@@ -29,8 +34,10 @@ defineProps({
   transcript: { type: String, default: '' },
   supported: { type: Boolean, default: true },
   error: { type: String, default: '' },
+  capability: { type: String, default: 'full' },
+  added: { type: Array, default: () => [] },
 });
-defineEmits(['cancel']);
+defineEmits(['cancel', 'undo']);
 </script>
 
 <style scoped>
@@ -102,4 +109,7 @@ defineEmits(['cancel']);
 .field-input:focus, .field-select:focus, .field-textarea:focus { border-color: var(--c-accent); box-shadow: 0 0 0 1px var(--c-accent); outline: none; }
 .field-label { font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--c-text-3); }
 @media (max-width: 600px) { .modal-backdrop { align-items: flex-end; padding: 0; } .modal-box { max-width: none; max-height: 92vh; } .modal-header, .modal-body, .modal-footer { padding-left: var(--sp-4); padding-right: var(--sp-4); } }
+.voice-added { list-style: none; padding: 0; margin: 8px 0; text-align: left; max-height: 140px; overflow: auto; }
+.voice-added li { padding: 3px 0; font-size: .9rem; }
+.voice-undo { margin-left: 8px; color: #f59e0b; font-weight: 700; background: none; border: none; cursor: pointer; }
 </style>

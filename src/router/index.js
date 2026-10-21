@@ -25,6 +25,36 @@ const routes = [
   },
 
   {
+    path: '/rankings',
+    name: 'rankings',
+    component: () => import('../views/RankingsView.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/discipline',
+    name: 'discipline',
+    component: () => import('../views/DisciplineView.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/gate',
+    name: 'gate',
+    component: () => import('../views/GateView.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/discipline/log',
+    name: 'procrastination-log',
+    component: () => import('../views/ProcrastinationLog.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/upcoming',
+    name: 'upcoming',
+    component: () => import('../views/UpcomingView.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
     path: '/addiction',
     name: 'addiction',
     component: Addiction

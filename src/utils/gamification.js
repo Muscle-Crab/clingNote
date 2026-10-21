@@ -29,3 +29,10 @@ export const badges = [
   { name: "Peak Performer", days: 30, icon: "🏔️" }
 ];
 
+
+// Monthly ranking badges (keyed by `id`; awarded once per month as `${id}:${YYYY-MM}`).
+export const monthlyBadges = [
+  { id: 'monthly-1', name: 'Monthly Champion', icon: '👑' },
+  { id: 'monthly-top3', name: 'Top 3 of the Month', icon: '🏅' },
+  { id: 'monthly-gold', name: 'Gold+ Month', icon: '🥇' },
+];

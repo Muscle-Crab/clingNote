@@ -22,6 +22,9 @@ export const renameSubtask = (list, id, title) => {
 export const toggleSubtask = (list, id) => (list || []).map((s) => (s.id === id ? { ...s, done: !s.done } : s));
 export const removeSubtask = (list, id) => (list || []).filter((s) => s.id !== id);
 
+// 0-100 completion percentage of the checklist (0 when there are no subtasks).
+export const subtaskPercent = (t) => { const { done, total } = subtaskProgress(t); return total ? Math.round((done / total) * 100) : 0; };
+
 // True when the task opted in, is still open, has subtasks and all of them are done.
 export const shouldAutoComplete = (t) => {
   const { done, total } = subtaskProgress(t);

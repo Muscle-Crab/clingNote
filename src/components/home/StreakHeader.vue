@@ -10,8 +10,9 @@
         </div>
         <div class="streak-info">
           <p class="streak-count">🔥 <span>{{ streak }}</span> day streak</p>
-          <p v-if="streak === 0" class="streak-sub streak-none">Start your streak today</p>
-          <p v-else class="streak-sub">{{ motivationalMessage }}</p>
+          <p v-if="streakStatus === 'at-risk'" class="streak-sub streak-at-risk">⚠️ {{ streak ? 'Streak at risk' : 'Building today' }} — {{ streakProgress }}/{{ streakMin }} today<span v-if="bestStreak"> · Best {{ bestStreak }}</span></p>
+          <p v-else-if="streak === 0" class="streak-sub streak-none">Complete {{ streakMin }} tasks to start your streak<span v-if="bestStreak"> · Best {{ bestStreak }}</span></p>
+          <p v-else class="streak-sub">{{ motivationalMessage }}<span v-if="bestStreak"> · Best {{ bestStreak }}</span></p>
         </div>
       </div>
 
@@ -66,6 +67,10 @@ import { getStreakIcon } from '@/utils/gamification';
 
 defineProps({
   streak: { type: Number, default: 0 },
+  bestStreak: { type: Number, default: 0 },
+  streakStatus: { type: String, default: 'none' },
+  streakProgress: { type: Number, default: 0 },
+  streakMin: { type: Number, default: 5 },
   motivationalMessage: { type: String, default: '' },
   pointsAccumulated: { type: Number, default: 0 },
   totalPoints: { type: Number, default: 0 },
@@ -81,6 +86,7 @@ defineEmits(['shutdown', 'end-day']);
 .streak-count { font-size: var(--fs-lg); font-weight: 700; margin: 0; color: var(--c-text); }
 .streak-count span { color: var(--c-warn); }
 .streak-sub { font-size: var(--fs-xs); color: var(--c-text-3); margin: 0; }
+.streak-at-risk { color: var(--c-warn-text, #B45309) !important; font-weight: 600; }
 .streak-none { color: var(--c-text-3) !important; }
 .header-cold .streak-count, .header-warm .streak-count, .header-hot .streak-count { color: var(--c-text); }
 .header-center { flex: 0 0 auto; padding-left: var(--sp-4); border-left: 1px solid var(--c-border); }

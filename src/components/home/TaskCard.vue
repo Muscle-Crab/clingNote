@@ -54,22 +54,31 @@
                     <div class="task-meta-row">
 
                       <span v-if="task.completed && isTodayTab" class="task-status task-status--done">Complete</span>
+                      <span v-else-if="task.status === 'pending'" class="task-status task-status--pending" :title="task.pendingOn ? 'Pending on ' + task.pendingOn : 'Pending'">Pending</span>
                       <button @click="$emit('toggle-important')" class="importance-btn" :title="task.important ? 'Important' : 'Mark important'" :aria-label="task.important ? 'Unmark important' : 'Mark important'" :aria-pressed="task.important ? 'true' : 'false'">
                         <i :class="task.important ? 'fas fa-fire task-fire--on' : 'fas fa-fire task-fire--off'"></i>
                       </button>
                     </div>
 
                     <!-- Planning chips -->
-                    <div v-if="estimateOf(task) || task.startTime || task.dueDate || (task.priority && task.priority !== 'low') || (task.status && task.status !== 'todo')" class="task-chips">
+                    <div v-if="estimateOf(task) || task.startTime || task.dueDate || (task.priority && task.priority !== 'low') || (task.status && task.status !== 'todo' && task.status !== 'pending')" class="task-chips">
                       <span v-if="task.priority && task.priority !== 'low'" class="chip" :class="'chip--' + task.priority">{{ task.priority }}</span>
-                      <span v-if="task.status && task.status !== 'todo'" class="chip">{{ task.status }}</span>
-                      <span v-if="task.dueDate" class="chip">Due {{ task.dueDate }}</span>
+                      <span v-if="task.status && task.status !== 'todo' && task.status !== 'pending'" class="chip">{{ task.status }}</span>
+                      <span v-if="task.scheduledFor" class="chip chip--due" :class="{ 'chip--overdue': task.scheduledFor < todayYmd }">{{ dueBadge(task, todayYmd) }}</span>
+                      <span v-else-if="task.dueDate" class="chip">Due {{ task.dueDate }}</span>
                       <span v-if="estimateOf(task)" class="chip">⏱ {{ formatMinutes(estimateOf(task)) }}</span>
                       <span v-if="task.startTime" class="chip">🕒 {{ formatClock(toMinutes(task.startTime)) }}<template v-if="estimateOf(task)"> – {{ formatClock(toMinutes(task.startTime) + estimateOf(task)) }}</template></span>
                     </div>
                     <div v-if="subtaskProgress(task).total" class="task-chips">
                       <span class="chip chip--subtasks" :class="{ 'chip--subtasks-done': subtaskProgress(task).done === subtaskProgress(task).total }" title="Subtasks done">☑ {{ subtaskProgress(task).done }}/{{ subtaskProgress(task).total }}</span>
+                      <span v-if="!task.boss" class="sub-bar" role="progressbar" :aria-valuenow="subtaskPercent(task)" aria-valuemin="0" aria-valuemax="100" :aria-label="'Subtasks ' + subtaskPercent(task) + '% done'"><span class="sub-bar-fill" :style="{ width: subtaskPercent(task) + '%' }"></span></span>
                     </div>
+                    <div v-if="task.boss && isTodayTab" class="boss-bar" :title="'Boss HP ' + bossHp(task) + '%'">
+                      <span class="boss-label">👹 BOSS</span>
+                      <div class="boss-hp" role="progressbar" :aria-valuenow="bossHp(task)" aria-valuemin="0" aria-valuemax="100"><div class="boss-hp-fill" :style="{ width: bossHp(task) + '%' }"></div></div>
+                      <span class="boss-hp-num">{{ bossHp(task) }} HP</span>
+                    </div>
+                    <div v-if="task.status === 'pending' && task.pendingOn" class="task-next task-pending-on">⏳ Pending on {{ task.pendingOn }}</div>
                     <div v-if="task.nextAction" class="task-next">→ {{ task.nextAction }}</div>
                     <div v-if="task.notes && !expanded" class="task-note-preview">📝 {{ task.notes.length > 60 ? task.notes.slice(0, 60) + '…' : task.notes }}</div>
 
@@ -89,9 +98,13 @@
                           <input type="time" class="field-input" :value="task.startTime || ''" @change="$emit('patch', { startTime: $event.target.value })" /></label>
                         <label class="mini-field"><span>Estimate (min)</span>
                           <input type="number" min="0" step="5" class="field-input" :value="task.estimateMin || ''" @change="$emit('patch', { estimateMin: Number($event.target.value) || 0 })" /></label>
+                        <label v-if="task.status === 'pending'" class="mini-field"><span>Pending on</span>
+                          <input type="text" class="field-input" :value="task.pendingOn || ''" placeholder="e.g. Apple review" @change="$emit('patch', { pendingOn: $event.target.value.trim() })" /></label>
                         <label class="mini-field"><span>Next action</span>
                           <input type="text" class="field-input" :value="task.nextAction || ''" @change="$emit('patch', { nextAction: $event.target.value.trim() })" /></label>
                       </div>
+                      <button type="button" class="cal-btn" @click="downloadTaskIcs(task, todayYmd)">📅 Add to calendar</button>
+                      <button v-if="isTodayTab && !task.completed" type="button" class="boss-btn" @click="$emit('set-boss')">{{ task.boss ? '✖ Remove boss' : '👹 Make this the evening boss' }}</button>
                       <label class="mini-field"><span>Note</span>
                         <textarea class="field-textarea" rows="2" :value="task.notes || ''" placeholder="Quick note…" @change="$emit('patch', { notes: $event.target.value })"></textarea></label>
                       <div v-if="task.type === 'one-time' && isTodayTab && !task.completed" class="mini-field sched-field"><span>Schedule for later</span>
@@ -159,9 +172,14 @@
 </template>
 
 <script setup>
+import { bossHp } from '@/utils/discipline';
+import { dueBadge } from '@/utils/scheduling';
+import { downloadTaskIcs } from '@/utils/ics';
+import { localDateStr } from '@/utils/streak';
+const todayYmd = localDateStr();
 import { ref, watch, onBeforeUnmount } from 'vue';
 import { STATUSES, taskKey, estimateOf, formatClock, formatDuration as formatMinutes, toMinutes } from '@/utils/taskPlanning';
-import { subtaskProgress } from '@/utils/subtasks';
+import { subtaskProgress, subtaskPercent } from '@/utils/subtasks';
 import { taskTimeLeft } from '@/utils/dayStats';
 import { formatShortDate, formatTime } from '@/utils/dateTime';
 import SubtaskList from '@/components/home/SubtaskList.vue';
@@ -177,7 +195,7 @@ defineProps({
   showNotification: { type: Boolean, default: false },
   transferNotification: { type: String, default: null },
 });
-const emit = defineEmits(['toggle-expand', 'toggle-complete', 'open-detail', 'toggle-important', 'patch', 'subtask-patch',
+const emit = defineEmits(['set-boss', 'toggle-expand', 'toggle-complete', 'open-detail', 'toggle-important', 'patch', 'subtask-patch',
   'toggle-label', 'open-reminder', 'transfer', 'video', 'upload', 'timer', 'wont-do', 'delete', 'schedule']);
 
 const moreOpen = ref(false);
@@ -337,4 +355,15 @@ const onCardTap = (event) => { // bound on the whole card (blank areas, chips, n
   .coin-value::after { content: ''; }
   .task-actions { left: var(--sp-2); right: var(--sp-2); justify-content: space-between; }
 }
+.boss-bar { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+.boss-label { font-size: var(--fs-xs, .7rem); font-weight: 800; color: #b91c1c; }
+.boss-hp { flex: 1; height: 8px; border-radius: 999px; background: #fee2e2; overflow: hidden; }
+.boss-hp-fill { height: 100%; background: linear-gradient(90deg, #ef4444, #b91c1c); transition: width .4s; }
+.boss-hp-num { font-size: var(--fs-xs, .7rem); font-variant-numeric: tabular-nums; color: #b91c1c; }
+.boss-btn { margin: 6px 0; padding: 4px 10px; border-radius: 8px; border: 1px solid #fca5a5; color: #b91c1c; background: #fff5f5; font-weight: 600; }
+.chip--due { background: var(--c-primary-soft, #eef2ff); color: var(--c-primary, #4f46e5); font-weight: 600; }
+.chip--overdue { background: #fee2e2; color: #b91c1c; }
+.sub-bar { display: inline-block; vertical-align: middle; width: 64px; height: 6px; border-radius: 999px; background: var(--c-border, #e2e8f0); overflow: hidden; margin-left: 6px; }
+.sub-bar-fill { display: block; height: 100%; background: var(--c-success, #22c55e); transition: width .3s; }
+.cal-btn { margin: 6px 6px 6px 0; padding: 4px 10px; border-radius: 8px; border: 1px solid var(--c-border, #e2e8f0); background: transparent; font-weight: 600; }
 </style>

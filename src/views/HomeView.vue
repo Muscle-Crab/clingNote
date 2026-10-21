@@ -1,5 +1,5 @@
 <template>
-  <div ref="scrollContainer" class="app-root" :class="{ 'is-dragging': isDraggingTask }">
+  <div ref="scrollContainer" class="app-root" :class="[{ 'is-dragging': isDraggingTask }, appTheme ? 'theme-' + appTheme : '']">
 
     <!-- Loading Screen -->
     <div v-if="isLoading" class="splash-screen">
@@ -32,6 +32,9 @@
             </button>
             <div v-if="menuOpen" class="hero-menu-pop" @click="menuOpen = false">
               <button type="button" class="hero-menu-item" @click="openShutdown">🌙 Shutdown day</button>
+              <router-link to="/upcoming" class="hero-menu-item">📅 Upcoming</router-link>
+              <router-link to="/rankings" class="hero-menu-item">🏆 Rankings</router-link>
+              <router-link to="/discipline" class="hero-menu-item">⚔️ Discipline Mode</router-link>
               <button type="button" class="hero-menu-item" @click="showSchedule = !showSchedule">🗓 {{ showSchedule ? 'Hide' : 'Show' }} schedule</button>
             </div>
           </div>
@@ -43,8 +46,24 @@
 
       </section>
 
-      <StreakHeader :streak="streak" :motivational-message="motivationalMessage" :points-accumulated="pointsAccumulated"
+      <StreakHeader :streak="streak" :best-streak="bestStreak" :streak-status="streakStatus" :streak-progress="streakProgress" :streak-min="DAILY_STREAK_MIN" :motivational-message="motivationalMessage" :points-accumulated="pointsAccumulated"
                     :total-points="totalPoints" :day-session="daySession" @shutdown="openShutdown" @end-day="endDay" />
+
+      <div v-if="disciplineWarning" class="disc-warning" :class="'disc-warning--' + disciplineWarning" role="alert">
+        ⚠️ {{ disciplineWarning === '30m' ? '30 minutes' : '2 hours' }} until your {{ disciplineSettings.deadline }} deadline — {{ streakProgress }}/{{ DAILY_STREAK_MIN }} done
+      </div>
+      <DramaOverlay v-if="lossScreen" variant="lost" title="Streak lost" button="I'll do better"
+                    :subtitle="`You missed your deadline. ${lossScreen.lostStreak ? lossScreen.lostStreak + '-day streak gone. ' : ''}${lossScreen.penalty} pts.`" @close="dismissLoss" />
+
+      <DramaOverlay v-if="bossVictory" variant="victory" title="Boss defeated" button="Claim victory"
+                    :subtitle="`${bossVictory.title} is down. +${BOSS_BONUS} pts — your day can count now.`" @close="bossVictory = null" />
+
+      <DramaOverlay v-if="levelUp" variant="levelup" :title="`Level ${levelUp.level}`" button="Let's go"
+                    :subtitle="`${levelUp.xp} XP · ${levelUp.toNext} XP to level ${levelUp.level + 1}`" @close="levelUp = null" />
+      <DramaOverlay v-if="rewardScreen && !levelUp" variant="reward" :title="`${rewardScreen.days}-day streak!`" button="Nice"
+                    :subtitle="`Reward unlocked: ${rewardScreen.label}`" @close="rewardScreen = null" />
+
+      <MorningReport v-if="morningRecap && isViewingToday" :recap="morningRecap" @close="morningRecap = null" />
 
       <TimeStatsBar v-if="isViewingToday" :stats="timeStats" />
 
@@ -81,7 +100,10 @@
       <ReminderModal v-if="isModalOpen" :reminder="reminder" :task-title="selectedTaskTitle" @close="closeModal" @submit="handleAddReminder" />
 
 
-      <VoiceModal v-if="voiceOpen" :transcript="liveTranscript" :supported="voiceSupported" :error="voiceError" @cancel="cancelVoiceInput" />
+      <VoiceModal v-if="voiceOpen" :transcript="liveTranscript" :supported="voiceSupported" :capability="voiceCap" :error="voiceError" :added="voiceAdded" @undo="undoVoiceTask" @cancel="cancelVoiceInput" />
+      <div v-if="!voiceOpen && voiceAdded.some((e) => e.undoUntil > nowTick)" class="voice-toasts" role="status">
+        <div v-for="e in voiceAdded.filter((x) => x.undoUntil > nowTick)" :key="e.id" class="voice-toast">🎙 Added “{{ e.title }}” <button type="button" @click="undoVoiceTask(e)">Undo</button></div>
+      </div>
 
 
       <!-- ─── Task List ─── -->
@@ -124,7 +146,7 @@
                   :task="task" :drag-disabled="!reorderable" :index="realIndex(task)" :is-today-tab="isViewingToday" :expanded="expandedKey === taskKey(task)"
                   :active-labels="activeLabels" :now="nowTick" :show-notification="showNotification" :transfer-notification="transferNotification"
                   @toggle-expand="toggleExpanded(task)" @toggle-complete="toggleTaskCompletion(realIndex(task))" @open-detail="openTaskDetailModal(task)"
-                  @toggle-important="toggleTaskImportance(realIndex(task))" @patch="patchTask(realIndex(task), task, $event)" @subtask-patch="onSubtaskPatch(realIndex(task), task, $event)"
+                  @set-boss="setBoss(realIndex(task), task)" @toggle-important="toggleTaskImportance(realIndex(task))" @patch="patchTask(realIndex(task), task, $event)" @subtask-patch="onSubtaskPatch(realIndex(task), task, $event)"
                   @toggle-label="toggleLabelHighlight" @open-reminder="openModal('calendar', realIndex(task), task.title)" @transfer="openTransferModal(realIndex(task))"
                   @video="openYouTubeModal(realIndex(task))" @upload="handleUpload($event, realIndex(task))" @timer="openTaskTimerModal(realIndex(task))"
                   @wont-do="openWontDoModal(realIndex(task))" @delete="deleteTask(realIndex(task))" @schedule="scheduleExistingTask(realIndex(task), task, $event)"
@@ -161,11 +183,20 @@ import { viewTasks, canReorder, normalizePrefs, visibleCount, shouldHandleShortc
 import { ACTIVE_CAP, taskKey, activeCount, loadSummary, buildSchedule } from '@/utils/taskPlanning';
 import { getTodayId, formatSessionTime, getCurrentDate, formatTime, getTodayDate, isToday } from '@/utils/dateTime';
 import { badges } from '@/utils/gamification';
-import { scheduleNotification, sendNotificationToPlayer } from '@/composables/useNotifications';
+import { recordMonthlyToggle, awardFinishedMonth } from '@/composables/useMonthlyStats';
+import { loadDisciplineSettings, settleDeadlines, clearLossPending, loadDisciplineState, setBossForDay, setBossCleared, tryFreeze } from '@/composables/useDiscipline';
+import { levelFor, rewardsFor } from '@/utils/rewards';
+import { defaultSettings as defaultDiscipline, warningFor, isPastDeadline, streakGate, BOSS_BONUS } from '@/utils/discipline';
+import DramaOverlay from '@/components/discipline/DramaOverlay.vue';
+import MorningReport from '@/components/home/MorningReport.vue';
+import { buildRecap, reportDue, prevDay } from '@/utils/dailyReport';
+import { monthKey, prevMonthKey } from '@/utils/ranking';
+import { applyTaskToggle, evaluateStreak, localDateStr, dayDiff, ALLOWED_GAP_DAYS, DAILY_STREAK_MIN } from '@/utils/streak';
+import { scheduleNotification, sendNotificationToPlayer, linkPushUser } from '@/composables/useNotifications';
 import { speak } from '@/composables/useSpeech';
 import { completionPercentage, computeTimeStats, daysLeftInYearFrom, heroTitleFor } from '@/utils/dayStats';
 import { shouldAutoComplete, resetSubtasks } from '@/utils/subtasks';
-import { buildScheduledEntry, futureOf, dueOf, countsByDate, withWeekDates, isValidDate, removeScheduled, rescheduleEntry } from '@/utils/scheduling';
+import { buildScheduledEntry, buildRecurringTemplate, isTaskVisibleOn, futureOf, dueOf, countsByDate, withWeekDates, isValidDate, removeScheduled, rescheduleEntry } from '@/utils/scheduling';
 import { mutateScheduled, materializeDueForToday } from '@/composables/useScheduledTasks';
 import ScheduledList from '@/components/home/ScheduledList.vue';
 import EmptyState from '@/components/home/EmptyState.vue';
@@ -190,6 +221,7 @@ import TimeStatsBar from '@/components/home/TimeStatsBar.vue';
 import TimerModal from '@/components/home/TimerModal.vue';
 import TransferModal from '@/components/home/TransferModal.vue';
 import VoiceModal from '@/components/home/VoiceModal.vue';
+import { splitSpokenTasks, voiceCapability, UNDO_MS } from '@/utils/voiceSplit';
 import WontDoModal from '@/components/home/WontDoModal.vue';
 import WorkoutModal from '@/components/home/WorkoutModal.vue';
 import YouTubeModal from '@/components/home/YouTubeModal.vue';
@@ -261,6 +293,7 @@ const startCountdownWatcher = () => {
 
       if (
           task.timerActive &&
+          task.status !== 'pending' && // pending tasks never auto-carry as overdue
           task.timerEndTime &&
           new Date(task.timerEndTime).getTime() <= Date.now()
       ) {
@@ -691,8 +724,8 @@ const selectedDayIndex = ref(-1);
 // Fresh Add-task form. Repeat defaults to "Just once" (one-time); Daily/Weekly are opt-in.
 const blankTask = () => ({
   title: '', time: '', priority: 'low', labels: [], notes: '', selectedDays: [], position: 0, type: 'one-time',
-  dueDate: '', startTime: '', estimateMin: '', nextAction: '', status: 'todo',
-  scheduleDate: '', scheduleTime: '',
+  dueDate: '', startTime: '', estimateMin: '', nextAction: '', status: 'todo', pendingOn: '',
+  scheduleDate: '', scheduleTime: '', scheduleRepeat: '', scheduleDays: [],
   reminder: { datetime: '', repeat: '' },
 });
 const newTask = ref(blankTask());
@@ -934,6 +967,8 @@ const toggleTaskCompletion = async (index) => {
     userCredits.value -= 10;
   }
 
+  if (isToday(selectedDayIndex.value)) onBossToggle(task).finally(() => updateStreakOnCompletion(task)); // both directions; pending ignored
+
   // Remove one-time tasks from the UI immediately
   if (task.type === "one-time") {
     selectedDayRoutine.value.splice(index, 1);
@@ -973,8 +1008,6 @@ const toggleTaskCompletion = async (index) => {
     console.error("Error updating task completion:", error);
   }
 
-  // Check streak after toggling task completion
-  checkStreakOnCompletion();
   checkAllTasksCompleted();
   await saveDailyPerformance();
   selectedDayRoutine.value = selectedDayRoutine.value.filter(task => !task.completed || showCompleted);
@@ -1106,8 +1139,7 @@ const checkAllTasksCompleted = async () => {
     // 🎉 Show completion animation
     showFullScreenAnimation.value = true;
     speak("Congratulations! You are free to do whatever you want");
-    updateStreakOnCompletion();
-    fetchSelectedDayRoutine()// 🔥 Update streak progression
+    fetchSelectedDayRoutine();
     await saveDailyPerformance();
 
     // 🗑 Remove one-time tasks & reset recurring tasks
@@ -1139,58 +1171,132 @@ const checkAllTasksCompleted = async () => {
 };
 
 
-const updateStreakOnCompletion = async () => {
-  if (!userId.value) {
-    console.log("No userId, skipping streak update");
-    return;
+// A day counts once >=1 task is completed (local date). See src/utils/streak.js.
+const streakGap = () => Number(userSettingsStreakGap.value) || ALLOWED_GAP_DAYS;
+
+// ---- Discipline Mode ----
+const disciplineSettings = ref(defaultDiscipline());
+const disciplineWarning = ref(null);
+const lossScreen = ref(null);
+// Whether today's completions may count toward the streak (Discipline Mode rules).
+const discState = ref({});
+const bossVictory = ref(null);
+const streakGateNow = () => {
+  const today = localDateStr();
+  return streakGate(disciplineSettings.value, {
+    missedToday: isPastDeadline(new Date(), today, disciplineSettings.value.deadline),
+    bossSet: discState.value.bossDate === today,
+    bossCleared: discState.value.bossClearedDate === today,
+  });
+};
+// One boss per day (today's tab only). Patches the flag on today's tasks.
+const setBoss = async (index, task) => {
+  if (!isToday(selectedDayIndex.value) || !userId.value) return;
+  const makeBoss = !task.boss;
+  for (let i = 0; i < selectedDayRoutine.value.length; i++) {
+    const t = selectedDayRoutine.value[i];
+    if (i === index) await patchTask(i, t, { boss: makeBoss });
+    else if (t.boss) await patchTask(i, t, { boss: false });
   }
-
-  const today = new Date().toLocaleDateString('en-CA');
-  console.log('today',today)
-  const streakDocRef = doc(db, 'streaks', userId.value);
-
+  const today = localDateStr();
   try {
-    const streakDocSnapshot = await getDoc(streakDocRef);
-
-    if (streakDocSnapshot.exists()) {
-      const data = streakDocSnapshot.data();
-      lastCompletionDate.value = data.lastCompletionDate || null;
-      streak.value = data.streak || 0;
-
-
-
-      if (lastCompletionDate.value === today) {
-        console.log("🛑 Streak already updated today. Skipping...");
-        return;
+    if (makeBoss) { await setBossForDay(userId.value, today, task.title); discState.value = { ...discState.value, bossDate: today, bossTitle: task.title, bossClearedDate: null }; }
+    else { await setBossForDay(userId.value, null, null); discState.value = { ...discState.value, bossDate: null, bossClearedDate: null }; }
+  } catch (e) { console.error('Set boss failed:', e); }
+};
+// Called before the streak update so the gate sees the boss state.
+const onBossToggle = async (task) => {
+  if (!task?.boss || !userId.value) return;
+  const today = localDateStr();
+  discState.value = { ...discState.value, bossDate: today, bossClearedDate: task.completed ? today : null };
+  try { await setBossCleared(userId.value, today, !!task.completed); } catch (e) { console.error('Boss update failed:', e); }
+  if (task.completed) bossVictory.value = { title: task.title };
+};
+const runDiscipline = async () => {
+  if (!userId.value || !disciplineSettings.value.enabled) { disciplineWarning.value = null; return; }
+  const now = new Date(); const today = localDateStr(now);
+  const w = warningFor(now, today, disciplineSettings.value.deadline, streakStatus.value === 'done');
+  disciplineWarning.value = w;
+  if (w) {
+    const k = `discWarn_${userId.value}_${today}_${w}`;
+    try {
+      if (!localStorage.getItem(k)) {
+        localStorage.setItem(k, '1');
+        if (typeof Notification !== 'undefined' && Notification.permission === 'granted') new Notification('ClingNot deadline', { body: `${w === '30m' ? '30 min' : '2 hours'} left: ${streakProgress.value}/${DAILY_STREAK_MIN} tasks done` });
       }
-
-
-      streak.value += 1;
-      lastCompletionDate.value = today;
-
-
-
-      await updateDoc(streakDocRef, {
-        streak: streak.value,
-        lastCompletionDate: today,
-        updatedAt: serverTimestamp(),
-      });
-
-      console.log(`✅ Streak updated to ${streak.value}`);
-    } else {
-      // No streak document yet
-      await setDoc(streakDocRef, {
-        streak: 1,
-        lastCompletionDate: today,
-        updatedAt: serverTimestamp()
-      });
-
-      streak.value = 1;
-      lastCompletionDate.value = today;
-
-      console.log("🔥 New streak started at 1");
-    }
-
+    } catch (e) { /* notifications optional */ }
+  }
+  try {
+    const r = await settleDeadlines(userId.value, disciplineSettings.value, now, (sd, missed) => tryFreeze(userId.value, sd, missed, rewardsFor(bestStreak.value).freezes));
+    const st = await loadDisciplineState(userId.value);
+    discState.value = st;
+    if (st?.lossPending) lossScreen.value = st.lossPending;
+    checkProgression(st);
+    if (r?.missed?.length) await checkStreakOnCompletion();
+  } catch (e) { console.error('Discipline settle failed:', e); }
+};
+// ---- Levels / milestone rewards ----
+const levelUp = ref(null);
+const rewardScreen = ref(null);
+const appTheme = ref('');
+const checkProgression = (st) => {
+  if (!userId.value) return;
+  const lv = levelFor(st?.xp || 0);
+  playerLevel.value = lv;
+  appTheme.value = st?.theme && rewardsFor(bestStreak.value).themes.includes(st.theme) ? st.theme : '';
+  try {
+    const kL = `lastLevelSeen_${userId.value}`; const seenL = Number(localStorage.getItem(kL) || 0);
+    if (seenL && lv.level > seenL) levelUp.value = lv;
+    localStorage.setItem(kL, String(Math.max(seenL, lv.level)));
+    const kR = `lastRewardSeen_${userId.value}`; const seenR = Number(localStorage.getItem(kR) || 0);
+    const newest = rewardsFor(bestStreak.value).unlocked.filter((m) => m.days > seenR);
+    if (newest.length) { rewardScreen.value = newest[newest.length - 1]; localStorage.setItem(kR, String(newest[newest.length - 1].days)); }
+  } catch (e) { /* storage optional */ }
+};
+const playerLevel = ref(levelFor(0));
+const dismissLoss = async () => { lossScreen.value = null; try { await clearLossPending(userId.value); } catch (e) { /* retry next open */ } };
+// ---- Morning report: first open after 8 AM local, once per day ----
+const morningRecap = ref(null);
+const maybeShowMorningReport = async () => {
+  if (!userId.value) return;
+  const now = new Date(); const today = localDateStr(now);
+  const k = `morningReport_${userId.value}`;
+  try { if (!reportDue(today, now.getHours(), localStorage.getItem(k))) return; } catch (e) { return; }
+  try {
+    const yName = days[new Date(`${prevDay(today)}T12:00:00`).getDay()].day;
+    const tName = days[now.getDay()].day;
+    const [sd, y, t] = await Promise.all([getDoc(doc(db, 'streaks', userId.value)), loadDayTasks(userId.value, yName), loadDayTasks(userId.value, tName)]);
+    morningRecap.value = buildRecap({ today, streakDoc: sd.exists() ? sd.data() : {}, yesterdayTasks: y, todayTasks: t, min: DAILY_STREAK_MIN, now });
+    localStorage.setItem(k, today);
+  } catch (e) { console.error('Morning report failed:', e); }
+};
+let disciplineTimer = null;
+const startDiscipline = async () => {
+  try { disciplineSettings.value = await loadDisciplineSettings(userId.value); } catch (e) { return; }
+  await runDiscipline();
+  if (!disciplineTimer) disciplineTimer = setInterval(runDiscipline, 60 * 1000);
+};
+onBeforeUnmount(() => { if (disciplineTimer) clearInterval(disciplineTimer); });
+const applyStreakState = (st) => {
+  const ev = evaluateStreak(st, localDateStr(), streakGap());
+  streak.value = ev.streak; bestStreak.value = ev.bestStreak; lastCompletionDate.value = ev.lastCompletionDate;
+  streakStatus.value = ev.status; streakProgress.value = ev.progress;
+  try { localStorage.setItem(`streakCache_${userId.value}`, JSON.stringify(st)); } catch (e) { /* cache only */ }
+};
+// Called when a task on today's tab is (un)completed; counts distinct non-pending tasks toward DAILY_STREAK_MIN.
+const updateStreakOnCompletion = async (task) => {
+  if (!userId.value || !task) return;
+  if (!isTaskVisibleOn(task, localDateStr())) return; // scheduled task before its week: never counts (central visibility check)
+  const streakDocRef = doc(db, 'streaks', userId.value);
+  try {
+    const snap = await getDoc(streakDocRef);
+    const prev = snap.exists() ? snap.data() : null;
+    const next = applyTaskToggle(prev, localDateStr(), { key: taskKey(task), completed: !!task.completed, pending: task.status === 'pending', gate: streakGateNow() }, streakGap());
+    await setDoc(streakDocRef, { ...next, updatedAt: serverTimestamp() }, { merge: true });
+    applyStreakState(next);
+    recordMonthlyToggle(userId.value, localDateStr(), { key: taskKey(task), completed: !!task.completed, pending: task.status === 'pending' }, next.bestStreak)
+      .then(() => loadDisciplineState(userId.value)).then((st) => { discState.value = st; checkProgression(st); })
+      .catch((e) => console.error('Monthly stats update failed:', e));
     checkForBadges();
     updateMotivationalMessage();
   } catch (error) {
@@ -1223,10 +1329,14 @@ onMounted(() => {
 onAuthStateChanged(auth, async(user) => {
   if (user) {
     userId.value = user.uid; // Set user ID when the user logs in
+    linkPushUser(user.uid); // OneSignal external_id = uid, so server-side 'self' pushes reach only this user
     console.log('User ID:', userId.value);
     await loadDaySession();
     // Fetch tasks and streak after user ID is set
     fetchStreakOnLoad(); // Ensure this runs after userId is set
+    startDiscipline();
+    maybeShowMorningReport();
+    awardFinishedMonth(user.uid, prevMonthKey(monthKey(localDateStr()))).catch(() => {}); // month-end badges for last month
 
     const todayIndex = new Date().getDay();
     if (todayIndex !== -1) {
@@ -1259,7 +1369,7 @@ const runScheduledMaterialization = async () => {
     todayStr.value = getTodayId();
     const todayName = days[new Date().getDay()]?.day;
     if (!todayName) return;
-    const res = await materializeDueForToday(userId.value, todayName, todayStr.value);
+    const res = await materializeDueForToday(userId.value, todayName, todayStr.value, (ds) => days[new Date(`${ds}T12:00:00`).getDay()]?.day);
     scheduledList.value = res.scheduled;
     scheduledError.value = '';
     return res.added;
@@ -1279,16 +1389,21 @@ onBeforeUnmount(() => document.removeEventListener('visibilitychange', onVisible
 
 const submitScheduledTask = async () => {
   const nt = newTask.value;
-  if (!isValidDate(nt.scheduleDate) || nt.scheduleDate <= getTodayId()) { error.value = 'Pick a date after today, or clear “Schedule for later”.'; return; }
+  const repeating = !!nt.scheduleRepeat;
+  if (!isValidDate(nt.scheduleDate) || (repeating ? nt.scheduleDate < getTodayId() : nt.scheduleDate <= getTodayId())) { error.value = 'Pick a date after today, or clear “Schedule for later”.'; return; }
   const labels = typeof nt.labels === 'string' ? nt.labels.split(',').map(l => l.trim()).filter(Boolean) : (nt.labels || []);
-  const entry = buildScheduledEntry({
+  const fields = {
     title: nt.title, important: false, time: '', priority: nt.priority, labels, notes: nt.notes, userId: userId.value,
-    status: nt.status || 'todo', dueDate: nt.dueDate || '', startTime: nt.startTime || '',
+    status: nt.status || 'todo', pendingOn: nt.status === 'pending' ? (nt.pendingOn || '').trim() : '', dueDate: nt.dueDate || '', startTime: nt.startTime || '',
     estimateMin: Number(nt.estimateMin) || 0, nextAction: (nt.nextAction || '').trim(),
-  }, nt.scheduleDate, nt.scheduleTime);
+  };
+  const entry = repeating
+    ? buildRecurringTemplate({ ...fields, scheduledTime: nt.scheduleTime }, nt.scheduleDate, { freq: nt.scheduleRepeat, days: nt.scheduleDays })
+    : buildScheduledEntry(fields, nt.scheduleDate, nt.scheduleTime);
   if (!entry) { error.value = 'Could not schedule this task.'; return; }
   try {
     scheduledList.value = await mutateScheduled(userId.value, (l) => [...l, entry]);
+    afterMaterialize(); // a date in the current week (or a recurring occurrence) shows up right away
     newTask.value = blankTask();
     capWarning.value = false; capOverride.value = false;
     closeModal();
@@ -1376,6 +1491,7 @@ const addNewTask = async () => {
     type: newTask.value.type,
     createdAt: new Date().toISOString(),
     status: newTask.value.status || 'todo',
+    pendingOn: newTask.value.status === 'pending' ? (newTask.value.pendingOn || '').trim() : '',
     dueDate: newTask.value.dueDate || '',
     startTime: newTask.value.startTime || '',
     estimateMin: Number(newTask.value.estimateMin) || 0,
@@ -1674,6 +1790,10 @@ watch(wontDoTasks, () => {
 // Reactive state for streak tracking
 const streak = ref(0);
 const lastCompletionDate = ref(null);
+const bestStreak = ref(0);
+const streakProgress = ref(0); // distinct non-pending tasks completed today
+const streakStatus = ref('none'); // none | done | at-risk | broken
+const userSettingsStreakGap = ref(ALLOWED_GAP_DAYS); // allowed days between counted days (1 = no skips)
 const unlockedBadges = ref([]);
 const motivationalMessage = ref('');
 // Always an array: day switches / failed loads can hand back undefined, and many consumers read .length/.filter.
@@ -1711,32 +1831,34 @@ const showNotification = ref(false);
 
 
 
-// Function to check for streak continuation
+// Evaluate streak for today: resets to 0 only after a full calendar day without a completion.
 const checkStreakOnCompletion = async () => {
   if (!userId.value) return;
-  const yesterday = new Date();
-  yesterday.setDate(yesterday.getDate() - 1);
-
-
   try {
     const streakDocRef = doc(db, 'streaks', userId.value);
-    const streakDocSnapshot = await getDoc(streakDocRef);
-
-    if (streakDocSnapshot.exists()) {
-      const data = streakDocSnapshot.data();
-      lastCompletionDate.value = data.lastCompletionDate || null;
-      streak.value = data.streak || 0
-      await updateStreakInFirestore(); // Save changes
-      checkForBadges();
-      updateMotivationalMessage();
+    const snap = await getDoc(streakDocRef);
+    if (!snap.exists()) { streakStatus.value = 'none'; return; }
+    const data = snap.data();
+    unlockedBadges.value = data.unlockedBadges || [];
+    let ev = evaluateStreak(data, localDateStr(), streakGap());
+    // Earned streak freeze (7-day milestone) covers exactly one missed day.
+    if (ev.status === 'broken' && data.streak && data.lastCompletionDate && dayDiff(data.lastCompletionDate, localDateStr()) === streakGap() + 1) {
+      const y = new Date(); y.setDate(y.getDate() - 1);
+      if (await tryFreeze(userId.value, data, [localDateStr(y)], rewardsFor(data.bestStreak || 0).freezes)) {
+        ev = evaluateStreak({ ...data, lastCompletionDate: localDateStr(y) }, localDateStr(), streakGap());
+      }
     }
+    const { status, progress, min, ...st } = ev; // eslint-disable-line no-unused-vars
+    if (ev.status === 'broken' && data.streak) await setDoc(streakDocRef, { ...st, updatedAt: serverTimestamp() }, { merge: true });
+    else if ((data.bestStreak || 0) < ev.bestStreak) await setDoc(streakDocRef, { bestStreak: ev.bestStreak }, { merge: true });
+    applyStreakState(st);
+    updateMotivationalMessage();
   } catch (error) {
     console.error('Error updating streak:', error);
   }
 };
 
-
-
+// (legacy, not scheduled) old midnight reducer kept for reference
 // Function to check tasks and reduce streak
 const checkTasksAndReduceStreak = async () => {
   if (!userId.value) return;
@@ -1837,27 +1959,9 @@ const startDailyCheck = () => {
 // });
 
 const fetchStreakOnLoad = async () => {
-  if (!userId.value) return; // Ensure user is logged in
-
-  const streakDocRef = doc(db, 'streaks', userId.value); // Use userId as document ID
-
-  try {
-    const streakDocSnapshot = await getDoc(streakDocRef);
-
-    if (streakDocSnapshot.exists()) {
-      const data = streakDocSnapshot.data();
-      streak.value = data.streak || 0;
-      lastCompletionDate.value = data.lastCompletionDate || null;
-      unlockedBadges.value = data.unlockedBadges || [];
-      console.log('Streak and badges fetched:', streak.value, unlockedBadges.value);
-    } else {
-      console.log('No streak document found for this user');
-    }
-
-    updateMotivationalMessage();
-  } catch (error) {
-    console.error('Error fetching streak on load:', error);
-  }
+  if (!userId.value) return;
+  try { const c = JSON.parse(localStorage.getItem(`streakCache_${userId.value}`) || 'null'); if (c) applyStreakState(c); } catch (e) { /* ignore */ }
+  await checkStreakOnCompletion();
 };
 
 const updateStreakInFirestore = async () => {
@@ -1867,11 +1971,9 @@ const updateStreakInFirestore = async () => {
 
   try {
     await setDoc(streakDocRef, {
-      streak: streak.value,
-      lastCompletionDate: lastCompletionDate.value,
       unlockedBadges: unlockedBadges.value,
       updatedAt: serverTimestamp()
-    });
+    }, { merge: true });
     console.log('Streak updated in Firestore:', streak.value);
   } catch (error) {
     console.error('Error updating streak in Firestore:', error);
@@ -1896,7 +1998,7 @@ const updateMotivationalMessage = () => {
     motivationalMessage.value = "You're on fire! Keep it up!";
   } else if (streak.value >= 3) {
     motivationalMessage.value = "Great job! You're building a habit!";
-  } if (streak.value >= 1 && streak.value <= 3) {
+  } else if (streak.value >= 1) {
     motivationalMessage.value = "Good start! Keep going!";
   }
 };
@@ -1977,7 +2079,8 @@ let recognition = null;
 let pendingVoiceText = '';
 let voiceSubmitting = false;
 const liveTranscript = ref('');
-const voiceSupported = typeof window !== 'undefined' && ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window);
+const voiceCap = typeof window !== 'undefined' ? voiceCapability(window, navigator) : 'none';
+const voiceSupported = voiceCap !== 'none';
 // Initialize SpeechRecognition only if supported (every property access stays inside this guard)
 if (voiceSupported) {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -1996,46 +2099,68 @@ if (voiceSupported) {
       : event.error === 'no-speech' ? "Didn't catch anything. Try again."
       : 'Voice input failed (' + (event.error || 'unknown') + ').';
   };
+  recognition.continuous = voiceCap !== 'partial'; // hands-free: keep listening across pauses (Chrome/Edge)
   recognition.onend = () => {
     listening.value = false;
-    // iOS Safari often ends without ever flagging a result final: use what we heard instead of dropping it.
-    if (voiceOpen.value && !voiceError.value && pendingVoiceText.trim()) submitVoiceTask(pendingVoiceText);
+    // iOS Safari often ends without flagging a result final: use what we heard instead of dropping it.
+    if (voiceOpen.value && !voiceError.value && pendingVoiceText.trim()) saveSpoken(pendingVoiceText);
+    // Hands-free: restart after each pause until the user taps Stop (iOS ends after every utterance).
+    if (voiceOpen.value && !voiceError.value && voiceSupported) setTimeout(() => { if (voiceOpen.value && !listening.value) { try { recognition.start(); } catch (e) { /* still stopping */ } } }, 250);
   };
   recognition.onresult = (event) => {
-    let transcript = '';
-    for (let i = 0; i < event.results.length; ++i) {
-      transcript += event.results[i][0].transcript;
+    let interim = '';
+    for (let i = event.resultIndex; i < event.results.length; ++i) {
+      const r = event.results[i];
+      if (r.isFinal) saveSpoken(r[0].transcript); // a pause ends a phrase: save it right away
+      else interim += r[0].transcript;
     }
-    transcript = transcript.trim();
-    liveTranscript.value = transcript;
-    pendingVoiceText = transcript;
-    if (event.results[event.results.length - 1].isFinal) {
-      try { recognition.stop(); } catch (e) { /* already stopped */ }
-      submitVoiceTask(transcript);
-    }
+    liveTranscript.value = interim.trim();
+    pendingVoiceText = interim.trim();
   };
 } else {
   console.warn("Speech recognition not supported in this browser.");
 }
-// Turn a finished transcript into a task using a fresh form (never leftover Add-form state).
-const submitVoiceTask = async (text) => {
-  const title = (text || '').trim();
+// Hands-free capture: every finished phrase is split ("and then" / "next") and each part saved immediately, with a 5 s undo.
+const voiceAdded = ref([]); // [{ id, title, createdAt, dayName, undoUntil }]
+const voiceQueue = [];
+const saveSpoken = (text) => {
   pendingVoiceText = '';
-  if (voiceSubmitting || !title) return;
+  liveTranscript.value = '';
+  splitSpokenTasks(text).forEach((t) => voiceQueue.push(t));
+  drainVoiceQueue();
+};
+const drainVoiceQueue = async () => {
+  if (voiceSubmitting) return;
   voiceSubmitting = true;
   try {
-    newTask.value = { ...blankTask(), title };
-    const ok = await addNewTask();
-    liveTranscript.value = '';
-    if (ok) { voiceOpen.value = false; return; }
-    if (!userId.value) { voiceError.value = 'Sign in to add tasks by voice.'; return; }
-    // Blocked (e.g. the active-task cap warning): hand the text to the Add form so the user sees why and can "Add anyway".
-    voiceOpen.value = false;
-    modalOpen.value = true;
+    while (voiceQueue.length) {
+      const title = voiceQueue.shift();
+      if (!userId.value) { voiceError.value = 'Sign in to add tasks by voice.'; voiceQueue.length = 0; break; }
+      newTask.value = { ...blankTask(), title };
+      capOverride.value = true; // hands-free never stops on the active-task cap warning
+      const ok = await addNewTask();
+      capOverride.value = false;
+      if (!ok) { voiceError.value = error.value || 'Could not add the task.'; continue; }
+      const saved = [...(selectedDayRoutine.value || [])].filter((x) => x.title === title).sort((x, y) => String(y.createdAt).localeCompare(String(x.createdAt)))[0];
+      const entry = { id: `${Date.now()}-${Math.random()}`, title, createdAt: saved?.createdAt, dayName: days[selectedDayIndex.value]?.day, undoUntil: Date.now() + UNDO_MS };
+      voiceAdded.value = [...voiceAdded.value, entry];
+      setTimeout(() => { voiceAdded.value = voiceAdded.value.map((e) => (e.id === entry.id ? { ...e, undoUntil: 0 } : e)); }, UNDO_MS);
+    }
   } catch (e) {
     console.error('Voice task failed:', e);
     voiceError.value = 'Could not add the task. Please try again.';
   } finally { voiceSubmitting = false; }
+};
+const undoVoiceTask = async (entry) => {
+  if (!entry?.createdAt || !entry.dayName || !userId.value) return;
+  const key = `${entry.createdAt}|${entry.title}`;
+  try {
+    const ref_ = doc(db, 'weeklyRoutines', `${userId.value}_${entry.dayName}`);
+    const cur = (await getDoc(ref_)).data()?.tasks || [];
+    await updateDoc(ref_, { tasks: cur.filter((t) => taskKey(t) !== key), updatedAt: serverTimestamp() });
+    selectedDayRoutine.value = (selectedDayRoutine.value || []).filter((t) => taskKey(t) !== key);
+    voiceAdded.value = voiceAdded.value.filter((e) => e.id !== entry.id);
+  } catch (e) { console.error('Undo failed:', e); }
 };
 const cancelVoiceInput = () => {
   if (recognition) { try { recognition.stop(); } catch (e) { /* not started */ } }
@@ -2044,9 +2169,11 @@ const cancelVoiceInput = () => {
   voiceError.value = '';
   liveTranscript.value = '';
   pendingVoiceText = '';
+  voiceAdded.value = voiceAdded.value.filter((e) => e.undoUntil > Date.now()); // keep live undo chips as toasts
 };
 
 const startVoiceInput = () => {
+  voiceAdded.value = [];
   voiceOpen.value = true; // always show the modal, even when recognition is unavailable
   liveTranscript.value = '';
   voiceError.value = '';
@@ -2247,7 +2374,7 @@ const saveDailyPerformance = async () => {
   const completedCount = selectedDayRoutine.value.filter(task => task.completed).length;
   const totalCount = selectedDayRoutine.value.length + wontDoTasks.value.length;
 
-  const streakGained = totalCount > 0 && completedCount === totalCount;
+  const streakGained = streakProgress.value >= DAILY_STREAK_MIN; // distinct non-pending tasks completed today (one-time tasks leave the list once done)
 
   await setDoc(docRef, {
     userId: userId.value,
@@ -2466,6 +2593,7 @@ const toggleExpanded = (task) => {
   expandedKey.value = expandedKey.value === taskKey(task) ? null : taskKey(task);
 };
 const patchTask = async (index, task, patch) => {
+  if (patch.status === 'pending' && !task.pendingSince) patch = { ...patch, pendingSince: new Date().toISOString() }; // wait time for the morning report
   try {
     const before = { createdAt: task.createdAt, title: task.title }; // stored identity before this edit
     const dayName = days[selectedDayIndex.value].day;
@@ -2501,7 +2629,7 @@ const openShutdown = async () => {
   try {
     const tasks = userId.value ? await loadDayTasks(userId.value, todayDayName()) : [];
     shutdownDone.value = tasks.filter((t) => t.completed);
-    shutdownOpenTasks.value = tasks.filter((t) => !t.completed);
+    shutdownOpenTasks.value = tasks.filter((t) => !t.completed && t.status !== 'pending'); // pending: no carry/nag
     shutdownCarry.value = Object.fromEntries(shutdownOpenTasks.value.map((t) => [taskKey(t), true]));
   } catch (e) { console.error('Shutdown load failed:', e); }
 };
@@ -2893,6 +3021,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .hero-menu-pop { position: absolute; right: 0; top: 52px; z-index: 30; min-width: 190px; padding: var(--sp-1); background: var(--c-surface-2); border: 1px solid var(--c-border-strong); border-radius: var(--r-lg); box-shadow: 0 8px 24px rgba(0,0,0,.5); }
 .hero-menu-item { display: block; width: 100%; min-height: 40px; text-align: left; padding: 0 var(--sp-3); background: none; border: none; border-radius: var(--r); color: var(--c-text); font-size: var(--fs-md); cursor: pointer; }
 .hero-menu-item:hover { background: var(--c-border); }
+a.hero-menu-item { display: block; text-decoration: none; color: inherit; }
 .tasks-list { gap: var(--sp-2); }
 .cap-warning, .load-summary { border-radius: var(--r-lg); }
 @media (min-width: 700px) { .content-wrap { padding-top: 40px; } .hero-title { font-size: 40px; } }
@@ -3002,4 +3131,12 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .app-root .empty-add.empty-add { min-height: 48px; background: linear-gradient(180deg, #5F7EF7, #4563E6); box-shadow: 0 6px 18px rgba(79,111,240,.4); }
 
 @media (max-width: 480px) { .app-root .modal-box.modal-box { border-radius: 22px 22px 0 0; padding-bottom: env(safe-area-inset-bottom); } }
+.disc-warning { margin: 8px 0; padding: 10px 14px; border-radius: 10px; font-weight: 700; background: var(--c-warn-soft, #fef3c7); color: var(--c-warn-text, #92400e); }
+.disc-warning--30m { background: #fee2e2; color: #991b1b; animation: discPulse 1.2s ease-in-out infinite; }
+@keyframes discPulse { 50% { opacity: .65; } }
+.app-root.theme-ember { --c-primary: #ea580c; --c-primary-soft: #ffedd5; --c-warn: #dc2626; }
+.app-root.theme-ocean { --c-primary: #0284c7; --c-primary-soft: #e0f2fe; --c-success: #0d9488; }
+.voice-toasts { position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%); z-index: 9000; display: flex; flex-direction: column; gap: 6px; }
+.voice-toast { background: #111827; color: #fff; padding: 8px 12px; border-radius: 10px; font-size: .9rem; box-shadow: 0 4px 12px rgba(0,0,0,.25); }
+.voice-toast button { margin-left: 10px; color: #fbbf24; font-weight: 700; background: none; border: none; }
 </style>

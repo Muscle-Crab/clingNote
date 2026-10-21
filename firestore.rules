@@ -1,0 +1,36 @@
+rules_version = '2';
+// Monthly ranking rules. NOTE: this file is not referenced by firebase.json yet and is NOT deployed.
+// Merge these match blocks into the project's live Firestore rules (from the console) before deploying,
+// otherwise other collections (weeklyRoutines, streaks, users, ...) would lose access.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /monthlyStats/{month}/users/{uid} {
+      // anyone signed in can read opted-in entries; users always read their own
+      allow read: if request.auth != null && (resource.data.optIn == true || request.auth.uid == uid);
+      allow write: if request.auth != null && request.auth.uid == uid
+        && month.matches('^[0-9]{4}-[0-9]{2}$')
+        && !('email' in request.resource.data);
+    }
+    match /monthlyStats/{month}/private/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+    // Discipline Mode state (settlement, log, boss, breaks, XP): owner-only
+    match /discipline/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+    // Profile doc; also holds scheduledTasks (one-off + recurring templates/instances): owner-only
+    match /users/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+    // Calendar feed tokens: owner may create/delete their own; nobody reads them from the client (server uses admin SDK)
+    match /icsTokens/{token} {
+      allow create: if request.auth != null && request.resource.data.uid == request.auth.uid && token.matches('^[a-f0-9]{48}$');
+      allow delete: if request.auth != null && resource.data.uid == request.auth.uid;
+      allow read, update: if false;
+    }
+    // Settings (incl. discipline toggle/deadline): owner-only
+    match /userSettings/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+  }
+}
