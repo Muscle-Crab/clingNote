@@ -268,14 +268,14 @@ pending.push((async () => {
 // voice -> task: transcript goes through a fresh form, failures are surfaced, interim-only results are not dropped (iOS)
 (() => {
   const hv = fs.readFileSync(path.join(src, 'views/HomeView.vue'), 'utf8');
-  assert.ok(/submitVoiceTask\(transcript\)/.test(hv) && /\.\.\.blankTask\(\), title/.test(hv), 'final result submits via fresh blankTask');
-  assert.ok(/recognition\.onend = \(\) => \{[\s\S]*?submitVoiceTask\(pendingVoiceText\)/.test(hv), 'onend submits transcript when no final flag arrived');
-  assert.ok(/const ok = await addNewTask\(\)/.test(hv) && /modalOpen\.value = true;\s*\} catch/.test(hv), 'blocked add (cap) falls back to the Add form instead of silently vanishing');
+  assert.ok(/if \(r\.isFinal\) saveSpoken\(r\[0\]\.transcript\)/.test(hv) && /\.\.\.blankTask\(\), title/.test(hv), 'each final phrase saves via fresh blankTask (hands-free)');
+  assert.ok(/recognition\.onend = \(\) => \{[\s\S]*?saveSpoken\(pendingVoiceText\)/.test(hv), 'onend saves transcript when no final flag arrived');
+  assert.ok(/const ok = await addNewTask\(\)/.test(hv) && /if \(!ok\) \{ voiceError\.value = /.test(hv), 'failed voice add is surfaced, not silently dropped');
   const fn = hv.slice(hv.indexOf('const addNewTask = async'), hv.indexOf('const speakDailyReport'));
   assert.ok(!/^\s*return;\s*$/m.test(fn) && /return addedOk;/.test(fn), 'addNewTask reports success/failure');
   assert.ok(/event\.error === 'aborted'\) return/.test(hv), 'aborted (own stop) is not shown as an error');
   assert.ok(/recognition\.abort\(\)/.test(hv) && /InvalidStateError/.test(hv), 'start retries after InvalidStateError');
-  assert.ok(/catch \(e\) \{\s*console\.error\('Voice task failed:'/.test(hv), 'submitVoiceTask surfaces thrown errors');
+  assert.ok(/catch \(e\) \{\s*console\.error\('Voice task failed:'/.test(hv), 'voice save surfaces thrown errors');
   assert.ok(/selectedDayIndex\.value < 0/.test(fn), 'addNewTask guards unloaded day index');
   assert.ok(/microphone=\(self\)/.test(fs.readFileSync(path.join(__dirname, '..', 'netlify.toml'), 'utf8')), 'netlify allows microphone');
   console.log('ok   voice -> task');

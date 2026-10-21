@@ -100,7 +100,10 @@
       <ReminderModal v-if="isModalOpen" :reminder="reminder" :task-title="selectedTaskTitle" @close="closeModal" @submit="handleAddReminder" />
 
 
-      <VoiceModal v-if="voiceOpen" :transcript="liveTranscript" :supported="voiceSupported" :error="voiceError" @cancel="cancelVoiceInput" />
+      <VoiceModal v-if="voiceOpen" :transcript="liveTranscript" :supported="voiceSupported" :capability="voiceCap" :error="voiceError" :added="voiceAdded" @undo="undoVoiceTask" @cancel="cancelVoiceInput" />
+      <div v-if="!voiceOpen && voiceAdded.some((e) => e.undoUntil > nowTick)" class="voice-toasts" role="status">
+        <div v-for="e in voiceAdded.filter((x) => x.undoUntil > nowTick)" :key="e.id" class="voice-toast">🎙 Added “{{ e.title }}” <button type="button" @click="undoVoiceTask(e)">Undo</button></div>
+      </div>
 
 
       <!-- ─── Task List ─── -->
@@ -218,6 +221,7 @@ import TimeStatsBar from '@/components/home/TimeStatsBar.vue';
 import TimerModal from '@/components/home/TimerModal.vue';
 import TransferModal from '@/components/home/TransferModal.vue';
 import VoiceModal from '@/components/home/VoiceModal.vue';
+import { splitSpokenTasks, voiceCapability, UNDO_MS } from '@/utils/voiceSplit';
 import WontDoModal from '@/components/home/WontDoModal.vue';
 import WorkoutModal from '@/components/home/WorkoutModal.vue';
 import YouTubeModal from '@/components/home/YouTubeModal.vue';
@@ -2075,7 +2079,8 @@ let recognition = null;
 let pendingVoiceText = '';
 let voiceSubmitting = false;
 const liveTranscript = ref('');
-const voiceSupported = typeof window !== 'undefined' && ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window);
+const voiceCap = typeof window !== 'undefined' ? voiceCapability(window, navigator) : 'none';
+const voiceSupported = voiceCap !== 'none';
 // Initialize SpeechRecognition only if supported (every property access stays inside this guard)
 if (voiceSupported) {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -2094,46 +2099,68 @@ if (voiceSupported) {
       : event.error === 'no-speech' ? "Didn't catch anything. Try again."
       : 'Voice input failed (' + (event.error || 'unknown') + ').';
   };
+  recognition.continuous = voiceCap !== 'partial'; // hands-free: keep listening across pauses (Chrome/Edge)
   recognition.onend = () => {
     listening.value = false;
-    // iOS Safari often ends without ever flagging a result final: use what we heard instead of dropping it.
-    if (voiceOpen.value && !voiceError.value && pendingVoiceText.trim()) submitVoiceTask(pendingVoiceText);
+    // iOS Safari often ends without flagging a result final: use what we heard instead of dropping it.
+    if (voiceOpen.value && !voiceError.value && pendingVoiceText.trim()) saveSpoken(pendingVoiceText);
+    // Hands-free: restart after each pause until the user taps Stop (iOS ends after every utterance).
+    if (voiceOpen.value && !voiceError.value && voiceSupported) setTimeout(() => { if (voiceOpen.value && !listening.value) { try { recognition.start(); } catch (e) { /* still stopping */ } } }, 250);
   };
   recognition.onresult = (event) => {
-    let transcript = '';
-    for (let i = 0; i < event.results.length; ++i) {
-      transcript += event.results[i][0].transcript;
+    let interim = '';
+    for (let i = event.resultIndex; i < event.results.length; ++i) {
+      const r = event.results[i];
+      if (r.isFinal) saveSpoken(r[0].transcript); // a pause ends a phrase: save it right away
+      else interim += r[0].transcript;
     }
-    transcript = transcript.trim();
-    liveTranscript.value = transcript;
-    pendingVoiceText = transcript;
-    if (event.results[event.results.length - 1].isFinal) {
-      try { recognition.stop(); } catch (e) { /* already stopped */ }
-      submitVoiceTask(transcript);
-    }
+    liveTranscript.value = interim.trim();
+    pendingVoiceText = interim.trim();
   };
 } else {
   console.warn("Speech recognition not supported in this browser.");
 }
-// Turn a finished transcript into a task using a fresh form (never leftover Add-form state).
-const submitVoiceTask = async (text) => {
-  const title = (text || '').trim();
+// Hands-free capture: every finished phrase is split ("and then" / "next") and each part saved immediately, with a 5 s undo.
+const voiceAdded = ref([]); // [{ id, title, createdAt, dayName, undoUntil }]
+const voiceQueue = [];
+const saveSpoken = (text) => {
   pendingVoiceText = '';
-  if (voiceSubmitting || !title) return;
+  liveTranscript.value = '';
+  splitSpokenTasks(text).forEach((t) => voiceQueue.push(t));
+  drainVoiceQueue();
+};
+const drainVoiceQueue = async () => {
+  if (voiceSubmitting) return;
   voiceSubmitting = true;
   try {
-    newTask.value = { ...blankTask(), title };
-    const ok = await addNewTask();
-    liveTranscript.value = '';
-    if (ok) { voiceOpen.value = false; return; }
-    if (!userId.value) { voiceError.value = 'Sign in to add tasks by voice.'; return; }
-    // Blocked (e.g. the active-task cap warning): hand the text to the Add form so the user sees why and can "Add anyway".
-    voiceOpen.value = false;
-    modalOpen.value = true;
+    while (voiceQueue.length) {
+      const title = voiceQueue.shift();
+      if (!userId.value) { voiceError.value = 'Sign in to add tasks by voice.'; voiceQueue.length = 0; break; }
+      newTask.value = { ...blankTask(), title };
+      capOverride.value = true; // hands-free never stops on the active-task cap warning
+      const ok = await addNewTask();
+      capOverride.value = false;
+      if (!ok) { voiceError.value = error.value || 'Could not add the task.'; continue; }
+      const saved = [...(selectedDayRoutine.value || [])].filter((x) => x.title === title).sort((x, y) => String(y.createdAt).localeCompare(String(x.createdAt)))[0];
+      const entry = { id: `${Date.now()}-${Math.random()}`, title, createdAt: saved?.createdAt, dayName: days[selectedDayIndex.value]?.day, undoUntil: Date.now() + UNDO_MS };
+      voiceAdded.value = [...voiceAdded.value, entry];
+      setTimeout(() => { voiceAdded.value = voiceAdded.value.map((e) => (e.id === entry.id ? { ...e, undoUntil: 0 } : e)); }, UNDO_MS);
+    }
   } catch (e) {
     console.error('Voice task failed:', e);
     voiceError.value = 'Could not add the task. Please try again.';
   } finally { voiceSubmitting = false; }
+};
+const undoVoiceTask = async (entry) => {
+  if (!entry?.createdAt || !entry.dayName || !userId.value) return;
+  const key = `${entry.createdAt}|${entry.title}`;
+  try {
+    const ref_ = doc(db, 'weeklyRoutines', `${userId.value}_${entry.dayName}`);
+    const cur = (await getDoc(ref_)).data()?.tasks || [];
+    await updateDoc(ref_, { tasks: cur.filter((t) => taskKey(t) !== key), updatedAt: serverTimestamp() });
+    selectedDayRoutine.value = (selectedDayRoutine.value || []).filter((t) => taskKey(t) !== key);
+    voiceAdded.value = voiceAdded.value.filter((e) => e.id !== entry.id);
+  } catch (e) { console.error('Undo failed:', e); }
 };
 const cancelVoiceInput = () => {
   if (recognition) { try { recognition.stop(); } catch (e) { /* not started */ } }
@@ -2142,9 +2169,11 @@ const cancelVoiceInput = () => {
   voiceError.value = '';
   liveTranscript.value = '';
   pendingVoiceText = '';
+  voiceAdded.value = voiceAdded.value.filter((e) => e.undoUntil > Date.now()); // keep live undo chips as toasts
 };
 
 const startVoiceInput = () => {
+  voiceAdded.value = [];
   voiceOpen.value = true; // always show the modal, even when recognition is unavailable
   liveTranscript.value = '';
   voiceError.value = '';
@@ -3107,4 +3136,7 @@ a.hero-menu-item { display: block; text-decoration: none; color: inherit; }
 @keyframes discPulse { 50% { opacity: .65; } }
 .app-root.theme-ember { --c-primary: #ea580c; --c-primary-soft: #ffedd5; --c-warn: #dc2626; }
 .app-root.theme-ocean { --c-primary: #0284c7; --c-primary-soft: #e0f2fe; --c-success: #0d9488; }
+.voice-toasts { position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%); z-index: 9000; display: flex; flex-direction: column; gap: 6px; }
+.voice-toast { background: #111827; color: #fff; padding: 8px 12px; border-radius: 10px; font-size: .9rem; box-shadow: 0 4px 12px rgba(0,0,0,.25); }
+.voice-toast button { margin-left: 10px; color: #fbbf24; font-weight: 700; background: none; border: none; }
 </style>
