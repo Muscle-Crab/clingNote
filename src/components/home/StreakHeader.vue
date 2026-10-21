@@ -80,7 +80,7 @@ defineEmits(['shutdown', 'end-day']);
 </script>
 
 <style scoped>
-.header-card { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2) var(--sp-4); padding: var(--sp-3) 0; margin-bottom: 0; }
+.header-card { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3) var(--sp-4); padding: var(--sp-4); margin: var(--sp-4) 0 0; background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--r-lg); box-shadow: var(--shadow-1); }
 .header-left { display: flex; align-items: center; gap: var(--sp-3); flex: 1 1 auto; min-width: 0; }
 .streak-badge { display: none; }
 .streak-count { font-size: var(--fs-lg); font-weight: 700; margin: 0; color: var(--c-text); }
@@ -89,11 +89,11 @@ defineEmits(['shutdown', 'end-day']);
 .streak-at-risk { color: var(--c-warn-text, #B45309) !important; font-weight: 600; }
 .streak-none { color: var(--c-text-3) !important; }
 .header-cold .streak-count, .header-warm .streak-count, .header-hot .streak-count { color: var(--c-text); }
-.header-center { flex: 0 0 auto; padding-left: var(--sp-4); border-left: 1px solid var(--c-border); }
-.points-pill { display: inline-block; font-size: var(--fs-md); font-weight: 700; padding: 0; background: none; border: none; }
+.header-center { flex: 0 0 auto; margin-left: auto; }
+.points-pill { display: inline-flex; align-items: center; gap: 4px; font-size: var(--fs-sm); font-weight: 700; padding: 4px 10px; border-radius: var(--r-pill); background: var(--c-surface-2); border: 1px solid var(--c-border); white-space: nowrap; }
 .points-needed { color: var(--c-warn); }
 .points-ready { color: var(--c-success); }
-.header-right { flex: 1 0 100%; display: flex; flex-direction: row; align-items: center; justify-content: space-between; gap: var(--sp-2); flex-wrap: wrap; }
+.header-right { flex: 1 0 100%; padding-top: var(--sp-3); border-top: 1px solid var(--c-border); display: flex; flex-direction: row; align-items: center; justify-content: space-between; gap: var(--sp-2); flex-wrap: wrap; }
 .day-controls { display: flex; gap: var(--sp-2); flex-wrap: wrap; }
 .btn-day { font-family: inherit; font-size: var(--fs-md); font-weight: 600; min-height: 40px; padding: 0 var(--sp-4); border-radius: var(--r); border: 1px solid var(--c-border); background: var(--c-surface); color: var(--c-text); cursor: pointer; transition: background .15s, border-color .15s; }
 .btn-day:hover { background: var(--c-surface-2); border-color: var(--c-border-strong); }

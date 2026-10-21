@@ -1,8 +1,8 @@
 <template>
-  <nav class="bg-black border-gray-200 dark:bg-gray-900">
+  <nav class="app-topbar">
     <!-- Header -->
-    <div class="max-w-screen-xl flex flex-wrap items-center justify-between mx-auto p-4">
-      <button @click="toggleSidebar" type="button" class="inline-flex items-center p-2 w-10 h-10 justify-center text-sm text-gray-500 rounded-lg md:hidden hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-200 dark:text-gray-400 dark:hover:bg-gray-700 dark:focus:ring-gray-600" aria-expanded="false">
+    <div class="app-topbar-inner">
+      <button @click="toggleSidebar" type="button" class="inline-flex items-center p-2 w-10 h-10 justify-center text-sm text-gray-500 rounded-lg hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-600" aria-expanded="false">
         <span class="sr-only">Open sidebar</span>
         <svg class="w-5 h-5" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 17 14">
           <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M1 1h15M1 7h15M1 13h15"/>
@@ -35,12 +35,12 @@
 
     <!-- Sidebar -->
     <aside :class="{ 'hidden': !sidebarOpen, 'block': sidebarOpen }"
-           class="fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-gray-200 dark:bg-gray-800 dark:border-gray-700">
+           class="app-sidebar fixed inset-y-0 left-0 z-50 w-64">
       <div class="flex items-center justify-between p-4">
         <router-link to="/">
           <a href="#" class="flex items-center space-x-3 rtl:space-x-reverse">
             <img src="@/assets/logo.png" class="h-8" alt="Cling Note Logo"/>
-            <span class="self-center text-2xl font-semibold whitespace-nowrap dark:text-white">Clingnote</span>
+            <span class="self-center text-xl font-semibold whitespace-nowrap">Clingnote</span>
           </a>
         </router-link>
         <button @click="closeSidebar" type="button"
@@ -55,22 +55,22 @@
       </div>
 
       <!-- Sidebar content -->
-      <nav class="px-4 py-8">
-        <ul class="space-y-4">
+      <nav class="px-3 py-4">
+        <ul class="app-sidebar-list">
           <!-- My Routine -->
-          <li class="flex items-center space-x-3">
-            <i class="fas fa-calendar-check text-gray-800 dark:text-gray-200"></i>
+          <li class="app-sidebar-item">
+            <i class="fas fa-calendar-check"></i>
             <router-link to="/"
-                         class="text-gray-800 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-500 font-medium">
+                         class="app-sidebar-link">
               My Routine
             </router-link>
           </li>
 
           <!-- Chat -->
-          <li class="flex items-center space-x-3">
-            <i class="fas fa-comments text-gray-800 dark:text-gray-200"></i>
+          <li class="app-sidebar-item">
+            <i class="fas fa-comments"></i>
             <router-link to="/chat"
-                         class="text-gray-800 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-500 font-medium">
+                         class="app-sidebar-link">
               Chat
             </router-link>
           </li>
@@ -78,45 +78,45 @@
 
           <!-- Admin Only Routes -->
           <template v-if="userEmail === 'ds7513635@gmail.com'">
-            <li class="flex items-center space-x-3">
-              <i class="fas fa-info-circle text-gray-800 dark:text-gray-200"></i>
+            <li class="app-sidebar-item">
+              <i class="fas fa-info-circle"></i>
               <router-link to="/about"
-                           class="text-gray-800 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-500 font-medium">
+                           class="app-sidebar-link">
                 About
               </router-link>
             </li>
           </template>
 
           <!-- Addiction -->
-          <li class="flex items-center space-x-3">
-            <i class="fas fa-ban text-gray-800 dark:text-gray-200"></i>
+          <li class="app-sidebar-item">
+            <i class="fas fa-ban"></i>
             <router-link to="/addiction"
-                         class="text-gray-800 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-500 font-medium">
+                         class="app-sidebar-link">
               Addiction
             </router-link>
           </li>
 
           <!-- Meal Tracker -->
-          <li class="flex items-center space-x-3">
-            <i class="fas fa-utensils text-gray-800 dark:text-gray-200"></i>
+          <li class="app-sidebar-item">
+            <i class="fas fa-utensils"></i>
             <router-link to="/mealPlan"
-                         class="text-gray-800 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-500 font-medium">
+                         class="app-sidebar-link">
               Meal Tracker
             </router-link>
           </li>
-          <li class="flex items-center space-x-3">
-            <i class="fas fa-user-shield text-gray-800 dark:text-gray-200"></i>
+          <li class="app-sidebar-item">
+            <i class="fas fa-user-shield"></i>
             <router-link to="/privacy-policy"
-                         class="text-gray-800 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-500 font-medium">
+                         class="app-sidebar-link">
               Privacy Policy
             </router-link>
           </li>
 
           <!-- Logout -->
-          <li class="flex items-center space-x-3">
-            <i class="fas fa-sign-out-alt text-gray-800 dark:text-gray-200"></i>
+          <li class="app-sidebar-item">
+            <i class="fas fa-sign-out-alt"></i>
             <button @click="logout"
-                    class="text-gray-800 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-500 font-medium">
+                    class="app-sidebar-link">
               Logout
             </button>
           </li>
@@ -209,4 +209,17 @@ onMounted(() => {
 @media (min-width: 768px) {
   body.sidebar-open #app { padding-left: 16rem; }
 }
+/* Shared shell: slim dark top bar + dark sidebar matching the home view palette */
+.app-topbar { background: #0B0D12; border-bottom: 1px solid #1C212C; }
+.app-topbar-inner { max-width: 1200px; margin: 0 auto; height: 56px; padding: 0 16px; display: flex; align-items: center; justify-content: space-between; }
+.app-topbar-inner > a { margin-left: auto; }
+.app-sidebar { background: #0F1218; border-right: 1px solid #1C212C; color: #E6E9EF; }
+.app-sidebar-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.app-sidebar-item { position: relative; display: flex; align-items: center; gap: 12px; padding: 0 12px; height: 40px; border-radius: 10px; color: #8791A5; }
+.app-sidebar-item:hover { background: #1A1E28; color: #E6E9EF; }
+.app-sidebar-item i { width: 18px; text-align: center; }
+.app-sidebar-link { color: #B4BCCB; font-weight: 500; font-size: 14px; background: none; border: 0; padding: 0; cursor: pointer; text-decoration: none; }
+.app-sidebar-link::after { content: ''; position: absolute; inset: 0; } /* whole row is clickable */
+.app-sidebar-item:hover .app-sidebar-link, .app-sidebar-link.router-link-exact-active { color: #fff; }
+.app-sidebar-item:has(.router-link-exact-active) { background: #19224A; color: #8FA8FF; }
 </style>

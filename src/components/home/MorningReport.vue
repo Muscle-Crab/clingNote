@@ -22,10 +22,12 @@ defineEmits(['close']);
 </script>
 
 <style scoped>
-.mr { margin: 8px 0; padding: 14px; border-radius: 12px; background: linear-gradient(135deg, #fff7ed, #fef3c7); border: 1px solid #fde68a; color: #422006; }
+.mr { margin: 8px 0; padding: 14px 16px; border-radius: var(--r-lg, 16px); background: var(--c-surface, #12151C); border: 1px solid var(--c-border, #252B38); border-left: 3px solid var(--c-warn, #F5B83D); color: var(--c-text-2, #B4BCCB); }
+.mr strong, .mr-title { color: var(--c-text, #E6E9EF); }
 .mr-head { display: flex; justify-content: space-between; align-items: center; }
-.mr-title { font-size: 1.05rem; font-weight: 800; margin: 0; }
-.mr-x { background: none; border: none; font-size: 1rem; cursor: pointer; }
+.mr-title { font-size: var(--fs-lg, 16px); font-weight: 700; margin: 0; }
+.mr-x { width: 28px; height: 28px; border-radius: 8px; background: none; border: none; color: var(--c-text-3, #8791A5); font-size: 13px; cursor: pointer; }
+.mr-x:hover { background: var(--c-surface-2, #1A1E28); }
 .mr-big { font-size: 1.1rem; margin: 6px 0; }
 .mr-list { margin: 2px 0 6px 18px; padding: 0; }
 .mr p { margin: 4px 0; }

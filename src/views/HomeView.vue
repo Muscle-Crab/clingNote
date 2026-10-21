@@ -49,15 +49,11 @@
       <StreakHeader :streak="streak" :best-streak="bestStreak" :streak-status="streakStatus" :streak-progress="streakProgress" :streak-min="DAILY_STREAK_MIN" :motivational-message="motivationalMessage" :points-accumulated="pointsAccumulated"
                     :total-points="totalPoints" :day-session="daySession" @shutdown="openShutdown" @end-day="endDay" />
 
-      <div v-if="disciplineWarning" class="disc-warning" :class="'disc-warning--' + disciplineWarning" role="alert">
+      <div v-if="disciplineWarning" class="disc-warning home-notice" :class="'disc-warning--' + disciplineWarning" role="alert">
         ⚠️ {{ disciplineWarning === '30m' ? '30 minutes' : '2 hours' }} until your {{ disciplineSettings.deadline }} deadline — {{ streakProgress }}/{{ DAILY_STREAK_MIN }} done
       </div>
-      <template v-if="strictOn">
-        <BossBanner v-if="bossWatchingMsg" kind="watching" :text="bossWatchingMsg" />
-        <BossBanner v-if="idleNudge" kind="idle" :text="idleNudge" dismissible @dismiss="idleNudge = null" />
-        <BossBanner v-else-if="bossMsg && bossMsg.phase !== 'verdict'" :kind="bossMsg.kind" :text="bossMsg.text" />
-      </template>
-      <VerdictOverlay v-if="verdictScreen" :v="verdictScreen.v" :text="verdictScreen.text" :date="verdictScreen.date" @close="dismissVerdict" />
+      <BossPanel v-if="strictOn && !bossHidden && (bossLines.length || verdictScreen)" class="home-notice" :lines="bossLines" :verdict="verdictScreen"
+                 @dismiss="bossHidden = true" @dismiss-line="idleNudge = null" @ack-verdict="dismissVerdict" />
       <DramaOverlay v-if="lossScreen" variant="lost" title="Streak lost" button="I'll do better"
                     :subtitle="`You missed your deadline. ${lossScreen.lostStreak ? lossScreen.lostStreak + '-day streak gone. ' : ''}${lossScreen.penalty} pts.`" @close="dismissLoss" />
 
@@ -69,7 +65,7 @@
       <DramaOverlay v-if="rewardScreen && !levelUp" variant="reward" :title="`${rewardScreen.days}-day streak!`" button="Nice"
                     :subtitle="`Reward unlocked: ${rewardScreen.label}`" @close="rewardScreen = null" />
 
-      <MorningReport v-if="morningRecap && isViewingToday" :recap="morningRecap" @close="morningRecap = null" />
+      <MorningReport v-if="morningRecap && isViewingToday" class="home-notice" :recap="morningRecap" @close="morningRecap = null" />
 
       <TimeStatsBar v-if="isViewingToday" :stats="timeStats" />
 
@@ -194,8 +190,7 @@ import { loadDisciplineSettings, settleDeadlines, clearLossPending, loadDiscipli
 import { levelFor, rewardsFor } from '@/utils/rewards';
 import { defaultSettings as defaultDiscipline, warningFor, isPastDeadline, streakGate, BOSS_BONUS } from '@/utils/discipline';
 import DramaOverlay from '@/components/discipline/DramaOverlay.vue';
-import BossBanner from '@/components/discipline/BossBanner.vue';
-import VerdictOverlay from '@/components/discipline/VerdictOverlay.vue';
+import BossPanel from '@/components/discipline/BossPanel.vue';
 import { bossMessage, validReason, carryTask, canAddTask, watchingBlockers, isIdle, verdict as dayVerdict, line as bossLine, IDLE_MINUTES } from '@/utils/strictBoss';
 import MorningReport from '@/components/home/MorningReport.vue';
 import { buildRecap, reportDue, prevDay } from '@/utils/dailyReport';
@@ -1261,6 +1256,17 @@ const strictOn = computed(() => !!(disciplineSettings.value.enabled && disciplin
 const bossMsg = ref(null);
 const idleNudge = ref(null);
 const verdictScreen = ref(null);
+const bossHidden = ref(false); // user collapsed the boss panel away for this session
+const bossLines = computed(() => {
+  const out = [];
+  if (bossWatchingMsg.value) out.push({ kind: 'watching', text: bossWatchingMsg.value });
+  if (idleNudge.value) out.push({ kind: 'idle', text: idleNudge.value, dismissible: true });
+  else if (bossMsg.value && bossMsg.value.phase !== 'verdict') out.push({ kind: bossMsg.value.kind, text: bossMsg.value.text });
+  return out;
+});
+// Remember an acknowledged verdict locally too, so a failed Firestore write can't re-open it every tick.
+const verdictSeenKey = () => `clingnot-verdict-seen-${userId.value}`;
+const verdictSeen = (d) => { try { return localStorage.getItem(verdictSeenKey()) === d; } catch (e) { return false; } };
 const deferReason = ref('');
 const lastActive = ref(Date.now());
 const markActive = () => { lastActive.value = Date.now(); };
@@ -1280,7 +1286,7 @@ const runStrictBoss = (now, today) => {
     lastActive.value = now.getTime(); // next nudge after another idle stretch
     try { if (typeof Notification !== 'undefined' && Notification.permission === 'granted' && document.hidden) new Notification('Boss: focus check', { body: idleNudge.value }); } catch (e) { /* optional */ }
   }
-  if (bossMsg.value?.phase === 'verdict' && discState.value.lastVerdictDate !== today && !verdictScreen.value) {
+  if (bossMsg.value?.phase === 'verdict' && discState.value.lastVerdictDate !== today && !verdictSeen(today) && !verdictScreen.value) {
     const v = dayVerdict({ done, min, total: (selectedDayRoutine.value || []).filter((t) => t.status !== 'pending').length });
     verdictScreen.value = { v, text: bossMsg.value.text, date: today };
   }
@@ -1289,6 +1295,7 @@ const dismissVerdict = async () => {
   const s = verdictScreen.value; verdictScreen.value = null;
   if (!s || !userId.value) return;
   discState.value = { ...discState.value, lastVerdictDate: s.date };
+  try { localStorage.setItem(verdictSeenKey(), s.date); } catch (e) { /* private mode */ }
   try {
     await patchDisciplineState(userId.value, { lastVerdictDate: s.date, lastVerdict: { date: s.date, passed: s.v.passed, grade: s.v.grade, done: s.v.done } });
     if (!s.v.passed) await logDiscipline(userId.value, 'verdict-failed', s.date, `${s.v.done}/${s.v.min}, grade ${s.v.grade}`);
@@ -3126,7 +3133,7 @@ a.hero-menu-item { display: block; text-decoration: none; color: inherit; }
 .app-root .milestone-dot--reached.milestone-dot--reached { box-shadow: 0 0 0 3px rgba(79,111,240,.15); }
 
 /* Streak + stats */
-.app-root .header-card.header-card { padding: var(--sp-3) var(--sp-1); }
+.app-root .home-notice { margin: var(--sp-3) 0 0; }
 .app-root .btn-day.btn-day { min-height: 44px; border-radius: 12px; box-shadow: var(--shadow-1); transition: background .2s var(--ease-out), border-color .2s, transform .15s; }
 .app-root .btn-day.btn-day:active { transform: scale(.97); }
 .app-root .stats-bar.stats-bar { padding: var(--sp-3) 0; background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--r-lg); box-shadow: var(--shadow-1); }
@@ -3179,8 +3186,8 @@ a.hero-menu-item { display: block; text-decoration: none; color: inherit; }
 .app-root .empty-add.empty-add { min-height: 48px; background: linear-gradient(180deg, #5F7EF7, #4563E6); box-shadow: 0 6px 18px rgba(79,111,240,.4); }
 
 @media (max-width: 480px) { .app-root .modal-box.modal-box { border-radius: 22px 22px 0 0; padding-bottom: env(safe-area-inset-bottom); } }
-.disc-warning { margin: 8px 0; padding: 10px 14px; border-radius: 10px; font-weight: 700; background: var(--c-warn-soft, #fef3c7); color: var(--c-warn-text, #92400e); }
-.disc-warning--30m { background: #fee2e2; color: #991b1b; animation: discPulse 1.2s ease-in-out infinite; }
+.disc-warning { margin: 8px 0; padding: 10px 14px; border-radius: var(--r-lg, 16px); font-weight: 600; background: var(--c-warn-soft, #2B2209); border: 1px solid var(--c-warn-line, #7A5A12); color: var(--c-warn-text, #F5C75F); }
+.disc-warning--30m { background: var(--c-danger-soft, #2E1517); border-color: var(--c-danger-line, #8F2A2A); color: var(--c-danger-text, #FCA5A5); animation: discPulse 1.2s ease-in-out infinite; }
 @keyframes discPulse { 50% { opacity: .65; } }
 .app-root.theme-ember { --c-primary: #ea580c; --c-primary-soft: #ffedd5; --c-warn: #dc2626; }
 .app-root.theme-ocean { --c-primary: #0284c7; --c-primary-soft: #e0f2fe; --c-success: #0d9488; }
