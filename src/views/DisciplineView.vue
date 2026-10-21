@@ -12,6 +12,10 @@
       <button v-if="canNotify" type="button" class="disc-btn" @click="askNotify">🔔 Enable deadline notifications</button>
       <p v-if="saved" class="muted">Saved ✓</p>
     </section>
+    <section class="disc-card">
+      <h2 class="disc-h">👹 Evening boss</h2>
+      <p class="muted">Open a task on today's list and tap “Make this the evening boss”. Subtasks drain its HP. With Discipline Mode on, your day won't count toward the streak until the boss is cleared. Clearing it: +{{ BOSS_BONUS }} pts.</p>
+    </section>
     <!-- phase-sections -->
   </div>
 </template>
@@ -21,7 +25,7 @@ import { ref, onMounted } from 'vue';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '@/firebaseConfig';
 import { DAILY_STREAK_MIN } from '@/utils/streak';
-import { MISSED_DEADLINE_PENALTY, defaultSettings } from '@/utils/discipline';
+import { MISSED_DEADLINE_PENALTY, BOSS_BONUS, defaultSettings } from '@/utils/discipline';
 import { loadDisciplineSettings, saveDisciplineSettings } from '@/composables/useDiscipline';
 /* phase-imports */
 
@@ -54,5 +58,6 @@ onMounted(() => onAuthStateChanged(auth, async (u) => {
 .disc-row { display: flex; gap: 8px; align-items: center; margin: 6px 0; }
 .disc-row input[type=time] { border: 1px solid var(--c-border, #e2e8f0); border-radius: 6px; padding: 2px 6px; }
 .disc-btn { margin-top: 8px; padding: 6px 12px; border-radius: 8px; background: var(--c-primary, #6366f1); color: #fff; }
+.disc-h { font-size: 1.05rem; font-weight: 700; margin: 0 0 6px; }
 .muted { color: var(--c-text-3, #64748b); font-size: .9rem; }
 </style>

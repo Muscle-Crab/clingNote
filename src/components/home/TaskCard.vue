@@ -71,6 +71,11 @@
                     <div v-if="subtaskProgress(task).total" class="task-chips">
                       <span class="chip chip--subtasks" :class="{ 'chip--subtasks-done': subtaskProgress(task).done === subtaskProgress(task).total }" title="Subtasks done">☑ {{ subtaskProgress(task).done }}/{{ subtaskProgress(task).total }}</span>
                     </div>
+                    <div v-if="task.boss && isTodayTab" class="boss-bar" :title="'Boss HP ' + bossHp(task) + '%'">
+                      <span class="boss-label">👹 BOSS</span>
+                      <div class="boss-hp" role="progressbar" :aria-valuenow="bossHp(task)" aria-valuemin="0" aria-valuemax="100"><div class="boss-hp-fill" :style="{ width: bossHp(task) + '%' }"></div></div>
+                      <span class="boss-hp-num">{{ bossHp(task) }} HP</span>
+                    </div>
                     <div v-if="task.status === 'pending' && task.pendingOn" class="task-next task-pending-on">⏳ Pending on {{ task.pendingOn }}</div>
                     <div v-if="task.nextAction" class="task-next">→ {{ task.nextAction }}</div>
                     <div v-if="task.notes && !expanded" class="task-note-preview">📝 {{ task.notes.length > 60 ? task.notes.slice(0, 60) + '…' : task.notes }}</div>
@@ -96,6 +101,7 @@
                         <label class="mini-field"><span>Next action</span>
                           <input type="text" class="field-input" :value="task.nextAction || ''" @change="$emit('patch', { nextAction: $event.target.value.trim() })" /></label>
                       </div>
+                      <button v-if="isTodayTab && !task.completed" type="button" class="boss-btn" @click="$emit('set-boss')">{{ task.boss ? '✖ Remove boss' : '👹 Make this the evening boss' }}</button>
                       <label class="mini-field"><span>Note</span>
                         <textarea class="field-textarea" rows="2" :value="task.notes || ''" placeholder="Quick note…" @change="$emit('patch', { notes: $event.target.value })"></textarea></label>
                       <div v-if="task.type === 'one-time' && isTodayTab && !task.completed" class="mini-field sched-field"><span>Schedule for later</span>
@@ -163,6 +169,7 @@
 </template>
 
 <script setup>
+import { bossHp } from '@/utils/discipline';
 import { ref, watch, onBeforeUnmount } from 'vue';
 import { STATUSES, taskKey, estimateOf, formatClock, formatDuration as formatMinutes, toMinutes } from '@/utils/taskPlanning';
 import { subtaskProgress } from '@/utils/subtasks';
@@ -181,7 +188,7 @@ defineProps({
   showNotification: { type: Boolean, default: false },
   transferNotification: { type: String, default: null },
 });
-const emit = defineEmits(['toggle-expand', 'toggle-complete', 'open-detail', 'toggle-important', 'patch', 'subtask-patch',
+const emit = defineEmits(['set-boss', 'toggle-expand', 'toggle-complete', 'open-detail', 'toggle-important', 'patch', 'subtask-patch',
   'toggle-label', 'open-reminder', 'transfer', 'video', 'upload', 'timer', 'wont-do', 'delete', 'schedule']);
 
 const moreOpen = ref(false);
@@ -341,4 +348,10 @@ const onCardTap = (event) => { // bound on the whole card (blank areas, chips, n
   .coin-value::after { content: ''; }
   .task-actions { left: var(--sp-2); right: var(--sp-2); justify-content: space-between; }
 }
+.boss-bar { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+.boss-label { font-size: var(--fs-xs, .7rem); font-weight: 800; color: #b91c1c; }
+.boss-hp { flex: 1; height: 8px; border-radius: 999px; background: #fee2e2; overflow: hidden; }
+.boss-hp-fill { height: 100%; background: linear-gradient(90deg, #ef4444, #b91c1c); transition: width .4s; }
+.boss-hp-num { font-size: var(--fs-xs, .7rem); font-variant-numeric: tabular-nums; color: #b91c1c; }
+.boss-btn { margin: 6px 0; padding: 4px 10px; border-radius: 8px; border: 1px solid #fca5a5; color: #b91c1c; background: #fff5f5; font-weight: 600; }
 </style>

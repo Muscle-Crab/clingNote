@@ -44,3 +44,19 @@ export const settleDays = (dates, countedDays) => {
 
 export const logEntry = (type, date, detail = '', at = new Date()) => ({ type, date, detail, at: at.toISOString() });
 export const pushLog = (log, ...entries) => [...(log || []), ...entries].slice(-LOG_KEEP);
+
+// ---- Phase 2: Evening boss ----
+export const BOSS_BONUS = 100;
+// HP 100 -> 0 as subtasks get done; a completed boss is at 0.
+export const bossHp = (task) => {
+  if (task?.completed) return 0;
+  const subs = Array.isArray(task?.subtasks) ? task.subtasks : [];
+  if (!subs.length) return 100;
+  return Math.round((1 - subs.filter((s) => s.done).length / subs.length) * 100);
+};
+// Can today's completions count toward the streak? Only gated when Discipline Mode is on.
+export const streakGate = (settings, { bossSet = false, bossCleared = false, missedToday = false } = {}) => {
+  if (!settings?.enabled) return true;
+  if (missedToday) return false;
+  return !bossSet || bossCleared;
+};

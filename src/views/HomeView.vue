@@ -54,6 +54,9 @@
       <DramaOverlay v-if="lossScreen" variant="lost" title="Streak lost" button="I'll do better"
                     :subtitle="`You missed your deadline. ${lossScreen.lostStreak ? lossScreen.lostStreak + '-day streak gone. ' : ''}${lossScreen.penalty} pts.`" @close="dismissLoss" />
 
+      <DramaOverlay v-if="bossVictory" variant="victory" title="Boss defeated" button="Claim victory"
+                    :subtitle="`${bossVictory.title} is down. +${BOSS_BONUS} pts — your day can count now.`" @close="bossVictory = null" />
+
       <TimeStatsBar v-if="isViewingToday" :stats="timeStats" />
 
       <WorkoutModal v-if="showWorkoutModal" :preferences="workoutPreferences" @close="closeWorkoutModal" @generate="generateWorkoutRoutine" />
@@ -132,7 +135,7 @@
                   :task="task" :drag-disabled="!reorderable" :index="realIndex(task)" :is-today-tab="isViewingToday" :expanded="expandedKey === taskKey(task)"
                   :active-labels="activeLabels" :now="nowTick" :show-notification="showNotification" :transfer-notification="transferNotification"
                   @toggle-expand="toggleExpanded(task)" @toggle-complete="toggleTaskCompletion(realIndex(task))" @open-detail="openTaskDetailModal(task)"
-                  @toggle-important="toggleTaskImportance(realIndex(task))" @patch="patchTask(realIndex(task), task, $event)" @subtask-patch="onSubtaskPatch(realIndex(task), task, $event)"
+                  @set-boss="setBoss(realIndex(task), task)" @toggle-important="toggleTaskImportance(realIndex(task))" @patch="patchTask(realIndex(task), task, $event)" @subtask-patch="onSubtaskPatch(realIndex(task), task, $event)"
                   @toggle-label="toggleLabelHighlight" @open-reminder="openModal('calendar', realIndex(task), task.title)" @transfer="openTransferModal(realIndex(task))"
                   @video="openYouTubeModal(realIndex(task))" @upload="handleUpload($event, realIndex(task))" @timer="openTaskTimerModal(realIndex(task))"
                   @wont-do="openWontDoModal(realIndex(task))" @delete="deleteTask(realIndex(task))" @schedule="scheduleExistingTask(realIndex(task), task, $event)"
@@ -170,8 +173,8 @@ import { ACTIVE_CAP, taskKey, activeCount, loadSummary, buildSchedule } from '@/
 import { getTodayId, formatSessionTime, getCurrentDate, formatTime, getTodayDate, isToday } from '@/utils/dateTime';
 import { badges } from '@/utils/gamification';
 import { recordMonthlyToggle, awardFinishedMonth } from '@/composables/useMonthlyStats';
-import { loadDisciplineSettings, settleDeadlines, clearLossPending, loadDisciplineState } from '@/composables/useDiscipline';
-import { defaultSettings as defaultDiscipline, warningFor, isPastDeadline } from '@/utils/discipline';
+import { loadDisciplineSettings, settleDeadlines, clearLossPending, loadDisciplineState, setBossForDay, setBossCleared } from '@/composables/useDiscipline';
+import { defaultSettings as defaultDiscipline, warningFor, isPastDeadline, streakGate, BOSS_BONUS } from '@/utils/discipline';
 import DramaOverlay from '@/components/discipline/DramaOverlay.vue';
 import { monthKey, prevMonthKey } from '@/utils/ranking';
 import { applyTaskToggle, evaluateStreak, localDateStr, ALLOWED_GAP_DAYS, DAILY_STREAK_MIN } from '@/utils/streak';
@@ -949,7 +952,7 @@ const toggleTaskCompletion = async (index) => {
     userCredits.value -= 10;
   }
 
-  if (isToday(selectedDayIndex.value)) updateStreakOnCompletion(task); // both directions; pending ignored in applyTaskToggle
+  if (isToday(selectedDayIndex.value)) onBossToggle(task).finally(() => updateStreakOnCompletion(task)); // both directions; pending ignored
 
   // Remove one-time tasks from the UI immediately
   if (task.type === "one-time") {
@@ -1161,7 +1164,39 @@ const disciplineSettings = ref(defaultDiscipline());
 const disciplineWarning = ref(null);
 const lossScreen = ref(null);
 // Whether today's completions may count toward the streak (Discipline Mode rules).
-const streakGateNow = () => !(disciplineSettings.value.enabled && isPastDeadline(new Date(), localDateStr(), disciplineSettings.value.deadline));
+const discState = ref({});
+const bossVictory = ref(null);
+const streakGateNow = () => {
+  const today = localDateStr();
+  return streakGate(disciplineSettings.value, {
+    missedToday: isPastDeadline(new Date(), today, disciplineSettings.value.deadline),
+    bossSet: discState.value.bossDate === today,
+    bossCleared: discState.value.bossClearedDate === today,
+  });
+};
+// One boss per day (today's tab only). Patches the flag on today's tasks.
+const setBoss = async (index, task) => {
+  if (!isToday(selectedDayIndex.value) || !userId.value) return;
+  const makeBoss = !task.boss;
+  for (let i = 0; i < selectedDayRoutine.value.length; i++) {
+    const t = selectedDayRoutine.value[i];
+    if (i === index) await patchTask(i, t, { boss: makeBoss });
+    else if (t.boss) await patchTask(i, t, { boss: false });
+  }
+  const today = localDateStr();
+  try {
+    if (makeBoss) { await setBossForDay(userId.value, today, task.title); discState.value = { ...discState.value, bossDate: today, bossTitle: task.title, bossClearedDate: null }; }
+    else { await setBossForDay(userId.value, null, null); discState.value = { ...discState.value, bossDate: null, bossClearedDate: null }; }
+  } catch (e) { console.error('Set boss failed:', e); }
+};
+// Called before the streak update so the gate sees the boss state.
+const onBossToggle = async (task) => {
+  if (!task?.boss || !userId.value) return;
+  const today = localDateStr();
+  discState.value = { ...discState.value, bossDate: today, bossClearedDate: task.completed ? today : null };
+  try { await setBossCleared(userId.value, today, !!task.completed); } catch (e) { console.error('Boss update failed:', e); }
+  if (task.completed) bossVictory.value = { title: task.title };
+};
 const runDiscipline = async () => {
   if (!userId.value || !disciplineSettings.value.enabled) { disciplineWarning.value = null; return; }
   const now = new Date(); const today = localDateStr(now);
@@ -1178,7 +1213,8 @@ const runDiscipline = async () => {
   }
   try {
     const r = await settleDeadlines(userId.value, disciplineSettings.value, now);
-    const st = r?.lossPending ? r : await loadDisciplineState(userId.value);
+    const st = await loadDisciplineState(userId.value);
+    discState.value = st;
     if (st?.lossPending) lossScreen.value = st.lossPending;
     if (r?.missed?.length) await checkStreakOnCompletion();
   } catch (e) { console.error('Discipline settle failed:', e); }
