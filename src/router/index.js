@@ -43,6 +43,12 @@ const routes = [
     meta: { requiresAuth: true }
   },
   {
+    path: '/discipline/log',
+    name: 'procrastination-log',
+    component: () => import('../views/ProcrastinationLog.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
     path: '/addiction',
     name: 'addiction',
     component: Addiction

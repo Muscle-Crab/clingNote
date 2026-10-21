@@ -37,7 +37,28 @@
           <option v-for="t in rw.themes" :key="t" :value="t">{{ t }}</option>
         </select></label>
     </section>
-    <!-- phase-sections -->
+    <section class="disc-card">
+      <h2 class="disc-h">🐌 Procrastination log</h2>
+      <p class="muted">{{ (dstate.log || []).length }} entries: missed deadlines, app opens while locked, boss failures.</p>
+      <router-link to="/discipline/log" class="disc-btn">View log</router-link>
+    </section>
+
+    <section class="disc-card">
+      <h2 class="disc-h">📸 Share your streak</h2>
+      <label class="disc-row"><input v-model="shareOptIn" type="checkbox" /> I want to create a shareable card</label>
+      <template v-if="shareOptIn">
+        <label class="disc-row"><input v-model="shareWithName" type="checkbox" /> Show my name (otherwise “Anonymous”)</label>
+        <button type="button" class="disc-btn" @click="makeCard">Create card</button>
+        <div v-if="cardUrl" class="card-preview">
+          <img :src="cardUrl" alt="Streak card preview" />
+          <div class="disc-row">
+            <a :href="cardUrl" download="clingnot-streak.png" class="disc-btn">⬇ Download PNG</a>
+            <button v-if="canShare" type="button" class="disc-btn" @click="shareCard">Share…</button>
+          </div>
+        </div>
+        <p class="muted">Card shows streak, level and tier only — never your email.</p>
+      </template>
+    </section>
   </div>
 </template>
 
@@ -50,7 +71,10 @@ import { MISSED_DEADLINE_PENALTY, BOSS_BONUS, BREAK_PER_TASK, BREAK_ALL_DONE, de
 import { loadDisciplineSettings, saveDisciplineSettings, loadDisciplineState, patchDisciplineState } from '@/composables/useDiscipline';
 import { levelFor, rewardsFor, MILESTONES } from '@/utils/rewards';
 import { doc, getDoc } from 'firebase/firestore';
-/* phase-imports */
+import { shareCardData } from '@/utils/rewards';
+import { tierFor, monthKey } from '@/utils/ranking';
+import { localDateStr } from '@/utils/streak';
+import { drawShareCard, canvasToBlob } from '@/utils/shareCard';
 
 const uid = ref(null);
 const settings = ref(defaultSettings());
@@ -67,7 +91,32 @@ const best = ref(0);
 const lv = computed(() => levelFor(dstate.value.xp || 0));
 const rw = computed(() => rewardsFor(best.value));
 const pickTheme = async (t) => { dstate.value = { ...dstate.value, theme: t }; try { await patchDisciplineState(uid.value, { theme: t }); } catch (e) { console.error(e); } };
-/* phase-setup */
+const shareOptIn = ref(false);
+const shareWithName = ref(false);
+const cardUrl = ref('');
+let cardBlob = null;
+const canShare = typeof navigator !== 'undefined' && !!navigator.share;
+const makeCard = async () => {
+  try {
+    const [sd, pub, user] = await Promise.all([
+      getDoc(doc(db, 'streaks', uid.value)),
+      getDoc(doc(db, 'monthlyStats', monthKey(localDateStr()), 'users', uid.value)),
+      shareWithName.value ? getDoc(doc(db, 'users', uid.value)) : Promise.resolve(null),
+    ]);
+    const s = sd.exists() ? sd.data() : {};
+    const data = shareCardData({
+      displayName: user && user.exists() ? user.data().name : '', streak: s.streak || 0, bestStreak: s.bestStreak || 0,
+      level: lv.value.level, tier: tierFor(pub.exists() ? pub.data().points || 0 : 0).name,
+    });
+    const canvas = drawShareCard(document.createElement('canvas'), data);
+    cardBlob = await canvasToBlob(canvas);
+    if (cardUrl.value) URL.revokeObjectURL(cardUrl.value);
+    cardUrl.value = URL.createObjectURL(cardBlob);
+  } catch (e) { console.error('Share card failed:', e); }
+};
+const shareCard = async () => {
+  try { await navigator.share({ files: [new File([cardBlob], 'clingnot-streak.png', { type: 'image/png' })], title: 'My ClingNot streak' }); } catch (e) { /* cancelled */ }
+};
 
 onMounted(() => onAuthStateChanged(auth, async (u) => {
   uid.value = u ? u.uid : null;
@@ -97,5 +146,6 @@ onMounted(() => onAuthStateChanged(auth, async (u) => {
 .rewards { list-style: none; padding: 0; margin: 4px 0; }
 .rewards li { padding: 2px 0; opacity: .6; }
 .rewards li.got { opacity: 1; font-weight: 600; }
+.card-preview img { width: 100%; max-width: 270px; border-radius: 12px; margin-top: 8px; }
 .muted { color: var(--c-text-3, #64748b); font-size: .9rem; }
 </style>

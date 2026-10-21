@@ -33,5 +33,7 @@ if (extra) {
   t('freeze bridges one missed day', () => { const r = extra.useFreeze({ streak: 8, bestStreak: 8, lastCompletionDate: '2026-10-19' }, '2026-10-20', { freezes: 1, used: 0 }); assert.equal(r.used, true); assert.equal(r.state.lastCompletionDate, '2026-10-20'); assert.equal(r.state.streak, 8); assert.equal(extra.useFreeze({ streak: 8 }, '2026-10-20', { freezes: 1, used: 1 }).used, false); });
   t('share card has no email', () => { const c = extra.shareCardData({ displayName: 'a@b.com', streak: 4, level: 3, tier: 'Gold' }); assert.equal(c.name, 'Anonymous'); assert.ok(!JSON.stringify(c).includes('@')); });
 }
+const SC = await import(path.join(dir, 'shareCard.mjs'));
+t('procrastination log labels cover all logged types', () => { for (const k of ['missed-deadline', 'gate-open-locked', 'boss-failed', 'freeze-used']) assert.ok(SC.LOG_LABELS[k]); });
 console.log(`${n} passed`);
 })().catch((e) => { console.error(e); process.exit(1); });
