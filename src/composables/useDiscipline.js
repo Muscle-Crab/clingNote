@@ -5,6 +5,7 @@ import { db } from '@/firebaseConfig';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { normSettings, datesToSettle, settleDays, logEntry, pushLog, MISSED_DEADLINE_PENALTY, BOSS_BONUS } from '@/utils/discipline';
 import { localDateStr } from '@/utils/streak';
+import { useFreeze } from '@/utils/rewards';
 import { addMonthlyAdjust } from '@/composables/useMonthlyStats';
 
 const settingsRef = (uid) => doc(db, 'userSettings', uid);
@@ -58,6 +59,17 @@ export const settleDeadlines = async (uid, settings, now = new Date(), onBeforeK
   }
   await patchDisciplineState(uid, { lastSettled: settledThrough, log, lossPending });
   return { missed, lossPending };
+};
+
+// Spend an earned streak freeze (if any) instead of killing the streak. Returns true if used.
+export const tryFreeze = async (uid, streakDoc, missedDates, freezes) => {
+  if (missedDates.length !== 1) return false; // a freeze covers a single missed day
+  const st = await loadDisciplineState(uid);
+  const r = useFreeze(streakDoc, missedDates[0], { freezes, used: st.freezesUsed || 0 });
+  if (!r.used) return false;
+  await setDoc(doc(db, 'streaks', uid), { lastCompletionDate: r.state.lastCompletionDate, counted: r.state.counted, prev: null }, { merge: true });
+  await patchDisciplineState(uid, { freezesUsed: (st.freezesUsed || 0) + 1 });
+  return true;
 };
 
 export const clearLossPending = (uid) => patchDisciplineState(uid, { lossPending: null });

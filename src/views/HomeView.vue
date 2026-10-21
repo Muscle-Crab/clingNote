@@ -1,5 +1,5 @@
 <template>
-  <div ref="scrollContainer" class="app-root" :class="{ 'is-dragging': isDraggingTask }">
+  <div ref="scrollContainer" class="app-root" :class="[{ 'is-dragging': isDraggingTask }, appTheme ? 'theme-' + appTheme : '']">
 
     <!-- Loading Screen -->
     <div v-if="isLoading" class="splash-screen">
@@ -56,6 +56,11 @@
 
       <DramaOverlay v-if="bossVictory" variant="victory" title="Boss defeated" button="Claim victory"
                     :subtitle="`${bossVictory.title} is down. +${BOSS_BONUS} pts — your day can count now.`" @close="bossVictory = null" />
+
+      <DramaOverlay v-if="levelUp" variant="levelup" :title="`Level ${levelUp.level}`" button="Let's go"
+                    :subtitle="`${levelUp.xp} XP · ${levelUp.toNext} XP to level ${levelUp.level + 1}`" @close="levelUp = null" />
+      <DramaOverlay v-if="rewardScreen && !levelUp" variant="reward" :title="`${rewardScreen.days}-day streak!`" button="Nice"
+                    :subtitle="`Reward unlocked: ${rewardScreen.label}`" @close="rewardScreen = null" />
 
       <TimeStatsBar v-if="isViewingToday" :stats="timeStats" />
 
@@ -173,11 +178,12 @@ import { ACTIVE_CAP, taskKey, activeCount, loadSummary, buildSchedule } from '@/
 import { getTodayId, formatSessionTime, getCurrentDate, formatTime, getTodayDate, isToday } from '@/utils/dateTime';
 import { badges } from '@/utils/gamification';
 import { recordMonthlyToggle, awardFinishedMonth } from '@/composables/useMonthlyStats';
-import { loadDisciplineSettings, settleDeadlines, clearLossPending, loadDisciplineState, setBossForDay, setBossCleared } from '@/composables/useDiscipline';
+import { loadDisciplineSettings, settleDeadlines, clearLossPending, loadDisciplineState, setBossForDay, setBossCleared, tryFreeze } from '@/composables/useDiscipline';
+import { levelFor, rewardsFor } from '@/utils/rewards';
 import { defaultSettings as defaultDiscipline, warningFor, isPastDeadline, streakGate, BOSS_BONUS } from '@/utils/discipline';
 import DramaOverlay from '@/components/discipline/DramaOverlay.vue';
 import { monthKey, prevMonthKey } from '@/utils/ranking';
-import { applyTaskToggle, evaluateStreak, localDateStr, ALLOWED_GAP_DAYS, DAILY_STREAK_MIN } from '@/utils/streak';
+import { applyTaskToggle, evaluateStreak, localDateStr, dayDiff, ALLOWED_GAP_DAYS, DAILY_STREAK_MIN } from '@/utils/streak';
 import { scheduleNotification, sendNotificationToPlayer } from '@/composables/useNotifications';
 import { speak } from '@/composables/useSpeech';
 import { completionPercentage, computeTimeStats, daysLeftInYearFrom, heroTitleFor } from '@/utils/dayStats';
@@ -1212,13 +1218,33 @@ const runDiscipline = async () => {
     } catch (e) { /* notifications optional */ }
   }
   try {
-    const r = await settleDeadlines(userId.value, disciplineSettings.value, now);
+    const r = await settleDeadlines(userId.value, disciplineSettings.value, now, (sd, missed) => tryFreeze(userId.value, sd, missed, rewardsFor(bestStreak.value).freezes));
     const st = await loadDisciplineState(userId.value);
     discState.value = st;
     if (st?.lossPending) lossScreen.value = st.lossPending;
+    checkProgression(st);
     if (r?.missed?.length) await checkStreakOnCompletion();
   } catch (e) { console.error('Discipline settle failed:', e); }
 };
+// ---- Levels / milestone rewards ----
+const levelUp = ref(null);
+const rewardScreen = ref(null);
+const appTheme = ref('');
+const checkProgression = (st) => {
+  if (!userId.value) return;
+  const lv = levelFor(st?.xp || 0);
+  playerLevel.value = lv;
+  appTheme.value = st?.theme && rewardsFor(bestStreak.value).themes.includes(st.theme) ? st.theme : '';
+  try {
+    const kL = `lastLevelSeen_${userId.value}`; const seenL = Number(localStorage.getItem(kL) || 0);
+    if (seenL && lv.level > seenL) levelUp.value = lv;
+    localStorage.setItem(kL, String(Math.max(seenL, lv.level)));
+    const kR = `lastRewardSeen_${userId.value}`; const seenR = Number(localStorage.getItem(kR) || 0);
+    const newest = rewardsFor(bestStreak.value).unlocked.filter((m) => m.days > seenR);
+    if (newest.length) { rewardScreen.value = newest[newest.length - 1]; localStorage.setItem(kR, String(newest[newest.length - 1].days)); }
+  } catch (e) { /* storage optional */ }
+};
+const playerLevel = ref(levelFor(0));
 const dismissLoss = async () => { lossScreen.value = null; try { await clearLossPending(userId.value); } catch (e) { /* retry next open */ } };
 let disciplineTimer = null;
 const startDiscipline = async () => {
@@ -1244,6 +1270,7 @@ const updateStreakOnCompletion = async (task) => {
     await setDoc(streakDocRef, { ...next, updatedAt: serverTimestamp() }, { merge: true });
     applyStreakState(next);
     recordMonthlyToggle(userId.value, localDateStr(), { key: taskKey(task), completed: !!task.completed, pending: task.status === 'pending' }, next.bestStreak)
+      .then(() => loadDisciplineState(userId.value)).then((st) => { discState.value = st; checkProgression(st); })
       .catch((e) => console.error('Monthly stats update failed:', e));
     checkForBadges();
     updateMotivationalMessage();
@@ -1781,7 +1808,14 @@ const checkStreakOnCompletion = async () => {
     if (!snap.exists()) { streakStatus.value = 'none'; return; }
     const data = snap.data();
     unlockedBadges.value = data.unlockedBadges || [];
-    const ev = evaluateStreak(data, localDateStr(), streakGap());
+    let ev = evaluateStreak(data, localDateStr(), streakGap());
+    // Earned streak freeze (7-day milestone) covers exactly one missed day.
+    if (ev.status === 'broken' && data.streak && data.lastCompletionDate && dayDiff(data.lastCompletionDate, localDateStr()) === streakGap() + 1) {
+      const y = new Date(); y.setDate(y.getDate() - 1);
+      if (await tryFreeze(userId.value, data, [localDateStr(y)], rewardsFor(data.bestStreak || 0).freezes)) {
+        ev = evaluateStreak({ ...data, lastCompletionDate: localDateStr(y) }, localDateStr(), streakGap());
+      }
+    }
     const { status, progress, min, ...st } = ev; // eslint-disable-line no-unused-vars
     if (ev.status === 'broken' && data.streak) await setDoc(streakDocRef, { ...st, updatedAt: serverTimestamp() }, { merge: true });
     else if ((data.bestStreak || 0) < ev.bestStreak) await setDoc(streakDocRef, { bestStreak: ev.bestStreak }, { merge: true });
@@ -3042,4 +3076,6 @@ a.hero-menu-item { display: block; text-decoration: none; color: inherit; }
 .disc-warning { margin: 8px 0; padding: 10px 14px; border-radius: 10px; font-weight: 700; background: var(--c-warn-soft, #fef3c7); color: var(--c-warn-text, #92400e); }
 .disc-warning--30m { background: #fee2e2; color: #991b1b; animation: discPulse 1.2s ease-in-out infinite; }
 @keyframes discPulse { 50% { opacity: .65; } }
+.app-root.theme-ember { --c-primary: #ea580c; --c-primary-soft: #ffedd5; --c-warn: #dc2626; }
+.app-root.theme-ocean { --c-primary: #0284c7; --c-primary-soft: #e0f2fe; --c-success: #0d9488; }
 </style>

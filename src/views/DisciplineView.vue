@@ -22,17 +22,34 @@
       <router-link to="/gate?app=tiktok" class="disc-btn">Open break gate</router-link>
       <p class="muted">Want it in front of TikTok? See the iPhone Shortcuts setup in <code>docs/tiktok-gate.md</code>: automation “When TikTok is opened → Open URL https://clingnot.netlify.app/gate?app=tiktok”, Run Immediately.</p>
     </section>
+    <section class="disc-card">
+      <h2 class="disc-h">⭐ Level {{ lv.level }}</h2>
+      <div class="xp-bar"><div class="xp-fill" :style="{ width: lv.pct + '%' }"></div></div>
+      <p class="muted">{{ lv.xp }} XP (lifetime points) · {{ lv.toNext }} XP to level {{ lv.level + 1 }}</p>
+      <h3 class="disc-h">🎁 Streak rewards (best {{ best }} days)</h3>
+      <ul class="rewards">
+        <li v-for="m in MILESTONES" :key="m.days" :class="{ got: best >= m.days }">{{ best >= m.days ? '✅' : '🔒' }} {{ m.days }} days — {{ m.label }}</li>
+      </ul>
+      <p class="muted">Streak freezes: {{ Math.max(0, rw.freezes - (dstate.freezesUsed || 0)) }} available (auto-used for one missed deadline).</p>
+      <label v-if="rw.themes.length" class="disc-row">Theme
+        <select :value="dstate.theme || ''" @change="pickTheme($event.target.value)">
+          <option value="">Default</option>
+          <option v-for="t in rw.themes" :key="t" :value="t">{{ t }}</option>
+        </select></label>
+    </section>
     <!-- phase-sections -->
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { onAuthStateChanged } from 'firebase/auth';
-import { auth } from '@/firebaseConfig';
+import { auth, db } from '@/firebaseConfig';
 import { DAILY_STREAK_MIN } from '@/utils/streak';
 import { MISSED_DEADLINE_PENALTY, BOSS_BONUS, BREAK_PER_TASK, BREAK_ALL_DONE, defaultSettings } from '@/utils/discipline';
-import { loadDisciplineSettings, saveDisciplineSettings } from '@/composables/useDiscipline';
+import { loadDisciplineSettings, saveDisciplineSettings, loadDisciplineState, patchDisciplineState } from '@/composables/useDiscipline';
+import { levelFor, rewardsFor, MILESTONES } from '@/utils/rewards';
+import { doc, getDoc } from 'firebase/firestore';
 /* phase-imports */
 
 const uid = ref(null);
@@ -45,12 +62,20 @@ const update = async (patch) => {
   try { settings.value = await saveDisciplineSettings(uid.value, settings.value); saved.value = true; setTimeout(() => { saved.value = false; }, 1500); } catch (e) { console.error('Save discipline failed:', e); }
 };
 const askNotify = async () => { try { await Notification.requestPermission(); } catch (e) { /* unsupported */ } canNotify.value = false; };
+const dstate = ref({});
+const best = ref(0);
+const lv = computed(() => levelFor(dstate.value.xp || 0));
+const rw = computed(() => rewardsFor(best.value));
+const pickTheme = async (t) => { dstate.value = { ...dstate.value, theme: t }; try { await patchDisciplineState(uid.value, { theme: t }); } catch (e) { console.error(e); } };
 /* phase-setup */
 
 onMounted(() => onAuthStateChanged(auth, async (u) => {
   uid.value = u ? u.uid : null;
   if (!uid.value) return;
   settings.value = await loadDisciplineSettings(uid.value);
+  dstate.value = await loadDisciplineState(uid.value);
+  const sd = await getDoc(doc(db, 'streaks', uid.value));
+  best.value = sd.exists() ? (sd.data().bestStreak || sd.data().streak || 0) : 0;
   /* phase-load */
 }));
 </script>
@@ -67,5 +92,10 @@ onMounted(() => onAuthStateChanged(auth, async (u) => {
 }
 .disc-btn { margin-top: 8px; padding: 6px 12px; border-radius: 8px; background: var(--c-primary, #6366f1); color: #fff; }
 .disc-h { font-size: 1.05rem; font-weight: 700; margin: 0 0 6px; }
+.xp-bar { height: 10px; border-radius: 999px; background: var(--c-border, #e2e8f0); overflow: hidden; }
+.xp-fill { height: 100%; background: linear-gradient(90deg, #8b5cf6, #ec4899); }
+.rewards { list-style: none; padding: 0; margin: 4px 0; }
+.rewards li { padding: 2px 0; opacity: .6; }
+.rewards li.got { opacity: 1; font-weight: 600; }
 .muted { color: var(--c-text-3, #64748b); font-size: .9rem; }
 </style>

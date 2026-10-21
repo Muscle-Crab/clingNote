@@ -2,7 +2,7 @@
 //   monthlyStats/{YYYY-MM}/users/{uid}   public: { count, points, tier, goal, displayName, bestStreak, optIn }
 //   monthlyStats/{YYYY-MM}/private/{uid} owner-only: { month, done: ['YYYY-MM-DD|taskKey'], goal }
 import { db } from '@/firebaseConfig';
-import { doc, getDoc, setDoc, getDocs, collection, query, where, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, getDocs, collection, query, where, serverTimestamp, increment } from 'firebase/firestore';
 import { applyMonthlyToggle, applyAdjust, computeStats, monthKey, safeName, buildLeaderboard, monthlyAwards, DEFAULT_MONTHLY_GOAL } from '@/utils/ranking';
 
 const pubRef = (mk, uid) => doc(db, 'monthlyStats', mk, 'users', uid);
@@ -23,6 +23,8 @@ const writeStats = async (mk, uid, detail, extra = {}) => {
     optIn: prev.optIn !== false, bestStreak: prev.bestStreak || 0,
     ...extra, updatedAt: serverTimestamp(),
   }, { merge: true });
+  const delta = s.points - (Number(prev.points) || 0); // XP = lifetime points (unchecks/penalties reduce it)
+  if (delta) await setDoc(doc(db, 'discipline', uid), { xp: increment(delta) }, { merge: true });
   return s;
 };
 

@@ -59,7 +59,7 @@ import { auth, db } from '@/firebaseConfig';
 import { localDateStr, todayCount, DAILY_STREAK_MIN } from '@/utils/streak';
 import { gateState, earnedBreakMinutes, fmtCountdown, BREAK_PER_TASK, defaultSettings } from '@/utils/discipline';
 import { loadDisciplineSettings, loadDisciplineState, breaksToday, startBreak, endBreak, logDiscipline } from '@/composables/useDiscipline';
-/* gate-imports */
+import { rewardsFor } from '@/utils/rewards';
 
 const route = useRoute();
 const appName = computed(() => { const a = String(route.query.app || 'this app').replace(/[^\w .-]/g, '').slice(0, 24); return a.toLowerCase() === 'tiktok' ? 'TikTok' : a; });
@@ -85,7 +85,7 @@ const load = async () => {
   const sd = streakSnap.exists() ? streakSnap.data() : {};
   count.value = todayCount(sd, today);
   streakNow.value = sd.streak || 0;
-  /* gate-load */
+  extraBonus.value = rewardsFor(sd.bestStreak || sd.streak || 0).breakBonus;
   breaks.value = breaksToday(st, today);
   loading.value = false;
   if (state.value.mode === 'locked') logDiscipline(uid.value, 'gate-open-locked', today, `${appName.value} · ${state.value.left} tasks left`).catch(() => {});
