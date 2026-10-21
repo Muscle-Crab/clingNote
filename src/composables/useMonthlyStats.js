@@ -3,7 +3,7 @@
 //   monthlyStats/{YYYY-MM}/private/{uid} owner-only: { month, done: ['YYYY-MM-DD|taskKey'], goal }
 import { db } from '@/firebaseConfig';
 import { doc, getDoc, setDoc, getDocs, collection, query, where, serverTimestamp } from 'firebase/firestore';
-import { applyMonthlyToggle, computeStats, monthKey, safeName, buildLeaderboard, monthlyAwards, DEFAULT_MONTHLY_GOAL } from '@/utils/ranking';
+import { applyMonthlyToggle, applyAdjust, computeStats, monthKey, safeName, buildLeaderboard, monthlyAwards, DEFAULT_MONTHLY_GOAL } from '@/utils/ranking';
 
 const pubRef = (mk, uid) => doc(db, 'monthlyStats', mk, 'users', uid);
 const privRef = (mk, uid) => doc(db, 'monthlyStats', mk, 'private', uid);
@@ -72,4 +72,11 @@ export const awardFinishedMonth = async (uid, mk) => {
   const fresh = ids.filter((i) => !have.has(i));
   if (fresh.length) await setDoc(ref, { monthlyBadges: [...have, ...fresh] }, { merge: true });
   return [...have, ...fresh];
+};
+
+// Idempotent point adjustment for the month containing `date` (penalties / bonuses).
+export const addMonthlyAdjust = async (uid, date, id, pts) => {
+  const mk = monthKey(date);
+  const { detail } = await loadMyMonth(uid, mk);
+  return writeStats(mk, uid, applyAdjust({ ...detail, month: mk }, mk, id, pts));
 };

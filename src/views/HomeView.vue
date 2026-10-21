@@ -33,6 +33,7 @@
             <div v-if="menuOpen" class="hero-menu-pop" @click="menuOpen = false">
               <button type="button" class="hero-menu-item" @click="openShutdown">🌙 Shutdown day</button>
               <router-link to="/rankings" class="hero-menu-item">🏆 Rankings</router-link>
+              <router-link to="/discipline" class="hero-menu-item">⚔️ Discipline Mode</router-link>
               <button type="button" class="hero-menu-item" @click="showSchedule = !showSchedule">🗓 {{ showSchedule ? 'Hide' : 'Show' }} schedule</button>
             </div>
           </div>
@@ -46,6 +47,12 @@
 
       <StreakHeader :streak="streak" :best-streak="bestStreak" :streak-status="streakStatus" :streak-progress="streakProgress" :streak-min="DAILY_STREAK_MIN" :motivational-message="motivationalMessage" :points-accumulated="pointsAccumulated"
                     :total-points="totalPoints" :day-session="daySession" @shutdown="openShutdown" @end-day="endDay" />
+
+      <div v-if="disciplineWarning" class="disc-warning" :class="'disc-warning--' + disciplineWarning" role="alert">
+        ⚠️ {{ disciplineWarning === '30m' ? '30 minutes' : '2 hours' }} until your {{ disciplineSettings.deadline }} deadline — {{ streakProgress }}/{{ DAILY_STREAK_MIN }} done
+      </div>
+      <DramaOverlay v-if="lossScreen" variant="lost" title="Streak lost" button="I'll do better"
+                    :subtitle="`You missed your deadline. ${lossScreen.lostStreak ? lossScreen.lostStreak + '-day streak gone. ' : ''}${lossScreen.penalty} pts.`" @close="dismissLoss" />
 
       <TimeStatsBar v-if="isViewingToday" :stats="timeStats" />
 
@@ -163,6 +170,9 @@ import { ACTIVE_CAP, taskKey, activeCount, loadSummary, buildSchedule } from '@/
 import { getTodayId, formatSessionTime, getCurrentDate, formatTime, getTodayDate, isToday } from '@/utils/dateTime';
 import { badges } from '@/utils/gamification';
 import { recordMonthlyToggle, awardFinishedMonth } from '@/composables/useMonthlyStats';
+import { loadDisciplineSettings, settleDeadlines, clearLossPending, loadDisciplineState } from '@/composables/useDiscipline';
+import { defaultSettings as defaultDiscipline, warningFor, isPastDeadline } from '@/utils/discipline';
+import DramaOverlay from '@/components/discipline/DramaOverlay.vue';
 import { monthKey, prevMonthKey } from '@/utils/ranking';
 import { applyTaskToggle, evaluateStreak, localDateStr, ALLOWED_GAP_DAYS, DAILY_STREAK_MIN } from '@/utils/streak';
 import { scheduleNotification, sendNotificationToPlayer } from '@/composables/useNotifications';
@@ -1145,6 +1155,42 @@ const checkAllTasksCompleted = async () => {
 
 // A day counts once >=1 task is completed (local date). See src/utils/streak.js.
 const streakGap = () => Number(userSettingsStreakGap.value) || ALLOWED_GAP_DAYS;
+
+// ---- Discipline Mode ----
+const disciplineSettings = ref(defaultDiscipline());
+const disciplineWarning = ref(null);
+const lossScreen = ref(null);
+// Whether today's completions may count toward the streak (Discipline Mode rules).
+const streakGateNow = () => !(disciplineSettings.value.enabled && isPastDeadline(new Date(), localDateStr(), disciplineSettings.value.deadline));
+const runDiscipline = async () => {
+  if (!userId.value || !disciplineSettings.value.enabled) { disciplineWarning.value = null; return; }
+  const now = new Date(); const today = localDateStr(now);
+  const w = warningFor(now, today, disciplineSettings.value.deadline, streakStatus.value === 'done');
+  disciplineWarning.value = w;
+  if (w) {
+    const k = `discWarn_${userId.value}_${today}_${w}`;
+    try {
+      if (!localStorage.getItem(k)) {
+        localStorage.setItem(k, '1');
+        if (typeof Notification !== 'undefined' && Notification.permission === 'granted') new Notification('ClingNot deadline', { body: `${w === '30m' ? '30 min' : '2 hours'} left: ${streakProgress.value}/${DAILY_STREAK_MIN} tasks done` });
+      }
+    } catch (e) { /* notifications optional */ }
+  }
+  try {
+    const r = await settleDeadlines(userId.value, disciplineSettings.value, now);
+    const st = r?.lossPending ? r : await loadDisciplineState(userId.value);
+    if (st?.lossPending) lossScreen.value = st.lossPending;
+    if (r?.missed?.length) await checkStreakOnCompletion();
+  } catch (e) { console.error('Discipline settle failed:', e); }
+};
+const dismissLoss = async () => { lossScreen.value = null; try { await clearLossPending(userId.value); } catch (e) { /* retry next open */ } };
+let disciplineTimer = null;
+const startDiscipline = async () => {
+  try { disciplineSettings.value = await loadDisciplineSettings(userId.value); } catch (e) { return; }
+  await runDiscipline();
+  if (!disciplineTimer) disciplineTimer = setInterval(runDiscipline, 60 * 1000);
+};
+onBeforeUnmount(() => { if (disciplineTimer) clearInterval(disciplineTimer); });
 const applyStreakState = (st) => {
   const ev = evaluateStreak(st, localDateStr(), streakGap());
   streak.value = ev.streak; bestStreak.value = ev.bestStreak; lastCompletionDate.value = ev.lastCompletionDate;
@@ -1158,7 +1204,7 @@ const updateStreakOnCompletion = async (task) => {
   try {
     const snap = await getDoc(streakDocRef);
     const prev = snap.exists() ? snap.data() : null;
-    const next = applyTaskToggle(prev, localDateStr(), { key: taskKey(task), completed: !!task.completed, pending: task.status === 'pending' }, streakGap());
+    const next = applyTaskToggle(prev, localDateStr(), { key: taskKey(task), completed: !!task.completed, pending: task.status === 'pending', gate: streakGateNow() }, streakGap());
     await setDoc(streakDocRef, { ...next, updatedAt: serverTimestamp() }, { merge: true });
     applyStreakState(next);
     recordMonthlyToggle(userId.value, localDateStr(), { key: taskKey(task), completed: !!task.completed, pending: task.status === 'pending' }, next.bestStreak)
@@ -1199,6 +1245,7 @@ onAuthStateChanged(auth, async(user) => {
     await loadDaySession();
     // Fetch tasks and streak after user ID is set
     fetchStreakOnLoad(); // Ensure this runs after userId is set
+    startDiscipline();
     awardFinishedMonth(user.uid, prevMonthKey(monthKey(localDateStr()))).catch(() => {}); // month-end badges for last month
 
     const todayIndex = new Date().getDay();
@@ -2956,4 +3003,7 @@ a.hero-menu-item { display: block; text-decoration: none; color: inherit; }
 .app-root .empty-add.empty-add { min-height: 48px; background: linear-gradient(180deg, #5F7EF7, #4563E6); box-shadow: 0 6px 18px rgba(79,111,240,.4); }
 
 @media (max-width: 480px) { .app-root .modal-box.modal-box { border-radius: 22px 22px 0 0; padding-bottom: env(safe-area-inset-bottom); } }
+.disc-warning { margin: 8px 0; padding: 10px 14px; border-radius: 10px; font-weight: 700; background: var(--c-warn-soft, #fef3c7); color: var(--c-warn-text, #92400e); }
+.disc-warning--30m { background: #fee2e2; color: #991b1b; animation: discPulse 1.2s ease-in-out infinite; }
+@keyframes discPulse { 50% { opacity: .65; } }
 </style>

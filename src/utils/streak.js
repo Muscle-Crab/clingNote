@@ -23,7 +23,10 @@ const norm = (s) => ({
   dayDate: s?.dayDate || null,
   dayDone: Array.isArray(s?.dayDone) ? [...new Set(s.dayDone)] : [],
   prev: s?.prev || null,
+  counted: Array.isArray(s?.counted) ? s.counted.slice(-62) : [], // recent counted local dates
 });
+export const COUNTED_KEEP = 62;
+const addCounted = (list, d) => [...list.filter((x) => x !== d), d].slice(-COUNTED_KEEP);
 
 export const todayCount = (state, today) => { const s = norm(state); return s.dayDate === today ? s.dayDone.length : 0; };
 
@@ -34,19 +37,20 @@ export const recordCompletion = (state, today, gap = ALLOWED_GAP_DAYS) => {
   const diff = s.lastCompletionDate ? dayDiff(s.lastCompletionDate, today) : Infinity;
   if (diff < 0) return s; // clock went backwards; ignore
   const streak = diff <= gap && s.streak > 0 ? s.streak + 1 : 1;
-  return { ...s, streak, bestStreak: Math.max(s.bestStreak, streak), lastCompletionDate: today,
+  return { ...s, streak, bestStreak: Math.max(s.bestStreak, streak), lastCompletionDate: today, counted: addCounted(s.counted, today),
     prev: { streak: s.streak, bestStreak: s.bestStreak, lastCompletionDate: s.lastCompletionDate } };
 };
 
 // A task was (un)completed today. Pending tasks are ignored.
-export const applyTaskToggle = (state, today, { key, completed, pending = false }, gap = ALLOWED_GAP_DAYS, min = DAILY_STREAK_MIN) => {
+// gate=false (Discipline Mode: boss not cleared / deadline missed) means the day can't count yet.
+export const applyTaskToggle = (state, today, { key, completed, pending = false, gate = true }, gap = ALLOWED_GAP_DAYS, min = DAILY_STREAK_MIN) => {
   let s = norm(state);
   if (pending || !key) return s;
   const done = new Set(s.dayDate === today ? s.dayDone : []);
   if (completed) done.add(key); else done.delete(key);
   s = { ...s, dayDate: today, dayDone: [...done], prev: s.dayDate === today ? s.prev : null };
-  if (done.size >= min) return recordCompletion(s, today, gap);
-  if (s.lastCompletionDate === today && s.prev) return { ...s, ...s.prev, prev: null }; // dropped below min: undo today
+  if (done.size >= min && gate) return recordCompletion(s, today, gap);
+  if (s.lastCompletionDate === today && s.prev) return { ...s, ...s.prev, prev: null, counted: s.counted.filter((d) => d !== today) }; // undo today
   return s;
 };
 

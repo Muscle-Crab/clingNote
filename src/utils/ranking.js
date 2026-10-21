@@ -36,14 +36,15 @@ export const computeStats = (detail, min = DAILY_STREAK_MIN) => {
   const goal = goalOf(detail?.goal);
   const count = done.length;
   const goalReached = count >= goal;
-  const points = count * POINTS_PER_TASK + streakDays * POINTS_STREAK_DAY + (goalReached ? POINTS_GOAL_BONUS : 0);
-  return { count, streakDays, goal, goalReached, points, tier: tierFor(points).name };
+  const adjust = Object.values(detail?.adjust || {}).reduce((a, v) => a + (Number(v) || 0), 0); // { 'kind:date': pts }
+  const points = Math.max(0, count * POINTS_PER_TASK + streakDays * POINTS_STREAK_DAY + (goalReached ? POINTS_GOAL_BONUS : 0) + adjust);
+  return { count, streakDays, goal, goalReached, adjust, points, tier: tierFor(points).name };
 };
 
 // Apply a task (un)completion on local date `today`. New month => fresh detail (starts at 0).
 export const applyMonthlyToggle = (detail, today, { key, completed, pending = false }) => {
   const month = monthKey(today);
-  const base = detail?.month === month ? detail : { month, done: [], goal: detail?.goal };
+  const base = detail?.month === month ? detail : { month, done: [], goal: detail?.goal, adjust: {} };
   if (pending || !key) return { ...base, done: [...(base.done || [])] };
   const set = new Set(base.done || []);
   const k = `${today}|${key}`;
@@ -70,4 +71,12 @@ export const monthlyAwards = (board, uid) => {
   if (i >= 0 && i < 3 && me.points > 0) out.push('monthly-top3');
   if (me && tierAtLeast(me.points, 'Gold')) out.push('monthly-gold');
   return out;
+};
+
+// Idempotent point adjustment (e.g. 'missed:2026-10-20' -> -50, 'boss:2026-10-20' -> +100).
+export const applyAdjust = (detail, mk, id, pts) => {
+  const base = detail?.month === mk ? detail : { month: mk, done: [], goal: detail?.goal, adjust: {} };
+  const adjust = { ...(base.adjust || {}) };
+  if (pts === null) delete adjust[id]; else adjust[id] = pts;
+  return { ...base, adjust };
 };

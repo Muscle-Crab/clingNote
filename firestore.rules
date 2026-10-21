@@ -14,5 +14,13 @@ service cloud.firestore {
     match /monthlyStats/{month}/private/{uid} {
       allow read, write: if request.auth != null && request.auth.uid == uid;
     }
+    // Discipline Mode state (settlement, log, boss, breaks, XP): owner-only
+    match /discipline/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+    // Settings (incl. discipline toggle/deadline): owner-only
+    match /userSettings/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
   }
 }
