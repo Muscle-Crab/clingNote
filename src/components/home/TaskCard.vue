@@ -6,31 +6,27 @@
                     :class="{
                     'task-card--completed': task.completed && isTodayTab,
                     'task-card--important': task.important,
-                    'task-card--menu': moreOpen
+                    'task-card--menu': moreOpen,
+                    'task-card--next': upNext
                   }"
                 >
-                  <!-- Left: drag + avatar -->
+                  <!-- Left: drag handle, completion circle, category tile -->
                   <div class="task-left">
-                    <div class="task-avatar drag-handle" :class="{ 'drag-handle--disabled': dragDisabled }" :style="{ background: 'grey' }"
+                    <div class="task-avatar drag-handle" :class="{ 'drag-handle--disabled': dragDisabled }"
                          :title="dragDisabled ? 'Reordering is off while a sort or filter is active (or on days other than today)' : 'Drag to reorder'"
-                         :aria-disabled="dragDisabled ? 'true' : 'false'">
+                         :aria-disabled="dragDisabled ? 'true' : 'false'" :aria-label="'Task ' + (index + 1) + ', drag to reorder'">
                       <i class="fas fa-grip-vertical"></i>
                     </div>
-                    <div class="task-index">{{ index + 1 }}</div>
+                    <button v-if="isTodayTab" @click="$emit('toggle-complete')" class="task-check" :aria-label="task.completed ? 'Mark not done' : 'Mark done'" :class="{ 'task-check--done': task.completed }">
+                      <i :class="task.completed ? 'fas fa-check-circle' : 'far fa-circle'"></i>
+                    </button>
+                    <div class="task-cat" :class="'task-cat--' + cat.tone" aria-hidden="true"><i :class="'fas ' + cat.icon"></i></div>
                   </div>
 
                   <!-- Center: main content -->
                   <div class="task-body">
+                    <p v-if="upNext" class="task-upnext">Up next</p>
                     <div class="task-title-row">
-                      <!-- Completion toggle -->
-                      <button
-                          v-if="isTodayTab"
-                          @click="$emit('toggle-complete')"
-                          class="task-check" :aria-label="task.completed ? 'Mark not done' : 'Mark done'"
-                          :class="{ 'task-check--done': task.completed }"
-                      >
-                        <i :class="task.completed ? 'fas fa-check-circle' : 'far fa-circle'"></i>
-                      </button>
 
                       <span
                           class="task-title"
@@ -47,6 +43,7 @@
                       <span v-if="task.fileURL" class="task-attachment" title="File">📄</span>
                     </div>
 
+                    <p class="task-sub">{{ cat.label }} · {{ whenText }}</p>
                     <div v-if="task.reminder?.date && task.reminder?.time" class="task-reminder">
                       📅 {{ formatShortDate(task.reminder.date) }}· ⏰ {{ formatTime(task.reminder.time) }}
                     </div>
@@ -66,7 +63,7 @@
                       <span v-if="task.status && task.status !== 'todo' && task.status !== 'pending'" class="chip">{{ task.status }}</span>
                       <span v-if="task.scheduledFor" class="chip chip--due" :class="{ 'chip--overdue': task.scheduledFor < todayYmd }">{{ dueBadge(task, todayYmd) }}</span>
                       <span v-else-if="task.dueDate" class="chip">Due {{ task.dueDate }}</span>
-                      <span v-if="estimateOf(task)" class="chip">⏱ {{ formatMinutes(estimateOf(task)) }}</span>
+                      <span v-if="false" class="chip">⏱ {{ formatMinutes(estimateOf(task)) }}</span>
                       <span v-if="task.startTime" class="chip">🕒 {{ formatClock(toMinutes(task.startTime)) }}<template v-if="estimateOf(task)"> – {{ formatClock(toMinutes(task.startTime) + estimateOf(task)) }}</template></span>
                     </div>
                     <div v-if="subtaskProgress(task).total" class="task-chips">
@@ -136,24 +133,19 @@
                         :aria-expanded="expanded ? 'true' : 'false'" :title="expanded ? 'Hide details' : 'Show details'" @click.stop="$emit('toggle-expand')">
                       <i class="fas fa-chevron-down"></i>
                     </button>
-                    <div class="coin-badge">
-                      <svg xmlns="http://www.w3.org/2000/svg" class="coin-svg" viewBox="0 0 24 24">
-                        <circle cx="12" cy="12" r="10" fill="#F59E0B"/>
-                        <circle cx="12" cy="12" r="8" fill="#D97706"/>
-                        <text x="12" y="16" font-size="10" text-anchor="middle" fill="white" font-family="Arial" font-weight="bold">$</text>
-                      </svg>
-                      <span class="coin-value">10</span>
+                    <div class="task-play-wrap">
+                      <button type="button" class="task-play" :class="{ 'task-play--primary': upNext }" title="Start focus timer" aria-label="Start focus timer" @click.stop="$emit('timer')">
+                        <i class="fas fa-play"></i>
+                      </button>
+                      <span class="task-pts" title="Points for completing">+10</span>
                     </div>
-
-                    <button type="button" class="task-play" title="Start Task" aria-label="Start Task" @click.stop="$emit('timer')">
-                      <i class="fas fa-play"></i>
-                    </button>
                     <button type="button" class="task-more" :class="{ 'task-more--open': moreOpen }" title="More actions" aria-label="More actions"
                         :aria-expanded="moreOpen ? 'true' : 'false'" @click.stop="moreOpen = !moreOpen">
                       <i class="fas fa-ellipsis-h"></i>
                     </button>
 
                     <div v-show="moreOpen" class="task-actions" @click.stop>
+                      <button @click="$emit('toggle-expand'); moreOpen = false" class="action-btn" title="Details" aria-label="Show details">📝</button>
                       <button @click="$emit('open-reminder')" class="action-btn" title="Reminder" aria-label="Add reminder">📅</button>
                       <button @click="$emit('transfer')" class="action-btn" title="Transfer" aria-label="Transfer to another day">🔄</button>
                       <button @click="$emit('video')" class="action-btn" title="Video" aria-label="Attach video">🎥</button>
@@ -177,14 +169,16 @@ import { dueBadge } from '@/utils/scheduling';
 import { downloadTaskIcs } from '@/utils/ics';
 import { localDateStr } from '@/utils/streak';
 const todayYmd = localDateStr();
-import { ref, watch, onBeforeUnmount } from 'vue';
+import { ref, watch, onBeforeUnmount, computed } from 'vue';
+import { categoryOf } from '@/utils/taskCategory';
 import { STATUSES, taskKey, estimateOf, formatClock, formatDuration as formatMinutes, toMinutes } from '@/utils/taskPlanning';
 import { subtaskProgress, subtaskPercent } from '@/utils/subtasks';
 import { taskTimeLeft } from '@/utils/dayStats';
 import { formatShortDate, formatTime } from '@/utils/dateTime';
 import SubtaskList from '@/components/home/SubtaskList.vue';
 
-defineProps({
+const props = defineProps({
+  upNext: { type: Boolean, default: false }, // first open task on today's list: highlighted row
   dragDisabled: { type: Boolean, default: false },
   task: { type: Object, required: true },
   index: { type: Number, required: true },
@@ -199,6 +193,14 @@ const emit = defineEmits(['set-boss', 'toggle-expand', 'toggle-complete', 'open-
   'toggle-label', 'open-reminder', 'transfer', 'video', 'upload', 'timer', 'wont-do', 'delete', 'schedule']);
 
 const moreOpen = ref(false);
+const cat = computed(() => categoryOf(props.task));
+const whenText = computed(() => {
+  const t = props.task; const est = estimateOf(t);
+  if (est) return formatMinutes(est);
+  if (t.startTime) return formatClock(toMinutes(t.startTime));
+  if (t.reminder?.time) return formatTime(t.reminder.time);
+  return 'Today';
+});
 // Close the "..." menu on Escape or any press outside the menu/its button.
 const onDocDown = (e) => { if (!e.target.closest || !e.target.closest('.task-actions, .task-more')) moreOpen.value = false; };
 const onDocKey = (e) => { if (e.key === 'Escape') moreOpen.value = false; };

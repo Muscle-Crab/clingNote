@@ -27,15 +27,14 @@ export const completionPercentage = (routine, wontDoCount, selectedDayIndex, tod
 export const computeTimeStats = (daySession, routine, wontDoCount) => {
   routine = Array.isArray(routine) ? routine : [];
   daySession = daySession || {};
-  const start = daySession.startTime
-      ? new Date(daySession.startTime.seconds ? daySession.startTime.seconds * 1000 : daySession.startTime)
-      : null;
+  const toD = (t) => (t?.toDate ? t.toDate() : new Date(t?.seconds ? t.seconds * 1000 : t));
+  const start = daySession.startTime ? toD(daySession.startTime) : null;
 
   const end = daySession.ended
-      ? new Date(daySession.endTime?.seconds ? daySession.endTime.seconds * 1000 : daySession.endTime)
+      ? toD(daySession.endTime)
       : new Date();
 
-  if (!start) {
+  if (!start || isNaN(start)) {
     return {
       totalDayTime: "0m",
       productiveTime: "0m",

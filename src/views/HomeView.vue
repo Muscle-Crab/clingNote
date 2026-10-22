@@ -14,16 +14,14 @@
     </div>
 
     <div v-else class="content-wrap">
-      <ShutdownPrompt :suggest="suggestShutdown" :open="shutdownOpen" :done="shutdownDone" :open-tasks="shutdownOpenTasks"
-                      v-model:carry="shutdownCarry" :busy="shutdownBusy"
-                      @start="openShutdown" @dismiss="shutdownDismissed = true" @close="shutdownOpen = false" @finish="finishShutdown" />
 
       <!-- ─── Calendar & Progress ─── -->
       <section class="calendar-section">
+        <div class="hero-scene" aria-hidden="true"></div>
         <header class="hero">
           <div class="hero-text">
             <p class="hero-date">{{ currentDate }}</p>
-            <h1 class="hero-title">{{ heroTitle }}</h1>
+            <h1 class="hero-title">{{ heroTitleParts.lead }}<span class="hero-accent">{{ heroTitleParts.accent }}</span></h1>
             <p class="hero-sub">{{ daysLeftInYear }} days left this year</p>
           </div>
           <div class="hero-menu">
@@ -32,6 +30,7 @@
             </button>
             <div v-if="menuOpen" class="hero-menu-pop" @click="menuOpen = false">
               <button type="button" class="hero-menu-item" @click="openShutdown">🌙 Shutdown day</button>
+              <button v-if="daySession.started && !daySession.ended" type="button" class="hero-menu-item" @click="endDay">■ End day<span v-if="daySession.startedAtText" class="hero-menu-meta"> · started {{ daySession.startedAtText }}</span></button>
               <router-link to="/upcoming" class="hero-menu-item">📅 Upcoming</router-link>
               <router-link to="/rankings" class="hero-menu-item">🏆 Rankings</router-link>
               <router-link to="/discipline" class="hero-menu-item">⚔️ Discipline Mode</router-link>
@@ -42,12 +41,14 @@
 
         <DayTabs :days="tabDays" :selected-index="selectedDayIndex" :scheduled-counts="scheduledCounts" @select="handleDayTabClick" />
 
-        <ProgressBar :percentage="calculateCompletionPercentage()" :milestones="milestones" :done="completedTaskCount || 0" :total="dayTasks.length" />
+        <ProgressBar :percentage="calculateCompletionPercentage()" :milestones="milestones" :done="completedTaskCount || 0" :total="dayTasks.length"
+                     :streak="streak" :streak-status="streakStatus" :streak-progress="streakProgress" :streak-min="DAILY_STREAK_MIN" :points="pointsAccumulated || 0" />
 
       </section>
+      <ShutdownPrompt class="home-notice" :suggest="false" :open="shutdownOpen" :done="shutdownDone" :open-tasks="shutdownOpenTasks"
+                      v-model:carry="shutdownCarry" :busy="shutdownBusy"
+                      @start="openShutdown" @dismiss="shutdownDismissed = true" @close="shutdownOpen = false" @finish="finishShutdown" />
 
-      <StreakHeader :streak="streak" :best-streak="bestStreak" :streak-status="streakStatus" :streak-progress="streakProgress" :streak-min="DAILY_STREAK_MIN" :motivational-message="motivationalMessage" :points-accumulated="pointsAccumulated"
-                    :total-points="totalPoints" :day-session="daySession" @shutdown="openShutdown" @end-day="endDay" />
 
       <div v-if="disciplineWarning" class="disc-warning home-notice" :class="'disc-warning--' + disciplineWarning" role="alert">
         ⚠️ {{ disciplineWarning === '30m' ? '30 minutes' : '2 hours' }} until your {{ disciplineSettings.deadline }} deadline — {{ streakProgress }}/{{ DAILY_STREAK_MIN }} done
@@ -67,7 +68,6 @@
 
       <MorningReport v-if="morningRecap && isViewingToday" class="home-notice" :recap="morningRecap" @close="morningRecap = null" />
 
-      <TimeStatsBar v-if="isViewingToday" :stats="timeStats" />
 
       <WorkoutModal v-if="showWorkoutModal" :preferences="workoutPreferences" @close="closeWorkoutModal" @generate="generateWorkoutRoutine" />
 
@@ -144,8 +144,8 @@
           >
             <template #item="{ element: task, index }">
               <TaskCard
-                  v-if="(!task.completed || (isViewingToday && showCompleted))"
-                  :task="task" :drag-disabled="!reorderable" :index="realIndex(task)" :is-today-tab="isViewingToday" :expanded="expandedKey === taskKey(task)"
+                  v-if="!task.completed || !isViewingToday"
+                  :task="task" :up-next="isViewingToday && !task.completed && taskKey(task) === upNextKey" :drag-disabled="!reorderable" :index="realIndex(task)" :is-today-tab="isViewingToday" :expanded="expandedKey === taskKey(task)"
                   :active-labels="activeLabels" :now="nowTick" :show-notification="showNotification" :transfer-notification="transferNotification"
                   @toggle-expand="toggleExpanded(task)" @toggle-complete="toggleTaskCompletion(realIndex(task))" @open-detail="openTaskDetailModal(task)"
                   @set-boss="setBoss(realIndex(task), task)" @toggle-important="toggleTaskImportance(realIndex(task))" @patch="patchTask(realIndex(task), task, $event)" @subtask-patch="onSubtaskPatch(realIndex(task), task, $event)"
@@ -156,6 +156,24 @@
             </template>
           </draggable>
 
+          <div v-if="isViewingToday && completedTaskCount > 0" class="done-section">
+            <button type="button" class="done-toggle" :aria-expanded="showCompleted ? 'true' : 'false'" @click="showCompleted = !showCompleted">
+              <i class="fas" :class="showCompleted ? 'fa-chevron-down' : 'fa-chevron-right'" aria-hidden="true"></i>
+              <span>Completed ({{ completedTaskCount }})</span>
+              <i class="fas done-eye" :class="showCompleted ? 'fa-eye' : 'fa-eye-slash'" aria-hidden="true"></i>
+            </button>
+            <div v-if="showCompleted" class="tasks-list tasks-list--done">
+              <TaskCard v-for="task in displayTasks.filter((t) => t.completed)" :key="taskKey(task)"
+                  :task="task" :drag-disabled="true" :index="realIndex(task)" :is-today-tab="true" :expanded="expandedKey === taskKey(task)"
+                  :active-labels="activeLabels" :now="nowTick"
+                  @toggle-expand="toggleExpanded(task)" @toggle-complete="toggleTaskCompletion(realIndex(task))" @open-detail="openTaskDetailModal(task)"
+                  @set-boss="setBoss(realIndex(task), task)" @toggle-important="toggleTaskImportance(realIndex(task))" @patch="patchTask(realIndex(task), task, $event)" @subtask-patch="onSubtaskPatch(realIndex(task), task, $event)"
+                  @toggle-label="toggleLabelHighlight" @open-reminder="openModal('calendar', realIndex(task), task.title)" @transfer="openTransferModal(realIndex(task))"
+                  @video="openYouTubeModal(realIndex(task))" @upload="handleUpload($event, realIndex(task))" @timer="openTaskTimerModal(realIndex(task))"
+                  @wont-do="openWontDoModal(realIndex(task))" @delete="deleteTask(realIndex(task))" @schedule="scheduleExistingTask(realIndex(task), task, $event)" />
+            </div>
+          </div>
+
           <IdleState v-if="dayTasks.length > 0 && dayTasks.every(task => task.completed) && !showCompleted" />
 
 
@@ -164,6 +182,8 @@
         </div>
       </section>
       <StartDayPrompt v-else-if="isViewingToday" @start="startDay" />
+
+      <TimeStatsBar v-if="isViewingToday" :stats="timeStats" :ended="!!daySession.ended" :suggest="suggestShutdown && !shutdownDismissed" @wrap-up="openShutdown" />
 
       <ScheduledList v-if="userId" :tasks="futureScheduled" :today-str="todayStr" :error="scheduledError"
                      @move-today="moveScheduledToToday" @update="updateScheduledDate" @delete="deleteScheduled" />
@@ -220,7 +240,6 @@ import ImagePreview from '@/components/home/ImagePreview.vue';
 import ProgressBar from '@/components/home/ProgressBar.vue';
 import ReminderModal from '@/components/home/ReminderModal.vue';
 import ShutdownPrompt from '@/components/home/ShutdownPrompt.vue';
-import StreakHeader from '@/components/home/StreakHeader.vue';
 import TaskDetailModal from '@/components/home/TaskDetailModal.vue';
 import TimeStatsBar from '@/components/home/TimeStatsBar.vue';
 import TimerModal from '@/components/home/TimerModal.vue';
@@ -1887,6 +1906,9 @@ const todayIdx = computed(() => new Date(calendarNow.value).getDay());
 const calculateCompletionPercentage = () => completionPercentage(selectedDayRoutine.value, wontDoTasks.value.length, selectedDayIndex.value, todayIdx.value);
 const daysLeftInYear = computed(() => daysLeftInYearFrom(new Date(calendarNow.value)));
 const heroTitle = computed(() => heroTitleFor(selectedDayIndex.value, todayIdx.value));
+// "Make today count." -> lead "Make today " + accent "count." (last word in the accent colour)
+const heroTitleParts = computed(() => { const t = heroTitle.value || ''; const i = t.lastIndexOf(' '); return i < 0 ? { lead: '', accent: t } : { lead: t.slice(0, i + 1), accent: t.slice(i + 1) }; });
+const upNextKey = computed(() => { const t = displayTasks.value.find((x) => !x.completed && x.status !== 'pending'); return t ? taskKey(t) : null; });
 const showNotification = ref(false);
 
 
@@ -3194,4 +3216,93 @@ a.hero-menu-item { display: block; text-decoration: none; color: inherit; }
 .voice-toasts { position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%); z-index: 9000; display: flex; flex-direction: column; gap: 6px; }
 .voice-toast { background: #111827; color: #fff; padding: 8px 12px; border-radius: 10px; font-size: .9rem; box-shadow: 0 4px 12px rgba(0,0,0,.25); }
 .voice-toast button { margin-left: 10px; color: #fbbf24; font-weight: 700; background: none; border: none; }
+
+/* ══ v2 skin: navy night theme matching the target mockup (wins via tripled selectors) ══ */
+.app-root.app-root.app-root {
+  --c-bg: #070D1C; --c-surface: #0C1630; --c-surface-2: #12203F; --c-border: #1A2846; --c-border-strong: #2A3C66;
+  --c-text: #F2F5FC; --c-text-2: #A9B4CC; --c-text-3: #7180A0;
+  --c-accent: #2F6FFF; --c-accent-hover: #4A82FF; --c-accent-text: #4F95FF; --c-accent-soft: #10204A; --c-accent-line: #24448F;
+  --r-lg: 18px;
+  background: var(--c-bg);
+}
+.app-root .content-wrap.content-wrap { max-width: 560px; padding: 0 16px calc(140px + env(safe-area-inset-bottom)); }
+.app-root .calendar-section.calendar-section { position: relative; padding-top: 20px; }
+.app-root .hero-scene { position: absolute; z-index: 0; top: 0; left: -16px; right: -16px; height: 330px; pointer-events: none;
+  background: linear-gradient(180deg, rgba(7,13,28,.25), rgba(7,13,28,0) 40%, var(--c-bg) 96%), url('~@/assets/hero-forest.svg') center bottom / cover no-repeat; }
+.app-root .calendar-section > :not(.hero-scene) { position: relative; z-index: 1; }
+@media (min-width: 600px) { .app-root .hero-scene { border-radius: 0 0 28px 28px; } }
+.app-root .hero.hero { padding: 4px 0 0; }
+.app-root .hero-date.hero-date { color: #6FA2FF; font-size: 12px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; font-family: inherit; }
+.app-root .hero-title.hero-title { font-size: 34px; line-height: 40px; font-weight: 800; letter-spacing: -.02em; background: none; color: #fff; -webkit-text-fill-color: #fff; margin: 4px 0 2px; }
+.app-root .hero-accent { color: #3D8BFF; -webkit-text-fill-color: #3D8BFF; }
+.app-root .hero-sub.hero-sub { color: var(--c-text-2); font-size: 15px; }
+.app-root .hero-menu-btn.hero-menu-btn { background: rgba(12,22,48,.6); border: 1px solid var(--c-border-strong); backdrop-filter: blur(6px); }
+.app-root .hero-menu-meta { color: var(--c-text-3); font-size: 12px; }
+/* week strip */
+.app-root .day-tabs.day-tabs.day-tabs { gap: 0; padding: 6px; background: rgba(12,22,48,.78); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid var(--c-border-strong); border-radius: 18px; margin: 18px 0 14px; }
+.app-root .day-tab.day-tab.day-tab { min-height: 60px; border-radius: 12px; position: relative; }
+.app-root .day-tab.day-tab.day-tab + .day-tab::before { content: ''; position: absolute; left: 0; top: 14px; bottom: 14px; border-left: 1px solid var(--c-border); }
+.app-root .day-tab--selected.day-tab--selected.day-tab--selected { background: linear-gradient(180deg, #2F7BFF, #1C5BE8); box-shadow: 0 8px 22px rgba(47,111,255,.45), inset 0 0 0 1px rgba(255,255,255,.18); }
+.app-root .day-tab--selected.day-tab--selected.day-tab--selected::before, .app-root .day-tab--selected + .day-tab::before { display: none; }
+.app-root .day-tab-name { text-transform: uppercase; font-size: 11px; letter-spacing: .06em; }
+.app-root .day-tab-date { font-size: 18px; font-weight: 700; }
+/* progress card */
+.app-root .progress-section.progress-section.progress-section { padding: 0; background: linear-gradient(135deg, rgba(18,32,63,.95), rgba(10,20,44,.95)); border: 1px solid var(--c-border-strong); border-radius: 18px; box-shadow: 0 12px 32px rgba(0,0,0,.35); }
+.app-root .progress-pct.progress-pct.progress-pct { background: none; -webkit-text-fill-color: #fff; color: #fff; }
+.app-root .ring-fill.ring-fill { filter: none; }
+.app-root .stat-val.stat-val.stat-val { white-space: nowrap; }
+@media (max-width: 430px) { .app-root .stats-bar .stat-icon { display: none; } .app-root .stats-bar .stat { padding: 4px 6px; } }
+/* notices + boss */
+.app-root .home-notice.home-notice { margin: 12px 0 0; }
+/* Today header */
+.app-root .task-list-header.task-list-header { padding: 18px 0 10px; }
+.app-root .task-count-label.task-count-label { font-size: 28px; font-weight: 800; }
+.app-root .task-count-badge.task-count-badge { background: var(--c-accent-soft); color: #7FB0FF; border: 1px solid var(--c-accent-line); font-family: inherit; padding: 3px 12px; }
+.app-root .toggle-visibility.toggle-visibility { width: 44px; min-width: 44px; height: 44px; border-radius: 50%; background: var(--c-surface); border: 1px solid var(--c-border-strong); color: var(--c-text); margin-left: 8px; padding: 0; }
+.app-root .toggle-visibility.toggle-visibility:hover { background: var(--c-surface-2); }
+/* task rows */
+.app-root .tasks-list.tasks-list > * + * { margin-top: 10px; }
+.app-root .task-card.task-card.task-card { align-items: center; gap: 10px; padding: 12px 8px 12px 6px; border-radius: 16px; background: linear-gradient(180deg, #0F1B38, #0B1530); border: 1px solid var(--c-border); box-shadow: none; transform: none; }
+.app-root .task-card.task-card.task-card:hover { border-color: var(--c-border-strong); }
+.app-root .task-card--next.task-card--next.task-card--next { border-color: #2A5BD6; border-left: 3px solid #3D8BFF; background: linear-gradient(90deg, rgba(47,111,255,.18), rgba(15,27,56,.9) 60%); box-shadow: 0 8px 28px rgba(47,111,255,.18); }
+.app-root .task-card--important.task-card--important.task-card--important:not(.task-card--next) { border-left: 3px solid var(--c-danger); }
+.app-root .task-left.task-left.task-left { gap: 6px; align-items: center; }
+.app-root .task-avatar.task-avatar.task-avatar { width: 18px; height: 44px; opacity: .55; font-size: 13px; }
+.app-root .task-check.task-check.task-check { width: 36px; height: 36px; margin: 0; font-size: 24px; color: #3A4D78; }
+.app-root .task-check--done.task-check--done.task-check--done { color: var(--c-success); }
+.app-root .task-cat { width: 40px; height: 40px; flex-shrink: 0; border-radius: 11px; display: grid; place-items: center; font-size: 17px; color: #fff; }
+.app-root .task-cat--blue { background: linear-gradient(180deg, #2F7BFF, #1C55D8); }
+.app-root .task-cat--purple { background: linear-gradient(180deg, #7B5BE6, #5A3BC2); color: #E4DAFF; }
+.app-root .task-cat--teal { background: linear-gradient(180deg, #16A79A, #0D7C74); }
+.app-root .task-cat--red { background: linear-gradient(180deg, #A9364A, #7E2335); color: #FFC9D2; }
+.app-root .task-cat--green { background: linear-gradient(180deg, #2DB36F, #1C8650); }
+.app-root .task-cat--amber { background: linear-gradient(180deg, #E3A12B, #B97A12); }
+.app-root .task-upnext { order: 0 !important; margin: 0; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #5B9BFF; }
+.app-root .task-title.task-title.task-title { font-size: 16px; font-weight: 600; color: var(--c-text); }
+.app-root .task-sub { order: 2 !important; margin: 0; font-size: 13px; color: var(--c-text-2); }
+.app-root .task-body > .task-reminder { order: 3; }
+.app-root .task-body > .task-meta-row { order: 4; }
+.app-root .task-meta-row:not(:has(.task-status)) .importance-btn:not([aria-pressed="true"]) { display: none; }
+.app-root .task-chevron.task-chevron.task-chevron { display: none; }
+.app-root .task-play-wrap { display: flex; flex-direction: column; align-items: center; gap: 0; }
+.app-root .task-play.task-play.task-play { width: 44px; height: 40px; color: var(--c-text); }
+.app-root .task-play.task-play.task-play::before { width: 36px; height: 36px; background: transparent; border: 1.5px solid #3A4D78; box-shadow: none; }
+.app-root .task-play--primary.task-play--primary.task-play--primary::before { width: 44px; height: 44px; border: 0; background: linear-gradient(180deg, #3D8BFF, #1F5FEA); box-shadow: 0 6px 18px rgba(47,111,255,.55); }
+.app-root .task-pts { font-size: 11px; font-weight: 700; color: #F5C542; line-height: 12px; }
+.app-root .task-more.task-more.task-more { width: 36px; color: var(--c-text-2); }
+.app-root .task-card--completed.task-card--completed .task-cat { filter: grayscale(.7); opacity: .7; }
+/* completed section */
+.app-root .done-section { margin-top: 12px; }
+.app-root .done-toggle { width: 100%; display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 8px; background: none; border: 0; color: var(--c-text-2); font-size: 15px; cursor: pointer; }
+.app-root .done-toggle .done-eye { margin-left: auto; color: var(--c-text); }
+.app-root .done-toggle:hover { color: var(--c-text); }
+/* stats + fab */
+.app-root .stats-bar.stats-bar.stats-bar { display: flex; padding: 8px; background: linear-gradient(180deg, #0F1B38, #0B1530); border: 1px solid var(--c-border); border-radius: 16px; }
+.app-root .stat-label.stat-label.stat-label { text-transform: none; letter-spacing: 0; font-size: 12px; font-weight: 400; margin: 0; }
+.app-root .stat-val.stat-val.stat-val { font-size: 16px; margin: 0; }
+.app-root .fab.fab.fab, .app-root .fab.fab.fab span { font-family: var(--font); }
+.app-root .fab-add.fab-add.fab-add { background: linear-gradient(90deg, #1E5BFF, #2F7BFF 60%, #3C8CFF); border-radius: 16px; font-size: 18px; font-weight: 700; text-transform: none; box-shadow: 0 10px 30px rgba(47,111,255,.45); }
+.app-root .fab-voice.fab-voice.fab-voice { background: #0F1B38; border: 1px solid var(--c-border-strong); border-radius: 16px; color: #fff; }
+.app-root .fab-group.fab-group { background: linear-gradient(to top, var(--c-bg) 60%, transparent); }
+@media (min-width: 768px) { .app-root .hero-title.hero-title { font-size: 40px; line-height: 46px; } }
 </style>

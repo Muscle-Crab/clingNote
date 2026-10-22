@@ -22,12 +22,7 @@
                 alt="Avatar"
                 class="w-10 h-10 rounded-full border object-cover"
             />
-            <img
-                v-else
-                src="https://ui-avatars.com/api/?name=User&background=4F46E5&color=fff&rounded=true"
-                alt="Default Avatar"
-                class="w-10 h-10 rounded-full border object-cover"
-            />
+            <span v-else class="app-avatar" :aria-label="'Profile ' + initials">{{ initials }}</span>
           </div>
 
       </router-link>
@@ -129,7 +124,7 @@
 
 <script setup>
 import { syncPublicProfile } from '@/composables/usePublicProfile';
-import { ref, onMounted, onBeforeUnmount, watch } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { auth, db } from '@/firebaseConfig';
 import { doc, getDoc } from 'firebase/firestore';
@@ -138,7 +133,9 @@ const router = useRouter();
 const sidebarOpen = ref(false);
 const userEmail = ref(null);
 const userId = ref(null);
-const avatarURL = ref(null); // New: Avatar URL from Firestore
+const avatarURL = ref(null);
+const displayName = ref('');
+const initials = computed(() => { const src = (displayName.value || userEmail.value || 'U').replace(/@.*/, '').trim(); const parts = src.split(/[\s._-]+/).filter(Boolean); return ((parts[0]?.[0] || 'U') + (parts[1]?.[0] || '')).toUpperCase(); }); // New: Avatar URL from Firestore
 
 const toggleSidebar = () => {
   sidebarOpen.value = !sidebarOpen.value;
@@ -186,6 +183,7 @@ onMounted(() => {
         const userDocSnap = await getDoc(userDocRef);
         if (userDocSnap.exists()) {
           avatarURL.value = userDocSnap.data().avatarURL || null;
+          displayName.value = userDocSnap.data().name || userDocSnap.data().displayName || user.displayName || '';
           syncPublicProfile(user.uid, userDocSnap.data()).catch(() => {}); // others only ever read publicProfiles
         } else {
           console.warn("No user document found in Firestore.");
@@ -210,10 +208,11 @@ onMounted(() => {
   body.sidebar-open #app { padding-left: 16rem; }
 }
 /* Shared shell: slim dark top bar + dark sidebar matching the home view palette */
-.app-topbar { background: #0B0D12; border-bottom: 1px solid #1C212C; }
+.app-topbar { background: #070D1C; border-bottom: 1px solid #121C33; }
 .app-topbar-inner { max-width: 1200px; margin: 0 auto; height: 56px; padding: 0 16px; display: flex; align-items: center; justify-content: space-between; }
 .app-topbar-inner > a { margin-left: auto; }
-.app-sidebar { background: #0F1218; border-right: 1px solid #1C212C; color: #E6E9EF; }
+.app-avatar { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; font-size: 14px; font-weight: 700; letter-spacing: .02em; color: #fff; background: rgba(12,22,48,.7); border: 1.5px solid #3D6FD8; }
+.app-sidebar { background: #0A1226; border-right: 1px solid #16223F; color: #E6E9EF; }
 .app-sidebar-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .app-sidebar-item { position: relative; display: flex; align-items: center; gap: 12px; padding: 0 12px; height: 40px; border-radius: 10px; color: #8791A5; }
 .app-sidebar-item:hover { background: #1A1E28; color: #E6E9EF; }

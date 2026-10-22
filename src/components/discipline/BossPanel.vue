@@ -6,6 +6,7 @@
       <button type="button" class="boss-btn" :aria-expanded="open ? 'true' : 'false'" :aria-label="open ? 'Collapse boss panel' : 'Expand boss panel'" @click="open = !open">{{ open ? '▾' : '▸' }}</button>
       <button type="button" class="boss-btn" aria-label="Hide boss panel for now" @click="$emit('dismiss')">✕</button>
     </header>
+    <p v-if="!open && (verdict || lines.length)" class="boss-peek" @click="open = true">{{ verdict ? (verdict.v.passed ? 'PASSED' : 'FAILED') + ' · grade ' + verdict.v.grade : lines[0].text }}</p>
     <div v-show="open" class="boss-body">
       <div v-if="verdict" class="boss-verdict" :class="verdict.v.passed ? 'is-pass' : 'is-fail'">
         <div class="boss-grade" :aria-label="'Grade ' + verdict.v.grade">{{ verdict.v.grade }}</div>
@@ -31,7 +32,7 @@ const props = defineProps({
   verdict: { type: Object, default: null }, // { v, text, date }
 });
 defineEmits(['dismiss', 'dismiss-line', 'ack-verdict']);
-const open = ref(true);
+const open = ref(!!props.verdict); // compact by default; a verdict opens expanded
 const ICONS = { morning: '📋', midday: '📢', evening: '🚨', idle: '👀', watching: '👁️' };
 const tone = computed(() => {
   if (props.verdict) return props.verdict.v.passed ? 'pass' : 'fail';
@@ -53,6 +54,7 @@ const chip = computed(() => ({ pass: 'Verdict', fail: 'Verdict', alert: 'Watchin
 .boss-chip { font-size: var(--fs-xs, 11px); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--c-text-3, #8791A5); background: var(--c-surface-2, #1A1E28); padding: 2px 8px; border-radius: 999px; }
 .boss-btn { width: 28px; height: 28px; border-radius: 8px; border: 0; background: transparent; color: var(--c-text-3, #8791A5); cursor: pointer; font-size: 13px; }
 .boss-btn:hover { background: var(--c-surface-2, #1A1E28); color: var(--c-text, #E6E9EF); }
+.boss-peek { margin: -4px 0 0; padding: 0 12px 10px 36px; font-size: 13px; color: var(--c-text-2, #B4BCCB); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
 .boss-body { padding: 0 12px 12px; display: flex; flex-direction: column; gap: 8px; }
 .boss-line { margin: 0; font-size: var(--fs-md, 14px); line-height: 20px; color: var(--c-text-2, #B4BCCB); display: flex; gap: 6px; align-items: flex-start; }
 .boss-mini { margin-left: auto; border: 0; background: none; color: var(--c-text-3, #8791A5); cursor: pointer; }
