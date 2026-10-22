@@ -18,7 +18,7 @@
         <p class="text-sm font-medium text-gray-600">{{ formatDOB(userData.dob) }}</p>
         <p v-if="isOwn" class="text-sm font-medium text-gray-600 mt-1">Plan: {{ userIsPro ? (userData.plan || 'Pro') : 'Free' }}
         </p>
-        <router-link v-if="isOwn && !userIsPro" to="/paywall" data-test="upgrade-pro"
+        <router-link v-if="isOwn && !userIsPro" to="/paywall" data-test="upgrade-pro" style="background:linear-gradient(90deg,#f59e0b,#ea580c);color:#fff;border-radius:8px;padding:10px 16px;font-weight:700;display:block;text-align:center"
           class="mt-3 block w-full text-center bg-gradient-to-r from-amber-500 to-orange-600 hover:opacity-90 text-white font-bold py-2 px-4 rounded">
           Upgrade to Pro
         </router-link>
