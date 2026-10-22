@@ -30,7 +30,7 @@ const writeStats = async (mk, uid, detail, extra = {}) => {
 
 export const loadMyMonth = async (uid, mk) => {
   const [p, d] = await Promise.all([getDoc(pubRef(mk, uid)), getDoc(privRef(mk, uid))]);
-  const detail = d.exists() ? d.data() : { month: mk, done: [], goal: p.exists() ? p.data().goal : DEFAULT_MONTHLY_GOAL };
+  const detail = d.exists() ? d.data() : { month: mk, done: [], goal: p.exists() ? (p.data().goal ?? DEFAULT_MONTHLY_GOAL) : DEFAULT_MONTHLY_GOAL };
   return { pub: p.exists() ? p.data() : null, detail, stats: computeStats(detail) };
 };
 
@@ -42,7 +42,7 @@ export const recordMonthlyToggle = async (uid, today, toggle, bestStreak) => {
   let detail = d.exists() ? d.data() : null;
   if (!detail) { // carry goal from last saved public doc for this month, if any
     const p = await getDoc(pubRef(mk, uid));
-    detail = { month: mk, done: [], goal: p.exists() ? p.data().goal : undefined };
+    detail = { month: mk, done: [], goal: p.exists() ? (p.data().goal ?? DEFAULT_MONTHLY_GOAL) : DEFAULT_MONTHLY_GOAL };
   }
   const next = applyMonthlyToggle(detail, today, toggle);
   return writeStats(mk, uid, next, bestStreak != null ? { bestStreak } : {});
