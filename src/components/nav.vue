@@ -32,11 +32,11 @@
     <aside :class="{ 'hidden': !sidebarOpen, 'block': sidebarOpen }"
            class="app-sidebar fixed inset-y-0 left-0 z-50 w-64">
       <div class="flex items-center justify-between p-4">
-        <router-link to="/">
-          <a href="#" class="flex items-center space-x-3 rtl:space-x-reverse">
+        <router-link to="/" class="flex items-center space-x-3 rtl:space-x-reverse">
+          <span class="flex items-center space-x-3 rtl:space-x-reverse">
             <img src="@/assets/logo.png" class="h-8" alt="Cling Note Logo"/>
-            <span class="self-center text-xl font-semibold whitespace-nowrap">Clingnote</span>
-          </a>
+            <span class="self-center text-xl font-semibold whitespace-nowrap">ClingNot</span>
+          </span>
         </router-link>
         <button @click="closeSidebar" type="button"
                 class="text-gray-500 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 focus:outline-none">
@@ -60,6 +60,9 @@
               My Routine
             </router-link>
           </li>
+          <li class="app-sidebar-item"><i class="fas fa-calendar-alt"></i><router-link to="/upcoming" class="app-sidebar-link">Upcoming</router-link></li>
+          <li class="app-sidebar-item"><i class="fas fa-trophy"></i><router-link to="/rankings" class="app-sidebar-link">Rankings</router-link></li>
+          <li class="app-sidebar-item"><i class="fas fa-gavel"></i><router-link to="/discipline" class="app-sidebar-link">Discipline</router-link></li>
 
 
 
