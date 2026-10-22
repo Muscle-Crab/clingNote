@@ -1084,6 +1084,7 @@ const markTaskAsWontDo = async () => {
       tasks: wontDoTasks.value,
       updatedAt: serverTimestamp()
     });
+    await saveSelectedDayTasks(); // persist removal so it doesn't reappear on reload/transfer
 
     console.log("Task marked as 'Won't Do' and saved to Firestore.");
   } catch (error) {
@@ -1101,6 +1102,7 @@ const undoWontDo = async (index) => {
   // Update Firestore
   const wontDoDocRef = doc(db, "wontDoTasks", `${userId.value}_${days[selectedDayIndex.value].day}`);
   await setDoc(wontDoDocRef, { tasks: wontDoTasks.value, updatedAt: serverTimestamp() });
+  await saveSelectedDayTasks().catch((e) => console.warn('Restore not saved:', e));
 
   console.log("Task restored from 'Won't Do'");
 };
@@ -2147,7 +2149,14 @@ const noticeCount = computed(() => {
 // Home overlays the shared top bar on the header illustration (see .home-v2 rules)
 onMounted(() => document.body.classList.add('home-v2'));
 onBeforeUnmount(() => document.body.classList.remove('home-v2'));
-const onMenuOutside = (e) => { if (menuOpen.value && heroMenuEl.value && !heroMenuEl.value.contains(e.target)) menuOpen.value = false; };
+// Closing tap is swallowed so it doesn't also trigger whatever sits under the panel (e.g. the Add Task FAB).
+const swallowClick = (ev) => { ev.stopPropagation(); ev.preventDefault(); };
+const onMenuOutside = (e) => {
+  if (!(menuOpen.value && heroMenuEl.value && !heroMenuEl.value.contains(e.target))) return;
+  menuOpen.value = false;
+  document.addEventListener('click', swallowClick, { capture: true, once: true });
+  setTimeout(() => document.removeEventListener('click', swallowClick, true), 400);
+};
 const onMenuKey = (e) => { if (e.key === 'Escape') menuOpen.value = false; };
 onMounted(() => { document.addEventListener('pointerdown', onMenuOutside, true); document.addEventListener('keydown', onMenuKey); });
 onBeforeUnmount(() => { document.removeEventListener('pointerdown', onMenuOutside, true); document.removeEventListener('keydown', onMenuKey); });

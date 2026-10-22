@@ -44,7 +44,7 @@ export const scheduleNotification = async (task, reminder) => {
 export const sendNotificationToPlayer = async (userName, action) => {
   const msgs = { created: ['New Task Alert', `${userName} created a new task!`], completed: ['Task Completed', `${userName} completed a task!`] };
   const [title, message] = msgs[action] || ['Notification', 'An action was performed.'];
-  try { await sendPush({ title, message }); } catch (error) { console.error('Error sending notification:', error); }
+  try { await sendPush({ title, message }); } catch (error) { console.warn('Push notification not sent:', error?.message || error); }
 };
 
 // Community features (Pickup / Room / Discussion) used to post to "All" from the browser with the REST key.

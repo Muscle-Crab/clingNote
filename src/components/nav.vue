@@ -61,14 +61,6 @@
             </router-link>
           </li>
 
-          <!-- Chat -->
-          <li class="app-sidebar-item">
-            <i class="fas fa-comments"></i>
-            <router-link to="/chat"
-                         class="app-sidebar-link">
-              Chat
-            </router-link>
-          </li>
 
 
           <!-- Admin Only Routes -->
@@ -91,14 +83,6 @@
             </router-link>
           </li>
 
-          <!-- Meal Tracker -->
-          <li class="app-sidebar-item">
-            <i class="fas fa-utensils"></i>
-            <router-link to="/mealPlan"
-                         class="app-sidebar-link">
-              Meal Tracker
-            </router-link>
-          </li>
           <li class="app-sidebar-item">
             <i class="fas fa-user-shield"></i>
             <router-link to="/privacy-policy"

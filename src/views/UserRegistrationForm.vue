@@ -1,7 +1,6 @@
 <template>
   <div class="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
     <div class="bg-white p-8 rounded shadow-md max-w-md w-full">
-      <h2 class="text-3xl font-extrabold text-gray-900 text-center mb-6">Register</h2>
       <form @submit.prevent="registerUser" class="space-y-4">
 
         <!-- Name -->
