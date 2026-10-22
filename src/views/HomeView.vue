@@ -3353,7 +3353,8 @@ a.hero-menu-item { display: block; text-decoration: none; color: inherit; }
 .app-root .fab-group.fab-group { padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
 
 /* ══ v3: pixel-close mockup layout ══ */
-body.home-v2 .app-topbar { position: absolute; top: 0; left: 0; right: 0; z-index: 40; background: transparent; border-bottom: 0; }
+body.home-v2 .app-topbar { position: absolute; top: 0; left: 0; right: 0; z-index: 60; background: transparent; border-bottom: 0; pointer-events: none; }
+.app-shell .app-topbar-inner > *, .app-shell .app-topbar aside { pointer-events: auto; }
 @media (min-width: 768px) { body.home-v2.sidebar-open .app-topbar { left: 16rem; } }
 .app-root .calendar-section.calendar-section { padding-top: calc(60px + env(safe-area-inset-top)); }
 .app-root .hero-scene.hero-scene { top: 0; height: calc(360px + env(safe-area-inset-top)); left: -16px; right: -16px;

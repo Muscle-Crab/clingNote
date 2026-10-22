@@ -1,17 +1,90 @@
-/* Shared page shell for the secondary (light) pages: consistent container, header, cards, controls. */
-.disc-page, .rank-page, .up-page { max-width: 720px !important; padding: 24px 16px 48px !important; }
-.disc-head, .rank-head, .up-head { margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #e5e7eb; }
-.disc-head h1, .rank-head h1, .up-head h1 { font-size: 1.5rem !important; letter-spacing: -.01em; color: #111827; }
-.disc-back, .rank-back, .up-back { font-size: .9rem; padding: 4px 8px; border-radius: 8px; }
-.disc-back:hover, .rank-back:hover, .up-back:hover { background: #f3f4f6; }
-.disc-card, .rank-card, .up-card { margin-top: 16px !important; padding: 18px 20px !important; border: 1px solid #e5e7eb; border-radius: 14px !important; box-shadow: 0 1px 2px rgba(16,24,40,.05) !important; background: #fff; }
-.disc-card > :first-child, .rank-card > :first-child, .up-card > :first-child { margin-top: 0; }
-.disc-h, .up-h { font-size: 1rem !important; font-weight: 650 !important; color: #111827; margin-bottom: 8px !important; }
-.disc-page .muted, .up-page .muted, .rank-page .muted { line-height: 1.5; }
-.disc-btn, .up-btn, .goal-form button, .rank-toggle button { min-height: 36px; padding: 0 14px !important; border-radius: 10px !important; font-weight: 600; font-size: .9rem; display: inline-flex !important; align-items: center; justify-content: center; text-decoration: none; }
-.disc-btn:hover, .up-btn--primary:hover, .goal-form button:hover { filter: brightness(1.08); }
-.disc-row input[type=time], .up-input, .goal-form input { min-height: 36px; border-radius: 10px !important; padding: 0 10px !important; border-color: #d1d5db !important; }
-@media (max-width: 480px) {
-  .disc-page, .rank-page, .up-page { padding: 16px 12px 40px !important; }
-  .disc-card, .rank-card, .up-card { padding: 14px !important; }
+/* ClingNote design system — shared by every page (home adds its own component styles on top).
+   Dark navy, glassy rounded cards, blue accent. Tailwind light utilities used by older pages are
+   remapped inside .app-shell so they follow the theme without editing each template. */
+.app-shell {
+  --c-bg: #070D1C; --c-surface: #0C1630; --c-surface-2: #12203F; --c-border: #1A2846; --c-border-strong: #2A3C66;
+  --c-text: #F2F5FC; --c-text-2: #A9B4CC; --c-text-3: #7180A0;
+  --c-accent: #2F6FFF; --c-accent-hover: #4A82FF; --c-accent-text: #5B9BFF; --c-accent-soft: #10204A; --c-accent-line: #24448F;
+  --c-primary: #2F6FFF; --c-primary-soft: #10204A;
+  --c-success: #3DDC97; --c-success-soft: #10261D; --c-warn: #F5B83D; --c-warn-soft: #2B2209; --c-warn-text: #F5C75F;
+  --c-danger: #F87171; --c-danger-soft: #2E1517;
+  --font: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  min-height: 100vh; background: var(--c-bg); color: var(--c-text); font-family: var(--font); -webkit-font-smoothing: antialiased;
+  padding-bottom: env(safe-area-inset-bottom);
 }
+html, body { background: #070D1C; }
+/* Top bar floats over each page's forest header */
+.app-shell .app-topbar { position: absolute; top: 0; left: 0; right: 0; z-index: 60; background: transparent; border-bottom: 0; pointer-events: none; }
+.app-shell .app-topbar-inner > *, .app-shell .app-topbar aside { pointer-events: auto; }
+@media (min-width: 768px) { body.sidebar-open .app-shell .app-topbar { left: 16rem; } }
+.app-shell:not(.app-shell--home) > :not(nav):not(.sub-hero) { position: relative; }
+
+/* ---------- Generic page content (non-home views) ---------- */
+.app-shell:not(.app-shell--home) h1, .app-shell:not(.app-shell--home) h2, .app-shell:not(.app-shell--home) h3 { color: var(--c-text); letter-spacing: -.01em; }
+.app-shell a { color: inherit; }
+.app-shell:not(.app-shell--home) p a, .app-shell:not(.app-shell--home) .text-blue-600, .app-shell:not(.app-shell--home) .text-blue-500, .app-shell:not(.app-shell--home) .text-indigo-600 { color: var(--c-accent-text); }
+.app-shell:not(.app-shell--home) input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]),
+.app-shell:not(.app-shell--home) select, .app-shell:not(.app-shell--home) textarea {
+  background: rgba(7,13,28,.6); color: var(--c-text); border: 1px solid var(--c-border-strong); border-radius: 12px; min-height: 44px; padding: 8px 12px; font-family: inherit;
+}
+.app-shell:not(.app-shell--home) input::placeholder, .app-shell:not(.app-shell--home) textarea::placeholder { color: var(--c-text-3); }
+.app-shell:not(.app-shell--home) input:focus, .app-shell:not(.app-shell--home) select:focus, .app-shell:not(.app-shell--home) textarea:focus { outline: none; border-color: var(--c-accent); box-shadow: 0 0 0 3px rgba(47,111,255,.25); }
+.app-shell input[type=checkbox], .app-shell input[type=radio] { accent-color: var(--c-accent); }
+.app-shell input[type=file] { color: var(--c-text-2); }
+.app-shell input[type=file]::file-selector-button { margin-right: 10px; padding: 8px 14px; border-radius: 10px; border: 1px solid var(--c-border-strong); background: var(--c-surface-2); color: var(--c-text); }
+
+/* ---------- Shared primitives for any page ---------- */
+.ui-card { background: linear-gradient(180deg, rgba(18,32,63,.92), rgba(12,22,48,.92)); border: 1px solid var(--c-border-strong); border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,.3); padding: 16px; }
+.ui-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 40px; padding: 0 16px; border-radius: 12px; font-weight: 600; font-size: 14px; border: 1px solid var(--c-border-strong); background: var(--c-surface-2); color: var(--c-text); text-decoration: none; cursor: pointer; }
+.ui-btn--primary { border-color: transparent; background: linear-gradient(90deg, #1E5BFF, #3C8CFF); box-shadow: 0 6px 18px rgba(47,111,255,.35); color: #fff; }
+.ui-pill { display: inline-flex; align-items: center; padding: 3px 12px; border-radius: 999px; font-size: 12px; font-weight: 700; background: var(--c-accent-soft); color: #7FB0FF; border: 1px solid var(--c-accent-line); }
+
+/* ---------- Discipline / Rankings / Upcoming / Log / Gate (share the same class pattern) ---------- */
+.disc-page, .rank-page, .up-page, .log-page, .gate-page { max-width: 720px; margin: 0 auto; padding: 4px 16px calc(48px + env(safe-area-inset-bottom)); color: var(--c-text); }
+.disc-head h1, .up-head h1, .rank-head h1, .log-head h1, .disc-back, .rank-back, .up-back, .log-back { display: none; }
+.disc-head:not(:has(> :not(h1):not(a))), .up-head:not(:has(> :not(h1):not(a))) { display: none; }
+.app-shell .disc-card, .app-shell .rank-card, .app-shell .up-card, .app-shell .log-card {
+  margin-top: 12px; padding: 16px; border-radius: 16px; background: linear-gradient(180deg, rgba(18,32,63,.92), rgba(12,22,48,.92)); border: 1px solid var(--c-border-strong); box-shadow: 0 10px 30px rgba(0,0,0,.28);
+}
+.app-shell .disc-h, .app-shell .up-h { font-size: 16px; font-weight: 700; color: var(--c-text); margin: 0 0 8px; }
+.app-shell .muted, .app-shell .rank-rules, .app-shell .rank-next { color: var(--c-text-2); line-height: 1.5; }
+.app-shell .disc-btn, .app-shell .up-btn, .app-shell .goal-form button, .app-shell .rank-toggle button {
+  display: inline-flex; align-items: center; justify-content: center; min-height: 38px; padding: 0 14px; border-radius: 12px; font-weight: 600; font-size: 14px; text-decoration: none; cursor: pointer;
+  border: 1px solid var(--c-border-strong); background: var(--c-surface-2); color: var(--c-text);
+}
+.app-shell .disc-btn, .app-shell .up-btn--primary, .app-shell .goal-form button, .app-shell .rank-toggle button.on { border-color: transparent; background: linear-gradient(90deg, #1E5BFF, #3C8CFF); color: #fff; box-shadow: 0 6px 18px rgba(47,111,255,.3); }
+.app-shell .up-btn--danger { color: #FCA5A5; border-color: #8F2A2A; background: var(--c-danger-soft); }
+.app-shell .up-row { border-bottom-color: var(--c-border); }
+.app-shell .xp-bar, .app-shell .bar { background: rgba(255,255,255,.08); }
+.app-shell .board li.me { background: var(--c-accent-soft); outline-color: var(--c-accent); }
+.app-shell .rank-banner { background: var(--c-warn-soft); color: var(--c-warn-text); }
+.app-shell .rank-head { justify-content: flex-end; }
+
+/* ---------- Tailwind light utilities remapped to the dark theme (older pages) ---------- */
+.app-shell:not(.app-shell--home) .bg-white, .app-shell:not(.app-shell--home) .bg-gray-50, .app-shell:not(.app-shell--home) .bg-gray-100 {
+  background-color: rgba(12,22,48,.92); }
+.app-shell:not(.app-shell--home) .bg-gray-200, .app-shell:not(.app-shell--home) .bg-gray-300 { background-color: var(--c-surface-2); }
+.app-shell:not(.app-shell--home) .bg-gray-600, .app-shell:not(.app-shell--home) .bg-gray-700 { background-color: var(--c-surface-2); }
+.app-shell:not(.app-shell--home) .bg-gray-800, .app-shell:not(.app-shell--home) .bg-gray-900, .app-shell:not(.app-shell--home) .bg-black:not(video) { background-color: var(--c-surface); }
+.app-shell:not(.app-shell--home) .bg-indigo-50, .app-shell:not(.app-shell--home) .bg-blue-50 { background-color: var(--c-accent-soft); }
+.app-shell:not(.app-shell--home) .bg-green-50 { background-color: var(--c-success-soft); }
+.app-shell:not(.app-shell--home) .bg-red-100, .app-shell:not(.app-shell--home) .bg-red-50 { background-color: var(--c-danger-soft); }
+.app-shell:not(.app-shell--home) .bg-yellow-100, .app-shell:not(.app-shell--home) .bg-yellow-50 { background-color: var(--c-warn-soft); }
+.app-shell:not(.app-shell--home) .bg-indigo-600, .app-shell:not(.app-shell--home) .bg-blue-600, .app-shell:not(.app-shell--home) .bg-blue-500, .app-shell:not(.app-shell--home) .bg-indigo-500 {
+  background-image: linear-gradient(90deg, #1E5BFF, #3C8CFF); background-color: #2F6FFF; }
+.app-shell:not(.app-shell--home) .text-gray-900, .app-shell:not(.app-shell--home) .text-gray-800, .app-shell:not(.app-shell--home) .text-black { color: var(--c-text); }
+.app-shell:not(.app-shell--home) .text-gray-700, .app-shell:not(.app-shell--home) .text-gray-600 { color: var(--c-text-2); }
+.app-shell:not(.app-shell--home) .text-gray-500, .app-shell:not(.app-shell--home) .text-gray-400 { color: var(--c-text-3); }
+.app-shell:not(.app-shell--home) .text-indigo-700, .app-shell:not(.app-shell--home) .text-indigo-800, .app-shell:not(.app-shell--home) .text-blue-700 { color: var(--c-accent-text); }
+.app-shell:not(.app-shell--home) .border-gray-100, .app-shell:not(.app-shell--home) .border-gray-200, .app-shell:not(.app-shell--home) .border-gray-300 { border-color: var(--c-border-strong); }
+.app-shell:not(.app-shell--home) .rounded, .app-shell:not(.app-shell--home) .rounded-md { border-radius: 12px; }
+.app-shell:not(.app-shell--home) .rounded-lg, .app-shell:not(.app-shell--home) .rounded-xl { border-radius: 16px; }
+.app-shell:not(.app-shell--home) .shadow, .app-shell:not(.app-shell--home) .shadow-md, .app-shell:not(.app-shell--home) .shadow-lg, .app-shell:not(.app-shell--home) .shadow-xl { box-shadow: 0 10px 30px rgba(0,0,0,.3); }
+.app-shell:not(.app-shell--home) .bg-white.shadow-md, .app-shell:not(.app-shell--home) .bg-white.shadow-lg, .app-shell:not(.app-shell--home) .bg-white.rounded-lg, .app-shell:not(.app-shell--home) .bg-gray-50.rounded-lg { border: 1px solid var(--c-border-strong); }
+/* page backgrounds set by full-height wrappers */
+.app-shell:not(.app-shell--home) .min-h-screen { background-color: transparent; }
+@media (max-width: 480px) { .disc-page, .rank-page, .up-page { padding-left: 12px; padding-right: 12px; } }
+.app-shell:not(.app-shell--home) .min-h-screen { background-image: none; }
+.app-shell:not(.app-shell--home) .bg-white\/70, .app-shell:not(.app-shell--home) .bg-white\/80, .app-shell:not(.app-shell--home) .bg-white\/90 { background-color: rgba(12,22,48,.85); border: 1px solid var(--c-border-strong); }
+.app-shell:not(.app-shell--home) .text-white\/70 { color: var(--c-text-2); }
+.app-shell:not(.app-shell--home) .bg-blue-50 { background-color: var(--c-accent-soft); }

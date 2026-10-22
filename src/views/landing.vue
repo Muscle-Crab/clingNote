@@ -140,7 +140,7 @@ const features = [
 
 <style scoped>
 section {
-  background-image: linear-gradient(to bottom, #ffffff, #f3f4f6);
+  background-image: linear-gradient(to bottom, #0A1430, #070D1C);
 }
 .iframe-container {
   max-width: 100%;

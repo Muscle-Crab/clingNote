@@ -1,5 +1,5 @@
 <template>
-  <div class="p-4 sm:p-6 md:p-8 min-h-screen flex flex-col items-center" style="background: #E3E6E6">
+  <div class="p-4 sm:p-6 md:p-8 min-h-screen flex flex-col items-center">
     <h1 class="text-3xl sm:text-4xl md:text-5xl font-extrabold text-green-700 mb-6 md:mb-10">Soccer Pickup Group</h1>
     <div v-if="canAssignCaptains" class="flex justify-between items-center mb-6">
       <button
