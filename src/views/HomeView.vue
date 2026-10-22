@@ -233,6 +233,7 @@ const limitHit = ref(null); // { limit, count, pro, day } when the last add was 
 const goUpgradeForLimit = () => { modalOpen.value = false; _proRouter.push({ path: '/paywall', query: { feature: 'taskLimit', from: '/home' } }); };
 // Limit data is prefetched when the add modal opens so Save does not wait on 8 Firestore reads.
 let gateCache = null; // { at, pro, lists, extra: [] }
+const pendingAdds = new Map(); // taskKey -> task: optimistic adds whose write has not landed yet (a refetch may miss them)
 const fetchGateData = async () => {
   const [ud, ...snaps] = await Promise.all([loadUserDoc(), ...days.map((d) => getDoc(doc(db, 'weeklyRoutines', `${userId.value}_${d.day}`)))]);
   gateCache = { at: Date.now(), pro: isProUser(ud), lists: snaps.map((x) => (x.exists() ? x.data().tasks || [] : [])), extra: [] };
@@ -243,7 +244,7 @@ const prefetchGate = () => { if (userId.value) gatePrefetch = fetchGateData().ca
 const dailyLimitGate = async (dayKey) => {
   let g = gatePrefetch ? await gatePrefetch : null;
   if (!g || Date.now() - g.at > 60000) g = await fetchGateData();
-  const res = checkDailyLimit(g.pro, dayKey, [...g.lists, g.extra], scheduledList.value || []);
+  const res = checkDailyLimit(g.pro, dayKey, [...g.lists, g.extra, [...pendingAdds.values()]], scheduledList.value || []);
   limitHit.value = res.ok ? null : { ...res, pro: g.pro, day: dayKey };
   return res.ok;
 };
@@ -1670,6 +1671,7 @@ const addNewTask = async () => {
   const key = taskKey(task);
   if (selectedDays.some((d) => d.day === viewDay)) selectedDayRoutine.value = insertAt(selectedDayRoutine.value || [], copyFor({ day: viewDay }));
   if (gateCache) gateCache.extra.push(task);
+  pendingAdds.set(key, task);
   const hadReminder = !!task.reminder;
   newTask.value = blankTask();
   capWarning.value = false; capOverride.value = false;
@@ -1685,7 +1687,7 @@ const addNewTask = async () => {
       error.value = `Could not save “${task.title}”. Please try again.`;
       alert(error.value);
       return false;
-    }
+    } finally { pendingAdds.delete(key); }
     try { if (hadReminder) await scheduleNotification(task, task.reminder); } catch (e) { console.error(e); }
     fetchUserName(userId.value).then((n) => n && sendNotificationToPlayer(n, 'created')).catch(() => {});
     return true;
