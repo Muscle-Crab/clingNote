@@ -140,8 +140,6 @@ const signInWithGoogle = async () => {
         profilePicture: user.photoURL,
         provider: user.providerId,
         lastLogin: new Date(),
-        credits: 15,
-        hasPaid: true,
         isPro: false,
         plan: 'free',
         onboardingComplete: false,

@@ -9,7 +9,7 @@
         </svg>
       </button>
       <!-- Display user's email and profile picture -->
-      <router-link :to="'/profile/' + userId" class="flex items-center space-x-3">
+      <router-link :to="userId ? '/profile/' + userId : '/login'" class="flex items-center space-x-3">
 
 <!--        <div v-if="userEmail" class="text-gray-800 dark:text-gray-200">-->
 <!--          {{ userEmail }}-->

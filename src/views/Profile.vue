@@ -52,7 +52,8 @@
 
 <script setup>
 import { syncPublicProfile } from '@/composables/usePublicProfile';
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
+import { onAuthStateChanged } from 'firebase/auth';
 import { ensureUserDoc } from '@/utils/userDoc';
 import { isPro } from '@/utils/pro';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
@@ -93,9 +94,11 @@ const fetchUserData = async () => {
   }
 };
 
-onMounted(() => {
-  fetchUserData();
-});
+// Wait for auth to settle (refresh/direct URL) and refetch when :userId changes (component is reused).
+const authReady = () => new Promise(res => { const u = onAuthStateChanged(auth, x => { u(); res(x); }); });
+const load = async () => { notFound.value = false; userData.value = null; await authReady(); await fetchUserData(); };
+onMounted(load);
+watch(() => route.currentRoute.value.params.userId, (n, o) => { if (n && n !== o) load(); });
 
 // Method to format date of birth
 const formatDOB = (dob) => {

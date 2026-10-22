@@ -6,7 +6,7 @@ export async function ensureUserDoc(user) {
   const snap = await getDoc(ref);
   if (snap.exists()) return snap.data();
   const base = { id: user.uid, email: user.email || '', name: user.displayName || (user.email || '').split('@')[0] || 'You',
-    credits: 15, isPro: false, plan: 'free', onboardingComplete: false, createdAt: new Date() };
+    isPro: false, plan: 'free', onboardingComplete: false, createdAt: new Date() };
   await setDoc(ref, base, { merge: true });
   return base;
 }
