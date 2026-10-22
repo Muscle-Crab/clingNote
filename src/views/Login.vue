@@ -2,9 +2,6 @@
   <div class="min-h-screen bg-gray-100 dark:bg-gray-900 flex items-center justify-center px-4">
     <div class="bg-white dark:bg-gray-800 shadow-lg rounded-2xl w-full max-w-md p-6 sm:p-8">
       <!-- Header -->
-      <h2 class="text-2xl sm:text-3xl font-bold text-center text-gray-800 dark:text-white mb-6">
-        Welcome Back 👋
-      </h2>
 
       <!-- 📌 Bookmark Prompt -->
       <div v-if="showBookmarkPrompt" class="bg-yellow-100 dark:bg-yellow-200/10 border border-yellow-300 dark:border-yellow-500 text-yellow-800 dark:text-yellow-300 p-4 rounded-md text-sm mb-6">

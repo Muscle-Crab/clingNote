@@ -14,50 +14,54 @@
     </div>
 
     <div v-else class="content-wrap">
-      <ShutdownPrompt :suggest="suggestShutdown" :open="shutdownOpen" :done="shutdownDone" :open-tasks="shutdownOpenTasks"
-                      v-model:carry="shutdownCarry" :busy="shutdownBusy"
-                      @start="openShutdown" @dismiss="shutdownDismissed = true" @close="shutdownOpen = false" @finish="finishShutdown" />
 
       <!-- ─── Calendar & Progress ─── -->
       <section class="calendar-section">
+        <div class="hero-scene" aria-hidden="true"></div>
         <header class="hero">
           <div class="hero-text">
             <p class="hero-date">{{ currentDate }}</p>
-            <h1 class="hero-title">{{ heroTitle }}</h1>
+            <h1 class="hero-title">{{ heroTitleParts.lead }}<span class="hero-accent">{{ heroTitleParts.accent }}</span></h1>
             <p class="hero-sub">{{ daysLeftInYear }} days left this year</p>
           </div>
-          <div class="hero-menu">
-            <button type="button" class="hero-menu-btn" aria-label="Menu" :aria-expanded="menuOpen ? 'true' : 'false'" @click="menuOpen = !menuOpen">
-              <i class="fas fa-bars"></i>
+          <div ref="heroMenuEl" class="hero-menu">
+            <button type="button" class="hero-menu-btn" :aria-label="noticeCount ? noticeCount + ' updates and day menu' : 'Day menu'" :aria-expanded="menuOpen ? 'true' : 'false'" @click="menuOpen = !menuOpen">
+              <i class="fas fa-bell" aria-hidden="true"></i>
+              <span v-if="noticeCount" class="hero-badge" :class="{ 'hero-badge--alert': disciplineWarning === '30m' || bossLines.some((l) => l.kind === 'evening' || l.kind === 'watching') }">{{ noticeCount }}</span>
             </button>
-            <div v-if="menuOpen" class="hero-menu-pop" @click="menuOpen = false">
+            <div v-if="menuOpen" class="hero-menu-pop" role="dialog" aria-label="Updates and day menu">
+              <div v-if="noticeCount || isViewingToday" class="hero-notices">
+                <div v-if="disciplineWarning && !(strictOn && !bossHidden && (bossLines.length || verdictScreen))" class="disc-warning home-notice" :class="'disc-warning--' + disciplineWarning" role="alert">
+        ⚠️ {{ disciplineWarning === '30m' ? '30 minutes' : '2 hours' }} until your {{ disciplineSettings.deadline }} deadline — {{ streakProgress }}/{{ DAILY_STREAK_MIN }} done
+      </div>
+                <BossPanel v-if="strictOn && !bossHidden && (bossLines.length || verdictScreen)" class="home-notice" :lines="bossLines" :verdict="verdictScreen"
+                 @dismiss="bossHidden = true" @dismiss-line="idleNudge = null" @ack-verdict="dismissVerdict" />
+                <MorningReport v-if="morningRecap && isViewingToday" class="home-notice" :recap="morningRecap" @close="morningRecap = null" />
+                <LoadSummary v-if="isViewingToday" :load="todayLoad" :expanded="showSchedule" @toggle="showSchedule = !showSchedule" />
+              </div>
+              <div class="hero-menu-items" @click="menuOpen = false">
               <button type="button" class="hero-menu-item" @click="openShutdown">🌙 Shutdown day</button>
+              <button v-if="daySession.started && !daySession.ended" type="button" class="hero-menu-item" @click="endDay">■ End day<span v-if="daySession.startedAtText" class="hero-menu-meta"> · started {{ daySession.startedAtText }}</span></button>
               <router-link to="/upcoming" class="hero-menu-item">📅 Upcoming</router-link>
               <router-link to="/rankings" class="hero-menu-item">🏆 Rankings</router-link>
               <router-link to="/discipline" class="hero-menu-item">⚔️ Discipline Mode</router-link>
               <button type="button" class="hero-menu-item" @click="showSchedule = !showSchedule">🗓 {{ showSchedule ? 'Hide' : 'Show' }} schedule</button>
+              </div>
             </div>
           </div>
         </header>
 
         <DayTabs :days="tabDays" :selected-index="selectedDayIndex" :scheduled-counts="scheduledCounts" @select="handleDayTabClick" />
 
-        <ProgressBar :percentage="calculateCompletionPercentage()" :milestones="milestones" :done="completedTaskCount || 0" :total="dayTasks.length" />
+        <ProgressBar :percentage="calculateCompletionPercentage()" :milestones="milestones" :done="completedTaskCount || 0" :total="dayTasks.length"
+                     :streak="streak" :streak-status="streakStatus" :streak-progress="streakProgress" :streak-min="DAILY_STREAK_MIN" :points="pointsAccumulated || 0" />
 
       </section>
+      <ShutdownPrompt class="home-notice" :suggest="false" :open="shutdownOpen" :done="shutdownDone" :open-tasks="shutdownOpenTasks"
+                      v-model:carry="shutdownCarry" :busy="shutdownBusy"
+                      @start="openShutdown" @dismiss="shutdownDismissed = true" @close="shutdownOpen = false" @finish="finishShutdown" />
 
-      <StreakHeader :streak="streak" :best-streak="bestStreak" :streak-status="streakStatus" :streak-progress="streakProgress" :streak-min="DAILY_STREAK_MIN" :motivational-message="motivationalMessage" :points-accumulated="pointsAccumulated"
-                    :total-points="totalPoints" :day-session="daySession" @shutdown="openShutdown" @end-day="endDay" />
 
-      <div v-if="disciplineWarning" class="disc-warning" :class="'disc-warning--' + disciplineWarning" role="alert">
-        ⚠️ {{ disciplineWarning === '30m' ? '30 minutes' : '2 hours' }} until your {{ disciplineSettings.deadline }} deadline — {{ streakProgress }}/{{ DAILY_STREAK_MIN }} done
-      </div>
-      <template v-if="strictOn">
-        <BossBanner v-if="bossWatchingMsg" kind="watching" :text="bossWatchingMsg" />
-        <BossBanner v-if="idleNudge" kind="idle" :text="idleNudge" dismissible @dismiss="idleNudge = null" />
-        <BossBanner v-else-if="bossMsg && bossMsg.phase !== 'verdict'" :kind="bossMsg.kind" :text="bossMsg.text" />
-      </template>
-      <VerdictOverlay v-if="verdictScreen" :v="verdictScreen.v" :text="verdictScreen.text" :date="verdictScreen.date" @close="dismissVerdict" />
       <DramaOverlay v-if="lossScreen" variant="lost" title="Streak lost" button="I'll do better"
                     :subtitle="`You missed your deadline. ${lossScreen.lostStreak ? lossScreen.lostStreak + '-day streak gone. ' : ''}${lossScreen.penalty} pts.`" @close="dismissLoss" />
 
@@ -69,9 +73,7 @@
       <DramaOverlay v-if="rewardScreen && !levelUp" variant="reward" :title="`${rewardScreen.days}-day streak!`" button="Nice"
                     :subtitle="`Reward unlocked: ${rewardScreen.label}`" @close="rewardScreen = null" />
 
-      <MorningReport v-if="morningRecap && isViewingToday" :recap="morningRecap" @close="morningRecap = null" />
 
-      <TimeStatsBar v-if="isViewingToday" :stats="timeStats" />
 
       <WorkoutModal v-if="showWorkoutModal" :preferences="workoutPreferences" @close="closeWorkoutModal" @generate="generateWorkoutRoutine" />
 
@@ -123,7 +125,6 @@
                           :sound-enabled="soundEnabled" :show-completed="showCompleted" v-model:prefs="viewPrefs" @toggle-sound="toggleSound" @toggle-completed="showCompleted = !showCompleted" />
 
 
-          <LoadSummary v-if="isViewingToday" :load="todayLoad" :expanded="showSchedule" @toggle="showSchedule = !showSchedule" />
 
           <TimeBlockSchedule v-if="showSchedule" :schedule="schedule" />
 
@@ -148,8 +149,8 @@
           >
             <template #item="{ element: task, index }">
               <TaskCard
-                  v-if="(!task.completed || (isViewingToday && showCompleted))"
-                  :task="task" :drag-disabled="!reorderable" :index="realIndex(task)" :is-today-tab="isViewingToday" :expanded="expandedKey === taskKey(task)"
+                  v-if="!task.completed || !isViewingToday"
+                  :task="task" :up-next="isViewingToday && !task.completed && taskKey(task) === upNextKey" :drag-disabled="!reorderable" :index="realIndex(task)" :is-today-tab="isViewingToday" :expanded="expandedKey === taskKey(task)"
                   :active-labels="activeLabels" :now="nowTick" :show-notification="showNotification" :transfer-notification="transferNotification"
                   @toggle-expand="toggleExpanded(task)" @toggle-complete="toggleTaskCompletion(realIndex(task))" @open-detail="openTaskDetailModal(task)"
                   @set-boss="setBoss(realIndex(task), task)" @toggle-important="toggleTaskImportance(realIndex(task))" @patch="patchTask(realIndex(task), task, $event)" @subtask-patch="onSubtaskPatch(realIndex(task), task, $event)"
@@ -160,6 +161,24 @@
             </template>
           </draggable>
 
+          <div v-if="isViewingToday && completedTaskCount > 0" class="done-section">
+            <button type="button" class="done-toggle" :aria-expanded="showCompleted ? 'true' : 'false'" @click="showCompleted = !showCompleted">
+              <i class="fas" :class="showCompleted ? 'fa-chevron-down' : 'fa-chevron-right'" aria-hidden="true"></i>
+              <span>Completed ({{ completedTaskCount }})</span>
+              <i class="fas done-eye" :class="showCompleted ? 'fa-eye' : 'fa-eye-slash'" aria-hidden="true"></i>
+            </button>
+            <div v-if="showCompleted" class="tasks-list tasks-list--done">
+              <TaskCard v-for="task in displayTasks.filter((t) => t.completed)" :key="taskKey(task)"
+                  :task="task" :drag-disabled="true" :index="realIndex(task)" :is-today-tab="true" :expanded="expandedKey === taskKey(task)"
+                  :active-labels="activeLabels" :now="nowTick"
+                  @toggle-expand="toggleExpanded(task)" @toggle-complete="toggleTaskCompletion(realIndex(task))" @open-detail="openTaskDetailModal(task)"
+                  @set-boss="setBoss(realIndex(task), task)" @toggle-important="toggleTaskImportance(realIndex(task))" @patch="patchTask(realIndex(task), task, $event)" @subtask-patch="onSubtaskPatch(realIndex(task), task, $event)"
+                  @toggle-label="toggleLabelHighlight" @open-reminder="openModal('calendar', realIndex(task), task.title)" @transfer="openTransferModal(realIndex(task))"
+                  @video="openYouTubeModal(realIndex(task))" @upload="handleUpload($event, realIndex(task))" @timer="openTaskTimerModal(realIndex(task))"
+                  @wont-do="openWontDoModal(realIndex(task))" @delete="deleteTask(realIndex(task))" @schedule="scheduleExistingTask(realIndex(task), task, $event)" />
+            </div>
+          </div>
+
           <IdleState v-if="dayTasks.length > 0 && dayTasks.every(task => task.completed) && !showCompleted" />
 
 
@@ -168,6 +187,8 @@
         </div>
       </section>
       <StartDayPrompt v-else-if="isViewingToday" @start="startDay" />
+
+      <TimeStatsBar v-if="isViewingToday" :stats="timeStats" :ended="!!daySession.ended" :suggest="suggestShutdown && !shutdownDismissed" @wrap-up="openShutdown" />
 
       <ScheduledList v-if="userId" :tasks="futureScheduled" :today-str="todayStr" :error="scheduledError"
                      @move-today="moveScheduledToToday" @update="updateScheduledDate" @delete="deleteScheduled" />
@@ -194,8 +215,7 @@ import { loadDisciplineSettings, settleDeadlines, clearLossPending, loadDiscipli
 import { levelFor, rewardsFor } from '@/utils/rewards';
 import { defaultSettings as defaultDiscipline, warningFor, isPastDeadline, streakGate, BOSS_BONUS } from '@/utils/discipline';
 import DramaOverlay from '@/components/discipline/DramaOverlay.vue';
-import BossBanner from '@/components/discipline/BossBanner.vue';
-import VerdictOverlay from '@/components/discipline/VerdictOverlay.vue';
+import BossPanel from '@/components/discipline/BossPanel.vue';
 import { bossMessage, validReason, carryTask, canAddTask, watchingBlockers, isIdle, verdict as dayVerdict, line as bossLine, IDLE_MINUTES } from '@/utils/strictBoss';
 import MorningReport from '@/components/home/MorningReport.vue';
 import { buildRecap, reportDue, prevDay } from '@/utils/dailyReport';
@@ -225,7 +245,6 @@ import ImagePreview from '@/components/home/ImagePreview.vue';
 import ProgressBar from '@/components/home/ProgressBar.vue';
 import ReminderModal from '@/components/home/ReminderModal.vue';
 import ShutdownPrompt from '@/components/home/ShutdownPrompt.vue';
-import StreakHeader from '@/components/home/StreakHeader.vue';
 import TaskDetailModal from '@/components/home/TaskDetailModal.vue';
 import TimeStatsBar from '@/components/home/TimeStatsBar.vue';
 import TimerModal from '@/components/home/TimerModal.vue';
@@ -787,7 +806,7 @@ const currentDate = computed(() => {
   if (selectedDayIndex.value === -1) return getCurrentDate();
   const d = new Date();
   d.setDate(d.getDate() + (selectedDayIndex.value - d.getDay()));
-  return new Intl.DateTimeFormat('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }).format(d);
+  return new Intl.DateTimeFormat('en-US', { weekday: 'long', month: 'long', day: 'numeric' }).format(d);
 });
 
 let weeklyRoutines = [];
@@ -1065,6 +1084,7 @@ const markTaskAsWontDo = async () => {
       tasks: wontDoTasks.value,
       updatedAt: serverTimestamp()
     });
+    await saveSelectedDayTasks(); // persist removal so it doesn't reappear on reload/transfer
 
     console.log("Task marked as 'Won't Do' and saved to Firestore.");
   } catch (error) {
@@ -1082,6 +1102,7 @@ const undoWontDo = async (index) => {
   // Update Firestore
   const wontDoDocRef = doc(db, "wontDoTasks", `${userId.value}_${days[selectedDayIndex.value].day}`);
   await setDoc(wontDoDocRef, { tasks: wontDoTasks.value, updatedAt: serverTimestamp() });
+  await saveSelectedDayTasks().catch((e) => console.warn('Restore not saved:', e));
 
   console.log("Task restored from 'Won't Do'");
 };
@@ -1261,6 +1282,17 @@ const strictOn = computed(() => !!(disciplineSettings.value.enabled && disciplin
 const bossMsg = ref(null);
 const idleNudge = ref(null);
 const verdictScreen = ref(null);
+const bossHidden = ref(false); // user collapsed the boss panel away for this session
+const bossLines = computed(() => {
+  const out = [];
+  if (bossWatchingMsg.value) out.push({ kind: 'watching', text: bossWatchingMsg.value });
+  if (idleNudge.value) out.push({ kind: 'idle', text: idleNudge.value, dismissible: true });
+  else if (bossMsg.value && bossMsg.value.phase !== 'verdict') out.push({ kind: bossMsg.value.kind, text: bossMsg.value.text });
+  return out;
+});
+// Remember an acknowledged verdict locally too, so a failed Firestore write can't re-open it every tick.
+const verdictSeenKey = () => `clingnot-verdict-seen-${userId.value}`;
+const verdictSeen = (d) => { try { return localStorage.getItem(verdictSeenKey()) === d; } catch (e) { return false; } };
 const deferReason = ref('');
 const lastActive = ref(Date.now());
 const markActive = () => { lastActive.value = Date.now(); };
@@ -1280,7 +1312,7 @@ const runStrictBoss = (now, today) => {
     lastActive.value = now.getTime(); // next nudge after another idle stretch
     try { if (typeof Notification !== 'undefined' && Notification.permission === 'granted' && document.hidden) new Notification('Boss: focus check', { body: idleNudge.value }); } catch (e) { /* optional */ }
   }
-  if (bossMsg.value?.phase === 'verdict' && discState.value.lastVerdictDate !== today && !verdictScreen.value) {
+  if (bossMsg.value?.phase === 'verdict' && discState.value.lastVerdictDate !== today && !verdictSeen(today) && !verdictScreen.value) {
     const v = dayVerdict({ done, min, total: (selectedDayRoutine.value || []).filter((t) => t.status !== 'pending').length });
     verdictScreen.value = { v, text: bossMsg.value.text, date: today };
   }
@@ -1289,6 +1321,7 @@ const dismissVerdict = async () => {
   const s = verdictScreen.value; verdictScreen.value = null;
   if (!s || !userId.value) return;
   discState.value = { ...discState.value, lastVerdictDate: s.date };
+  try { localStorage.setItem(verdictSeenKey(), s.date); } catch (e) { /* private mode */ }
   try {
     await patchDisciplineState(userId.value, { lastVerdictDate: s.date, lastVerdict: { date: s.date, passed: s.v.passed, grade: s.v.grade, done: s.v.done } });
     if (!s.v.passed) await logDiscipline(userId.value, 'verdict-failed', s.date, `${s.v.done}/${s.v.min}, grade ${s.v.grade}`);
@@ -1880,6 +1913,9 @@ const todayIdx = computed(() => new Date(calendarNow.value).getDay());
 const calculateCompletionPercentage = () => completionPercentage(selectedDayRoutine.value, wontDoTasks.value.length, selectedDayIndex.value, todayIdx.value);
 const daysLeftInYear = computed(() => daysLeftInYearFrom(new Date(calendarNow.value)));
 const heroTitle = computed(() => heroTitleFor(selectedDayIndex.value, todayIdx.value));
+// "Make today count." -> lead "Make today " + accent "count." (last word in the accent colour)
+const heroTitleParts = computed(() => { const t = heroTitle.value || ''; const i = t.lastIndexOf(' '); return i < 0 ? { lead: '', accent: t } : { lead: t.slice(0, i + 1), accent: t.slice(i + 1) }; });
+const upNextKey = computed(() => { const t = displayTasks.value.find((x) => !x.completed && x.status !== 'pending'); return t ? taskKey(t) : null; });
 const showNotification = ref(false);
 
 
@@ -2104,7 +2140,26 @@ onMounted(() => {
 
   checkStreakOnCompletion();
 });
-const menuOpen = ref(false);
+const menuOpen = ref(false); // closed by default; closes on outside tap / Escape / route change
+const heroMenuEl = ref(null);
+const noticeCount = computed(() => {
+  const boss = strictOn.value && !bossHidden.value && (bossLines.value.length || verdictScreen.value);
+  return (boss ? 1 : 0) + (disciplineWarning.value && !boss ? 1 : 0) + (morningRecap.value && isViewingToday.value ? 1 : 0);
+});
+// Home overlays the shared top bar on the header illustration (see .home-v2 rules)
+onMounted(() => document.body.classList.add('home-v2'));
+onBeforeUnmount(() => document.body.classList.remove('home-v2'));
+// Closing tap is swallowed so it doesn't also trigger whatever sits under the panel (e.g. the Add Task FAB).
+const swallowClick = (ev) => { ev.stopPropagation(); ev.preventDefault(); };
+const onMenuOutside = (e) => {
+  if (!(menuOpen.value && heroMenuEl.value && !heroMenuEl.value.contains(e.target))) return;
+  menuOpen.value = false;
+  document.addEventListener('click', swallowClick, { capture: true, once: true });
+  setTimeout(() => document.removeEventListener('click', swallowClick, true), 400);
+};
+const onMenuKey = (e) => { if (e.key === 'Escape') menuOpen.value = false; };
+onMounted(() => { document.addEventListener('pointerdown', onMenuOutside, true); document.addEventListener('keydown', onMenuKey); });
+onBeforeUnmount(() => { document.removeEventListener('pointerdown', onMenuOutside, true); document.removeEventListener('keydown', onMenuKey); });
 const milestones = ref([
   { label: '0%', percent: 0, position: 0, icon: '🌱' },      // Seed planted
   { label: '25%', percent: 25, position: 25, icon: '🌿' },   // Sprouting leaves
@@ -3126,7 +3181,7 @@ a.hero-menu-item { display: block; text-decoration: none; color: inherit; }
 .app-root .milestone-dot--reached.milestone-dot--reached { box-shadow: 0 0 0 3px rgba(79,111,240,.15); }
 
 /* Streak + stats */
-.app-root .header-card.header-card { padding: var(--sp-3) var(--sp-1); }
+.app-root .home-notice { margin: var(--sp-3) 0 0; }
 .app-root .btn-day.btn-day { min-height: 44px; border-radius: 12px; box-shadow: var(--shadow-1); transition: background .2s var(--ease-out), border-color .2s, transform .15s; }
 .app-root .btn-day.btn-day:active { transform: scale(.97); }
 .app-root .stats-bar.stats-bar { padding: var(--sp-3) 0; background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--r-lg); box-shadow: var(--shadow-1); }
@@ -3179,12 +3234,194 @@ a.hero-menu-item { display: block; text-decoration: none; color: inherit; }
 .app-root .empty-add.empty-add { min-height: 48px; background: linear-gradient(180deg, #5F7EF7, #4563E6); box-shadow: 0 6px 18px rgba(79,111,240,.4); }
 
 @media (max-width: 480px) { .app-root .modal-box.modal-box { border-radius: 22px 22px 0 0; padding-bottom: env(safe-area-inset-bottom); } }
-.disc-warning { margin: 8px 0; padding: 10px 14px; border-radius: 10px; font-weight: 700; background: var(--c-warn-soft, #fef3c7); color: var(--c-warn-text, #92400e); }
-.disc-warning--30m { background: #fee2e2; color: #991b1b; animation: discPulse 1.2s ease-in-out infinite; }
+.disc-warning { margin: 8px 0; padding: 10px 14px; border-radius: var(--r-lg, 16px); font-weight: 600; background: var(--c-warn-soft, #2B2209); border: 1px solid var(--c-warn-line, #7A5A12); color: var(--c-warn-text, #F5C75F); }
+.disc-warning--30m { background: var(--c-danger-soft, #2E1517); border-color: var(--c-danger-line, #8F2A2A); color: var(--c-danger-text, #FCA5A5); animation: discPulse 1.2s ease-in-out infinite; }
 @keyframes discPulse { 50% { opacity: .65; } }
 .app-root.theme-ember { --c-primary: #ea580c; --c-primary-soft: #ffedd5; --c-warn: #dc2626; }
 .app-root.theme-ocean { --c-primary: #0284c7; --c-primary-soft: #e0f2fe; --c-success: #0d9488; }
 .voice-toasts { position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%); z-index: 9000; display: flex; flex-direction: column; gap: 6px; }
 .voice-toast { background: #111827; color: #fff; padding: 8px 12px; border-radius: 10px; font-size: .9rem; box-shadow: 0 4px 12px rgba(0,0,0,.25); }
 .voice-toast button { margin-left: 10px; color: #fbbf24; font-weight: 700; background: none; border: none; }
+
+/* ══ v2 skin: navy night theme matching the target mockup (wins via tripled selectors) ══ */
+.app-root.app-root.app-root {
+  --c-bg: #070D1C; --c-surface: #0C1630; --c-surface-2: #12203F; --c-border: #1A2846; --c-border-strong: #2A3C66;
+  --c-text: #F2F5FC; --c-text-2: #A9B4CC; --c-text-3: #7180A0;
+  --c-accent: #2F6FFF; --c-accent-hover: #4A82FF; --c-accent-text: #4F95FF; --c-accent-soft: #10204A; --c-accent-line: #24448F;
+  --r-lg: 18px;
+  background: var(--c-bg);
+}
+.app-root .content-wrap.content-wrap { max-width: 560px; padding: 0 16px calc(140px + env(safe-area-inset-bottom)); }
+.app-root .calendar-section.calendar-section { position: relative; padding-top: 20px; }
+.app-root .hero-scene { position: absolute; z-index: 0; top: 0; left: -16px; right: -16px; height: 330px; pointer-events: none;
+  background: linear-gradient(180deg, rgba(7,13,28,.25), rgba(7,13,28,0) 40%, var(--c-bg) 96%), url('~@/assets/hero-forest.jpg') 72% 30% / cover no-repeat; }
+.app-root .calendar-section > :not(.hero-scene) { position: relative; z-index: 1; }
+@media (min-width: 600px) { .app-root .hero-scene { border-radius: 0 0 28px 28px; } }
+.app-root .hero.hero { padding: 4px 0 0; }
+.app-root .hero-date.hero-date { color: #6FA2FF; font-size: 12px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; font-family: inherit; }
+.app-root .hero-title.hero-title { font-size: 34px; line-height: 40px; font-weight: 800; letter-spacing: -.02em; background: none; color: #fff; -webkit-text-fill-color: #fff; margin: 4px 0 2px; }
+.app-root .hero-accent { color: #3D8BFF; -webkit-text-fill-color: #3D8BFF; }
+.app-root .hero-sub.hero-sub { color: var(--c-text-2); font-size: 15px; }
+.app-root .hero-menu-btn.hero-menu-btn { background: rgba(12,22,48,.6); border: 1px solid var(--c-border-strong); backdrop-filter: blur(6px); }
+.app-root .hero-menu-meta { color: var(--c-text-3); font-size: 12px; }
+/* week strip */
+.app-root .day-tabs.day-tabs.day-tabs { gap: 0; padding: 6px; background: rgba(12,22,48,.78); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid var(--c-border-strong); border-radius: 18px; margin: 18px 0 14px; }
+.app-root .day-tab.day-tab.day-tab { min-height: 60px; border-radius: 12px; position: relative; }
+.app-root .day-tab.day-tab.day-tab + .day-tab::before { content: ''; position: absolute; left: 0; top: 14px; bottom: 14px; border-left: 1px solid var(--c-border); }
+.app-root .day-tab--selected.day-tab--selected.day-tab--selected { background: linear-gradient(180deg, #2F7BFF, #1C5BE8); box-shadow: 0 8px 22px rgba(47,111,255,.45), inset 0 0 0 1px rgba(255,255,255,.18); }
+.app-root .day-tab--selected.day-tab--selected.day-tab--selected::before, .app-root .day-tab--selected + .day-tab::before { display: none; }
+.app-root .day-tab-name { text-transform: uppercase; font-size: 11px; letter-spacing: .06em; }
+.app-root .day-tab-date { font-size: 18px; font-weight: 700; }
+/* progress card */
+.app-root .progress-section.progress-section.progress-section { padding: 0; background: linear-gradient(135deg, rgba(18,32,63,.95), rgba(10,20,44,.95)); border: 1px solid var(--c-border-strong); border-radius: 18px; box-shadow: 0 12px 32px rgba(0,0,0,.35); }
+.app-root .progress-pct.progress-pct.progress-pct { background: none; -webkit-text-fill-color: #fff; color: #fff; }
+.app-root .ring-fill.ring-fill { filter: none; }
+.app-root .stat-val.stat-val.stat-val { white-space: nowrap; }
+@media (max-width: 430px) { .app-root .stats-bar .stat-icon { display: none; } .app-root .stats-bar .stat { padding: 4px 6px; } }
+/* notices + boss */
+.app-root .home-notice.home-notice { margin: 12px 0 0; }
+/* Today header */
+.app-root .task-list-header.task-list-header { padding: 18px 0 10px; }
+.app-root .task-count-label.task-count-label { font-size: 28px; font-weight: 800; }
+.app-root .task-count-badge.task-count-badge { background: var(--c-accent-soft); color: #7FB0FF; border: 1px solid var(--c-accent-line); font-family: inherit; padding: 3px 12px; }
+.app-root .toggle-visibility.toggle-visibility { width: 44px; min-width: 44px; height: 44px; border-radius: 50%; background: var(--c-surface); border: 1px solid var(--c-border-strong); color: var(--c-text); margin-left: 8px; padding: 0; }
+.app-root .toggle-visibility.toggle-visibility:hover { background: var(--c-surface-2); }
+/* task rows */
+.app-root .tasks-list.tasks-list > * + * { margin-top: 10px; }
+.app-root .task-card.task-card.task-card { align-items: center; gap: 10px; padding: 12px 8px 12px 6px; border-radius: 16px; background: linear-gradient(180deg, #0F1B38, #0B1530); border: 1px solid var(--c-border); box-shadow: none; transform: none; }
+.app-root .task-card.task-card.task-card:hover { border-color: var(--c-border-strong); }
+.app-root .task-card--next.task-card--next.task-card--next { border-color: #2A5BD6; border-left: 3px solid #3D8BFF; background: linear-gradient(90deg, rgba(47,111,255,.18), rgba(15,27,56,.9) 60%); box-shadow: 0 8px 28px rgba(47,111,255,.18); }
+.app-root .task-card--important.task-card--important.task-card--important:not(.task-card--next) { border-left: 3px solid var(--c-danger); }
+.app-root .task-left.task-left.task-left { gap: 6px; align-items: center; }
+.app-root .task-avatar.task-avatar.task-avatar { width: 18px; height: 44px; opacity: .55; font-size: 13px; }
+.app-root .task-check.task-check.task-check { width: 36px; height: 36px; margin: 0; font-size: 24px; color: #3A4D78; }
+.app-root .task-check--done.task-check--done.task-check--done { color: var(--c-success); }
+.app-root .task-cat { width: 40px; height: 40px; flex-shrink: 0; border-radius: 11px; display: grid; place-items: center; font-size: 17px; color: #fff; }
+.app-root .task-cat--blue { background: linear-gradient(180deg, #2F7BFF, #1C55D8); }
+.app-root .task-cat--purple { background: linear-gradient(180deg, #7B5BE6, #5A3BC2); color: #E4DAFF; }
+.app-root .task-cat--teal { background: linear-gradient(180deg, #16A79A, #0D7C74); }
+.app-root .task-cat--red { background: linear-gradient(180deg, #A9364A, #7E2335); color: #FFC9D2; }
+.app-root .task-cat--green { background: linear-gradient(180deg, #2DB36F, #1C8650); }
+.app-root .task-cat--amber { background: linear-gradient(180deg, #E3A12B, #B97A12); }
+.app-root .task-upnext { order: 0 !important; margin: 0; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #5B9BFF; }
+.app-root .task-title.task-title.task-title { font-size: 16px; font-weight: 600; color: var(--c-text); }
+.app-root .task-sub { order: 2 !important; margin: 0; font-size: 13px; color: var(--c-text-2); }
+.app-root .task-body > .task-reminder { order: 3; }
+.app-root .task-body > .task-meta-row { order: 4; }
+.app-root .task-meta-row:not(:has(.task-status)) .importance-btn:not([aria-pressed="true"]) { display: none; }
+.app-root .task-chevron.task-chevron.task-chevron { display: none; }
+.app-root .task-play-wrap { display: flex; flex-direction: column; align-items: center; gap: 0; }
+.app-root .task-play.task-play.task-play { width: 44px; height: 40px; color: var(--c-text); }
+.app-root .task-play.task-play.task-play::before { width: 36px; height: 36px; background: transparent; border: 1.5px solid #3A4D78; box-shadow: none; }
+.app-root .task-play--primary.task-play--primary.task-play--primary::before { width: 44px; height: 44px; border: 0; background: linear-gradient(180deg, #3D8BFF, #1F5FEA); box-shadow: 0 6px 18px rgba(47,111,255,.55); }
+.app-root .task-pts { font-size: 11px; font-weight: 700; color: #F5C542; line-height: 12px; }
+.app-root .task-more.task-more.task-more { width: 36px; color: var(--c-text-2); }
+.app-root .task-card--completed.task-card--completed .task-cat { filter: grayscale(.7); opacity: .7; }
+/* completed section */
+.app-root .done-section { margin-top: 12px; }
+.app-root .done-toggle { width: 100%; display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 8px; background: none; border: 0; color: var(--c-text-2); font-size: 15px; cursor: pointer; }
+.app-root .done-toggle .done-eye { margin-left: auto; color: var(--c-text); }
+.app-root .done-toggle:hover { color: var(--c-text); }
+/* stats + fab */
+.app-root .stats-bar.stats-bar.stats-bar { display: flex; padding: 8px; background: linear-gradient(180deg, #0F1B38, #0B1530); border: 1px solid var(--c-border); border-radius: 16px; }
+.app-root .stat-label.stat-label.stat-label { text-transform: none; letter-spacing: 0; font-size: 12px; font-weight: 400; margin: 0; }
+.app-root .stat-val.stat-val.stat-val { font-size: 16px; margin: 0; }
+.app-root .fab.fab.fab, .app-root .fab.fab.fab span { font-family: var(--font); }
+.app-root .fab-add.fab-add.fab-add { background: linear-gradient(90deg, #1E5BFF, #2F7BFF 60%, #3C8CFF); border-radius: 16px; font-size: 18px; font-weight: 700; text-transform: none; box-shadow: 0 10px 30px rgba(47,111,255,.45); }
+.app-root .fab-voice.fab-voice.fab-voice { background: #0F1B38; border: 1px solid var(--c-border-strong); border-radius: 16px; color: #fff; }
+.app-root .fab-group.fab-group { background: linear-gradient(to top, var(--c-bg) 60%, transparent); }
+@media (min-width: 768px) { .app-root .hero-title.hero-title { font-size: 40px; line-height: 46px; } }
+
+/* v2 rows: right controls pinned top-right so details (chips, notes, labels) use the full card width */
+.app-root .task-card.task-card.task-card { position: relative; align-items: flex-start; padding: 12px 8px 12px 4px; }
+.app-root .task-left.task-left.task-left { align-self: flex-start; gap: 4px; }
+.app-root .task-avatar.task-avatar.task-avatar { width: 14px; height: 40px; }
+.app-root .task-right.task-right.task-right { position: absolute; top: 10px; right: 6px; margin: 0; }
+.app-root .task-body.task-body.task-body { padding-top: 0; }
+.app-root .task-body > .task-upnext, .app-root .task-body > .task-title-row, .app-root .task-body > .task-sub { padding-right: 84px; }
+.app-root .task-title.task-title.task-title { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word; line-height: 21px; }
+.app-root .task-title-row.task-title-row { flex-wrap: wrap; row-gap: 2px; }
+.app-root .task-body > .task-chips.task-chips { flex: 1 1 100%; flex-wrap: wrap; justify-content: flex-start; }
+.app-root .task-body > .task-meta-row { flex: 0 0 auto; }
+.app-root .task-note-preview, .app-root .task-next, .app-root .task-reminder { font-size: 12px; color: var(--c-text-2); }
+.app-root .task-labels.task-labels { display: flex; flex-wrap: wrap; gap: 4px; }
+@media (max-width: 400px) {
+  .app-root .task-cat { width: 34px; height: 34px; font-size: 15px; border-radius: 10px; }
+  .app-root .task-check.task-check.task-check { width: 30px; height: 34px; font-size: 22px; }
+  .app-root .task-more.task-more.task-more { width: 28px; }
+  .app-root .task-body > .task-upnext, .app-root .task-body > .task-title-row, .app-root .task-body > .task-sub { padding-right: 76px; }
+}
+
+/* Header menu must sit above the week strip / cards (they create their own stacking contexts) */
+.app-root .calendar-section > .hero.hero { z-index: 50; }
+.app-root .hero-menu-pop.hero-menu-pop { z-index: 1000; background: #13203F; border: 1px solid var(--c-border-strong); box-shadow: 0 16px 40px rgba(0,0,0,.65); backdrop-filter: none; }
+.app-root .hero-menu-item.hero-menu-item { color: var(--c-text); background: transparent; }
+.app-root .hero-menu-item.hero-menu-item:hover { background: #1A2A52; }
+/* Room for the fixed Add Task bar + iOS home indicator so the last rows / empty state stay visible */
+.app-root .content-wrap.content-wrap { padding-bottom: calc(170px + env(safe-area-inset-bottom)); }
+.app-root .fab-group.fab-group { padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
+
+/* ══ v3: pixel-close mockup layout ══ */
+body.home-v2 .app-topbar { position: absolute; top: 0; left: 0; right: 0; z-index: 60; background: transparent; border-bottom: 0; pointer-events: none; }
+.app-shell .app-topbar-inner > *, .app-shell .app-topbar aside { pointer-events: auto; }
+@media (min-width: 768px) { body.home-v2.sidebar-open .app-topbar { left: 16rem; } }
+.app-root .calendar-section.calendar-section { padding-top: calc(60px + env(safe-area-inset-top)); }
+.app-root .hero-scene.hero-scene { top: 0; height: calc(360px + env(safe-area-inset-top)); left: -16px; right: -16px;
+  background: linear-gradient(180deg, rgba(7,13,28,.15), rgba(7,13,28,0) 35%, rgba(7,13,28,.55) 75%, var(--c-bg) 98%), url('~@/assets/hero-forest.jpg') 72% 30% / cover no-repeat; }
+.app-root .hero.hero { display: flex; align-items: flex-start; justify-content: space-between; padding: 0; }
+.app-root .hero-date.hero-date { margin: 0; font-size: 13px; letter-spacing: .16em; color: #5E9BFF; }
+.app-root .hero-title.hero-title { font-size: 36px; line-height: 42px; margin: 4px 0 2px; }
+.app-root .hero-sub.hero-sub { margin: 0; font-size: 16px; color: #B7C2DA; }
+.app-root .hero.hero { position: relative; }
+.app-root .hero-text { flex: 1 1 100%; min-width: 0; }
+.app-root .hero-menu.hero-menu { position: absolute; right: 0; top: 22px; }
+.app-root .hero-menu-btn.hero-menu-btn { width: 36px; height: 36px; border-radius: 50%; font-size: 14px; color: #C9D5F0; background: rgba(12,22,48,.55); border: 1px solid rgba(90,120,190,.35); box-shadow: none; position: relative; }
+.app-root .hero-badge { position: absolute; top: -4px; right: -4px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: #2F6FFF; color: #fff; font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; border: 2px solid #070D1C; }
+.app-root .hero-badge--alert { background: #EF4444; }
+.app-root .hero-menu-pop.hero-menu-pop { position: fixed; top: calc(64px + env(safe-area-inset-top)); left: 12px; right: 12px; max-width: 420px; margin-left: auto; max-height: 72vh; overflow-y: auto; padding: 10px; border-radius: 18px; }
+@media (min-width: 768px) { .app-root .hero-menu-pop.hero-menu-pop { position: absolute; top: 44px; left: auto; right: 0; width: 380px; } }
+.app-root .hero-notices { display: flex; flex-direction: column; gap: 8px; padding-bottom: 8px; margin-bottom: 6px; border-bottom: 1px solid var(--c-border); }
+.app-root .hero-notices:empty { display: none; }
+.app-root .hero-notices .home-notice.home-notice { margin: 0; }
+.app-root .hero-menu-items { display: flex; flex-direction: column; }
+/* week strip proportions */
+.app-root .day-tabs.day-tabs.day-tabs { margin: 18px 0 12px; padding: 5px; border-radius: 16px; }
+.app-root .day-tab.day-tab.day-tab { min-height: 62px; }
+.app-root .day-tab-name.day-tab-name { font-size: 12px; font-weight: 500; color: #A9B4CC; }
+.app-root .day-tab--selected .day-tab-name { color: #fff; }
+.app-root .day-tab-date.day-tab-date { font-size: 20px; font-weight: 700; color: #F2F5FC; margin-top: 2px; }
+/* progress card */
+.app-root .progress-section.progress-section.progress-section { border-radius: 16px; }
+.app-root .progress-top.progress-top { min-height: 118px; padding: 14px 14px 12px; }
+.app-root .progress-copy.progress-copy { align-self: stretch; display: flex; flex-direction: column; }
+.app-root .milestone-row.milestone-row { margin-top: auto; padding-top: 10px; }
+/* rows */
+.app-root .task-list-header.task-list-header { padding: 16px 0 10px; }
+.app-root .task-count-label.task-count-label { font-size: 30px; line-height: 34px; }
+.app-root .tasks-list.tasks-list > * + * { margin-top: 8px; }
+.app-root .task-card.task-card.task-card { min-height: 64px; padding: 10px 8px 10px 4px; border-radius: 14px; }
+.app-root .task-card--next.task-card--next.task-card--next { min-height: 84px; }
+.app-root .task-title.task-title.task-title { font-size: 16px; font-weight: 600; }
+.app-root .task-sub.task-sub { font-size: 14px; color: #A9B4CC; }
+
+/* v3 tightening to mockup proportions */
+.app-root .calendar-section.calendar-section { padding-top: calc(52px + env(safe-area-inset-top)); }
+.app-root .hero-title.hero-title { font-size: 34px; line-height: 38px; margin: 2px 0 2px; }
+.app-root .hero-sub.hero-sub { font-size: 15px; }
+.app-root .day-tabs.day-tabs.day-tabs { margin: 14px 0 10px; }
+.app-root .day-tab.day-tab.day-tab { min-height: 56px; }
+.app-root .day-tab-date.day-tab-date { font-size: 19px; }
+.app-root .progress-top.progress-top { min-height: 104px; padding: 12px 12px 10px; }
+.app-root .progress-ring.progress-ring { width: 84px; height: 84px; }
+.app-root .foot-item { padding: 10px 14px; }
+.app-root .task-list-header.task-list-header { padding: 12px 0 8px; }
+.app-root .task-count-label.task-count-label { font-size: 28px; line-height: 32px; }
+.app-root .toggle-visibility.toggle-visibility { width: 40px; min-width: 40px; height: 40px; min-height: 40px; }
+.app-root .task-card.task-card.task-card { min-height: 58px; padding: 8px 8px 8px 4px; }
+.app-root .task-card--next.task-card--next.task-card--next { min-height: 72px; }
+.app-root .tasks-list.tasks-list > * + * { margin-top: 7px; }
+.app-root .task-cat { width: 36px; height: 36px; font-size: 16px; border-radius: 10px; }
+.app-root .task-title.task-title.task-title { font-size: 15px; line-height: 20px; }
+.app-root .task-sub.task-sub { font-size: 13px; }
+.app-root .task-upnext { font-size: 10px; }
 </style>

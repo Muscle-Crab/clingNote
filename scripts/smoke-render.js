@@ -18,7 +18,7 @@ require.extensions['.vue'] = (mod, filename) => {
   const out = compileScript(descriptor, { id: 'smoke', inlineTemplate: true });
   mod._compile(toCjs(out.content, filename), filename);
 };
-for (const ext of ['.svg', '.png', '.mp3', '.css']) require.extensions[ext] = (mod, filename) => { mod.exports = filename; }; // assets: stub
+for (const ext of ['.svg', '.png', '.jpg', '.mp3', '.css']) require.extensions[ext] = (mod, filename) => { mod.exports = filename; }; // assets: stub
 const origJs = require.extensions['.js'];
 require.extensions['.js'] = (mod, filename) => {
   if (filename.startsWith(src)) mod._compile(toCjs(fs.readFileSync(filename, 'utf8'), filename), filename);
@@ -65,7 +65,7 @@ const cases = [
   ['TaskListHeader', { completed: 1, total: 3, soundEnabled: true, showCompleted: false }, ['1/3', 'Sounds on', 'aria-pressed="true"', 'aria-label="Sounds"']],
   ['EmptyState', {}, ['Nothing here yet'], ['Add task']],
   ['EmptyState', { showAdd: true }, ['Nothing here yet', 'empty-add', 'Add task']],
-  ['TaskListHeader', { completed: 0, total: 1, prefs: { sort: 'priority', filter: 'waiting' } }, ['aria-label="Sort and filter"', 'sort-btn--active', 'Show completed']],
+  ['TaskListHeader', { completed: 0, total: 1, prefs: { sort: 'priority', filter: 'waiting' } }, ['aria-label="Sort and filter"', 'sort-btn--active']],
   ['ScheduledList', { todayStr: '2026-10-17', tasks: [{ id: 'a', title: 'Pay rent', scheduledDate: '2026-10-18', scheduledTime: '09:30' }, { id: 'b', title: 'Dentist', scheduledDate: '2026-10-25', scheduledTime: '' }] }, ['Scheduled', 'sched-count', '>2<', 'aria-expanded="false"']],
   ['TaskListHeader', { label: 'Monday', isToday: false, completed: 0, total: 2 }, ['Monday', '0/2'], ['Sort and filter', 'Show completed', 'Sounds']],
   ['DayTabs', { days: [{ day: 'Sat', date: '2026-10-17' }], selectedIndex: 0, scheduledCounts: { '2026-10-17': 2 } }, ['day-tab-dot', '2 scheduled', '>17<']],

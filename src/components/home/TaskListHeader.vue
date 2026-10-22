@@ -7,7 +7,7 @@
     <div class="header-actions">
       <div v-if="isToday" ref="sortWrap" class="sort-wrap">
         <button @click="open = !open" class="toggle-visibility sort-btn" :class="{ 'sort-btn--active': !isDefaultPrefs(prefs) }" :aria-expanded="open" aria-haspopup="true" aria-label="Sort and filter" title="Sort and filter">
-          <i class="fas fa-sort-amount-down"></i>
+          <i class="fas fa-list-ul"></i>
         </button>
         <div v-if="open" class="sort-menu" role="group" aria-label="Sort and filter tasks">
           <label class="sort-label">Sort by
@@ -26,10 +26,6 @@
       </div>
       <button v-if="isToday" @click="$emit('toggle-sound')" class="toggle-visibility" :aria-pressed="soundEnabled ? 'true' : 'false'" aria-label="Sounds" :title="soundEnabled ? 'Sounds on' : 'Sounds off'">
         <i :class="soundEnabled ? 'fas fa-volume-up' : 'fas fa-volume-mute'"></i>
-      </button>
-      <button v-if="isToday" @click="$emit('toggle-completed')" class="toggle-visibility toggle-visibility--text" :aria-pressed="showCompleted ? 'true' : 'false'" :title="showCompleted ? 'Hide completed' : 'Show completed'">
-        <i :class="showCompleted ? 'fas fa-eye' : 'fas fa-eye-slash'"></i>
-        <span>{{ showCompleted ? 'Hide completed' : 'Show completed' }}</span>
       </button>
     </div>
   </div>
