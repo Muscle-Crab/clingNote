@@ -39,12 +39,16 @@
 
 <script setup>
 import { ref, computed } from 'vue';
+import { useRoute } from 'vue-router';
 import { PLANS, DEFAULT_PLAN, fmt, planById } from '@/config/pricing';
 import { startCheckout } from '@/utils/checkout';
 import { auth } from '@/firebaseConfig';
 defineProps({ name: { type: String, default: 'there' } });
 defineEmits(['close']);
-const sel = ref(DEFAULT_PLAN); const busy = ref(false); const msg = ref('');
+const route = useRoute();
+const FEAT = { aiCoach: 'The AI coach', strictBoss: 'Strict Boss mode', calendarFeed: 'The calendar feed' };
+const sel = ref(DEFAULT_PLAN); const busy = ref(false);
+const msg = ref(route.query.checkout === 'cancel' ? 'Checkout canceled — no charge was made.' : FEAT[route.query.feature] ? `🔒 ${FEAT[route.query.feature]} is a Pro feature.` : '');
 const plan = computed(() => planById(sel.value));
 const ctaText = computed(() => busy.value ? 'One sec…' : plan.value.trialDays ? 'Try for $0.00' : `Continue — ${fmt(plan.value.price)}`);
 const fine = computed(() => { const p = plan.value;

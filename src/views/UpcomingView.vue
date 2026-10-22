@@ -75,13 +75,16 @@ import { auth } from '@/firebaseConfig';
 import { localDateStr } from '@/utils/streak';
 import { futureOf, groupByDate, formatScheduledDate, isTemplate, describeRecurrence, nextOccurrences, sundayOf, visibleFrom, removeScheduled, rescheduleEntry, WEEKDAYS, isValidDate } from '@/utils/scheduling';
 import { loadScheduled, mutateScheduled } from '@/composables/useScheduledTasks';
+import { useRouter as _useRouter } from 'vue-router';
+import { requirePro } from '@/composables/usePro';
 import { loadFeedToken, rotateFeedToken, revokeFeedToken, feedUrls } from '@/composables/useCalendarFeed';
 
 const uid = ref(null);
 const feed = ref(null);
 const feedBusy = ref(false);
 const copied = ref(false);
-const rotate = async () => { feedBusy.value = true; try { feed.value = feedUrls(await rotateFeedToken(uid.value)); } catch (e) { console.error(e); error.value = 'Could not create the feed link (rules?).'; } feedBusy.value = false; };
+const _proRouter = _useRouter();
+const rotate = async () => { if (!(await requirePro(_proRouter, 'calendarFeed'))) return; feedBusy.value = true; try { feed.value = feedUrls(await rotateFeedToken(uid.value)); } catch (e) { console.error(e); error.value = 'Could not create the feed link (rules?).'; } feedBusy.value = false; };
 const revoke = async () => { if (!confirm('Revoke the calendar link? Subscribed calendars will stop updating.')) return; try { await revokeFeedToken(uid.value); feed.value = null; } catch (e) { console.error(e); error.value = 'Could not revoke.'; } };
 const copyFeed = async () => { try { await navigator.clipboard.writeText(feed.value.https); copied.value = true; setTimeout(() => { copied.value = false; }, 1500); } catch (e) { /* select manually */ } };
 const list = ref([]);

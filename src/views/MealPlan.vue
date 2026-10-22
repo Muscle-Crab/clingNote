@@ -152,6 +152,9 @@
 
 <script setup>
 import { askAi } from '@/composables/useAi';
+import { useRouter as _useRouter } from 'vue-router';
+import { requirePro } from '@/composables/usePro';
+const _proRouter = _useRouter();
 import { ref, reactive, onMounted } from 'vue'
 import { db, auth} from '@/firebaseConfig.js'
 import { collection, addDoc, query, where, orderBy, limit, getDocs, doc, getDoc } from 'firebase/firestore'
@@ -209,6 +212,7 @@ function formatNutrient(val, key) {
 }
 
 async function analyzeImage() {
+  if (!(await requirePro(_proRouter, 'aiCoach'))) return;
 
 
   isLoading.value = true;
@@ -277,6 +281,7 @@ function toBase64(file) {
 }
 
 async function addManualFood() {
+  if (!(await requirePro(_proRouter, 'aiCoach'))) return;
   if (!manualFood.value.trim()) return
 
   const res = await askAi('meal-text', { food: manualFood.value })

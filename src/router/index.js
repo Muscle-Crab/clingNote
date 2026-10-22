@@ -33,7 +33,13 @@ const routes = [
   {
     path: '/paywall',
     name: 'paywall',
-    redirect: { path: '/onboarding', query: { step: 5 } }
+    redirect: (to) => ({ path: '/onboarding', query: { ...to.query, step: 5 } })
+  },
+  {
+    path: '/pro/success',
+    name: 'pro-success',
+    component: () => import('../views/pro/ProSuccess.vue'),
+    meta: { requiresAuth: true, bare: true }
   },
   {
     path: '/rankings',
@@ -174,7 +180,7 @@ router.beforeEach(async (to, from, next) => {
   }
 
   if (requiresAuth && !currentUser) {
-    return next('/login');
+    return next({ path: '/login', query: { redirect: to.fullPath } });
   }
 
   next();

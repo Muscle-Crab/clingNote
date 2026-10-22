@@ -222,6 +222,12 @@ import { buildRecap, reportDue, prevDay } from '@/utils/dailyReport';
 import { monthKey, prevMonthKey } from '@/utils/ranking';
 import { applyTaskToggle, evaluateStreak, localDateStr, dayDiff, ALLOWED_GAP_DAYS, DAILY_STREAK_MIN } from '@/utils/streak';
 import { askAi } from '@/composables/useAi';
+import { useRouter as _useRouter } from 'vue-router';
+import { requirePro, loadUserDoc } from '@/composables/usePro';
+import { canUse } from '@/utils/pro';
+const _proRouter = _useRouter();
+const strictAllowed = ref(true); // false for free users once ENFORCE_PAYWALL is on
+loadUserDoc().then((d) => { strictAllowed.value = canUse(d, 'strictBoss'); }).catch(() => {});
 import { scheduleNotification, sendNotificationToPlayer, linkPushUser } from '@/composables/useNotifications';
 import { speak } from '@/composables/useSpeech';
 import { completionPercentage, computeTimeStats, daysLeftInYearFrom, heroTitleFor } from '@/utils/dayStats';
@@ -1278,7 +1284,7 @@ const runDiscipline = async () => {
   } catch (e) { console.error('Discipline settle failed:', e); }
 };
 // ---- Strict Boss Mode ----
-const strictOn = computed(() => !!(disciplineSettings.value.enabled && disciplineSettings.value.strict));
+const strictOn = computed(() => !!(strictAllowed.value && disciplineSettings.value.enabled && disciplineSettings.value.strict));
 const bossMsg = ref(null);
 const idleNudge = ref(null);
 const verdictScreen = ref(null);
@@ -2565,13 +2571,15 @@ const workoutPreferences = reactive({
 });
 
 
-const openWorkoutModal = () => {
+const openWorkoutModal = async () => {
+  if (!(await requirePro(_proRouter, 'aiCoach'))) return;
   showWorkoutModal.value = true;
 };const closeWorkoutModal = () => {
   showWorkoutModal.value = false;
 };
 
 const generateWorkoutRoutine = async () => {
+  if (!(await requirePro(_proRouter, 'aiCoach'))) { closeWorkoutModal(); return; }
   closeWorkoutModal();
   isLoading.value = true;
 

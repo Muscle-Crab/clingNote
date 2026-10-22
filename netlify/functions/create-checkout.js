@@ -47,8 +47,8 @@ const handler = async (event, deps = {}) => {
     line_items: [{ price, quantity: 1 }],
     client_reference_id: uid,
     metadata: meta,
-    success_url: `${origin}/?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${origin}/?checkout=cancel`,
+    success_url: `${origin}/pro/success?plan=${body.planId}&session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${origin}/paywall?checkout=cancel`,
     allow_promotion_codes: true,
   };
   if (plan.mode === 'subscription') {

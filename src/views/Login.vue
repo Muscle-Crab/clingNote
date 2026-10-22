@@ -73,6 +73,8 @@ import { auth, db } from '@/firebaseConfig';
 import { useRouter, useRoute } from 'vue-router';
 
 const router = useRouter();
+const _rd = useRoute().query.redirect;
+const afterLogin = () => (typeof _rd === 'string' && _rd.startsWith('/') && !_rd.startsWith('//') ? _rd : '/');
 const email = ref(typeof useRoute().query.email === 'string' ? useRoute().query.email : '');
 const password = ref('');
 const isSubmitting = ref(false);
@@ -103,7 +105,7 @@ const loginUser = async () => {
     console.log('Successfully logged in user:', user.email);
     email.value = '';
     password.value = '';
-    router.push('/');
+    router.push(afterLogin());
   } catch (error) {
     console.error('Login failed:', error.message);
     errorMessage.value = "Invalid Credentials";
@@ -164,7 +166,7 @@ const signInWithGoogle = async () => {
       console.log("✅ Existing user, last login updated.");
     }
 
-    router.push('/');
+    router.push(afterLogin());
   } catch (error) {
     console.error('Google sign-in failed:', error.message);
     errorMessage.value = "Google sign-in failed.";

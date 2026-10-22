@@ -8,7 +8,7 @@
     <section class="disc-card">
       <label class="disc-row"><input type="checkbox" :checked="settings.enabled" @change="update({ enabled: $event.target.checked })" /> <strong>Discipline Mode</strong></label>
       <p class="muted">Finish {{ DAILY_STREAK_MIN }} tasks (not pending) by your deadline every day. Miss it: {{ MISSED_DEADLINE_PENALTY }} pts, streak dies, tier can drop.</p>
-      <label class="disc-row"><input type="checkbox" :checked="settings.strict" :disabled="!settings.enabled" @change="update({ strict: $event.target.checked })" /> <strong>Strict Boss</strong></label>
+      <label class="disc-row"><input type="checkbox" :checked="settings.strict" :disabled="!settings.enabled" @change="toggleStrict($event)" /> <strong>Strict Boss</strong></label>
       <p class="muted">The boss gives orders in the morning, calls you out at midday if fewer than 2 are done, warns you in the evening and gives a PASSED/FAILED verdict after the deadline. To skip or defer a task you have to say why. Each task gets one carry-over; after that it's overdue and blocks new non-urgent tasks. You get nudged after {{ IDLE_MINUTES }} min idle. Defaults: on, {{ DAILY_STREAK_MIN }} tasks, 9 PM.</p>
       <p v-if="dstate.lastVerdict" class="muted">Last verdict ({{ dstate.lastVerdict.date }}): <strong>{{ dstate.lastVerdict.passed ? 'PASSED' : 'FAILED' }}</strong>, grade {{ dstate.lastVerdict.grade }}</p>
       <label class="disc-row">Daily deadline <input type="time" :value="settings.deadline" @change="update({ deadline: $event.target.value })" /></label>
@@ -73,6 +73,8 @@
 
 <script setup>
 import { IDLE_MINUTES } from '@/utils/strictBoss';
+import { useRouter as _useRouter } from 'vue-router';
+import { requirePro } from '@/composables/usePro';
 import { ref, computed, onMounted } from 'vue';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth, db } from '@/firebaseConfig';
@@ -95,6 +97,10 @@ const update = async (patch) => {
   settings.value = { ...settings.value, ...patch };
   try { settings.value = await saveDisciplineSettings(uid.value, settings.value); saved.value = true; setTimeout(() => { saved.value = false; }, 1500); } catch (e) { console.error('Save discipline failed:', e); }
 };
+const _proRouter = _useRouter();
+const toggleStrict = async (ev) => { const on = ev.target.checked;
+  if (on && !(await requirePro(_proRouter, 'strictBoss'))) { ev.target.checked = false; return; }
+  update({ strict: on }); };
 const askNotify = async () => { try { await Notification.requestPermission(); } catch (e) { /* unsupported */ } canNotify.value = false; };
 const dstate = ref({});
 const best = ref(0);

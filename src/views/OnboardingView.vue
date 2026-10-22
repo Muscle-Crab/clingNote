@@ -91,7 +91,8 @@ async function next() {
   }
   go(step.value + 1);
 }
-async function finish() { await persist({ onboardingComplete: true, onboardingCompletedAt: new Date() }); router.push('/home'); }
+async function finish() { await persist({ onboardingComplete: true, onboardingCompletedAt: new Date() });
+  const from = String(route.query.from || ''); router.push(from.startsWith('/') && !from.startsWith('//') ? from : '/home'); }
 </script>
 
 <style scoped>
