@@ -33,7 +33,7 @@
                           :class="{ 'task-title--done': task.completed && isTodayTab }"
                           @click="$emit('open-detail')"
                       >
-                        {{ task.title.length > 28 ? task.title.slice(0, 28) + '…' : task.title }}
+                        {{ task.title }}
                       </span>
                       <span v-if="task.timerActive" class="task-timer-left">
                         ⏳  {{ taskTimeLeft(task, now) }}
@@ -114,9 +114,9 @@
                     </div>
 
                     <!-- Labels -->
-                    <div v-if="task.labels?.length" class="task-labels">
+                    <div v-if="labelList.length" class="task-labels">
                       <span
-                          v-for="(label, i) in task.labels"
+                          v-for="(label, i) in labelList"
                           :key="i"
                           @click="$emit('toggle-label', label)"
                           class="label-pill label-pill--sm"
@@ -194,6 +194,8 @@ const emit = defineEmits(['set-boss', 'toggle-expand', 'toggle-complete', 'open-
 
 const moreOpen = ref(false);
 const cat = computed(() => categoryOf(props.task));
+// labels may be stored as an array or a comma-separated string (older tasks); never iterate a string per character
+const labelList = computed(() => { const l = props.task.labels; return (Array.isArray(l) ? l : typeof l === 'string' ? l.split(',') : []).map((x) => String(x).trim()).filter(Boolean); });
 const whenText = computed(() => {
   const t = props.task; const est = estimateOf(t);
   if (est) return formatMinutes(est);

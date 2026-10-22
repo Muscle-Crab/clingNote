@@ -3305,4 +3305,24 @@ a.hero-menu-item { display: block; text-decoration: none; color: inherit; }
 .app-root .fab-voice.fab-voice.fab-voice { background: #0F1B38; border: 1px solid var(--c-border-strong); border-radius: 16px; color: #fff; }
 .app-root .fab-group.fab-group { background: linear-gradient(to top, var(--c-bg) 60%, transparent); }
 @media (min-width: 768px) { .app-root .hero-title.hero-title { font-size: 40px; line-height: 46px; } }
+
+/* v2 rows: right controls pinned top-right so details (chips, notes, labels) use the full card width */
+.app-root .task-card.task-card.task-card { position: relative; align-items: flex-start; padding: 12px 8px 12px 4px; }
+.app-root .task-left.task-left.task-left { align-self: flex-start; gap: 4px; }
+.app-root .task-avatar.task-avatar.task-avatar { width: 14px; height: 40px; }
+.app-root .task-right.task-right.task-right { position: absolute; top: 10px; right: 6px; margin: 0; }
+.app-root .task-body.task-body.task-body { padding-top: 0; }
+.app-root .task-body > .task-upnext, .app-root .task-body > .task-title-row, .app-root .task-body > .task-sub { padding-right: 84px; }
+.app-root .task-title.task-title.task-title { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word; line-height: 21px; }
+.app-root .task-title-row.task-title-row { flex-wrap: wrap; row-gap: 2px; }
+.app-root .task-body > .task-chips.task-chips { flex: 1 1 100%; flex-wrap: wrap; justify-content: flex-start; }
+.app-root .task-body > .task-meta-row { flex: 0 0 auto; }
+.app-root .task-note-preview, .app-root .task-next, .app-root .task-reminder { font-size: 12px; color: var(--c-text-2); }
+.app-root .task-labels.task-labels { display: flex; flex-wrap: wrap; gap: 4px; }
+@media (max-width: 400px) {
+  .app-root .task-cat { width: 34px; height: 34px; font-size: 15px; border-radius: 10px; }
+  .app-root .task-check.task-check.task-check { width: 30px; height: 34px; font-size: 22px; }
+  .app-root .task-more.task-more.task-more { width: 28px; }
+  .app-root .task-body > .task-upnext, .app-root .task-body > .task-title-row, .app-root .task-body > .task-sub { padding-right: 76px; }
+}
 </style>
