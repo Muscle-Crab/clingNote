@@ -17,7 +17,11 @@
         <p class="text-sm font-medium text-gray-600">{{ userData.gender }}</p>
         <p class="text-sm font-medium text-gray-600">{{ formatDOB(userData.dob) }}</p>
         <p v-if="isOwn" class="text-sm font-medium text-gray-600 mt-1">Plan: {{ userIsPro ? (userData.plan || 'Pro') : 'Free' }}
-          <router-link v-if="!userIsPro" to="/paywall" class="text-blue-600 ml-1">Upgrade</router-link></p>
+        </p>
+        <router-link v-if="isOwn && !userIsPro" to="/paywall" data-test="upgrade-pro"
+          class="mt-3 block w-full text-center bg-gradient-to-r from-amber-500 to-orange-600 hover:opacity-90 text-white font-bold py-2 px-4 rounded">
+          Upgrade to Pro
+        </router-link>
         <button v-if="isOwn" @click="editMode = true" class="mt-4 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
           Edit
         </button>
@@ -44,8 +48,11 @@
     <div v-else-if="notFound" class="text-center text-gray-500">
       This profile isn't available.
     </div>
-    <div v-else class="text-center text-gray-500">
+    <div v-else-if="loading" class="text-center text-gray-500">
       Loading...
+    </div>
+    <div v-else class="text-center text-gray-500">
+      Couldn't load this profile. <button @click="load" class="text-blue-600 underline">Retry</button>
     </div>
   </div>
 </template>
@@ -68,35 +75,51 @@ const isOwn = ref(false);
 const notFound = ref(false);
 const userIsPro = computed(() => isPro(userData.value));
 
+const loading = ref(true);
+// Never let a hung network/auth call keep the page on "Loading..." forever.
+const withTimeout = (pr, ms, label) => Promise.race([pr, new Promise((_, rej) => setTimeout(() => rej(new Error(label + ' timed out')), ms))]);
+// Fallback built from the auth user so the owner always sees something even if Firestore fails.
+const fromAuth = (u) => ({ id: u.uid, email: u.email || '', name: u.displayName || (u.email || '').split('@')[0] || 'You' });
+
 // Fetch user data from Firestore
 const fetchUserData = async () => {
+  const targetId = route.currentRoute.value.params.userId;
+  const user = auth.currentUser;
+  const own = !!user && user.uid === targetId;
+  isOwn.value = own;
   try {
-    const targetId = route.currentRoute.value.params.userId;
-    const own = !!auth.currentUser && auth.currentUser.uid === targetId;
-    isOwn.value = own;
-    const docRef = doc(db, own ? 'users' : 'publicProfiles', targetId); // other users: public fields only
-    const docSnap = await getDoc(docRef);
-
+    const docSnap = await withTimeout(getDoc(doc(db, own ? 'users' : 'publicProfiles', targetId)), 10000, 'getDoc');
     if (docSnap.exists()) {
-      userData.value = docSnap.data();
-      // Prepopulate editedUserData with userData when entering edit mode
-      editedUserData.value = { ...userData.value };
+      userData.value = own ? { ...fromAuth(user), ...docSnap.data() } : docSnap.data();
     } else if (own) {
-      // Older accounts may have no users/{uid} doc yet: create a minimal one instead of hanging on Loading...
-      userData.value = await ensureUserDoc(auth.currentUser);
-      editedUserData.value = { ...userData.value };
+      // Older accounts may have no users/{uid} doc: create a minimal one (no billing fields), but don't block on it.
+      userData.value = fromAuth(user);
+      ensureUserDoc(user).then((d) => { if (d) userData.value = { ...userData.value, ...d }; }).catch((e) => console.warn('ensureUserDoc failed:', e.message));
     } else {
       notFound.value = true;
     }
   } catch (error) {
     console.error('Error fetching user data:', error.message);
-    notFound.value = true;
+    if (own) userData.value = fromAuth(user); else notFound.value = true;
   }
+  if (userData.value) editedUserData.value = { ...userData.value };
 };
 
 // Wait for auth to settle (refresh/direct URL) and refetch when :userId changes (component is reused).
-const authReady = () => new Promise(res => { const u = onAuthStateChanged(auth, x => { u(); res(x); }); });
-const load = async () => { notFound.value = false; userData.value = null; await authReady(); await fetchUserData(); };
+const authReady = () => (auth.authStateReady ? auth.authStateReady() : new Promise(res => { const u = onAuthStateChanged(auth, () => { u(); res(); }); }));
+let seq = 0;
+const load = async () => {
+  const my = ++seq;
+  loading.value = true; notFound.value = false; userData.value = null;
+  try {
+    await withTimeout(authReady(), 8000, 'auth').catch((e) => console.warn(e.message));
+    if (my === seq) await fetchUserData();
+  } catch (e) {
+    console.error('Profile load failed:', e?.message);
+  } finally {
+    if (my === seq) loading.value = false;
+  }
+};
 onMounted(load);
 watch(() => route.currentRoute.value.params.userId, (n, o) => { if (n && n !== o) load(); });
 

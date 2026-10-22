@@ -6,7 +6,7 @@ export async function ensureUserDoc(user) {
   const snap = await getDoc(ref);
   if (snap.exists()) return snap.data();
   const base = { id: user.uid, email: user.email || '', name: user.displayName || (user.email || '').split('@')[0] || 'You',
-    isPro: false, plan: 'free', onboardingComplete: false, createdAt: new Date() };
+    onboardingComplete: false, createdAt: new Date() }; // billing fields (isPro/plan/credits/hasPaid) are server-only
   await setDoc(ref, base, { merge: true });
   return base;
 }
