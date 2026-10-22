@@ -528,6 +528,7 @@ function speakAlerts() {
   window.speechSynthesis.speak(utterance);
 }
 const handleAnalyzeClick = async () => {
+  if (!(await requirePro(_proRouter, 'aiCoach'))) return;
   if (credits.value <= 0) {
     await redirectToCheckout();
     return;
