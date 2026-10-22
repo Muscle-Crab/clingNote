@@ -90,8 +90,8 @@
 
 
       <AddTaskModal v-if="modalOpen" :new-task="newTask" v-model:repeat-mode="repeatMode" v-model:show-advanced="showAdvanced"
-                    :days="days" :selected-day-routine="selectedDayRoutine" :error="error" :cap-warning="capWarning"
-                    @close="closeModal" @submit="addNewTask" @add-anyway="addAnyway" />
+                    :days="days" :selected-day-routine="selectedDayRoutine" :error="error" :cap-warning="capWarning" :limit-hit="limitHit"
+                    @close="closeModal" @submit="addNewTask" @add-anyway="addAnyway" @upgrade="goUpgradeForLimit" />
 
 
       <YouTubeModal v-if="youtubeModalOpen" v-model:url="youtubeInput" @close="closeYouTubeModal" @save="saveYouTubeLink" />
@@ -186,7 +186,7 @@
 
         </div>
       </section>
-      <StartDayPrompt v-else-if="isViewingToday" @start="startDay" />
+      <StartDayPrompt v-else-if="isViewingToday" :done="!!daySession.ended" :ended-at="daySession.endedAtText" @start="startDay" />
 
       <TimeStatsBar v-if="isViewingToday" :stats="timeStats" :ended="!!daySession.ended" :suggest="suggestShutdown && !shutdownDismissed" @wrap-up="openShutdown" />
 
@@ -224,8 +224,20 @@ import { applyTaskToggle, evaluateStreak, localDateStr, dayDiff, ALLOWED_GAP_DAY
 import { askAi } from '@/composables/useAi';
 import { useRouter as _useRouter } from 'vue-router';
 import { requirePro, loadUserDoc } from '@/composables/usePro';
+import { isPro as isProUser } from '@/utils/pro';
+import { checkDailyLimit } from '@/utils/taskLimits';
 import { canUse } from '@/utils/pro';
 const _proRouter = _useRouter();
+// Daily task limit (config/pricing.js TASK_LIMITS): free 3/day, Pro 5/day
+const limitHit = ref(null); // { limit, count, pro, day } when the last add was blocked
+const goUpgradeForLimit = () => { modalOpen.value = false; _proRouter.push({ path: '/paywall', query: { feature: 'taskLimit', from: '/home' } }); };
+const dailyLimitGate = async (dayKey) => {
+  const [ud, ...snaps] = await Promise.all([loadUserDoc(true), ...days.map((d) => getDoc(doc(db, 'weeklyRoutines', `${userId.value}_${d.day}`)))]);
+  const pro = isProUser(ud);
+  const res = checkDailyLimit(pro, dayKey, snaps.map((x) => (x.exists() ? x.data().tasks || [] : [])), scheduledList.value || []);
+  limitHit.value = res.ok ? null : { ...res, pro, day: dayKey };
+  return res.ok;
+};
 const strictAllowed = ref(true); // false for free users once ENFORCE_PAYWALL is on
 loadUserDoc().then((d) => { strictAllowed.value = canUse(d, 'strictBoss'); }).catch(() => {});
 import { scheduleNotification, sendNotificationToPlayer, linkPushUser } from '@/composables/useNotifications';
@@ -1563,6 +1575,15 @@ const addNewTask = async () => {
     return false;
   }
 
+  limitHit.value = null;
+  try {
+    if (!(await dailyLimitGate(newTask.value.scheduleDate || getTodayId()))) {
+      const l = limitHit.value;
+      error.value = l.pro ? `Daily limit reached: ${l.limit} tasks per day on Pro.` : `Daily limit reached: free accounts can add ${l.limit} tasks per day.`;
+      return false;
+    }
+  } catch (e) { console.error('limit check', e); error.value = 'Could not check your daily task limit, try again.'; return false; }
+
   // Scheduled-for-later tasks go to their own doc and do not count toward today's cap.
   if (newTask.value.scheduleDate) { await submitScheduledTask(); return true; }
 
@@ -2691,7 +2712,7 @@ const isCapBlocked = () => {
   return false;
 };
 const addAnyway = () => { capOverride.value = true; capWarning.value = false; addNewTask(); };
-watch(modalOpen, (open) => { if (!open) { capWarning.value = false; capOverride.value = false; } });
+watch(modalOpen, (open) => { if (!open) { capWarning.value = false; capOverride.value = false; limitHit.value = null; } });
 
 // Load summary + schedule
 const todayLoad = computed(() => loadSummary(selectedDayRoutine.value));
@@ -2758,6 +2779,11 @@ const finishShutdown = async (carry) => {
     shutdownOpen.value = false;
     shutdownDismissed.value = true;
     if (daySession.value.started && !daySession.value.ended) await endDay(); // existing End Day logic
+    else if (!daySession.value.ended && userId.value) { // wrapped up without pressing Start Day: still mark today done
+      const now = new Date();
+      await setDoc(doc(db, 'userSettings', userId.value), { daySessions: { [getTodayId()]: { ended: true, endTime: serverTimestamp(), updatedAt: serverTimestamp() } } }, { merge: true });
+      daySession.value = { ...daySession.value, ended: true, endTime: now, endedAtText: formatSessionTime(now) };
+    }
     await fetchSelectedDayRoutine();
   } catch (e) {
     console.error('Shutdown failed:', e);

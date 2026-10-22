@@ -10,6 +10,7 @@ export const askAi = async (task, input) => {
     body: JSON.stringify({ task, input }),
   });
   const data = await r.json().catch(() => ({}));
+  if (r.status === 402 && data.error === 'Pro required' && typeof window !== 'undefined') window.location.assign('/paywall?feature=aiCoach');
   if (!r.ok) throw Object.assign(new Error(data.error || `AI failed (${r.status})`), { status: r.status });
   return data; // { content, creditsLeft? }
 };

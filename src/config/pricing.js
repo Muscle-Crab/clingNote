@@ -9,3 +9,7 @@ export const DEFAULT_PLAN = 'yearly';
 export const CURRENCY = 'USD';
 export const fmt = (n) => `$${n.toFixed(2)}`;
 export const planById = (id) => PLANS.find((p) => p.id === id);
+
+// Daily task-creation limits (tasks created or scheduled for one calendar day). Change here only.
+export const TASK_LIMITS = { free: 3, pro: 5 };
+export const dailyTaskLimit = (pro) => (pro ? TASK_LIMITS.pro : TASK_LIMITS.free);

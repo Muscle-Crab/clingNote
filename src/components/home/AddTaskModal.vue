@@ -116,7 +116,14 @@
             </div>
           </transition>
 
-          <div v-if="error" class="error-msg">{{ error }}</div>
+          <div v-if="error && !limitHit" class="error-msg">{{ error }}</div>
+          <div v-if="limitHit" class="cap-warning limit-hit" role="alert" data-test="task-limit">
+            <strong>You've hit today's limit of {{ limitHit.limit }} tasks.</strong>
+            <template v-if="limitHit.pro"> That's the Pro maximum for one day. Finish or move something first.</template>
+            <template v-else> Free accounts get {{ limitHit.limit }} tasks per day. Pro raises it to {{ proLimit }}.
+              <button type="button" class="btn-secondary cap-override" data-test="limit-upgrade" @click="$emit('upgrade')">Upgrade to Pro</button>
+            </template>
+          </div>
           <div v-if="capWarning" class="cap-warning" role="alert">
             <strong>You already have {{ ACTIVE_CAP }} active tasks today.</strong>
             A shorter list gets finished more often. Move something, or add this one anyway.
@@ -137,6 +144,7 @@ import { ref, onMounted, nextTick } from 'vue';
 import { ACTIVE_CAP, STATUSES } from '@/utils/taskPlanning';
 import { WEEKDAYS } from '@/utils/scheduling';
 import { getOrdinalSuffix } from '@/utils/dateTime';
+import { TASK_LIMITS } from '@/config/pricing';
 
 // newTask is the reactive form object owned by HomeView; the form edits it in place via v-model.
 defineProps({
@@ -145,11 +153,13 @@ defineProps({
   selectedDayRoutine: { type: Array, default: () => [] },
   error: { type: String, default: '' },
   capWarning: { type: Boolean, default: false },
+  limitHit: { type: Object, default: null },
 });
+const proLimit = TASK_LIMITS.pro;
 const repeatMode = defineModel('repeatMode');
 const showAdvanced = defineModel('showAdvanced');
 const tomorrow = (() => { const d = new Date(); d.setDate(d.getDate() + 1); return d.toLocaleDateString('en-CA'); })();
-defineEmits(['close', 'submit', 'add-anyway']);
+defineEmits(['close', 'submit', 'add-anyway', 'upgrade']);
 const titleInput = ref(null);
 onMounted(() => nextTick(() => titleInput.value && titleInput.value.focus()));
 </script>
