@@ -260,7 +260,7 @@ import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'fire
 import data from '@/data.json';
 import draggable from "vuedraggable";
 import {db} from '@/firebaseConfig'; // Assuming you have imported the Firebase setup file and exported the db instance
-import { doc, setDoc, serverTimestamp, getDoc, updateDoc,getFirestore} from 'firebase/firestore';
+import { doc, setDoc, serverTimestamp, getDoc, updateDoc, deleteDoc, getFirestore} from 'firebase/firestore';
 const modalOpen = ref(false);
 import { deleteObject } from "firebase/storage";
 
