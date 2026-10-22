@@ -208,7 +208,7 @@ onMounted(() => {
   body.sidebar-open #app { padding-left: 16rem; }
 }
 /* Shared shell: slim dark top bar + dark sidebar matching the home view palette */
-.app-topbar { background: #070D1C; border-bottom: 1px solid #121C33; }
+.app-topbar { background: #070D1C; border-bottom: 1px solid #121C33; padding-top: env(safe-area-inset-top); }
 .app-topbar-inner { max-width: 1200px; margin: 0 auto; height: 56px; padding: 0 16px; display: flex; align-items: center; justify-content: space-between; }
 .app-topbar-inner > a { margin-left: auto; }
 .app-avatar { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; font-size: 14px; font-weight: 700; letter-spacing: .02em; color: #fff; background: rgba(12,22,48,.7); border: 1.5px solid #3D6FD8; }

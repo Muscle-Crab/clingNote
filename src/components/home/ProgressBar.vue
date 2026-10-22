@@ -19,7 +19,7 @@
           </div>
         </div>
       </div>
-      <div class="plant" aria-hidden="true"><span class="plant-icon">{{ current ? current.icon : '🌱' }}</span></div>
+      <div class="progress-scene" aria-hidden="true"></div>
     </div>
     <div class="progress-foot">
       <p class="foot-item" :class="{ 'foot-item--risk': streakStatus === 'at-risk' }" :title="streakStatus === 'at-risk' ? `Streak at risk: ${streakProgress}/${streakMin} today` : `Complete ${streakMin} tasks a day to keep it`">
@@ -62,6 +62,8 @@ const current = computed(() => {
 .progress-copy { flex: 1; min-width: 0; padding-left: 16px; border-left: 1px solid var(--c-border); position: relative; z-index: 1; }
 .progress-label { margin: 0; font-size: 18px; font-weight: 700; color: var(--c-text); }
 .progress-sub { margin: 2px 0 0; font-size: var(--fs-md); color: var(--c-text-2); }
+.progress-scene { position: absolute; z-index: 0; top: 0; right: 0; bottom: 0; width: 62%; background: url('~@/assets/progress-sprout.jpg') 78% 60% / cover no-repeat; -webkit-mask-image: linear-gradient(90deg, transparent, #000 45%); mask-image: linear-gradient(90deg, transparent, #000 45%); opacity: .95; }
+.progress-top > .progress-ring, .progress-top > .progress-copy { position: relative; z-index: 1; }
 .plant { position: absolute; right: 12px; top: 8px; width: 96px; height: 64px; display: flex; align-items: flex-end; justify-content: center; border-radius: 50% 50% 0 0; background: radial-gradient(60% 50% at 50% 100%, rgba(61,220,151,.22), transparent 70%); }
 .plant-icon { font-size: 40px; line-height: 1; filter: drop-shadow(0 4px 10px rgba(61,220,151,.35)); }
 .milestone-row { position: relative; display: flex; justify-content: flex-end; gap: 10px; margin-top: 14px; }
@@ -77,5 +79,7 @@ const current = computed(() => {
 .foot-icon { font-size: 18px; }
 .foot-item--pts strong { color: #F5C542; }
 .coin { width: 22px; height: 22px; border-radius: 50%; display: inline-grid; place-items: center; font-size: 12px; color: #7A4B00; background: radial-gradient(circle at 35% 30%, #FFE08A, #E0A21B); }
-@media (max-width: 400px) { .plant { width: 64px; } .plant-icon { font-size: 30px; } .progress-ring { width: 80px; height: 80px; } }
+@media (max-width: 400px) { .progress-scene { position: absolute; z-index: 0; top: 0; right: 0; bottom: 0; width: 62%; background: url('~@/assets/progress-sprout.jpg') 78% 60% / cover no-repeat; -webkit-mask-image: linear-gradient(90deg, transparent, #000 45%); mask-image: linear-gradient(90deg, transparent, #000 45%); opacity: .95; }
+.progress-top > .progress-ring, .progress-top > .progress-copy { position: relative; z-index: 1; }
+.plant { width: 64px; } .plant-icon { font-size: 30px; } .progress-ring { width: 80px; height: 80px; } }
 </style>

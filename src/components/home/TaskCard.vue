@@ -58,9 +58,9 @@
                     </div>
 
                     <!-- Planning chips -->
-                    <div v-if="estimateOf(task) || task.startTime || task.dueDate || (task.priority && task.priority !== 'low') || (task.status && task.status !== 'todo' && task.status !== 'pending')" class="task-chips">
+                    <div v-if="estimateOf(task) || task.startTime || task.dueDate || (task.priority && task.priority !== 'low') || (task.status && !['todo', 'pending', 'active'].includes(task.status))" class="task-chips">
                       <span v-if="task.priority && task.priority !== 'low'" class="chip" :class="'chip--' + task.priority">{{ task.priority }}</span>
-                      <span v-if="task.status && task.status !== 'todo' && task.status !== 'pending'" class="chip">{{ task.status }}</span>
+                      <span v-if="task.status && !['todo', 'pending', 'active'].includes(task.status)" class="chip">{{ task.status }}</span>
                       <span v-if="task.scheduledFor" class="chip chip--due" :class="{ 'chip--overdue': task.scheduledFor < todayYmd }">{{ dueBadge(task, todayYmd) }}</span>
                       <span v-else-if="task.dueDate" class="chip">Due {{ task.dueDate }}</span>
                       <span v-if="false" class="chip">⏱ {{ formatMinutes(estimateOf(task)) }}</span>

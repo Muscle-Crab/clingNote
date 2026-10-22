@@ -24,17 +24,29 @@
             <h1 class="hero-title">{{ heroTitleParts.lead }}<span class="hero-accent">{{ heroTitleParts.accent }}</span></h1>
             <p class="hero-sub">{{ daysLeftInYear }} days left this year</p>
           </div>
-          <div class="hero-menu">
-            <button type="button" class="hero-menu-btn" aria-label="Menu" :aria-expanded="menuOpen ? 'true' : 'false'" @click="menuOpen = !menuOpen">
-              <i class="fas fa-bars"></i>
+          <div ref="heroMenuEl" class="hero-menu">
+            <button type="button" class="hero-menu-btn" :aria-label="noticeCount ? noticeCount + ' updates and day menu' : 'Day menu'" :aria-expanded="menuOpen ? 'true' : 'false'" @click="menuOpen = !menuOpen">
+              <i class="fas fa-bell" aria-hidden="true"></i>
+              <span v-if="noticeCount" class="hero-badge" :class="{ 'hero-badge--alert': disciplineWarning === '30m' || bossLines.some((l) => l.kind === 'evening' || l.kind === 'watching') }">{{ noticeCount }}</span>
             </button>
-            <div v-if="menuOpen" class="hero-menu-pop" @click="menuOpen = false">
+            <div v-if="menuOpen" class="hero-menu-pop" role="dialog" aria-label="Updates and day menu">
+              <div v-if="noticeCount || isViewingToday" class="hero-notices">
+                <div v-if="disciplineWarning && !(strictOn && !bossHidden && (bossLines.length || verdictScreen))" class="disc-warning home-notice" :class="'disc-warning--' + disciplineWarning" role="alert">
+        ⚠️ {{ disciplineWarning === '30m' ? '30 minutes' : '2 hours' }} until your {{ disciplineSettings.deadline }} deadline — {{ streakProgress }}/{{ DAILY_STREAK_MIN }} done
+      </div>
+                <BossPanel v-if="strictOn && !bossHidden && (bossLines.length || verdictScreen)" class="home-notice" :lines="bossLines" :verdict="verdictScreen"
+                 @dismiss="bossHidden = true" @dismiss-line="idleNudge = null" @ack-verdict="dismissVerdict" />
+                <MorningReport v-if="morningRecap && isViewingToday" class="home-notice" :recap="morningRecap" @close="morningRecap = null" />
+                <LoadSummary v-if="isViewingToday" :load="todayLoad" :expanded="showSchedule" @toggle="showSchedule = !showSchedule" />
+              </div>
+              <div class="hero-menu-items" @click="menuOpen = false">
               <button type="button" class="hero-menu-item" @click="openShutdown">🌙 Shutdown day</button>
               <button v-if="daySession.started && !daySession.ended" type="button" class="hero-menu-item" @click="endDay">■ End day<span v-if="daySession.startedAtText" class="hero-menu-meta"> · started {{ daySession.startedAtText }}</span></button>
               <router-link to="/upcoming" class="hero-menu-item">📅 Upcoming</router-link>
               <router-link to="/rankings" class="hero-menu-item">🏆 Rankings</router-link>
               <router-link to="/discipline" class="hero-menu-item">⚔️ Discipline Mode</router-link>
               <button type="button" class="hero-menu-item" @click="showSchedule = !showSchedule">🗓 {{ showSchedule ? 'Hide' : 'Show' }} schedule</button>
+              </div>
             </div>
           </div>
         </header>
@@ -50,11 +62,6 @@
                       @start="openShutdown" @dismiss="shutdownDismissed = true" @close="shutdownOpen = false" @finish="finishShutdown" />
 
 
-      <div v-if="disciplineWarning" class="disc-warning home-notice" :class="'disc-warning--' + disciplineWarning" role="alert">
-        ⚠️ {{ disciplineWarning === '30m' ? '30 minutes' : '2 hours' }} until your {{ disciplineSettings.deadline }} deadline — {{ streakProgress }}/{{ DAILY_STREAK_MIN }} done
-      </div>
-      <BossPanel v-if="strictOn && !bossHidden && (bossLines.length || verdictScreen)" class="home-notice" :lines="bossLines" :verdict="verdictScreen"
-                 @dismiss="bossHidden = true" @dismiss-line="idleNudge = null" @ack-verdict="dismissVerdict" />
       <DramaOverlay v-if="lossScreen" variant="lost" title="Streak lost" button="I'll do better"
                     :subtitle="`You missed your deadline. ${lossScreen.lostStreak ? lossScreen.lostStreak + '-day streak gone. ' : ''}${lossScreen.penalty} pts.`" @close="dismissLoss" />
 
@@ -66,7 +73,6 @@
       <DramaOverlay v-if="rewardScreen && !levelUp" variant="reward" :title="`${rewardScreen.days}-day streak!`" button="Nice"
                     :subtitle="`Reward unlocked: ${rewardScreen.label}`" @close="rewardScreen = null" />
 
-      <MorningReport v-if="morningRecap && isViewingToday" class="home-notice" :recap="morningRecap" @close="morningRecap = null" />
 
 
       <WorkoutModal v-if="showWorkoutModal" :preferences="workoutPreferences" @close="closeWorkoutModal" @generate="generateWorkoutRoutine" />
@@ -119,7 +125,6 @@
                           :sound-enabled="soundEnabled" :show-completed="showCompleted" v-model:prefs="viewPrefs" @toggle-sound="toggleSound" @toggle-completed="showCompleted = !showCompleted" />
 
 
-          <LoadSummary v-if="isViewingToday" :load="todayLoad" :expanded="showSchedule" @toggle="showSchedule = !showSchedule" />
 
           <TimeBlockSchedule v-if="showSchedule" :schedule="schedule" />
 
@@ -801,7 +806,7 @@ const currentDate = computed(() => {
   if (selectedDayIndex.value === -1) return getCurrentDate();
   const d = new Date();
   d.setDate(d.getDate() + (selectedDayIndex.value - d.getDay()));
-  return new Intl.DateTimeFormat('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }).format(d);
+  return new Intl.DateTimeFormat('en-US', { weekday: 'long', month: 'long', day: 'numeric' }).format(d);
 });
 
 let weeklyRoutines = [];
@@ -2133,7 +2138,19 @@ onMounted(() => {
 
   checkStreakOnCompletion();
 });
-const menuOpen = ref(false);
+const menuOpen = ref(false); // closed by default; closes on outside tap / Escape / route change
+const heroMenuEl = ref(null);
+const noticeCount = computed(() => {
+  const boss = strictOn.value && !bossHidden.value && (bossLines.value.length || verdictScreen.value);
+  return (boss ? 1 : 0) + (disciplineWarning.value && !boss ? 1 : 0) + (morningRecap.value && isViewingToday.value ? 1 : 0);
+});
+// Home overlays the shared top bar on the header illustration (see .home-v2 rules)
+onMounted(() => document.body.classList.add('home-v2'));
+onBeforeUnmount(() => document.body.classList.remove('home-v2'));
+const onMenuOutside = (e) => { if (menuOpen.value && heroMenuEl.value && !heroMenuEl.value.contains(e.target)) menuOpen.value = false; };
+const onMenuKey = (e) => { if (e.key === 'Escape') menuOpen.value = false; };
+onMounted(() => { document.addEventListener('pointerdown', onMenuOutside, true); document.addEventListener('keydown', onMenuKey); });
+onBeforeUnmount(() => { document.removeEventListener('pointerdown', onMenuOutside, true); document.removeEventListener('keydown', onMenuKey); });
 const milestones = ref([
   { label: '0%', percent: 0, position: 0, icon: '🌱' },      // Seed planted
   { label: '25%', percent: 25, position: 25, icon: '🌿' },   // Sprouting leaves
@@ -3228,7 +3245,7 @@ a.hero-menu-item { display: block; text-decoration: none; color: inherit; }
 .app-root .content-wrap.content-wrap { max-width: 560px; padding: 0 16px calc(140px + env(safe-area-inset-bottom)); }
 .app-root .calendar-section.calendar-section { position: relative; padding-top: 20px; }
 .app-root .hero-scene { position: absolute; z-index: 0; top: 0; left: -16px; right: -16px; height: 330px; pointer-events: none;
-  background: linear-gradient(180deg, rgba(7,13,28,.25), rgba(7,13,28,0) 40%, var(--c-bg) 96%), url('~@/assets/hero-forest.svg') center bottom / cover no-repeat; }
+  background: linear-gradient(180deg, rgba(7,13,28,.25), rgba(7,13,28,0) 40%, var(--c-bg) 96%), url('~@/assets/hero-forest.jpg') 72% 30% / cover no-repeat; }
 .app-root .calendar-section > :not(.hero-scene) { position: relative; z-index: 1; }
 @media (min-width: 600px) { .app-root .hero-scene { border-radius: 0 0 28px 28px; } }
 .app-root .hero.hero { padding: 4px 0 0; }
@@ -3325,4 +3342,76 @@ a.hero-menu-item { display: block; text-decoration: none; color: inherit; }
   .app-root .task-more.task-more.task-more { width: 28px; }
   .app-root .task-body > .task-upnext, .app-root .task-body > .task-title-row, .app-root .task-body > .task-sub { padding-right: 76px; }
 }
+
+/* Header menu must sit above the week strip / cards (they create their own stacking contexts) */
+.app-root .calendar-section > .hero.hero { z-index: 50; }
+.app-root .hero-menu-pop.hero-menu-pop { z-index: 1000; background: #13203F; border: 1px solid var(--c-border-strong); box-shadow: 0 16px 40px rgba(0,0,0,.65); backdrop-filter: none; }
+.app-root .hero-menu-item.hero-menu-item { color: var(--c-text); background: transparent; }
+.app-root .hero-menu-item.hero-menu-item:hover { background: #1A2A52; }
+/* Room for the fixed Add Task bar + iOS home indicator so the last rows / empty state stay visible */
+.app-root .content-wrap.content-wrap { padding-bottom: calc(170px + env(safe-area-inset-bottom)); }
+.app-root .fab-group.fab-group { padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
+
+/* ══ v3: pixel-close mockup layout ══ */
+body.home-v2 .app-topbar { position: absolute; top: 0; left: 0; right: 0; z-index: 40; background: transparent; border-bottom: 0; }
+@media (min-width: 768px) { body.home-v2.sidebar-open .app-topbar { left: 16rem; } }
+.app-root .calendar-section.calendar-section { padding-top: calc(60px + env(safe-area-inset-top)); }
+.app-root .hero-scene.hero-scene { top: 0; height: calc(360px + env(safe-area-inset-top)); left: -16px; right: -16px;
+  background: linear-gradient(180deg, rgba(7,13,28,.15), rgba(7,13,28,0) 35%, rgba(7,13,28,.55) 75%, var(--c-bg) 98%), url('~@/assets/hero-forest.jpg') 72% 30% / cover no-repeat; }
+.app-root .hero.hero { display: flex; align-items: flex-start; justify-content: space-between; padding: 0; }
+.app-root .hero-date.hero-date { margin: 0; font-size: 13px; letter-spacing: .16em; color: #5E9BFF; }
+.app-root .hero-title.hero-title { font-size: 36px; line-height: 42px; margin: 4px 0 2px; }
+.app-root .hero-sub.hero-sub { margin: 0; font-size: 16px; color: #B7C2DA; }
+.app-root .hero.hero { position: relative; }
+.app-root .hero-text { flex: 1 1 100%; min-width: 0; }
+.app-root .hero-menu.hero-menu { position: absolute; right: 0; top: 22px; }
+.app-root .hero-menu-btn.hero-menu-btn { width: 36px; height: 36px; border-radius: 50%; font-size: 14px; color: #C9D5F0; background: rgba(12,22,48,.55); border: 1px solid rgba(90,120,190,.35); box-shadow: none; position: relative; }
+.app-root .hero-badge { position: absolute; top: -4px; right: -4px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: #2F6FFF; color: #fff; font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; border: 2px solid #070D1C; }
+.app-root .hero-badge--alert { background: #EF4444; }
+.app-root .hero-menu-pop.hero-menu-pop { position: fixed; top: calc(64px + env(safe-area-inset-top)); left: 12px; right: 12px; max-width: 420px; margin-left: auto; max-height: 72vh; overflow-y: auto; padding: 10px; border-radius: 18px; }
+@media (min-width: 768px) { .app-root .hero-menu-pop.hero-menu-pop { position: absolute; top: 44px; left: auto; right: 0; width: 380px; } }
+.app-root .hero-notices { display: flex; flex-direction: column; gap: 8px; padding-bottom: 8px; margin-bottom: 6px; border-bottom: 1px solid var(--c-border); }
+.app-root .hero-notices:empty { display: none; }
+.app-root .hero-notices .home-notice.home-notice { margin: 0; }
+.app-root .hero-menu-items { display: flex; flex-direction: column; }
+/* week strip proportions */
+.app-root .day-tabs.day-tabs.day-tabs { margin: 18px 0 12px; padding: 5px; border-radius: 16px; }
+.app-root .day-tab.day-tab.day-tab { min-height: 62px; }
+.app-root .day-tab-name.day-tab-name { font-size: 12px; font-weight: 500; color: #A9B4CC; }
+.app-root .day-tab--selected .day-tab-name { color: #fff; }
+.app-root .day-tab-date.day-tab-date { font-size: 20px; font-weight: 700; color: #F2F5FC; margin-top: 2px; }
+/* progress card */
+.app-root .progress-section.progress-section.progress-section { border-radius: 16px; }
+.app-root .progress-top.progress-top { min-height: 118px; padding: 14px 14px 12px; }
+.app-root .progress-copy.progress-copy { align-self: stretch; display: flex; flex-direction: column; }
+.app-root .milestone-row.milestone-row { margin-top: auto; padding-top: 10px; }
+/* rows */
+.app-root .task-list-header.task-list-header { padding: 16px 0 10px; }
+.app-root .task-count-label.task-count-label { font-size: 30px; line-height: 34px; }
+.app-root .tasks-list.tasks-list > * + * { margin-top: 8px; }
+.app-root .task-card.task-card.task-card { min-height: 64px; padding: 10px 8px 10px 4px; border-radius: 14px; }
+.app-root .task-card--next.task-card--next.task-card--next { min-height: 84px; }
+.app-root .task-title.task-title.task-title { font-size: 16px; font-weight: 600; }
+.app-root .task-sub.task-sub { font-size: 14px; color: #A9B4CC; }
+
+/* v3 tightening to mockup proportions */
+.app-root .calendar-section.calendar-section { padding-top: calc(52px + env(safe-area-inset-top)); }
+.app-root .hero-title.hero-title { font-size: 34px; line-height: 38px; margin: 2px 0 2px; }
+.app-root .hero-sub.hero-sub { font-size: 15px; }
+.app-root .day-tabs.day-tabs.day-tabs { margin: 14px 0 10px; }
+.app-root .day-tab.day-tab.day-tab { min-height: 56px; }
+.app-root .day-tab-date.day-tab-date { font-size: 19px; }
+.app-root .progress-top.progress-top { min-height: 104px; padding: 12px 12px 10px; }
+.app-root .progress-ring.progress-ring { width: 84px; height: 84px; }
+.app-root .foot-item { padding: 10px 14px; }
+.app-root .task-list-header.task-list-header { padding: 12px 0 8px; }
+.app-root .task-count-label.task-count-label { font-size: 28px; line-height: 32px; }
+.app-root .toggle-visibility.toggle-visibility { width: 40px; min-width: 40px; height: 40px; min-height: 40px; }
+.app-root .task-card.task-card.task-card { min-height: 58px; padding: 8px 8px 8px 4px; }
+.app-root .task-card--next.task-card--next.task-card--next { min-height: 72px; }
+.app-root .tasks-list.tasks-list > * + * { margin-top: 7px; }
+.app-root .task-cat { width: 36px; height: 36px; font-size: 16px; border-radius: 10px; }
+.app-root .task-title.task-title.task-title { font-size: 15px; line-height: 20px; }
+.app-root .task-sub.task-sub { font-size: 13px; }
+.app-root .task-upnext { font-size: 10px; }
 </style>
