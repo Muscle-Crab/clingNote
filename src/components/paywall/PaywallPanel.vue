@@ -53,7 +53,7 @@ const fine = computed(() => { const p = plan.value;
 const demo = [{ t: 'Morning workout', d: true }, { t: 'Write project report', b: true }, { t: 'Reply to emails' }, { t: 'Read 20 pages', d: true }];
 async function buy() { busy.value = true; msg.value = '';
   const r = await startCheckout({ planId: sel.value, user: auth.currentUser }); busy.value = false;
-  if (!r.ok) msg.value = '💳 Payments coming soon — enjoy ClingNot free for now!'; }
+  if (!r.ok) msg.value = r.notConfigured ? '💳 Payments coming soon — enjoy ClingNot free for now!' : 'Checkout failed — please try again.'; }
 function restore() { msg.value = 'Nothing to restore yet — purchases will sync to your account automatically.'; }
 </script>
 
