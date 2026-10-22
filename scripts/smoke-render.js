@@ -272,7 +272,7 @@ pending.push((async () => {
   assert.ok(/recognition\.onend = \(\) => \{[\s\S]*?saveSpoken\(pendingVoiceText\)/.test(hv), 'onend saves transcript when no final flag arrived');
   assert.ok(/const ok = await addNewTask\(\)/.test(hv) && /if \(!ok\) \{ voiceError\.value = /.test(hv), 'failed voice add is surfaced, not silently dropped');
   const fn = hv.slice(hv.indexOf('const addNewTask = async'), hv.indexOf('const speakDailyReport'));
-  assert.ok(!/^\s*return;\s*$/m.test(fn) && /lastAddPersist = \(async/.test(fn) && /return false;/.test(fn), 'addNewTask reports success/failure (optimistic, rollback on error)');
+  assert.ok(!/^\s*return;\s*$/m.test(fn) && /lastAddPersist = trackWrite\(\(async/.test(fn) && /return false;/.test(fn), 'addNewTask reports success/failure (optimistic, rollback on error)');
   assert.ok(/event\.error === 'aborted'\) return/.test(hv), 'aborted (own stop) is not shown as an error');
   assert.ok(/recognition\.abort\(\)/.test(hv) && /InvalidStateError/.test(hv), 'start retries after InvalidStateError');
   assert.ok(/catch \(e\) \{\s*console\.error\('Voice task failed:'/.test(hv), 'voice save surfaces thrown errors');

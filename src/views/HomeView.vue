@@ -240,6 +240,12 @@ const fetchGateData = async () => {
   return gateCache;
 };
 let gatePrefetch = null;
+// Optimistic writes still in flight: warn before a reload/close would drop them.
+let pendingWrites = 0;
+const trackWrite = (pr) => { pendingWrites++; return Promise.resolve(pr).finally(() => { pendingWrites--; }); };
+const beforeUnloadGuard = (e) => { if (pendingWrites > 0) { e.preventDefault(); e.returnValue = ''; } };
+window.addEventListener('beforeunload', beforeUnloadGuard);
+onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnloadGuard));
 const prefetchGate = () => { if (userId.value) gatePrefetch = fetchGateData().catch(() => null); };
 const dailyLimitGate = async (dayKey) => {
   let g = gatePrefetch ? await gatePrefetch : null;
@@ -1677,7 +1683,7 @@ const addNewTask = async () => {
   capWarning.value = false; capOverride.value = false;
   closeModal();
   error.value = '';
-  lastAddPersist = (async () => {
+  lastAddPersist = trackWrite((async () => {
     try {
       await Promise.all(selectedDays.map((d) => mutateDay(d.day, (l) => (l.some((t) => taskKey(t) === key) ? l : insertAt(l, copyFor(d))))));
     } catch (e) {
@@ -1692,7 +1698,7 @@ const addNewTask = async () => {
     try { if (hadReminder) await scheduleNotification(task, task.reminder); } catch (e) { console.error(e); }
     fetchUserName(userId.value).then((n) => n && sendNotificationToPlayer(n, 'created')).catch(() => {});
     return true;
-  })();
+  })());
   return true;
 };
 let lastAddPersist = Promise.resolve(true);
@@ -1712,7 +1718,7 @@ const setTaskRepeat = async (task, dayNames) => {
   selectedDayRoutine.value = [...selectedDayRoutine.value];
   try {
     // one transaction over all 7 day docs: the series is updated atomically (no half-applied repeat after a reload)
-    await runTransaction(db, async (tx) => {
+    await trackWrite(runTransaction(db, async (tx) => {
       const refs = days.map((d) => doc(db, 'weeklyRoutines', `${userId.value}_${d.day}`));
       const snaps = await Promise.all(refs.map((r) => tx.get(r)));
       snaps.forEach((snap, i) => {
@@ -1729,7 +1735,7 @@ const setTaskRepeat = async (task, dayNames) => {
         }
         tx.set(refs[i], { tasks: next, updatedAt: serverTimestamp() }, { merge: true });
       });
-    });
+    }));
   } catch (e) {
     console.error('repeat', e); Object.assign(task, prev); selectedDayRoutine.value = [...selectedDayRoutine.value];
     alert('Could not update the repeat setting. Please try again.');
