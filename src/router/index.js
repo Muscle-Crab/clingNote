@@ -25,6 +25,17 @@ const routes = [
   },
 
   {
+    path: '/onboarding',
+    name: 'onboarding',
+    component: () => import('../views/OnboardingView.vue'),
+    meta: { requiresAuth: true, bare: true }
+  },
+  {
+    path: '/paywall',
+    name: 'paywall',
+    redirect: { path: '/onboarding', query: { step: 5 } }
+  },
+  {
     path: '/rankings',
     name: 'rankings',
     component: () => import('../views/RankingsView.vue'),

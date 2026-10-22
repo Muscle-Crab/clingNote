@@ -142,7 +142,12 @@ const signInWithGoogle = async () => {
         lastLogin: new Date(),
         credits: 15,
         hasPaid: true,
+        isPro: false,
+        plan: 'free',
+        onboardingComplete: false,
       });
+      router.push('/onboarding');
+      return;
       console.log("🎉 New user created with credits and hasPaid set.");
     } else {
       // Returning user — update last login only

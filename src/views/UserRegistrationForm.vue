@@ -133,6 +133,9 @@ const registerUser = async () => {
       gender: gender.value,
       credits: 15,
       hasPaid: false,
+      isPro: false,
+      plan: 'free',
+      onboardingComplete: false,
       avatarURL,
     };
 
@@ -147,7 +150,7 @@ const registerUser = async () => {
     avatar.value = null;
     avatarPreview.value = null;
 
-    router.push('/');
+    router.push('/onboarding');
   } catch (error) {
     errorMessage.value = getFriendlyErrorMessage(error);
   } finally {

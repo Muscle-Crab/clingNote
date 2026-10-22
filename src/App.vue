@@ -1,6 +1,6 @@
 <template>
   <div class="app-shell" :class="{ 'app-shell--home': isHome }">
-    <navi/>
+    <navi v-if="!route.meta.bare"/>
     <SubpageHero v-if="hero" :title="hero.title" :kicker="hero.kicker" :back="hero.back !== false" />
     <router-view></router-view>
   </div>
