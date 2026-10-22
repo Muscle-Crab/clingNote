@@ -6,20 +6,23 @@
           <circle cx="50" cy="50" r="42" class="ring-track" />
           <circle cx="50" cy="50" r="42" class="ring-fill" :stroke-dasharray="C" :stroke-dashoffset="C * (1 - pct / 100)" />
         </svg>
-        <span class="progress-pct">{{ pct }}%</span>
+        <span class="progress-pct" :style="pct >= 100 ? { fontSize: '20px' } : null">{{ pct }}%</span>
       </div>
       <div class="progress-copy">
         <p class="progress-label">Daily progress</p>
         <p v-if="total !== null" class="progress-sub">{{ done }} of {{ total }} tasks complete</p>
         <div class="milestone-row">
           <div v-for="(milestone, index) in milestones" :key="index" class="milestone-dot"
-               :class="{ 'milestone-dot--reached': percentage >= milestone.percent, 'milestone-dot--current': milestone === current }"
+               :class="{ 'milestone-dot--reached': percentage >= milestone.percent && milestone !== current, 'milestone-dot--current': milestone === current, 'milestone-dot--future': percentage < milestone.percent }"
                :title="milestone.icon + ' ' + milestone.percent + '%'">
             <span class="milestone-icon">{{ milestone.icon }}</span>
           </div>
         </div>
       </div>
-      <div class="progress-scene" aria-hidden="true"></div>
+      <div class="progress-scene" aria-hidden="true">
+        <!-- one layer per milestone stage, all in the DOM (so they preload); the current one fades in -->
+        <div v-for="(img, i) in STAGE_IMAGES" :key="i" class="scene-layer" :class="{ 'scene-layer--on': i === stageIndex }" :style="{ backgroundImage: `url(${img})` }"></div>
+      </div>
     </div>
     <div class="progress-foot">
       <p class="foot-item" :class="{ 'foot-item--risk': streakStatus === 'at-risk' }" :title="streakStatus === 'at-risk' ? `Streak at risk: ${streakProgress}/${streakMin} today` : `Complete ${streakMin} tasks a day to keep it`">
@@ -32,6 +35,11 @@
 
 <script setup>
 import { computed } from 'vue';
+import stage0 from '@/assets/stages/stage-0-sprout.jpg';
+import stage1 from '@/assets/stages/stage-1-leafy.jpg';
+import stage2 from '@/assets/stages/stage-2-tree.jpg';
+import stage3 from '@/assets/stages/stage-3-pine.jpg';
+import stage4 from '@/assets/stages/stage-4-peak.jpg';
 const props = defineProps({
   percentage: { type: Number, default: 0 },
   milestones: { type: Array, required: true },
@@ -44,7 +52,10 @@ const props = defineProps({
   points: { type: Number, default: 0 },
 });
 const C = 2 * Math.PI * 42;
+// Scene art per stage, same order as the milestone icons: 🌱 sprout, 🌿 leafy plant, 🌳 tree, 🌲 pine, 🏔️ peak
+const STAGE_IMAGES = [stage0, stage1, stage2, stage3, stage4];
 const pct = computed(() => Math.round(Math.min(100, Math.max(0, Number(props.percentage) || 0))));
+const stageIndex = computed(() => Math.max(0, Math.min(STAGE_IMAGES.length - 1, props.milestones.indexOf(current.value))));
 const current = computed(() => {
   const reached = props.milestones.filter((m) => props.percentage >= m.percent);
   return reached[reached.length - 1] || props.milestones[0] || null;
@@ -62,15 +73,16 @@ const current = computed(() => {
 .progress-copy { flex: 1; min-width: 0; padding-left: 16px; border-left: 1px solid var(--c-border); position: relative; z-index: 1; }
 .progress-label { margin: 0; font-size: 18px; font-weight: 700; color: var(--c-text); }
 .progress-sub { margin: 2px 0 0; font-size: var(--fs-md); color: var(--c-text-2); }
-.progress-scene { position: absolute; z-index: 0; top: 0; right: 0; bottom: 0; width: 62%; background: url('~@/assets/progress-sprout.jpg') 78% 60% / cover no-repeat; -webkit-mask-image: linear-gradient(90deg, transparent, #000 45%); mask-image: linear-gradient(90deg, transparent, #000 45%); opacity: .95; }
+.progress-scene { position: absolute; z-index: 0; top: 0; right: 0; bottom: 0; width: 62%; -webkit-mask-image: linear-gradient(90deg, transparent, #000 45%); mask-image: linear-gradient(90deg, transparent, #000 45%); }
+.scene-layer { position: absolute; inset: 0; background-position: 78% 60%; background-size: cover; background-repeat: no-repeat; opacity: 0; transition: opacity .8s ease; }
+.scene-layer--on { opacity: .95; }
 .progress-top > .progress-ring, .progress-top > .progress-copy { position: relative; z-index: 1; }
-.plant { position: absolute; right: 12px; top: 8px; width: 96px; height: 64px; display: flex; align-items: flex-end; justify-content: center; border-radius: 50% 50% 0 0; background: radial-gradient(60% 50% at 50% 100%, rgba(61,220,151,.22), transparent 70%); }
-.plant-icon { font-size: 40px; line-height: 1; filter: drop-shadow(0 4px 10px rgba(61,220,151,.35)); }
 .milestone-row { position: relative; display: flex; justify-content: flex-end; gap: 10px; margin-top: 14px; }
 .milestone-row::before { content: ''; position: absolute; left: 30%; right: 12px; top: 50%; border-top: 1px dashed var(--c-border-strong); }
 .milestone-dot { position: relative; width: 28px; height: 28px; box-sizing: border-box; border-radius: 50%; background: var(--c-surface); border: 1px solid var(--c-border-strong); display: flex; align-items: center; justify-content: center; font-size: 13px; filter: grayscale(1); opacity: .7; }
-.milestone-dot--reached { filter: none; opacity: 1; }
-.milestone-dot--current { border-color: var(--c-accent); box-shadow: 0 0 0 3px rgba(47,111,255,.25); background: var(--c-accent-soft); }
+.milestone-dot--reached { filter: none; opacity: 1; border-color: var(--c-accent-line); background: var(--c-accent-soft); box-shadow: 0 0 0 2px rgba(47,111,255,.18); }
+.milestone-dot--future { filter: grayscale(1) brightness(.7); opacity: .55; }
+.milestone-dot--current { filter: none; opacity: 1; transform: scale(1.12); border-color: #4F95FF; background: var(--c-accent-soft); box-shadow: 0 0 0 3px rgba(47,111,255,.35), 0 0 14px rgba(79,149,255,.55); }
 .progress-foot { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid var(--c-border); }
 .foot-item { margin: 0; padding: 12px 16px; display: flex; align-items: center; gap: 8px; font-size: var(--fs-md); color: var(--c-text-2); }
 .foot-item + .foot-item { border-left: 1px solid var(--c-border); }
@@ -79,7 +91,5 @@ const current = computed(() => {
 .foot-icon { font-size: 18px; }
 .foot-item--pts strong { color: #F5C542; }
 .coin { width: 22px; height: 22px; border-radius: 50%; display: inline-grid; place-items: center; font-size: 12px; color: #7A4B00; background: radial-gradient(circle at 35% 30%, #FFE08A, #E0A21B); }
-@media (max-width: 400px) { .progress-scene { position: absolute; z-index: 0; top: 0; right: 0; bottom: 0; width: 62%; background: url('~@/assets/progress-sprout.jpg') 78% 60% / cover no-repeat; -webkit-mask-image: linear-gradient(90deg, transparent, #000 45%); mask-image: linear-gradient(90deg, transparent, #000 45%); opacity: .95; }
-.progress-top > .progress-ring, .progress-top > .progress-copy { position: relative; z-index: 1; }
-.plant { width: 64px; } .plant-icon { font-size: 30px; } .progress-ring { width: 80px; height: 80px; } }
+@media (max-width: 400px) { .progress-ring { width: 80px; height: 80px; } }
 </style>
