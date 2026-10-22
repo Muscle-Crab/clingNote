@@ -233,7 +233,7 @@ const limitHit = ref(null); // { limit, count, pro, day } when the last add was 
 const goUpgradeForLimit = () => { modalOpen.value = false; _proRouter.push({ path: '/paywall', query: { feature: 'taskLimit', from: '/home' } }); };
 // Limit data is prefetched when the add modal opens so Save does not wait on 8 Firestore reads.
 let gateCache = null; // { at, pro, lists, extra: [] }
-const pendingAdds = new Map(); // taskKey -> task: optimistic adds whose write has not landed yet (a refetch may miss them)
+const pendingAdds = new Map(); // taskKey -> task added in this session (a refetch started before the write landed would miss it; counting dedupes by key)
 const fetchGateData = async () => {
   const [ud, ...snaps] = await Promise.all([loadUserDoc(), ...days.map((d) => getDoc(doc(db, 'weeklyRoutines', `${userId.value}_${d.day}`)))]);
   gateCache = { at: Date.now(), pro: isProUser(ud), lists: snaps.map((x) => (x.exists() ? x.data().tasks || [] : [])), extra: [] };
@@ -973,7 +973,7 @@ const sortedSelectedDayRoutine = computed(() => {
 });
 
 const deleteTask = async (index) => {
-  gateCache = null; gatePrefetch = null; // a deleted task frees its slot under the daily limit
+  gateCache = null; gatePrefetch = null; pendingAdds.clear(); // a deleted task frees its slot under the daily limit (next check refetches)
   const confirmed = confirm("Are you sure you want to delete this task?");
   if (!confirmed) return;
   const dayName = days[selectedDayIndex.value].day;
@@ -1683,11 +1683,12 @@ const addNewTask = async () => {
     } catch (e) {
       console.error('Error adding task:', e);
       selectedDayRoutine.value = (selectedDayRoutine.value || []).filter((t) => taskKey(t) !== key);
+      pendingAdds.delete(key);
       if (gateCache) gateCache.extra = gateCache.extra.filter((t) => taskKey(t) !== key);
       error.value = `Could not save “${task.title}”. Please try again.`;
       alert(error.value);
       return false;
-    } finally { pendingAdds.delete(key); }
+    }
     try { if (hadReminder) await scheduleNotification(task, task.reminder); } catch (e) { console.error(e); }
     fetchUserName(userId.value).then((n) => n && sendNotificationToPlayer(n, 'created')).catch(() => {});
     return true;
@@ -1710,14 +1711,25 @@ const setTaskRepeat = async (task, dayNames) => {
   Object.assign(task, patch);
   selectedDayRoutine.value = [...selectedDayRoutine.value];
   try {
-    await Promise.all(days.map((d, i) => mutateDay(d.day, (l) => {
-      const has = l.some((t) => taskKey(t) === key);
-      if (!want.has(d.day)) return has ? l.filter((t) => taskKey(t) !== key) : l;
-      if (has) return l.map((t) => (taskKey(t) === key ? { ...t, ...patch } : t));
-      const af = i !== selectedDayIndex.value ? activeFromForDay(i) : '';
-      const { timerActive, timerEnd, timerStart, boss, ...base } = task;
-      return [...l, { ...base, ...patch, completed: false, completedAt: null, status: base.status === 'done' ? 'todo' : base.status, activeFrom: af }];
-    })));
+    // one transaction over all 7 day docs: the series is updated atomically (no half-applied repeat after a reload)
+    await runTransaction(db, async (tx) => {
+      const refs = days.map((d) => doc(db, 'weeklyRoutines', `${userId.value}_${d.day}`));
+      const snaps = await Promise.all(refs.map((r) => tx.get(r)));
+      snaps.forEach((snap, i) => {
+        const d = days[i];
+        const l = snap.exists() ? snap.data().tasks || [] : [];
+        const has = l.some((t) => taskKey(t) === key);
+        let next = l;
+        if (!want.has(d.day)) { if (!has) return; next = l.filter((t) => taskKey(t) !== key); }
+        else if (has) next = l.map((t) => (taskKey(t) === key ? { ...t, ...patch } : t));
+        else {
+          const af = i !== selectedDayIndex.value ? activeFromForDay(i) : '';
+          const { timerActive, timerEnd, timerStart, boss, ...base } = task;
+          next = [...l, { ...base, ...patch, completed: false, completedAt: null, status: base.status === 'done' ? 'todo' : base.status, activeFrom: af }];
+        }
+        tx.set(refs[i], { tasks: next, updatedAt: serverTimestamp() }, { merge: true });
+      });
+    });
   } catch (e) {
     console.error('repeat', e); Object.assign(task, prev); selectedDayRoutine.value = [...selectedDayRoutine.value];
     alert('Could not update the repeat setting. Please try again.');

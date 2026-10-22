@@ -136,7 +136,7 @@
                         <button type="button" data-test="repeat-opt-daily" @click="pickRepeat(ALL)">Every day</button>
                         <button type="button" data-test="repeat-opt-weekdays" @click="pickRepeat(WEEKDAYS)">Weekdays</button>
                         <div class="repeat-days">
-                          <label v-for="d in ALL" :key="d"><input type="checkbox" :value="d" v-model="customDays" />{{ d.slice(0, 2) }}</label>
+                          <label v-for="d in ALL" :key="d"><input type="checkbox" :value="d" v-model="customDays" />{{ d }}</label>
                         </div>
                         <button type="button" data-test="repeat-opt-custom" @click="pickRepeat(customDays)">Save days</button>
                         <button type="button" data-test="repeat-opt-none" @click="pickRepeat([])">Don't repeat</button>
@@ -204,7 +204,7 @@ const props = defineProps({
 });
 const emit = defineEmits(['set-repeat', 'set-boss', 'toggle-expand', 'toggle-complete', 'open-detail', 'toggle-important', 'patch', 'subtask-patch',
   'toggle-label', 'open-reminder', 'transfer', 'video', 'upload', 'timer', 'wont-do', 'delete', 'schedule']);
-const ALL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const ALL = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']; // same keys as data.json days[].day
 const WEEKDAYS = ALL.slice(1, 6);
 const repeatOpen = ref(false);
 const isRepeating = computed(() => (props.task.repeatDays || []).length > 1 || (props.task.type === 'recurring' && !Array.isArray(props.task.repeatDays)));
