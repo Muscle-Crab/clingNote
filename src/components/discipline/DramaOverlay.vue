@@ -30,8 +30,8 @@ const icon = computed(() => ({ lost: '💀', victory: '⚔️', levelup: '⬆️
 .drama--lost .drama-card { animation: shake .6s cubic-bezier(.36,.07,.19,.97) 3; border-color: #dc2626; }
 .drama--victory .drama-card, .drama--levelup .drama-card, .drama--reward .drama-card { animation: pop .5s ease-out; border-color: #f59e0b; }
 .drama-card { position: relative; max-width: 360px; width: 90%; text-align: center; padding: 28px 20px; border-radius: 16px; background: #111; color: #fff; border: 2px solid; }
-.drama-icon { font-size: 4rem; }
-.drama-title { font-size: 2rem; font-weight: 900; text-transform: uppercase; margin: 8px 0; letter-spacing: .04em; }
+.drama-icon { font-size: 4rem; line-height: 1.15; margin-bottom: 4px; }
+.drama-title { font-size: 2rem; font-weight: 900; text-transform: uppercase; margin: 8px 0; line-height: 1.15; letter-spacing: .04em; }
 .drama--lost .drama-title { color: #f87171; }
 .drama-sub { color: #d1d5db; margin-bottom: 16px; }
 .drama-btn { margin-top: 12px; padding: 10px 20px; border-radius: 999px; background: #fff; color: #111; font-weight: 700; }
