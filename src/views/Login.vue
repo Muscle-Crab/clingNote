@@ -73,6 +73,8 @@ import { requestPasswordReset, loginErrorMessage } from '@/utils/authReset';
 import { signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, sendPasswordResetEmail, updateProfile } from 'firebase/auth';
 import { isNativeIOS } from '@/utils/platform';
 import { signInWithApple } from '@/utils/appleAuth';
+import { hasSeenTutorial, markTutorialSeen } from '@/utils/entryGuard';
+import { syncAfterAuth } from '@/composables/useEightHour';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { auth, db } from '@/firebaseConfig';
 import { useRouter, useRoute } from 'vue-router';
@@ -82,6 +84,10 @@ const showApple = isNativeIOS();
 const showGoogle = !isNativeIOS(); // native Google needs @capacitor-firebase/authentication + GoogleService-Info.plist (see progress notes)
 const _rd = useRoute().query.redirect;
 const afterLogin = () => (typeof _rd === 'string' && _rd.startsWith('/') && !_rd.startsWith('//') ? _rd : '/');
+// A brand-new account created from this page (Apple/Google) that never saw the tutorial goes through it first (/welcome?new=1), then on to the post-signup setup + paywall.
+const afterNewAccount = () => (hasSeenTutorial() ? '/onboarding' : { path: '/welcome', query: { new: '1' } });
+// Existing account: tutorial is for new users only. Also flush a wake pick cached before sign-up (a locked server plan always wins).
+const afterSignIn = () => { markTutorialSeen(); syncAfterAuth().catch(() => {}); };
 const email = ref(typeof useRoute().query.email === 'string' ? useRoute().query.email : '');
 const password = ref('');
 const isSubmitting = ref(false);
@@ -110,6 +116,7 @@ const loginUser = async () => {
     console.log('Successfully logged in user:', user.email);
     email.value = '';
     password.value = '';
+    afterSignIn();
     router.push(afterLogin());
   } catch (error) {
     console.error('Login failed:', error.message);
@@ -144,7 +151,8 @@ const signInWithGoogle = async () => {
         plan: 'free',
         onboardingComplete: false,
       });
-      router.push('/onboarding');
+      syncAfterAuth().catch(() => {});
+      router.push(afterNewAccount());
       return;
       console.log("🎉 New user created with credits and hasPaid set.");
     } else {
@@ -155,6 +163,7 @@ const signInWithGoogle = async () => {
       console.log("✅ Existing user, last login updated.");
     }
 
+    afterSignIn();
     router.push(afterLogin());
   } catch (error) {
     console.error('Google sign-in failed:', error.message);
@@ -175,10 +184,12 @@ const signInWithAppleClick = async () => {
     if (a.givenName && !user.displayName) { try { await updateProfile(user, { displayName: name }); } catch (e) { /* non-fatal */ } }
     if (!userSnap.exists()) {
       await setDoc(userRef, { id: user.uid, uid: user.uid, name, email: user.email || a.email || '', provider: 'apple.com', lastLogin: new Date(), createdAt: new Date(), isPro: false, plan: 'free', onboardingComplete: false });
-      router.push('/onboarding');
+      syncAfterAuth().catch(() => {});
+      router.push(afterNewAccount());
       return;
     }
     await setDoc(userRef, { lastLogin: new Date(), ...(a.givenName ? { name } : {}) }, { merge: true });
+    afterSignIn();
     router.push(afterLogin());
   } catch (error) {
     const code = String(error?.code || error?.message || '');

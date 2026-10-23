@@ -76,6 +76,7 @@
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
+import { syncAfterAuth } from '@/composables/useEightHour';
 import PasswordField from '@/components/ui/PasswordField.vue';
 import { ensureUserDoc } from '@/utils/userDoc';
 import { auth, db, storage } from '@/firebaseConfig';
@@ -170,6 +171,8 @@ const registerUser = async () => {
   catch (err) { console.error('[register] updateProfile failed:', err); }
 
   isSubmitting.value = false;
+  // Cached wake pick from the pre-signup tutorial -> the new account (server plan), then post-signup setup + paywall.
+  try { await syncAfterAuth(); } catch (e) { console.error('[register] plan sync failed (will retry on Home):', e); }
   router.push('/onboarding');
 };
 </script>

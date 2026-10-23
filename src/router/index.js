@@ -9,6 +9,10 @@ import Pickup from '../views/Pickup.vue';
 import Addiction from "@/views/addiction.vue";
 import sub from "@/views/Subs.vue";
 import { ugcHidden, isNativeIOS, isNative } from '@/utils/platform';
+import { decideEntry, hasSeenTutorial, hasSeenPaywallLocal, ENTRY_PATHS } from '@/utils/entryGuard';
+import { isPro } from '@/utils/pro';
+import { db } from '../firebaseConfig';
+import { doc, getDoc } from 'firebase/firestore';
 
 const routes = [
   {
@@ -24,6 +28,13 @@ const routes = [
     meta: { requiresAuth: true }
   },
 
+  {
+    // New-user tutorial: public (unauthenticated), once per install, no skip. Order: /welcome -> sign up -> /onboarding (+ paywall) -> /home. See utils/entryGuard.js
+    path: '/welcome',
+    name: 'welcome',
+    component: () => import('../views/WelcomeView.vue'),
+    meta: { bare: true }
+  },
   {
     path: '/onboarding',
     name: 'onboarding',
@@ -164,6 +175,20 @@ const router = createRouter({
   routes
 });
 
+// Reads just what the one-time paywall needs (isPro + paywallSeenAt). Cached per uid; any read failure => docLoaded:false => no paywall (never blocks the app).
+const _pwCache = {};
+async function loadPaywallState(user) {
+  const seenLocal = hasSeenPaywallLocal(user.uid);
+  if (seenLocal) return { isPro: false, seenLocal: true, seenRemote: true, docLoaded: true };
+  if (_pwCache[user.uid]) return _pwCache[user.uid];
+  try {
+    const snap = await Promise.race([getDoc(doc(db, 'users', user.uid)), new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 3500))]);
+    const d = snap.exists() ? snap.data() : null;
+    if (!d) return { isPro: false, seenLocal: false, seenRemote: false, docLoaded: false };
+    return (_pwCache[user.uid] = { isPro: isPro(d), seenLocal: false, seenRemote: !!d.paywallSeenAt, docLoaded: true });
+  } catch (e) { return { isPro: false, seenLocal: false, seenRemote: false, docLoaded: false }; }
+}
+
 // Route guard
 router.beforeEach(async (to, from, next) => {
   const requiresAuth = to.matched.some(record => record.meta.requiresAuth);
@@ -188,6 +213,12 @@ router.beforeEach(async (to, from, next) => {
 
   // iOS app: web-only features (Stripe-credit meal tracker) are not reachable (App Store 3.1.1)
   if (isNativeIOS() && to.matched.some(r => r.meta && r.meta.webOnly)) return next(currentUser ? '/home' : '/login');
+
+  // New-user entry order (tutorial before sign up) + the one-time paywall for existing non-Pro users: pure rules in utils/entryGuard.js
+  let paywall = null;
+  if (currentUser && ENTRY_PATHS.includes(to.path)) paywall = await loadPaywallState(currentUser);
+  const entry = decideEntry({ to: { path: to.path, query: to.query }, user: currentUser, native: isNative(), tutorialSeen: hasSeenTutorial(), paywall });
+  if (entry) return next(entry);
 
   // iOS app: no marketing landing page (hero image + 26MB demo video are website-only) -> straight to Login / Home
   if (isNative() && (to.path === '/' || to.path === '/landing')) return next(currentUser ? '/home' : '/login');

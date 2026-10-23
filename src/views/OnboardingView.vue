@@ -24,7 +24,8 @@
 
       <section v-else-if="STEPS[step] === 'schedule'" class="ob-sec">
         <p class="ob-k">Step 2</p><h1 class="ob-h">Your daily <span>rhythm</span></h1><p class="ob-p">We'll nudge you to start your day and wrap it up on time.</p>
-        <label class="ob-field"><span>☀️ Wake up</span><input type="time" v-model="a.wakeTime" /></label>
+        <div class="ob-field" data-test="ob-wake-locked"><span>☀️ Your 8-hour day starts</span><b>{{ wakeLabel }}</b></div>
+        <p class="ob-p ob-small">You picked this before signing up. Once a day starts, the 8 hours are locked.</p>
         <label class="ob-field"><span>🎯 Tasks done by</span><input type="time" v-model="a.deadline" /></label>
         <label class="ob-field"><span>🌙 Bedtime</span><input type="time" v-model="a.bedTime" /></label>
       </section>
@@ -52,13 +53,16 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue';
+import { ref, reactive, computed, onMounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { auth } from '@/firebaseConfig';
 import { ensureUserDoc, saveUserFields } from '@/utils/userDoc';
 import { isNativeIOS } from '@/utils/platform';
 import { requestNativePushPermission, getNativePushState } from '@/utils/nativePush';
 import PaywallPanel from '@/components/paywall/PaywallPanel.vue';
+import { markPaywallSeenLocal } from '@/utils/entryGuard';
+import { readCachedPlan, useEightHour } from '@/composables/useEightHour';
+import { fmtWakeLabel } from '@/utils/eightHour';
 
 const STEPS = ['welcome', 'goals', 'schedule', 'strictness', 'notifications']; // index STEPS.length = paywall
 const GOALS = [
@@ -75,14 +79,19 @@ const route = useRoute(); const router = useRouter();
 const step = ref(Math.min(Number(route.query.step) || 0, STEPS.length));
 const name = ref('');
 const a = reactive({ goals: [], wakeTime: '07:00', deadline: '21:00', bedTime: '23:00', strictness: 'firm', notifications: 'unknown' });
+const eh = useEightHour();
+const wakeLabel = computed(() => fmtWakeLabel(eh.plan.value?.wakeTime || a.wakeTime) || '—');
+// The paywall counts as "seen" the moment it is shown (local flag + users/{uid}.paywallSeenAt) so existing users get it at most once; Subs/Profile can still open it.
+watch(step, (n) => { if (n === STEPS.length) { const u = auth.currentUser; if (u) { markPaywallSeenLocal(u.uid); saveUserFields(u.uid, { paywallSeenAt: new Date() }).catch(() => {}); } } }, { immediate: true });
 const firstName = computed(() => (name.value || 'there').split(' ')[0]);
 const ctaLabel = computed(() => ({ welcome: "Let's go", notifications: 'Turn on notifications' }[STEPS[step.value]] || 'Continue'));
 const toggle = (id) => { const i = a.goals.indexOf(id); i < 0 ? a.goals.push(id) : a.goals.splice(i, 1); };
 
 onMounted(async () => {
   const u = auth.currentUser; if (!u) return;
+  const cp = readCachedPlan(); if (cp) a.wakeTime = cp.wakeTime; // the wake time is picked in the pre-signup tutorial (and locked into the 8-hour day), not here
   try { const d = await ensureUserDoc(u); name.value = d.name || u.displayName || '';
-    if (d.onboarding) Object.assign(a, d.onboarding); } catch (e) { console.error('onboarding load', e.message); }
+    if (d.onboarding) Object.assign(a, d.onboarding, cp ? { wakeTime: cp.wakeTime } : {}); } catch (e) { console.error('onboarding load', e.message); }
 });
 const persist = (extra = {}) => { const u = auth.currentUser; if (!u) return Promise.resolve();
   return saveUserFields(u.uid, { onboarding: { ...a }, ...extra }).catch((e) => console.error('onboarding save', e.message)); };
@@ -120,6 +129,7 @@ async function finish() { await persist({ onboardingComplete: true, onboardingCo
 .ob-row { width: 100%; display: flex; gap: 14px; align-items: center; margin-bottom: 10px; } .ob-row .em { font-size: 28px; } .ob-row b { display: block; font-size: 16px; } .ob-row small { color: #A9B4CC; font-weight: 500; font-size: 13px; }
 .ob-field { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; margin-bottom: 10px; border-radius: 16px; border: 1px solid #2A3C66; background: linear-gradient(180deg, rgba(18,32,63,.92), rgba(12,22,48,.92)); font-weight: 600; }
 .ob-field input { width: 160px; text-align: right; font-size: 18px; font-weight: 700; color-scheme: dark; }
+.ob-small { font-size: 13px; margin-top: 4px; }
 .ob-bell { font-size: 64px; text-align: center; margin: 20px 0 6px; filter: drop-shadow(0 10px 30px rgba(47,111,255,.5)); }
 .ob-note { display: flex; flex-direction: column; gap: 4px; padding: 14px; border-radius: 16px; background: rgba(18,32,63,.92); border: 1px solid #2A3C66; font-size: 14px; } .ob-note span { color: #A9B4CC; }
 .ob-foot { padding-top: 16px; display: flex; flex-direction: column; gap: 8px; }
