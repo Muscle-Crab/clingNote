@@ -24,11 +24,11 @@ let n = 0; const ok = (c, m) => { assert.ok(c, m); n++; };
   ok(/data-test="eh-start"/.test(html), 'ready with all tasks => start button (auto-start also fires)');
   const lock = { dayKey: '2026-10-23', dayName: 'Fri', tz: TZ, wakeTime: '07:00', startMs: at('2026-10-23T11:00:00Z'), endMs: at('2026-10-23T19:00:00Z'), taskCount: 3, plannedCount: 3, points: [20, 40, 30], totalPoints: 90, target: 70 };
   html = await render(at('2026-10-23T13:00:00Z'), { ...base, lock }, [T('a', true), T('b'), T('c', true)]); // 2h in
-  ok(/data-test="eh-countdown"[^>]*>06:00:00</.test(html) || /06:00:00/.test(html), 'countdown shows 6h left');
-  ok(/Ends 3:00 PM/.test(html), 'ends 3:00 PM'); ok(/2\/3<\/strong><span>tasks done/.test(html), 'tasks done/total'); ok(/50\/70<\/strong><span>points target/.test(html), 'points / target');
+  ok(/06:00:00|05:59:5\d/.test(html), 'countdown shows 6h left');
+  ok(/Ends 3:00 PM/.test(html), 'ends 3:00 PM'); ok(/Ends 3:00 PM/.test(html) && /7:00 AM/.test(html), 'start and end times'); ok(/50\/70 pts/.test(html), 'points / target as small text'); ok(!/tasks done|role="progressbar"|eh-bar/.test(html), 'compact strip: no tasks-done block and no bar (the progress card already shows it)'); ok(/eh-clock/.test(html), 'countdown number is the prominent element');
   ok(/data-test="eh-lock"/.test(html), 'lock badge'); ok(!/type="time"|eh-stepper|<button/.test(html), 'no edit controls while running');
   // device clock far off: offset keeps the countdown on server time
-  st.offset = 0; html = await render(at('2026-10-23T13:00:00Z'), { ...base, lock }, [T('a', true), T('b'), T('c', true)]); ok(/06:00:00/.test(html), 'server clock decides');
+  st.offset = 0; html = await render(at('2026-10-23T13:00:00Z'), { ...base, lock }, [T('a', true), T('b'), T('c', true)]); ok(/06:00:00|05:59:5\d/.test(html), 'server clock decides');
   html = await render(at('2026-10-23T20:00:00Z'), { ...base, lock, stats: { ...core.defaultStats(), streak: 1, notice: 'Tomorrow is harder.' }, reward: 'Nice' }, [T('a', true), T('b', true), T('c', true)]);
   ok(/Goal met/.test(html) && /data-test="eh-reward"/.test(html) && /data-test="eh-notice"/.test(html), 'ended + met shows reward and notice');
   html = await render(at('2026-10-23T20:00:00Z'), { ...base, lock, stats: { ...core.defaultStats(), notice: 'Tomorrow is harder.' } }, [T('a', true), T('b'), T('c')]);

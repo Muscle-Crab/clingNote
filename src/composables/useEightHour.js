@@ -85,8 +85,14 @@ export const useEightHour = () => {
     if (phaseInfo.value.phase === 'before' || phaseInfo.value.phase === 'ready') return core.fmtClock((phaseInfo.value.startMs || phaseInfo.value.wakeMs) + core.WINDOW_MS, tz);
     return '';
   });
+  // "7:00 AM": the real (locked) start while running/ended; otherwise the planned wake time
+  const startsLabel = computed(() => {
+    const tz = plan.value?.tz || deviceTz();
+    if (lock.value && (running.value || phase.value === 'ended')) return core.fmtClock(lock.value.startMs, tz);
+    return plan.value ? core.fmtWakeLabel(plan.value.wakeTime) : '';
+  });
   const stats = computed(() => st.data?.stats || core.defaultStats());
-  return { st, data, plan, lock, phase, phaseInfo, running, remainingMs, countdown, endsLabel, stats, reward: computed(() => st.data?.reward || ''),
+  return { st, data, plan, lock, phase, phaseInfo, running, remainingMs, countdown, endsLabel, startsLabel, stats, reward: computed(() => st.data?.reward || ''),
     refresh, savePlan, startNow, reportProgress, nowMs };
 };
 
