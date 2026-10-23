@@ -12,7 +12,7 @@
       <span>Add Task</span>
     </router-link>
 
-    <button @click="$emit('voice')" class="fab fab-voice" :class="{ 'fab-voice--listening': listening }" title="Voice input">
+    <button v-if="showVoice" @click="$emit('voice')" class="fab fab-voice" :class="{ 'fab-voice--listening': listening }" title="Voice input">
       <span v-if="listening" class="fab-pulse"></span>
       <svg xmlns="http://www.w3.org/2000/svg" class="fab-icon" viewBox="0 0 24 24" fill="currentColor">
         <path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2Z"/>
@@ -25,6 +25,7 @@
 defineProps({
   userId: { type: String, default: null },
   listening: { type: Boolean, default: false },
+  showVoice: { type: Boolean, default: true },
 });
 defineEmits(['add', 'voice']);
 </script>

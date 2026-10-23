@@ -9,6 +9,7 @@ import TermsandCondition from '../views/TermsandCondition.vue';
 import Pickup from '../views/Pickup.vue';
 import Addiction from "@/views/addiction.vue";
 import sub from "@/views/Subs.vue";
+import { ugcHidden } from '@/utils/platform';
 
 const routes = [
   {
@@ -170,6 +171,13 @@ router.beforeEach(async (to, from, next) => {
       });
 
   const currentUser = auth.currentUser || await getUser();
+
+  // iOS app: community/UGC screens are not offered (App Store 1.2) -> back to Home (or Login when signed out)
+  if (ugcHidden()) {
+    const UGC_PATHS = ['/rankings', '/pickup', '/fdfd', '/chat'];
+    const otherProfile = to.path.startsWith('/profile/') && to.params.userId !== (currentUser && currentUser.uid);
+    if (UGC_PATHS.includes(to.path) || otherProfile) return next(currentUser ? '/home' : '/login');
+  }
 
   if (to.path === '/') {
     if (currentUser) {

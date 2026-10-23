@@ -57,7 +57,8 @@
 
 
 <script setup>
-const features = [
+import { voiceInputBlocked } from '@/utils/platform';
+const allFeatures = [
   {
     title: "🎙️ Voice-Controlled Task Creation",
     description: "Add tasks hands-free using voice input, live transcription, and waveform animation."
@@ -135,6 +136,7 @@ const features = [
     description: "Beautiful and responsive interface with full light/dark mode support."
   }
 ];
+const features = voiceInputBlocked() ? allFeatures.filter((f) => !/Voice/i.test(f.title)) : allFeatures; // no voice claims inside the iOS app (WKWebView has no speech recognition)
 
 </script>
 

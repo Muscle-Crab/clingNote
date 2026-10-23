@@ -61,7 +61,7 @@
             </router-link>
           </li>
           <li class="app-sidebar-item"><i class="fas fa-calendar-alt"></i><router-link to="/upcoming" class="app-sidebar-link">Upcoming</router-link></li>
-          <li class="app-sidebar-item"><i class="fas fa-trophy"></i><router-link to="/rankings" class="app-sidebar-link">Rankings</router-link></li>
+          <li v-if="!hideUgc" class="app-sidebar-item"><i class="fas fa-trophy"></i><router-link to="/rankings" class="app-sidebar-link">Rankings</router-link></li>
           <li class="app-sidebar-item"><i class="fas fa-gavel"></i><router-link to="/discipline" class="app-sidebar-link">Discipline</router-link></li>
 
 
@@ -113,6 +113,8 @@
 import { syncPublicProfile } from '@/composables/usePublicProfile';
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
 import { useRouter } from 'vue-router';
+import { ugcHidden } from '@/utils/platform';
+const hideUgc = ugcHidden(); // iOS app: no Rankings/community until report+block tools exist
 import { auth, db } from '@/firebaseConfig';
 import { doc, getDoc } from 'firebase/firestore';
 

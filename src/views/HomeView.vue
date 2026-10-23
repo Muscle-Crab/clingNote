@@ -46,7 +46,7 @@
               <button type="button" class="hero-menu-item" @click="openShutdown">🌙 Shutdown day</button>
               <button v-if="daySession.started && !daySession.ended" type="button" class="hero-menu-item" @click="endDay">■ End day<span v-if="daySession.startedAtText" class="hero-menu-meta"> · started {{ daySession.startedAtText }}</span></button>
               <router-link to="/upcoming" class="hero-menu-item">📅 Upcoming</router-link>
-              <router-link to="/rankings" class="hero-menu-item">🏆 Rankings</router-link>
+              <router-link v-if="!hideUgc" to="/rankings" class="hero-menu-item">🏆 Rankings</router-link>
               <router-link to="/discipline" class="hero-menu-item">⚔️ Discipline Mode</router-link>
               <button type="button" class="hero-menu-item" data-test="open-background" @click="showBackground = true">🎧 Background</button>
               <button type="button" class="hero-menu-item" @click="showSchedule = !showSchedule">🗓 {{ showSchedule ? 'Hide' : 'Show' }} schedule</button>
@@ -204,7 +204,7 @@
       <ScheduledList v-if="userId" :tasks="futureScheduled" :today-str="todayStr" :error="scheduledError"
                      @move-today="moveScheduledToToday" @update="updateScheduledDate" @delete="deleteScheduled" />
 
-      <FabButtons :user-id="userId" :listening="listening" @add="onAddClick" @voice="startVoiceInput" />
+      <FabButtons :user-id="userId" :listening="listening" :show-voice="!voiceBlocked" @add="onAddClick" @voice="startVoiceInput" />
 
 
     </div>
@@ -306,6 +306,7 @@ import TimeStatsBar from '@/components/home/TimeStatsBar.vue';
 import TimerModal from '@/components/home/TimerModal.vue';
 import TransferModal from '@/components/home/TransferModal.vue';
 import VoiceModal from '@/components/home/VoiceModal.vue';
+import { ugcHidden, voiceInputBlocked } from '@/utils/platform';
 import { splitSpokenTasks, voiceCapability, UNDO_MS } from '@/utils/voiceSplit';
 import WontDoModal from '@/components/home/WontDoModal.vue';
 import WorkoutModal from '@/components/home/WorkoutModal.vue';
@@ -2303,7 +2304,9 @@ let pendingVoiceText = '';
 let voiceSubmitting = false;
 let voiceAddFailed = false; // the last spoken task was refused (limit, strict boss, save error): keep the message visible
 const liveTranscript = ref('');
-const voiceCap = typeof window !== 'undefined' ? voiceCapability(window, navigator) : 'none';
+const voiceBlocked = voiceInputBlocked(); // iOS shell: WKWebView has no SpeechRecognition -> mic button hidden
+const hideUgc = ugcHidden();
+const voiceCap = typeof window !== 'undefined' && !voiceBlocked ? voiceCapability(window, navigator) : 'none';
 const voiceSupported = voiceCap !== 'none';
 // Initialize SpeechRecognition only if supported (every property access stays inside this guard)
 if (voiceSupported) {
