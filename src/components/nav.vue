@@ -158,6 +158,7 @@ onMounted(() => {
   sidebarOpen.value = mq ? mq.matches : window.innerWidth >= 768;
   if (mq) mq.addEventListener('change', onMq);
   document.addEventListener('keydown', onEsc);
+  window.addEventListener('clingnot:avatar', (e) => { avatarURL.value = (e && e.detail) || null; });
 
   auth.onAuthStateChanged(async (user) => {
     if (user) {

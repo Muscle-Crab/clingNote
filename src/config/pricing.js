@@ -11,5 +11,7 @@ export const fmt = (n) => `$${n.toFixed(2)}`;
 export const planById = (id) => PLANS.find((p) => p.id === id);
 
 // Daily task-creation limits (tasks created or scheduled for one calendar day). Change here only.
-export const TASK_LIMITS = { free: 3, pro: 5 };
+export const TASK_LIMITS = { free: 5, pro: 5 };
+// Pro only sells a higher daily limit when it really is higher (free and Pro are both 5/day now).
+export const PRO_RAISES_LIMIT = TASK_LIMITS.pro > TASK_LIMITS.free;
 export const dailyTaskLimit = (pro) => (pro ? TASK_LIMITS.pro : TASK_LIMITS.free);

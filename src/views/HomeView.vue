@@ -1,5 +1,7 @@
 <template>
   <div ref="scrollContainer" class="app-root" :class="[{ 'is-dragging': isDraggingTask, 'reorder-active': isDraggingTask || reorderSettling }, appTheme ? 'theme-' + appTheme : '']">
+    <BackgroundLayer :anim="bgPrefs.anim" />
+    <BackgroundPanel :open="showBackground" @close="showBackground = false" />
 
     <!-- Loading Screen -->
     <div v-if="isLoading" class="splash-screen">
@@ -45,6 +47,7 @@
               <router-link to="/upcoming" class="hero-menu-item">📅 Upcoming</router-link>
               <router-link to="/rankings" class="hero-menu-item">🏆 Rankings</router-link>
               <router-link to="/discipline" class="hero-menu-item">⚔️ Discipline Mode</router-link>
+              <button type="button" class="hero-menu-item" data-test="open-background" @click="showBackground = true">🎧 Background</button>
               <button type="button" class="hero-menu-item" @click="showSchedule = !showSchedule">🗓 {{ showSchedule ? 'Hide' : 'Show' }} schedule</button>
               </div>
             </div>
@@ -225,6 +228,9 @@ import DramaOverlay from '@/components/discipline/DramaOverlay.vue';
 import BossPanel from '@/components/discipline/BossPanel.vue';
 import { bossMessage, validReason, carryTask, canAddTask, watchingBlockers, isIdle, verdict as dayVerdict, line as bossLine, IDLE_MINUTES } from '@/utils/strictBoss';
 import MorningReport from '@/components/home/MorningReport.vue';
+import BackgroundLayer from '@/components/background/BackgroundLayer.vue';
+import BackgroundPanel from '@/components/background/BackgroundPanel.vue';
+import { useBackground } from '@/composables/useBackground';
 import { buildRecap, reportDue, prevDay } from '@/utils/dailyReport';
 import { monthKey, prevMonthKey } from '@/utils/ranking';
 import { applyTaskToggle, evaluateStreak, localDateStr, dayDiff, ALLOWED_GAP_DAYS, DAILY_STREAK_MIN, capStreak, lostReason } from '@/utils/streak';
@@ -235,7 +241,7 @@ import { isPro as isProUser } from '@/utils/pro';
 import { checkDailyLimit } from '@/utils/taskLimits';
 import { canUse } from '@/utils/pro';
 const _proRouter = _useRouter();
-// Daily task limit (config/pricing.js TASK_LIMITS): free 3/day, Pro 5/day
+// Daily task limit (config/pricing.js TASK_LIMITS): free 5/day, Pro 5/day
 const limitHit = ref(null); // { limit, count, pro, day } when the last add was blocked
 const goUpgradeForLimit = () => { modalOpen.value = false; _proRouter.push({ path: '/paywall', query: { feature: 'taskLimit', from: '/home' } }); };
 // Limit data is prefetched when the add modal opens so Save does not wait on 8 Firestore reads.
@@ -2240,6 +2246,8 @@ onMounted(() => {
 
   checkStreakOnCompletion();
 });
+const showBackground = ref(false);
+const { prefs: bgPrefs } = useBackground();
 const menuOpen = ref(false); // closed by default; closes on outside tap / Escape / route change
 const heroMenuEl = ref(null);
 const noticeCount = computed(() => {
@@ -2781,7 +2789,7 @@ const repeatMode = computed({
   }
 });
 
-// Daily cap of 3 active tasks (override available)
+// (legacy note) the old soft active-task cap
 const capWarning = ref(false);
 const capOverride = ref(false);
 const addsToToday = () => {
@@ -2995,6 +3003,7 @@ const finishShutdown = async (carry) => {
 
 /* ── Root ── */
 .app-root {
+  isolation: isolate; /* Background canvas (z-index -1) stays above the page colour but behind content */
   /* ── Design tokens (dark, Atlassian-style neutrals + blue accent) ── */
   --c-bg: #0B0D12;
   --c-surface: #12151C;

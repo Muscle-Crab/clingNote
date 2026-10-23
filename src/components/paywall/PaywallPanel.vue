@@ -40,7 +40,7 @@
 <script setup>
 import { ref, computed } from 'vue';
 import { useRoute } from 'vue-router';
-import { PLANS, DEFAULT_PLAN, fmt, planById, TASK_LIMITS } from '@/config/pricing';
+import { PLANS, DEFAULT_PLAN, fmt, planById, TASK_LIMITS, PRO_RAISES_LIMIT } from '@/config/pricing';
 import { startCheckout } from '@/utils/checkout';
 import { auth } from '@/firebaseConfig';
 defineProps({ name: { type: String, default: 'there' } });
@@ -48,7 +48,7 @@ defineEmits(['close']);
 const route = useRoute();
 const FEAT = { aiCoach: 'The AI coach', strictBoss: 'Strict Boss mode', calendarFeed: 'The calendar feed' };
 const sel = ref(DEFAULT_PLAN); const busy = ref(false);
-const msg = ref(route.query.checkout === 'cancel' ? 'Checkout canceled — no charge was made.' : route.query.feature === 'taskLimit' ? `You've reached the free limit of ${TASK_LIMITS.free} tasks today. Pro lets you add ${TASK_LIMITS.pro} per day.` : FEAT[route.query.feature] ? `🔒 ${FEAT[route.query.feature]} is a Pro feature.` : '');
+const msg = ref(route.query.checkout === 'cancel' ? 'Checkout canceled — no charge was made.' : route.query.feature === 'taskLimit' ? (PRO_RAISES_LIMIT ? `You've reached the free limit of ${TASK_LIMITS.free} tasks today. Pro lets you add ${TASK_LIMITS.pro} per day.` : `You've reached today's limit of ${TASK_LIMITS.free} tasks. Pro adds the AI coach, Strict Boss and more.`) : FEAT[route.query.feature] ? `🔒 ${FEAT[route.query.feature]} is a Pro feature.` : '');
 const plan = computed(() => planById(sel.value));
 const ctaText = computed(() => busy.value ? 'One sec…' : plan.value.trialDays ? 'Try for $0.00' : `Continue — ${fmt(plan.value.price)}`);
 const fine = computed(() => { const p = plan.value;
