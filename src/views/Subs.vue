@@ -2,7 +2,12 @@
   <div class="max-w-xl mx-auto mt-10 p-6 bg-white rounded shadow">
     <h2 class="text-2xl font-bold mb-4">Manage Subscription</h2>
 
-    <div v-if="loading" class="text-gray-500">Loading...</div>
+    <div v-if="ios">
+      <p class="mb-4">Subscriptions bought in the app are managed by Apple.</p>
+      <a href="https://apps.apple.com/account/subscriptions" class="text-blue-600 underline" @click.prevent="openManage">Manage subscription in Apple ID settings</a>
+    </div>
+
+    <div v-else-if="loading" class="text-gray-500">Loading...</div>
 
     <div v-else-if="!hasPaid">
       <p>You don't have an active subscription.</p>
@@ -30,6 +35,9 @@ import { getAuth } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/firebaseConfig'; // ✅ must point to your Firestore setup
 
+import { isNativeIOS } from '@/utils/platform';
+const ios = isNativeIOS();
+const openManage = async () => { try { const { Browser } = await import('@capacitor/browser'); await Browser.open({ url: 'https://apps.apple.com/account/subscriptions' }); } catch (e) { window.open('https://apps.apple.com/account/subscriptions', '_blank'); } };
 const loading = ref(true);
 const hasPaid = ref(false);
 const nextBillingDate = ref('');

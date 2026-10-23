@@ -56,7 +56,7 @@ const handler = async (event, deps = {}) => {
     if (r) {
       const write = deps.write || (async (uid, data) => {
         const admin = getAdmin();
-        await admin.firestore().collection('users').doc(uid).set({ ...data, proUpdatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+        await admin.firestore().collection('users').doc(uid).set({ ...data, ...(data.isPro ? { proSource: 'stripe' } : {}), proUpdatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
       });
       await write(r.uid, r.update);
       console.log(`Pro sync ${evt.type} uid=${r.uid} isPro=${r.update.isPro}`);

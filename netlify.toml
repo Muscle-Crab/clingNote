@@ -38,3 +38,12 @@ Permissions-Policy = "microphone=(self), camera=()"
 
 [functions."create-checkout"]
 external_node_modules = ["stripe", "firebase-admin"]
+
+# Apple IAP (RevenueCat) entitlement mirror. Env: REVENUECAT_WEBHOOK_SECRET, REVENUECAT_SECRET_KEY.
+[functions."revenuecat-webhook"]
+included_files = ["netlify/functions/lib/**"]
+external_node_modules = ["firebase-admin", "@opentelemetry/api"]
+
+[functions."revenuecat-sync"]
+included_files = ["netlify/functions/lib/**"]
+external_node_modules = ["firebase-admin", "@opentelemetry/api"]

@@ -1,0 +1,12 @@
+{
+  "appId": "app.clingnote.ios",
+  "appName": "ClingNot",
+  "webDir": "dist",
+  "ios": {
+    "contentInset": "always",
+    "scheme": "ClingNot"
+  },
+  "plugins": {
+    "PushNotifications": { "presentationOptions": ["badge", "sound", "alert"] }
+  }
+}

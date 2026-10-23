@@ -20,7 +20,8 @@ service cloud.firestore {
     // Fields only the server (Stripe webhook / AI function, admin SDK) may change
     function billingKeys() {
       return ['hasPaid', 'premium', 'credits', 'subscription', 'subscriptionId', 'subscriptionStatus', 'stripeCustomerId', 'admin', 'role',
-              'proExpiresAt', 'stripeSubscriptionId', 'stripeStatus', 'stripePriceId', 'stripeSessionId', 'stripe', 'proUpdatedAt'];
+              'proExpiresAt', 'stripeSubscriptionId', 'stripeStatus', 'stripePriceId', 'stripeSessionId', 'stripe', 'proUpdatedAt',
+              'proSource', 'iapProductId', 'iapStore', 'iapEnvironment'];
     }
     // isPro / plan: clients may only ever write the free defaults, and never on a doc that is currently Pro.
     function freeDefaultsOnly() {

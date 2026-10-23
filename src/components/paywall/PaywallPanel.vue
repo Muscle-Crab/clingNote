@@ -25,40 +25,68 @@
       <button v-for="p in PLANS" :key="p.id" class="plan" :class="{on: sel===p.id}" role="radio" :aria-checked="sel===p.id" @click="sel=p.id">
         <span v-if="p.badge" class="badge">{{ p.badge }}</span>
         <span class="pl">{{ p.label }}</span>
-        <span class="pp">{{ fmt(p.price) }}<small>{{ p.period==='once' ? ' once' : '/'+p.period }}</small></span>
+        <span class="pp">{{ priceText(p) }}<small>{{ p.period==='once' ? ' once' : '/'+p.period }}</small></span>
         <span class="pm">{{ p.period==='yr' ? `~${fmt(p.perMonth)}/mo` : p.period==='once' ? 'Pay once, own it' : 'Billed monthly' }}</span>
       </button>
     </div>
 
-    <p class="due"><span>✓</span> {{ plan.trialDays ? 'No Payment Due Now' : 'Cancel anytime' }}</p>
+    <p class="due"><span>✓</span> {{ trialDaysFor(plan) ? 'No Payment Due Now' : 'Cancel anytime' }}</p>
     <button class="cta" :disabled="busy" @click="buy">{{ ctaText }}</button>
     <p class="fine">{{ fine }}</p>
     <p v-if="msg" class="soon">{{ msg }}</p>
+    <p v-if="ios" class="legal">
+      <template v-if="plan.mode === 'subscription'">Payment is charged to your Apple ID at confirmation of purchase. The subscription renews automatically unless canceled at least 24 hours before the end of the current period. Manage or cancel anytime in your Apple ID account settings.</template>
+      <template v-else>One-time purchase charged to your Apple ID. Does not renew.</template>
+      <br /><a :href="IAP_URLS.terms" @click.prevent="openLink(IAP_URLS.terms)">Terms of Use</a> · <a :href="IAP_URLS.privacy" @click.prevent="openLink(IAP_URLS.privacy)">Privacy Policy</a>
+    </p>
   </div>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import { PLANS, DEFAULT_PLAN, fmt, planById, TASK_LIMITS, PRO_RAISES_LIMIT } from '@/config/pricing';
 import { startCheckout } from '@/utils/checkout';
 import { auth } from '@/firebaseConfig';
+import { isNativeIOS } from '@/utils/platform';
+import { IAP_URLS } from '@/config/iap';
 defineProps({ name: { type: String, default: 'there' } });
-defineEmits(['close']);
+const emit = defineEmits(['close']);
+// iOS native build: Apple IAP via RevenueCat (Stripe is never shown or called). Web: Stripe, unchanged.
+const ios = isNativeIOS();
+const iapPlans = ref([]);
+onMounted(async () => { if (!ios) return;
+  try { const { loadPlans } = await import('@/utils/iap'); iapPlans.value = await loadPlans(); if (!iapPlans.value.length) msg.value = 'Purchases are not available right now. Please try again later.'; }
+  catch (e) { msg.value = 'Could not load purchase options. Check your connection and try again.'; } });
+const iapFor = (id) => iapPlans.value.find((x) => x.id === id);
+const priceText = (p) => iapFor(p.id)?.priceString || fmt(p.price);
+const trialDaysFor = (p) => ios ? (iapFor(p.id)?.trialDays || 0) : p.trialDays;
+const openLink = async (url) => { try { const { Browser } = await import('@capacitor/browser'); await Browser.open({ url }); } catch (e) { window.open(url, '_blank'); } };
 const route = useRoute();
 const FEAT = { aiCoach: 'The AI coach', strictBoss: 'Strict Boss mode', calendarFeed: 'The calendar feed' };
 const sel = ref(DEFAULT_PLAN); const busy = ref(false);
 const msg = ref(route.query.checkout === 'cancel' ? 'Checkout canceled — no charge was made.' : route.query.feature === 'taskLimit' ? (PRO_RAISES_LIMIT ? `You've reached the free limit of ${TASK_LIMITS.free} tasks today. Pro lets you add ${TASK_LIMITS.pro} per day.` : `You've reached today's limit of ${TASK_LIMITS.free} tasks. Pro adds the AI coach, Strict Boss and more.`) : FEAT[route.query.feature] ? `🔒 ${FEAT[route.query.feature]} is a Pro feature.` : '');
 const plan = computed(() => planById(sel.value));
-const ctaText = computed(() => busy.value ? 'One sec…' : plan.value.trialDays ? 'Try for $0.00' : `Continue — ${fmt(plan.value.price)}`);
-const fine = computed(() => { const p = plan.value;
-  if (p.trialDays) return `${p.trialDays}-day free trial, then ${fmt(p.price)}/year. Cancel anytime.`;
-  return p.period === 'once' ? `One-time payment of ${fmt(p.price)}. Lifetime access.` : `${fmt(p.price)}/month. Cancel anytime.`; });
+const ctaText = computed(() => busy.value ? 'One sec…' : trialDaysFor(plan.value) ? 'Try for $0.00' : `Continue — ${priceText(plan.value)}`);
+const fine = computed(() => { const p = plan.value; const td = trialDaysFor(p); const pr = priceText(p);
+  if (td) return `${td}-day free trial, then ${pr}/year. Cancel anytime.`;
+  return p.period === 'once' ? `One-time payment of ${pr}. Lifetime access.` : `${pr}/${p.period === 'yr' ? 'year' : 'month'}. Cancel anytime.`; });
 const demo = [{ t: 'Morning workout', d: true }, { t: 'Write project report', b: true }, { t: 'Reply to emails' }, { t: 'Read 20 pages', d: true }];
 async function buy() { busy.value = true; msg.value = '';
+  if (ios) { try { const { purchase } = await import('@/utils/iap'); const p = iapFor(sel.value);
+      if (!p) msg.value = 'This plan is not available right now. Please try again later.';
+      else { const r = await purchase(auth.currentUser, p); if (r.ok) emit('close'); else if (!r.cancelled) msg.value = r.error || 'Purchase failed — please try again.'; } }
+    catch (e) { msg.value = 'Purchase failed — please try again.'; }
+    busy.value = false; return; }
   const r = await startCheckout({ planId: sel.value, user: auth.currentUser }); busy.value = false;
   if (!r.ok) msg.value = r.notConfigured ? '💳 Payments coming soon — enjoy ClingNot free for now!' : 'Checkout failed — please try again.'; }
-function restore() { msg.value = 'Nothing to restore yet — purchases will sync to your account automatically.'; }
+async function restore() {
+  if (!ios) { msg.value = 'Nothing to restore yet — purchases will sync to your account automatically.'; return; }
+  busy.value = true; msg.value = '';
+  try { const { restore: rest } = await import('@/utils/iap'); const r = await rest(auth.currentUser);
+    if (!r.ok) msg.value = r.error; else if (r.restored) { msg.value = 'Purchases restored. Welcome back to Pro!'; setTimeout(() => emit('close'), 900); } else msg.value = 'No previous purchases found for this Apple ID.'; }
+  catch (e) { msg.value = 'Restore failed — please try again.'; }
+  busy.value = false; }
 </script>
 
 <style scoped>
@@ -91,5 +119,6 @@ function restore() { msg.value = 'Nothing to restore yet — purchases will sync
 .cta { width: 100%; min-height: 56px; border: 0; border-radius: 16px; font-size: 17px; font-weight: 800; color: #fff; background: linear-gradient(90deg,#1E5BFF,#3C8CFF); box-shadow: 0 10px 26px rgba(47,111,255,.4); cursor: pointer; }
 .cta:disabled { opacity: .7; }
 .fine { font-size: 12px; color: #7180A0; margin: 10px 0 0; }
+.legal { margin: 14px 4px 0; font-size: 11px; line-height: 15px; color: #7180A0; } .legal a { color: #7FB0FF; text-decoration: underline; }
 .soon { margin: 12px 0 0; padding: 10px 12px; border-radius: 12px; background: #10204A; border: 1px solid #24448F; color: #7FB0FF; font-size: 13px; font-weight: 600; }
 </style>
