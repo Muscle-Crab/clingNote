@@ -9,7 +9,7 @@ import TermsandCondition from '../views/TermsandCondition.vue';
 import Pickup from '../views/Pickup.vue';
 import Addiction from "@/views/addiction.vue";
 import sub from "@/views/Subs.vue";
-import { ugcHidden } from '@/utils/platform';
+import { ugcHidden, isNativeIOS } from '@/utils/platform';
 
 const routes = [
   {
@@ -40,7 +40,7 @@ const routes = [
     path: '/pro/success',
     name: 'pro-success',
     component: () => import('../views/pro/ProSuccess.vue'),
-    meta: { requiresAuth: true, bare: true }
+    meta: { requiresAuth: true, bare: true, webOnly: true }
   },
   {
     path: '/rankings',
@@ -86,7 +86,7 @@ const routes = [
     path: '/payment-success',
     name: 'payment-success',
     component: () => import('../views/PaymentSuccess.vue'),
-    meta: { requiresAuth: true }
+    meta: { requiresAuth: true, webOnly: true }
   },
   {
     path: '/profile/:userId',
@@ -153,7 +153,8 @@ const routes = [
   ,{
     path: '/mealPlan',
     name: 'MealPlan',
-    component: () => import('../views/MealPlan.vue')
+    component: () => import('../views/MealPlan.vue'),
+    meta: { webOnly: true } // credits are bought with Stripe (digital goods) -> not available in the iOS app, see guard
   }
 ];
 
@@ -182,6 +183,9 @@ router.beforeEach(async (to, from, next) => {
     const otherProfile = to.path.startsWith('/profile/') && to.params.userId !== (currentUser && currentUser.uid);
     if (UGC_PATHS.includes(to.path) || otherProfile) return next(currentUser ? '/home' : '/login');
   }
+
+  // iOS app: web-only features (Stripe-credit meal tracker) are not reachable (App Store 3.1.1)
+  if (isNativeIOS() && to.matched.some(r => r.meta && r.meta.webOnly)) return next(currentUser ? '/home' : '/login');
 
   if (to.path === '/') {
     if (currentUser) {

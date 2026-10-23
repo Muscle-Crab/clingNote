@@ -151,6 +151,7 @@
 
 
 <script setup>
+import { isNativeIOS } from '@/utils/platform';
 import { fnUrl } from '@/config/api';
 import { askAi } from '@/composables/useAi';
 import { ensureAiConsent } from '@/composables/useAiConsent';
@@ -541,6 +542,7 @@ const handleAnalyzeClick = async () => {
 };
 
 const redirectToCheckout = async () => {
+  if (isNativeIOS()) return; // Stripe credits are never offered in the iOS app (digital goods must use Apple IAP)
   try {
     const response = await fetch(fnUrl('create-checkout-session'), {
       method: 'POST',
