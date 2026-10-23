@@ -19,6 +19,7 @@
         <p v-else class="voice-transcript">"<span>{{ transcript }}</span>"</p>
         <p v-if="!error" class="voice-hint">Say a task and pause — it saves automatically. Say “and then” or “next” to add several at once.</p>
         <p v-if="capability === 'partial'" class="voice-hint">On iPhone/Safari the mic restarts after each phrase; if it stops, tap the mic again.</p>
+        <p v-if="hint" class="voice-hint" role="status">{{ hint }}</p>
         <ul v-if="added.length" class="voice-added">
           <li v-for="e in added" :key="e.id">✓ {{ e.title }} <button v-if="e.undoUntil" type="button" class="voice-undo" @click="$emit('undo', e)">Undo</button></li>
         </ul>
@@ -35,6 +36,7 @@ defineProps({
   supported: { type: Boolean, default: true },
   error: { type: String, default: '' },
   capability: { type: String, default: 'full' },
+  hint: { type: String, default: '' },
   added: { type: Array, default: () => [] },
 });
 defineEmits(['cancel', 'undo']);
