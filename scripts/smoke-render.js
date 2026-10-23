@@ -240,7 +240,7 @@ pending.push((async () => {
   assert.strictEqual(ds.completionPercentage(r, 0, 0, 0), 57, 'Sunday works too');
   assert.strictEqual(ds.completionPercentage(r, undefined, 2, 2), 57, 'missing wont-do count');
   assert.strictEqual(ds.completionPercentage([{ completed: true }, null], 0, 1, 1), 50, 'null entries tolerated');
-  assert.strictEqual(ds.daysLeftInYearFrom(new Date(2026, 9, 18, 0, 3)), 75);
+  assert.strictEqual(ds.daysLeftInYearFrom(new Date(2026, 9, 18, 0, 3)), 74);
   assert.strictEqual(ds.daysLeftInYearFrom(new Date(2026, 9, 18, 0, 3)) - 1, ds.daysLeftInYearFrom(new Date(2026, 9, 19, 0, 3)), 'rolls over by one at midnight');
   assert.strictEqual(ds.heroTitleFor(0, 0), 'Make today count.');
   assert.strictEqual(ds.heroTitleFor(6, 0), 'Plan your Saturday'); assert.strictEqual(ds.heroTitleFor(1, 3), 'Looking back at Monday');

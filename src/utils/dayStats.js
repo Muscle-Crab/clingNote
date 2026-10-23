@@ -64,8 +64,10 @@ export const computeTimeStats = (daySession, routine, wontDoCount) => {
 };
 
 export const daysLeftInYearFrom = (today = new Date()) => {
-  const endOfYear = new Date(today.getFullYear(), 11, 31); // December 31
-  const diffTime = endOfYear - today;
+  // Compare wall-clock components in UTC so a daylight-saving change between now and Dec 31 can't shift the count by a day.
+  const endOfYear = Date.UTC(today.getFullYear(), 11, 31); // December 31
+  const nowWall = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate(), today.getHours(), today.getMinutes(), today.getSeconds(), today.getMilliseconds());
+  const diffTime = endOfYear - nowWall;
   return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 };
 
