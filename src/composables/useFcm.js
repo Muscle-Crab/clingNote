@@ -31,7 +31,18 @@ const toast = (title, body) => {
   document.body.appendChild(el); setTimeout(() => el.remove(), 5000);
 };
 
-const getReg = () => navigator.serviceWorker.register(SW_URL, { scope: SW_SCOPE });
+// Register (or reuse) the push worker and wait until it is ACTIVE: PushManager.subscribe fails with "no active Service Worker" on the first install otherwise.
+const getReg = async () => {
+  const reg = await navigator.serviceWorker.register(SW_URL, { scope: SW_SCOPE });
+  if (reg.active) return reg;
+  const sw = reg.installing || reg.waiting;
+  if (sw) await new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error('Service worker did not activate')), 15000);
+    const check = () => { if (sw.state === 'activated') { clearTimeout(t); resolve(); } else if (sw.state === 'redundant') { clearTimeout(t); reject(new Error('Service worker install failed')); } };
+    sw.addEventListener('statechange', check); check();
+  });
+  return reg;
+};
 const mintToken = async () => {
   const m = await import('firebase/messaging');
   const messaging = m.getMessaging(app);
