@@ -175,7 +175,7 @@ const signInWithAppleClick = async () => {
     const code = String(error?.code || error?.message || '');
     if (/1001|cancel/i.test(code)) return; // user dismissed the Apple sheet
     console.error('Apple sign-in failed:', code);
-    errorMessage.value = 'Sign in with Apple failed. Please try again.';
+    errorMessage.value = 'Sign in with Apple failed. Please try again.' + (isNativeIOS() ? ' [' + code.slice(0, 90) + ']' : '');
   } finally {
     isSubmitting.value = false;
   }
