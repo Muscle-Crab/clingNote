@@ -25,6 +25,23 @@ const routes = [
   },
 
   {
+    path: '/onboarding',
+    name: 'onboarding',
+    component: () => import('../views/OnboardingView.vue'),
+    meta: { requiresAuth: true, bare: true }
+  },
+  {
+    path: '/paywall',
+    name: 'paywall',
+    redirect: (to) => ({ path: '/onboarding', query: { ...to.query, step: 5 } })
+  },
+  {
+    path: '/pro/success',
+    name: 'pro-success',
+    component: () => import('../views/pro/ProSuccess.vue'),
+    meta: { requiresAuth: true, bare: true }
+  },
+  {
     path: '/rankings',
     name: 'rankings',
     component: () => import('../views/RankingsView.vue'),
@@ -163,7 +180,7 @@ router.beforeEach(async (to, from, next) => {
   }
 
   if (requiresAuth && !currentUser) {
-    return next('/login');
+    return next({ path: '/login', query: { redirect: to.fullPath } });
   }
 
   next();

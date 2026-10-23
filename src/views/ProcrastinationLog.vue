@@ -33,7 +33,7 @@ const filters = [{ value: 'all', label: 'All' }, ...Object.entries(LOG_LABELS).m
 const countOf = (v) => (v === 'all' ? log.value.length : log.value.filter((e) => e.type === v).length);
 const shown = computed(() => [...log.value].reverse().filter((e) => filter.value === 'all' || e.type === filter.value));
 // Shown in the browser's local time zone (e.g. EDT).
-const fmt = (e) => `${new Date(e.at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short', timeZoneName: 'short' })}${e.date ? ' · for ' + e.date : ''}`;
+const fmt = (e) => `${new Date(e.at).toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })}${e.date ? ' · for ' + e.date : ''}`;
 
 onMounted(() => onAuthStateChanged(auth, async (u) => {
   if (!u) return;

@@ -35,6 +35,7 @@
                       >
                         {{ task.title }}
                       </span>
+                      <span v-if="isRepeating" class="task-repeat-badge" data-test="repeat-badge" :title="'Repeats: ' + repeatLabel">🔁 {{ repeatLabel }}</span>
                       <span v-if="task.timerActive" class="task-timer-left">
                         ⏳  {{ taskTimeLeft(task, now) }}
                       </span>
@@ -129,6 +130,18 @@
 
                   <!-- Right: coin + actions -->
                   <div class="task-right">
+                    <div class="task-repeat-wrap" @click.stop>
+                      <button type="button" class="task-repeat" data-test="repeat-btn" :class="{ 'task-repeat--on': isRepeating }" :title="isRepeating ? 'Repeats: ' + repeatLabel : 'Make recurring'" aria-label="Repeat settings" @click="repeatOpen = !repeatOpen">🔁</button>
+                      <div v-if="repeatOpen" class="repeat-pop" data-test="repeat-pop">
+                        <button type="button" data-test="repeat-opt-daily" @click="pickRepeat(ALL)">Every day</button>
+                        <button type="button" data-test="repeat-opt-weekdays" @click="pickRepeat(WEEKDAYS)">Weekdays</button>
+                        <div class="repeat-days">
+                          <label v-for="d in ALL" :key="d"><input type="checkbox" :value="d" v-model="customDays" />{{ d }}</label>
+                        </div>
+                        <button type="button" data-test="repeat-opt-custom" @click="pickRepeat(customDays)">Save days</button>
+                        <button type="button" data-test="repeat-opt-none" @click="pickRepeat([])">Don't repeat</button>
+                      </div>
+                    </div>
                     <button type="button" class="task-chevron" :class="{ 'task-chevron--open': expanded }" aria-label="Show details"
                         :aria-expanded="expanded ? 'true' : 'false'" :title="expanded ? 'Hide details' : 'Show details'" @click.stop="$emit('toggle-expand')">
                       <i class="fas fa-chevron-down"></i>
@@ -189,8 +202,20 @@ const props = defineProps({
   showNotification: { type: Boolean, default: false },
   transferNotification: { type: String, default: null },
 });
-const emit = defineEmits(['set-boss', 'toggle-expand', 'toggle-complete', 'open-detail', 'toggle-important', 'patch', 'subtask-patch',
+const emit = defineEmits(['set-repeat', 'set-boss', 'toggle-expand', 'toggle-complete', 'open-detail', 'toggle-important', 'patch', 'subtask-patch',
   'toggle-label', 'open-reminder', 'transfer', 'video', 'upload', 'timer', 'wont-do', 'delete', 'schedule']);
+const ALL = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']; // same keys as data.json days[].day
+const WEEKDAYS = ALL.slice(1, 6);
+const repeatOpen = ref(false);
+const isRepeating = computed(() => (props.task.repeatDays || []).length > 1 || (props.task.type === 'recurring' && !Array.isArray(props.task.repeatDays)));
+const repeatLabel = computed(() => {
+  const r = props.task.repeatDays || [];
+  if (r.length === 7) return 'daily';
+  if (r.length === 5 && WEEKDAYS.every((d) => r.includes(d))) return 'weekdays';
+  return r.length ? ALL.filter((d) => r.includes(d)).map((d) => d.slice(0, 3)).join(' ') : 'weekly';
+});
+const customDays = ref([...(props.task.repeatDays || [])]);
+const pickRepeat = (list) => { repeatOpen.value = false; emit('set-repeat', [...list]); };
 
 const moreOpen = ref(false);
 const cat = computed(() => categoryOf(props.task));
@@ -370,4 +395,12 @@ const onCardTap = (event) => { // bound on the whole card (blank areas, chips, n
 .sub-bar { display: inline-block; vertical-align: middle; width: 64px; height: 6px; border-radius: 999px; background: var(--c-border, #e2e8f0); overflow: hidden; margin-left: 6px; }
 .sub-bar-fill { display: block; height: 100%; background: var(--c-success, #22c55e); transition: width .3s; }
 .cal-btn { margin: 6px 6px 6px 0; padding: 4px 10px; border-radius: 8px; border: 1px solid var(--c-border, #e2e8f0); background: transparent; font-weight: 600; }
+.task-repeat-wrap { position: relative; }
+.task-repeat { background: none; border: 0; cursor: pointer; font-size: 15px; opacity: .45; padding: 4px; }
+.task-repeat--on { opacity: 1; }
+.repeat-pop { position: absolute; right: 0; top: 100%; z-index: 30; display: flex; flex-direction: column; gap: 4px; min-width: 170px; padding: 8px; border-radius: 10px; background: var(--c-surface, #111a2e); border: 1px solid rgba(255,255,255,.12); box-shadow: 0 8px 24px rgba(0,0,0,.4); }
+.repeat-pop button { text-align: left; padding: 6px 8px; border-radius: 6px; border: 0; background: rgba(255,255,255,.06); color: inherit; cursor: pointer; font-size: 13px; }
+.repeat-days { display: flex; flex-wrap: wrap; gap: 4px; font-size: 12px; }
+.repeat-days label { display: flex; align-items: center; gap: 2px; }
+.task-repeat-badge { font-size: 11px; opacity: .8; margin-left: 6px; white-space: nowrap; }
 </style>

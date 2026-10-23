@@ -37,6 +37,7 @@
         <!-- Error Message -->
         <div v-if="errorMessage" class="text-red-500 bg-red-100 border border-red-400 px-4 py-2 rounded mb-4">
           {{ errorMessage }}
+          <router-link v-if="emailExists" :to="{ path: '/login', query: { email } }" class="block mt-2 font-semibold underline">Log in instead</router-link>
         </div>
 
         <!-- Terms -->
@@ -70,7 +71,8 @@
 <script setup>
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
+import { ensureUserDoc } from '@/utils/userDoc';
 import { auth, db, storage } from '@/firebaseConfig';
 import { doc, setDoc } from 'firebase/firestore';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -110,48 +112,59 @@ const getFriendlyErrorMessage = (error) => {
   return errorMap[error.code] || "An unexpected error occurred. Please try again.";
 };
 
+const emailExists = ref(false);
+
 const registerUser = async () => {
   errorMessage.value = '';
+  emailExists.value = false;
+  isSubmitting.value = true;
+  let user;
   try {
-    isSubmitting.value = true;
     const userCredential = await createUserWithEmailAndPassword(auth, email.value, password.value);
-    const user = userCredential.user;
+    user = userCredential.user;
+  } catch (error) {
+    console.error('[register] createUser failed:', error);
+    if (error.code === 'auth/email-already-in-use') emailExists.value = true;
+    errorMessage.value = getFriendlyErrorMessage(error);
+    isSubmitting.value = false;
+    return;
+  }
 
-    let avatarURL = '';
-    if (avatar.value) {
-      const storagePath = `avatars/${user.uid}`;
-      const imageRef = storageRef(storage, storagePath);
+  // Account exists from here on: never strand the user on an error.
+  let avatarURL = '';
+  if (avatar.value) {
+    try {
+      const imageRef = storageRef(storage, `avatars/${user.uid}`);
       await uploadBytes(imageRef, avatar.value);
       avatarURL = await getDownloadURL(imageRef);
+    } catch (err) {
+      console.error('[register] avatar upload failed (continuing without photo):', err);
     }
-
-    const userData = {
-      id: user.uid,
-      email: user.email,
-      name: name.value,
-      dob: dob.value,
-      gender: gender.value,
-      credits: 15,
-      hasPaid: false,
-      avatarURL,
-    };
-
-    await setDoc(doc(db, 'users', user.uid), userData);
-
-    // Reset form
-    email.value = '';
-    password.value = '';
-    name.value = '';
-    dob.value = '';
-    gender.value = '';
-    avatar.value = null;
-    avatarPreview.value = null;
-
-    router.push('/');
-  } catch (error) {
-    errorMessage.value = getFriendlyErrorMessage(error);
-  } finally {
-    isSubmitting.value = false;
   }
+
+  // NOTE: credits / hasPaid are server-managed; live Firestore rules reject client writes of them.
+  const userData = {
+    id: user.uid,
+    email: user.email,
+    name: name.value || (user.email || '').split('@')[0],
+    dob: dob.value,
+    gender: gender.value,
+    isPro: false,
+    plan: 'free',
+    onboardingComplete: false,
+    avatarURL,
+    createdAt: new Date(),
+  };
+  try {
+    await setDoc(doc(db, 'users', user.uid), userData, { merge: true });
+  } catch (err) {
+    console.error('[register] user doc write failed, retrying minimal doc:', err);
+    try { await ensureUserDoc(user); } catch (e2) { console.error('[register] ensureUserDoc failed:', e2); }
+  }
+  try { if (userData.name) await updateProfile(user, { displayName: userData.name, ...(avatarURL ? { photoURL: avatarURL } : {}) }); }
+  catch (err) { console.error('[register] updateProfile failed:', err); }
+
+  isSubmitting.value = false;
+  router.push('/onboarding');
 };
 </script>

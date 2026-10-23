@@ -52,6 +52,8 @@
 
         <!-- Error -->
         <div v-if="errorMessage" class="text-red-500 text-sm text-center">{{ errorMessage }}</div>
+        <div class="text-center text-sm"><button type="button" class="underline text-gray-300" @click="resetPassword">Forgot password?</button></div>
+        <div v-if="infoMessage" class="text-green-400 text-sm text-center">{{ infoMessage }}</div>
       </form>
 
       <!-- Register Link -->
@@ -65,16 +67,25 @@
 
 <script setup>
 import { ref, onMounted } from 'vue';
-import { signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
+import { signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, sendPasswordResetEmail } from 'firebase/auth';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { auth, db } from '@/firebaseConfig';
-import { useRouter } from 'vue-router';
+import { useRouter, useRoute } from 'vue-router';
 
 const router = useRouter();
-const email = ref('');
+const _rd = useRoute().query.redirect;
+const afterLogin = () => (typeof _rd === 'string' && _rd.startsWith('/') && !_rd.startsWith('//') ? _rd : '/');
+const email = ref(typeof useRoute().query.email === 'string' ? useRoute().query.email : '');
 const password = ref('');
 const isSubmitting = ref(false);
 const errorMessage = ref('');
+const infoMessage = ref('');
+const resetPassword = async () => {
+  errorMessage.value = ''; infoMessage.value = '';
+  if (!email.value) { errorMessage.value = 'Enter your email above first.'; return; }
+  try { await sendPasswordResetEmail(auth, email.value); infoMessage.value = 'If an account exists for that email, a reset link is on its way.'; }
+  catch (e) { console.error('[reset]', e); errorMessage.value = e.code === 'auth/invalid-email' ? 'Invalid email format.' : 'Could not send reset email. Try again.'; }
+};
 
 // Platform detection
 const isIos = /iphone|ipad|ipod/.test(window.navigator.userAgent.toLowerCase());
@@ -94,7 +105,7 @@ const loginUser = async () => {
     console.log('Successfully logged in user:', user.email);
     email.value = '';
     password.value = '';
-    router.push('/');
+    router.push(afterLogin());
   } catch (error) {
     console.error('Login failed:', error.message);
     errorMessage.value = "Invalid Credentials";
@@ -140,9 +151,12 @@ const signInWithGoogle = async () => {
         profilePicture: user.photoURL,
         provider: user.providerId,
         lastLogin: new Date(),
-        credits: 15,
-        hasPaid: true,
+        isPro: false,
+        plan: 'free',
+        onboardingComplete: false,
       });
+      router.push('/onboarding');
+      return;
       console.log("🎉 New user created with credits and hasPaid set.");
     } else {
       // Returning user — update last login only
@@ -152,7 +166,7 @@ const signInWithGoogle = async () => {
       console.log("✅ Existing user, last login updated.");
     }
 
-    router.push('/');
+    router.push(afterLogin());
   } catch (error) {
     console.error('Google sign-in failed:', error.message);
     errorMessage.value = "Google sign-in failed.";

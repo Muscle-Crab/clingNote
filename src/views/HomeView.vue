@@ -90,8 +90,8 @@
 
 
       <AddTaskModal v-if="modalOpen" :new-task="newTask" v-model:repeat-mode="repeatMode" v-model:show-advanced="showAdvanced"
-                    :days="days" :selected-day-routine="selectedDayRoutine" :error="error" :cap-warning="capWarning"
-                    @close="closeModal" @submit="addNewTask" @add-anyway="addAnyway" />
+                    :days="days" :selected-day-routine="selectedDayRoutine" :error="error" :cap-warning="capWarning" :limit-hit="limitHit"
+                    @close="closeModal" @submit="addNewTask" @add-anyway="addAnyway" @upgrade="goUpgradeForLimit" />
 
 
       <YouTubeModal v-if="youtubeModalOpen" v-model:url="youtubeInput" @close="closeYouTubeModal" @save="saveYouTubeLink" />
@@ -156,7 +156,7 @@
                   @set-boss="setBoss(realIndex(task), task)" @toggle-important="toggleTaskImportance(realIndex(task))" @patch="patchTask(realIndex(task), task, $event)" @subtask-patch="onSubtaskPatch(realIndex(task), task, $event)"
                   @toggle-label="toggleLabelHighlight" @open-reminder="openModal('calendar', realIndex(task), task.title)" @transfer="openTransferModal(realIndex(task))"
                   @video="openYouTubeModal(realIndex(task))" @upload="handleUpload($event, realIndex(task))" @timer="openTaskTimerModal(realIndex(task))"
-                  @wont-do="openWontDoModal(realIndex(task))" @delete="deleteTask(realIndex(task))" @schedule="scheduleExistingTask(realIndex(task), task, $event)"
+                  @wont-do="openWontDoModal(realIndex(task))" @delete="deleteTask(realIndex(task))" @schedule="scheduleExistingTask(realIndex(task), task, $event)" @set-repeat="setTaskRepeat(task, $event)"
               />
             </template>
           </draggable>
@@ -175,7 +175,7 @@
                   @set-boss="setBoss(realIndex(task), task)" @toggle-important="toggleTaskImportance(realIndex(task))" @patch="patchTask(realIndex(task), task, $event)" @subtask-patch="onSubtaskPatch(realIndex(task), task, $event)"
                   @toggle-label="toggleLabelHighlight" @open-reminder="openModal('calendar', realIndex(task), task.title)" @transfer="openTransferModal(realIndex(task))"
                   @video="openYouTubeModal(realIndex(task))" @upload="handleUpload($event, realIndex(task))" @timer="openTaskTimerModal(realIndex(task))"
-                  @wont-do="openWontDoModal(realIndex(task))" @delete="deleteTask(realIndex(task))" @schedule="scheduleExistingTask(realIndex(task), task, $event)" />
+                  @wont-do="openWontDoModal(realIndex(task))" @delete="deleteTask(realIndex(task))" @schedule="scheduleExistingTask(realIndex(task), task, $event)" @set-repeat="setTaskRepeat(task, $event)" />
             </div>
           </div>
 
@@ -186,7 +186,7 @@
 
         </div>
       </section>
-      <StartDayPrompt v-else-if="isViewingToday" @start="startDay" />
+      <StartDayPrompt v-else-if="isViewingToday" :done="!!daySession.ended" :ended-at="daySession.endedAtText" @start="startDay" />
 
       <TimeStatsBar v-if="isViewingToday" :stats="timeStats" :ended="!!daySession.ended" :suggest="suggestShutdown && !shutdownDismissed" @wrap-up="openShutdown" />
 
@@ -222,6 +222,48 @@ import { buildRecap, reportDue, prevDay } from '@/utils/dailyReport';
 import { monthKey, prevMonthKey } from '@/utils/ranking';
 import { applyTaskToggle, evaluateStreak, localDateStr, dayDiff, ALLOWED_GAP_DAYS, DAILY_STREAK_MIN } from '@/utils/streak';
 import { askAi } from '@/composables/useAi';
+import { useRouter as _useRouter } from 'vue-router';
+import { requirePro, loadUserDoc } from '@/composables/usePro';
+import { isPro as isProUser } from '@/utils/pro';
+import { checkDailyLimit } from '@/utils/taskLimits';
+import { canUse } from '@/utils/pro';
+const _proRouter = _useRouter();
+// Daily task limit (config/pricing.js TASK_LIMITS): free 3/day, Pro 5/day
+const limitHit = ref(null); // { limit, count, pro, day } when the last add was blocked
+const goUpgradeForLimit = () => { modalOpen.value = false; _proRouter.push({ path: '/paywall', query: { feature: 'taskLimit', from: '/home' } }); };
+// Limit data is prefetched when the add modal opens so Save does not wait on 8 Firestore reads.
+let gateCache = null; // { at, pro, lists, extra: [] }
+const pendingAdds = new Map(); // taskKey -> task added in this session (a refetch started before the write landed would miss it; counting dedupes by key)
+const fetchGateData = async () => {
+  const [ud, ...snaps] = await Promise.all([loadUserDoc(), ...days.map((d) => getDoc(doc(db, 'weeklyRoutines', `${userId.value}_${d.day}`)))]);
+  gateCache = { at: Date.now(), pro: isProUser(ud), lists: snaps.map((x) => (x.exists() ? x.data().tasks || [] : [])), extra: [] };
+  return gateCache;
+};
+let gatePrefetch = null;
+// Optimistic writes still in flight: warn before a reload/close would drop them.
+let pendingWrites = 0;
+const trackWrite = (pr) => { pendingWrites++; return Promise.resolve(pr).finally(() => { pendingWrites--; }); };
+const beforeUnloadGuard = (e) => { if (pendingWrites > 0) { e.preventDefault(); e.returnValue = ''; } };
+window.addEventListener('beforeunload', beforeUnloadGuard);
+onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnloadGuard));
+const prefetchGate = () => { if (userId.value) gatePrefetch = fetchGateData().catch(() => null); };
+const dailyLimitGate = async (dayKey) => {
+  let g = gatePrefetch ? await gatePrefetch : null;
+  if (!g || Date.now() - g.at > 60000) g = await fetchGateData();
+  const res = checkDailyLimit(g.pro, dayKey, [...g.lists, g.extra, [...pendingAdds.values()]], scheduledList.value || []);
+  limitHit.value = res.ok ? null : { ...res, pro: g.pro, day: dayKey };
+  return res.ok;
+};
+// Read-modify-write of a weeklyRoutines day doc inside a transaction (no lost updates when two writes overlap).
+const mutateDay = (dayName, fn) => runTransaction(db, async (tx) => {
+  const ref_ = doc(db, 'weeklyRoutines', `${userId.value}_${dayName}`);
+  const snap = await tx.get(ref_);
+  const next = fn(snap.exists() ? [...(snap.data().tasks || [])] : []);
+  tx.set(ref_, { tasks: next, updatedAt: serverTimestamp() }, { merge: true });
+  return next;
+});
+const strictAllowed = ref(true); // false for free users once ENFORCE_PAYWALL is on
+loadUserDoc().then((d) => { strictAllowed.value = canUse(d, 'strictBoss'); }).catch(() => {});
 import { scheduleNotification, sendNotificationToPlayer, linkPushUser } from '@/composables/useNotifications';
 import { speak } from '@/composables/useSpeech';
 import { completionPercentage, computeTimeStats, daysLeftInYearFrom, heroTitleFor } from '@/utils/dayStats';
@@ -260,7 +302,7 @@ import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'fire
 import data from '@/data.json';
 import draggable from "vuedraggable";
 import {db} from '@/firebaseConfig'; // Assuming you have imported the Firebase setup file and exported the db instance
-import { doc, setDoc, serverTimestamp, getDoc, updateDoc,getFirestore} from 'firebase/firestore';
+import { doc, setDoc, serverTimestamp, getDoc, updateDoc, deleteDoc, getFirestore, runTransaction} from 'firebase/firestore';
 const modalOpen = ref(false);
 import { deleteObject } from "firebase/storage";
 
@@ -718,6 +760,7 @@ const openModal = (type = 'task', index = null, title = '') => {
     isModalOpen.value = true;
   } else {
     modalOpen.value = true;
+    prefetchGate();
   }
 };
 
@@ -936,6 +979,7 @@ const sortedSelectedDayRoutine = computed(() => {
 });
 
 const deleteTask = async (index) => {
+  gateCache = null; gatePrefetch = null; pendingAdds.clear(); // a deleted task frees its slot under the daily limit (next check refetches)
   const confirmed = confirm("Are you sure you want to delete this task?");
   if (!confirmed) return;
   const dayName = days[selectedDayIndex.value].day;
@@ -1278,7 +1322,7 @@ const runDiscipline = async () => {
   } catch (e) { console.error('Discipline settle failed:', e); }
 };
 // ---- Strict Boss Mode ----
-const strictOn = computed(() => !!(disciplineSettings.value.enabled && disciplineSettings.value.strict));
+const strictOn = computed(() => !!(strictAllowed.value && disciplineSettings.value.enabled && disciplineSettings.value.strict));
 const bossMsg = ref(null);
 const idleNudge = ref(null);
 const verdictScreen = ref(null);
@@ -1557,6 +1601,15 @@ const addNewTask = async () => {
     return false;
   }
 
+  limitHit.value = null;
+  try {
+    if (!(await dailyLimitGate(newTask.value.scheduleDate || getTodayId()))) {
+      const l = limitHit.value;
+      error.value = l.pro ? `Daily limit reached: ${l.limit} tasks per day on Pro.` : `Daily limit reached: free accounts can add ${l.limit} tasks per day.`;
+      return false;
+    }
+  } catch (e) { console.error('limit check', e); error.value = 'Could not check your daily task limit, try again.'; return false; }
+
   // Scheduled-for-later tasks go to their own doc and do not count toward today's cap.
   if (newTask.value.scheduleDate) { await submitScheduledTask(); return true; }
 
@@ -1612,59 +1665,83 @@ const addNewTask = async () => {
     };
   }
 
-  let addedOk = false;
-  try {
-    for (const selectedDay of selectedDays) {
-      const selectedDayDocRef = doc(
-          db,
-          'weeklyRoutines',
-          `${userId.value}_${selectedDay.day}`
-      );
-      const selectedDayDocSnapshot = await getDoc(selectedDayDocRef);
-
-      let existingTasks = [];
-      if (selectedDayDocSnapshot.exists()) {
-        existingTasks = selectedDayDocSnapshot.data().tasks || [];
-      }
-
-      const position = parseInt(newTask.value.position, 10);
-      // copies for weekdays already past this week only start showing next week (not on past days of the current week)
-      const dayIdx = days.findIndex((d) => d.day === selectedDay.day);
-      const activeFrom = newTask.value.selectedDays.length > 0 && task.type === 'recurring' && dayIdx !== selectedDayIndex.value && dayIdx >= 0 ? activeFromForDay(dayIdx) : '';
-      const copy = activeFrom ? { ...task, activeFrom } : task;
-      existingTasks.splice(position, 0, copy);
-
-      await setDoc(selectedDayDocRef, {
-        tasks: existingTasks,
-        updatedAt: serverTimestamp()
-      });
-
-      if (selectedDay.day === days[selectedDayIndex.value].day) {
-        selectedDayRoutine.value = [...existingTasks].sort((a, b) => {
-          return new Date('1970/01/01T' + a.time) - new Date('1970/01/01T' + b.time);
-        });
-      }
+  // Optimistic: show the task and close the modal right away, persist in the background, roll back on failure.
+  const position = parseInt(newTask.value.position, 10);
+  const copyFor = (selectedDay) => {
+    const dayIdx = days.findIndex((d) => d.day === selectedDay.day);
+    const activeFrom = newTask.value.selectedDays.length > 0 && task.type === 'recurring' && dayIdx !== selectedDayIndex.value && dayIdx >= 0 ? activeFromForDay(dayIdx) : '';
+    return activeFrom ? { ...task, activeFrom } : { ...task };
+  };
+  const insertAt = (list, copy) => { const l = [...list]; l.splice(Number.isNaN(position) ? l.length : position, 0, copy); return l; };
+  const viewDay = days[selectedDayIndex.value].day;
+  const key = taskKey(task);
+  if (selectedDays.some((d) => d.day === viewDay)) selectedDayRoutine.value = insertAt(selectedDayRoutine.value || [], copyFor({ day: viewDay }));
+  if (gateCache) gateCache.extra.push(task);
+  pendingAdds.set(key, task);
+  const hadReminder = !!task.reminder;
+  newTask.value = blankTask();
+  capWarning.value = false; capOverride.value = false;
+  closeModal();
+  error.value = '';
+  lastAddPersist = trackWrite((async () => {
+    try {
+      await Promise.all(selectedDays.map((d) => mutateDay(d.day, (l) => (l.some((t) => taskKey(t) === key) ? l : insertAt(l, copyFor(d))))));
+    } catch (e) {
+      console.error('Error adding task:', e);
+      selectedDayRoutine.value = (selectedDayRoutine.value || []).filter((t) => taskKey(t) !== key);
+      pendingAdds.delete(key);
+      if (gateCache) gateCache.extra = gateCache.extra.filter((t) => taskKey(t) !== key);
+      error.value = `Could not save “${task.title}”. Please try again.`;
+      alert(error.value);
+      return false;
     }
-
-    if (task.reminder) {
-      await scheduleNotification(task, task.reminder);
-    }
-
-    newTask.value = blankTask();
-    capWarning.value = false; capOverride.value = false;
-    closeModal();
-    error.value = '';
-    addedOk = true;
-
-    const userName = await fetchUserName(userId.value);
-    if (userName) {
-      await sendNotificationToPlayer(userName, "created");
-    }
-  } catch (error) {
-    console.error('Error adding task:', error);
-  }
-  return addedOk;
+    try { if (hadReminder) await scheduleNotification(task, task.reminder); } catch (e) { console.error(e); }
+    fetchUserName(userId.value).then((n) => n && sendNotificationToPlayer(n, 'created')).catch(() => {});
+    return true;
+  })());
+  return true;
 };
+let lastAddPersist = Promise.resolve(true);
+
+// Repeat control on task cards: keep one copy of the task (same createdAt+title) on every chosen weekday.
+// Copies keep the original createdAt, so making a task recurring never counts as a new task toward the daily limit.
+const setTaskRepeat = async (task, dayNames) => {
+  if (!userId.value || !task) return;
+  const viewDay = days[selectedDayIndex.value].day;
+  const want = new Set(dayNames && dayNames.length ? dayNames : [viewDay]);
+  want.add(viewDay); // the card being edited stays where it is
+  const recurring = want.size > 1;
+  const key = taskKey(task);
+  const prev = { type: task.type, repeatDays: task.repeatDays };
+  const patch = { type: recurring ? 'recurring' : (task.type === 'recurring' ? 'one-time' : task.type || 'one-time'), repeatDays: recurring ? [...want] : [] };
+  Object.assign(task, patch);
+  selectedDayRoutine.value = [...selectedDayRoutine.value];
+  try {
+    // one transaction over all 7 day docs: the series is updated atomically (no half-applied repeat after a reload)
+    await trackWrite(runTransaction(db, async (tx) => {
+      const refs = days.map((d) => doc(db, 'weeklyRoutines', `${userId.value}_${d.day}`));
+      const snaps = await Promise.all(refs.map((r) => tx.get(r)));
+      snaps.forEach((snap, i) => {
+        const d = days[i];
+        const l = snap.exists() ? snap.data().tasks || [] : [];
+        const has = l.some((t) => taskKey(t) === key);
+        let next = l;
+        if (!want.has(d.day)) { if (!has) return; next = l.filter((t) => taskKey(t) !== key); }
+        else if (has) next = l.map((t) => (taskKey(t) === key ? { ...t, ...patch } : t));
+        else {
+          const af = i !== selectedDayIndex.value ? activeFromForDay(i) : '';
+          const { timerActive, timerEnd, timerStart, boss, ...base } = task;
+          next = [...l, { ...base, ...patch, completed: false, completedAt: null, status: base.status === 'done' ? 'todo' : base.status, activeFrom: af }];
+        }
+        tx.set(refs[i], { tasks: next, updatedAt: serverTimestamp() }, { merge: true });
+      });
+    }));
+  } catch (e) {
+    console.error('repeat', e); Object.assign(task, prev); selectedDayRoutine.value = [...selectedDayRoutine.value];
+    alert('Could not update the repeat setting. Please try again.');
+  }
+};
+
 
 
 const speakDailyReport = async () => {
@@ -2252,7 +2329,7 @@ const drainVoiceQueue = async () => {
       if (!userId.value) { voiceError.value = 'Sign in to add tasks by voice.'; voiceQueue.length = 0; break; }
       newTask.value = { ...blankTask(), title };
       capOverride.value = true; // hands-free never stops on the active-task cap warning
-      const ok = await addNewTask();
+      const ok = await addNewTask() && (await lastAddPersist);
       capOverride.value = false;
       if (!ok) { voiceError.value = error.value || 'Could not add the task.'; continue; }
       const saved = [...(selectedDayRoutine.value || [])].filter((x) => x.title === title).sort((x, y) => String(y.createdAt).localeCompare(String(x.createdAt)))[0];
@@ -2268,6 +2345,7 @@ const drainVoiceQueue = async () => {
 const undoVoiceTask = async (entry) => {
   if (!entry?.createdAt || !entry.dayName || !userId.value) return;
   const key = `${entry.createdAt}|${entry.title}`;
+  await lastAddPersist;
   try {
     const ref_ = doc(db, 'weeklyRoutines', `${userId.value}_${entry.dayName}`);
     const cur = (await getDoc(ref_)).data()?.tasks || [];
@@ -2565,13 +2643,15 @@ const workoutPreferences = reactive({
 });
 
 
-const openWorkoutModal = () => {
+const openWorkoutModal = async () => {
+  if (!(await requirePro(_proRouter, 'aiCoach'))) return;
   showWorkoutModal.value = true;
 };const closeWorkoutModal = () => {
   showWorkoutModal.value = false;
 };
 
 const generateWorkoutRoutine = async () => {
+  if (!(await requirePro(_proRouter, 'aiCoach'))) { closeWorkoutModal(); return; }
   closeWorkoutModal();
   isLoading.value = true;
 
@@ -2683,7 +2763,7 @@ const isCapBlocked = () => {
   return false;
 };
 const addAnyway = () => { capOverride.value = true; capWarning.value = false; addNewTask(); };
-watch(modalOpen, (open) => { if (!open) { capWarning.value = false; capOverride.value = false; } });
+watch(modalOpen, (open) => { if (!open) { capWarning.value = false; capOverride.value = false; limitHit.value = null; } });
 
 // Load summary + schedule
 const todayLoad = computed(() => loadSummary(selectedDayRoutine.value));
@@ -2750,6 +2830,11 @@ const finishShutdown = async (carry) => {
     shutdownOpen.value = false;
     shutdownDismissed.value = true;
     if (daySession.value.started && !daySession.value.ended) await endDay(); // existing End Day logic
+    else if (!daySession.value.ended && userId.value) { // wrapped up without pressing Start Day: still mark today done
+      const now = new Date();
+      await setDoc(doc(db, 'userSettings', userId.value), { daySessions: { [getTodayId()]: { ended: true, endTime: serverTimestamp(), updatedAt: serverTimestamp() } } }, { merge: true });
+      daySession.value = { ...daySession.value, ended: true, endTime: now, endedAtText: formatSessionTime(now) };
+    }
     await fetchSelectedDayRoutine();
   } catch (e) {
     console.error('Shutdown failed:', e);

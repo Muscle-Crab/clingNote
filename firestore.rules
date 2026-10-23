@@ -1,36 +1,164 @@
 rules_version = '2';
-// Monthly ranking rules. NOTE: this file is not referenced by firebase.json yet and is NOT deployed.
-// Merge these match blocks into the project's live Firestore rules (from the console) before deploying,
-// otherwise other collections (weeklyRoutines, streaks, users, ...) would lose access.
+// PROPOSED full Firestore rules for clingnote-463b4 (based on the live rules + paywall hardening).
+// NOT deployed yet: rules are shared with production, and current main's Login.vue still creates user docs with
+// credits/hasPaid from the client, which these rules reject. Deploy only after feat/paywall-onboarding is merged:
+//   firebase deploy --only firestore:rules   (needs "firestore": {"rules": "firestore.rules"} in firebase.json)
 service cloud.firestore {
   match /databases/{database}/documents {
+    
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Helper function to check if user owns the document
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    // Billing/entitlement fields are written ONLY by Netlify functions (admin SDK: stripe-webhook, ai credits).
+    function protectedUserFields() {
+      return ['isPro', 'plan', 'proExpiresAt', 'credits', 'hasPaid',
+              'stripeCustomerId', 'stripeSubscriptionId', 'stripeStatus', 'stripePriceId', 'stripeSessionId', 'stripe'];
+    }
+    // New docs may only carry the default free values (Login.vue writes isPro:false, plan:'free').
+    function cleanCreate() {
+      let d = request.resource.data;
+      return !d.keys().hasAny(protectedUserFields().removeAll(['isPro', 'plan']))
+        && (!('isPro' in d) || d.isPro == false)
+        && (!('plan' in d) || d.plan == 'free');
+    }
+    function untouchedProtected() {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(protectedUserFields());
+    }
+
+    // Users collection - public read kept for compatibility (profiles/rankings); writes owner-only, billing fields locked
+    match /users/{userId} {
+      allow read: if true;
+      allow create: if isOwner(userId) && cleanCreate();
+      allow update: if isOwner(userId) && untouchedProtected();
+      allow delete: if isOwner(userId);
+    }
+    
+    // Posts collection
+    match /posts/{postId} {
+      allow read: if true;
+      allow create, update: if isAuthenticated();
+      allow delete: if isAuthenticated() && request.auth.uid == resource.data.userId;
+    }
+    
+    // Rooms collection
+    match /rooms/{roomId} {
+      allow read, write: if isAuthenticated();
+    }
+    
+    // Tasks collection
+    match /tasks/{taskId} {
+      allow read, write: if isAuthenticated();
+    }
+    
+    // Weekly Routines - users can only access their own tasks
+    match /weeklyRoutines/{routineId} {
+      // routineId format: {userId}_{dayName}; owner-only (was: any signed-in user).
+      // Daily task limit is enforced in the UI only: rules can't count tasks by createdAt date inside an array.
+      // As a coarse backstop a single day doc can't hold more than 200 tasks.
+      allow read, delete: if isAuthenticated() && request.auth.uid == routineId.split('_')[0];
+      allow create, update: if isAuthenticated() && request.auth.uid == routineId.split('_')[0]
+        && (!('tasks' in request.resource.data) || request.resource.data.tasks.size() <= 200);
+    }
+    
+    // Captains collection
+    match /captains/{captainId} {
+      allow read: if true;
+      allow write: if isAuthenticated();
+    }
+    
+    // Game collection
+    match /game/{gameId} {
+      allow read: if true;
+      allow write: if isAuthenticated();
+    }
+    
+    // Turn State document
+    match /game/turnState {
+      allow read: if true;
+      allow write: if isAuthenticated();
+    }
+    
+    // Streaks - users can read/write their own streak data
+    match /streaks/{streakId} {
+      allow read, write: if isAuthenticated();  // TODO: confirm streakId format, then restrict to owner
+    }
+    
+    // Won't Do Tasks - users can only access their own
+    match /wontDoTasks/{userId_day} {
+      allow read, write: if isAuthenticated() && 
+        request.auth.uid == userId_day.split("_")[0];
+    }
+    
+    // Daily Reports - users can only access their own
+    match /dailyReports/{reportId} {
+      allow read, write: if isAuthenticated() &&
+        request.auth.uid == reportId.split('_')[0];
+    }
+    
+    // NoFap subcollection
+    match /users/{userId}/nofap/{docId} {
+      allow read, write: if isOwner(userId);
+    }
+    
+    // Meals collection
+    match /meals/{mealId} {
+      allow read, update, delete: if isAuthenticated() && request.auth.uid == resource.data.userId;
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+    }
+    
+    // User Settings
+    match /userSettings/{userId} {
+      allow read, write: if isOwner(userId);
+    }
+    
+    // ===== NEW GAMIFICATION COLLECTIONS =====
+    
+    // User Ranks - users can read/write their own rank data
+    match /userRanks/{userId} {
+      allow read, write: if isOwner(userId);
+    }
+    
+    // Badges/Achievements - users can read/write their own badges
+    match /badges/{userId} {
+      allow read, write: if isOwner(userId);
+    }
+    
+    // ===== ADDED (streak-fix release): paths not covered by existing rules =====
+
+    // Monthly ranking: public leaderboard summary. Authed users read opted-in entries (+ always their own); owner writes.
     match /monthlyStats/{month}/users/{uid} {
-      // anyone signed in can read opted-in entries; users always read their own
-      allow read: if request.auth != null && (resource.data.optIn == true || request.auth.uid == uid);
-      allow write: if request.auth != null && request.auth.uid == uid
-        && month.matches('^[0-9]{4}-[0-9]{2}$')
-        && !('email' in request.resource.data);
+      allow read: if isAuthenticated() && (resource.data.optIn == true || request.auth.uid == uid);
+      allow write: if isOwner(uid) && month.matches('^[0-9]{4}-[0-9]{2}$');
     }
+
+    // Monthly ranking: per-user private detail (task keys, point adjustments)
     match /monthlyStats/{month}/private/{uid} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
+      allow read, write: if isOwner(uid);
     }
-    // Discipline Mode state (settlement, log, boss, breaks, XP): owner-only
+
+    // Discipline Mode state (deadline settlement, log, boss, breaks, XP, theme, freezes)
     match /discipline/{uid} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
+      allow read, write: if isOwner(uid);
     }
-    // Profile doc; also holds scheduledTasks (one-off + recurring templates/instances): owner-only
-    match /users/{uid} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
-    }
-    // Calendar feed tokens: owner may create/delete their own; nobody reads them from the client (server uses admin SDK)
+
+    // Calendar feed tokens: owner creates/deletes own token; only the server (admin SDK) reads them
     match /icsTokens/{token} {
-      allow create: if request.auth != null && request.resource.data.uid == request.auth.uid && token.matches('^[a-f0-9]{48}$');
-      allow delete: if request.auth != null && resource.data.uid == request.auth.uid;
+      allow create: if isAuthenticated() && token.matches('^[a-f0-9]{48}$')
+                    && request.resource.data.uid == request.auth.uid;
+      allow delete: if isAuthenticated() && resource.data.uid == request.auth.uid;
       allow read, update: if false;
     }
-    // Settings (incl. discipline toggle/deadline): owner-only
-    match /userSettings/{uid} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
+
+    // Default deny all other collections
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

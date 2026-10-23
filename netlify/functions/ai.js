@@ -1,7 +1,8 @@
 // POST /.netlify/functions/ai   Authorization: Bearer <Firebase ID token>
 // Body: { task: 'meal-image' | 'meal-text' | 'workout', input: {...} } -> { content }
-// OPENAI_API_KEY stays on the server. 'meal-image' costs 1 credit, deducted here in a transaction (clients can't write credits).
-const { verifyUser, getAdmin } = require('./lib/notify');
+// Pro only (server-checked users/{uid}.isPro + proExpiresAt). OPENAI_API_KEY stays on the server. 'meal-image' costs 1 credit, deducted here in a transaction (clients can't write credits).
+const { getAdmin } = require('./lib/firebaseAdmin');
+const { requirePro } = require('./lib/requirePro');
 const { buildRequest } = require('./lib/aiPrompts');
 
 const json = (statusCode, body) => ({ statusCode, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -22,11 +23,11 @@ const refundCredit = async (db, uid) => db.runTransaction(async (tx) => {
 exports.handler = async (event, ctx, deps = {}) => {
   if (event.httpMethod !== 'POST') return json(405, { error: 'Method not allowed' });
   try {
-    const uid = await verifyUser(event.headers, deps.verify);
+    const uid = await requirePro(event, { verify: deps.verify, db: deps.db }); // 401 / 402 unless Pro
     if (!process.env.OPENAI_API_KEY) return json(500, { error: 'Server not configured' });
     let body; try { body = JSON.parse(event.body || '{}'); } catch (e) { return json(400, { error: 'Bad JSON' }); }
     const req = buildRequest(body.task, body.input);
-    const db = deps.db || (req.costsCredit ? getAdmin().firestore() : null);
+    const db = deps.db || getAdmin().firestore();
     let creditsLeft;
     if (req.costsCredit) creditsLeft = await spendCredit(db, uid);
     const r = await (deps.fetch || fetch)('https://api.openai.com/v1/chat/completions', {

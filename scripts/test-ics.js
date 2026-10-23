@@ -23,12 +23,14 @@ await t('token format', () => { assert.ok(I.isValidToken('a'.repeat(48))); asser
 await t('feed function: valid token -> calendar, unknown/revoked/bad -> 404', async () => {
   const fn = require(path.join(__dirname, '../netlify/functions/calendar.js'));
   const good = 'b'.repeat(48);
-  const data = { [`icsTokens/${good}`]: { uid: 'u1' }, 'users/u1': { scheduledTasks: { tasks: [{ id: 's', title: 'Report', scheduledDate: '2026-10-30' }] }, email: 'secret@x.com' } };
+  const data = { [`icsTokens/${good}`]: { uid: 'u1' }, 'users/u1': { isPro: true, plan: 'yearly', scheduledTasks: { tasks: [{ id: 's', title: 'Report', scheduledDate: '2026-10-30' }] }, email: 'secret@x.com' } };
   const db = { doc: (p) => ({ get: async () => ({ exists: p in data, data: () => data[p] }) }) };
   const ok = await fn.handler({ httpMethod: 'GET', queryStringParameters: { token: good } }, {}, { db });
   assert.equal(ok.statusCode, 200); assert.match(ok.headers['Content-Type'], /text\/calendar/); assert.match(ok.body, /SUMMARY:Report/); assert.ok(!ok.body.includes('secret@x.com'));
   assert.equal((await fn.handler({ httpMethod: 'GET', queryStringParameters: { token: 'c'.repeat(48) } }, {}, { db })).statusCode, 404);
   assert.equal((await fn.handler({ httpMethod: 'GET', queryStringParameters: { token: '../users' } }, {}, { db })).statusCode, 404);
+  data[`icsTokens/${'d'.repeat(48)}`] = { uid: 'u2' }; data['users/u2'] = { isPro: false, plan: 'free' };
+  assert.equal((await fn.handler({ httpMethod: 'GET', queryStringParameters: { token: 'd'.repeat(48) } }, {}, { db })).statusCode, 402);
   assert.equal((await fn.handler({ httpMethod: 'POST', queryStringParameters: {} }, {}, { db })).statusCode, 405);
 });
 console.log(`${n} passed`);

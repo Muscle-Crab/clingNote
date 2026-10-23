@@ -1,6 +1,11 @@
 <template>
   <section class="task-section day-not-started">
-    <div class="empty-state">
+    <div v-if="done" class="empty-state" data-test="day-wrapped">
+      <div class="empty-icon">🌙</div>
+      <h2 class="empty-title">Day wrapped up</h2>
+      <p class="empty-sub">Nice work. You finished today<span v-if="endedAt"> at {{ endedAt }}</span>. See you tomorrow.</p>
+    </div>
+    <div v-else class="empty-state">
       <div class="empty-icon">🌅</div>
 
       <h2 class="empty-title">
@@ -23,6 +28,7 @@
 </template>
 
 <script setup>
+defineProps({ done: { type: Boolean, default: false }, endedAt: { type: String, default: '' } });
 defineEmits(['start']);
 </script>
 

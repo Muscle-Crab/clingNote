@@ -11,7 +11,7 @@ status = 200
 node_bundler = "esbuild"
 
 [functions."stripe-webhook"]
-included_files = ["netlify/functions/serviceAccountKey.json"]
+included_files = ["netlify/functions/lib/**"]
 external_node_modules = ["stripe", "firebase-admin", "@opentelemetry/api"]
 
 [functions."daily-report"]
@@ -32,3 +32,6 @@ external_node_modules = ["firebase-admin"]
 for = "/*"
 [headers.values]
 Permissions-Policy = "microphone=(self), camera=()"
+
+[functions."create-checkout"]
+external_node_modules = ["stripe", "firebase-admin"]
