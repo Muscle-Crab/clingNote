@@ -4,7 +4,7 @@ const { withCors } = require('./lib/cors');
 // Requires a recent sign-in (auth_time <= 5 min) -> otherwise 401 {code:'reauth-required'} and the client re-authenticates and retries.
 const { verifyUser } = require('./lib/notify');
 const { getAdmin } = require('./lib/firebaseAdmin');
-const { buildDeletionPlan, makeAdminIo, runPlan, revokeAppleToken } = require('./lib/accountDeletion');
+const { buildDeletionPlan, makeAdminIo, runPlan, revokeAppleToken, deleteOneSignalUser, deleteRevenueCatSubscriber } = require('./lib/accountDeletion');
 
 const RECENT_SEC = 300;
 const json = (statusCode, o) => ({ statusCode, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(o) });
@@ -40,8 +40,13 @@ const handler = async (event, deps = {}) => {
     // 3. Firestore + Storage, then the Auth user last (so a retry is still authenticated if data deletion failed midway)
     const failed = await runPlan(buildDeletionPlan(uid, deps.now || new Date()), io);
     if (failed.length) { console.error('[delete-account] incomplete', uid.slice(0, 6), failed.length); return json(500, { error: 'Could not delete all data. Please try again.', failed: failed.length }); }
+    // 4. Processors that hold a profile for this uid (best effort: reported, never blocks). Skipped (and reported) when their env key is not set.
+    const pf = { env: deps.env || process.env, fetchImpl: deps.fetch || fetch };
+    const onesignal = await deleteOneSignalUser(uid, pf);
+    const revenuecat = await deleteRevenueCatSubscriber(uid, pf);
+    if (onesignal === 'failed' || revenuecat === 'failed') console.error('[delete-account] processor cleanup failed', uid.slice(0, 6), onesignal, revenuecat);
     await (deps.deleteAuth || ((u) => getAdmin().auth().deleteUser(u)))(uid);
-    return json(200, { ok: true, apple, stripe, iapNote: userDoc && userDoc.proSource === 'revenuecat' ? 'Apple subscriptions are not cancelled by deleting the account; manage them in Apple ID settings.' : undefined });
+    return json(200, { ok: true, apple, stripe, onesignal, revenuecat, iapNote: userDoc && userDoc.proSource === 'revenuecat' ? 'Apple subscriptions are not cancelled by deleting the account; manage them in Apple ID settings.' : undefined });
   } catch (e) {
     console.error('[delete-account]', e && e.message);
     return json(e.status || 500, { error: e.status ? e.message : 'Delete failed' });

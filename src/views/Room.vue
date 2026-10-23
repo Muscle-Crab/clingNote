@@ -970,7 +970,7 @@ function isVideoUrl(url) {
 
 const uploadFile = async (file) => {
   if (!file) return null;
-  const storageReference = storageRef(storage, `uploads/${file.name}`);
+  const storageReference = storageRef(storage, `uploads/${currentUser.value?.uid || 'anon'}_${Date.now()}_${file.name}`);
   const uploadTask = uploadBytesResumable(storageReference, file);
 
   return new Promise((resolve, reject) => {

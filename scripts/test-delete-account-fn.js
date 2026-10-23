@@ -8,7 +8,7 @@ const lib = require(path.join(__dirname, '../netlify/functions/lib/accountDeleti
   const req = (auth = 'Bearer tok', body = {}, method = 'POST') => ({ httpMethod: method, headers: auth ? { authorization: auth } : {}, body: JSON.stringify(body) });
   const mk = (over = {}) => { const log = []; return { log, now: NOW,
     verify: async () => ({ uid: UID, auth_time: nowSec - 30 }),
-    io: { recursive: async (p) => log.push('rec:' + p), doc: async (p) => log.push('doc:' + p), idPrefix: async (c, p) => log.push('pre:' + c + ':' + p), where: async (c, f, v) => log.push('where:' + c + ':' + f + ':' + v), storagePrefix: async (p) => log.push('st:' + p), readUser: async () => ({ proSource: 'revenuecat' }) },
+    io: { recursive: async (p) => log.push('rec:' + p), doc: async (p) => log.push('doc:' + p), idPrefix: async (c, p) => log.push('pre:' + c + ':' + p), where: async (c, f, v) => log.push('where:' + c + ':' + f + ':' + v), storagePrefix: async (p) => log.push('st:' + p), scrubComments: async (u) => log.push('scrub:' + u), postMedia: async (u) => log.push('media:' + u), readUser: async () => ({ proSource: 'revenuecat' }) },
     deleteAuth: async (u) => log.push('auth:' + u), env: {}, ...over }; };
 
   await t('plan covers every user-owned collection + storage and rejects bad uids', () => {
@@ -16,7 +16,8 @@ const lib = require(path.join(__dirname, '../netlify/functions/lib/accountDeleti
     ['recursive:users/' + UID, 'doc:publicProfiles/' + UID, 'doc:streaks/' + UID, 'doc:userSettings/' + UID, 'doc:discipline/' + UID, 'doc:userRanks/' + UID, 'doc:badges/' + UID,
       'doc:monthlyStats/2026-11/users/' + UID, 'doc:monthlyStats/2026-11/private/' + UID, 'doc:monthlyStats/2024-01/users/' + UID,
       'idPrefix:weeklyRoutines', 'idPrefix:wontDoTasks', 'idPrefix:dailyReports', 'where:posts', 'where:rooms', 'where:meals', 'where:icsTokens',
-      'storagePrefix:avatars/' + UID, 'storagePrefix:task_images/' + UID + '_', 'storagePrefix:task_files/' + UID + '_'].forEach((x) => assert.ok(steps.includes(x), 'missing ' + x));
+      'storagePrefix:avatars/' + UID, 'storagePrefix:task_images/' + UID + '_', 'storagePrefix:task_files/' + UID + '_',
+      'storagePrefix:mealImages/' + UID + '_', 'storagePrefix:uploads/' + UID + '_', 'scrubComments:undefined', 'postMedia:undefined'].forEach((x) => assert.ok(steps.includes(x), 'missing ' + x));
     assert.throws(() => lib.buildDeletionPlan('../users/x', NOW)); assert.throws(() => lib.buildDeletionPlan('', NOW));
   });
   await t('405 / 401 without or with bad token; nothing deleted', async () => {
@@ -55,6 +56,30 @@ const lib = require(path.join(__dirname, '../netlify/functions/lib/accountDeleti
     assert.ok(crypto.verify('sha256', Buffer.from(h + '.' + p), { key: publicKey, dsaEncoding: 'ieee-p1363' }, Buffer.from(s.replace(/-/g, '+').replace(/_/g, '/'), 'base64')));
     assert.equal(await lib.revokeAppleToken('code1', { env: {}, fetchImpl }), 'skipped-not-configured'); assert.equal(await lib.revokeAppleToken('', { env, fetchImpl }), 'skipped-no-code');
     assert.equal(await lib.revokeAppleToken('c', { env, fetchImpl: async () => ({ ok: false, json: async () => ({}) }) }), 'failed');
+  });
+  await t('comment scrub removes only the user\'s comments/replies/reaction/read marker from other people\'s posts', () => {
+    const O = 'otherUser1234567890abcdefgh12';
+    const post = { comments: [{ id: 'a', userId: UID, message: 'x' }, { id: 'b', userId: O, message: 'y', replies: [{ id: 'r1', userId: UID }, { id: 'r2', userId: O }] }, { id: 'c', userId: O }], reactions: { [UID]: 'like', [O]: 'love' }, readComments: { [UID]: ['a'], [O]: ['b'] } };
+    const r = lib.scrubPostData(JSON.parse(JSON.stringify(post)), UID);
+    assert.deepEqual(r.update.comments.map((c) => c.id), ['b', 'c']); assert.deepEqual(r.update.comments[0].replies.map((x) => x.id), ['r2']);
+    assert.deepEqual(r.update.reactions, { [O]: 'love' }); assert.equal(r.dropReadComments, true);
+    assert.equal(lib.scrubPostData({ comments: [{ id: 'c', userId: O }], reactions: { [O]: 'x' }, readComments: { [O]: [] } }, UID), null); assert.equal(lib.scrubPostData({}, UID), null);
+  });
+  await t('storage path is derived from a post mediaUrl (only uploads/ is deleted by the executor)', () => {
+    assert.equal(lib.storagePathFromUrl('https://firebasestorage.googleapis.com/v0/b/x.appspot.com/o/uploads%2Fmy%20pic.png?alt=media&token=t'), 'uploads/my pic.png');
+    assert.equal(lib.storagePathFromUrl(''), null); assert.equal(lib.storagePathFromUrl('https://example.com/a.png'), null);
+  });
+  await t('OneSignal + RevenueCat: skipped without keys, correct REST DELETE with keys, failure never blocks', async () => {
+    const calls = []; const f = (status) => async (url, o) => { calls.push({ url, o }); return { ok: status < 300, status }; };
+    assert.equal(await lib.deleteOneSignalUser(UID, { env: {}, fetchImpl: f(200) }), 'skipped-not-configured'); assert.equal(await lib.deleteRevenueCatSubscriber(UID, { env: {}, fetchImpl: f(200) }), 'skipped-not-configured'); assert.equal(calls.length, 0);
+    assert.equal(await lib.deleteOneSignalUser(UID, { env: { ONESIGNAL_REST_API_KEY: 'os_v2_app_k', ONESIGNAL_APP_ID: 'APP1' }, fetchImpl: f(200) }), 'deleted');
+    assert.equal(calls[0].url, 'https://api.onesignal.com/apps/APP1/users/by/external_id/' + UID); assert.equal(calls[0].o.method, 'DELETE'); assert.equal(calls[0].o.headers.Authorization, 'Key os_v2_app_k');
+    assert.equal(await lib.deleteRevenueCatSubscriber(UID, { env: { REVENUECAT_SECRET_KEY: 'sk_x' }, fetchImpl: f(200) }), 'deleted');
+    assert.equal(calls[1].url, 'https://api.revenuecat.com/v1/subscribers/' + UID); assert.equal(calls[1].o.method, 'DELETE'); assert.equal(calls[1].o.headers.Authorization, 'Bearer sk_x');
+    assert.equal(await lib.deleteRevenueCatSubscriber(UID, { env: { REVENUECAT_SECRET_KEY: 'k' }, fetchImpl: f(404) }), 'not-found'); assert.equal(await lib.deleteOneSignalUser(UID, { env: { ONESIGNAL_REST_API_KEY: 'k' }, fetchImpl: f(500) }), 'failed');
+    assert.equal(await lib.deleteOneSignalUser(UID, { env: { ONESIGNAL_REST_API_KEY: 'k' }, fetchImpl: async () => { throw new Error('net'); } }), 'failed');
+    const d = mk({ env: { ONESIGNAL_REST_API_KEY: 'k', REVENUECAT_SECRET_KEY: 'k' }, fetch: f(500) }); const r = await fn._handler(req(), d); const b = JSON.parse(r.body);
+    assert.equal(r.statusCode, 200); assert.equal(b.onesignal, 'failed'); assert.equal(b.revenuecat, 'failed'); assert.equal(d.log[d.log.length - 1], 'auth:' + UID);
   });
   console.log(`\n${n} delete-account tests passed`);
 })().catch((e) => { console.error(e); process.exit(1); });

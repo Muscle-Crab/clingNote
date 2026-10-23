@@ -8,7 +8,10 @@ const UID_RE = /^[A-Za-z0-9]{6,128}$/;
 const DOC_COLLECTIONS = ['publicProfiles', 'streaks', 'userSettings', 'userRanks', 'badges', 'discipline']; // id === uid
 const PREFIX_COLLECTIONS = ['weeklyRoutines', 'wontDoTasks', 'dailyReports'];                               // id === `${uid}_...`
 const FIELD_COLLECTIONS = [['posts', 'userId'], ['rooms', 'user_id'], ['meals', 'userId'], ['icsTokens', 'uid']];
-const STORAGE_PREFIXES = (uid) => [`avatars/${uid}`, `task_images/${uid}_`, `task_files/${uid}_`];
+// meal photos are saved as mealImages/${uid}_..., community uploads as uploads/${uid}_... (older uploads have no uid in the name -> removed through the
+// user's posts' mediaUrl, see 'postMedia')
+const STORAGE_PREFIXES = (uid) => [`avatars/${uid}`, `task_images/${uid}_`, `task_files/${uid}_`, `mealImages/${uid}_`, `uploads/${uid}_`];
+const ONESIGNAL_APP_ID = 'fc206a71-7d65-4cfa-b8b2-0c10548e1476'; // public id (same as the client); override with ONESIGNAL_APP_ID
 
 const monthKeys = (now = new Date(), from = '2024-01') => {
   const out = []; let [y, m] = from.split('-').map(Number);
@@ -24,10 +27,31 @@ const buildDeletionPlan = (uid, now = new Date()) => {
   DOC_COLLECTIONS.forEach((c) => steps.push({ kind: 'doc', path: `${c}/${uid}` }));
   monthKeys(now).forEach((mk) => { steps.push({ kind: 'doc', path: `monthlyStats/${mk}/users/${uid}` }); steps.push({ kind: 'doc', path: `monthlyStats/${mk}/private/${uid}` }); });
   PREFIX_COLLECTIONS.forEach((c) => steps.push({ kind: 'idPrefix', collection: c, prefix: `${uid}_` }));
+  steps.push({ kind: 'scrubComments', uid });   // remove this user's comments/replies/reactions/read markers from OTHER people's posts
+  steps.push({ kind: 'postMedia', uid });       // community uploads attached to the user's own posts (older names carry no uid)
   FIELD_COLLECTIONS.forEach(([c, f]) => steps.push({ kind: 'where', collection: c, field: f, value: uid }));
   STORAGE_PREFIXES(uid).forEach((p) => steps.push({ kind: 'storagePrefix', prefix: p }));
   return steps;
 };
+
+// Pure: what to change on one post document to remove uid's contributions. Returns null when nothing changes.
+const scrubPostData = (data, uid) => {
+  const out = {}; let changed = false;
+  if (Array.isArray(data.comments)) {
+    const kept = [];
+    for (const c of data.comments) {
+      if (c && c.userId === uid) { changed = true; continue; }
+      if (c && Array.isArray(c.replies) && c.replies.some((r) => r && r.userId === uid)) { changed = true; kept.push({ ...c, replies: c.replies.filter((r) => !(r && r.userId === uid)) }); } else kept.push(c);
+    }
+    if (kept.length !== data.comments.length || changed) { out.comments = kept; changed = true; }
+  }
+  if (data.reactions && Object.prototype.hasOwnProperty.call(data.reactions, uid)) { const r = { ...data.reactions }; delete r[uid]; out.reactions = r; changed = true; }
+  const dropRead = !!(data.readComments && Object.prototype.hasOwnProperty.call(data.readComments, uid));
+  if (dropRead) changed = true;
+  return changed ? { update: out, dropReadComments: dropRead } : null;
+};
+// Storage object path from a Firebase download URL (https://firebasestorage.googleapis.com/v0/b/<bucket>/o/<encoded path>?alt=media...)
+const storagePathFromUrl = (url) => { try { const m = /\/o\/([^?]+)/.exec(String(url || '')); return m ? decodeURIComponent(m[1]) : null; } catch (e) { return null; } };
 
 // Real executor on top of firebase-admin. Each step is independent; failures are collected, never swallowed silently.
 const makeAdminIo = (admin, bucketName) => {
@@ -39,6 +63,29 @@ const makeAdminIo = (admin, bucketName) => {
     doc: (path) => db.doc(path).delete(),
     idPrefix: (collection, prefix) => deleteQuery(db.collection(collection).where(FieldPath.documentId(), '>=', prefix).where(FieldPath.documentId(), '<', prefix + '\uf8ff')),
     where: (collection, field, value) => deleteQuery(db.collection(collection).where(field, '==', value)),
+    scrubComments: async (uid) => {
+      let last = null;
+      for (;;) {
+        let q = db.collection('posts').orderBy(FieldPath.documentId()).limit(300); if (last) q = q.startAfter(last);
+        const snap = await q.get(); if (snap.empty) return;
+        for (const d of snap.docs) {
+          await db.runTransaction(async (tx) => {
+            const fresh = await tx.get(d.ref); if (!fresh.exists) return;
+            const r = scrubPostData(fresh.data(), uid); if (!r) return;
+            const upd = { ...r.update }; if (r.dropReadComments) upd[`readComments.${uid}`] = admin.firestore.FieldValue.delete();
+            tx.update(d.ref, upd);
+          });
+        }
+        last = snap.docs[snap.docs.length - 1]; if (snap.size < 300) return;
+      }
+    },
+    postMedia: async (uid) => {
+      const snap = await db.collection('posts').where('userId', '==', uid).get();
+      for (const d of snap.docs) {
+        const path = storagePathFromUrl(d.data().mediaUrl);
+        if (path && path.startsWith('uploads/')) { try { await admin.storage().bucket(bucketName).file(path).delete({ ignoreNotFound: true }); } catch (e) { if (e.code !== 404) throw e; } }
+      }
+    },
     storagePrefix: (prefix) => admin.storage().bucket(bucketName).deleteFiles({ prefix, force: true }),
     readUser: async (uid) => { const s = await db.doc(`users/${uid}`).get(); return s.exists ? s.data() : null; },
   };
@@ -53,6 +100,8 @@ const runPlan = async (steps, io) => {
       else if (s.kind === 'idPrefix') await io.idPrefix(s.collection, s.prefix);
       else if (s.kind === 'where') await io.where(s.collection, s.field, s.value);
       else if (s.kind === 'storagePrefix') await io.storagePrefix(s.prefix);
+      else if (s.kind === 'scrubComments') await io.scrubComments(s.uid);
+      else if (s.kind === 'postMedia') await io.postMedia(s.uid);
     } catch (e) {
       // a missing storage object / empty prefix is not a failure
       if (s.kind === 'storagePrefix' && (e.code === 404 || /not found/i.test(e.message || ''))) continue;
@@ -60,6 +109,25 @@ const runPlan = async (steps, io) => {
     }
   }
   return failed;
+};
+
+// ---- Third-party processors (best effort; configured by env vars, otherwise reported as skipped so it can be done by hand) ----
+// OneSignal: delete the user (external_id === Firebase uid) so no push profile/tokens remain. Env: ONESIGNAL_REST_API_KEY (+ optional ONESIGNAL_APP_ID).
+const oneSignalAuth = (key) => (String(key).startsWith('os_v2_') ? `Key ${key}` : `Basic ${key}`);
+const deleteOneSignalUser = async (uid, { env = process.env, fetchImpl = fetch } = {}) => {
+  const key = env.ONESIGNAL_REST_API_KEY; if (!key) return 'skipped-not-configured';
+  try {
+    const r = await fetchImpl(`https://api.onesignal.com/apps/${env.ONESIGNAL_APP_ID || ONESIGNAL_APP_ID}/users/by/external_id/${encodeURIComponent(uid)}`, { method: 'DELETE', headers: { Authorization: oneSignalAuth(key) } });
+    return r.ok ? 'deleted' : r.status === 404 ? 'not-found' : 'failed';
+  } catch (e) { return 'failed'; }
+};
+// RevenueCat: delete the subscriber record (app_user_id === uid). Does NOT cancel an App Store subscription (only Apple can). Env: REVENUECAT_SECRET_KEY.
+const deleteRevenueCatSubscriber = async (uid, { env = process.env, fetchImpl = fetch } = {}) => {
+  const key = env.REVENUECAT_SECRET_KEY; if (!key) return 'skipped-not-configured';
+  try {
+    const r = await fetchImpl(`https://api.revenuecat.com/v1/subscribers/${encodeURIComponent(uid)}`, { method: 'DELETE', headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' } });
+    return r.ok ? 'deleted' : r.status === 404 ? 'not-found' : 'failed';
+  } catch (e) { return 'failed'; }
 };
 
 // ---- Apple "Sign in with Apple" token revocation (needs a server-side Apple key; skipped when not configured) ----
@@ -93,4 +161,4 @@ const revokeAppleToken = async (authorizationCode, { env = process.env, fetchImp
   } catch (e) { return 'failed'; }
 };
 
-module.exports = { UID_RE, buildDeletionPlan, makeAdminIo, runPlan, revokeAppleToken, appleConfig, appleClientSecret, monthKeys, STORAGE_PREFIXES };
+module.exports = { scrubPostData, storagePathFromUrl, deleteOneSignalUser, deleteRevenueCatSubscriber, UID_RE, buildDeletionPlan, makeAdminIo, runPlan, revokeAppleToken, appleConfig, appleClientSecret, monthKeys, STORAGE_PREFIXES };
