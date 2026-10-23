@@ -3,7 +3,7 @@
     <h1 class="text-3xl font-bold mb-6">Privacy Policy</h1>
 
     <p class="mb-4">
-      ClingNot ("we", "our", or "us") is committed to protecting your privacy. This Privacy Policy explains what we collect, why, who we share it with, how long we keep it, and how you can delete it when you use the ClingNot iPhone app and website.
+      CleanNote ("we", "our", or "us") is committed to protecting your privacy. This Privacy Policy explains what we collect, why, who we share it with, how long we keep it, and how you can delete it when you use the CleanNote iPhone app and website.
     </p>
 
     <h2 class="text-xl font-semibold mt-6 mb-2">1. Information We Collect</h2>
@@ -14,7 +14,7 @@
       <li><strong>Habit tracking (Recovery Tracker, website only):</strong> if you choose to use it, the habit you want to quit and your daily check-in history. See section 7.</li>
       <li><strong>Photos and camera:</strong> the app asks for access to your camera or photo library only when you choose to take or pick a picture (profile picture, task attachment, meal photo or post). We only receive the pictures you choose.</li>
       <li><strong>Device information:</strong> a device/push identifier used by OneSignal to deliver notifications to you.</li>
-      <li><strong>Purchase information (iPhone app):</strong> your Pro subscription or purchase status, product and expiry, together with your anonymous ClingNot user ID, which are shared with RevenueCat to validate purchases. We never receive or store your payment card or Apple ID payment details.</li>
+      <li><strong>Purchase information (iPhone app):</strong> your Pro subscription or purchase status, product and expiry, together with your anonymous CleanNote user ID, which are shared with RevenueCat to validate purchases. We never receive or store your payment card or Apple ID payment details.</li>
     </ul>
 
     <h2 class="text-xl font-semibold mt-6 mb-2">2. How We Use Your Information</h2>
@@ -28,13 +28,13 @@
 
     <h2 class="text-xl font-semibold mt-6 mb-2">3. Data Sharing and Disclosure</h2>
     <p class="mb-4">
-      We do not sell your personal information and we do not share it with third parties for advertising. We share data only with the service providers that help us run ClingNot (Firebase/Google, OneSignal, OpenAI, RevenueCat, and Stripe on the web), or if required by law.
+      We do not sell your personal information and we do not share it with third parties for advertising. We share data only with the service providers that help us run CleanNote (Firebase/Google, OneSignal, OpenAI, RevenueCat, and Stripe on the web), or if required by law.
     </p>
     <ul class="list-disc pl-6 mb-4">
       <li><strong>Firebase (Google):</strong> authentication, database and file storage.</li>
       <li><strong>OneSignal:</strong> delivers push notifications to your device.</li>
       <li><strong>Apple (in-app purchases):</strong> in the iPhone app, Pro subscriptions and purchases are processed by Apple through the App Store. Apple handles your payment and billing and manages renewals and cancellations through your Apple ID settings.</li>
-      <li><strong>RevenueCat:</strong> we use RevenueCat to validate and manage in-app purchases. RevenueCat receives purchase information (such as product, transaction and subscription status) and your ClingNot user ID, but not your name or email address. See <a href="https://www.revenuecat.com/privacy" class="text-blue-600 hover:underline" target="_blank" rel="noopener">RevenueCat's privacy policy</a>.</li>
+      <li><strong>RevenueCat:</strong> we use RevenueCat to validate and manage in-app purchases. RevenueCat receives purchase information (such as product, transaction and subscription status) and your CleanNote user ID, but not your name or email address. See <a href="https://www.revenuecat.com/privacy" class="text-blue-600 hover:underline" target="_blank" rel="noopener">RevenueCat's privacy policy</a>.</li>
       <li><strong>Stripe (website):</strong> on the website, payments are processed by Stripe; we do not store your card details.</li>
       <li><strong>OpenAI (AI features):</strong> when you use AI features such as the AI coach, AI workouts or routine suggestions, the text you provide (for example your task titles, prompts, or a meal photo you submit in Meal Plan) is sent to OpenAI to generate a response. We ask for your permission before the first time anything is sent. It is used only to provide the feature to you. Do not include sensitive personal information in AI prompts.</li>
     </ul>
@@ -42,7 +42,7 @@
     <h2 class="text-xl font-semibold mt-6 mb-2">4. Analytics and Tracking</h2>
     <ul class="list-disc pl-6 mb-4">
       <li><strong>No tracking:</strong> we do not track you across other companies' apps and websites, we do not use advertising identifiers, and we do not show third-party ads. The iPhone app does not ask for "tracking" permission because it does not track.</li>
-      <li><strong>Analytics:</strong> the ClingNot <em>website</em> uses Google (Firebase) Analytics to measure aggregate usage such as page visits. The iPhone app does not include analytics.</li>
+      <li><strong>Analytics:</strong> the CleanNote <em>website</em> uses Google (Firebase) Analytics to measure aggregate usage such as page visits. The iPhone app does not include analytics.</li>
     </ul>
 
     <h2 class="text-xl font-semibold mt-6 mb-2">5. Data Storage, Security and Retention</h2>
@@ -66,7 +66,7 @@
 
     <h2 class="text-xl font-semibold mt-6 mb-2">8. Children's Privacy</h2>
     <p class="mb-4">
-      ClingNot is not intended for use by children under the age of 13. We do not knowingly collect personal data from children. If you believe a child has given us personal data, contact us and we will delete it.
+      CleanNote is not intended for use by children under the age of 13. We do not knowingly collect personal data from children. If you believe a child has given us personal data, contact us and we will delete it.
     </p>
 
     <h2 class="text-xl font-semibold mt-6 mb-2">9. Updates to This Policy</h2>

@@ -1,4 +1,4 @@
-# ClingNot iOS – App Review decisions (local branch feat/ios-capacitor)
+# CleanNote iOS – App Review decisions (local branch feat/ios-capacitor)
 
 - **Recovery Tracker (/addiction)** – hidden in the iOS app (nav link removed, route is `webOnly`), because it is sensitive health-adjacent self-tracking and not needed for review. On the web it stays, with a persistent *not medical advice* box (988 / SAMHSA 1-800-662-4357), the option "Porn" is shown as "Adult content" (stored value stays `Porn` so existing accounts keep working) and the voice follow-up wording was neutralised. It is declared in the privacy policy (section 7). To ship it on iOS later: drop `webOnly` on the route and `!isIOS` in `nav.vue`, and add the category to the App Privacy answers ("Health & Fitness"/"Sensitive Info" not linked to tracking).
 - **About (/about)** – admin user-management page behind a hardcoded admin email; web only, route is `webOnly`, nav link hidden on iOS.

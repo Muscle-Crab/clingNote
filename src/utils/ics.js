@@ -27,8 +27,8 @@ export const eventLines = (ev, now = new Date()) => {
   return L;
 };
 
-export const buildCalendar = (events, name = 'ClingNot tasks', now = new Date()) => [
-  'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//ClingNot//Tasks//EN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
+export const buildCalendar = (events, name = 'CleanNote tasks', now = new Date()) => [
+  'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//CleanNote//Tasks//EN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
   `X-WR-CALNAME:${escapeText(name)}`, 'REFRESH-INTERVAL;VALUE=DURATION:PT1H', 'X-PUBLISHED-TTL:PT1H',
   ...events.flatMap((e) => eventLines(e, now)), 'END:VCALENDAR',
 ].map(foldLine).join('\r\n') + '\r\n';
@@ -68,7 +68,7 @@ export const feedEvents = (scheduled = [], dayLists = {}) => {
 export const taskIcs = (task, fallbackDate, now = new Date()) => buildCalendar([{
   uid: `one-${String(task.createdAt || now.getTime())}`.replace(/[^\w-]/g, ''), title: task.title,
   date: task.scheduledFor || task.scheduledDate || task.dueDate || fallbackDate, time: task.startTime || task.scheduledTime || '', minutes: task.estimateMin, notes: task.notes,
-}], 'ClingNot task', now);
+}], 'CleanNote task', now);
 
 export const isValidToken = (t) => typeof t === 'string' && /^[a-f0-9]{48}$/.test(t);
 
@@ -87,7 +87,7 @@ export const downloadTaskIcs = async (task, today, opts = {}) => {
     try {
       if (nav && nav.share && env.File) {
         const file = new env.File([text], name, { type: 'text/calendar' });
-        if (!nav.canShare || nav.canShare({ files: [file] })) { await nav.share({ files: [file], title: task.title || 'ClingNot task' }); return 'shared'; }
+        if (!nav.canShare || nav.canShare({ files: [file] })) { await nav.share({ files: [file], title: task.title || 'CleanNote task' }); return 'shared'; }
       }
     } catch (e) { if (e && e.name === 'AbortError') return 'cancelled'; /* share failed: fall through to copy */ }
     try { await nav.clipboard.writeText(plainSummary(task, today)); return 'copied'; } catch (e) { return 'failed'; }

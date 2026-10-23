@@ -6,7 +6,7 @@ module.exports = defineConfig({
   transpileDependencies: true,
   productionSourceMap: !NATIVE, // no source maps inside the app bundle
   chainWebpack: (config) => {
-    config.plugin('html').tap((args) => { args[0].title = 'ClingNot'; return args; });
+    config.plugin('html').tap((args) => { args[0].title = 'CleanNote'; return args; });
     if (NATIVE) {
       config.plugin('copy').tap((args) => {
         args[0].patterns.forEach((p) => { p.globOptions = p.globOptions || {}; p.globOptions.ignore = [...(p.globOptions.ignore || []), ...NATIVE_PUBLIC_EXCLUDE]; });

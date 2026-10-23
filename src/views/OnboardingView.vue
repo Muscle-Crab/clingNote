@@ -12,7 +12,7 @@
         <div class="ob-art"></div>
         <p class="ob-k">Welcome</p>
         <h1 class="ob-h">Hey {{ firstName }}, meet your <span>accountability boss.</span></h1>
-        <p class="ob-p">ClingNot clings to your to‑dos until they're done. A few quick questions and we'll set it up around you.</p>
+        <p class="ob-p">CleanNote clings to your to‑dos until they're done. A few quick questions and we'll set it up around you.</p>
       </section>
 
       <section v-else-if="STEPS[step] === 'goals'" class="ob-sec">
@@ -40,8 +40,8 @@
       <section v-else-if="STEPS[step] === 'notifications'" class="ob-sec">
         <div class="ob-bell">🔔</div>
         <p class="ob-k">Step 4</p><h1 class="ob-h">Let the boss <span>reach you</span></h1>
-        <p class="ob-p">Notifications are how ClingNot keeps you honest: start‑of‑day prompts, deadline warnings and boss check‑ins. No spam.</p>
-        <div class="ob-note"><b>⏰ 9:00 PM · ClingNot</b><span>2 tasks left before your deadline. Boss is watching 👀</span></div>
+        <p class="ob-p">Notifications are how CleanNote keeps you honest: start‑of‑day prompts, deadline warnings and boss check‑ins. No spam.</p>
+        <div class="ob-note"><b>⏰ 9:00 PM · CleanNote</b><span>2 tasks left before your deadline. Boss is watching 👀</span></div>
       </section>
 
       <div class="ob-foot">

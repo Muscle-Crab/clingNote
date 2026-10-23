@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<!-- ClingNot privacy manifest. Keep in sync with the App Privacy answers in App Store Connect and with src/views/privacy-policy.vue.
+<!-- CleanNote privacy manifest. Keep in sync with the App Privacy answers in App Store Connect and with src/views/privacy-policy.vue.
      No tracking (no ATT prompt, no ad identifiers, no analytics SDK in the iOS app). Third-party SDKs (Capacitor, OneSignal, RevenueCat) ship their own manifests. -->
 <plist version="1.0">
 <dict>

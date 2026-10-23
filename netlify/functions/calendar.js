@@ -26,7 +26,7 @@ const rawHandler = async (event, ctx, deps = {}) => {
   try {
     const ics = await exports.buildFeed(deps.db || getAdmin().firestore(), token);
     if (!ics) return { statusCode: 404, body: 'Not found' };
-    if (ics === exports.NOT_PRO) return { statusCode: 402, body: 'ClingNot Pro required' };
+    if (ics === exports.NOT_PRO) return { statusCode: 402, body: 'CleanNote Pro required' };
     return { statusCode: 200, headers: { 'Content-Type': 'text/calendar; charset=utf-8', 'Cache-Control': 'private, max-age=900', 'X-Robots-Tag': 'noindex' }, body: ics };
   } catch (e) { return { statusCode: 500, body: 'Error' }; }
 };

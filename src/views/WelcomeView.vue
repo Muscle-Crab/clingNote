@@ -7,9 +7,9 @@
     </div>
 
     <section v-if="STEPS[step] === 'intro'" class="wl-sec" data-test="wl-intro">
-      <p class="wl-k">Welcome to ClingNot</p>
+      <p class="wl-k">Welcome to CleanNote</p>
       <h1 class="wl-h">Discipline, <span>not wishes.</span></h1>
-      <p class="wl-p">ClingNot is a strict daily system. No streak-gaming, no editing the rules once you've started.</p>
+      <p class="wl-p">CleanNote is a strict daily system. No streak-gaming, no editing the rules once you've started.</p>
       <ul class="wl-list">
         <li><span>☀️</span><div><b>Pick your wake time</b><small>Your 8-hour day starts then, every day.</small></div></li>
         <li><span>🔒</span><div><b>8 hours, locked</b><small>The task count, the points per task and the daily target are set when the day starts. No edits.</small></div></li>

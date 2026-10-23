@@ -9,7 +9,7 @@ const sendToUser = async ({ db, messaging, FieldValue }, uid, n = {}) => {
   const snap = await ref.get();
   const tokens = [...new Set(((snap.exists && snap.data().fcmTokens) || []).filter((t) => typeof t === 'string' && t))].slice(-10);
   if (!tokens.length) return { sent: 0, failed: 0, removed: 0, tokens: 0 };
-  const data = { title: clip(n.title || 'ClingNot', 80), body: clip(n.body || '', 240), url: safePath(n.url), tag: clip(n.tag || 'clingnot', 40) };
+  const data = { title: clip(n.title || 'CleanNote', 80), body: clip(n.body || '', 240), url: safePath(n.url), tag: clip(n.tag || 'clingnot', 40) };
   const res = await messaging.sendEachForMulticast({ tokens, data, webpush: { headers: { Urgency: 'high', TTL: '3600' } } });
   const dead = []; const errors = [];
   res.responses.forEach((r, i) => { if (r.success) return; const c = (r.error && r.error.code) || 'unknown'; if (!errors.includes(c)) errors.push(c); if (BAD.has(c)) dead.push(tokens[i]); });

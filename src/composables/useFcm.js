@@ -50,7 +50,7 @@ const mintToken = async () => {
   const token = await m.getToken(messaging, { vapidKey: VAPID_PUBLIC_KEY, serviceWorkerRegistration: reg });
   if (!token) throw new Error('No token');
   if (unsubFg) unsubFg();
-  unsubFg = m.onMessage(messaging, (p) => { const d = p?.data || {}; toast(d.title || 'ClingNot', d.body || ''); }); // foreground: in-app banner
+  unsubFg = m.onMessage(messaging, (p) => { const d = p?.data || {}; toast(d.title || 'CleanNote', d.body || ''); }); // foreground: in-app banner
   return { token, m, messaging };
 };
 const saveToken = (uid, token) => setDoc(doc(db, 'users', uid), { fcmTokens: arrayUnion(token) }, { merge: true });

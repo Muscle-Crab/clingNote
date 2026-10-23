@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-        <string>ClingNot</string>
+        <string>CleanNote</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -29,9 +29,9 @@
 		<string>remote-notification</string>
 	</array>
 	<key>NSCameraUsageDescription</key>
-	<string>ClingNot uses the camera only when you choose to take a photo for a profile picture, a task attachment, a meal photo or a post.</string>
+	<string>CleanNote uses the camera only when you choose to take a photo for a profile picture, a task attachment, a meal photo or a post.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>ClingNot accesses your photo library only when you choose a picture for your profile, a task attachment, a meal photo or a post.</string>
+	<string>CleanNote accesses your photo library only when you choose a picture for your profile, a task attachment, a meal photo or a post.</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UIApplicationSceneManifest</key>

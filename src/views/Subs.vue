@@ -53,7 +53,7 @@ const busy = ref(false);
 
 const PLAN_NAMES = { monthly: 'Pro Monthly', yearly: 'Pro Yearly', lifetime: 'Pro Lifetime' };
 const isLifetime = computed(() => plan.value === 'lifetime');
-const planLabel = computed(() => `You are subscribed to ${PLAN_NAMES[plan.value] || 'ClingNot Pro'}.`);
+const planLabel = computed(() => `You are subscribed to ${PLAN_NAMES[plan.value] || 'CleanNote Pro'}.`);
 // Firestore Timestamp | Date | seconds | ISO string -> localized date ('N/A' when unknown)
 const fmtDate = (v) => {
   if (!v) return 'N/A';

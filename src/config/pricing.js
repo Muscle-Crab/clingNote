@@ -1,4 +1,4 @@
-// Single source of truth for ClingNot plan pricing. Change prices here only.
+// Single source of truth for CleanNote plan pricing. Change prices here only.
 // `stripePriceEnv` names the Netlify env var holding the Stripe Price ID (set when payments are turned on).
 export const PLANS = [
   { id: 'monthly', label: 'Monthly', price: 2.99, period: 'mo', perMonth: 2.99, trialDays: 0, mode: 'subscription', stripePriceEnv: 'STRIPE_PRICE_MONTHLY' },

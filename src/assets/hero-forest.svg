@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 420" preserveAspectRatio="xMidYMax slice">
-<!-- Original illustration generated for ClingNot (night forest). No third-party assets. -->
+<!-- Original illustration generated for CleanNote (night forest). No third-party assets. -->
 <defs><linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0B1838"/><stop offset=".55" stop-color="#12285A"/><stop offset="1" stop-color="#0A1226"/></linearGradient>
 <radialGradient id="moon" cx=".78" cy=".2" r=".35"><stop offset="0" stop-color="#7FA6FF" stop-opacity=".35"/><stop offset="1" stop-color="#7FA6FF" stop-opacity="0"/></radialGradient>
 <linearGradient id="fade" x1="0" y1="0" x2="0" y2="1"><stop offset=".55" stop-color="#070D1C" stop-opacity="0"/><stop offset="1" stop-color="#070D1C"/></linearGradient></defs>

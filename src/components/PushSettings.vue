@@ -2,8 +2,8 @@
   <section class="push" data-test="push-settings">
     <h2 class="push-h">🔔 Notifications</h2>
     <p class="push-p">Get push notifications on this device.</p>
-    <p v-if="iosNote && !native" class="push-note" data-test="push-ios-note">On iPhone and iPad, web push only works after you add ClingNot to your Home Screen (Share → Add to Home Screen) and open it from there.</p>
-    <p v-if="native && nativeStatus === 'denied'" class="push-note" data-test="push-denied">Notifications are turned off for ClingNot on this iPhone. To get reminders, open Settings → Notifications → ClingNot and allow notifications.</p>
+    <p v-if="iosNote && !native" class="push-note" data-test="push-ios-note">On iPhone and iPad, web push only works after you add CleanNote to your Home Screen (Share → Add to Home Screen) and open it from there.</p>
+    <p v-if="native && nativeStatus === 'denied'" class="push-note" data-test="push-denied">Notifications are turned off for CleanNote on this iPhone. To get reminders, open Settings → Notifications → CleanNote and allow notifications.</p>
     <div v-if="native" class="push-actions">
       <button v-if="nativeStatus === 'denied'" type="button" class="push-btn push-btn--primary" :disabled="busy" data-test="push-open-settings" @click="enableNative">Open iPhone Settings</button>
       <button v-else-if="!enabled" type="button" class="push-btn push-btn--primary" :disabled="busy" data-test="push-enable" @click="enableNative">Turn on reminders</button>
@@ -43,13 +43,13 @@ const enableNative = async () => {
     const before = await getNativePushState();
     if (before.status === 'granted') optInNativePush(); else await requestNativePushPermission();
     const st = await refreshNative();
-    msg.value = st.optedIn ? 'Reminders are on for this iPhone.' : st.status === 'denied' ? 'Notifications are still blocked. Turn them on in iPhone Settings → Notifications → ClingNot.' : 'Permission was not granted.';
+    msg.value = st.optedIn ? 'Reminders are on for this iPhone.' : st.status === 'denied' ? 'Notifications are still blocked. Turn them on in iPhone Settings → Notifications → CleanNote.' : 'Permission was not granted.';
   } catch (e) { msg.value = 'Could not turn on reminders. Try again.'; }
   busy.value = false;
 };
 const disableNative = async () => { busy.value = true; optOutNativePush(); await refreshNative(); enabled.value = false; msg.value = 'Reminders are off for this iPhone. You can turn them back on here any time.'; busy.value = false; };
-const testNative = async () => { busy.value = true; msg.value = ''; try { await sendPush({ kind: 'self', title: 'ClingNot', message: 'Test reminder: notifications are working.' }); msg.value = 'Test sent. It should arrive in a moment.'; } catch (e) { msg.value = e.message || 'Could not send.'; } busy.value = false; };
-const REASONS = { denied: 'Notifications are blocked in your browser settings for this site.', dismissed: 'Permission was not granted.', unsupported: 'This browser does not support web push.', 'ios-install': 'Add ClingNot to your Home Screen first, then enable notifications there.', signin: 'Sign in first.', error: 'Could not turn on notifications. Try again.' };
+const testNative = async () => { busy.value = true; msg.value = ''; try { await sendPush({ kind: 'self', title: 'CleanNote', message: 'Test reminder: notifications are working.' }); msg.value = 'Test sent. It should arrive in a moment.'; } catch (e) { msg.value = e.message || 'Could not send.'; } busy.value = false; };
+const REASONS = { denied: 'Notifications are blocked in your browser settings for this site.', dismissed: 'Permission was not granted.', unsupported: 'This browser does not support web push.', 'ios-install': 'Add CleanNote to your Home Screen first, then enable notifications there.', signin: 'Sign in first.', error: 'Could not turn on notifications. Try again.' };
 const enable = async () => { busy.value = true; msg.value = ''; const r = await enablePush(); enabled.value = r.ok; msg.value = r.ok ? 'Notifications are on for this device.' : (REASONS[r.reason] || 'Could not turn on notifications.'); busy.value = false; };
 const disable = async () => { busy.value = true; await disablePush(); enabled.value = false; msg.value = 'Notifications are off for this device.'; busy.value = false; };
 const test = async () => { busy.value = true; msg.value = ''; try { const r = await sendTestPush(); msg.value = r.ok ? 'Test sent. It should arrive in a moment.' : (r.error || 'Could not send.'); } catch (e) { msg.value = 'Could not send.'; } busy.value = false; };

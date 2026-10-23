@@ -9,7 +9,7 @@ const authHeader = (key) => (String(key).startsWith('os_v2_') ? `Key ${key}` : `
 // Build the OneSignal payload. kind 'self' targets ONLY the caller (external_id = Firebase uid; the client calls OneSignal.login(uid)).
 const buildPayload = ({ appId, uid, kind = 'self', title, message, sendAfter, url }, { allowBroadcast = false } = {}) => {
   if (!appId) throw Object.assign(new Error('Server not configured'), { status: 500 });
-  const body = { app_id: appId, headings: { en: clip(title, MAX_LEN.title) || 'ClingNot' }, contents: { en: clip(message, MAX_LEN.message) } };
+  const body = { app_id: appId, headings: { en: clip(title, MAX_LEN.title) || 'CleanNote' }, contents: { en: clip(message, MAX_LEN.message) } };
   if (!body.contents.en) throw Object.assign(new Error('Empty message'), { status: 400 });
   if (kind === 'self') {
     if (!uid) throw Object.assign(new Error('No user'), { status: 401 });

@@ -1,7 +1,7 @@
 # Calendar sync (read-only)
 
 ## Subscribe to your tasks
-1. In ClingNot open **📅 Upcoming** (home menu) → **Calendar feed** → **Create private feed link**.
+1. In CleanNote open **📅 Upcoming** (home menu) → **Calendar feed** → **Create private feed link**.
 2. **Apple Calendar (iPhone/Mac):** tap **Subscribe (Apple)**, or Settings → Calendar → Accounts → Add Subscribed Calendar → paste the link.
 3. **Google Calendar (web):** Other calendars → **+** → **From URL** → paste the link. (Google refreshes subscribed feeds on its own schedule, often every few hours.)
 

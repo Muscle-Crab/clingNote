@@ -5,7 +5,7 @@
       <!-- Not medical advice (always visible) -->
       <div class="mb-6 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900" role="note" data-test="recovery-disclaimer">
         <p class="font-semibold mb-1">This is a self-tracking tool, not medical advice.</p>
-        <p class="mb-1">ClingNot does not diagnose, treat or cure any condition, and it is not a substitute for professional help. If you are struggling with addiction or your mental health, please talk to a doctor or a qualified counsellor.</p>
+        <p class="mb-1">CleanNote does not diagnose, treat or cure any condition, and it is not a substitute for professional help. If you are struggling with addiction or your mental health, please talk to a doctor or a qualified counsellor.</p>
         <p>
           In the U.S. you can call or text <a href="tel:988" class="underline font-medium">988</a> (Suicide &amp; Crisis Lifeline) or call the SAMHSA Helpline at
           <a href="tel:18006624357" class="underline font-medium">1-800-662-4357</a> (free, confidential, 24/7). Outside the U.S., contact your local emergency number or health service.
