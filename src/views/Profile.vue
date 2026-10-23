@@ -22,12 +22,14 @@
         <p class="text-sm font-medium text-gray-600 mt-1">{{ userData.email }}</p>
         <p class="text-sm font-medium text-gray-600">{{ userData.gender }}</p>
         <p class="text-sm font-medium text-gray-600">{{ formatDOB(userData.dob) }}</p>
-        <p v-if="isOwn" class="text-sm font-medium text-gray-600 mt-1">Plan: {{ userIsPro ? (userData.plan || 'Pro') : 'Free' }}
+        <p v-if="isOwn" class="text-sm font-medium text-gray-600 mt-1" data-test="profile-plan">Plan: {{ planText }}
         </p>
         <router-link v-if="isOwn && !userIsPro" to="/paywall" data-test="upgrade-pro" style="background:linear-gradient(90deg,#f59e0b,#ea580c);color:#fff;border-radius:8px;padding:10px 16px;font-weight:700;display:block;text-align:center"
           class="mt-3 block w-full text-center bg-gradient-to-r from-amber-500 to-orange-600 hover:opacity-90 text-white font-bold py-2 px-4 rounded">
           Upgrade to Pro
         </router-link>
+        <button v-if="isOwn && userIsPro && !isLifetime" type="button" data-test="manage-sub" @click="manageSub"
+          class="mt-3 block w-full text-center bg-gray-800 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded">Manage subscription</button>
         <router-link v-if="isOwn" to="/onboarding" data-test="replay-onboarding" class="mt-3 block text-center text-blue-600 hover:underline text-sm">Replay onboarding</router-link>
         <PushSettings v-if="isOwn" />
         <button v-if="isOwn" @click="editMode = true" class="mt-4 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
@@ -75,6 +77,8 @@ import { ref, computed, onMounted, watch } from 'vue';
 import { onAuthStateChanged } from 'firebase/auth';
 import { ensureUserDoc } from '@/utils/userDoc';
 import { isPro } from '@/utils/pro';
+import { withRcPro } from '@/composables/usePro';
+import { isNativeIOS } from '@/utils/platform';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { useRouter } from 'vue-router';
 import { auth, db } from '@/firebaseConfig';
@@ -85,7 +89,14 @@ const editedUserData = ref(null);
 const editMode = ref(false);
 const isOwn = ref(false);
 const notFound = ref(false);
-const userIsPro = computed(() => isPro(userData.value));
+// Merged Pro: Firestore/server flag OR (iOS) RevenueCat's active 'pro' entitlement (reactive).
+const proDoc = computed(() => (isOwn.value && userData.value ? withRcPro(auth.currentUser?.uid, userData.value) : userData.value));
+const userIsPro = computed(() => isPro(proDoc.value));
+const isLifetime = computed(() => userIsPro.value && proDoc.value?.plan === 'lifetime');
+const PLAN_WORD = { monthly: 'Monthly', yearly: 'Yearly' };
+const planText = computed(() => (!userIsPro.value ? 'Free' : isLifetime.value ? 'Pro (Lifetime)' : PLAN_WORD[proDoc.value?.plan] ? `Pro (${PLAN_WORD[proDoc.value.plan]})` : 'Pro'));
+// iOS: Apple's subscription management (apps cannot cancel IAP). Web: the existing Manage Subscription page (Stripe cancel flow).
+const manageSub = async () => { if (isNativeIOS()) { const m = await import('@/utils/iap'); await m.manageSubscriptions(); } else route.push('/subs'); };
 
 const loading = ref(true);
 const fileInput = ref(null);
@@ -162,6 +173,8 @@ const load = async () => {
   }
 };
 onMounted(load);
+// iOS: make sure RevenueCat is logged in and customerInfo is read for this page (the auth listener may not have finished yet).
+onMounted(() => { if (isNativeIOS() && auth.currentUser) import("@/utils/iap").then((m) => m.ensureIapUser(auth.currentUser)).catch(() => {}); });
 watch(() => route.currentRoute.value.params.userId, (n, o) => { if (n && n !== o) load(); });
 
 // Method to format date of birth

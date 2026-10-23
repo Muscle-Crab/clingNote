@@ -66,12 +66,22 @@ t('privacy manifest exists, declares no tracking and is part of the Xcode projec
 t('iOS trusts the RevenueCat pro entitlement directly (OR with server flag), cached and cleared on change', () => {
   const u = rd('src/composables/usePro.js'), i = rd('src/utils/iap.js');
   assert(/export const setRcPro/.test(u) && /clearProCache\(\)/.test(u.split('export const setRcPro')[1].split('\n')[0]));
-  assert(/rcProActive = \(uid\) => isNativeIOS\(\) && rcPro\.active && !!uid && rcPro\.uid === uid/.test(u));
+  assert(/rcProActive = \(uid\) => isNativeIOS\(\) && rcPro\.value\.active && !!uid && rcPro\.value\.uid === uid/.test(u));
   assert((u.match(/withRcPro\(u\.uid,/g) || []).length === 3, 'every loadUserDoc return ORs RevenueCat');
   assert(/entitlements\?\.active\?\.\[RC_ENTITLEMENT\]/.test(i) && /RC_ENTITLEMENT = 'pro'/.test(rd('src/config/iap.js')));
   assert(/Purchases\.getCustomerInfo\(\)/.test(i) && /addCustomerInfoUpdateListener/.test(i) && /await refreshCustomerInfo\(\)/.test(i));
-  assert(/setRcPro\(user\.uid, active\);\n    if \(!active\)/.test(i), 'purchase result applied immediately');
-  assert(/const active = entitlementActive\(customerInfo\);\n    if \(user\?\.uid\) setRcPro\(user\.uid, active\);/.test(i), 'restore result applied immediately');
+  assert(/setRcPro\(user\.uid, active, entitlementPlan\(res\?\.customerInfo\)\);\n    if \(!active\)/.test(i), 'purchase result applied immediately');
+  assert(/const active = entitlementActive\(customerInfo\);\n    if \(user\?\.uid\) setRcPro\(user\.uid, active, entitlementPlan\(customerInfo\)\);/.test(i), 'restore result applied immediately');
   assert(/setRcPro\(null, false\)/.test(i), 'cleared on logout');
+});
+t('merged Pro drives Profile/paywall/limit prompts: Manage subscription, Pro (Lifetime), never Plan: Free for Pro', () => {
+  const p = rd('src/views/Profile.vue'), r = rd('src/router/index.js'), i = rd('src/utils/iap.js'), m = rd('src/components/home/AddTaskModal.vue');
+  assert(/withRcPro\(auth\.currentUser\?\.uid, userData\.value\)/.test(p) && /ensureIapUser\(auth\.currentUser\)/.test(p));
+  assert(/'Pro \(Lifetime\)'/.test(p) && /Manage subscription<\/button>/.test(p) && /v-if="isOwn && userIsPro && !isLifetime"/.test(p) && /v-if="isOwn && !userIsPro" to="\/paywall"/.test(p));
+  assert(!/Cancel subscription/i.test(p));
+  assert(/Purchases\.showManageSubscriptions\(\)/.test(i) && /itms-apps:\/\/apps\.apple\.com\/account\/subscriptions/.test(i));
+  assert(/isPro\(withRcPro\(user\.uid, d\)\)/.test(r) && /to\.path === '\/paywall' && currentUser/.test(r));
+  assert(/v-if="!rcPro\(\)"[^>]*data-test="limit-upgrade"/.test(m));
+  assert(/const rcPro = ref\(/.test(rd('src/composables/usePro.js')), 'RC state is reactive');
 });
 console.log(`${n} passed`);

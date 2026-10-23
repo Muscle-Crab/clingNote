@@ -4,7 +4,7 @@ import { fnUrl } from '@/config/api';
 // RevenueCat REST API and writes isPro/plan/proExpiresAt with the Admin SDK. The client never writes those fields.
 import { isNativeIOS } from '@/utils/platform';
 import { RC_ENTITLEMENT, IAP_PRODUCTS, planIdForProduct } from '@/config/iap';
-import { clearProCache, setRcPro } from '@/composables/usePro';
+import { clearProCache, setRcPro, rcProActive } from '@/composables/usePro';
 import { toRaw } from 'vue';
 
 let mod = null; let configured = false; let currentUid = null;
@@ -14,7 +14,16 @@ export const iapAvailable = () => isNativeIOS() && !!process.env.VUE_APP_REVENUE
 
 // Trust RevenueCat's active entitlement directly on iOS (OR'd with the server flag in usePro).
 export const entitlementActive = (ci) => !!ci?.entitlements?.active?.[RC_ENTITLEMENT];
-const applyCustomerInfo = (ci) => { if (currentUid) setRcPro(currentUid, entitlementActive(ci)); };
+export const entitlementPlan = (ci) => { const e = ci?.entitlements?.active?.[RC_ENTITLEMENT]; if (!e) return null; return planIdForProduct(e.productIdentifier) || (e.expirationDate ? 'pro' : 'lifetime'); };
+const applyCustomerInfo = (ci) => { if (currentUid) setRcPro(currentUid, entitlementActive(ci), entitlementPlan(ci)); };
+// Views call this on mount: log in (if the auth listener has not yet) and read customerInfo, so Pro shows without waiting for the server.
+export async function ensureIapUser(user) { if (!iapAvailable() || !user?.uid) return false; try { await identifyIapUser(user); } catch (e) { /* logged */ } return rcProActiveFor(user.uid); }
+const rcProActiveFor = (uid) => rcProActive(uid);
+// Apps cannot cancel an IAP themselves: open Apple's subscription management.
+export async function manageSubscriptions() {
+  try { if (await initIap()) { const { Purchases } = await sdk(); await Purchases.showManageSubscriptions(); return true; } } catch (e) { /* fall back to the URL */ }
+  window.location.href = 'itms-apps://apps.apple.com/account/subscriptions'; return false;
+}
 export async function refreshCustomerInfo() {
   if (!configured || !currentUid) return false;
   try { const { Purchases } = await sdk(); const { customerInfo } = await Purchases.getCustomerInfo(); applyCustomerInfo(customerInfo); return entitlementActive(customerInfo); }
@@ -79,7 +88,7 @@ export async function purchase(user, plan) {
   try {
     const res = await Purchases.purchasePackage({ aPackage: toRaw(plan.pkg) });
     const active = entitlementActive(res?.customerInfo);
-    if (user?.uid) setRcPro(user.uid, active);
+    if (user?.uid) setRcPro(user.uid, active, entitlementPlan(res?.customerInfo));
     if (!active) return { ok: false, error: 'Purchase is still processing. Pull to refresh in a moment.' };
   } catch (e) {
     if (e?.userCancelled) return { ok: false, cancelled: true };
@@ -95,7 +104,7 @@ export async function restore(user) {
   try {
     const { customerInfo } = await Purchases.restorePurchases();
     const active = entitlementActive(customerInfo);
-    if (user?.uid) setRcPro(user.uid, active);
+    if (user?.uid) setRcPro(user.uid, active, entitlementPlan(customerInfo));
     try { await syncEntitlement(user); } catch (e) { /* ignore */ }
     return { ok: true, restored: active };
   } catch (e) { return { ok: false, error: e?.message || 'Restore failed.' }; }

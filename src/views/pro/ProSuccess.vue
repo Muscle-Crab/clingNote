@@ -40,7 +40,7 @@ import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '@/firebaseConfig';
 import { isPro } from '@/utils/pro';
 import { planById, fmt } from '@/config/pricing';
-import { clearProCache } from '@/composables/usePro';
+import { clearProCache, withRcPro } from '@/composables/usePro';
 
 const route = useRoute(); const router = useRouter();
 const state = ref('pending'); // pending | confirmed | timeout
@@ -59,7 +59,7 @@ async function check() {
   const u = auth.currentUser; if (!u) return false;
   try { const s = await getDoc(doc(db, 'users', u.uid)); const d = s.exists() ? s.data() : null;
     if (d?.plan) docPlan.value = d.plan;
-    return isPro(d);
+    return isPro(withRcPro(u.uid, d));
   } catch (e) { console.error('pro poll', e.message); return false; }
 }
 async function poll() {

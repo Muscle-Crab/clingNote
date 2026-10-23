@@ -11,6 +11,7 @@ import sub from "@/views/Subs.vue";
 import { ugcHidden, isNativeIOS, isNative } from '@/utils/platform';
 import { decideEntry, hasSeenTutorial, hasSeenPaywallLocal, ENTRY_PATHS } from '@/utils/entryGuard';
 import { isPro } from '@/utils/pro';
+import { withRcPro, rcProActive, loadUserDoc } from '@/composables/usePro';
 import { db } from '../firebaseConfig';
 import { doc, getDoc } from 'firebase/firestore';
 
@@ -179,13 +180,13 @@ const router = createRouter({
 const _pwCache = {};
 async function loadPaywallState(user) {
   const seenLocal = hasSeenPaywallLocal(user.uid);
-  if (seenLocal) return { isPro: false, seenLocal: true, seenRemote: true, docLoaded: true };
-  if (_pwCache[user.uid]) return _pwCache[user.uid];
+  if (seenLocal) return { isPro: rcProActive(user.uid), seenLocal: true, seenRemote: true, docLoaded: true };
+  if (_pwCache[user.uid]) return { ..._pwCache[user.uid], isPro: _pwCache[user.uid].isPro || rcProActive(user.uid) };
   try {
     const snap = await Promise.race([getDoc(doc(db, 'users', user.uid)), new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 3500))]);
     const d = snap.exists() ? snap.data() : null;
     if (!d) return { isPro: false, seenLocal: false, seenRemote: false, docLoaded: false };
-    return (_pwCache[user.uid] = { isPro: isPro(d), seenLocal: false, seenRemote: !!d.paywallSeenAt, docLoaded: true });
+    return (_pwCache[user.uid] = { isPro: isPro(withRcPro(user.uid, d)), seenLocal: false, seenRemote: !!d.paywallSeenAt, docLoaded: true });
   } catch (e) { return { isPro: false, seenLocal: false, seenRemote: false, docLoaded: false }; }
 }
 
@@ -219,6 +220,9 @@ router.beforeEach(async (to, from, next) => {
   if (currentUser && ENTRY_PATHS.includes(to.path)) paywall = await loadPaywallState(currentUser);
   const entry = decideEntry({ to: { path: to.path, query: to.query }, user: currentUser, native: isNative(), tutorialSeen: hasSeenTutorial(), paywall });
   if (entry) return next(entry);
+
+  // Pro users (server flag or, on iOS, RevenueCat's entitlement) never see the upgrade screen.
+  if (to.path === '/paywall' && currentUser) { try { if (isPro(await loadUserDoc())) return next(to.query.from && String(to.query.from).startsWith('/') && to.query.from !== '/paywall' ? String(to.query.from) : '/home'); } catch (e) { /* show the paywall */ } }
 
   // iOS app: no marketing landing page (hero image + 26MB demo video are website-only) -> straight to Login / Home
   if (isNative() && (to.path === '/' || to.path === '/landing')) return next(currentUser ? '/home' : '/login');

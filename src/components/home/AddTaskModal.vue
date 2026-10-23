@@ -121,7 +121,7 @@
             <strong>You've hit today's limit of {{ limitHit.limit }} tasks.</strong>
             <template v-if="limitHit.pro"> That's the Pro maximum for one day. Finish or move something first.</template>
             <template v-else> Free accounts get {{ limitHit.limit }} tasks per day.<template v-if="proRaises"> Pro raises it to {{ proLimit }}.</template>
-              <button type="button" class="btn-secondary cap-override" data-test="limit-upgrade" @click="$emit('upgrade')">Upgrade to Pro</button>
+              <button v-if="!rcPro()" type="button" class="btn-secondary cap-override" data-test="limit-upgrade" @click="$emit('upgrade')">Upgrade to Pro</button>
             </template>
           </div>
         </div>
@@ -140,6 +140,9 @@ import { ACTIVE_CAP, STATUSES } from '@/utils/taskPlanning';
 import { WEEKDAYS } from '@/utils/scheduling';
 import { getOrdinalSuffix } from '@/utils/dateTime';
 import { TASK_LIMITS, PRO_RAISES_LIMIT } from '@/config/pricing';
+import { rcProActive } from '@/composables/usePro';
+import { auth } from '@/firebaseConfig';
+const rcPro = () => rcProActive(auth.currentUser?.uid); // iOS: RevenueCat says Pro -> never show an upgrade prompt
 
 // newTask is the reactive form object owned by HomeView; the form edits it in place via v-model.
 defineProps({

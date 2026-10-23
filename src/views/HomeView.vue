@@ -240,14 +240,14 @@ import { applyTaskToggle, evaluateStreak, localDateStr, dayDiff, ALLOWED_GAP_DAY
 import { askAi } from '@/composables/useAi';
 import { ensureAiConsent } from '@/composables/useAiConsent';
 import { useRouter as _useRouter } from 'vue-router';
-import { requirePro, loadUserDoc } from '@/composables/usePro';
+import { requirePro, loadUserDoc, rcProActive } from '@/composables/usePro';
 import { isPro as isProUser } from '@/utils/pro';
 import { checkDailyLimit } from '@/utils/taskLimits';
 import { canUse } from '@/utils/pro';
 const _proRouter = _useRouter();
 // Daily task limit (config/pricing.js TASK_LIMITS): free 5/day, Pro 5/day
 const limitHit = ref(null); // { limit, count, pro, day } when the last add was blocked
-const goUpgradeForLimit = () => { modalOpen.value = false; _proRouter.push({ path: '/paywall', query: { feature: 'taskLimit', from: '/home' } }); };
+const goUpgradeForLimit = () => { if (rcProActive(auth.currentUser?.uid)) return; modalOpen.value = false; _proRouter.push({ path: '/paywall', query: { feature: 'taskLimit', from: '/home' } }); };
 // Limit data is prefetched when the add modal opens so Save does not wait on 8 Firestore reads.
 let gateCache = null; // { at, pro, lists, extra: [] }
 const pendingAdds = new Map(); // taskKey -> task added in this session (a refetch started before the write landed would miss it; counting dedupes by key)
