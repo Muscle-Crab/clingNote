@@ -21,11 +21,11 @@ export const drawShareCard = (canvas, d) => {
   c.font = '600 44px system-ui, sans-serif'; c.fillText('ClingNot', W / 2, 120);
   c.font = '220px system-ui, sans-serif'; c.fillText('🔥', W / 2, 440);
   c.font = '900 260px system-ui, sans-serif'; c.fillText(String(d.streak), W / 2, 720);
-  c.font = '700 64px system-ui, sans-serif'; c.fillText('day streak', W / 2, 810);
+  c.font = '700 64px system-ui, sans-serif'; c.fillText('of 5 · day streak', W / 2, 810);
   c.font = '600 52px system-ui, sans-serif'; c.fillStyle = '#fcd34d';
   c.fillText(`Level ${d.level} · ${d.tier}`, W / 2, 940);
   c.fillStyle = '#d1d5db'; c.font = '500 44px system-ui, sans-serif';
-  c.fillText(`Best ${d.bestStreak} days`, W / 2, 1020);
+  c.fillText(`Best ${Math.min(5, d.bestStreak)}/5`, W / 2, 1020);
   c.fillStyle = '#fff'; c.font = '600 48px system-ui, sans-serif';
   c.fillText(d.name, W / 2, 1200);
   return canvas;

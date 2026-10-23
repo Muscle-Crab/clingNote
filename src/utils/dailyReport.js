@@ -29,8 +29,11 @@ export const buildRecap = ({ today, streakDoc = {}, yesterdayTasks = [], todayTa
   if (s.dayDate === yesterday) done = (s.dayDone || []).length;
   else if (s.lastDay?.date === yesterday) done = Number(s.lastDay.count) || 0;
   const counted = (s.counted || []).includes(yesterday) || s.lastCompletionDate === yesterday;
-  const streak = Number(s.streak) || 0;
-  const streakStatus = counted ? `🔥 ${streak}-day streak alive` : (streak ? `⚠️ yesterday didn't count, ${streak}-day streak at risk` : '💀 no active streak');
+  const STREAK_CAP = 5; // keep in sync with src/utils/streak.js (this file is also loaded standalone by tests)
+  // Day streak is capped at 5; a yesterday that didn't count (fewer than `min` tasks or no Start Day) means the streak was reset to 0.
+  const streak = counted ? Math.min(STREAK_CAP, Number(s.streak) || 0) : 0;
+  const hadStreak = (Number(s.streak) || 0) > 0;
+  const streakStatus = counted ? `🔥 ${streak}/${STREAK_CAP} day streak alive` : (hadStreak ? `💀 yesterday didn't count (${done}/${min}) — streak reset to 0/${STREAK_CAP}` : `💀 no active streak (0/${STREAK_CAP})`);
   const slipped = (yesterdayTasks || []).filter((t) => t && !t.completed && t.status !== 'pending').map((t) => t.title).slice(0, 5);
   const pending = [...(yesterdayTasks || []), ...(todayTasks || [])].filter((t) => t?.status === 'pending')
     .filter((t, i, a) => a.findIndex((x) => x.title === t.title) === i)

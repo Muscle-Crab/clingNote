@@ -38,5 +38,5 @@ export const useFreeze = (state, missedDate, { freezes = 0, used = 0 } = {}) => 
 
 // Data for the shareable streak card. Never includes email or uid.
 export const shareCardData = ({ displayName, streak = 0, bestStreak = 0, level = 1, tier = 'Bronze' } = {}) => ({
-  name: safeName(displayName), streak: Number(streak) || 0, bestStreak: Number(bestStreak) || 0, level: Number(level) || 1, tier: String(tier),
+  name: safeName(displayName), streak: Math.min(5, Number(streak) || 0), bestStreak: Number(bestStreak) || 0, level: Number(level) || 1, tier: String(tier),
 });

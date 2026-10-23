@@ -63,7 +63,7 @@
 
 
       <DramaOverlay v-if="lossScreen" variant="lost" title="Streak lost" button="I'll do better"
-                    :subtitle="`You missed your deadline. ${lossScreen.lostStreak ? lossScreen.lostStreak + '-day streak gone. ' : ''}${lossScreen.penalty} pts.`" @close="dismissLoss" />
+                    :subtitle="lossScreen.reason ? `${lossScreen.lostStreak ? lossScreen.lostStreak + '/5 streak gone. ' : ''}${lossScreen.reason} Complete 5 tasks a day to keep it.` : `You missed your deadline. ${lossScreen.lostStreak ? lossScreen.lostStreak + '-day streak gone. ' : ''}${lossScreen.penalty} pts.`" @close="dismissLoss" />
 
       <DramaOverlay v-if="bossVictory" variant="victory" title="Boss defeated" button="Claim victory"
                     :subtitle="`${bossVictory.title} is down. +${BOSS_BONUS} pts — your day can count now.`" @close="bossVictory = null" />
@@ -220,7 +220,7 @@ import { bossMessage, validReason, carryTask, canAddTask, watchingBlockers, isId
 import MorningReport from '@/components/home/MorningReport.vue';
 import { buildRecap, reportDue, prevDay } from '@/utils/dailyReport';
 import { monthKey, prevMonthKey } from '@/utils/ranking';
-import { applyTaskToggle, evaluateStreak, localDateStr, dayDiff, ALLOWED_GAP_DAYS, DAILY_STREAK_MIN } from '@/utils/streak';
+import { applyTaskToggle, evaluateStreak, localDateStr, dayDiff, ALLOWED_GAP_DAYS, DAILY_STREAK_MIN, capStreak, lostReason } from '@/utils/streak';
 import { askAi } from '@/composables/useAi';
 import { useRouter as _useRouter } from 'vue-router';
 import { requirePro, loadUserDoc } from '@/composables/usePro';
@@ -1393,7 +1393,7 @@ const checkProgression = (st) => {
   } catch (e) { /* storage optional */ }
 };
 const playerLevel = ref(levelFor(0));
-const dismissLoss = async () => { lossScreen.value = null; try { await clearLossPending(userId.value); } catch (e) { /* retry next open */ } };
+const dismissLoss = async () => { const noticeOnly = lossScreen.value && lossScreen.value.noticeOnly; lossScreen.value = null; if (noticeOnly) { try { localStorage.setItem(`streakLostSeen_${userId.value}_${localDateStr()}`, '1'); } catch (e) { /* ignore */ } return; } try { await clearLossPending(userId.value); } catch (e) { /* retry next open */ } };
 // ---- Morning report: first open after 8 AM local, once per day ----
 const morningRecap = ref(null);
 const maybeShowMorningReport = async () => {
@@ -1430,7 +1430,7 @@ const updateStreakOnCompletion = async (task) => {
   try {
     const snap = await getDoc(streakDocRef);
     const prev = snap.exists() ? snap.data() : null;
-    const next = applyTaskToggle(prev, localDateStr(), { key: taskKey(task), completed: !!task.completed, pending: task.status === 'pending', gate: streakGateNow() }, streakGap());
+    const next = applyTaskToggle(prev, localDateStr(), { key: taskKey(task), completed: !!task.completed, pending: task.status === 'pending', gate: streakGateNow() && !!daySession.value.started }, streakGap());
     await setDoc(streakDocRef, { ...next, updatedAt: serverTimestamp() }, { merge: true });
     applyStreakState(next);
     recordMonthlyToggle(userId.value, localDateStr(), { key: taskKey(task), completed: !!task.completed, pending: task.status === 'pending' }, next.bestStreak)
@@ -1522,7 +1522,7 @@ const afterMaterialize = async () => {
   if (added && selectedDayIndex.value === new Date().getDay()) await fetchSelectedDayRoutine();
 };
 watch(selectedDayIndex, () => { if (userId.value && dueOf(scheduledList.value, getTodayId()).length) afterMaterialize(); });
-const onVisible = () => { if (document.visibilityState === 'visible' && userId.value && getTodayId() !== todayStr.value) afterMaterialize(); };
+const onVisible = () => { if (document.visibilityState === 'visible' && userId.value && getTodayId() !== todayStr.value) { afterMaterialize(); checkStreakOnCompletion(); } };
 onMounted(() => document.addEventListener('visibilitychange', onVisible));
 onBeforeUnmount(() => document.removeEventListener('visibilitychange', onVisible));
 
@@ -2021,7 +2021,11 @@ const checkStreakOnCompletion = async () => {
       }
     }
     const { status, progress, min, ...st } = ev; // eslint-disable-line no-unused-vars
-    if (ev.status === 'broken' && data.streak) await setDoc(streakDocRef, { ...st, updatedAt: serverTimestamp() }, { merge: true });
+    if (ev.status === 'broken' && data.streak) {
+      await setDoc(streakDocRef, { ...st, updatedAt: serverTimestamp() }, { merge: true });
+      // Streak lost because a day didn't count (fewer than 5 tasks / no Start Day). No -50 here: that penalty belongs to Discipline Mode deadlines only.
+      if (!lossScreen.value && !localStorage.getItem(`streakLostSeen_${userId.value}_${localDateStr()}`)) lossScreen.value = { lostStreak: capStreak(data.streak), penalty: 0, reason: lostReason(data, localDateStr()), noticeOnly: true };
+    }
     else if ((data.bestStreak || 0) < ev.bestStreak) await setDoc(streakDocRef, { bestStreak: ev.bestStreak }, { merge: true });
     applyStreakState(st);
     updateMotivationalMessage();
@@ -2590,11 +2594,6 @@ function toggleLabelHighlight(label) {
   }
 }
 
-onMounted(() => {
-  setTimeout(() => {
-    speak(`Only ${daysLeftInYear.value} days left in the year. Make them count.`);
-  }, 3000); // Delay for dramatic effect
-});
 const youtubeModalOpen = ref(false);
 const selectedYouTubeTaskIndex = ref(null);
 const youtubeInput = ref('');

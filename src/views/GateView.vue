@@ -84,7 +84,7 @@ const load = async () => {
   settings.value = s;
   const sd = streakSnap.exists() ? streakSnap.data() : {};
   count.value = todayCount(sd, today);
-  streakNow.value = sd.streak || 0;
+  streakNow.value = Math.min(5, sd.streak || 0);
   extraBonus.value = rewardsFor(sd.bestStreak || sd.streak || 0).breakBonus;
   breaks.value = breaksToday(st, today);
   loading.value = false;

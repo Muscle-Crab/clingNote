@@ -35,7 +35,7 @@
       <h2 class="disc-h">⭐ Level {{ lv.level }}</h2>
       <div class="xp-bar"><div class="xp-fill" :style="{ width: lv.pct + '%' }"></div></div>
       <p class="muted">{{ lv.xp }} XP (lifetime points) · {{ lv.toNext }} XP to level {{ lv.level + 1 }}</p>
-      <h3 class="disc-h">🎁 Streak rewards (best {{ best }} days)</h3>
+      <h3 class="disc-h">🎁 Streak rewards (best {{ Math.min(best, 5) }}/5 days)</h3>
       <ul class="rewards">
         <li v-for="m in MILESTONES" :key="m.days" :class="{ got: best >= m.days }">{{ best >= m.days ? '✅' : '🔒' }} {{ m.days }} days — {{ m.label }}</li>
       </ul>
