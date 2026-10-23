@@ -75,12 +75,14 @@ const routes = [
   {
     path: '/addiction',
     name: 'addiction',
-    component: Addiction
+    component: Addiction,
+    meta: { webOnly: true } // Recovery Tracker is not shipped in the iOS app (sensitive health-adjacent self-tracking; see docs/ios-app-review-notes.md)
   },
   {
     path: '/about',
     name: 'about',
-    component: () => import('../views/AboutView.vue')
+    component: () => import('../views/AboutView.vue'),
+    meta: { webOnly: true } // admin user list (hardcoded admin email in nav) -> never in the iOS app
   },
   {
     path: '/payment-success',

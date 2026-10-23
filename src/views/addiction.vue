@@ -1,7 +1,17 @@
 <template>
   <div class="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-100 py-12 px-4 sm:px-6 lg:px-8">
     <div class="max-w-3xl mx-auto bg-white/70 backdrop-blur-md shadow-2xl rounded-2xl p-8 transition-all duration-300">
-      <h1 class="text-4xl font-extrabold text-center text-indigo-800 mb-8 tracking-tight">🌱 Recovery Tracker</h1>
+      <h1 class="text-4xl font-extrabold text-center text-indigo-800 mb-4 tracking-tight">🌱 Recovery Tracker</h1>
+      <!-- Not medical advice (always visible) -->
+      <div class="mb-6 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900" role="note" data-test="recovery-disclaimer">
+        <p class="font-semibold mb-1">This is a self-tracking tool, not medical advice.</p>
+        <p class="mb-1">ClingNot does not diagnose, treat or cure any condition, and it is not a substitute for professional help. If you are struggling with addiction or your mental health, please talk to a doctor or a qualified counsellor.</p>
+        <p>
+          In the U.S. you can call or text <a href="tel:988" class="underline font-medium">988</a> (Suicide &amp; Crisis Lifeline) or call the SAMHSA Helpline at
+          <a href="tel:18006624357" class="underline font-medium">1-800-662-4357</a> (free, confidential, 24/7). Outside the U.S., contact your local emergency number or health service.
+          In an emergency, call your local emergency number.
+        </p>
+      </div>
       <!-- Fuel Tank -->
       <div class="mb-4">
         <h2 class="text-xl font-bold text-gray-800 mb-2 flex items-center justify-between">
@@ -26,7 +36,7 @@
       <div class="mb-6" v-if="!addictionLocked">
         <label class="block text-gray-700 font-medium mb-2">What are you quitting?</label>
         <select v-model="addictionType" @change="lockAddiction" class="w-full p-3 border border-gray-300 rounded-xl shadow-sm focus:ring-2 focus:ring-indigo-400">
-          <option>Porn</option>
+          <option value="Porn">Adult content</option>
           <option>Smoking</option>
           <option>Sugar</option>
           <option>Social Media</option>
@@ -35,7 +45,7 @@
       </div>
       <div v-else class="mb-6">
         <label class="block text-gray-700 font-medium mb-2">Addiction Tracked:</label>
-        <div class="p-3 bg-indigo-100 rounded-xl text-indigo-700 font-semibold shadow-inner">{{ addictionType }}</div>
+        <div class="p-3 bg-indigo-100 rounded-xl text-indigo-700 font-semibold shadow-inner">{{ addictionLabel }}</div>
       </div>
 
       <!-- Motivational Quote -->
@@ -125,6 +135,8 @@ import { doc, getDoc, updateDoc, setDoc, arrayUnion } from 'firebase/firestore'
 
 const addictionType = ref('Porn')
 const addictionLocked = ref(false)
+// 'Porn' is the value already stored in existing accounts; it is shown to people as "Adult content".
+const addictionLabel = computed(() => (String(addictionType.value).toLowerCase() === 'porn' ? 'Adult content' : addictionType.value))
 const streak = ref(0)
 const retentionDays = ref([])
 const relapseDays = ref([])
@@ -229,7 +241,7 @@ async function speakDailyCheck() {
   const main = new SpeechSynthesisUtterance("Did you engage yesterday?")
   main.onend = async () => {
     if (addictionType.value.toLowerCase() === 'porn') {
-      const followUp = new SpeechSynthesisUtterance("Did you watch any porn-related videos?")
+      const followUp = new SpeechSynthesisUtterance("Did you view any adult content?")
       speechSynthesis.speak(followUp)
     }
     await updateDoc(userRef, { lastVoicePrompt: todayStr })

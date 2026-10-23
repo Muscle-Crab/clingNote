@@ -14,4 +14,15 @@ t('paywall iOS path has no hardcoded USD / trial wording leaks', () => {
   assert(/shownPlans = computed\(\(\) => ios \?/.test(s)); assert(/priceText = \(p\) => iapFor\(p\.id\)\?\.priceString \|\| \(ios \? '' : fmt\(p\.price\)\)/.test(s));
   assert(!/\}\/year\. Cancel/.test(s.replace(/\$\{pr\}\/\$\{periodWord\(p\)\}/g, ''))); assert(/Unlock <span>ClingNot Pro<\/span>/.test(s));
 });
+t('Recovery Tracker + admin About are web-only; nav hides them on iOS; disclaimer + reworded option exist', () => {
+  ['/addiction', '/about'].forEach((r) => { const i = router.indexOf(`path: '${r}'`); assert(i > 0, r); assert(/webOnly: true/.test(router.slice(i, i + 300)), r + ' webOnly'); });
+  const nav = rd('src/components/nav.vue'); assert(/<template v-if="!isIOS && userEmail ===/.test(nav)); assert(/<li v-if="!isIOS"[^>]*data-test="nav-addiction"/.test(nav));
+  const a = rd('src/views/addiction.vue'); assert(/data-test="recovery-disclaimer"/.test(a) && /not medical advice/i.test(a) && /988/.test(a) && /1-800-662-4357/.test(a));
+  assert(/<option value="Porn">Adult content<\/option>/.test(a)); assert(!/>Porn</.test(a) && !/porn-related/.test(a));
+});
+t('privacy policy covers retention, DOB/gender, avatar/photos, analytics, no tracking, recovery tracker, deletion and uses ClingNot', () => {
+  const p = rd('src/views/privacy-policy.vue');
+  ['Retention', 'date of birth', 'gender', 'profile picture', 'Analytics', 'No tracking', 'Recovery Tracker', 'OneSignal', 'RevenueCat', 'Delete Account', 'comments, replies and reactions'].forEach((k) => assert(p.includes(k), k));
+  assert(!/ClingNote/.test(p), 'brand is ClingNot');
+});
 console.log(`${n} passed`);

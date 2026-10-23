@@ -67,7 +67,7 @@
 
 
           <!-- Admin Only Routes -->
-          <template v-if="userEmail === 'ds7513635@gmail.com'">
+          <template v-if="!isIOS && userEmail === 'ds7513635@gmail.com'"> <!-- admin user-management page: never in the iOS app -->
             <li class="app-sidebar-item">
               <i class="fas fa-info-circle"></i>
               <router-link to="/about"
@@ -78,7 +78,7 @@
           </template>
 
           <!-- Addiction -->
-          <li class="app-sidebar-item">
+          <li v-if="!isIOS" class="app-sidebar-item" data-test="nav-addiction">
             <i class="fas fa-ban"></i>
             <router-link to="/addiction"
                          class="app-sidebar-link">
@@ -125,7 +125,8 @@
 import { syncPublicProfile } from '@/composables/usePublicProfile';
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import { ugcHidden } from '@/utils/platform';
+import { ugcHidden, isNativeIOS } from '@/utils/platform';
+const isIOS = isNativeIOS(); // iOS app: no admin About page, no Recovery Tracker (see docs/ios-app-review-notes.md)
 const hideUgc = ugcHidden(); // iOS app: no Rankings/community until report+block tools exist
 import { auth, db } from '@/firebaseConfig';
 import { doc, getDoc } from 'firebase/firestore';
