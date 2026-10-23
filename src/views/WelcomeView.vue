@@ -38,15 +38,14 @@
 
     <section v-else class="wl-sec" data-test="wl-account">
       <p class="wl-k">Last step</p>
-      <h1 class="wl-h">{{ signedIn ? 'You are in.' : 'Create your' }} <span>{{ signedIn ? 'Let\'s set up.' : 'account.' }}</span></h1>
+      <h1 class="wl-h">{{ signedIn ? 'You are in.' : 'Save your' }} <span>{{ signedIn ? 'Let\'s set up.' : 'plan.' }}</span></h1>
       <p class="wl-p">Your day starts at <b>{{ wakeLabel }}</b> and ends at <b>{{ endLabel }}</b>, with {{ taskCount }} task{{ taskCount === 1 ? '' : 's' }} per day. We save this to your account.</p>
-      <div class="wl-note"><b>What happens next</b><span>{{ signedIn ? 'A few quick questions, then your plans.' : 'Sign up, answer a few quick questions, then choose a plan.' }}</span></div>
+      <div class="wl-note"><b>What happens next</b><span>{{ signedIn ? 'A few quick questions, then your plans.' : (native ? 'Sign in with Apple' : 'Sign in with Google') + ', answer a few quick questions, then choose a plan.' }}</span></div>
     </section>
 
     <div class="wl-foot">
       <template v-if="STEPS[step] === 'account'">
-        <button v-if="!signedIn" class="wl-cta" data-test="wl-create" @click="finish('/register')">Create account</button>
-        <button v-if="!signedIn" class="wl-link" data-test="wl-have" @click="finish({ path: '/login', query: { returning: '1' } })">I already have an account</button>
+        <button v-if="!signedIn" class="wl-cta" data-test="wl-signin" @click="finish({ path: '/login', query: { returning: '1' } })">Continue to sign in</button>
         <button v-if="signedIn" class="wl-cta" data-test="wl-continue" :disabled="busy" @click="finishSignedIn">Continue</button>
       </template>
       <button v-else class="wl-cta" data-test="wl-next" :disabled="!canNext" @click="next">{{ nextLabel }}</button>
@@ -62,10 +61,12 @@ import TutorialCarousel from '@/components/onboarding/TutorialCarousel.vue';
 import AppStoreButton from '@/components/AppStoreButton.vue';
 import { TOUR_SLIDES } from '@/assets/tour/slides';
 import { markTutorialSeen } from '@/utils/entryGuard';
+import { isNativeIOS } from '@/utils/platform';
+const native = isNativeIOS(); // iOS app: Apple sign-in only; web: Google
 import { cachePlan, readCachedPlan, syncAfterAuth, deviceTz } from '@/composables/useEightHour';
 import { fmtWakeLabel, parseWake, MAX_TASKS_PER_DAY, WAKE_PICKER_PRESELECT, WINDOW_MIN } from '@/utils/eightHour';
 
-// Pre-sign-up tutorial: explainer -> real-app screenshot carousel -> explicit wake pick -> account. The user cannot leave it
+// Pre-sign-up tutorial: explainer -> real-app screenshot carousel -> explicit wake pick -> sign-in (Apple/Google; no email sign-up). The user cannot leave it
 // half-way: the only exits are the account actions on the last step (the flag is set there, once per install).
 const STEPS = ['intro', 'tour', 'wake', 'account'];
 const router = useRouter(); const route = useRoute();

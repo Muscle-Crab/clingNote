@@ -1,6 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import HomeView from '../views/HomeView.vue';
-import RegisterPage from '../views/UserRegistrationForm.vue';
 import Login from '../views/Login.vue';
 import { auth } from '../firebaseConfig';
 import Room from '../views/Room.vue';
@@ -30,7 +29,7 @@ const routes = [
   },
 
   {
-    // New-user tutorial: public (unauthenticated), once per install, no skip. Order: /welcome -> sign up -> /onboarding (+ paywall) -> /home. See utils/entryGuard.js
+    // New-user tutorial: public (unauthenticated), once per install, no skip. Order: /welcome -> sign in (Apple/Google creates the account) -> /onboarding (+ paywall) -> /home. See utils/entryGuard.js
     path: '/welcome',
     name: 'welcome',
     component: () => import('../views/WelcomeView.vue'),
@@ -146,9 +145,9 @@ const routes = [
     component: TermsandCondition
   },
   {
+    // Email sign-up was removed: accounts are created by Sign in with Apple / Google. Old links land on /login.
     path: '/register',
-    name: 'Register',
-    component: RegisterPage
+    redirect: (to) => ({ path: '/login', query: to.query })
   },
   {
     path: '/sub',
@@ -186,7 +185,7 @@ async function loadPaywallState(user) {
     const snap = await Promise.race([getDoc(doc(db, 'users', user.uid)), new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 3500))]);
     const d = snap.exists() ? snap.data() : null;
     if (!d) return { isPro: false, seenLocal: false, seenRemote: false, docLoaded: false };
-    return (_pwCache[user.uid] = { isPro: isPro(withRcPro(user.uid, d)), seenLocal: false, seenRemote: !!d.paywallSeenAt, docLoaded: true });
+    return (_pwCache[user.uid] = { isPro: isPro(withRcPro(user.uid, d)), seenLocal: false, seenRemote: !!d.paywallSeenAt, docLoaded: true, needsOnboarding: d.onboardingComplete === false });
   } catch (e) { return { isPro: false, seenLocal: false, seenRemote: false, docLoaded: false }; }
 }
 
@@ -215,7 +214,7 @@ router.beforeEach(async (to, from, next) => {
   // iOS app: web-only features (Stripe-credit meal tracker) are not reachable (App Store 3.1.1)
   if (isNativeIOS() && to.matched.some(r => r.meta && r.meta.webOnly)) return next(currentUser ? '/home' : '/login');
 
-  // New-user entry order (tutorial before sign up) + the one-time paywall for existing non-Pro users: pure rules in utils/entryGuard.js
+  // New-user entry order (tutorial before sign-in) + the one-time paywall for existing non-Pro users: pure rules in utils/entryGuard.js
   let paywall = null;
   if (currentUser && ENTRY_PATHS.includes(to.path)) paywall = await loadPaywallState(currentUser);
   const entry = decideEntry({ to: { path: to.path, query: to.query }, user: currentUser, native: isNative(), tutorialSeen: hasSeenTutorial(), paywall });

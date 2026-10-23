@@ -19,10 +19,10 @@ const AUTH = { id: 'auth' };
   assert.equal(loginErrorMessage({ code: 'auth/network-request-failed' }).startsWith('Network'), true); assert.equal(loginErrorMessage({ code: 'auth/wrong-password' }), 'Invalid Credentials'); assert.ok(/Too many/.test(loginErrorMessage({ code: 'auth/too-many-requests' })));
   assert.ok(isEmailish('a@b.co') && !isEmailish('a@b') && !isEmailish('a b@c.de')); assert.equal(normalizeEmail(null), '');
   // wiring (static)
-  const login = fs.readFileSync(new URL('../src/views/Login.vue', import.meta.url), 'utf8'); const reg = fs.readFileSync(new URL('../src/views/UserRegistrationForm.vue', import.meta.url), 'utf8');
+  const login = fs.readFileSync(new URL('../src/views/Login.vue', import.meta.url), 'utf8');
   assert.ok(/data-test="forgot-password"/.test(login) && /:disabled="isResetting"/.test(login), 'Forgot password button, disabled while sending');
   assert.ok(/requestPasswordReset\(sendPasswordResetEmail, auth, email\.value\)/.test(login) && !/actionCodeSettings|handleCodeInApp/.test(login), 'no continue URL');
-  assert.ok(/<PasswordField/.test(login) && /<PasswordField/.test(reg), 'show/hide password on Login and Register');
-  assert.ok(!/type="password"/.test(login) && !/type="password"/.test(reg), 'no raw password inputs left on those screens');
+  assert.ok(/<PasswordField/.test(login), 'show/hide password on Login');
+  assert.ok(!/type="password"/.test(login), 'no raw password inputs left on those screens');
   console.log('test-auth-reset: ok');
 })().catch((e) => { console.error(e); process.exit(1); });

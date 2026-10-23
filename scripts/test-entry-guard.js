@@ -12,12 +12,12 @@ const PW_NEW = { isPro: false, seenLocal: false, seenRemote: false, docLoaded: t
 // ── unauthenticated: tutorial first, once per install, no skip ──
 t('first launch, native: / -> /welcome', () => assert.deepStrictEqual(D('/', { native: true }), { path: '/welcome' }));
 t('first launch, native: /login (no returning flag) -> /welcome (tutorial cannot be skipped)', () => assert.deepStrictEqual(D('/login', { native: true }), { path: '/welcome' }));
-t('first launch, any platform: /register -> /welcome (no sign-up before the tutorial)', () => { assert.deepStrictEqual(D('/register', { native: true }), { path: '/welcome' }); assert.deepStrictEqual(D('/register'), { path: '/welcome' }); });
+t('no email sign-up: the /register route only redirects to /login and the form is gone', () => { assert.ok(!fs.existsSync(path.join(__dirname, '..', 'src/views/UserRegistrationForm.vue'))); assert.match(read('src/router/index.js'), /path: '\/register',\s*redirect:/); assert.ok(!/createUserWithEmailAndPassword/.test(read('src/views/Login.vue'))); assert.ok(!/to="\/register"|'\/register'|Create account|>Register</.test(read('src/views/Login.vue') + read('src/views/WelcomeView.vue') + read('src/App.vue'))); });
 t('first launch: /home (signed out) -> /welcome, not /login', () => assert.deepStrictEqual(D('/home'), { path: '/welcome' }));
 t('returning=1 lets an existing user on a fresh install reach /login', () => assert.strictEqual(D({ path: '/login', query: { returning: '1' } }, { native: true }), null));
 t('web landing / login stay reachable without the tutorial', () => { assert.strictEqual(D('/'), null); assert.strictEqual(D('/login'), null); });
 t('/welcome is public', () => assert.strictEqual(D('/welcome'), null));
-t('tutorial seen: /register, /login and native / are not redirected by the entry guard', () => { for (const p of ['/register', '/login', '/']) assert.strictEqual(D(p, { native: true, tutorialSeen: true }), null); });
+t('tutorial seen: /register, /login and native / are not redirected by the entry guard', () => { for (const p of ['/login', '/']) assert.strictEqual(D(p, { native: true, tutorialSeen: true }), null); });
 t('other public pages (terms, privacy, support) are never gated', () => { for (const p of ['/terms', '/privacy-policy', '/support']) assert.strictEqual(D(p, { native: true }), null); });
 
 // ── signed in ──
@@ -54,7 +54,9 @@ t('welcome: no skip control, finishing marks the tutorial seen, the wake pick is
   assert.ok(!/skip/i.test(welcome.replace(/no skip/gi, ''))); assert.match(welcome, /markTutorialSeen/); assert.match(welcome, /cachePlan/); assert.match(welcome, /wakeConfirmed/);
 });
 t('sign-in paths flush the cached wake plan to the account (syncAfterAuth) and route new accounts correctly', () => {
-  for (const f of ['src/views/Login.vue', 'src/views/UserRegistrationForm.vue']) assert.match(read(f), /syncAfterAuth/);
+  for (const f of ['src/views/Login.vue', 'src/views/WelcomeView.vue']) assert.match(read(f), /syncAfterAuth/);
   assert.match(read('src/views/Login.vue'), /markTutorialSeen/);
 });
+t('new Apple/Google account (onboardingComplete false) entering the app -> /onboarding, before the paywall', () => { assert.deepStrictEqual(D('/home', { user: {}, tutorialSeen: true, paywall: { ...PW_NEW, needsOnboarding: true } }), { path: '/onboarding' }); assert.strictEqual(D('/home', { user: {}, paywall: { ...PW_NEW, needsOnboarding: true, seenLocal: true } }), null); assert.strictEqual(D('/home', { user: {}, paywall: { ...PW_NEW, needsOnboarding: true, docLoaded: false } }), null); });
+t('login: Apple (iOS) / Google (web) create the users doc and route new accounts to onboarding; email is sign-in only', () => { const l = read('src/views/Login.vue'); assert.match(l, /onboardingComplete: false/); assert.match(l, /afterNewAccount\(\)/); assert.match(l, /'\/onboarding'/); assert.match(l, /signInWithEmailAndPassword/); assert.match(l, /data-test="email-toggle"/); });
 console.log(`entry guard: ${n} checks passed`);

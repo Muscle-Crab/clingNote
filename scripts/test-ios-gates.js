@@ -48,7 +48,7 @@ t('landing page skipped on native; landing video is not bundled in the iOS build
 t('AI workout: disclaimer shown, no fabricated youtubeURL requested or stored; policy/terms/login link to each other; brand name', () => {
   assert(/data-test="workout-disclaimer"/.test(rd('src/components/home/WorkoutModal.vue')));
   assert(!/youtubeURL/.test(rd('netlify/functions/lib/aiPrompts.js'))); assert(/map\(\(\{ youtubeURL, \.\.\.task \}\)/.test(rd('src/views/HomeView.vue')));
-  assert(/to="\/privacy-policy"/.test(rd('src/views/Login.vue')) && /to="\/privacy-policy"/.test(rd('src/views/UserRegistrationForm.vue')));
+  assert(/to="\/privacy-policy"/.test(rd('src/views/Login.vue')));
   assert(!/\bClingNot\b/.test(rd('src/App.vue') + rd('src/views/TermsandCondition.vue')));
 });
 t('firestore.rules: captains/game writes limited to pickup admins / captains; post comments constrained', () => {

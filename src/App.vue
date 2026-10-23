@@ -34,7 +34,6 @@ const HEROES = {
   Discussion: { title: 'Discussion Rooms', kicker: 'Community' },
   RoomInterior: { title: 'Chat Rooms', kicker: 'Community' },
   Login: { title: 'Welcome back', kicker: 'CleanNote', back: false },
-  Register: { title: 'Create account', kicker: 'CleanNote', back: false },
   TermsandCondition: { title: 'Terms & Conditions', kicker: 'Legal', back: false },
   privacy: { title: 'Privacy Policy', kicker: 'Legal', back: false },
   support: { title: 'Support', kicker: 'Help', back: false },
