@@ -1,3 +1,4 @@
+const { withCors } = require('./lib/cors');
 // RevenueCat webhook (Apple IAP). RevenueCat sends the value configured in the dashboard "Authorization header value" on every call.
 // The payload is only a trigger: each affected uid is re-verified against the RevenueCat REST API before anything is written.
 // Idempotent: re-processing the same event (RC retries reuse the event id) re-derives the same state. Sandbox events are honoured
@@ -21,5 +22,5 @@ const handler = async (event, deps = {}) => {
     return { statusCode: 500, body: 'Handler error' }; // non-2xx => RevenueCat retries
   }
 };
-exports.handler = (event) => handler(event);
+exports.handler = withCors((event) => handler(event));
 exports._handler = handler;

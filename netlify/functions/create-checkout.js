@@ -1,3 +1,4 @@
+const { withCors } = require('./lib/cors');
 // Stripe Checkout endpoint. Returns 501 {configured:false} unless PAYMENTS_ENABLED=true + Stripe env set.
 // Env: PAYMENTS_ENABLED, STRIPE_SECRET_KEY, STRIPE_PRICE_MONTHLY, STRIPE_PRICE_YEARLY, STRIPE_PRICE_LIFETIME,
 //      Firebase Admin creds (see lib/firebaseAdmin.js) for ID-token verification.
@@ -66,5 +67,5 @@ const handler = async (event, deps = {}) => {
     return json(500, { error: 'Checkout failed' });
   }
 };
-exports.handler = (event) => handler(event);
+exports.handler = withCors((event) => handler(event));
 exports._handler = handler;

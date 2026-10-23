@@ -1,3 +1,4 @@
+const { withCors } = require('./lib/cors');
 require('dotenv').config();
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const admin = require('firebase-admin');
@@ -11,7 +12,7 @@ if (!admin.apps.length) {
     });
 }
 
-exports.handler = async (event) => {
+const rawHandler = async (event) => {
     try {
         const { userId } = JSON.parse(event.body);
         const db = admin.firestore();
@@ -38,3 +39,4 @@ exports.handler = async (event) => {
         return { statusCode: 500, body: JSON.stringify({ error: err.message }) };
     }
 };
+exports.handler = withCors(rawHandler);

@@ -1,8 +1,9 @@
 // Client side of push notifications. No OneSignal REST key here: sending goes through the
 // Netlify Function /.netlify/functions/send-notification, which verifies the Firebase ID token.
 import { auth } from '@/firebaseConfig';
+import { fnUrl } from '@/config/api';
 
-const ENDPOINT = '/.netlify/functions/send-notification';
+const ENDPOINT = fnUrl('send-notification');
 
 // Link this browser's OneSignal subscription to the Firebase uid so 'self' pushes reach only this user.
 export const linkPushUser = async (uid) => {

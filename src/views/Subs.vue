@@ -30,6 +30,7 @@
 </template>
 
 <script setup>
+import { fnUrl } from '@/config/api';
 import { ref, onMounted } from 'vue';
 import { getAuth } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
@@ -77,7 +78,7 @@ const cancelSubscription = async () => {
   const user = auth.currentUser;
 
   try {
-    const res = await fetch('/.netlify/functions/cancel-subscription', {
+    const res = await fetch(fnUrl('cancel-subscription'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userId: user.uid }),

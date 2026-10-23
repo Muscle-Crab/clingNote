@@ -20,7 +20,7 @@ const refundCredit = async (db, uid) => db.runTransaction(async (tx) => {
   tx.update(ref, { credits: (Number(snap.data()?.credits) || 0) + 1 });
 });
 
-exports.handler = async (event, ctx, deps = {}) => {
+const rawHandler = async (event, ctx, deps = {}) => {
   if (event.httpMethod !== 'POST') return json(405, { error: 'Method not allowed' });
   try {
     const uid = await requirePro(event, { verify: deps.verify, db: deps.db }); // 401 / 402 unless Pro
@@ -40,3 +40,5 @@ exports.handler = async (event, ctx, deps = {}) => {
     return json(e.status || 500, { error: e.message });
   }
 };
+const { withCors } = require('./lib/cors');
+exports.handler = withCors(rawHandler);

@@ -1,3 +1,4 @@
+import { fnUrl } from '@/config/api';
 // RevenueCat (StoreKit) client for the iOS Capacitor build. Never imported eagerly on web: the SDK is loaded lazily and only when isNativeIOS().
 // Entitlement truth lives server-side: after a purchase/restore we call /.netlify/functions/revenuecat-sync, which re-verifies with the
 // RevenueCat REST API and writes isPro/plan/proExpiresAt with the Admin SDK. The client never writes those fields.
@@ -47,7 +48,7 @@ export async function loadPlans() {
 // Ask the server to re-verify with RevenueCat and update users/{uid}. Returns the server result ({isPro, plan}).
 export async function syncEntitlement(user) {
   const token = await user.getIdToken();
-  const r = await fetch('/.netlify/functions/revenuecat-sync', { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+  const r = await fetch(fnUrl('revenuecat-sync'), { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
   const data = await r.json().catch(() => ({}));
   clearProCache();
   if (!r.ok) throw new Error(data.error || `Sync failed (${r.status})`);

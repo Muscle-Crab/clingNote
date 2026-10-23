@@ -1,3 +1,4 @@
+const { withCors } = require('./lib/cors');
 // POST /.netlify/functions/delete-account   Authorization: Bearer <Firebase ID token>   body: { appleAuthorizationCode? }
 // Deletes the CALLER's Firestore data, Storage files and Firebase Auth user (uid comes from the verified token, never the body).
 // Requires a recent sign-in (auth_time <= 5 min) -> otherwise 401 {code:'reauth-required'} and the client re-authenticates and retries.
@@ -46,5 +47,5 @@ const handler = async (event, deps = {}) => {
     return json(e.status || 500, { error: e.status ? e.message : 'Delete failed' });
   }
 };
-exports.handler = (event) => handler(event);
+exports.handler = withCors((event) => handler(event));
 exports._handler = handler;

@@ -2,6 +2,7 @@
 // Creation/rotation goes through the calendar-token Netlify function, which verifies the ID token and Pro status server-side.
 import { db, auth } from '@/firebaseConfig';
 import { doc, getDoc } from 'firebase/firestore';
+import { fnUrl } from '@/config/api';
 
 const FEED_BASE = 'https://clingnot.netlify.app/.netlify/functions/calendar?token=';
 
@@ -12,7 +13,7 @@ export const loadFeedToken = async (uid) => { const s = await getDoc(doc(db, 'us
 const callTokenFn = async (method) => {
   const user = auth.currentUser;
   if (!user) throw new Error('Not signed in');
-  const r = await fetch('/.netlify/functions/calendar-token', { method, headers: { Authorization: `Bearer ${await user.getIdToken()}` } });
+  const r = await fetch(fnUrl('calendar-token'), { method, headers: { Authorization: `Bearer ${await user.getIdToken()}` } });
   const data = await r.json().catch(() => ({}));
   if (!r.ok) throw Object.assign(new Error(data.error || `Feed request failed (${r.status})`), { status: r.status });
   return data.token || '';

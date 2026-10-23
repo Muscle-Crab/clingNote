@@ -5,7 +5,7 @@ const { verifyUser } = require('./lib/notify');
 const { sendToUser } = require('./lib/fcm');
 const json = (statusCode, body) => ({ statusCode, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 
-exports.handler = async (event, ctx, deps = {}) => {
+const rawHandler = async (event, ctx, deps = {}) => {
   if (event.httpMethod !== 'POST') return json(405, { error: 'Method not allowed' });
   try {
     const verify = deps.verify || ((t) => getAdmin().auth().verifyIdToken(t));
@@ -18,3 +18,5 @@ exports.handler = async (event, ctx, deps = {}) => {
     return json(200, { ok: r.sent > 0, ...r });
   } catch (e) { console.error('push-send', e.message); return json(e.status || 500, { error: e.status ? e.message : 'Could not send' }); }
 };
+const { withCors } = require('./lib/cors');
+exports.handler = withCors(rawHandler);

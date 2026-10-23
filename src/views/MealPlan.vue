@@ -151,6 +151,7 @@
 
 
 <script setup>
+import { fnUrl } from '@/config/api';
 import { askAi } from '@/composables/useAi';
 import { useRouter as _useRouter } from 'vue-router';
 import { requirePro } from '@/composables/usePro';
@@ -538,7 +539,7 @@ const handleAnalyzeClick = async () => {
 
 const redirectToCheckout = async () => {
   try {
-    const response = await fetch('/.netlify/functions/create-checkout-session', {
+    const response = await fetch(fnUrl('create-checkout-session'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

@@ -1,3 +1,4 @@
+const { withCors } = require('./lib/cors');
 // Client-triggered entitlement refresh (after purchase / restore on iOS). Authenticated with the caller's Firebase ID token;
 // the caller can only ever sync THEIR OWN uid, and the result comes from RevenueCat's REST API, never from the client.
 const { verifyUser } = require('./lib/notify');
@@ -15,5 +16,5 @@ const handler = async (event, deps = {}) => {
     return { statusCode: e.status || 500, body: JSON.stringify({ error: e.status ? e.message : 'Sync failed' }) };
   }
 };
-exports.handler = (event) => handler(event);
+exports.handler = withCors((event) => handler(event));
 exports._handler = handler;

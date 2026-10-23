@@ -1,3 +1,4 @@
+import { fnUrl } from '@/config/api';
 // Client side of in-app account deletion (App Store 5.1.1(v)). Re-authenticates when needed, then asks the server
 // (netlify/functions/delete-account.js, Admin SDK) to erase Firestore data, Storage files and the Firebase Auth user.
 import { EmailAuthProvider, GoogleAuthProvider, reauthenticateWithCredential, reauthenticateWithPopup } from 'firebase/auth';
@@ -15,7 +16,7 @@ export const reauthMethod = (user = auth.currentUser) => {
 
 const callDelete = async (user, appleAuthorizationCode) => {
   const token = await user.getIdToken(true); // fresh token carries the new auth_time after re-auth
-  const r = await fetch('/.netlify/functions/delete-account', { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(appleAuthorizationCode ? { appleAuthorizationCode } : {}) });
+  const r = await fetch(fnUrl('delete-account'), { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(appleAuthorizationCode ? { appleAuthorizationCode } : {}) });
   const data = await r.json().catch(() => ({}));
   return { ok: r.ok, status: r.status, data };
 };

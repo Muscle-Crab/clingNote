@@ -1,3 +1,4 @@
+const { withCors } = require('./lib/cors');
 // Stripe webhook: verifies signature, syncs Pro status to users/{uid}.
 // Env: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, Firebase Admin creds (lib/firebaseAdmin.js).
 const { getAdmin } = require('./lib/firebaseAdmin');
@@ -67,6 +68,6 @@ const handler = async (event, deps = {}) => {
   }
   return { statusCode: 200, body: 'ok' };
 };
-exports.handler = (event) => handler(event);
+exports.handler = withCors((event) => handler(event));
 exports._handler = handler;
 exports.buildUpdate = buildUpdate;

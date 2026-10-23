@@ -6,7 +6,7 @@ const { requirePro } = require('./lib/requirePro');
 const { verifyUser } = require('./lib/notify');
 const json = (statusCode, body) => ({ statusCode, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 
-exports.handler = async (event, ctx, deps = {}) => {
+const rawHandler = async (event, ctx, deps = {}) => {
   try {
     const verify = deps.verify || ((t) => getAdmin().auth().verifyIdToken(t));
     let uid;
@@ -27,3 +27,5 @@ exports.handler = async (event, ctx, deps = {}) => {
     return json(200, { token });
   } catch (e) { return json(e.status || 500, { error: e.status ? e.message : 'Error' }); }
 };
+const { withCors } = require('./lib/cors');
+exports.handler = withCors(rawHandler);
