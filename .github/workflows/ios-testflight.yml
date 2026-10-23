@@ -7,8 +7,13 @@ jobs:
   build:
     runs-on: macos-15
     timeout-minutes: 45
+    # Pin Xcode: App Store Connect only accepts builds made with the current major SDK (Xcode 26 / iOS 26 SDK); the macos-15 default is Xcode 16.4.
+    # Xcode_26.3 is installed on the macos-15 image; bump this path deliberately when the image/App Store minimum changes.
+    env: { DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer }
     steps:
       - uses: actions/checkout@v4
+      - name: Show pinned Xcode
+        run: xcodebuild -version && xcrun --sdk iphoneos --show-sdk-version
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
       - run: npm ci

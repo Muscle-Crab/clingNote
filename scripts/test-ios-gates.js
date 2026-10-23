@@ -45,4 +45,9 @@ t('firestore.rules: captains/game writes limited to pickup admins / captains; po
   assert(/commentsChangeOk\(\) && ownMapKeyOnly\('reactions'\) && ownMapKeyOnly\('readComments'\)/.test(r));
   ['ds7513635@gmail.com', 'pablo.novoa89@gmail.com', 'lordsarfo123@gmail.com', 'ideastogether@yahoo.com', 'testing@gmail.com'].forEach((e) => assert(rd('src/views/Pickup.vue').includes(e) && r.includes(e), e));
 });
+t('privacy manifest exists, declares no tracking and is part of the Xcode project; Xcode is pinned in the workflow', () => {
+  const m = rd('ios/App/App/PrivacyInfo.xcprivacy'); assert(/NSPrivacyTracking<\/key>\s*<false\/>/.test(m)); assert(/NSPrivacyAccessedAPICategoryUserDefaults/.test(m));
+  const px = rd('ios/App/App.xcodeproj/project.pbxproj'); assert((px.match(/PrivacyInfo\.xcprivacy/g) || []).length >= 4);
+  assert(/DEVELOPER_DIR: \/Applications\/Xcode_26\.\d+\.app/.test(rd('.github/workflows/ios-testflight.yml')));
+});
 console.log(`${n} passed`);
