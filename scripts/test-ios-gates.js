@@ -63,4 +63,15 @@ t('privacy manifest exists, declares no tracking and is part of the Xcode projec
   const px = rd('ios/App/App.xcodeproj/project.pbxproj'); assert((px.match(/PrivacyInfo\.xcprivacy/g) || []).length >= 4);
   assert(/DEVELOPER_DIR: \/Applications\/Xcode_26\.\d+\.app/.test(rd('.github/workflows/ios-testflight.yml')));
 });
+t('iOS trusts the RevenueCat pro entitlement directly (OR with server flag), cached and cleared on change', () => {
+  const u = rd('src/composables/usePro.js'), i = rd('src/utils/iap.js');
+  assert(/export const setRcPro/.test(u) && /clearProCache\(\)/.test(u.split('export const setRcPro')[1].split('\n')[0]));
+  assert(/rcProActive = \(uid\) => isNativeIOS\(\) && rcPro\.active && !!uid && rcPro\.uid === uid/.test(u));
+  assert((u.match(/withRcPro\(u\.uid,/g) || []).length === 3, 'every loadUserDoc return ORs RevenueCat');
+  assert(/entitlements\?\.active\?\.\[RC_ENTITLEMENT\]/.test(i) && /RC_ENTITLEMENT = 'pro'/.test(rd('src/config/iap.js')));
+  assert(/Purchases\.getCustomerInfo\(\)/.test(i) && /addCustomerInfoUpdateListener/.test(i) && /await refreshCustomerInfo\(\)/.test(i));
+  assert(/setRcPro\(user\.uid, active\);\n    if \(!active\)/.test(i), 'purchase result applied immediately');
+  assert(/const active = entitlementActive\(customerInfo\);\n    if \(user\?\.uid\) setRcPro\(user\.uid, active\);/.test(i), 'restore result applied immediately');
+  assert(/setRcPro\(null, false\)/.test(i), 'cleared on logout');
+});
 console.log(`${n} passed`);

@@ -4,13 +4,22 @@ import { fnUrl } from '@/config/api';
 // RevenueCat REST API and writes isPro/plan/proExpiresAt with the Admin SDK. The client never writes those fields.
 import { isNativeIOS } from '@/utils/platform';
 import { RC_ENTITLEMENT, IAP_PRODUCTS, planIdForProduct } from '@/config/iap';
-import { clearProCache } from '@/composables/usePro';
+import { clearProCache, setRcPro } from '@/composables/usePro';
 import { toRaw } from 'vue';
 
 let mod = null; let configured = false; let currentUid = null;
 const sdk = async () => mod || (mod = await import('@revenuecat/purchases-capacitor'));
 
 export const iapAvailable = () => isNativeIOS() && !!process.env.VUE_APP_REVENUECAT_IOS_KEY;
+
+// Trust RevenueCat's active entitlement directly on iOS (OR'd with the server flag in usePro).
+export const entitlementActive = (ci) => !!ci?.entitlements?.active?.[RC_ENTITLEMENT];
+const applyCustomerInfo = (ci) => { if (currentUid) setRcPro(currentUid, entitlementActive(ci)); };
+export async function refreshCustomerInfo() {
+  if (!configured || !currentUid) return false;
+  try { const { Purchases } = await sdk(); const { customerInfo } = await Purchases.getCustomerInfo(); applyCustomerInfo(customerInfo); return entitlementActive(customerInfo); }
+  catch (e) { console.warn('RevenueCat customerInfo failed', e?.message || e); return false; }
+}
 
 let initPromise = null; // single in-flight configure(): the auth listener and the paywall can both call initIap() at start-up
 export async function initIap() {
@@ -19,7 +28,9 @@ export async function initIap() {
   if (!initPromise) initPromise = (async () => {
     const { Purchases } = await sdk();
     await Purchases.configure({ apiKey: process.env.VUE_APP_REVENUECAT_IOS_KEY });
-    configured = true; return true;
+    configured = true;
+    try { await Purchases.addCustomerInfoUpdateListener((ci) => applyCustomerInfo(ci)); } catch (e) { /* listener unsupported: launch/login/purchase/restore still refresh */ }
+    return true;
   })().catch((e) => { initPromise = null; throw e; });
   return initPromise;
 }
@@ -30,8 +41,9 @@ export async function identifyIapUser(user) {
   const { Purchases } = await sdk();
   try {
     if (user?.uid) { if (currentUid !== user.uid) { await Purchases.logIn({ appUserID: user.uid }); currentUid = user.uid; } }
-    else if (currentUid) { await Purchases.logOut(); currentUid = null; }
+    else if (currentUid) { await Purchases.logOut(); currentUid = null; setRcPro(null, false); }
   } catch (e) { console.warn('RevenueCat identify failed', e?.message || e); }
+  if (user?.uid && currentUid === user.uid) await refreshCustomerInfo(); // launch / after login
 }
 
 // Returns [{ id:'monthly'|'yearly'|'lifetime', pkg, priceString, trialEligible, trialText }] from the current RevenueCat offering.
@@ -66,7 +78,8 @@ export async function purchase(user, plan) {
   // 'Must provide aPackage parameter'), so hand the SDK the raw package object (a JSON round-trip would drop native fields).
   try {
     const res = await Purchases.purchasePackage({ aPackage: toRaw(plan.pkg) });
-    const active = !!res?.customerInfo?.entitlements?.active?.[RC_ENTITLEMENT];
+    const active = entitlementActive(res?.customerInfo);
+    if (user?.uid) setRcPro(user.uid, active);
     if (!active) return { ok: false, error: 'Purchase is still processing. Pull to refresh in a moment.' };
   } catch (e) {
     if (e?.userCancelled) return { ok: false, cancelled: true };
@@ -81,7 +94,8 @@ export async function restore(user) {
   const { Purchases } = await sdk();
   try {
     const { customerInfo } = await Purchases.restorePurchases();
-    const active = !!customerInfo?.entitlements?.active?.[RC_ENTITLEMENT];
+    const active = entitlementActive(customerInfo);
+    if (user?.uid) setRcPro(user.uid, active);
     try { await syncEntitlement(user); } catch (e) { /* ignore */ }
     return { ok: true, restored: active };
   } catch (e) { return { ok: false, error: e?.message || 'Restore failed.' }; }
