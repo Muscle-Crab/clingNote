@@ -116,6 +116,7 @@
           </li>
 
         </ul>
+        <div class="p-4"><AppStoreButton small /></div>
       </nav>
     </aside>
   </nav>
@@ -125,6 +126,7 @@
 import { syncPublicProfile } from '@/composables/usePublicProfile';
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
 import { useRouter } from 'vue-router';
+import AppStoreButton from '@/components/AppStoreButton.vue';
 import { ugcHidden, isNativeIOS } from '@/utils/platform';
 const isIOS = isNativeIOS(); // iOS app: no admin About page, no Recovery Tracker (see docs/ios-app-review-notes.md)
 const hideUgc = ugcHidden(); // iOS app: no Rankings/community until report+block tools exist

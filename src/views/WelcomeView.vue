@@ -16,6 +16,7 @@
         <li><span>🎯</span><div><b>Finish the goal</b><small>Hit the points target before the clock runs out.</small></div></li>
         <li><span>🔥</span><div><b>Build streaks, climb ranks</b><small>Miss a day and the streak pays for it.</small></div></li>
       </ul>
+      <div class="wl-asb"><AppStoreButton /></div>
     </section>
 
     <section v-else-if="STEPS[step] === 'tour'" class="wl-sec wl-tour" data-test="wl-tour">
@@ -58,6 +59,7 @@ import { ref, computed } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { auth } from '@/firebaseConfig';
 import TutorialCarousel from '@/components/onboarding/TutorialCarousel.vue';
+import AppStoreButton from '@/components/AppStoreButton.vue';
 import { TOUR_SLIDES } from '@/assets/tour/slides';
 import { markTutorialSeen } from '@/utils/entryGuard';
 import { cachePlan, readCachedPlan, syncAfterAuth, deviceTz } from '@/composables/useEightHour';
@@ -98,6 +100,7 @@ const finishSignedIn = async () => {
 </script>
 
 <style scoped>
+.wl-asb { margin-top: 18px; display: flex; justify-content: center; }
 .wl { min-height: 100vh; min-height: 100dvh; max-width: 480px; margin: 0 auto; display: flex; flex-direction: column; padding: calc(14px + env(safe-area-inset-top)) 20px calc(22px + env(safe-area-inset-bottom)); color: var(--c-text, #F2F5FC); background: #070D1C; }
 .wl-top { display: flex; align-items: center; gap: 12px; min-height: 36px; }
 .wl-back { width: 32px; background: none; border: 0; color: #A9B4CC; font-size: 28px; line-height: 1; cursor: pointer; }

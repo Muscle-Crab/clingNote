@@ -13,6 +13,7 @@
         <p class="ob-k">Welcome</p>
         <h1 class="ob-h">Hey {{ firstName }}, meet your <span>accountability boss.</span></h1>
         <p class="ob-p">CleanNote clings to your to‑dos until they're done. A few quick questions and we'll set it up around you.</p>
+        <div class="ob-asb"><AppStoreButton small /></div>
       </section>
 
       <section v-else-if="STEPS[step] === 'goals'" class="ob-sec">
@@ -55,6 +56,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import AppStoreButton from '@/components/AppStoreButton.vue';
 import { auth } from '@/firebaseConfig';
 import { ensureUserDoc, saveUserFields } from '@/utils/userDoc';
 import { isNativeIOS } from '@/utils/platform';
@@ -112,6 +114,7 @@ async function finish() { await persist({ onboardingComplete: true, onboardingCo
 </script>
 
 <style scoped>
+.ob-asb { margin-top: 16px; }
 .ob { min-height: 100vh; max-width: 480px; margin: 0 auto; display: flex; flex-direction: column; padding: calc(14px + env(safe-area-inset-top)) 20px calc(24px + env(safe-area-inset-bottom)); color: var(--c-text,#F2F5FC); }
 .ob-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 36px; }
 .ob-back { background: none; border: 0; color: #A9B4CC; font-size: 28px; line-height: 1; cursor: pointer; width: 32px; }
