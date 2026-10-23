@@ -313,8 +313,7 @@ import TimeStatsBar from '@/components/home/TimeStatsBar.vue';
 import TimerModal from '@/components/home/TimerModal.vue';
 import TransferModal from '@/components/home/TransferModal.vue';
 import VoiceModal from '@/components/home/VoiceModal.vue';
-import { ugcHidden, voiceInputBlocked, isNativeIOS } from '@/utils/platform';
-import { probeNativeVoice, getNativeSpeech, createNativeVoice, MSG_UNAVAILABLE } from '@/utils/nativeVoice';
+import { ugcHidden, voiceInputBlocked } from '@/utils/platform';
 import { splitSpokenTasks, voiceCapability, UNDO_MS } from '@/utils/voiceSplit';
 import WontDoModal from '@/components/home/WontDoModal.vue';
 import WorkoutModal from '@/components/home/WorkoutModal.vue';
@@ -2362,15 +2361,12 @@ let pendingVoiceText = '';
 let voiceSubmitting = false;
 let voiceAddFailed = false; // the last spoken task was refused (limit, strict boss, save error): keep the message visible
 const liveTranscript = ref('');
-const nativeVoiceShell = isNativeIOS(); // iOS shell: WKWebView has no Web SpeechRecognition -> the native plugin is used instead
-const voiceBlocked = computed(() => voiceInputBlocked()); // iOS: hidden until the plugin reports available()
-if (nativeVoiceShell) probeNativeVoice();
-let nativeVoice = null;
+const voiceBlocked = voiceInputBlocked(); // iOS shell: WKWebView has no SpeechRecognition -> mic button hidden
 const hideUgc = ugcHidden();
-const voiceCap = nativeVoiceShell ? 'native' : (typeof window !== 'undefined' ? voiceCapability(window, navigator) : 'none');
+const voiceCap = typeof window !== 'undefined' && !voiceBlocked ? voiceCapability(window, navigator) : 'none';
 const voiceSupported = voiceCap !== 'none';
 // Initialize SpeechRecognition only if supported (every property access stays inside this guard)
-if (voiceSupported && !nativeVoiceShell) {
+if (voiceSupported) {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   recognition = new SpeechRecognition();
   recognition.lang = (typeof navigator !== 'undefined' && navigator.language) || 'en-US';
@@ -2432,7 +2428,6 @@ const drainVoiceQueue = async () => {
         voiceAddFailed = true;
         voiceError.value = error.value || 'Could not add the task.';
         if (recognition) { try { recognition.stop(); } catch (e) { /* not started */ } }
-        if (nativeVoice) nativeVoice.pause();
         continue;
       }
       const saved = [...(selectedDayRoutine.value || [])].filter((x) => x.title === title).sort((x, y) => String(y.createdAt).localeCompare(String(x.createdAt)))[0];
@@ -2463,34 +2458,12 @@ const undoVoiceTask = async (entry) => {
 const cancelVoiceInput = () => {
   voiceAddFailed = false;
   if (recognition) { try { recognition.stop(); } catch (e) { /* not started */ } }
-  if (nativeVoice) nativeVoice.stop();
   listening.value = false;
   voiceOpen.value = false;
   voiceError.value = '';
   liveTranscript.value = '';
   pendingVoiceText = '';
   voiceAdded.value = voiceAdded.value.filter((e) => e.undoUntil > Date.now()); // keep live undo chips as toasts
-};
-
-// iOS shell: live partial text -> same saveSpoken() -> splitSpokenTasks -> addNewTask path as the browser recognizer.
-const startNativeVoice = async () => {
-  try {
-    if (!nativeVoice) {
-      const sr = await getNativeSpeech();
-      nativeVoice = createNativeVoice(sr, {
-        language: (typeof navigator !== 'undefined' && navigator.language) || 'en-US',
-        onPartial: (t) => { liveTranscript.value = t; },
-        onPhrase: (t) => saveSpoken(t),
-        onListening: (on) => { listening.value = on; if (on && !voiceAddFailed) voiceError.value = ''; },
-        onError: (m) => { voiceError.value = m; },
-      });
-    }
-    if (!(await probeNativeVoice())) { voiceError.value = MSG_UNAVAILABLE; return; }
-    await nativeVoice.start();
-  } catch (e) {
-    console.error('Native voice failed:', e);
-    voiceError.value = 'Could not start voice input. Close this and try again.';
-  }
 };
 
 const startVoiceInput = () => {
@@ -2500,7 +2473,6 @@ const startVoiceInput = () => {
   liveTranscript.value = '';
   voiceError.value = '';
   pendingVoiceText = '';
-  if (nativeVoiceShell) { startNativeVoice(); return; }
   if (!recognition) return;
   try { recognition.start(); }
   catch (e) {

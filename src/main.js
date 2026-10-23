@@ -1,5 +1,4 @@
 import { createApp } from 'vue'
-import { probeNativeVoice } from '@/utils/nativeVoice'
 import App from './App.vue'
 import router from './router'
 import store from './store'
@@ -56,7 +55,6 @@ if (isNative()) {
 
 // Mount the app
 app.mount('#app');
-probeNativeVoice(); // iOS shell only: shows the mic button once the native speech recognizer reports available
 
 // iOS: link the RevenueCat customer to the Firebase uid (app_user_id === uid) and log out on sign-out.
 if (isNativeIOS()) {
