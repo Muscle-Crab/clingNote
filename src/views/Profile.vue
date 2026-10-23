@@ -33,6 +33,7 @@
         <button v-if="isOwn" @click="editMode = true" class="mt-4 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
           Edit
         </button>
+        <DeleteAccount v-if="isOwn" :user-is-pro="userIsPro" />
       </div>
 
       <!-- Edit Profile Information -->
@@ -67,6 +68,7 @@
 
 <script setup>
 import PushSettings from '@/components/PushSettings.vue';
+import DeleteAccount from '@/components/DeleteAccount.vue';
 import { syncPublicProfile } from '@/composables/usePublicProfile';
 import { fileToAvatarDataUrl, isAvatarSrc, initialsOf } from '@/utils/avatar';
 import { ref, computed, onMounted, watch } from 'vue';
