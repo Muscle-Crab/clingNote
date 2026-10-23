@@ -2714,7 +2714,7 @@ Goal: ${workoutPreferences.goal}, Duration: ${workoutPreferences.duration} minut
 Limit to a maximum of ${workoutPreferences.maxPerDay} workouts per day.
 Return in JSON format like:
 {
-  "Mon": [{ "title": "...", "youtubeURL": "...", "type": "recurring", "completed": false }],
+  "Mon": [{ "title": "...", "type": "recurring", "completed": false }],
   ...
 }`;
 
@@ -2736,7 +2736,7 @@ const applyGeneratedRoutine = async (generatedWeek) => {
     for (const [day, tasks] of Object.entries(generatedWeek)) {
       const docRef = doc(db, "weeklyRoutines", `${userId.value}_${day}`);
       await setDoc(docRef, {
-        tasks: tasks.map(task => ({
+        tasks: tasks.map(({ youtubeURL, ...task }) => ({ // AI-invented video links are dropped (they are fabricated / dead)
           ...task,
           createdAt: new Date().toISOString(),
           userId: userId.value,
@@ -2748,7 +2748,7 @@ const applyGeneratedRoutine = async (generatedWeek) => {
       });
     }
 
-    alert("✅ Your AI workout routine is ready!");
+    alert("✅ Your AI workout routine is ready! It is a general suggestion, not medical advice. Check with a doctor before starting a new exercise program.");
     if (selectedDayIndex.value !== -1) fetchSelectedDayRoutine();
   } catch (err) {
     console.error("Error applying AI routine:", err);

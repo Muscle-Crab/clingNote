@@ -32,4 +32,10 @@ t('landing page skipped on native; landing video is not bundled in the iOS build
   const v = rd('vue.config.js'); ['iphone.mov', 'test.html', 'sw.js', 'productionSourceMap: !NATIVE'].forEach((k) => assert(v.includes(k), k));
   assert(/npm run build:ios/.test(rd('.github/workflows/ios-testflight.yml')));
 });
+t('AI workout: disclaimer shown, no fabricated youtubeURL requested or stored; policy/terms/login link to each other; brand name', () => {
+  assert(/data-test="workout-disclaimer"/.test(rd('src/components/home/WorkoutModal.vue')));
+  assert(!/youtubeURL/.test(rd('netlify/functions/lib/aiPrompts.js'))); assert(/map\(\(\{ youtubeURL, \.\.\.task \}\)/.test(rd('src/views/HomeView.vue')));
+  assert(/to="\/privacy-policy"/.test(rd('src/views/Login.vue')) && /to="\/privacy-policy"/.test(rd('src/views/UserRegistrationForm.vue')));
+  assert(!/ClingNote/.test(rd('src/App.vue') + rd('src/views/TermsandCondition.vue')));
+});
 console.log(`${n} passed`);

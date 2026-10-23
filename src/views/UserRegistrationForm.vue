@@ -43,8 +43,12 @@
         <!-- Terms -->
         <p class="text-sm text-gray-600 dark:text-gray-300 mt-4">
           By continuing, you agree to our
-          <router-link to="/terms" class="text-blue-600 hover:underline">
+          <router-link to="/terms" class="text-blue-600 hover:underline" data-test="register-terms">
             Terms & Conditions
+          </router-link>
+          and
+          <router-link to="/privacy-policy" class="text-blue-600 hover:underline" data-test="register-privacy">
+            Privacy Policy
           </router-link>.
         </p>
 

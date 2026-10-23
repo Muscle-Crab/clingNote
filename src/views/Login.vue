@@ -47,7 +47,8 @@
           </button>
           <p class="text-xs text-gray-500 dark:text-gray-400 mt-4 text-center">
             By continuing, you agree to our
-            <router-link to="/terms" class="text-blue-600 hover:underline dark:text-blue-400">Terms & Conditions</router-link>.
+            <router-link to="/terms" class="text-blue-600 hover:underline dark:text-blue-400" data-test="login-terms">Terms & Conditions</router-link>
+            and <router-link to="/privacy-policy" class="text-blue-600 hover:underline dark:text-blue-400" data-test="login-privacy">Privacy Policy</router-link>.
           </p>
         </div>
 

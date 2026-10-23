@@ -1,4 +1,4 @@
-/* ClingNote design system — shared by every page (home adds its own component styles on top).
+/* ClingNot design system — shared by every page (home adds its own component styles on top).
    Dark navy, glassy rounded cards, blue accent. Tailwind light utilities used by older pages are
    remapped inside .app-shell so they follow the theme without editing each template. */
 .app-shell {

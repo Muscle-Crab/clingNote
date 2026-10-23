@@ -36,7 +36,7 @@ Goal: ${clip(p.goal, 40) || 'General Fitness'}, Duration: ${int(p.duration, 5, 1
 Limit to a maximum of ${int(p.maxPerDay, 1, 10, 3)} workouts per day.
 Return in JSON format like:
 {
-  "Mon": [{ "title": "...", "youtubeURL": "...", "type": "recurring", "completed": false }],
+  "Mon": [{ "title": "...", "type": "recurring", "completed": false }],
   ...
 }`;
     return { costsCredit: false, body: { model: 'gpt-4o-mini', temperature: 0.7, max_tokens: 2000, messages: [{ role: 'user', content: prompt }] } };
