@@ -29,9 +29,18 @@
           </button>
         </div>
 
-        <!-- Google Sign-in -->
+        <!-- Sign in with Apple (iOS app only; App Store Guideline 4.8) -->
+        <div v-if="showApple">
+          <button type="button" @click.prevent="signInWithAppleClick" :disabled="isSubmitting" data-test="apple-signin"
+                  class="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-black text-white border border-black hover:bg-gray-900 text-sm font-semibold disabled:opacity-50">
+            <svg class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16.37 1.43c0 1.14-.46 2.22-1.2 3.02-.8.86-2.1 1.52-3.14 1.44-.13-1.1.42-2.25 1.15-3 .82-.86 2.2-1.5 3.19-1.46zM20.5 17.1c-.55 1.27-.82 1.84-1.52 2.96-1 1.57-2.4 3.52-4.14 3.54-1.55.02-1.95-1-4.05-.99-2.1.01-2.54 1.01-4.09.99-1.74-.02-3.07-1.78-4.07-3.35C-.27 15.7-.56 10.6 1.4 7.88c1.4-1.93 3.6-3.06 5.67-3.06 2.1 0 3.42 1.15 5.16 1.15 1.68 0 2.7-1.15 5.14-1.15 1.84 0 3.79 1 5.18 2.73-4.55 2.5-3.81 9 .0 9.55z"/></svg>
+            <span>Sign in with Apple</span>
+          </button>
+        </div>
+
+        <!-- Google Sign-in (web only: Google blocks embedded WKWebView OAuth, so it is hidden in the iOS app) -->
         <div>
-          <button @click.prevent="signInWithGoogle"
+          <button v-if="showGoogle" @click.prevent="signInWithGoogle"
                   class="w-full flex items-center justify-center gap-3 px-4 py-2 rounded-lg bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-600 text-sm font-medium">
             <img src="https://img.icons8.com/color/48/000000/google-logo.png" class="h-5 w-5" alt="Google" />
             <span>Sign in with Google</span>
@@ -59,12 +68,16 @@
 
 <script setup>
 import { ref } from 'vue';
-import { signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, sendPasswordResetEmail } from 'firebase/auth';
+import { signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, sendPasswordResetEmail, updateProfile } from 'firebase/auth';
+import { isNativeIOS } from '@/utils/platform';
+import { signInWithApple } from '@/utils/appleAuth';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { auth, db } from '@/firebaseConfig';
 import { useRouter, useRoute } from 'vue-router';
 
 const router = useRouter();
+const showApple = isNativeIOS();
+const showGoogle = !isNativeIOS(); // native Google needs @capacitor-firebase/authentication + GoogleService-Info.plist (see progress notes)
 const _rd = useRoute().query.redirect;
 const afterLogin = () => (typeof _rd === 'string' && _rd.startsWith('/') && !_rd.startsWith('//') ? _rd : '/');
 const email = ref(typeof useRoute().query.email === 'string' ? useRoute().query.email : '');
@@ -138,5 +151,32 @@ const signInWithGoogle = async () => {
     errorMessage.value = "Google sign-in failed.";
   }
 };
-</script>
 
+const signInWithAppleClick = async () => {
+  errorMessage.value = ''; infoMessage.value = '';
+  try {
+    isSubmitting.value = true;
+    const a = await signInWithApple();
+    const user = a.user;
+    const userRef = doc(db, 'users', user.uid);
+    const userSnap = await getDoc(userRef);
+    // Apple only returns the name on the very first authorization, so store it now.
+    const name = [a.givenName, a.familyName].filter(Boolean).join(' ') || user.displayName || (user.email || '').split('@')[0] || 'You';
+    if (a.givenName && !user.displayName) { try { await updateProfile(user, { displayName: name }); } catch (e) { /* non-fatal */ } }
+    if (!userSnap.exists()) {
+      await setDoc(userRef, { id: user.uid, uid: user.uid, name, email: user.email || a.email || '', provider: 'apple.com', lastLogin: new Date(), createdAt: new Date(), isPro: false, plan: 'free', onboardingComplete: false });
+      router.push('/onboarding');
+      return;
+    }
+    await setDoc(userRef, { lastLogin: new Date(), ...(a.givenName ? { name } : {}) }, { merge: true });
+    router.push(afterLogin());
+  } catch (error) {
+    const code = String(error?.code || error?.message || '');
+    if (/1001|cancel/i.test(code)) return; // user dismissed the Apple sheet
+    console.error('Apple sign-in failed:', code);
+    errorMessage.value = 'Sign in with Apple failed. Please try again.';
+  } finally {
+    isSubmitting.value = false;
+  }
+};
+</script>
