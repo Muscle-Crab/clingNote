@@ -8,7 +8,7 @@
       <Skeleton :loading="loading" v-if="loading"/>
 
       <div v-else class="md:grid grid-cols-1 md:grid-cols-3 gap-8 items-start">
-        <div class="flex space-x-4">
+        <div class="flex flex-wrap gap-2">
           <!-- Facebook -->
           <button
               @click="shareOnFacebook"

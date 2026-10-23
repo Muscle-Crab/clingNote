@@ -29,7 +29,7 @@
       <h2 class="disc-h">☕ Earned breaks</h2>
       <p class="muted">{{ BREAK_PER_TASK }} min per completed task, +{{ BREAK_ALL_DONE }} min for hitting {{ DAILY_STREAK_MIN }}, +5 at a 7-day streak, +10 at 30 days.</p>
       <router-link to="/gate?app=tiktok" class="disc-btn">Open break gate</router-link>
-      <p class="muted">Want it in front of TikTok? See the iPhone Shortcuts setup in <code>docs/tiktok-gate.md</code>: automation “When TikTok is opened → Open URL https://clingnot.netlify.app/gate?app=tiktok”, Run Immediately.</p>
+      <p class="muted">Want it in front of TikTok? In the iPhone Shortcuts app, create an automation “When TikTok is opened → Open URL https://clingnot.netlify.app/gate?app=tiktok” and set it to Run Immediately.</p>
     </section>
     <section class="disc-card">
       <h2 class="disc-h">⭐ Level {{ lv.level }}</h2>
@@ -61,7 +61,7 @@
         <div v-if="cardUrl" class="card-preview">
           <img :src="cardUrl" alt="Streak card preview" />
           <div class="disc-row">
-            <a :href="cardUrl" download="clingnot-streak.png" class="disc-btn">⬇ Download PNG</a>
+            <a v-if="!native" :href="cardUrl" download="clingnot-streak.png" class="disc-btn">⬇ Download PNG</a>
             <button v-if="canShare" type="button" class="disc-btn" @click="shareCard">Share…</button>
           </div>
         </div>
@@ -73,6 +73,7 @@
 
 <script setup>
 import { IDLE_MINUTES } from '@/utils/strictBoss';
+import { isNative } from '@/utils/platform';
 import { useRouter as _useRouter } from 'vue-router';
 import { requirePro, loadUserDoc } from '@/composables/usePro';
 import { canUse } from '@/utils/pro';
@@ -105,6 +106,14 @@ const toggleStrict = async (ev) => { const on = ev.target.checked;
   if (on && !(await requirePro(_proRouter, 'strictBoss'))) { ev.target.checked = false; return; }
   update({ strict: on }); };
 const askNotify = async () => { try { await Notification.requestPermission(); } catch (e) { /* unsupported */ } canNotify.value = false; };
+// Morning report push opt-in: userSettings/{uid}.morningReport = { enabled, timeZone } (read by the hourly daily-report function).
+const tz = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/New_York'; } catch (e) { return 'America/New_York'; } })();
+const morningPush = ref(false);
+const setMorningPush = async (on) => {
+  if (!uid.value) return;
+  morningPush.value = !!on;
+  try { await setDoc(doc(db, 'userSettings', uid.value), { morningReport: { enabled: !!on, timeZone: tz } }, { merge: true }); } catch (e) { morningPush.value = !on; console.error('Morning report save failed:', e.message); }
+};
 const dstate = ref({});
 const best = ref(0);
 const lv = computed(() => levelFor(dstate.value.xp || 0));
@@ -114,6 +123,7 @@ const shareOptIn = ref(false);
 const shareWithName = ref(false);
 const cardUrl = ref('');
 let cardBlob = null;
+const native = isNative(); // blob downloads do nothing in WKWebView; the share sheet (below) is the way to save the card there
 const canShare = typeof navigator !== 'undefined' && !!navigator.share;
 const makeCard = async () => {
   try {
