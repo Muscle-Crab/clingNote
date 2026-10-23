@@ -47,3 +47,8 @@ external_node_modules = ["firebase-admin", "@opentelemetry/api"]
 [functions."revenuecat-sync"]
 included_files = ["netlify/functions/lib/**"]
 external_node_modules = ["firebase-admin", "@opentelemetry/api"]
+
+# Account deletion (App Store 5.1.1(v)). Optional env for Apple token revocation: APPLE_TEAM_ID, APPLE_KEY_ID, APPLE_PRIVATE_KEY, APPLE_CLIENT_ID.
+[functions."delete-account"]
+included_files = ["netlify/functions/lib/**"]
+external_node_modules = ["firebase-admin", "stripe", "@opentelemetry/api"]
