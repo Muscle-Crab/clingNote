@@ -50,6 +50,7 @@
                     </div>
 
                     <div class="task-meta-row">
+                      <span class="task-pts" title="Points for completing this task" data-test="task-pts">+10 pts</span>
 
                       <span v-if="task.completed && isTodayTab" class="task-status task-status--done">Complete</span>
                       <span v-else-if="task.status === 'pending'" class="task-status task-status--pending" :title="task.pendingOn ? 'Pending on ' + task.pendingOn : 'Pending'">Pending</span>
@@ -150,7 +151,6 @@
                       <button type="button" class="task-play" :class="{ 'task-play--primary': upNext }" title="Start focus timer" aria-label="Start focus timer" @click.stop="$emit('timer')">
                         <i class="fas fa-play"></i>
                       </button>
-                      <span class="task-pts" title="Points for completing">+10</span>
                     </div>
                     <button type="button" class="task-more" :class="{ 'task-more--open': moreOpen }" title="More actions" aria-label="More actions"
                         :aria-expanded="moreOpen ? 'true' : 'false'" @click.stop="moreOpen = !moreOpen">
@@ -271,7 +271,8 @@ const onCardTap = (event) => { // bound on the whole card (blank areas, chips, n
 .drag { transform: rotate(2deg); }
 .task-card { cursor: pointer; position: relative; display: flex; gap: var(--sp-2); align-items: flex-start; padding: var(--sp-2) var(--sp-3); background: var(--c-surface); border: 1px solid var(--c-border); border-left: 3px solid transparent; border-radius: var(--r); box-shadow: var(--shadow-1); transition: background .15s, border-color .15s; }
 .task-card:hover { background: var(--c-surface-2); }
-.task-card--completed { opacity: .6; }
+/* dim the text of a finished task, but never the controls (a see-through play button looks broken) */
+.task-card--completed .task-body, .task-card--completed .task-cat { opacity: .6; }
 /* opacity makes each completed card its own stacking context: lift the card whose menu is open above its siblings */
 .task-card--menu { z-index: 30; }
 .drag-handle { user-select: none; -webkit-user-select: none; }
@@ -369,7 +370,7 @@ const onCardTap = (event) => { // bound on the whole card (blank areas, chips, n
 .coin-svg { width: 12px; height: 12px; }
 .coin-value::after { content: ' pts'; }
 .task-play { width: 40px; height: 40px; display: inline-flex; align-items: center; justify-content: center; background: none; border: none; padding: 0; cursor: pointer; position: relative; font-size: 11px; color: var(--c-on-accent); }
-.task-play::before { content: ''; position: absolute; width: 32px; height: 32px; border-radius: 50%; background: var(--c-accent); transition: background .15s; }
+.task-play::before { content: ''; position: absolute; width: 32px; height: 32px; border-radius: 50%; background: #2F6BFF; transition: background .15s; }
 .task-play i { position: relative; margin-left: 2px; }
 .task-play:hover::before { background: var(--c-accent-hover); }
 .task-more, .task-chevron { width: 40px; height: 40px; border: none; background: none; border-radius: var(--r); color: var(--c-text-2); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; font-size: var(--fs-md); padding: 0; }
