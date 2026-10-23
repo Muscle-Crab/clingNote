@@ -17,6 +17,36 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.token.admin == true;
     }
 
+    // ── 8-hour day lock helpers (see match /weeklyRoutines and /eightHour below) ──
+    function eightHourPath(uid) {
+      return /databases/$(database)/documents/eightHour/$(uid);
+    }
+    function eightHourLocked(uid, dayName) {
+      return exists(eightHourPath(uid))
+        && get(eightHourPath(uid)).data.get('lock', null) != null
+        && get(eightHourPath(uid)).data.lock.get('dayName', '') == dayName
+        && get(eightHourPath(uid)).data.lock.startAt <= request.time
+        && get(eightHourPath(uid)).data.lock.endAt > request.time;
+    }
+    function lockedTaskSame(a, b) {
+      return a.get('title', null) == b.get('title', null)
+        && a.get('createdAt', null) == b.get('createdAt', null)
+        && a.get('points', null) == b.get('points', null)
+        && a.get('complexity', null) == b.get('complexity', null)
+        && a.get('estimateMin', null) == b.get('estimateMin', null)
+        && a.get('type', null) == b.get('type', null);
+    }
+    function lockedSlotSame(o, n, i) {
+      return i >= o.size() || lockedTaskSame(o[i], n[i]);
+    }
+    function lockedDayUnchanged() {
+      let o = resource.data.get('tasks', []);
+      let n = request.resource.data.get('tasks', []);
+      return n.size() == o.size()
+        && lockedSlotSame(o, n, 0) && lockedSlotSame(o, n, 1) && lockedSlotSame(o, n, 2) && lockedSlotSame(o, n, 3) && lockedSlotSame(o, n, 4)
+        && lockedSlotSame(o, n, 5) && lockedSlotSame(o, n, 6) && lockedSlotSame(o, n, 7) && lockedSlotSame(o, n, 8) && lockedSlotSame(o, n, 9);
+    }
+
     // Fields only the server (Stripe webhook / AI function, admin SDK) may change
     function billingKeys() {
       return ['hasPaid', 'premium', 'credits', 'subscription', 'subscriptionId', 'subscriptionStatus', 'stripeCustomerId', 'admin', 'role',
@@ -110,8 +140,25 @@ service cloud.firestore {
     }
 
     // Weekly Routines - routineId format: {userId}_{dayName}
+    // While the owner's 8-hour window is running (eightHour/{uid}.lock, written only by the eight-hour-day function), today's day doc is LOCKED:
+    // same number of tasks, and the first 10 slots keep their title/createdAt/points/complexity/estimateMin/type (no add / delete / swap / reorder / re-point).
+    // Completing tasks, timers, notes and subtasks stay editable. Rules cannot loop, so slots 0..9 are compared explicitly (the app caps a day at 5 tasks).
     match /weeklyRoutines/{routineId} {
-      allow read, write: if isAuthenticated() && request.auth.uid == routineId.split('_')[0];
+      allow read: if isAuthenticated() && request.auth.uid == routineId.split('_')[0];
+      allow create: if isAuthenticated() && request.auth.uid == routineId.split('_')[0] && !eightHourLocked(routineId.split('_')[0], routineId.split('_')[1]);
+      allow update: if isAuthenticated() && request.auth.uid == routineId.split('_')[0]
+        && (!eightHourLocked(routineId.split('_')[0], routineId.split('_')[1]) || lockedDayUnchanged());
+      allow delete: if isAuthenticated() && request.auth.uid == routineId.split('_')[0] && !eightHourLocked(routineId.split('_')[0], routineId.split('_')[1]);
+    }
+
+    // 8-hour day state (plan, lock, stats): readable by the owner, written ONLY by the Netlify function (admin SDK bypasses rules).
+    match /eightHour/{uid} {
+      allow read: if isOwner(uid);
+      allow write: if false;
+      match /history/{dayKey} {
+        allow read: if isOwner(uid);
+        allow write: if false;
+      }
     }
 
     // Captains collection

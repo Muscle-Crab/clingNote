@@ -97,3 +97,11 @@ eq(c.settleDay(m3, { dayKey: '2026-10-26', earned: 0, target: 95 }), m3, 'idempo
 eq(c.settleDay(null, { dayKey: 'd', earned: 0, target: 0 }).lastResult, 'missed', '0 target never counts as met');
 eq(c.rewardFor(0), ''); ok(c.rewardFor(3) && c.rewardFor(7) !== c.rewardFor(3));
 console.log(`eight-hour core: ${pass} checks passed`);
+// progressOf / countableIndexes (client display == server recount)
+{
+  const lock = { dayKey: '2026-10-23', points: [20, 40, 30] };
+  const tasks = [{ completed: true }, { completed: false }, { activeFrom: '2026-10-30', completed: true }, { completed: true }];
+  assert.deepStrictEqual(c.countableIndexes(tasks, '2026-10-23'), [0, 1, 3]);
+  assert.deepStrictEqual(c.progressOf(lock, tasks), { earned: 50, done: 2, total: 3 });
+  console.log('eight-hour progressOf ok');
+}

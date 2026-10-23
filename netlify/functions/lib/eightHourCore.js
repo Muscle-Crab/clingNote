@@ -119,6 +119,14 @@ const lockedChangeAllowed = (oldTasks, newTasks) => {
   return { ok: true };
 };
 
+// Which stored tasks count toward the day (recurring copies whose activeFrom is still in the future are hidden today) and how far along the user is.
+const countableIndexes = (tasks, dayKey) => (tasks || []).map((t, i) => i).filter((i) => tasks[i] && !(tasks[i].activeFrom && dayKey < tasks[i].activeFrom));
+const progressOf = (lock, tasks) => {
+  const idx = countableIndexes(tasks, lock.dayKey); let earned = 0, done = 0;
+  idx.forEach((i, n) => { if (tasks[i].completed && lock.points && lock.points[n] != null) { earned += lock.points[n]; done += 1; } });
+  return { earned, done, total: idx.length };
+};
+
 // ── end-of-day settlement: streak, one-time target bump, reward, failure notice ──
 const defaultStats = () => ({ streak: 0, best: 0, targetLevel: TARGET_LEVELS.start, bumped: false, daysMet: 0, daysMissed: 0, lastDay: '', lastResult: '', notice: '' });
 // lock: { dayKey, earned, target }. Pure: returns the new stats (never mutates).
@@ -145,5 +153,5 @@ module.exports = {
   clamp, round5, parseWake, fmtWake, validTz, partsIn, dayKeyIn, dayNameIn, wakeInstant, evaluatePhase,
   countdownParts, fmtCountdown, fmtClock, fmtWakeLabel,
   complexityFromMinutes, complexityFromText, pointsFor, estimateTask, levelRatio, dailyTarget,
-  lockedChangeAllowed, defaultStats, settleDay, failureNotice, rewardFor,
+  lockedChangeAllowed, countableIndexes, progressOf, defaultStats, settleDay, failureNotice, rewardFor,
 };
