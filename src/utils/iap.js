@@ -5,6 +5,7 @@ import { fnUrl } from '@/config/api';
 import { isNativeIOS } from '@/utils/platform';
 import { RC_ENTITLEMENT, IAP_PRODUCTS, planIdForProduct } from '@/config/iap';
 import { clearProCache } from '@/composables/usePro';
+import { toRaw } from 'vue';
 
 let mod = null; let configured = false; let currentUid = null;
 const sdk = async () => mod || (mod = await import('@revenuecat/purchases-capacitor'));
@@ -61,8 +62,10 @@ export async function syncEntitlement(user) {
 
 export async function purchase(user, plan) {
   const { Purchases } = await sdk();
+  // The paywall keeps plans in a Vue ref(), so plan.pkg is a reactive Proxy; the Capacitor bridge cannot serialise a Proxy (native then rejects
+  // 'Must provide aPackage parameter'), so hand the SDK the raw package object (a JSON round-trip would drop native fields).
   try {
-    const res = await Purchases.purchasePackage({ aPackage: plan.pkg });
+    const res = await Purchases.purchasePackage({ aPackage: toRaw(plan.pkg) });
     const active = !!res?.customerInfo?.entitlements?.active?.[RC_ENTITLEMENT];
     if (!active) return { ok: false, error: 'Purchase is still processing. Pull to refresh in a moment.' };
   } catch (e) {

@@ -14,6 +14,12 @@ t('paywall iOS: empty / failed / loading store offerings show a friendly state w
   assert(/<button v-if="!ios \|\| iapState === 'ready'" class="cta"/.test(s), 'CTA hidden until plans are loaded'); assert(/data-test="pw-restore"/.test(s));
   assert(!/Stripe|startCheckout/.test(s.slice(s.indexOf('async function buy'), s.indexOf('async function restore')).split('const r = await startCheckout')[0]), 'iOS buy path is IAP only');
 });
+t('iap purchase hands RevenueCat a raw (non-Proxy) package: the paywall plans live in a reactive ref', () => {
+  const src = rd('src/utils/iap.js'); assert(/import \{ toRaw \} from 'vue'/.test(src)); assert(/purchasePackage\(\{ aPackage: toRaw\(plan\.pkg\) \}\)/.test(src));
+  const { reactive, ref, isProxy, toRaw } = require('vue'); const pkg = { identifier: '$rc_lifetime', product: { identifier: 'clingnote_pro_lifetime' }, presentedOfferingContext: { offeringIdentifier: 'default' } };
+  const plan = ref([{ id: 'lifetime', pkg }]).value[0]; assert(isProxy(plan.pkg), 'reactive plan.pkg is a Proxy'); assert(isProxy(reactive(pkg)));
+  const raw = toRaw(plan.pkg); assert(!isProxy(raw) && raw === pkg, 'toRaw returns the original, un-serialised package object');
+});
 t('terms hides the Stripe sentence on iOS only', () => { const s = rd('src/views/TermsandCondition.vue'); assert(/<span v-if="!ios"[^>]*>On the website, payments are processed by Stripe\. <\/span>/.test(s)); });
 t('meal credits checkout is a no-op on iOS', () => assert(/redirectToCheckout = async \(\) => \{\s*if \(isNativeIOS\(\)\) return;/.test(rd('src/views/MealPlan.vue'))));
 t('paywall iOS path has no hardcoded USD / trial wording leaks', () => {
