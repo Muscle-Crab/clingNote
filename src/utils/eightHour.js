@@ -1,0 +1,37 @@
+// Client entry for the shared 8-hour-day logic (the CommonJS core is also used by netlify/functions/eight-hour-day.js).
+import core from '../../netlify/functions/lib/eightHourCore.js';
+
+export const WINDOW_MS = core.WINDOW_MS;
+export const WINDOW_MIN = core.WINDOW_MIN;
+export const MAX_TASKS_PER_DAY = core.MAX_TASKS_PER_DAY;
+export const LOCK_IDENTITY_SLOTS = core.LOCK_IDENTITY_SLOTS;
+export const WEEKDAYS = core.WEEKDAYS;
+export const WAKE_PICKER_PRESELECT = core.WAKE_PICKER_PRESELECT;
+export const START_MODE = core.START_MODE;
+export const TARGET_LEVELS = core.TARGET_LEVELS;
+export const LOCKED_FIELDS = core.LOCKED_FIELDS;
+export const clamp = core.clamp;
+export const round5 = core.round5;
+export const parseWake = core.parseWake;
+export const fmtWake = core.fmtWake;
+export const validTz = core.validTz;
+export const partsIn = core.partsIn;
+export const dayKeyIn = core.dayKeyIn;
+export const dayNameIn = core.dayNameIn;
+export const wakeInstant = core.wakeInstant;
+export const evaluatePhase = core.evaluatePhase;
+export const countdownParts = core.countdownParts;
+export const fmtCountdown = core.fmtCountdown;
+export const fmtClock = core.fmtClock;
+export const fmtWakeLabel = core.fmtWakeLabel;
+export const complexityFromMinutes = core.complexityFromMinutes;
+export const complexityFromText = core.complexityFromText;
+export const pointsFor = core.pointsFor;
+export const estimateTask = core.estimateTask;
+export const levelRatio = core.levelRatio;
+export const dailyTarget = core.dailyTarget;
+export const lockedChangeAllowed = core.lockedChangeAllowed;
+export const defaultStats = core.defaultStats;
+export const settleDay = core.settleDay;
+export const failureNotice = core.failureNotice;
+export const rewardFor = core.rewardFor;
