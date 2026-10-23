@@ -313,6 +313,15 @@ pending.push((async () => {
   assert.strictEqual(c([]), '');
   console.log('ok   schedule overlap flags');
 })();
+pending.push((async () => {
+  const PF = require(path.join(src, 'components/ui/PasswordField.vue')).default;
+  const html = await renderToString(createSSRApp(PF, { modelValue: 'secret', id: 'pw', required: true }));
+  assert.ok(/type="password"/.test(html) && !/type="text"/.test(html), 'password hidden by default');
+  assert.ok(/aria-label="Show password"/.test(html) && /data-test="password-toggle"/.test(html) && /aria-pressed="false"/.test(html), 'accessible Show password toggle');
+  assert.ok(/type="button"/.test(html), 'toggle never submits the form');
+  assert.ok(/width: 44px; height: 44px/.test(fs.readFileSync(path.join(src, 'components/ui/PasswordField.vue'), 'utf8')), '44px tap target');
+  console.log('ok   PasswordField');
+})().catch((e) => { console.log('FAIL PasswordField:', e.message); process.exitCode = 1; failedAsync = true; }));
 (async () => {
   let failed = 0;
   const warn = console.warn; const warnings = [];

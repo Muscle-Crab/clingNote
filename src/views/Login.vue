@@ -7,15 +7,14 @@
       <form @submit.prevent="loginUser" class="space-y-4">
         <div>
           <label for="email-address" class="sr-only">Email address</label>
-          <input id="email-address" type="email" v-model="email" required
+          <input id="email-address" ref="emailEl" type="email" v-model="email" required autocomplete="email" autocapitalize="none" autocorrect="off" data-test="login-email"
                  class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 placeholder-gray-400 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
                  placeholder="Email address" />
         </div>
         <div>
           <label for="password" class="sr-only">Password</label>
-          <input id="password" type="password" v-model="password" required
-                 class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 placeholder-gray-400 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
-                 placeholder="Password" />
+          <PasswordField id="password" v-model="password" required autocomplete="current-password" placeholder="Password"
+                         input-class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 placeholder-gray-400 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm" />
         </div>
 
         <!-- Submit -->
@@ -53,9 +52,9 @@
         </div>
 
         <!-- Error -->
-        <div v-if="errorMessage" class="text-red-500 text-sm text-center">{{ errorMessage }}</div>
-        <div class="text-center text-sm"><button type="button" class="underline text-gray-300" @click="resetPassword">Forgot password?</button></div>
-        <div v-if="infoMessage" class="text-green-400 text-sm text-center">{{ infoMessage }}</div>
+        <div v-if="errorMessage" class="text-red-600 dark:text-red-400 text-sm text-center" role="alert" data-test="login-error">{{ errorMessage }}</div>
+        <div class="text-center text-sm"><button type="button" class="underline text-indigo-600 dark:text-indigo-300 min-h-[44px] px-3 disabled:opacity-50" :disabled="isResetting" data-test="forgot-password" @click="resetPassword">{{ isResetting ? 'Sending…' : 'Forgot password?' }}</button></div>
+        <div v-if="infoMessage" class="text-green-700 dark:text-green-400 text-sm text-center" role="status" data-test="login-info">{{ infoMessage }}</div>
       </form>
 
       <!-- Register Link -->
@@ -68,7 +67,9 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, nextTick } from 'vue';
+import PasswordField from '@/components/ui/PasswordField.vue';
+import { requestPasswordReset, loginErrorMessage } from '@/utils/authReset';
 import { signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, sendPasswordResetEmail, updateProfile } from 'firebase/auth';
 import { isNativeIOS } from '@/utils/platform';
 import { signInWithApple } from '@/utils/appleAuth';
@@ -86,14 +87,22 @@ const password = ref('');
 const isSubmitting = ref(false);
 const errorMessage = ref('');
 const infoMessage = ref('');
+const emailEl = ref(null);
+const isResetting = ref(false);
 const resetPassword = async () => {
+  if (isResetting.value) return;
   errorMessage.value = ''; infoMessage.value = '';
-  if (!email.value) { errorMessage.value = 'Enter your email above first.'; return; }
-  try { await sendPasswordResetEmail(auth, email.value); infoMessage.value = 'If an account exists for that email, a reset link is on its way.'; }
-  catch (e) { console.error('[reset]', e); errorMessage.value = e.code === 'auth/invalid-email' ? 'Invalid email format.' : 'Could not send reset email. Try again.'; }
+  isResetting.value = true;
+  try {
+    const r = await requestPasswordReset(sendPasswordResetEmail, auth, email.value);
+    if (r.ok) infoMessage.value = r.message;
+    else { errorMessage.value = r.message; if (r.code) console.error('[reset]', r.code); }
+    if (r.field === 'email') { await nextTick(); if (emailEl.value) emailEl.value.focus(); }
+  } finally { isResetting.value = false; }
 };
 
 const loginUser = async () => {
+  errorMessage.value = ''; infoMessage.value = '';
   try {
     isSubmitting.value = true;
     const userCredential = await signInWithEmailAndPassword(auth, email.value, password.value);
@@ -104,7 +113,7 @@ const loginUser = async () => {
     router.push(afterLogin());
   } catch (error) {
     console.error('Login failed:', error.message);
-    errorMessage.value = "Invalid Credentials";
+    errorMessage.value = loginErrorMessage(error);
   } finally {
     isSubmitting.value = false;
   }

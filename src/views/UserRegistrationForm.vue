@@ -20,8 +20,8 @@
         <!-- Password -->
         <div>
           <label for="password" class="sr-only">Password</label>
-          <input id="password" name="password" type="password" v-model="password" required placeholder="Password"
-                 class="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm">
+          <PasswordField id="password" name="password" v-model="password" required autocomplete="new-password" placeholder="Password"
+                         input-class="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm" />
         </div>
 
         <!-- Profile Photo Upload -->
@@ -76,6 +76,7 @@
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
+import PasswordField from '@/components/ui/PasswordField.vue';
 import { ensureUserDoc } from '@/utils/userDoc';
 import { auth, db, storage } from '@/firebaseConfig';
 import { doc, setDoc } from 'firebase/firestore';
