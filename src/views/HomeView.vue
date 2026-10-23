@@ -1,6 +1,6 @@
 <template>
   <div ref="scrollContainer" class="app-root" :class="[{ 'is-dragging': isDraggingTask, 'reorder-active': isDraggingTask || reorderSettling }, appTheme ? 'theme-' + appTheme : '']">
-    <BackgroundLayer :anim="bgPrefs.anim" />
+    <BackgroundLayer :anim="bgPrefs.anim" :force-motion="bgPrefs.forceMotion" />
     <BackgroundPanel :open="showBackground" @close="showBackground = false" />
 
     <!-- Loading Screen -->
@@ -25,6 +25,7 @@
             <p class="hero-date">{{ currentDate }}</p>
             <h1 class="hero-title">{{ heroTitleParts.lead }}<span class="hero-accent">{{ heroTitleParts.accent }}</span></h1>
             <p class="hero-sub">{{ daysLeftInYear }} days left this year</p>
+            <button type="button" class="bg-pill" data-test="open-background-pill" aria-label="Background: animation and music" @click="showBackground = true">🎧 Background<span class="bg-pill-sub">snow · rain · fire · music</span></button>
           </div>
           <div ref="heroMenuEl" class="hero-menu">
             <button type="button" class="hero-menu-btn" :aria-label="noticeCount ? noticeCount + ' updates and day menu' : 'Day menu'" :aria-expanded="menuOpen ? 'true' : 'false'" @click="menuOpen = !menuOpen">
@@ -3003,7 +3004,6 @@ const finishShutdown = async (carry) => {
 
 /* ── Root ── */
 .app-root {
-  isolation: isolate; /* Background canvas (z-index -1) stays above the page colour but behind content */
   /* ── Design tokens (dark, Atlassian-style neutrals + blue accent) ── */
   --c-bg: #0B0D12;
   --c-surface: #12151C;
@@ -3241,6 +3241,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .hero-date { margin: 0 0 var(--sp-2); font-family: 'JetBrains Mono', monospace; font-size: var(--fs-xs); letter-spacing: .08em; text-transform: uppercase; color: var(--c-text-3); }
 .hero-title { margin: 0; font-size: var(--fs-2xl); line-height: 1.1; font-weight: 800; letter-spacing: -.02em; color: var(--c-text); }
 .hero-sub { margin: var(--sp-2) 0 0; font-size: var(--fs-md); color: var(--c-text-2); }
+.bg-pill { display: inline-flex; align-items: center; gap: 8px; margin-top: 10px; min-height: 40px; padding: 0 14px; border-radius: 999px; border: 1.5px solid #6b8cff; background: rgba(79,111,240,.22); color: #fff; font-size: 14px; font-weight: 600; cursor: pointer; }
+.bg-pill:active { transform: scale(.97); }
+.bg-pill-sub { font-weight: 400; font-size: 11px; color: #b9c6ee; }
 .hero-menu { position: relative; flex-shrink: 0; }
 .hero-menu-btn { width: 44px; height: 44px; border-radius: 50%; background: var(--c-surface-2); border: 1px solid var(--c-border-strong); color: var(--c-text); cursor: pointer; font-size: var(--fs-lg); }
 .hero-menu-btn:hover { background: var(--c-border); }

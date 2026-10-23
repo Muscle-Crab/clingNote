@@ -8,7 +8,10 @@
         <div class="bgp-anims" role="radiogroup" aria-label="Background animation">
           <button v-for="a in ANIMS" :key="a.id" type="button" role="radio" class="bgp-chip" :class="{ on: bg.prefs.anim === a.id }" :aria-checked="bg.prefs.anim === a.id" :data-test="'bg-anim-' + a.id" @click="bg.setAnim(a.id)"><span aria-hidden="true">{{ a.icon }}</span>{{ a.label }}</button>
         </div>
-        <p v-if="reduced && bg.prefs.anim !== 'none'" class="bgp-note">Your device asks for reduced motion, so the animation is shown as a still picture.</p>
+        <div v-if="reduced" class="bgp-note bgp-motion" data-test="bg-reduced-note">
+          <p>Your device has <b>Reduce Motion</b> turned on, so animations show as a still picture.</p>
+          <label class="bgp-force"><input type="checkbox" data-test="bg-force-motion" :checked="bg.prefs.forceMotion" @change="bg.setForceMotion($event.target.checked)" /> Play animation anyway</label>
+        </div>
 
         <h3 class="bgp-h">Music <small>(plays only when you tap Play)</small></h3>
         <div class="bgp-tracks" role="radiogroup" aria-label="Music">
@@ -62,6 +65,9 @@ onBeforeUnmount(() => clearInterval(iv));
 .bgp-vol { flex: 1; display: flex; align-items: center; gap: 6px; }
 .bgp-vol input { flex: 1; min-height: 44px; }
 .bgp-note { margin: 8px 0 0; font-size: .78rem; color: #9aa3b8; }
+.bgp-motion { padding: 8px 10px; border: 1px solid #3a4160; border-radius: 10px; background: #181c2c; color: #c9d2ee; }
+.bgp-motion p { margin: 0 0 6px; }
+.bgp-force { display: flex; align-items: center; gap: 8px; min-height: 44px; font-size: .9rem; color: #fff; cursor: pointer; }
 .bgp-err { color: #ff8c8c; }
 .bgp-reset { margin-top: 12px; width: 100%; min-height: 44px; border-radius: 12px; border: 1px solid #2a2f3f; background: transparent; color: inherit; cursor: pointer; }
 </style>
