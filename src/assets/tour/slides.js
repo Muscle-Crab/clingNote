@@ -1,5 +1,5 @@
 // Onboarding tutorial slides. Every image is a real screenshot of the app (390x844 iPhone viewport) taken with demo data
-// only ("ZZTEST" accounts), resized to 600px wide and stored as local WebP (no CDN, ~35 KB each).
+// only (fictional demo account), resized to 600px wide and stored as local WebP (no CDN, ~35 KB each).
 // Captions only describe features that exist: snow/rain/fireplace are visual canvas animations, the four music tracks are
 // generated in the browser (no real rain audio) and play only after the user taps Play.
 import day from './s01_day.webp';
