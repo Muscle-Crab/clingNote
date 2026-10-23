@@ -2,11 +2,16 @@
   <div class="pw">
     <div class="pw-top">
       <button class="pw-link" @click="$emit('close')">Maybe later</button>
-      <button class="pw-link" @click="restore">Restore</button>
+      <button class="pw-link" data-test="pw-restore" @click="restore">{{ ios ? 'Restore Purchases' : 'Restore' }}</button>
     </div>
-    <h1 class="pw-h">We want you to try <span>ClingNot</span> for free.</h1>
+    <h1 v-if="ios" class="pw-h" data-test="pw-heading">Unlock <span>ClingNot Pro</span></h1>
+    <h1 v-else class="pw-h">We want you to try <span>ClingNot</span> for free.</h1>
 
-    <div class="phone" aria-hidden="true">
+    <ul v-if="ios" class="feats" data-test="pw-features">
+      <li v-for="f in FEATURES" :key="f.t"><span class="fi">✓</span><span><b>{{ f.t }}</b><small>{{ f.d }}</small></span></li>
+    </ul>
+
+    <div v-else class="phone" aria-hidden="true">
       <div class="notch"></div>
       <div class="scr">
         <div class="ph-status"><span>9:41</span><span>▮▮▮</span></div>
@@ -22,16 +27,17 @@
     </div>
 
     <div class="plans" role="radiogroup">
-      <button v-for="p in PLANS" :key="p.id" class="plan" :class="{on: sel===p.id}" role="radio" :aria-checked="sel===p.id" @click="sel=p.id">
-        <span v-if="p.badge" class="badge">{{ p.badge }}</span>
+      <button v-for="p in shownPlans" :key="p.id" class="plan" :class="{on: sel===p.id}" role="radio" :aria-checked="sel===p.id" @click="sel=p.id">
+        <span v-if="badgeFor(p)" class="badge">{{ badgeFor(p) }}</span>
         <span class="pl">{{ p.label }}</span>
-        <span class="pp">{{ priceText(p) }}<small>{{ p.period==='once' ? ' once' : '/'+p.period }}</small></span>
-        <span class="pm">{{ p.period==='yr' ? `~${fmt(p.perMonth)}/mo` : p.period==='once' ? 'Pay once, own it' : 'Billed monthly' }}</span>
+        <span class="pp" data-test="pw-price">{{ priceText(p) }}<small>{{ ios ? periodSuffix(p) : (p.period==='once' ? ' once' : '/'+p.period) }}</small></span>
+        <span class="pm">{{ ios ? subLine(p) : (p.period==='yr' ? `~${fmt(p.perMonth)}/mo` : p.period==='once' ? 'Pay once, own it' : 'Billed monthly') }}</span>
       </button>
     </div>
 
-    <p class="due"><span>✓</span> {{ trialDaysFor(plan) ? 'No Payment Due Now' : 'Cancel anytime' }}</p>
-    <button class="cta" :disabled="busy" @click="buy">{{ ctaText }}</button>
+    <p v-if="ios && billLine" class="due due--bill" data-test="pw-bill">{{ billLine }}</p>
+    <p v-if="!ios" class="due"><span>✓</span> {{ trialDaysFor(plan) ? 'No Payment Due Now' : 'Cancel anytime' }}</p>
+    <button class="cta" :disabled="busy || (ios && !iapFor(sel))" @click="buy">{{ ctaText }}</button>
     <p class="fine">{{ fine }}</p>
     <p v-if="msg" class="soon">{{ msg }}</p>
     <p v-if="ios" class="legal">
@@ -56,21 +62,40 @@ const emit = defineEmits(['close']);
 const ios = isNativeIOS();
 const iapPlans = ref([]);
 onMounted(async () => { if (!ios) return;
-  try { const { loadPlans } = await import('@/utils/iap'); iapPlans.value = await loadPlans(); if (!iapPlans.value.length) msg.value = 'Purchases are not available right now. Please try again later.'; }
-  catch (e) { msg.value = 'Could not load purchase options. Check your connection and try again.'; } });
+  try { const { loadPlans } = await import('@/utils/iap'); iapPlans.value = await loadPlans(); if (!iapPlans.value.length) msg.value = 'Purchases are not available right now. Please try again later.';
+    else if (!iapFor(sel.value)) sel.value = (iapPlans.value[0] || {}).id || sel.value; }
+  catch (e) { console.warn('loadPlans failed', e?.message || e); msg.value = 'Could not load purchase options. Check your connection and try again.'; } });
 const iapFor = (id) => iapPlans.value.find((x) => x.id === id);
-const priceText = (p) => iapFor(p.id)?.priceString || fmt(p.price);
+// iOS shows ONLY store-provided, localised prices (never a hardcoded USD fallback); web keeps the Stripe price list.
+const shownPlans = computed(() => ios ? PLANS.filter((p) => iapFor(p.id)) : PLANS);
+const priceText = (p) => iapFor(p.id)?.priceString || (ios ? '' : fmt(p.price));
+const periodWord = (p) => (p.period === 'yr' ? 'year' : 'month');
+const periodSuffix = (p) => (p.period === 'once' ? '' : `/${periodWord(p)}`);
+const subLine = (p) => { const td = trialDaysFor(p); return td ? `${td}-day free trial` : p.period === 'once' ? 'Pay once, no renewal' : `Billed every ${periodWord(p)}`; };
+// "Save N%" only when computed from the two live store prices (works in any currency); nothing is hardcoded.
+const savePct = computed(() => { const m = iapFor('monthly')?.price; const y = iapFor('yearly')?.price; return m && y && y < m * 12 ? Math.round((1 - y / (m * 12)) * 100) : 0; });
+const badgeFor = (p) => (ios ? (p.id === 'yearly' && savePct.value >= 5 ? `Save ${savePct.value}%` : '') : p.badge);
 const trialDaysFor = (p) => ios ? (iapFor(p.id)?.trialDays || 0) : p.trialDays;
 const openLink = async (url) => { try { const { Browser } = await import('@capacitor/browser'); await Browser.open({ url }); } catch (e) { window.open(url, '_blank'); } };
 const route = useRoute();
+const FEATURES = [
+  { t: 'AI coach', d: 'Personalised workout and meal suggestions.' },
+  { t: 'Strict Boss mode', d: 'An accountability mode that calls out procrastination.' },
+  { t: 'Calendar feed', d: 'See your daily plan in any calendar app.' },
+];
 const FEAT = { aiCoach: 'The AI coach', strictBoss: 'Strict Boss mode', calendarFeed: 'The calendar feed' };
 const sel = ref(DEFAULT_PLAN); const busy = ref(false);
 const msg = ref(route.query.checkout === 'cancel' ? 'Checkout canceled — no charge was made.' : route.query.feature === 'taskLimit' ? (PRO_RAISES_LIMIT ? `You've reached the free limit of ${TASK_LIMITS.free} tasks today. Pro lets you add ${TASK_LIMITS.pro} per day.` : `You've reached today's limit of ${TASK_LIMITS.free} tasks. Pro adds the AI coach, Strict Boss and more.`) : FEAT[route.query.feature] ? `🔒 ${FEAT[route.query.feature]} is a Pro feature.` : '');
 const plan = computed(() => planById(sel.value));
-const ctaText = computed(() => busy.value ? 'One sec…' : trialDaysFor(plan.value) ? 'Try for $0.00' : `Continue — ${priceText(plan.value)}`);
+const ctaText = computed(() => busy.value ? 'One sec…' : ios ? (trialDaysFor(plan.value) ? 'Start free trial' : plan.value.period === 'once' ? 'Buy lifetime access' : 'Subscribe') : trialDaysFor(plan.value) ? 'Try for $0.00' : `Continue — ${priceText(plan.value)}`);
+// iOS: the billed amount (from the store) is the boldest line, shown above the button; trial wording only when this plan really has a trial.
+const billLine = computed(() => { const p = plan.value; const td = trialDaysFor(p); const pr = priceText(p); if (!pr) return '';
+  if (p.period === 'once') return `${pr} one-time purchase`;
+  return td ? `${pr} per ${periodWord(p)} after your ${td}-day free trial` : `${pr} per ${periodWord(p)}`; });
 const fine = computed(() => { const p = plan.value; const td = trialDaysFor(p); const pr = priceText(p);
-  if (td) return `${td}-day free trial, then ${pr}/year. Cancel anytime.`;
-  return p.period === 'once' ? `One-time payment of ${pr}. Lifetime access.` : `${pr}/${p.period === 'yr' ? 'year' : 'month'}. Cancel anytime.`; });
+  if (!pr) return '';
+  if (td) return `${td}-day free trial, then ${pr}/${periodWord(p)}. Cancel anytime.`;
+  return p.period === 'once' ? `One-time payment of ${pr}. Lifetime access.` : `${pr}/${periodWord(p)}. Cancel anytime.`; });
 const demo = [{ t: 'Morning workout', d: true }, { t: 'Write project report', b: true }, { t: 'Reply to emails' }, { t: 'Read 20 pages', d: true }];
 async function buy() { busy.value = true; msg.value = '';
   if (ios) { try { const { purchase } = await import('@/utils/iap'); const p = iapFor(sel.value);
@@ -115,6 +140,10 @@ async function restore() {
 .plan.on { border-color: #3C8CFF; background: #10204A; box-shadow: 0 0 0 3px rgba(47,111,255,.25); }
 .badge { position: absolute; top: -10px; left: 50%; transform: translateX(-50%); white-space: nowrap; font-size: 10px; font-weight: 800; padding: 2px 8px; border-radius: 999px; background: #3DDC97; color: #062016; }
 .pl { font-size: 12px; font-weight: 600; color: #A9B4CC; } .pp { font-size: 17px; font-weight: 800; } .pp small { font-size: 10px; color: #A9B4CC; font-weight: 600; } .pm { font-size: 10px; color: #7180A0; }
+.feats { list-style: none; margin: 4px 0 6px; padding: 0; text-align: left; display: flex; flex-direction: column; gap: 12px; }
+.feats li { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border-radius: 14px; border: 1px solid #2A3C66; background: rgba(12,22,48,.92); }
+.feats .fi { color: #3DDC97; font-weight: 800; } .feats b { display: block; font-size: 15px; } .feats small { color: #A9B4CC; font-size: 13px; }
+.due--bill { font-size: 17px; font-weight: 800; color: #fff; }
 .due { font-size: 15px; font-weight: 700; margin: 6px 0 12px; } .due span { color: #3DDC97; margin-right: 4px; }
 .cta { width: 100%; min-height: 56px; border: 0; border-radius: 16px; font-size: 17px; font-weight: 800; color: #fff; background: linear-gradient(90deg,#1E5BFF,#3C8CFF); box-shadow: 0 10px 26px rgba(47,111,255,.4); cursor: pointer; }
 .cta:disabled { opacity: .7; }

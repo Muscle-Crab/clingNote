@@ -11,12 +11,16 @@ const sdk = async () => mod || (mod = await import('@revenuecat/purchases-capaci
 
 export const iapAvailable = () => isNativeIOS() && !!process.env.VUE_APP_REVENUECAT_IOS_KEY;
 
+let initPromise = null; // single in-flight configure(): the auth listener and the paywall can both call initIap() at start-up
 export async function initIap() {
   if (!iapAvailable()) return false;
   if (configured) return true;
-  const { Purchases } = await sdk();
-  await Purchases.configure({ apiKey: process.env.VUE_APP_REVENUECAT_IOS_KEY });
-  configured = true; return true;
+  if (!initPromise) initPromise = (async () => {
+    const { Purchases } = await sdk();
+    await Purchases.configure({ apiKey: process.env.VUE_APP_REVENUECAT_IOS_KEY });
+    configured = true; return true;
+  })().catch((e) => { initPromise = null; throw e; });
+  return initPromise;
 }
 
 // Called from the global Firebase auth listener. app_user_id === Firebase uid (never an email).
@@ -41,7 +45,7 @@ export async function loadPlans() {
     const id = planIdForProduct(pkg.product.identifier); if (!id) return null;
     const intro = pkg.product.introPrice;
     const eligible = !!intro && elig[pkg.product.identifier]?.status === INTRO_ELIGIBILITY_STATUS.INTRO_ELIGIBILITY_STATUS_ELIGIBLE;
-    return { id, pkg, priceString: pkg.product.priceString, trialEligible: eligible, trialDays: eligible ? (intro.periodNumberOfUnits || 0) : 0 };
+    return { id, pkg, priceString: pkg.product.priceString, price: pkg.product.price, trialEligible: eligible, trialDays: eligible ? (intro.periodNumberOfUnits || 0) : 0 };
   }).filter(Boolean);
 }
 
