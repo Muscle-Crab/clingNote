@@ -20,7 +20,8 @@
     <template v-else-if="view === 'planned'">
       <div class="eh-head"><h2 class="eh-title">Your 8-hour day</h2><span class="eh-badge">Not started</span></div>
       <p class="eh-big" data-test="eh-starts">{{ phase === 'before' ? 'Starts ' + fmtWake : 'Ready' }}<small> · Ends {{ ends }}</small></p>
-      <p class="eh-muted" v-if="phase === 'ready'" data-test="eh-needs-tasks">
+      <p class="eh-muted" v-if="phase === 'ready' && needMore <= 0" data-test="eh-all-added">All {{ plan.taskCount }} task{{ plan.taskCount === 1 ? '' : 's' }} added. Start the countdown when you are ready.</p>
+      <p class="eh-muted" v-else-if="phase === 'ready'" data-test="eh-needs-tasks">
         Add {{ needMore }} more task{{ needMore === 1 ? '' : 's' }} to start the countdown ({{ taskTotal }}/{{ plan.taskCount }} added).
       </p>
       <p class="eh-muted" v-else>Add your {{ plan.taskCount }} task{{ plan.taskCount === 1 ? '' : 's' }} ({{ taskTotal }}/{{ plan.taskCount }}). The countdown starts at your wake time.</p>

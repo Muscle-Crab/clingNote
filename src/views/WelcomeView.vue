@@ -77,8 +77,9 @@ const signedIn = computed(() => !!auth.currentUser && route.query.new === '1');
 const wakeLabel = computed(() => fmtWakeLabel(wake.value) || '—');
 const endLabel = computed(() => { const w = parseWake(wake.value); if (!w) return '—'; const t = (w.h * 60 + w.m + WINDOW_MIN) % 1440; return fmtWakeLabel(`${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`); });
 const lastSlide = TOUR_SLIDES.length - 1;
-const canNext = computed(() => (STEPS[step.value] === 'tour' ? sawLast.value || slide.value >= lastSlide : STEPS[step.value] === 'wake' ? wakeConfirmed.value && !!parseWake(wake.value) : true));
-const nextLabel = computed(() => (STEPS[step.value] === 'tour' && !canNext.value ? 'Next' : 'Continue'));
+// The tour's button always works: it pages through the slides, and only after the last one does it move on.
+const canNext = computed(() => (STEPS[step.value] === 'wake' ? wakeConfirmed.value && !!parseWake(wake.value) : true));
+const nextLabel = computed(() => (STEPS[step.value] === 'tour' && slide.value < lastSlide ? 'Next' : 'Continue'));
 
 const confirmWake = () => { if (!parseWake(wake.value)) return; wakeConfirmed.value = true; cachePlan({ wakeTime: wake.value, taskCount: taskCount.value, tz: deviceTz() }); };
 const next = () => {
@@ -110,7 +111,7 @@ const finishSignedIn = async () => {
 .wl-list li { display: flex; gap: 14px; align-items: center; padding: 13px 14px; border-radius: 16px; border: 1px solid #2A3C66; background: linear-gradient(180deg, rgba(18, 32, 63, .92), rgba(12, 22, 48, .92)); }
 .wl-list li > span { font-size: 26px; } .wl-list b { display: block; font-size: 16px; } .wl-list small { color: #A9B4CC; font-size: 13px; line-height: 1.4; }
 .wl-field { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; margin-bottom: 10px; border-radius: 16px; border: 1px solid #2A3C66; background: linear-gradient(180deg, rgba(18, 32, 63, .92), rgba(12, 22, 48, .92)); font-weight: 600; }
-.wl-field input { width: 150px; text-align: right; font-size: 20px; font-weight: 700; color-scheme: dark; }
+.wl-field input { width: 178px; text-align: right; font-size: 19px; font-weight: 700; color-scheme: dark; }
 .wl-ends { margin: 2px 0 14px; color: #A9B4CC; font-size: 15px; } .wl-ends b { color: #fff; }
 .wl-step { display: flex; align-items: center; gap: 14px; } .wl-step b { font-size: 22px; min-width: 20px; text-align: center; }
 .wl-step button { width: 40px; height: 40px; border-radius: 12px; border: 1px solid #2A3C66; background: #10204A; color: #fff; font-size: 22px; cursor: pointer; } .wl-step button:disabled { opacity: .35; }

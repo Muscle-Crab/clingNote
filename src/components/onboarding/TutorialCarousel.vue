@@ -22,9 +22,11 @@ const props = defineProps({ slides: { type: Array, default: () => TOUR_SLIDES },
 const emit = defineEmits(['update:modelValue', 'last']);
 const track = ref(null);
 const index = ref(props.modelValue);
+let autoUntil = 0; // while the buttons scroll the track programmatically, ignore the intermediate scroll positions
 
 const onScroll = () => {
   const el = track.value; if (!el || !el.clientWidth) return;
+  if (Date.now() < autoUntil) return;
   const i = Math.max(0, Math.min(props.slides.length - 1, Math.round(el.scrollLeft / el.clientWidth)));
   if (i !== index.value) { index.value = i; emit('update:modelValue', i); }
   if (i === props.slides.length - 1) emit('last');
@@ -32,9 +34,11 @@ const onScroll = () => {
 const goTo = (i, smooth = true) => {
   const el = track.value; if (!el) return;
   const reduce = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  autoUntil = Date.now() + (smooth && !reduce ? 700 : 150);
   el.scrollTo({ left: i * el.clientWidth, behavior: smooth && !reduce ? 'smooth' : 'auto' });
 };
 watch(() => props.modelValue, (v) => { if (v !== index.value) { index.value = v; goTo(v); } });
+watch(index, (i) => { if (i === props.slides.length - 1) emit('last'); });
 onMounted(() => { if (index.value) goTo(index.value, false); });
 defineExpose({ goTo });
 </script>
