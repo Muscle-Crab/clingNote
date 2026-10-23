@@ -24,6 +24,8 @@ jobs:
         env: { VUE_APP_REVENUECAT_IOS_KEY: "${{ secrets.VUE_APP_REVENUECAT_IOS_KEY }}" }
         run: npm run build:ios
       - run: npx cap sync ios
+      - name: Patch generated OneSignal plugin for SwiftPM
+        run: python3 scripts/ios-patch-onesignal.py
       - name: Write App Store Connect API key
         run: |
           mkdir -p ~/private_keys
