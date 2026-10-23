@@ -23,6 +23,7 @@
           By continuing, you agree to our
           <router-link to="/terms" class="text-blue-600 hover:underline dark:text-blue-400" data-test="login-terms">Terms & Conditions</router-link>
           and <router-link to="/privacy-policy" class="text-blue-600 hover:underline dark:text-blue-400" data-test="login-privacy">Privacy Policy</router-link>.
+          <router-link to="/support" class="block mt-2 text-gray-500 dark:text-gray-400 underline" data-test="login-support">Support</router-link>
         </p>
       </div>
 
