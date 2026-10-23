@@ -3,6 +3,7 @@
     <navi v-if="!route.meta.bare"/>
     <SubpageHero v-if="hero" :title="hero.title" :kicker="hero.kicker" :back="hero.back !== false" />
     <router-view></router-view>
+    <AiConsentModal />
   </div>
 </template>
 
@@ -14,6 +15,7 @@ import { resumePush } from '@/composables/useFcm';
 import { useRoute } from 'vue-router';
 import navi from '@/components/nav.vue';
 import SubpageHero from '@/components/ui/SubpageHero.vue';
+import AiConsentModal from '@/components/AiConsentModal.vue';
 
 const route = useRoute();
 const isHome = computed(() => route.name === 'home');

@@ -1,10 +1,13 @@
 // Calls the server-side AI function. No OpenAI key in the browser.
 import { auth } from '@/firebaseConfig';
 import { fnUrl } from '@/config/api';
+import { ensureAiConsent } from '@/composables/useAiConsent';
 
 export const askAi = async (task, input) => {
   const user = auth.currentUser;
   if (!user) throw new Error('Not signed in');
+  // Backstop: nothing leaves the device for OpenAI without the user's one-time consent (callers also ask early for a better flow).
+  if (!(await ensureAiConsent())) throw Object.assign(new Error('AI consent declined'), { status: 'consent-declined' });
   const r = await fetch(fnUrl('ai'), {
     method: 'POST',
     headers: { Authorization: `Bearer ${await user.getIdToken()}`, 'Content-Type': 'application/json' },

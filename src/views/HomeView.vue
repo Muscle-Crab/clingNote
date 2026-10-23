@@ -236,6 +236,7 @@ import { buildRecap, reportDue, prevDay } from '@/utils/dailyReport';
 import { monthKey, prevMonthKey } from '@/utils/ranking';
 import { applyTaskToggle, evaluateStreak, localDateStr, dayDiff, ALLOWED_GAP_DAYS, DAILY_STREAK_MIN, capStreak, lostReason } from '@/utils/streak';
 import { askAi } from '@/composables/useAi';
+import { ensureAiConsent } from '@/composables/useAiConsent';
 import { useRouter as _useRouter } from 'vue-router';
 import { requirePro, loadUserDoc } from '@/composables/usePro';
 import { isPro as isProUser } from '@/utils/pro';
@@ -2693,6 +2694,7 @@ const openWorkoutModal = async () => {
 
 const generateWorkoutRoutine = async () => {
   if (!(await requirePro(_proRouter, 'aiCoach'))) { closeWorkoutModal(); return; }
+  if (!(await ensureAiConsent())) { closeWorkoutModal(); return; } // one-time OpenAI data-sharing consent (declined => nothing is sent)
   closeWorkoutModal();
   isLoading.value = true;
 

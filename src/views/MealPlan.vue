@@ -153,6 +153,7 @@
 <script setup>
 import { fnUrl } from '@/config/api';
 import { askAi } from '@/composables/useAi';
+import { ensureAiConsent } from '@/composables/useAiConsent';
 import { useRouter as _useRouter } from 'vue-router';
 import { requirePro } from '@/composables/usePro';
 const _proRouter = _useRouter();
@@ -214,6 +215,7 @@ function formatNutrient(val, key) {
 
 async function analyzeImage() {
   if (!(await requirePro(_proRouter, 'aiCoach'))) return;
+  if (!(await ensureAiConsent())) return; // one-time OpenAI data-sharing consent (photo is only sent after Allow)
 
 
   isLoading.value = true;
@@ -283,6 +285,7 @@ function toBase64(file) {
 
 async function addManualFood() {
   if (!(await requirePro(_proRouter, 'aiCoach'))) return;
+  if (!(await ensureAiConsent())) return; // one-time OpenAI data-sharing consent
   if (!manualFood.value.trim()) return
 
   const res = await askAi('meal-text', { food: manualFood.value })
