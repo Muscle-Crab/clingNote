@@ -108,7 +108,7 @@
       <ReminderModal v-if="isModalOpen" :reminder="reminder" :task-title="selectedTaskTitle" @close="closeModal" @submit="handleAddReminder" />
 
 
-      <VoiceModal v-if="voiceOpen" :transcript="liveTranscript" :supported="voiceSupported" :capability="voiceCap" :error="voiceError" :added="voiceAdded" @undo="undoVoiceTask" @cancel="cancelVoiceInput" />
+      <VoiceModal v-if="voiceOpen" :transcript="liveTranscript" :supported="voiceSupported" :capability="voiceCap" :error="voiceError" :hint="voiceHint" :added="voiceAdded" @undo="undoVoiceTask" @cancel="cancelVoiceInput" />
       <div v-if="!voiceOpen && voiceAdded.some((e) => e.undoUntil > nowTick)" class="voice-toasts" role="status">
         <div v-for="e in voiceAdded.filter((x) => x.undoUntil > nowTick)" :key="e.id" class="voice-toast">🎙 Added “{{ e.title }}” <button type="button" @click="undoVoiceTask(e)">Undo</button></div>
       </div>
@@ -2269,6 +2269,7 @@ const voiceError = ref('');
 let recognition = null;
 let pendingVoiceText = '';
 let voiceSubmitting = false;
+let voiceAddFailed = false; // the last spoken task was refused (limit, strict boss, save error): keep the message visible
 const liveTranscript = ref('');
 const voiceCap = typeof window !== 'undefined' ? voiceCapability(window, navigator) : 'none';
 const voiceSupported = voiceCap !== 'none';
@@ -2280,7 +2281,7 @@ if (voiceSupported) {
   recognition.interimResults = true;
   recognition.maxAlternatives = 1;
 
-  recognition.onstart = () => { listening.value = true; voiceError.value = ''; };
+  recognition.onstart = () => { listening.value = true; if (!voiceAddFailed) voiceError.value = ''; }; // a mic auto-restart must not wipe a "could not add the task" message
   recognition.onerror = (event) => {
     console.error("Speech recognition error:", event.error);
     listening.value = false;
@@ -2331,7 +2332,12 @@ const drainVoiceQueue = async () => {
       capOverride.value = true; // hands-free never stops on the active-task cap warning
       const ok = await addNewTask() && (await lastAddPersist);
       capOverride.value = false;
-      if (!ok) { voiceError.value = error.value || 'Could not add the task.'; continue; }
+      if (!ok) {
+        voiceAddFailed = true;
+        voiceError.value = error.value || 'Could not add the task.';
+        if (recognition) { try { recognition.stop(); } catch (e) { /* not started */ } }
+        continue;
+      }
       const saved = [...(selectedDayRoutine.value || [])].filter((x) => x.title === title).sort((x, y) => String(y.createdAt).localeCompare(String(x.createdAt)))[0];
       const entry = { id: `${Date.now()}-${Math.random()}`, title, createdAt: saved?.createdAt, dayName: days[selectedDayIndex.value]?.day, undoUntil: Date.now() + UNDO_MS };
       voiceAdded.value = [...voiceAdded.value, entry];
@@ -2339,9 +2345,12 @@ const drainVoiceQueue = async () => {
     }
   } catch (e) {
     console.error('Voice task failed:', e);
+    voiceAddFailed = true;
     voiceError.value = 'Could not add the task. Please try again.';
   } finally { voiceSubmitting = false; }
 };
+// Today's list stays hidden until Start Day: tell the user where the spoken task went instead of leaving them guessing.
+const voiceHint = computed(() => (voiceAdded.value.length && isViewingToday.value && !canViewSelectedDayTasks.value ? "Saved. Today's list is hidden until you tap Start Day." : ''));
 const undoVoiceTask = async (entry) => {
   if (!entry?.createdAt || !entry.dayName || !userId.value) return;
   const key = `${entry.createdAt}|${entry.title}`;
@@ -2355,6 +2364,7 @@ const undoVoiceTask = async (entry) => {
   } catch (e) { console.error('Undo failed:', e); }
 };
 const cancelVoiceInput = () => {
+  voiceAddFailed = false;
   if (recognition) { try { recognition.stop(); } catch (e) { /* not started */ } }
   listening.value = false;
   voiceOpen.value = false;
@@ -2365,6 +2375,7 @@ const cancelVoiceInput = () => {
 };
 
 const startVoiceInput = () => {
+  voiceAddFailed = false;
   voiceAdded.value = [];
   voiceOpen.value = true; // always show the modal, even when recognition is unavailable
   liveTranscript.value = '';
