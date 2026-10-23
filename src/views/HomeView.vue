@@ -117,7 +117,7 @@
       <!-- ─── Task List ─── -->
       <section v-if="canViewSelectedDayTasks"
                class="task-section">
-        <EmptyState v-if="dayTasks.length === 0" :show-add="true" @add="openModal('task')" />
+        <EmptyState v-if="dayTasks.length === 0" :show-add="true" @add="onAddClick" />
 
 
         <div v-else class="task-list-wrap">
@@ -193,7 +193,7 @@
       <ScheduledList v-if="userId" :tasks="futureScheduled" :today-str="todayStr" :error="scheduledError"
                      @move-today="moveScheduledToToday" @update="updateScheduledDate" @delete="deleteScheduled" />
 
-      <FabButtons :user-id="userId" :listening="listening" @add="openModal('task')" @voice="startVoiceInput" />
+      <FabButtons :user-id="userId" :listening="listening" @add="onAddClick" @voice="startVoiceInput" />
 
 
     </div>
@@ -753,6 +753,17 @@ const fetchUserName = async (userId) => {
 
 
 
+// Add Task button: a free user already at today's limit goes straight to the paywall instead of opening the form.
+const onAddClick = async () => {
+  try {
+    if (userId.value) {
+      const g = gateCache && Date.now() - gateCache.at < 60000 ? gateCache : await fetchGateData();
+      const res = checkDailyLimit(g.pro, getTodayId(), [...g.lists, g.extra, [...pendingAdds.values()]], scheduledList.value || []);
+      if (!res.ok && !g.pro) { goUpgradeForLimit(); return; }
+    }
+  } catch (e) { console.error('limit pre-check', e); }
+  openModal('task');
+};
 const openModal = (type = 'task', index = null, title = '') => {
   if (type === 'calendar') {
     selectedTaskIndex.value = index; // Store task index
@@ -1605,6 +1616,7 @@ const addNewTask = async () => {
   try {
     if (!(await dailyLimitGate(newTask.value.scheduleDate || getTodayId()))) {
       const l = limitHit.value;
+      if (!l.pro) { goUpgradeForLimit(); return false; } // free user over the daily limit: open the paywall instead of an error
       error.value = l.pro ? `Daily limit reached: ${l.limit} tasks per day on Pro.` : `Daily limit reached: free accounts can add ${l.limit} tasks per day.`;
       return false;
     }
@@ -2756,11 +2768,8 @@ const addsToToday = () => {
   const sel = newTask.value.selectedDays;
   return sel.length > 0 ? sel.some((d) => d.day === todayName) : isViewingToday.value;
 };
-const isCapBlocked = () => {
-  if (capOverride.value || !addsToToday()) return false;
-  if (activeCount(selectedDayRoutine.value) >= ACTIVE_CAP) { capWarning.value = true; return true; }
-  return false;
-};
+// The soft "3 active tasks today" nudge was removed (it no longer blocks or shows a message); the real per-plan limit is dailyLimitGate.
+const isCapBlocked = () => false;
 const addAnyway = () => { capOverride.value = true; capWarning.value = false; addNewTask(); };
 watch(modalOpen, (open) => { if (!open) { capWarning.value = false; capOverride.value = false; limitHit.value = null; } });
 
