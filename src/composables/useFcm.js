@@ -55,13 +55,16 @@ const mintToken = async () => {
 };
 const saveToken = (uid, token) => setDoc(doc(db, 'users', uid), { fcmTokens: arrayUnion(token) }, { merge: true });
 
+// Never leave the button spinning: some networks/browsers block the push service and getToken then never settles.
+const withTimeout = (pr, ms, msg) => Promise.race([pr, new Promise((_, rej) => setTimeout(() => rej(new Error(msg)), ms))]);
+
 // Called from a button click. Returns { ok, reason? }.
 export const enablePush = async () => {
   const u = auth.currentUser; if (!u) return { ok: false, reason: 'signin' };
   if (!(await pushSupported())) return { ok: false, reason: iosNeedsInstall() ? 'ios-install' : 'unsupported' };
   const perm = await Notification.requestPermission();
   if (perm !== 'granted') return { ok: false, reason: perm === 'denied' ? 'denied' : 'dismissed' };
-  try { const { token } = await mintToken(); await saveToken(u.uid, token); localStorage.setItem(LS, '1'); return { ok: true }; }
+  try { const { token } = await withTimeout(mintToken(), 25000, 'Push registration timed out'); await saveToken(u.uid, token); localStorage.setItem(LS, '1'); return { ok: true }; }
   catch (e) { console.error('enablePush', e.message); return { ok: false, reason: 'error' }; }
 };
 

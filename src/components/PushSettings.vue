@@ -1,7 +1,7 @@
 <template>
   <section class="push" data-test="push-settings">
     <h2 class="push-h">🔔 Notifications</h2>
-    <p class="push-p">Get reminders as push notifications on this device.</p>
+    <p class="push-p">Get push notifications on this device.</p>
     <p v-if="iosNote" class="push-note" data-test="push-ios-note">On iPhone and iPad, web push only works after you add ClingNot to your Home Screen (Share → Add to Home Screen) and open it from there.</p>
     <div class="push-actions">
       <button v-if="!enabled" type="button" class="push-btn push-btn--primary" :disabled="busy" data-test="push-enable" @click="enable">Enable notifications</button>
