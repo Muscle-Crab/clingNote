@@ -142,6 +142,10 @@ const routes = [
     name: 'subs',
     component: () => import('../views/Subs.vue')
   },{
+    path: '/support',
+    name: 'support',
+    component: () => import('../views/SupportView.vue')
+  },{
     path: '/privacy-policy',
     name: 'privacy',
     component: () => import('../views/privacy-policy.vue')

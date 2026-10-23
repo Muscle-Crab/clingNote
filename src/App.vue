@@ -37,6 +37,7 @@ const HEROES = {
   Register: { title: 'Create account', kicker: 'ClingNote', back: false },
   TermsandCondition: { title: 'Terms & Conditions', kicker: 'Legal', back: false },
   privacy: { title: 'Privacy Policy', kicker: 'Legal', back: false },
+  support: { title: 'Support', kicker: 'Help', back: false },
   subs: { title: 'Go Premium', kicker: 'Plans' },
   MealPlan: { title: 'Meal Tracker', kicker: 'Nutrition' },
   NotFoundComponent: { title: 'Page not found', kicker: '404' },

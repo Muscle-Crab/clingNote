@@ -89,9 +89,21 @@
           <li class="app-sidebar-item">
             <i class="fas fa-user-shield"></i>
             <router-link to="/privacy-policy"
-                         class="app-sidebar-link">
+                         class="app-sidebar-link" data-test="nav-privacy">
               Privacy Policy
             </router-link>
+          </li>
+          <li class="app-sidebar-item">
+            <i class="fas fa-file-contract"></i>
+            <router-link to="/terms" class="app-sidebar-link" data-test="nav-terms">Terms &amp; Conditions</router-link>
+          </li>
+          <li class="app-sidebar-item">
+            <i class="fas fa-life-ring"></i>
+            <router-link to="/support" class="app-sidebar-link" data-test="nav-support">Support</router-link>
+          </li>
+          <li v-if="userId" class="app-sidebar-item">
+            <i class="fas fa-user-times"></i>
+            <router-link :to="'/profile/' + userId + '?delete=1'" class="app-sidebar-link" data-test="nav-delete-account">Delete Account</router-link>
           </li>
 
           <!-- Logout -->

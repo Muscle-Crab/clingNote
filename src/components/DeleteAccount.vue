@@ -1,5 +1,5 @@
 <template>
-  <div class="mt-6 border-t border-gray-200 pt-4 text-center" data-test="delete-account">
+  <div id="delete-account" class="mt-6 border-t border-gray-200 pt-4 text-center" data-test="delete-account">
     <button v-if="!open" type="button" class="text-sm text-red-600 hover:underline" data-test="delete-account-open" @click="open = true">Delete account</button>
     <div v-else class="text-left rounded-lg border border-red-200 bg-red-50 p-3" role="alertdialog" aria-labelledby="del-title">
       <p id="del-title" class="font-semibold text-red-700 text-sm">Delete your account?</p>
@@ -20,15 +20,18 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
-import { useRouter } from 'vue-router';
+import { ref, computed, onMounted } from 'vue';
+import { useRouter, useRoute } from 'vue-router';
 import { auth } from '@/firebaseConfig';
 import { isNativeIOS } from '@/utils/platform';
 import { deleteMyAccount, reauthMethod } from '@/utils/deleteAccount';
 
 defineProps({ userIsPro: { type: Boolean, default: false } });
 const router = useRouter();
-const open = ref(false); const busy = ref(false); const password = ref(''); const message = ref('');
+const route = useRoute();
+const open = ref(route.query.delete === '1'); // /profile/<uid>?delete=1 (nav + support page links) opens the confirmation directly
+onMounted(() => { if (open.value) { try { document.getElementById('delete-account')?.scrollIntoView({ block: 'center' }); } catch (e) { /* ignore */ } } });
+const busy = ref(false); const password = ref(''); const message = ref('');
 const isIos = isNativeIOS();
 const method = computed(() => (open.value ? reauthMethod(auth.currentUser) : 'none'));
 const cancel = () => { open.value = false; password.value = ''; message.value = ''; };
