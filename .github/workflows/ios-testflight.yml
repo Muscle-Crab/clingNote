@@ -2,7 +2,9 @@
 # Manual only (workflow_dispatch). Needs repo secrets: ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8_BASE64 (App Store Connect API key, role >= App Manager),
 # and VUE_APP_REVENUECAT_IOS_KEY (RevenueCat public "appl_" SDK key). Nothing here runs until the App Store Connect app record exists.
 name: ios-testflight
-on: { workflow_dispatch: {} }
+on:
+  workflow_dispatch: {}
+  push: { branches: [feat/ios-capacitor] }  # temporary: lets the run start from this branch before the workflow exists on main; remove before merging
 jobs:
   build:
     runs-on: macos-15
