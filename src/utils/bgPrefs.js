@@ -7,7 +7,7 @@ export const TRACKS = [
   { id: 'ambient', label: 'Ambient drift', hint: 'Warm evolving pads' },
   { id: 'fireside', label: 'Fireside crackle', hint: 'Soft crackling fire sounds' },
 ];
-export const DEFAULTS = Object.freeze({ anim: 'none', track: 'lofi', volume: 0.5, forceMotion: false });
+export const DEFAULTS = Object.freeze({ anim: 'none', track: 'lofi', volume: 0.5, forceMotion: false, musicOn: false });
 const clamp01 = (n) => Math.min(1, Math.max(0, Number.isFinite(n) ? n : DEFAULTS.volume));
 export const sanitize = (p) => {
   const o = p && typeof p === 'object' ? p : {};
@@ -16,6 +16,7 @@ export const sanitize = (p) => {
     track: TRACKS.some((t) => t.id === o.track) ? o.track : DEFAULTS.track,
     volume: clamp01(Number(o.volume)),
     forceMotion: o.forceMotion === true, // "play anyway" when the device asks for reduced motion
+    musicOn: o.musicOn === true, // music was playing when the user left: resume it on return
   };
 };
 export const loadPrefs = (storage = typeof localStorage !== 'undefined' ? localStorage : null) => {

@@ -2250,7 +2250,13 @@ onMounted(() => {
   checkStreakOnCompletion();
 });
 const showBackground = ref(false);
-const { prefs: bgPrefs } = useBackground();
+const bgApi = useBackground();
+const bgPrefs = bgApi.prefs;
+// Returning to the app (cold start or back from the background): bring back the music the user had on.
+const resumeBgMusic = () => { try { bgApi.resumeIfWanted(); } catch (e) { /* audio is optional */ } };
+const onBgVisible = () => { if (document.visibilityState === 'visible') resumeBgMusic(); };
+onMounted(() => { resumeBgMusic(); document.addEventListener('visibilitychange', onBgVisible); });
+onBeforeUnmount(() => document.removeEventListener('visibilitychange', onBgVisible));
 const menuOpen = ref(false); // closed by default; closes on outside tap / Escape / route change
 const heroMenuEl = ref(null);
 const noticeCount = computed(() => {

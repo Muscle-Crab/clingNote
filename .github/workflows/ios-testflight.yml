@@ -37,6 +37,14 @@ jobs:
           xcodebuild -project App.xcodeproj -scheme App -configuration Release -destination 'generic/platform=iOS' \
             -archivePath $RUNNER_TEMP/App.xcarchive CURRENT_PROJECT_VERSION=${{ github.run_number }} \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" archive
+      - name: Embed entitlements in the unsigned archive
+        working-directory: ios/App
+        run: |
+          # An unsigned archive carries no entitlements, so the exported app lost Sign in with Apple + Push (Apple error 1000). Ad-hoc sign with App.entitlements so export re-signs WITH them.
+          APP="$RUNNER_TEMP/App.xcarchive/Products/Applications/App.app"
+          echo "Before:"; codesign -d --entitlements :- "$APP" 2>&1 | head -20 || true
+          codesign --force --sign - --entitlements App/App.entitlements "$APP"
+          echo "After:"; codesign -d --entitlements :- "$APP" 2>&1 | head -20
       - name: Export + upload to TestFlight
         working-directory: ios/App
         run: |
