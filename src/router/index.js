@@ -4,19 +4,18 @@ import RegisterPage from '../views/UserRegistrationForm.vue';
 import Login from '../views/Login.vue';
 import { auth } from '../firebaseConfig';
 import Room from '../views/Room.vue';
-import Landing from '../views/landing.vue';
 import TermsandCondition from '../views/TermsandCondition.vue';
 import Pickup from '../views/Pickup.vue';
 import Addiction from "@/views/addiction.vue";
 import sub from "@/views/Subs.vue";
-import { ugcHidden, isNativeIOS } from '@/utils/platform';
+import { ugcHidden, isNativeIOS, isNative } from '@/utils/platform';
 
 const routes = [
   {
     path: '/',
     name: 'Root',
     // placeholder, redirection handled in route guard
-    component: Landing
+    component: () => import('../views/landing.vue')
   },
   {
     path: '/home',
@@ -100,7 +99,7 @@ const routes = [
   {
     path: '/landing',
     name: 'Landing',
-    component: Landing
+    component: () => import('../views/landing.vue')
   },
   {
     path: '/:pathMatch(.*)*',
@@ -188,6 +187,9 @@ router.beforeEach(async (to, from, next) => {
 
   // iOS app: web-only features (Stripe-credit meal tracker) are not reachable (App Store 3.1.1)
   if (isNativeIOS() && to.matched.some(r => r.meta && r.meta.webOnly)) return next(currentUser ? '/home' : '/login');
+
+  // iOS app: no marketing landing page (hero image + 26MB demo video are website-only) -> straight to Login / Home
+  if (isNative() && (to.path === '/' || to.path === '/landing')) return next(currentUser ? '/home' : '/login');
 
   if (to.path === '/') {
     if (currentUser) {

@@ -98,9 +98,9 @@
               </h2>
 
               <!-- Video Tutorial -->
-              <div class="w-full mb-6 rounded-lg shadow-lg">
+              <div v-if="demoVideo" class="w-full mb-6 rounded-lg shadow-lg">
                 <video
-                    src="@/assets/video.mp4"
+                    :src="demoVideo"
                     controls
                     autoplay
                     class="w-full h-full object-cover"
@@ -425,6 +425,7 @@ import { useRoute } from 'vue-router';
 import { ref as storageRef, uploadBytes, getDownloadURL, uploadBytesResumable } from "firebase/storage";
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
+import { demoVideo } from '@/utils/landingMedia';
 const audioRef = ref(null);
 const previewUrl = ref('');
 const fileToUpload = ref(null);

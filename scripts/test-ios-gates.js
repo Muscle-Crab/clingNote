@@ -25,4 +25,11 @@ t('privacy policy covers retention, DOB/gender, avatar/photos, analytics, no tra
   ['Retention', 'date of birth', 'gender', 'profile picture', 'Analytics', 'No tracking', 'Recovery Tracker', 'OneSignal', 'RevenueCat', 'Delete Account', 'comments, replies and reactions'].forEach((k) => assert(p.includes(k), k));
   assert(!/ClingNote/.test(p), 'brand is ClingNot');
 });
+t('landing page skipped on native; landing video is not bundled in the iOS build and not loaded on native', () => {
+  assert(/isNative\(\) && \(to\.path === '\/' \|\| to\.path === '\/landing'\)\) return next\(currentUser \? '\/home' : '\/login'\)/.test(router));
+  const m = rd('src/utils/landingMedia.js'); assert(/VUE_APP_NATIVE_BUILD === '1' \|\| isNative\(\)\) \? '' : require\('@\/assets\/video\.mp4'\)/.test(m)); assert(/heroStyle = isNative\(\) \? \{\}/.test(m));
+  assert(!/assets\/video\.mp4/.test(rd('src/views/landing.vue') + rd('src/views/Room.vue')));
+  const v = rd('vue.config.js'); ['iphone.mov', 'test.html', 'sw.js', 'productionSourceMap: !NATIVE'].forEach((k) => assert(v.includes(k), k));
+  assert(/npm run build:ios/.test(rd('.github/workflows/ios-testflight.yml')));
+});
 console.log(`${n} passed`);

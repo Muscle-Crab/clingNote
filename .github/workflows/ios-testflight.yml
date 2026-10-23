@@ -15,7 +15,7 @@ jobs:
       - run: npm run check
       - name: Build web assets
         env: { VUE_APP_REVENUECAT_IOS_KEY: "${{ secrets.VUE_APP_REVENUECAT_IOS_KEY }}" }
-        run: npm run build
+        run: npm run build:ios
       - run: npx cap sync ios
       - name: Write App Store Connect API key
         run: |
