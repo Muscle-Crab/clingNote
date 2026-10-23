@@ -281,6 +281,7 @@ const mutateDay = (dayName, fn) => runTransaction(db, async (tx) => {
 });
 const strictAllowed = ref(true); // false for free users once ENFORCE_PAYWALL is on
 loadUserDoc().then((d) => { strictAllowed.value = canUse(d, 'strictBoss'); }).catch(() => {});
+import { scheduleTimerDone, cancelLocal, timerKey, cancelTaskNotifications } from '@/utils/localNotify';
 import { scheduleNotification, sendNotificationToPlayer, linkPushUser } from '@/composables/useNotifications';
 import { speak } from '@/composables/useSpeech';
 import { completionPercentage, computeTimeStats, daysLeftInYearFrom, heroTitleFor } from '@/utils/dayStats';
@@ -984,6 +985,7 @@ const startTimer = async () => {
   selectedDayRoutine.value[selectedTimerTaskIndex.value] = task;
 
   await saveSelectedDayTasks();
+  scheduleTimerDone(task); // iOS: on-device notification at end time (JS timers stop when backgrounded)
 
   showTimerModal.value = false;
   selectedTimerTaskIndex.value = null;
@@ -1055,6 +1057,7 @@ const deleteTask = async (index) => {
     const removeAll = alsoDays.length > 0 &&
       confirm(`This task repeats on ${alsoDays.length} other day${alsoDays.length > 1 ? 's' : ''} (${alsoDays.join(', ')}).\n\nOK = delete it from all days\nCancel = delete only from this day`);
 
+    if (target) cancelTaskNotifications(target);
     selectedDayRoutine.value.splice(index, 1);
     await updateDoc(selectedDayDocRef, {
       tasks: selectedDayRoutine.value,
@@ -1091,6 +1094,7 @@ const toggleTaskCompletion = async (index) => {
     task.completedAt = completedNow;
     task.timerActive = false;
     task.timerStoppedAt = completedNow;
+    cancelTaskNotifications(task);
 
     userCredits.value += 10;
     announceNextTask(index);
@@ -1103,6 +1107,7 @@ const toggleTaskCompletion = async (index) => {
     task.completedAt = null;
     task.timerStoppedAt = null;
     task.timerActive = false;
+    cancelLocal(timerKey(task));
     userCredits.value -= 10;
   }
 

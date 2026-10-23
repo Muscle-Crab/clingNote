@@ -2,6 +2,8 @@
 // Netlify Function /.netlify/functions/send-notification, which verifies the Firebase ID token.
 import { auth } from '@/firebaseConfig';
 import { fnUrl } from '@/config/api';
+import { isNativeIOS } from '@/utils/platform';
+import { scheduleReminder, parseLocal } from '@/utils/localNotify';
 
 const ENDPOINT = fnUrl('send-notification');
 
@@ -32,8 +34,15 @@ const to12h = (time24) => {
 export const scheduleNotification = async (task, reminder) => {
   if (!task || !reminder?.date || !reminder?.time) { console.error('Invalid task or reminder data'); return; }
   const formattedTime = to12h(reminder.time);
+  const message = `${task.title} at ${formattedTime}`;
+  if (isNativeIOS()) { // on-device: fires while backgrounded/locked, no server dependency
+    const ok = await scheduleReminder(task, reminder, message);
+    alert(ok ? `Reminder set for ${formattedTime}.` : 'Could not set the reminder. Check that notifications are allowed for CleanNote in Settings and that the time is in the future.');
+    return;
+  }
   try {
-    await sendPush({ title: 'Task Reminder', message: `${task.title} at ${formattedTime}`, sendAfter: new Date(`${reminder.date}T${reminder.time}:00`).toISOString() });
+    const at = parseLocal(reminder.date, reminder.time);
+    await sendPush({ title: 'Task Reminder', message, sendAfter: at ? at.toISOString() : undefined });
     alert(`Task "${task.title}" has been scheduled successfully for ${formattedTime}!`);
   } catch (error) {
     console.error('Error scheduling notification:', error);
