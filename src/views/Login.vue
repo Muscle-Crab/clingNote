@@ -32,7 +32,7 @@
         <!-- Sign in with Apple (iOS app only; App Store Guideline 4.8) -->
         <div v-if="showApple">
           <button type="button" @click.prevent="signInWithAppleClick" :disabled="isSubmitting" data-test="apple-signin"
-                  class="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-black text-white border border-black hover:bg-gray-900 text-sm font-semibold disabled:opacity-50">
+                  class="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-white text-black border border-white hover:bg-gray-200 text-sm font-semibold disabled:opacity-50">
             <svg class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16.37 1.43c0 1.14-.46 2.22-1.2 3.02-.8.86-2.1 1.52-3.14 1.44-.13-1.1.42-2.25 1.15-3 .82-.86 2.2-1.5 3.19-1.46zM20.5 17.1c-.55 1.27-.82 1.84-1.52 2.96-1 1.57-2.4 3.52-4.14 3.54-1.55.02-1.95-1-4.05-.99-2.1.01-2.54 1.01-4.09.99-1.74-.02-3.07-1.78-4.07-3.35C-.27 15.7-.56 10.6 1.4 7.88c1.4-1.93 3.6-3.06 5.67-3.06 2.1 0 3.42 1.15 5.16 1.15 1.68 0 2.7-1.15 5.14-1.15 1.84 0 3.79 1 5.18 2.73-4.55 2.5-3.81 9 .0 9.55z"/></svg>
             <span>Sign in with Apple</span>
           </button>
