@@ -56,6 +56,8 @@ import { ref, reactive, computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { auth } from '@/firebaseConfig';
 import { ensureUserDoc, saveUserFields } from '@/utils/userDoc';
+import { isNativeIOS } from '@/utils/platform';
+import { requestNativePushPermission, getNativePushState } from '@/utils/nativePush';
 import PaywallPanel from '@/components/paywall/PaywallPanel.vue';
 
 const STEPS = ['welcome', 'goals', 'schedule', 'strictness', 'notifications']; // index STEPS.length = paywall
@@ -87,7 +89,12 @@ const persist = (extra = {}) => { const u = auth.currentUser; if (!u) return Pro
 function go(n) { step.value = n; router.replace({ query: { ...route.query, step: n } }); persist(); }
 async function next() {
   if (STEPS[step.value] === 'notifications') {
-    try { if ('Notification' in window) a.notifications = await Notification.requestPermission(); } catch (e) { a.notifications = 'error'; }
+    try {
+      if (isNativeIOS()) { // iOS app: ask through the native OneSignal prompt (the web Notification API does not exist in WKWebView)
+        const ok = await requestNativePushPermission();
+        a.notifications = ok ? 'granted' : (await getNativePushState()).status === 'denied' ? 'denied' : 'default';
+      } else if ('Notification' in window) a.notifications = await Notification.requestPermission();
+    } catch (e) { a.notifications = 'error'; }
   }
   go(step.value + 1);
 }

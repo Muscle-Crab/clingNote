@@ -109,14 +109,14 @@
 
               <!-- Steps -->
               <ol class="list-decimal list-inside space-y-4 text-gray-300 text-lg">
-                <li>
+                <li v-if="!isIOSApp">
                   <span class="font-semibold">Bookmark this page to your home screen:</span>
                   <ul class="list-disc list-inside ml-4">
                     <li>On iPhone/iPad (Safari): Tap the "Share" icon, then select "Add to Home Screen."</li>
                     <li>On Android (Chrome): Tap the three-dot menu, then select "Add to Home Screen."</li>
                   </ul>
                 </li>
-                <li>
+                <li v-if="!isIOSApp">
                   <span class="font-semibold">Open the app from the home screen:</span> Tap the bookmark you just added.
                 </li>
                 <li>
@@ -415,6 +415,8 @@
 
 <script setup>
 import { sendBroadcast } from '@/composables/useNotifications';
+import { isNativeIOS } from '@/utils/platform';
+const isIOSApp = isNativeIOS(); // the 'Add to Home Screen' steps are web-only
 import { ref, onMounted, computed, watch} from 'vue';
 import { db, auth, storage } from '@/firebaseConfig';
 import Skeleton from "@/components/Skeleton.vue";
