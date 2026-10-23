@@ -47,7 +47,7 @@ const cases = [
   ['TimerModal', { hours: 0, minutes: 5 }, ['Set Timer']],
   ['WontDoModal', { reason: '' }, ['Won']],
   ['TransferModal', { day: null, days, selectedDayIndex: 0 }, ['Mon', 'Oct 12']],
-  ['AddTaskModal', { newTask: { title: '', status: 'in-progress', priority: 'low', selectedDays: [], reminder: {}, position: 0, labels: '', notes: '' }, repeatMode: 'weekly', showAdvanced: true, days, selectedDayRoutine: [task], error: 'oops', capWarning: true }, ['New task', 'role="dialog"', 'aria-modal="true"', 'e.g. 30', 'oops', 'active tasks', 'Status', 'In progress', 'Waiting']],
+  ['AddTaskModal', { newTask: { title: '', status: 'in-progress', priority: 'low', selectedDays: [], reminder: {}, position: 0, labels: '', notes: '' }, repeatMode: 'weekly', showAdvanced: true, days, selectedDayRoutine: [task], error: 'oops', capWarning: true }, ['New task', 'role="dialog"', 'aria-modal="true"', 'e.g. 30', 'oops', 'Status', 'In progress', 'Waiting']],
   ['YouTubeModal', { url: '' }, ['Attach video']],
   ['TaskDetailModal', { task, activeLabels: ['Work'] }, ['Write report', 'embed/abcdefghijk']],
   ['ImagePreview', { src: 'x.png' }, ['x.png']],

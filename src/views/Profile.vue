@@ -1,13 +1,19 @@
 <template>
   <div class="container mx-auto py-8">
     <div v-if="userData" class="max-w-md mx-auto bg-white rounded-lg shadow-md overflow-hidden">
-      <!-- Profile Image -->
+      <!-- Profile Image: own photo, or the default initials avatar -->
       <div class="relative">
-        <img class="h-32 w-full object-cover" src="https://cdn.pixabay.com/photo/2023/11/14/11/07/sparrow-8387465_640.jpg" alt="Profile Picture">
-        <div class="absolute inset-0 bg-black opacity-50"></div>
+        <div class="h-32 w-full" style="background:linear-gradient(135deg,#1e3a8a,#312e81 55%,#0f172a)"></div>
         <div class="absolute inset-x-0 bottom-0 pb-2 text-center">
-          <img class="h-16 w-16 object-cover rounded-full border-4 border-white shadow-md" src="https://cdn.pixabay.com/photo/2023/08/24/01/01/boy-8209561_640.jpg" alt="Profile Picture">
+          <img v-if="avatarSrc" class="profile-avatar h-16 w-16 object-cover rounded-full border-4 border-white shadow-md inline-block" :src="avatarSrc" alt="Profile picture" data-test="profile-avatar" />
+          <span v-else class="profile-avatar profile-avatar--default inline-flex items-center justify-center h-16 w-16 rounded-full border-4 border-white shadow-md font-bold text-white" style="background:#2563eb;font-size:1.25rem" data-test="profile-avatar-default" aria-label="Default profile picture">{{ initials }}</span>
         </div>
+      </div>
+      <div v-if="isOwn" class="px-4 pt-3 text-center" data-test="avatar-controls">
+        <input ref="fileInput" type="file" accept="image/*" class="hidden" data-test="avatar-file" @change="onPickAvatar" />
+        <button type="button" class="text-sm text-blue-600 hover:underline" :disabled="avatarBusy" data-test="avatar-change" @click="fileInput && fileInput.click()">{{ avatarSrc ? 'Change photo' : 'Upload photo' }}</button>
+        <template v-if="avatarSrc"> · <button type="button" class="text-sm text-gray-600 hover:underline" :disabled="avatarBusy" data-test="avatar-reset" @click="resetAvatar">Reset to default</button></template>
+        <p v-if="avatarMsg" class="text-xs mt-1" :class="avatarErr ? 'text-red-600' : 'text-green-700'" role="status">{{ avatarMsg }}</p>
       </div>
 
       <!-- Profile Information -->
@@ -22,6 +28,8 @@
           class="mt-3 block w-full text-center bg-gradient-to-r from-amber-500 to-orange-600 hover:opacity-90 text-white font-bold py-2 px-4 rounded">
           Upgrade to Pro
         </router-link>
+        <router-link v-if="isOwn" to="/onboarding" data-test="replay-onboarding" class="mt-3 block text-center text-blue-600 hover:underline text-sm">Replay onboarding</router-link>
+        <PushSettings v-if="isOwn" />
         <button v-if="isOwn" @click="editMode = true" class="mt-4 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
           Edit
         </button>
@@ -58,7 +66,9 @@
 </template>
 
 <script setup>
+import PushSettings from '@/components/PushSettings.vue';
 import { syncPublicProfile } from '@/composables/usePublicProfile';
+import { fileToAvatarDataUrl, isAvatarSrc, initialsOf } from '@/utils/avatar';
 import { ref, computed, onMounted, watch } from 'vue';
 import { onAuthStateChanged } from 'firebase/auth';
 import { ensureUserDoc } from '@/utils/userDoc';
@@ -76,6 +86,35 @@ const notFound = ref(false);
 const userIsPro = computed(() => isPro(userData.value));
 
 const loading = ref(true);
+const fileInput = ref(null);
+const avatarBusy = ref(false);
+const avatarMsg = ref('');
+const avatarErr = ref(false);
+const avatarSrc = computed(() => (userData.value && isAvatarSrc(userData.value.avatarURL) ? userData.value.avatarURL : ''));
+const initials = computed(() => initialsOf(userData.value?.name, userData.value?.email));
+const saveAvatar = async (value, okMsg) => {
+  const uid = auth.currentUser?.uid;
+  if (!uid) return;
+  avatarBusy.value = true; avatarMsg.value = ''; avatarErr.value = false;
+  try {
+    await setDoc(doc(db, 'users', uid), { avatarURL: value }, { merge: true });
+    userData.value = { ...userData.value, avatarURL: value };
+    if (editedUserData.value) editedUserData.value = { ...editedUserData.value, avatarURL: value };
+    syncPublicProfile(uid, userData.value).catch(() => {});
+    window.dispatchEvent(new CustomEvent('clingnot:avatar', { detail: value }));
+    avatarMsg.value = okMsg;
+  } catch (e) { console.error('Avatar save failed:', e.message); avatarErr.value = true; avatarMsg.value = 'Could not save your photo. Try again.'; }
+  avatarBusy.value = false;
+};
+const onPickAvatar = async (ev) => {
+  const f = ev.target.files && ev.target.files[0];
+  ev.target.value = '';
+  if (!f) return;
+  avatarBusy.value = true; avatarMsg.value = ''; avatarErr.value = false;
+  try { const data = await fileToAvatarDataUrl(f); avatarBusy.value = false; await saveAvatar(data, 'Photo updated.'); }
+  catch (e) { avatarBusy.value = false; avatarErr.value = true; avatarMsg.value = e.message || 'Could not use that image.'; }
+};
+const resetAvatar = () => saveAvatar('', 'Photo reset to default.');
 // Never let a hung network/auth call keep the page on "Loading..." forever.
 const withTimeout = (pr, ms, label) => Promise.race([pr, new Promise((_, rej) => setTimeout(() => rej(new Error(label + ' timed out')), ms))]);
 // Fallback built from the auth user so the owner always sees something even if Firestore fails.

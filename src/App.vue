@@ -7,7 +7,10 @@
 </template>
 
 <script setup>
-import { computed } from 'vue';
+import { computed, onMounted } from 'vue';
+import { onAuthStateChanged } from 'firebase/auth';
+import { auth } from '@/firebaseConfig';
+import { resumePush } from '@/composables/useFcm';
 import { useRoute } from 'vue-router';
 import navi from '@/components/nav.vue';
 import SubpageHero from '@/components/ui/SubpageHero.vue';
@@ -37,4 +40,6 @@ const HEROES = {
   NotFoundComponent: { title: 'Page not found', kicker: '404' },
 };
 const hero = computed(() => HEROES[route.name] || null);
+// Returning users who already turned push on get the foreground handler back (never prompts).
+onMounted(() => { try { onAuthStateChanged(auth, (u) => { if (u) resumePush(); }); } catch (e) { /* ignore */ } });
 </script>

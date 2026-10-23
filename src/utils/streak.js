@@ -3,6 +3,11 @@
 // ALLOWED_GAP_DAYS = max days between counted days (1 = no skipped days).
 export const ALLOWED_GAP_DAYS = 1;
 export const DAILY_STREAK_MIN = 5;
+// The day streak is capped: it displays as N/STREAK_CAP and never goes above it.
+// A day counts only if the user pressed Start Day and completed >= DAILY_STREAK_MIN tasks; a day that doesn't count
+// resets the streak to 0 on the next evaluation (next app open / day rollover).
+export const STREAK_CAP = 5;
+export const capStreak = (n) => Math.min(STREAK_CAP, Math.max(0, Number(n) || 0));
 
 const pad = (n) => String(n).padStart(2, '0');
 export const localDateStr = (d = new Date()) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -17,8 +22,8 @@ export const dayDiff = (from, to) => {
 // State: { streak, bestStreak, lastCompletionDate, dayDate, dayDone: [taskKey], prev }
 // prev = snapshot before today's increment, so un-completing below the minimum can undo it.
 const norm = (s) => ({
-  streak: Number(s?.streak) || 0,
-  bestStreak: Math.max(Number(s?.bestStreak) || 0, Number(s?.streak) || 0),
+  streak: capStreak(s?.streak), // existing streaks above the cap are clamped
+  bestStreak: Math.max(Number(s?.bestStreak) || 0, capStreak(s?.streak)),
   lastCompletionDate: s?.lastCompletionDate || null,
   dayDate: s?.dayDate || null,
   dayDone: Array.isArray(s?.dayDone) ? [...new Set(s.dayDone)] : [],
@@ -37,7 +42,7 @@ export const recordCompletion = (state, today, gap = ALLOWED_GAP_DAYS) => {
   if (s.lastCompletionDate === today) return s;
   const diff = s.lastCompletionDate ? dayDiff(s.lastCompletionDate, today) : Infinity;
   if (diff < 0) return s; // clock went backwards; ignore
-  const streak = diff <= gap && s.streak > 0 ? s.streak + 1 : 1;
+  const streak = diff <= gap && s.streak > 0 ? capStreak(s.streak + 1) : 1;
   return { ...s, streak, bestStreak: Math.max(s.bestStreak, streak), lastCompletionDate: today, counted: addCounted(s.counted, today),
     prev: { streak: s.streak, bestStreak: s.bestStreak, lastCompletionDate: s.lastCompletionDate } };
 };
@@ -66,4 +71,14 @@ export const evaluateStreak = (state, today, gap = ALLOWED_GAP_DAYS, min = DAILY
   const diff = dayDiff(s.lastCompletionDate, today);
   if (diff <= gap) return { ...base, status: 'at-risk' }; // today still open
   return { ...base, streak: 0, status: 'broken' };
+};
+
+// Why a streak was lost (for the banner): yesterday had fewer than `min` completions, or the day was never started.
+export const lostReason = (state, today, min = DAILY_STREAK_MIN) => {
+  const s = norm(state);
+  const [yy, mm, dd] = today.split('-').map(Number);
+  const yesterday = new Date(Date.UTC(yy, mm - 1, dd - 1)).toISOString().slice(0, 10);
+  const n = s.dayDate === yesterday ? s.dayDone.length : (s.lastDay && s.lastDay.date === yesterday ? s.lastDay.count : 0);
+  if (n > 0 && n < min) return `Only ${n}/${min} tasks were completed yesterday.`;
+  return "You didn't press Start Day and finish tasks yesterday.";
 };

@@ -1,11 +1,11 @@
 <template>
-  <div class="modal-backdrop">
-    <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="nt-title" @keydown.esc="$emit('close')">
+  <div class="modal-backdrop nt-backdrop" :style="vvStyle" @touchmove.self.prevent>
+    <div class="modal-box nt-sheet" role="dialog" aria-modal="true" aria-labelledby="nt-title" @keydown.esc="$emit('close')">
       <div class="modal-header">
         <h2 id="nt-title" class="modal-title">✦ New task</h2>
         <button type="button" @click="$emit('close')" class="modal-close" aria-label="Close">✕</button>
       </div>
-      <form @submit.prevent="$emit('submit')">
+      <form class="nt-form" @submit.prevent="$emit('submit')">
         <div class="modal-body">
           <div class="field-group">
             <label class="field-label" for="nt-name">Task name</label>
@@ -120,14 +120,9 @@
           <div v-if="limitHit" class="cap-warning limit-hit" role="alert" data-test="task-limit">
             <strong>You've hit today's limit of {{ limitHit.limit }} tasks.</strong>
             <template v-if="limitHit.pro"> That's the Pro maximum for one day. Finish or move something first.</template>
-            <template v-else> Free accounts get {{ limitHit.limit }} tasks per day. Pro raises it to {{ proLimit }}.
+            <template v-else> Free accounts get {{ limitHit.limit }} tasks per day.<template v-if="proRaises"> Pro raises it to {{ proLimit }}.</template>
               <button type="button" class="btn-secondary cap-override" data-test="limit-upgrade" @click="$emit('upgrade')">Upgrade to Pro</button>
             </template>
-          </div>
-          <div v-if="capWarning" class="cap-warning" role="alert">
-            <strong>You already have {{ ACTIVE_CAP }} active tasks today.</strong>
-            A shorter list gets finished more often. Move something, or add this one anyway.
-            <button type="button" class="btn-secondary cap-override" @click="$emit('add-anyway')">Add anyway</button>
           </div>
         </div>
         <div class="modal-footer">
@@ -140,11 +135,11 @@
 </template>
 
 <script setup>
-import { ref, onMounted, nextTick } from 'vue';
+import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { ACTIVE_CAP, STATUSES } from '@/utils/taskPlanning';
 import { WEEKDAYS } from '@/utils/scheduling';
 import { getOrdinalSuffix } from '@/utils/dateTime';
-import { TASK_LIMITS } from '@/config/pricing';
+import { TASK_LIMITS, PRO_RAISES_LIMIT } from '@/config/pricing';
 
 // newTask is the reactive form object owned by HomeView; the form edits it in place via v-model.
 defineProps({
@@ -156,12 +151,30 @@ defineProps({
   limitHit: { type: Object, default: null },
 });
 const proLimit = TASK_LIMITS.pro;
+const proRaises = PRO_RAISES_LIMIT;
 const repeatMode = defineModel('repeatMode');
 const showAdvanced = defineModel('showAdvanced');
 const tomorrow = (() => { const d = new Date(); d.setDate(d.getDate() + 1); return d.toLocaleDateString('en-CA'); })();
 defineEmits(['close', 'submit', 'add-anyway', 'upgrade']);
 const titleInput = ref(null);
 onMounted(() => nextTick(() => titleInput.value && titleInput.value.focus()));
+
+// Keep the sheet fixed in place on phones: lock page scroll while open and size/position it to the *visual* viewport,
+// so the on-screen keyboard shrinks the sheet (its body scrolls) instead of pushing or dragging it around.
+const vvStyle = ref({});
+const syncVv = () => {
+  const vv = window.visualViewport;
+  vvStyle.value = vv ? { top: `${Math.round(vv.offsetTop)}px`, height: `${Math.round(vv.height)}px`, bottom: 'auto' } : {};
+};
+onMounted(() => {
+  document.documentElement.classList.add('nt-modal-open'); document.body.classList.add('nt-modal-open');
+  syncVv();
+  if (window.visualViewport) { window.visualViewport.addEventListener('resize', syncVv); window.visualViewport.addEventListener('scroll', syncVv); }
+});
+onBeforeUnmount(() => {
+  document.documentElement.classList.remove('nt-modal-open'); document.body.classList.remove('nt-modal-open');
+  if (window.visualViewport) { window.visualViewport.removeEventListener('resize', syncVv); window.visualViewport.removeEventListener('scroll', syncVv); }
+});
 </script>
 
 <style scoped>
@@ -300,4 +313,26 @@ onMounted(() => nextTick(() => titleInput.value && titleInput.value.focus()));
 .field-hint { margin: 4px 0 0; font-size: var(--fs-xs); color: var(--c-text-3); }
 .sched-weekdays { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .sched-wd { font-size: var(--fs-xs, .8rem); display: flex; gap: 3px; align-items: center; }
+
+/* ── Fixed, keyboard-safe sheet: header/footer stay put, only the body scrolls ── */
+.nt-backdrop { position: fixed; inset: 0; height: 100dvh; box-sizing: border-box; overscroll-behavior: contain; touch-action: none; -webkit-tap-highlight-color: transparent; }
+.nt-sheet { overflow: hidden; max-height: 100%; min-height: 0; touch-action: auto; overscroll-behavior: contain; transform: none; }
+.nt-form { display: flex; flex-direction: column; min-height: 0; flex: 1 1 auto; }
+.nt-sheet .modal-header, .nt-sheet .modal-footer { flex: 0 0 auto; }
+.nt-sheet .modal-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; -webkit-overflow-scrolling: touch; }
+.nt-sheet .modal-footer { padding-bottom: calc(var(--sp-4, 16px) + env(safe-area-inset-bottom)); }
+.nt-sheet .field-input, .nt-sheet .field-select, .nt-sheet .field-textarea { scroll-margin: 16px; }
+@media (max-width: 600px) {
+  .nt-backdrop { padding: 0; align-items: flex-end; }
+  .nt-sheet { width: 100%; max-width: 100%; max-height: min(92%, 100dvh); border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+  .nt-sheet .field-input, .nt-sheet .field-select, .nt-sheet .field-textarea { font-size: 16px; } /* no iOS focus-zoom (which shifts the page) */
+}
+</style>
+
+<style>
+/* Page scroll lock while the New task sheet is open (unscoped: targets html/body/app root). */
+html.nt-modal-open, body.nt-modal-open { overflow: hidden !important; overscroll-behavior: none; }
+body.nt-modal-open .app-root { overflow: hidden; overscroll-behavior: none; }
+.app-root .nt-sheet.nt-sheet.nt-sheet { animation: ntFade .18s ease-out; transform: none; }
+@keyframes ntFade { from { opacity: 0; } }
 </style>

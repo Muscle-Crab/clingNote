@@ -8,20 +8,28 @@
     <p v-if="error" class="up-error" role="alert">{{ error }}</p>
     <p v-if="loading" class="muted">Loading…</p>
 
-    <section class="up-card">
-      <h2 class="up-h">📆 Calendar feed</h2>
-      <p class="muted">Subscribe in Apple Calendar or Google Calendar to see scheduled, repeating and due-dated tasks. Read-only, refreshes about hourly. Anyone with the link can see your task titles, so keep it private; rotate it if it leaks.</p>
-      <template v-if="feed">
-        <input class="up-input up-feed" readonly :value="feed.https" aria-label="Calendar feed URL" @focus="$event.target.select()" />
-        <div class="up-actions">
-          <a :href="feed.webcal" class="up-btn up-btn--primary">Subscribe (Apple)</a>
-          <button type="button" class="up-btn" @click="copyFeed">{{ copied ? 'Copied ✓' : 'Copy URL' }}</button>
-          <button type="button" class="up-btn" @click="rotate">New link</button>
-          <button type="button" class="up-btn up-btn--danger" @click="revoke">Revoke</button>
-        </div>
-        <p class="muted">Google Calendar: Other calendars → + → From URL → paste the link.</p>
-      </template>
-      <button v-else type="button" class="up-btn up-btn--primary" :disabled="feedBusy" @click="rotate">Create private feed link</button>
+    <section class="up-card cal" data-test="calendar">
+      <h2 class="up-h">📅 Calendar</h2>
+      <div class="cal-nav">
+        <button type="button" class="up-btn" :disabled="weekOffset === 0" aria-label="Previous week" data-test="cal-prev" @click="weekOffset--">‹</button>
+        <strong class="cal-range" data-test="cal-range">{{ rangeLabel }}</strong>
+        <button type="button" class="up-btn" :disabled="weekOffset >= 11" aria-label="Next week" data-test="cal-next" @click="weekOffset++">›</button>
+      </div>
+      <p v-if="loading" class="muted">Loading…</p>
+      <ul v-else class="cal-days">
+        <li v-for="d in weekDays" :key="d.date" class="cal-day" :class="{ 'cal-day--today': d.date === today, 'cal-day--empty': !d.items.length }" :data-date="d.date">
+          <div class="cal-date"><span class="cal-dow">{{ d.dow }}</span><span class="cal-dom">{{ d.dom }}</span></div>
+          <ul class="cal-items">
+            <li v-for="it in d.items" :key="it.key" class="cal-item" :class="{ 'cal-item--done': it.done }" data-test="cal-item">
+              <span class="cal-state" :aria-label="it.done ? 'Done' : 'Not done'">{{ it.done ? '✓' : '○' }}</span>
+              <span class="cal-title">{{ it.title }}</span>
+              <span v-if="it.time" class="cal-time">{{ it.time }}</span>
+              <span v-if="it.recurring" class="cal-rec" title="Repeats" aria-label="Repeats">🔁</span>
+            </li>
+            <li v-if="!d.items.length" class="cal-none">Nothing scheduled</li>
+          </ul>
+        </li>
+      </ul>
     </section>
 
     <section v-if="templates.length" class="up-card">
@@ -73,21 +81,15 @@ import { ref, computed, onMounted } from 'vue';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '@/firebaseConfig';
 import { localDateStr } from '@/utils/streak';
-import { futureOf, groupByDate, formatScheduledDate, isTemplate, describeRecurrence, nextOccurrences, sundayOf, visibleFrom, removeScheduled, rescheduleEntry, WEEKDAYS, isValidDate } from '@/utils/scheduling';
+import { futureOf, groupByDate, formatScheduledDate, isTemplate, describeRecurrence, nextOccurrences, sundayOf, addDaysStr, visibleFrom, removeScheduled, rescheduleEntry, WEEKDAYS, isValidDate } from '@/utils/scheduling';
 import { loadScheduled, mutateScheduled } from '@/composables/useScheduledTasks';
-import { useRouter as _useRouter } from 'vue-router';
-import { requirePro } from '@/composables/usePro';
-import { loadFeedToken, rotateFeedToken, revokeFeedToken, feedUrls } from '@/composables/useCalendarFeed';
+import { loadDayTasks } from '@/composables/useDayPersistence';
+import { agendaForRange, weekStartOf, dowOf } from '@/utils/agenda';
 
 const uid = ref(null);
-const feed = ref(null);
-const feedBusy = ref(false);
-const copied = ref(false);
-const _proRouter = _useRouter();
-const rotate = async () => { if (!(await requirePro(_proRouter, 'calendarFeed'))) return; feedBusy.value = true; try { feed.value = feedUrls(await rotateFeedToken()); } catch (e) { console.error(e); if (e.status === 402) { feedBusy.value = false; _proRouter.push('/paywall'); return; } error.value = 'Could not create the feed link.'; } feedBusy.value = false; };
-const revoke = async () => { if (!confirm('Revoke the calendar link? Subscribed calendars will stop updating.')) return; try { await revokeFeedToken(); feed.value = null; } catch (e) { console.error(e); error.value = 'Could not revoke.'; } };
-const copyFeed = async () => { try { await navigator.clipboard.writeText(feed.value.https); copied.value = true; setTimeout(() => { copied.value = false; }, 1500); } catch (e) { /* select manually */ } };
 const list = ref([]);
+const dayLists = ref({});
+const weekOffset = ref(0);
 const loading = ref(true);
 const error = ref('');
 const editing = ref(null);
@@ -95,6 +97,14 @@ const draft = ref({});
 const today = localDateStr();
 const weekEnd = sundayOf(today);
 const weekEndLabel = formatScheduledDate(weekEnd, today);
+
+// Native calendar: tasks by date (scheduled, recurring occurrences, this week's lists) for the selected week.
+const weekStart = computed(() => addDaysStr(weekStartOf(today), weekOffset.value * 7));
+const weekEndDate = computed(() => addDaysStr(weekStart.value, 6));
+const agenda = computed(() => agendaForRange({ scheduled: list.value, dayLists: dayLists.value, today, from: weekStart.value, to: weekEndDate.value }));
+const mdLabel = (s) => new Date(`${s}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+const rangeLabel = computed(() => `${mdLabel(weekStart.value)} – ${mdLabel(weekEndDate.value)}`);
+const weekDays = computed(() => Object.keys(agenda.value).map((date) => ({ date, dow: WEEKDAYS[dowOf(date)], dom: Number(date.slice(8)), items: agenda.value[date] })));
 
 // Upcoming = one-off entries (and generated recurring instances) due after the current week.
 const groups = computed(() => groupByDate(futureOf(list.value, today)));
@@ -120,7 +130,7 @@ onMounted(() => onAuthStateChanged(auth, async (u) => {
   if (!uid.value) return;
   try {
     list.value = await loadScheduled(uid.value);
-    loadFeedToken(uid.value).then((t) => { feed.value = feedUrls(t); }).catch(() => {});
+    try { const ls = await Promise.all(WEEKDAYS.map((n) => loadDayTasks(uid.value, n))); dayLists.value = Object.fromEntries(WEEKDAYS.map((n, i) => [n, ls[i]])); } catch (e) { console.error(e); }
     draft.value = Object.fromEntries(list.value.filter(isTemplate).map((t) => [t.id, { title: t.title, freq: t.recurrence.freq, days: [...(t.recurrence.days || [])], dayOfMonth: t.recurrence.dayOfMonth || 1 }]));
   } catch (e) { console.error(e); error.value = 'Scheduled tasks could not be loaded.'; }
   loading.value = false;
@@ -145,6 +155,22 @@ onMounted(() => onAuthStateChanged(auth, async (u) => {
 .up-btn--primary { background: var(--c-primary, #6366f1); color: #fff; border-color: transparent; }
 .up-btn--danger { color: #b91c1c; border-color: #fca5a5; }
 .up-error { color: #b91c1c; }
-.up-feed { width: 100%; margin: 6px 0; font-size: .8rem; }
+.cal-nav { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.cal-nav .up-btn { min-width: 44px; min-height: 40px; font-size: 1.2rem; }
+.cal-days { list-style: none; margin: 0; padding: 0; }
+.cal-day { display: flex; gap: 10px; padding: 8px 0; border-top: 1px solid var(--c-border, #e2e8f0); }
+.cal-day--today .cal-date { color: var(--c-accent, #6366f1); font-weight: 700; }
+.cal-day--empty { opacity: .6; }
+.cal-date { flex: 0 0 44px; display: flex; flex-direction: column; align-items: center; line-height: 1.1; }
+.cal-dow { font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; }
+.cal-dom { font-size: 1.3rem; font-weight: 700; }
+.cal-items { list-style: none; margin: 0; padding: 0; flex: 1; min-width: 0; }
+.cal-item { display: flex; align-items: baseline; gap: 6px; padding: 3px 0; font-size: .95rem; }
+.cal-title { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.cal-item--done .cal-title { text-decoration: line-through; opacity: .6; }
+.cal-state { width: 16px; flex: 0 0 16px; text-align: center; }
+.cal-item--done .cal-state { color: #16a34a; }
+.cal-time { font-size: .8rem; color: var(--c-text-3, #64748b); }
+.cal-none { font-size: .85rem; color: var(--c-text-3, #64748b); padding: 3px 0; }
 .muted { color: var(--c-text-3, #64748b); font-size: .85rem; }
 </style>

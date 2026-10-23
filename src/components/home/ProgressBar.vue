@@ -25,8 +25,9 @@
       </div>
     </div>
     <div class="progress-foot">
-      <p class="foot-item" :class="{ 'foot-item--risk': streakStatus === 'at-risk' }" :title="streakStatus === 'at-risk' ? `Streak at risk: ${streakProgress}/${streakMin} today` : `Complete ${streakMin} tasks a day to keep it`">
-        <span class="foot-icon" aria-hidden="true">🔥</span><strong>{{ streak }}</strong>&nbsp;day streak
+      <p class="foot-item foot-item--streak" :class="{ 'foot-item--risk': streakStatus === 'at-risk' }" :title="`Complete ${streakMin} tasks a day (after Start Day) to keep your streak. Today: ${streakProgress}/${streakMin}`">
+        <span class="foot-icon" aria-hidden="true">🔥</span>
+        <span class="foot-text"><span><strong data-test="streak-count">{{ Math.min(streak, STREAK_CAP) }}/{{ STREAK_CAP }}</strong>&nbsp;day streak</span><small data-test="streak-today">{{ Math.min(streakProgress, streakMin) }}/{{ streakMin }} done today to keep it</small></span>
       </p>
       <p class="foot-item foot-item--pts"><span class="coin" aria-hidden="true">★</span><strong>{{ points }}</strong>&nbsp;points</p>
     </div>
@@ -35,6 +36,7 @@
 
 <script setup>
 import { computed } from 'vue';
+import { STREAK_CAP } from '@/utils/streak';
 import stage0 from '@/assets/stages/stage-0-sprout.jpg';
 import stage1 from '@/assets/stages/stage-1-leafy.jpg';
 import stage2 from '@/assets/stages/stage-2-tree.jpg';
@@ -89,6 +91,9 @@ const current = computed(() => {
 .foot-item strong { color: var(--c-text); font-size: 16px; }
 .foot-item--risk strong { color: var(--c-warn); }
 .foot-icon { font-size: 18px; }
+.foot-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+.foot-text small { font-size: var(--fs-xs); color: var(--c-text-3); }
+.foot-item--risk small { color: var(--c-warn); }
 .foot-item--pts strong { color: #F5C542; }
 .coin { width: 22px; height: 22px; border-radius: 50%; display: inline-grid; place-items: center; font-size: 12px; color: #7A4B00; background: radial-gradient(circle at 35% 30%, #FFE08A, #E0A21B); }
 @media (max-width: 400px) { .progress-ring { width: 80px; height: 80px; } }

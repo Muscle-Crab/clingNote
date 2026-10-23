@@ -1,5 +1,7 @@
 <template>
-  <div ref="scrollContainer" class="app-root" :class="[{ 'is-dragging': isDraggingTask }, appTheme ? 'theme-' + appTheme : '']">
+  <div ref="scrollContainer" class="app-root" :class="[{ 'is-dragging': isDraggingTask, 'reorder-active': isDraggingTask || reorderSettling }, appTheme ? 'theme-' + appTheme : '']">
+    <BackgroundLayer :anim="bgPrefs.anim" />
+    <BackgroundPanel :open="showBackground" @close="showBackground = false" />
 
     <!-- Loading Screen -->
     <div v-if="isLoading" class="splash-screen">
@@ -45,6 +47,7 @@
               <router-link to="/upcoming" class="hero-menu-item">📅 Upcoming</router-link>
               <router-link to="/rankings" class="hero-menu-item">🏆 Rankings</router-link>
               <router-link to="/discipline" class="hero-menu-item">⚔️ Discipline Mode</router-link>
+              <button type="button" class="hero-menu-item" data-test="open-background" @click="showBackground = true">🎧 Background</button>
               <button type="button" class="hero-menu-item" @click="showSchedule = !showSchedule">🗓 {{ showSchedule ? 'Hide' : 'Show' }} schedule</button>
               </div>
             </div>
@@ -63,7 +66,7 @@
 
 
       <DramaOverlay v-if="lossScreen" variant="lost" title="Streak lost" button="I'll do better"
-                    :subtitle="`You missed your deadline. ${lossScreen.lostStreak ? lossScreen.lostStreak + '-day streak gone. ' : ''}${lossScreen.penalty} pts.`" @close="dismissLoss" />
+                    :subtitle="lossScreen.reason ? `${lossScreen.lostStreak ? lossScreen.lostStreak + '/5 streak gone. ' : ''}${lossScreen.reason} Complete 5 tasks a day to keep it.` : `You missed your deadline. ${lossScreen.lostStreak ? lossScreen.lostStreak + '-day streak gone. ' : ''}${lossScreen.penalty} pts.`" @close="dismissLoss" />
 
       <DramaOverlay v-if="bossVictory" variant="victory" title="Boss defeated" button="Claim victory"
                     :subtitle="`${bossVictory.title} is down. +${BOSS_BONUS} pts — your day can count now.`" @close="bossVictory = null" />
@@ -117,7 +120,7 @@
       <!-- ─── Task List ─── -->
       <section v-if="canViewSelectedDayTasks"
                class="task-section">
-        <EmptyState v-if="dayTasks.length === 0" :show-add="true" @add="openModal('task')" />
+        <EmptyState v-if="dayTasks.length === 0" :show-add="true" @add="onAddClick" />
 
 
         <div v-else class="task-list-wrap">
@@ -135,17 +138,24 @@
               handle=".drag-handle"
               :item-key="taskKey"
               :prevent-on-filter="false"
-              :fallback-tolerance="5"
-              :animation="reducedMotion ? 0 : 150"
+              :force-fallback="true"
+              :fallback-tolerance="3"
+              :touch-start-threshold="3"
+              :scroll-sensitivity="90"
+              :scroll-speed="14"
+              easing="cubic-bezier(.2, .8, .2, 1)"
+              :animation="reducedMotion ? 0 : 220"
               :disabled="!reorderable"
               :model-value="displayTasks"
               @update:model-value="onReorder"
               tag="div"
               class="tasks-list space-y-2"
-              ghost-class="ghost"
-              drag-class="drag"
+              ghost-class="task-ghost"
+              chosen-class="task-chosen"
+              drag-class="task-dragging"
+              fallback-class="sortable-fallback-card"
               @start="onDragStart()"
-              @end="isDraggingTask = false; playSound('dragEnd'); handleDragEnd()"
+              @end="isDraggingTask = false; settleReorder(); playSound('dragEnd'); handleDragEnd()"
           >
             <template #item="{ element: task, index }">
               <TaskCard
@@ -193,7 +203,7 @@
       <ScheduledList v-if="userId" :tasks="futureScheduled" :today-str="todayStr" :error="scheduledError"
                      @move-today="moveScheduledToToday" @update="updateScheduledDate" @delete="deleteScheduled" />
 
-      <FabButtons :user-id="userId" :listening="listening" @add="openModal('task')" @voice="startVoiceInput" />
+      <FabButtons :user-id="userId" :listening="listening" @add="onAddClick" @voice="startVoiceInput" />
 
 
     </div>
@@ -218,9 +228,12 @@ import DramaOverlay from '@/components/discipline/DramaOverlay.vue';
 import BossPanel from '@/components/discipline/BossPanel.vue';
 import { bossMessage, validReason, carryTask, canAddTask, watchingBlockers, isIdle, verdict as dayVerdict, line as bossLine, IDLE_MINUTES } from '@/utils/strictBoss';
 import MorningReport from '@/components/home/MorningReport.vue';
+import BackgroundLayer from '@/components/background/BackgroundLayer.vue';
+import BackgroundPanel from '@/components/background/BackgroundPanel.vue';
+import { useBackground } from '@/composables/useBackground';
 import { buildRecap, reportDue, prevDay } from '@/utils/dailyReport';
 import { monthKey, prevMonthKey } from '@/utils/ranking';
-import { applyTaskToggle, evaluateStreak, localDateStr, dayDiff, ALLOWED_GAP_DAYS, DAILY_STREAK_MIN } from '@/utils/streak';
+import { applyTaskToggle, evaluateStreak, localDateStr, dayDiff, ALLOWED_GAP_DAYS, DAILY_STREAK_MIN, capStreak, lostReason } from '@/utils/streak';
 import { askAi } from '@/composables/useAi';
 import { useRouter as _useRouter } from 'vue-router';
 import { requirePro, loadUserDoc } from '@/composables/usePro';
@@ -228,7 +241,7 @@ import { isPro as isProUser } from '@/utils/pro';
 import { checkDailyLimit } from '@/utils/taskLimits';
 import { canUse } from '@/utils/pro';
 const _proRouter = _useRouter();
-// Daily task limit (config/pricing.js TASK_LIMITS): free 3/day, Pro 5/day
+// Daily task limit (config/pricing.js TASK_LIMITS): free 5/day, Pro 5/day
 const limitHit = ref(null); // { limit, count, pro, day } when the last add was blocked
 const goUpgradeForLimit = () => { modalOpen.value = false; _proRouter.push({ path: '/paywall', query: { feature: 'taskLimit', from: '/home' } }); };
 // Limit data is prefetched when the add modal opens so Save does not wait on 8 Firestore reads.
@@ -753,6 +766,17 @@ const fetchUserName = async (userId) => {
 
 
 
+// Add Task button: a free user already at today's limit goes straight to the paywall instead of opening the form.
+const onAddClick = async () => {
+  try {
+    if (userId.value) {
+      const g = gateCache && Date.now() - gateCache.at < 60000 ? gateCache : await fetchGateData();
+      const res = checkDailyLimit(g.pro, getTodayId(), [...g.lists, g.extra, [...pendingAdds.values()]], scheduledList.value || []);
+      if (!res.ok && !g.pro) { goUpgradeForLimit(); return; }
+    }
+  } catch (e) { console.error('limit pre-check', e); }
+  openModal('task');
+};
 const openModal = (type = 'task', index = null, title = '') => {
   if (type === 'calendar') {
     selectedTaskIndex.value = index; // Store task index
@@ -1393,7 +1417,7 @@ const checkProgression = (st) => {
   } catch (e) { /* storage optional */ }
 };
 const playerLevel = ref(levelFor(0));
-const dismissLoss = async () => { lossScreen.value = null; try { await clearLossPending(userId.value); } catch (e) { /* retry next open */ } };
+const dismissLoss = async () => { const noticeOnly = lossScreen.value && lossScreen.value.noticeOnly; lossScreen.value = null; if (noticeOnly) { try { localStorage.setItem(`streakLostSeen_${userId.value}_${localDateStr()}`, '1'); } catch (e) { /* ignore */ } return; } try { await clearLossPending(userId.value); } catch (e) { /* retry next open */ } };
 // ---- Morning report: first open after 8 AM local, once per day ----
 const morningRecap = ref(null);
 const maybeShowMorningReport = async () => {
@@ -1430,7 +1454,7 @@ const updateStreakOnCompletion = async (task) => {
   try {
     const snap = await getDoc(streakDocRef);
     const prev = snap.exists() ? snap.data() : null;
-    const next = applyTaskToggle(prev, localDateStr(), { key: taskKey(task), completed: !!task.completed, pending: task.status === 'pending', gate: streakGateNow() }, streakGap());
+    const next = applyTaskToggle(prev, localDateStr(), { key: taskKey(task), completed: !!task.completed, pending: task.status === 'pending', gate: streakGateNow() && !!daySession.value.started }, streakGap());
     await setDoc(streakDocRef, { ...next, updatedAt: serverTimestamp() }, { merge: true });
     applyStreakState(next);
     recordMonthlyToggle(userId.value, localDateStr(), { key: taskKey(task), completed: !!task.completed, pending: task.status === 'pending' }, next.bestStreak)
@@ -1522,7 +1546,7 @@ const afterMaterialize = async () => {
   if (added && selectedDayIndex.value === new Date().getDay()) await fetchSelectedDayRoutine();
 };
 watch(selectedDayIndex, () => { if (userId.value && dueOf(scheduledList.value, getTodayId()).length) afterMaterialize(); });
-const onVisible = () => { if (document.visibilityState === 'visible' && userId.value && getTodayId() !== todayStr.value) afterMaterialize(); };
+const onVisible = () => { if (document.visibilityState === 'visible' && userId.value && getTodayId() !== todayStr.value) { afterMaterialize(); checkStreakOnCompletion(); } };
 onMounted(() => document.addEventListener('visibilitychange', onVisible));
 onBeforeUnmount(() => document.removeEventListener('visibilitychange', onVisible));
 
@@ -1605,6 +1629,7 @@ const addNewTask = async () => {
   try {
     if (!(await dailyLimitGate(newTask.value.scheduleDate || getTodayId()))) {
       const l = limitHit.value;
+      if (!l.pro) { goUpgradeForLimit(); return false; } // free user over the daily limit: open the paywall instead of an error
       error.value = l.pro ? `Daily limit reached: ${l.limit} tasks per day on Pro.` : `Daily limit reached: free accounts can add ${l.limit} tasks per day.`;
       return false;
     }
@@ -2021,7 +2046,11 @@ const checkStreakOnCompletion = async () => {
       }
     }
     const { status, progress, min, ...st } = ev; // eslint-disable-line no-unused-vars
-    if (ev.status === 'broken' && data.streak) await setDoc(streakDocRef, { ...st, updatedAt: serverTimestamp() }, { merge: true });
+    if (ev.status === 'broken' && data.streak) {
+      await setDoc(streakDocRef, { ...st, updatedAt: serverTimestamp() }, { merge: true });
+      // Streak lost because a day didn't count (fewer than 5 tasks / no Start Day). No -50 here: that penalty belongs to Discipline Mode deadlines only.
+      if (!lossScreen.value && !localStorage.getItem(`streakLostSeen_${userId.value}_${localDateStr()}`)) lossScreen.value = { lostStreak: capStreak(data.streak), penalty: 0, reason: lostReason(data, localDateStr()), noticeOnly: true };
+    }
     else if ((data.bestStreak || 0) < ev.bestStreak) await setDoc(streakDocRef, { bestStreak: ev.bestStreak }, { merge: true });
     applyStreakState(st);
     updateMotivationalMessage();
@@ -2217,6 +2246,8 @@ onMounted(() => {
 
   checkStreakOnCompletion();
 });
+const showBackground = ref(false);
+const { prefs: bgPrefs } = useBackground();
 const menuOpen = ref(false); // closed by default; closes on outside tap / Escape / route change
 const heroMenuEl = ref(null);
 const noticeCount = computed(() => {
@@ -2601,11 +2632,6 @@ function toggleLabelHighlight(label) {
   }
 }
 
-onMounted(() => {
-  setTimeout(() => {
-    speak(`Only ${daysLeftInYear.value} days left in the year. Make them count.`);
-  }, 3000); // Delay for dramatic effect
-});
 const youtubeModalOpen = ref(false);
 const selectedYouTubeTaskIndex = ref(null);
 const youtubeInput = ref('');
@@ -2740,8 +2766,11 @@ watchMilestones(() => calculateCompletionPercentage(), milestones, selectedDayIn
 
 const FULL_DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const isDraggingTask = ref(false);
+const reorderSettling = ref(false); // keeps entrance animations off while the DOM settles after a drop (no replay/flash)
+let settleTimer = null;
+const settleReorder = () => { reorderSettling.value = true; clearTimeout(settleTimer); settleTimer = setTimeout(() => { reorderSettling.value = false; }, 600); };
 const onDragStart = () => {
-  isDraggingTask.value = true;
+  isDraggingTask.value = true; reorderSettling.value = true;
   const sel = window.getSelection && window.getSelection();
   if (sel && sel.removeAllRanges) sel.removeAllRanges();
   playSound('dragStart');
@@ -2760,7 +2789,7 @@ const repeatMode = computed({
   }
 });
 
-// Daily cap of 3 active tasks (override available)
+// (legacy note) the old soft active-task cap
 const capWarning = ref(false);
 const capOverride = ref(false);
 const addsToToday = () => {
@@ -2768,11 +2797,8 @@ const addsToToday = () => {
   const sel = newTask.value.selectedDays;
   return sel.length > 0 ? sel.some((d) => d.day === todayName) : isViewingToday.value;
 };
-const isCapBlocked = () => {
-  if (capOverride.value || !addsToToday()) return false;
-  if (activeCount(selectedDayRoutine.value) >= ACTIVE_CAP) { capWarning.value = true; return true; }
-  return false;
-};
+// The soft "3 active tasks today" nudge was removed (it no longer blocks or shows a message); the real per-plan limit is dailyLimitGate.
+const isCapBlocked = () => false;
 const addAnyway = () => { capOverride.value = true; capWarning.value = false; addNewTask(); };
 watch(modalOpen, (open) => { if (!open) { capWarning.value = false; capOverride.value = false; limitHit.value = null; } });
 
@@ -2977,6 +3003,7 @@ const finishShutdown = async (carry) => {
 
 /* ── Root ── */
 .app-root {
+  isolation: isolate; /* Background canvas (z-index -1) stays above the page colour but behind content */
   /* ── Design tokens (dark, Atlassian-style neutrals + blue accent) ── */
   --c-bg: #0B0D12;
   --c-surface: #12151C;
@@ -3520,4 +3547,38 @@ body.home-v2 .app-topbar { position: absolute; top: 0; left: 0; right: 0; z-inde
 .app-root .task-title.task-title.task-title { font-size: 15px; line-height: 20px; }
 .app-root .task-sub.task-sub { font-size: 13px; }
 .app-root .task-upnext { font-size: 10px; }
+
+/* ══ Mobile UI fixes: task-card controls, smooth reorder, bottom bar alignment ══ */
+/* 1) Right-hand controls: one aligned row [repeat][play][more], pinned top-right; "+10" is a small badge so it never changes the row height */
+.app-root .task-right.task-right.task-right { top: 8px; right: 6px; height: 44px; display: flex; align-items: center; justify-content: flex-end; gap: 2px; }
+.app-root .task-repeat-wrap { display: flex; align-items: center; justify-content: center; width: 32px; height: 44px; }
+.app-root .task-repeat.task-repeat { width: 32px; height: 36px; padding: 0; display: inline-flex; align-items: center; justify-content: center; font-size: 16px; line-height: 1; opacity: .6; }
+.app-root .task-repeat.task-repeat--on { opacity: 1; }
+.app-root .task-play-wrap { position: relative; display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; flex: 0 0 44px; }
+.app-root .task-play.task-play.task-play { width: 44px; height: 44px; }
+.app-root .task-pts.task-pts { position: absolute; top: -3px; right: -5px; padding: 0 5px; border-radius: 999px; background: rgba(245,197,66,.16); font-size: 10px; line-height: 14px; pointer-events: none; }
+.app-root .task-more.task-more.task-more { width: 32px; height: 44px; flex: 0 0 32px; }
+.app-root .task-body > .task-upnext, .app-root .task-body > .task-title-row, .app-root .task-body > .task-sub { padding-right: 122px; }
+.app-root .task-avatar.task-avatar.task-avatar { width: 22px; margin-right: -6px; -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; }
+@media (max-width: 400px) {
+  .app-root .task-more.task-more.task-more { width: 32px; }
+  .app-root .task-body > .task-upnext, .app-root .task-body > .task-title-row, .app-root .task-body > .task-sub { padding-right: 118px; }
+}
+/* 2) Smooth reorder: the drag clone is the real card, the placeholder keeps its slot (no layout jump), no entrance replay on drop */
+.app-root .tasks-list > .sortable-fallback-card { animation: none !important; margin: 0 !important; z-index: 1000 !important; box-shadow: 0 14px 34px rgba(0,0,0,.55); transform-origin: 50% 50%; will-change: transform; }
+.app-root .tasks-list > .task-ghost { opacity: .35; background: var(--c-border, #2a2a2e) !important; animation: none; }
+.app-root .tasks-list > .task-chosen { cursor: grabbing; }
+.app-root.reorder-active .tasks-list > * { animation: none !important; }
+.app-root .tasks-list > * { transition: opacity .15s; }
+.app-root .drag-handle { touch-action: none; }
+/* 3) Bottom area: stats bar centered in a tidy grid, fab bar aligned to the same 16px gutters, safe-area aware */
+.app-root .stats-bar.stats-bar.stats-bar { flex-wrap: wrap; gap: 8px 0; padding: 10px; }
+.app-root .stats-bar .stat { flex: 1 1 0; min-width: 0; justify-content: center; text-align: center; padding: 2px 6px; }
+.app-root .stats-bar .stat > div { min-width: 0; }
+.app-root .stats-bar .wrap-btn { flex: 1 0 100%; justify-content: center; margin-top: 2px; min-height: 44px; }
+@media (min-width: 768px) { .app-root .stats-bar .wrap-btn { flex: 0 0 auto; margin: 0 0 0 8px; } .app-root .stats-bar .stat { justify-content: flex-start; text-align: left; } .app-root .stats-bar.stats-bar.stats-bar { flex-wrap: nowrap; } }
+.app-root .done-section, .app-root .sched { padding-left: 0; padding-right: 0; }
+.app-root .fab-group.fab-group { left: 0; right: 0; padding-left: max(16px, calc((100vw - 560px) / 2 + 16px)); padding-right: max(16px, calc((100vw - 560px) / 2 + 16px)); padding-top: var(--sp-4, 16px); padding-bottom: calc(12px + env(safe-area-inset-bottom)); gap: 12px; justify-content: center; align-items: center; pointer-events: none; }
+.app-root .fab-group.fab-group > * { pointer-events: auto; }
+.app-root .content-wrap.content-wrap { padding-bottom: calc(150px + env(safe-area-inset-bottom)); }
 </style>
