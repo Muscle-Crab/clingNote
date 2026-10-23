@@ -37,8 +37,9 @@ import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/firebaseConfig'; // ✅ must point to your Firestore setup
 
 import { isNativeIOS } from '@/utils/platform';
+import { openExternal } from '@/utils/openExternal';
 const ios = isNativeIOS();
-const openManage = async () => { try { const { Browser } = await import('@capacitor/browser'); await Browser.open({ url: 'https://apps.apple.com/account/subscriptions' }); } catch (e) { window.open('https://apps.apple.com/account/subscriptions', '_blank'); } };
+const openManage = () => openExternal('https://apps.apple.com/account/subscriptions');
 const loading = ref(true);
 const hasPaid = ref(false);
 const nextBillingDate = ref('');

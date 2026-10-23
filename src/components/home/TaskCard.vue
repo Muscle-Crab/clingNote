@@ -102,7 +102,7 @@
                         <label class="mini-field"><span>Next action</span>
                           <input type="text" class="field-input" :value="task.nextAction || ''" @change="$emit('patch', { nextAction: $event.target.value.trim() })" /></label>
                       </div>
-                      <button type="button" class="cal-btn" @click="downloadTaskIcs(task, todayYmd)">📅 Add to calendar</button>
+                      <button type="button" class="cal-btn" @click="addToCalendar">📅 Add to calendar</button>
                       <button v-if="isTodayTab && !task.completed" type="button" class="boss-btn" @click="$emit('set-boss')">{{ task.boss ? '✖ Remove boss' : '👹 Make this the evening boss' }}</button>
                       <label class="mini-field"><span>Note</span>
                         <textarea class="field-textarea" rows="2" :value="task.notes || ''" placeholder="Quick note…" @change="$emit('patch', { notes: $event.target.value })"></textarea></label>
@@ -180,8 +180,14 @@
 import { bossHp } from '@/utils/discipline';
 import { dueBadge } from '@/utils/scheduling';
 import { downloadTaskIcs } from '@/utils/ics';
+import { isNative } from '@/utils/platform';
 import { localDateStr } from '@/utils/streak';
 const todayYmd = localDateStr();
+const addToCalendar = async () => {
+  const r = await downloadTaskIcs(props.task, todayYmd, { native: isNative() });
+  if (r === 'copied') window.alert('Your phone could not open the calendar sheet, so the event details were copied. Paste them into Calendar.');
+  else if (r === 'failed') window.alert('Could not add this to your calendar. Try again.');
+};
 import { ref, watch, onBeforeUnmount, computed } from 'vue';
 import { categoryOf } from '@/utils/taskCategory';
 import { STATUSES, taskKey, estimateOf, formatClock, formatDuration as formatMinutes, toMinutes } from '@/utils/taskPlanning';

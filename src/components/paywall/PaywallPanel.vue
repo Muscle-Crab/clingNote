@@ -56,6 +56,7 @@ import { startCheckout } from '@/utils/checkout';
 import { auth } from '@/firebaseConfig';
 import { isNativeIOS } from '@/utils/platform';
 import { IAP_URLS } from '@/config/iap';
+import { openExternal } from '@/utils/openExternal';
 defineProps({ name: { type: String, default: 'there' } });
 const emit = defineEmits(['close']);
 // iOS native build: Apple IAP via RevenueCat (Stripe is never shown or called). Web: Stripe, unchanged.
@@ -76,7 +77,7 @@ const subLine = (p) => { const td = trialDaysFor(p); return td ? `${td}-day free
 const savePct = computed(() => { const m = iapFor('monthly')?.price; const y = iapFor('yearly')?.price; return m && y && y < m * 12 ? Math.round((1 - y / (m * 12)) * 100) : 0; });
 const badgeFor = (p) => (ios ? (p.id === 'yearly' && savePct.value >= 5 ? `Save ${savePct.value}%` : '') : p.badge);
 const trialDaysFor = (p) => ios ? (iapFor(p.id)?.trialDays || 0) : p.trialDays;
-const openLink = async (url) => { try { const { Browser } = await import('@capacitor/browser'); await Browser.open({ url }); } catch (e) { window.open(url, '_blank'); } };
+const openLink = (url) => openExternal(url);
 const route = useRoute();
 const FEATURES = [
   { t: 'AI coach', d: 'Personalised workout and meal suggestions.' },

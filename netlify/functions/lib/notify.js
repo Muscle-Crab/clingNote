@@ -29,17 +29,8 @@ const buildPayload = ({ appId, uid, kind = 'self', title, message, sendAfter, ur
   return body;
 };
 
-let adminApp = null;
-const getAdmin = () => {
-  // eslint-disable-next-line global-require
-  const admin = require('firebase-admin');
-  if (!adminApp) {
-    adminApp = admin.apps.length ? admin.app() : admin.initializeApp({
-      credential: admin.credential.cert(JSON.parse(Buffer.from(process.env.GOOGLE_APPLICATION_CREDENTIALS_BASE || '', 'base64').toString('utf8'))),
-    });
-  }
-  return admin;
-};
+// Same init helper as every other function (accepts FIREBASE_SERVICE_ACCOUNT, GOOGLE_APPLICATION_CREDENTIALS_BASE64 and _BASE).
+const { getAdmin } = require('./firebaseAdmin');
 
 // Verify "Authorization: Bearer <Firebase ID token>" -> uid (throws 401).
 const verifyUser = async (headers, verify = (t) => getAdmin().auth().verifyIdToken(t)) => {

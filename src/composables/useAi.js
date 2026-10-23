@@ -14,7 +14,8 @@ export const askAi = async (task, input) => {
     body: JSON.stringify({ task, input }),
   });
   const data = await r.json().catch(() => ({}));
-  if (r.status === 402 && data.error === 'Pro required' && typeof window !== 'undefined') window.location.assign('/paywall?feature=aiCoach');
+  // In-app navigation (a full page load would reload the whole SPA / shell and lose state).
+  if (r.status === 402 && data.error === 'Pro required') { try { (await import('@/router')).default.push({ path: '/paywall', query: { feature: 'aiCoach' } }); } catch (e) { /* router unavailable */ } }
   if (!r.ok) throw Object.assign(new Error(data.error || `AI failed (${r.status})`), { status: r.status });
   return data; // { content, creditsLeft? }
 };

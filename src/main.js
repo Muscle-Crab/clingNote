@@ -10,10 +10,13 @@ import { onAuthStateChanged } from 'firebase/auth'
 import { auth } from './firebaseConfig'
 import { loadPrefs, loadCustomImage } from './utils/bgPrefs'
 import { applyBackgroundImage } from './utils/bgImage'
+import { interceptBlankLinks } from './utils/openExternal'
 
 
 // Saved home/header background picture (per device); default = the original forest art.
 try { const bp = loadPrefs(); applyBackgroundImage(bp.image, loadCustomImage()); } catch (e) { /* cosmetic only */ }
+
+interceptBlankLinks(); // iOS shell: target=_blank links open in the in-app browser
 
 const app = createApp(App);
 

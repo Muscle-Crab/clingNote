@@ -175,10 +175,10 @@
               </div>
 
 
-              <a v-if="post.url?.includes('youtube.com')" :href="post.url" target="_blank">
+              <a v-if="post.url?.includes('youtube.com')" :href="post.url" target="_blank" rel="noopener">
                 <iframe width="100%" height="200" :src="'https://www.youtube.com/embed/' + extractYouTubeId(post.url)" frameborder="0" allowfullscreen></iframe>
               </a>
-              <a v-else-if="post.url?.includes('tiktok.com')" :href="post.url" target="_blank">
+              <a v-else-if="post.url?.includes('tiktok.com')" :href="post.url" target="_blank" rel="noopener">
                 <iframe width="100%" height="200" :src="'https://www.tiktok.com/embed/v2/' + extractTikTokId(post.url)" frameborder="0" allowfullscreen></iframe>
               </a>
 
@@ -426,6 +426,7 @@ import { ref as storageRef, uploadBytes, getDownloadURL, uploadBytesResumable } 
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import { demoVideo } from '@/utils/landingMedia';
+import { openExternal } from '@/utils/openExternal';
 const audioRef = ref(null);
 const previewUrl = ref('');
 const fileToUpload = ref(null);
@@ -1017,17 +1018,17 @@ const currentUrl = window.location.href; // Use the current page URL or replace 
 // Share functions for each platform
 const shareOnFacebook = () => {
   const facebookUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(currentUrl)}`;
-  window.open(facebookUrl, '_blank', 'width=600,height=400');
+  openExternal(facebookUrl, 'width=600,height=400');
 };
 
 const shareOnTwitter = () => {
   const twitterUrl = `https://twitter.com/intent/tweet?url=${encodeURIComponent(currentUrl)}&text=Check this out!`;
-  window.open(twitterUrl, '_blank', 'width=600,height=400');
+  openExternal(twitterUrl, 'width=600,height=400');
 };
 
 const shareOnWhatsApp = () => {
   const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(`Check this out: ${currentUrl}`)}`;
-  window.open(whatsappUrl, '_blank');
+  openExternal(whatsappUrl);
 };
 const copyToClipboard = () => {
   const url = window.location.href; // Get the current page URL

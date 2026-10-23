@@ -10,8 +10,15 @@
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <link rel="manifest" href="/manifest.json">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
-    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-3201106649415125"
-            crossorigin="anonymous"></script>
+    <script>
+        // Google AdSense: web only (no ads in the iOS app shell).
+        if (!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform())) {
+            var ad = document.createElement('script');
+            ad.async = true; ad.crossOrigin = 'anonymous';
+            ad.src = 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-3201106649415125';
+            document.head.appendChild(ad);
+        }
+    </script>
     <title><%= htmlWebpackPlugin.options.title %></title>
 
     <script>
