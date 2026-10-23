@@ -103,4 +103,3 @@ export const sendTestPush = async () => {
   const codes = a.j.errors && a.j.errors.length ? ` (${a.j.errors.join(', ')})` : '';
   return { ok: a.ok, error: a.j.error || (a.status < 300 && a.j.ok === false ? `Delivery failed${codes}. Turn notifications off and on again.` : a.status < 300 ? '' : 'Request failed') };
 };
-};
