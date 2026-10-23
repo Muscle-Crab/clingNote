@@ -24,6 +24,9 @@ external_node_modules = ["firebase-admin"]
 [functions."ai"]
 external_node_modules = ["firebase-admin"]
 
+[functions."eight-hour-day"]
+external_node_modules = ["firebase-admin"]
+
 [functions."push-send"]
 external_node_modules = ["firebase-admin"]
 
