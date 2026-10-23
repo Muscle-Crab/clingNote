@@ -4,7 +4,7 @@
       <button @click="$emit('cancel')" class="modal-close voice-cancel" aria-label="Close">✕</button>
       <template v-if="!supported">
         <p class="voice-label">Voice input isn't supported</p>
-        <p v-if="native" class="voice-hint">Voice input isn't available in the iPhone app yet. Tap Add Task to type your task instead.</p>
+        <p v-if="native" class="voice-hint">Speech recognition isn't available on this iPhone right now. Tap Add Task to type your task instead.</p>
         <p v-else class="voice-hint">This browser can't do speech recognition. Try Chrome, Edge or Safari, or add the task with the keyboard.</p>
       </template>
       <template v-else>
@@ -32,8 +32,8 @@
 </template>
 
 <script setup>
-import { voiceInputBlocked } from '@/utils/platform';
-const native = voiceInputBlocked();
+import { isNativeIOS } from '@/utils/platform';
+const native = isNativeIOS();
 defineProps({
   transcript: { type: String, default: '' },
   supported: { type: Boolean, default: true },

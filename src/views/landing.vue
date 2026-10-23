@@ -57,7 +57,8 @@
 
 
 <script setup>
-import { voiceInputBlocked } from '@/utils/platform';
+import { computed } from 'vue';
+import { voiceInputBlocked, isNativeIOS } from '@/utils/platform';
 import { demoVideo, heroStyle } from '@/utils/landingMedia';
 const allFeatures = [
   {
@@ -137,7 +138,8 @@ const allFeatures = [
     description: "Beautiful and responsive interface with full light/dark mode support."
   }
 ];
-const features = voiceInputBlocked() ? allFeatures.filter((f) => !/Voice/i.test(f.title)) : allFeatures; // no voice claims inside the iOS app (WKWebView has no speech recognition)
+// iOS app: the spoken-task claim shows only once the native speech plugin reports available() (same gate as the mic button); voice-note recording claims stay web-only.
+const features = computed(() => allFeatures.filter((f) => !(voiceInputBlocked() && /Voice-Controlled/i.test(f.title)) && !(isNativeIOS() && /Voice Notes/i.test(f.title))));
 
 </script>
 
