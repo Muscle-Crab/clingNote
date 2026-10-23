@@ -28,8 +28,10 @@
 	<array>
 		<string>remote-notification</string>
 	</array>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>ClingNot uses the microphone only when you tap the mic button to add a task by voice.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>ClingNot uses the camera only when you choose to take a photo for a profile picture, a task attachment, a meal photo or a post.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>ClingNot accesses your photo library only when you choose a picture for your profile, a task attachment, a meal photo or a post.</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UIApplicationSceneManifest</key>
@@ -57,7 +59,7 @@
 	<string>Main</string>
 	<key>UIRequiredDeviceCapabilities</key>
 	<array>
-		<string>armv7</string>
+		<string>arm64</string>
 	</array>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
