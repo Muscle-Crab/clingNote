@@ -8,7 +8,7 @@ const playing = ref(false);
 const audioError = ref('');
 let engine = null;
 
-const persist = () => savePrefs({ anim: prefs.anim, track: prefs.track, volume: prefs.volume });
+const persist = () => savePrefs({ anim: prefs.anim, track: prefs.track, volume: prefs.volume, forceMotion: prefs.forceMotion });
 
 export const useBackground = () => ({
   prefs, playing, audioError,
@@ -25,6 +25,7 @@ export const useBackground = () => ({
   async pause() { playing.value = false; if (engine) await engine.stop(); engine = null; },
   async toggle() { if (playing.value) await this.pause(); else await this.play(); },
   setTrack(id) { Object.assign(prefs, sanitize({ ...prefs, track: id })); persist(); if (engine && playing.value) engine.setTrack(prefs.track); },
+  setForceMotion(on) { Object.assign(prefs, sanitize({ ...prefs, forceMotion: !!on })); persist(); },
   setVolume(v) { Object.assign(prefs, sanitize({ ...prefs, volume: Number(v) })); persist(); if (engine) engine.setVolume(prefs.volume); },
   async reset() { await this.pause(); Object.assign(prefs, DEFAULTS); persist(); },
   level: () => (engine ? engine.level() : 0),

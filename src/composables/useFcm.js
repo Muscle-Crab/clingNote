@@ -87,10 +87,19 @@ export const resumePush = async () => {
   try { if (!(await pushSupported())) return; const { token } = await mintToken(); await saveToken(auth.currentUser.uid, token); } catch (e) { console.error('resumePush', e.message); }
 };
 
-export const sendTestPush = async () => {
-  const u = auth.currentUser; if (!u) return { ok: false, error: 'Sign in first' };
-  const idToken = await u.getIdToken();
+const postTest = async () => {
+  const idToken = await auth.currentUser.getIdToken();
   const r = await fetch(SEND_FN, { method: 'POST', headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
   const j = await r.json().catch(() => ({}));
-  return { ok: r.ok && j.ok !== false, error: j.error || (r.ok && j.ok === false ? 'Delivery failed (token expired?)' : r.ok ? '' : 'Request failed') };
+  return { status: r.status, j, ok: r.ok && j.ok !== false };
+};
+export const sendTestPush = async () => {
+  const u = auth.currentUser; if (!u) return { ok: false, error: 'Sign in first' };
+  let a = await postTest();
+  // The server drops tokens FCM says are dead (or none were ever saved). Re-register this device once and retry.
+  if (!a.ok && (a.status === 404 || a.j.removed > 0) && pushState().enabled) {
+    try { const { token } = await withTimeout(mintToken(), 25000, 'Push registration timed out'); await saveToken(u.uid, token); a = await postTest(); } catch (e) { console.error('re-register', e.message); }
+  }
+  const codes = a.j.errors && a.j.errors.length ? ` (${a.j.errors.join(', ')})` : '';
+  return { ok: a.ok, error: a.j.error || (a.status < 300 && a.j.ok === false ? `Delivery failed${codes}. Turn notifications off and on again.` : a.status < 300 ? '' : 'Request failed') };
 };
