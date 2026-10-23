@@ -1,5 +1,5 @@
 <template>
-  <div ref="scrollContainer" class="app-root" :class="[{ 'is-dragging': isDraggingTask }, appTheme ? 'theme-' + appTheme : '']">
+  <div ref="scrollContainer" class="app-root" :class="[{ 'is-dragging': isDraggingTask, 'reorder-active': isDraggingTask || reorderSettling }, appTheme ? 'theme-' + appTheme : '']">
 
     <!-- Loading Screen -->
     <div v-if="isLoading" class="splash-screen">
@@ -135,17 +135,24 @@
               handle=".drag-handle"
               :item-key="taskKey"
               :prevent-on-filter="false"
-              :fallback-tolerance="5"
-              :animation="reducedMotion ? 0 : 150"
+              :force-fallback="true"
+              :fallback-tolerance="3"
+              :touch-start-threshold="3"
+              :scroll-sensitivity="90"
+              :scroll-speed="14"
+              easing="cubic-bezier(.2, .8, .2, 1)"
+              :animation="reducedMotion ? 0 : 220"
               :disabled="!reorderable"
               :model-value="displayTasks"
               @update:model-value="onReorder"
               tag="div"
               class="tasks-list space-y-2"
-              ghost-class="ghost"
-              drag-class="drag"
+              ghost-class="task-ghost"
+              chosen-class="task-chosen"
+              drag-class="task-dragging"
+              fallback-class="sortable-fallback-card"
               @start="onDragStart()"
-              @end="isDraggingTask = false; playSound('dragEnd'); handleDragEnd()"
+              @end="isDraggingTask = false; settleReorder(); playSound('dragEnd'); handleDragEnd()"
           >
             <template #item="{ element: task, index }">
               <TaskCard
@@ -2740,8 +2747,11 @@ watchMilestones(() => calculateCompletionPercentage(), milestones, selectedDayIn
 
 const FULL_DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const isDraggingTask = ref(false);
+const reorderSettling = ref(false); // keeps entrance animations off while the DOM settles after a drop (no replay/flash)
+let settleTimer = null;
+const settleReorder = () => { reorderSettling.value = true; clearTimeout(settleTimer); settleTimer = setTimeout(() => { reorderSettling.value = false; }, 600); };
 const onDragStart = () => {
-  isDraggingTask.value = true;
+  isDraggingTask.value = true; reorderSettling.value = true;
   const sel = window.getSelection && window.getSelection();
   if (sel && sel.removeAllRanges) sel.removeAllRanges();
   playSound('dragStart');
@@ -3517,4 +3527,38 @@ body.home-v2 .app-topbar { position: absolute; top: 0; left: 0; right: 0; z-inde
 .app-root .task-title.task-title.task-title { font-size: 15px; line-height: 20px; }
 .app-root .task-sub.task-sub { font-size: 13px; }
 .app-root .task-upnext { font-size: 10px; }
+
+/* ══ Mobile UI fixes: task-card controls, smooth reorder, bottom bar alignment ══ */
+/* 1) Right-hand controls: one aligned row [repeat][play][more], pinned top-right; "+10" is a small badge so it never changes the row height */
+.app-root .task-right.task-right.task-right { top: 8px; right: 6px; height: 44px; display: flex; align-items: center; justify-content: flex-end; gap: 2px; }
+.app-root .task-repeat-wrap { display: flex; align-items: center; justify-content: center; width: 32px; height: 44px; }
+.app-root .task-repeat.task-repeat { width: 32px; height: 36px; padding: 0; display: inline-flex; align-items: center; justify-content: center; font-size: 16px; line-height: 1; opacity: .6; }
+.app-root .task-repeat.task-repeat--on { opacity: 1; }
+.app-root .task-play-wrap { position: relative; display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; flex: 0 0 44px; }
+.app-root .task-play.task-play.task-play { width: 44px; height: 44px; }
+.app-root .task-pts.task-pts { position: absolute; top: -3px; right: -5px; padding: 0 5px; border-radius: 999px; background: rgba(245,197,66,.16); font-size: 10px; line-height: 14px; pointer-events: none; }
+.app-root .task-more.task-more.task-more { width: 32px; height: 44px; flex: 0 0 32px; }
+.app-root .task-body > .task-upnext, .app-root .task-body > .task-title-row, .app-root .task-body > .task-sub { padding-right: 122px; }
+.app-root .task-avatar.task-avatar.task-avatar { width: 22px; margin-right: -6px; -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; }
+@media (max-width: 400px) {
+  .app-root .task-more.task-more.task-more { width: 32px; }
+  .app-root .task-body > .task-upnext, .app-root .task-body > .task-title-row, .app-root .task-body > .task-sub { padding-right: 118px; }
+}
+/* 2) Smooth reorder: the drag clone is the real card, the placeholder keeps its slot (no layout jump), no entrance replay on drop */
+.app-root .tasks-list > .sortable-fallback-card { animation: none !important; margin: 0 !important; z-index: 1000 !important; box-shadow: 0 14px 34px rgba(0,0,0,.55); transform-origin: 50% 50%; will-change: transform; }
+.app-root .tasks-list > .task-ghost { opacity: .35; background: var(--c-border, #2a2a2e) !important; animation: none; }
+.app-root .tasks-list > .task-chosen { cursor: grabbing; }
+.app-root.reorder-active .tasks-list > * { animation: none !important; }
+.app-root .tasks-list > * { transition: opacity .15s; }
+.app-root .drag-handle { touch-action: none; }
+/* 3) Bottom area: stats bar centered in a tidy grid, fab bar aligned to the same 16px gutters, safe-area aware */
+.app-root .stats-bar.stats-bar.stats-bar { flex-wrap: wrap; gap: 8px 0; padding: 10px; }
+.app-root .stats-bar .stat { flex: 1 1 0; min-width: 0; justify-content: center; text-align: center; padding: 2px 6px; }
+.app-root .stats-bar .stat > div { min-width: 0; }
+.app-root .stats-bar .wrap-btn { flex: 1 0 100%; justify-content: center; margin-top: 2px; min-height: 44px; }
+@media (min-width: 768px) { .app-root .stats-bar .wrap-btn { flex: 0 0 auto; margin: 0 0 0 8px; } .app-root .stats-bar .stat { justify-content: flex-start; text-align: left; } .app-root .stats-bar.stats-bar.stats-bar { flex-wrap: nowrap; } }
+.app-root .done-section, .app-root .sched { padding-left: 0; padding-right: 0; }
+.app-root .fab-group.fab-group { left: 0; right: 0; padding-left: max(16px, calc((100vw - 560px) / 2 + 16px)); padding-right: max(16px, calc((100vw - 560px) / 2 + 16px)); padding-top: var(--sp-4, 16px); padding-bottom: calc(12px + env(safe-area-inset-bottom)); gap: 12px; justify-content: center; align-items: center; pointer-events: none; }
+.app-root .fab-group.fab-group > * { pointer-events: auto; }
+.app-root .content-wrap.content-wrap { padding-bottom: calc(150px + env(safe-area-inset-bottom)); }
 </style>

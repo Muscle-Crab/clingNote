@@ -22,6 +22,8 @@
           class="mt-3 block w-full text-center bg-gradient-to-r from-amber-500 to-orange-600 hover:opacity-90 text-white font-bold py-2 px-4 rounded">
           Upgrade to Pro
         </router-link>
+        <router-link v-if="isOwn" to="/onboarding" data-test="replay-onboarding" class="mt-3 block text-center text-blue-600 hover:underline text-sm">Replay onboarding</router-link>
+        <PushSettings v-if="isOwn" />
         <button v-if="isOwn" @click="editMode = true" class="mt-4 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
           Edit
         </button>
@@ -58,6 +60,7 @@
 </template>
 
 <script setup>
+import PushSettings from '@/components/PushSettings.vue';
 import { syncPublicProfile } from '@/composables/usePublicProfile';
 import { ref, computed, onMounted, watch } from 'vue';
 import { onAuthStateChanged } from 'firebase/auth';

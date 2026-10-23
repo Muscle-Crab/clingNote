@@ -3,14 +3,6 @@
     <div class="bg-white dark:bg-gray-800 shadow-lg rounded-2xl w-full max-w-md p-6 sm:p-8">
       <!-- Header -->
 
-      <!-- 📌 Bookmark Prompt -->
-      <div v-if="showBookmarkPrompt" class="bg-yellow-100 dark:bg-yellow-200/10 border border-yellow-300 dark:border-yellow-500 text-yellow-800 dark:text-yellow-300 p-4 rounded-md text-sm mb-6">
-        <p v-if="isIos">To bookmark this app, tap the <strong>Share</strong> icon and choose <strong>"Add to Home Screen"</strong>.</p>
-        <p v-else-if="isAndroid">To bookmark this app, tap the <strong>⋮ menu</strong> and select <strong>"Add to Home screen"</strong>.</p>
-        <p v-else>Press <strong>Ctrl+D</strong> (Windows) or <strong>Cmd+D</strong> (Mac) to bookmark this app.</p>
-        <button @click="showBookmarkPrompt = false" class="mt-3 text-blue-600 hover:underline dark:text-blue-400">Dismiss</button>
-      </div>
-
       <!-- Login Form -->
       <form @submit.prevent="loginUser" class="space-y-4">
         <div>
@@ -66,7 +58,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref } from 'vue';
 import { signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, sendPasswordResetEmail } from 'firebase/auth';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { auth, db } from '@/firebaseConfig';
@@ -87,16 +79,6 @@ const resetPassword = async () => {
   catch (e) { console.error('[reset]', e); errorMessage.value = e.code === 'auth/invalid-email' ? 'Invalid email format.' : 'Could not send reset email. Try again.'; }
 };
 
-// Platform detection
-const isIos = /iphone|ipad|ipod/.test(window.navigator.userAgent.toLowerCase());
-const isAndroid = /android/.test(window.navigator.userAgent.toLowerCase());
-const showBookmarkPrompt = ref(false);
-
-onMounted(() => {
-  // Show bookmark prompt only if not already dismissed (you can enhance with localStorage)
-  showBookmarkPrompt.value = true;
-});
-
 const loginUser = async () => {
   try {
     isSubmitting.value = true;
@@ -113,22 +95,6 @@ const loginUser = async () => {
     isSubmitting.value = false;
   }
 };
-onMounted(() => {
-  showBookmarkPrompt.value = true;
-
-  // Speak the instruction based on platform
-  const message = isIos
-      ? 'To bookmark this app, tap the Share icon and choose Add to Home Screen.'
-      : isAndroid
-          ? 'To bookmark this app, tap the three dots menu and select Add to Home screen.'
-          : 'Press Control D on Windows or Command D on Mac to bookmark this app.';
-
-  const utterance = new SpeechSynthesisUtterance(message);
-  utterance.lang = 'en-US';
-  utterance.rate = 1;
-  utterance.pitch = 1;
-  speechSynthesis.speak(utterance);
-});
 
 
 const signInWithGoogle = async () => {
