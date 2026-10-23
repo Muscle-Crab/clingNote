@@ -106,6 +106,9 @@ const call = async (db, body, extra = {}) => { const r = await handler(ev(body),
   db.store['eightHour/u1'].lock.settled = false; db.store['eightHour/u1'].stats = {};
   r = await call(db, { action: 'state' }); eq([r.body.lock.earned, r.body.stats.lastResult], [50, 'met'], 'in-window writes are counted even if progress was never called');
 
+  // task count must equal the plan
+  db = mkDb({ 'eightHour/u1': { plan: { wakeTime: '07:00', tz: TZ, taskCount: 3 } }, 'weeklyRoutines/u1_Fri': { tasks: [T('One task'), T('Two tasks')] } });
+  clock = at('2026-10-23T12:00:00Z'); r = await call(db, { action: 'start' }); eq([r.code, r.body.code], [409, 'count-mismatch']);
   // too many tasks / users are isolated
   db = mkDb({ 'eightHour/u1': { plan: { wakeTime: '07:00', tz: TZ, taskCount: 5 } }, 'weeklyRoutines/u1_Fri': { tasks: [1, 2, 3, 4, 5, 6].map((n) => T('t'.repeat(n))) } });
   clock = at('2026-10-23T12:00:00Z'); r = await call(db, { action: 'start' }); eq([r.code, r.body.code], [409, 'too-many']);

@@ -57,6 +57,8 @@
 
         <DayTabs :days="tabDays" :selected-index="selectedDayIndex" :scheduled-counts="scheduledCounts" @select="handleDayTabClick" />
 
+        <EightHourCard :tasks="ehTasks" :start-error="ehStartError" @retry="syncAfterAuth" @start="tryStartEightHour" />
+
         <ProgressBar :percentage="calculateCompletionPercentage()" :milestones="milestones" :done="completedTaskCount || 0" :total="dayTasks.length"
                      :streak="streak" :streak-status="streakStatus" :streak-progress="streakProgress" :streak-min="DAILY_STREAK_MIN" :points="pointsAccumulated || 0" />
 
@@ -300,6 +302,10 @@ import CelebrationOverlay from '@/components/home/CelebrationOverlay.vue';
 import DayTabs from '@/components/home/DayTabs.vue';
 import ImagePreview from '@/components/home/ImagePreview.vue';
 import ProgressBar from '@/components/home/ProgressBar.vue';
+import EightHourCard from '@/components/home/EightHourCard.vue';
+import { useEightHour, syncAfterAuth } from '@/composables/useEightHour';
+import { countableIndexes } from '@/utils/eightHour';
+import { isDayLocked, isLockError, assertTasksChangeAllowed, LOCKED_MESSAGE } from '@/utils/eightHourLock';
 import ReminderModal from '@/components/home/ReminderModal.vue';
 import ShutdownPrompt from '@/components/home/ShutdownPrompt.vue';
 import TaskDetailModal from '@/components/home/TaskDetailModal.vue';
@@ -352,8 +358,30 @@ const openTaskTimerModal = (index) => {
   showTimerModal.value = true;
 };
 
+// ── 8-hour day: strict lock (UI guards; the data layer and Firestore rules enforce the same) ──
+const eh = useEightHour();
+const lockedDayName = computed(() => (eh.running.value && eh.lock.value ? eh.lock.value.dayName : ''));
+const selectedDayLocked = computed(() => !!lockedDayName.value && days[selectedDayIndex.value]?.day === lockedDayName.value);
+// true (after telling the user) when the given weekday tab is the locked day; every list-changing action calls this first
+const blockIfLocked = (dayIdx = selectedDayIndex.value) => {
+  if (dayIdx === -1 || !days[dayIdx] || !isDayLocked(days[dayIdx].day)) return false;
+  alert(LOCKED_MESSAGE);
+  return true;
+};
+const lockMessage = (e) => { if (isLockError(e)) { alert(e.message); return true; } return false; };
+// the planned task count (set before the countdown) limits what today's list may hold until the countdown starts
+const planFull = () => {
+  const plan = eh.plan.value; const ph = eh.phase.value;
+  if (!plan || (ph !== 'before' && ph !== 'ready')) return false;
+  return countableIndexes(selectedDayRoutine.value || [], eh.phaseInfo.value.dayKey || '').length >= plan.taskCount;
+};
+
 const saveSelectedDayTasks = async () => {
   if (!userId.value || selectedDayIndex.value === -1) return;
+  if (selectedDayLocked.value) { // whole-array write on a locked day: only allowed if every locked field of every slot is unchanged
+    const old = await loadDayTasks(userId.value, days[selectedDayIndex.value].day);
+    assertTasksChangeAllowed(days[selectedDayIndex.value].day, old, selectedDayRoutine.value);
+  }
 
   const selectedDayDocRef = doc(
       db,
@@ -638,6 +666,7 @@ const transferTask = async () => {
     return;
   }
 
+  if (blockIfLocked(currentDayIndex) || blockIfLocked(targetDayIndex)) { closeTransferModal(); return; }
   const currentDay = days[currentDayIndex].day;
   const targetDay = days[targetDayIndex].day;
 
@@ -697,6 +726,7 @@ const transferTask = async () => {
 const resetTasksToIncomplete = async (dayIndex = selectedDayIndex.value, isCurrent = () => true) => {
   if (!userId.value || dayIndex === -1) return;
 
+  if (isDayLocked(days[dayIndex]?.day)) return; // 8-hour lock: never wipe the locked day's progress
   const selectedDay = days[dayIndex];
   const selectedDayDocRef = doc(db, 'weeklyRoutines', `${userId.value}_${selectedDay.day}`);
 
@@ -803,7 +833,7 @@ const hasHiddenCopies = computed(() => dayTasks.value.length !== selectedDayRout
 const viewItems = computed(() => viewTasks(selectedDayRoutine.value, effectivePrefs.value).filter((i) => !isHiddenOnDate(i.task, viewTabDate.value)));
 const displayTasks = computed(() => viewItems.value.map((i) => i.task));
 const visibleTaskCount = computed(() => visibleCount(viewItems.value, showCompleted.value));
-const reorderable = computed(() => canReorder(effectivePrefs.value) && !hasHiddenCopies.value);
+const reorderable = computed(() => canReorder(effectivePrefs.value) && !hasHiddenCopies.value && !selectedDayLocked.value); // locked day: order is frozen
 const realIndex = (task) => (selectedDayRoutine.value || []).indexOf(task);
 const onReorder = (list) => { if (reorderable.value && Array.isArray(list)) selectedDayRoutine.value = list; };
 const reducedMotion = typeof window !== 'undefined' && window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)').matches : false;
@@ -899,7 +929,7 @@ const fetchSelectedDayRoutine = async () => {
       const isPastDay = new Date(selectedDay.date) < new Date(getTodayDate());
 
       // If it's a past day, reset all tasks to incomplete
-      if (isPastDay) {
+      if (isPastDay && !isDayLocked(selectedDay.day)) { // (the 8-hour window can run past midnight: its day is never reset)
         tasks = tasks.map(task => resetSubtasks({
           ...task,
           completed: false
@@ -1006,6 +1036,7 @@ const sortedSelectedDayRoutine = computed(() => {
 });
 
 const deleteTask = async (index) => {
+  if (blockIfLocked()) return;
   gateCache = null; gatePrefetch = null; pendingAdds.clear(); // a deleted task frees its slot under the daily limit (next check refetches)
   const confirmed = confirm("Are you sure you want to delete this task?");
   if (!confirmed) return;
@@ -1077,8 +1108,9 @@ const toggleTaskCompletion = async (index) => {
 
   if (isToday(selectedDayIndex.value)) onBossToggle(task).finally(() => updateStreakOnCompletion(task)); // both directions; pending ignored
 
-  // Remove one-time tasks from the UI immediately
-  if (task.type === "one-time") {
+  // Remove one-time tasks from the UI immediately (a locked day keeps every task: completed ones stay in place)
+  const lockedToggle = selectedDayLocked.value;
+  if (task.type === "one-time" && !lockedToggle) {
     selectedDayRoutine.value.splice(index, 1);
   } else {
     selectedDayRoutine.value.splice(index, 1, task); // Update recurring tasks
@@ -1092,14 +1124,19 @@ const toggleTaskCompletion = async (index) => {
     if (selectedDayDocSnapshot.exists()) {
       let tasks = selectedDayDocSnapshot.data().tasks || [];
 
-      if (task.type === "one-time") {
+      if (lockedToggle) {
+        // 8-hour lock: update in place by identity; the array never shrinks and no locked field changes
+        const at = tasks.findIndex((t) => t.createdAt === task.createdAt && t.title === task.title);
+        const slot = at >= 0 ? at : index;
+        tasks[slot] = { ...tasks[slot], completed: task.completed, completedAt: task.completedAt, timerActive: false, timerStoppedAt: task.timerStoppedAt };
+      } else if (task.type === "one-time") {
         // Remove the one-time task completely
         tasks = tasks.filter((_, i) => i !== index);
       } else {
         tasks[index] = task; // Otherwise, update the task
       }
 
-      if (tasks.length > 0) {
+      if (tasks.length > 0 || lockedToggle) {
         // Update Firestore with remaining tasks
         await updateDoc(selectedDayDocRef, {
           tasks: tasks,
@@ -1116,6 +1153,7 @@ const toggleTaskCompletion = async (index) => {
     console.error("Error updating task completion:", error);
   }
 
+  if (lockedToggle) eh.reportProgress(); // server recounts earned points from the day doc (server clock)
   checkAllTasksCompleted();
   await saveDailyPerformance();
   selectedDayRoutine.value = selectedDayRoutine.value.filter(task => !task.completed || showCompleted);
@@ -1134,6 +1172,7 @@ const openWontDoModal = (index) => {
 };
 const markTaskAsWontDo = async () => {
   if (selectedWontDoTaskIndex.value === null) return;
+  if (blockIfLocked()) { wontDoModalOpen.value = false; return; } // no skipping on a locked day
   if (strictOn.value && !validReason(wontDoReason.value)) return; // "why didn't you?" is mandatory in strict mode
   if (strictOn.value) logStrict('skipped', `${selectedDayRoutine.value[selectedWontDoTaskIndex.value]?.title}: ${wontDoReason.value.trim()}`);
 
@@ -1167,6 +1206,7 @@ const markTaskAsWontDo = async () => {
 };
 
 const undoWontDo = async (index) => {
+  if (blockIfLocked()) return;
   const task = wontDoTasks.value.splice(index, 1)[0];
   selectedDayRoutine.value.push(task);
 
@@ -1183,6 +1223,7 @@ const undoWontDo = async (index) => {
 
 
 const handleDragEnd = async () => {
+  if (blockIfLocked()) { fetchSelectedDayRoutine(); return; } // restore the stored order
   if (selectedDayIndex.value === -1 || !userId.value) {
     console.error('No selected day or user is not logged in');
     return;
@@ -1302,7 +1343,7 @@ const streakGateNow = () => {
   });
 };
 // One boss per day (today's tab only). Patches the flag on today's tasks.
-const setBoss = async (index, task) => {
+const setBoss = async (index, task) => { // (boss is not a locked field: allowed on a locked day)
   if (!isToday(selectedDayIndex.value) || !userId.value) return;
   const makeBoss = !task.boss;
   for (let i = 0; i < selectedDayRoutine.value.length; i++) {
@@ -1582,6 +1623,7 @@ const submitScheduledTask = async () => {
 
 // Editor: move an existing one-time task from today's list to a future date.
 const scheduleExistingTask = async (index, task, { date, time }) => {
+  if (blockIfLocked()) return;
   if (!userId.value || !isValidDate(date) || date <= getTodayId()) { alert('Pick a date after today.'); return; }
   const entry = buildScheduledEntry({ ...task, userId: userId.value }, date, time);
   if (!entry) return;
@@ -1654,6 +1696,12 @@ const addNewTask = async () => {
       newTask.value.selectedDays.length > 0
           ? newTask.value.selectedDays
           : [days[selectedDayIndex.value]];
+
+  // 8-hour lock: nothing can be added to the locked day (including repeating copies); before the countdown the plan count is the cap
+  if (selectedDays.some((d) => isDayLocked(d.day))) { error.value = LOCKED_MESSAGE; return false; }
+  if (selectedDays.some((d) => d.day === days[selectedDayIndex.value].day) && isToday(selectedDayIndex.value) && planFull()) {
+    error.value = `Your plan is ${eh.plan.value.taskCount} task${eh.plan.value.taskCount === 1 ? '' : 's'} today. Raise the task count in the 8-hour card first (only possible before the countdown starts).`; return false;
+  }
 
   const labels =
       typeof newTask.value.labels === 'string'
@@ -1735,6 +1783,7 @@ let lastAddPersist = Promise.resolve(true);
 // Copies keep the original createdAt, so making a task recurring never counts as a new task toward the daily limit.
 const setTaskRepeat = async (task, dayNames) => {
   if (!userId.value || !task) return;
+  if (days.some((d) => isDayLocked(d.day))) { alert(LOCKED_MESSAGE); return; } // a repeat edit rewrites copies on every weekday, including the locked one
   const viewDay = days[selectedDayIndex.value].day;
   const want = new Set(dayNames && dayNames.length ? dayNames : [viewDay]);
   want.add(viewDay); // the card being edited stays where it is
@@ -1875,6 +1924,7 @@ const startEditingTask = (index) => {
 };
 
 const updateTask = async () => {
+  if (blockIfLocked()) return;
   if (editedTask.value.title.trim() === '') {
     error.value = 'Task name cannot be empty';
     return;
@@ -2769,6 +2819,9 @@ const canViewSelectedDayTasks = computed(() => {
     return true;
   }
 
+  // 8-hour day: the list is open while a plan is waiting for its tasks and while the window runs (no separate Start Day press needed)
+  if (eh.phase.value === 'running' || eh.phase.value === 'before' || eh.phase.value === 'ready') return true;
+
   // Today requires Start Day
   return daySession.value.started && !daySession.value.ended;
 });
@@ -2834,7 +2887,8 @@ const patchTask = async (index, task, patch) => {
     const saved = patch.estimateMin !== undefined ? { ...patch, estimateMin: task.estimateMin } : patch;
     await patchStoredTask(userId.value, dayName, before, index, saved);
   } catch (e) {
-    console.error('Error saving task field:', e);
+    if (!lockMessage(e)) console.error('Error saving task field:', e);
+    if (isLockError(e)) fetchSelectedDayRoutine();
   }
 };
 
@@ -2886,11 +2940,40 @@ const finishShutdown = async (carry) => {
     }
     await fetchSelectedDayRoutine();
   } catch (e) {
-    console.error('Shutdown failed:', e);
+    if (!lockMessage(e)) console.error('Shutdown failed:', e);
   } finally {
     shutdownBusy.value = false;
   }
 };
+
+// ── 8-hour day: sync with the server, auto-start the locked window, keep the card's task list ──
+const ehTasksCache = ref([]);
+const ehTasks = computed(() => (isToday(selectedDayIndex.value) || selectedDayLocked.value ? selectedDayRoutine.value : ehTasksCache.value));
+watch(selectedDayRoutine, (l) => { if (isToday(selectedDayIndex.value) || selectedDayLocked.value) ehTasksCache.value = [...(l || [])]; }, { deep: true });
+watch(userId, (u) => { if (u) syncAfterAuth(); }, { immediate: true }); // also saves the wake time picked in onboarding if the account has no plan yet
+const ehStartError = ref('');
+let ehStarting = false;
+// Legacy per-day session: opened quietly when the 8-hour window starts (so End Day / shutdown / stats keep working as before).
+const ensureLegacyDayStarted = async () => {
+  if (!userId.value || (daySession.value.started && !daySession.value.ended)) return;
+  const now = new Date();
+  await setDoc(doc(db, 'userSettings', userId.value), { daySessions: { [getTodayId()]: { started: true, ended: false, startTime: serverTimestamp(), endTime: null, updatedAt: serverTimestamp() } } }, { merge: true });
+  daySession.value = { started: true, ended: false, startTime: now, endTime: null, startedAtText: formatSessionTime(now), endedAtText: '' };
+};
+const tryStartEightHour = async () => {
+  if (ehStarting || eh.phase.value !== 'ready' || !userId.value || !isToday(selectedDayIndex.value)) return;
+  const plan = eh.plan.value;
+  const n = countableIndexes(selectedDayRoutine.value || [], eh.phaseInfo.value.dayKey || '').length;
+  if (!plan || n !== plan.taskCount) return; // the countdown starts only when the task list matches the plan
+  ehStarting = true; ehStartError.value = '';
+  try {
+    await lastAddPersist; // the server counts what is stored: wait for any pending add
+    await eh.startNow();
+    await ensureLegacyDayStarted().catch((e) => console.warn('day session:', e));
+    await fetchSelectedDayRoutine();
+  } catch (e) { ehStartError.value = e.message || 'Could not start the countdown'; } finally { ehStarting = false; }
+};
+watch([() => eh.phase.value, () => (selectedDayRoutine.value || []).length, () => eh.plan.value?.taskCount], tryStartEightHour);
 </script>
 
 
