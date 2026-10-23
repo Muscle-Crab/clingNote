@@ -24,6 +24,27 @@ if (!isNative()) app.use(OneSignalVue, {
 app.use(store);
 app.use(router);
 
+// Native shell only: if the app fails to start (blank screen), show the reason on screen instead of an empty page, so a TestFlight tester can report it.
+if (isNative()) {
+  const show = (title, detail) => {
+    try {
+      let box = document.getElementById('native-startup-error');
+      if (!box) {
+        box = document.createElement('pre');
+        box.id = 'native-startup-error';
+        box.style.cssText = 'position:fixed;left:0;right:0;bottom:0;max-height:45vh;overflow:auto;margin:0;padding:12px 14px calc(12px + env(safe-area-inset-bottom));background:#2b0a0a;color:#ffd2d2;font:11px/1.35 ui-monospace,Menlo,monospace;white-space:pre-wrap;z-index:2147483647';
+        document.body.appendChild(box);
+      }
+      box.textContent += title + ': ' + String(detail).slice(0, 600) + '\n';
+    } catch (e) { /* ignore */ }
+  };
+  window.addEventListener('error', (e) => show('Error', e.message + (e.filename ? ' @ ' + e.filename + ':' + e.lineno : '')));
+  window.addEventListener('unhandledrejection', (e) => show('Unhandled', (e.reason && (e.reason.stack || e.reason.message)) || e.reason));
+  app.config.errorHandler = (err, _i, info) => show('Vue (' + info + ')', (err && (err.stack || err.message)) || err);
+  router.onError((err) => show('Router', (err && (err.stack || err.message)) || err));
+  setTimeout(() => { if (!router.currentRoute.value.name) show('Startup', 'first page did not load after 8s at ' + location.href); }, 8000);
+}
+
 // Mount the app
 app.mount('#app');
 

@@ -176,7 +176,8 @@ router.beforeEach(async (to, from, next) => {
         });
       });
 
-  const currentUser = auth.currentUser || await getUser();
+  // Never let a stalled Firebase auth init (seen in the iOS WebView) block the first navigation forever: after 4s treat as signed out.
+  const currentUser = auth.currentUser || await Promise.race([getUser(), new Promise(resolve => setTimeout(() => resolve(null), 4000))]);
 
   // iOS app: community/UGC screens are not offered (App Store 1.2) -> back to Home (or Login when signed out)
   if (ugcHidden()) {
