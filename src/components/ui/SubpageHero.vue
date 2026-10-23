@@ -20,7 +20,7 @@ const accent = computed(() => parts.value[1]);
 
 <style scoped>
 .sub-hero { position: relative; overflow: hidden; padding: calc(64px + env(safe-area-inset-top)) 16px 22px; }
-.sub-hero-art { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(7,13,28,.2), rgba(7,13,28,.35) 55%, var(--c-bg, #070D1C)), url('~@/assets/hero-forest.jpg') 72% 35% / cover no-repeat; }
+.sub-hero-art { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(7,13,28,.2), rgba(7,13,28,.35) 55%, var(--c-bg, #070D1C)), var(--hero-img, url('~@/assets/hero-forest.jpg')) 72% 35% / cover no-repeat; }
 .sub-hero-inner { position: relative; max-width: 720px; margin: 0 auto; }
 .sub-hero-back { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--c-text-2, #A9B4CC); text-decoration: none; padding: 4px 10px 4px 8px; margin-left: -8px; border-radius: 999px; }
 .sub-hero-back:hover { background: rgba(255,255,255,.06); color: #fff; }

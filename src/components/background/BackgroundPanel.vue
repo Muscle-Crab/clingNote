@@ -4,6 +4,18 @@
       <section class="bgp" role="dialog" aria-modal="true" aria-label="Background" data-test="bg-panel" :data-playing="bg.playing.value ? '1' : '0'" :data-anim="bg.prefs.anim" :data-level="level.toFixed(3)">
         <header class="bgp-head"><h2>🎧 Background</h2><button type="button" class="bgp-x" aria-label="Close" data-test="bg-close" @click="$emit('close')">✕</button></header>
 
+        <h3 class="bgp-h">Picture</h3>
+        <div class="bgp-imgs" role="radiogroup" aria-label="Background picture">
+          <button v-for="im in IMAGES" :key="im.id" type="button" role="radio" class="bgp-img" :class="{ on: bg.prefs.image === im.id }" :aria-checked="bg.prefs.image === im.id" :data-test="'bg-img-' + im.id" :style="{ backgroundImage: thumb(im.id) }" @click="bg.setImage(im.id)"><span>{{ im.label }}</span></button>
+          <button type="button" role="radio" class="bgp-img bgp-img--up" :class="{ on: bg.prefs.image === 'custom' }" :aria-checked="bg.prefs.image === 'custom'" data-test="bg-img-custom" :style="bg.customImage.value ? { backgroundImage: thumb('custom') } : null" @click="onCustom"><span>{{ bg.customImage.value ? 'Your photo' : '＋ Upload your own' }}</span></button>
+        </div>
+        <input ref="fileInput" type="file" accept="image/*" class="bgp-file" data-test="bg-img-file" @change="onFile" />
+        <div v-if="bg.prefs.image !== 'forest' || bg.customImage.value" class="bgp-imgrow">
+          <button v-if="bg.customImage.value" type="button" class="bgp-link" data-test="bg-img-change" @click="fileInput && fileInput.click()">Choose another photo</button>
+          <button type="button" class="bgp-link" data-test="bg-img-reset" @click="bg.resetImage()">Reset picture</button>
+        </div>
+        <p v-if="bg.imageError.value" class="bgp-note bgp-err" role="alert" data-test="bg-img-error">{{ bg.imageError.value }}</p>
+
         <h3 class="bgp-h">Animation</h3>
         <div class="bgp-anims" role="radiogroup" aria-label="Background animation">
           <button v-for="a in ANIMS" :key="a.id" type="button" role="radio" class="bgp-chip" :class="{ on: bg.prefs.anim === a.id }" :aria-checked="bg.prefs.anim === a.id" :data-test="'bg-anim-' + a.id" @click="bg.setAnim(a.id)"><span aria-hidden="true">{{ a.icon }}</span>{{ a.label }}</button>
@@ -32,12 +44,17 @@
 <script setup>
 import { ref, watch, onBeforeUnmount } from 'vue';
 import { useBackground } from '@/composables/useBackground';
-import { ANIMS, TRACKS } from '@/utils/bgPrefs';
+import { ANIMS, TRACKS, IMAGES } from '@/utils/bgPrefs';
+import { imageCss } from '@/utils/bgImage';
 
 const props = defineProps({ open: { type: Boolean, default: false } });
 defineEmits(['close']);
 const bg = useBackground();
 const level = ref(0);
+const fileInput = ref(null);
+const thumb = (id) => imageCss(id, bg.customImage.value);
+const onCustom = () => { if (bg.customImage.value) bg.setImage('custom'); else if (fileInput.value) fileInput.value.click(); };
+const onFile = async (e) => { const f = e.target.files && e.target.files[0]; e.target.value = ''; if (f) await bg.uploadImage(f); };
 const reduced = typeof window !== 'undefined' && window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)').matches : false;
 let iv = 0;
 watch(() => props.open, (o) => { clearInterval(iv); if (o) iv = setInterval(() => { level.value = bg.level(); }, 400); });
@@ -52,6 +69,14 @@ onBeforeUnmount(() => clearInterval(iv));
 .bgp-x { min-width: 44px; min-height: 44px; border: 0; background: transparent; color: inherit; font-size: 1.1rem; cursor: pointer; }
 .bgp-h { margin: 10px 0 6px; font-size: .85rem; text-transform: uppercase; letter-spacing: .06em; color: #9aa3b8; }
 .bgp-h small { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.bgp-imgs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.bgp-img { position: relative; min-height: 64px; border-radius: 12px; border: 2px solid #2a2f3f; background: #1a1d29 center / cover no-repeat; color: #fff; cursor: pointer; overflow: hidden; display: flex; align-items: flex-end; justify-content: center; padding: 0; font: inherit; }
+.bgp-img span { width: 100%; padding: 14px 4px 4px; font-size: .72rem; font-weight: 600; text-align: center; background: linear-gradient(180deg, transparent, rgba(0,0,0,.7)); text-shadow: 0 1px 2px rgba(0,0,0,.6); }
+.bgp-img.on { border-color: #6b8cff; box-shadow: 0 0 0 2px rgba(107,140,255,.35); }
+.bgp-img--up { border-style: dashed; }
+.bgp-file { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.bgp-imgrow { display: flex; gap: 14px; margin-top: 6px; }
+.bgp-link { min-height: 44px; border: 0; background: transparent; color: #8fa8ff; font-size: .85rem; text-decoration: underline; cursor: pointer; padding: 0 2px; }
 .bgp-anims { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
 .bgp-chip { min-height: 64px; border-radius: 12px; border: 1.5px solid #2a2f3f; background: #1a1d29; color: inherit; font-size: .8rem; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; cursor: pointer; }
 .bgp-chip span { font-size: 1.4rem; }

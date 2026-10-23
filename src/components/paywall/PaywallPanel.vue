@@ -124,7 +124,7 @@ async function restore() {
 .notch { position: absolute; top: 6px; left: 50%; transform: translateX(-50%); width: 70px; height: 18px; border-radius: 12px; background: #000; z-index: 2; }
 .scr { position: absolute; inset: 0; padding: 8px 10px; text-align: left; font-size: 10px; }
 .ph-status { display: flex; justify-content: space-between; font-size: 9px; color: #A9B4CC; padding: 0 6px; }
-.ph-hero { margin: 10px -10px 6px; padding: 14px 12px 10px; background: linear-gradient(180deg, rgba(7,13,28,.1), #070D1C), url('~@/assets/hero-forest.jpg') 70% 35%/cover; }
+.ph-hero { margin: 10px -10px 6px; padding: 14px 12px 10px; background: linear-gradient(180deg, rgba(7,13,28,.1), #070D1C), var(--hero-img, url('~@/assets/hero-forest.jpg')) 70% 35%/cover; }
 .ph-hero .k { margin: 0; font-size: 8px; letter-spacing: .16em; text-transform: uppercase; color: #5E9BFF; font-weight: 700; }
 .ph-hero .t { margin: 2px 0 8px; font-size: 13px; font-weight: 800; color: #fff; } .ph-hero b { color: #3D8BFF; }
 .ph-stats { display: flex; gap: 5px; } .ph-stats div { flex: 1; background: rgba(12,22,48,.85); border: 1px solid #2A3C66; border-radius: 8px; padding: 4px; text-align: center; }

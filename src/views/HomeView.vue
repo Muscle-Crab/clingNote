@@ -25,7 +25,7 @@
             <p class="hero-date">{{ currentDate }}</p>
             <h1 class="hero-title">{{ heroTitleParts.lead }}<span class="hero-accent">{{ heroTitleParts.accent }}</span></h1>
             <p class="hero-sub">{{ daysLeftInYear }} days left this year</p>
-            <button type="button" class="bg-pill" data-test="open-background-pill" aria-label="Background: animation and music" @click="showBackground = true">🎧 Background<span class="bg-pill-sub">snow · rain · fire · music</span></button>
+            <button type="button" class="bg-pill" data-test="open-background-pill" aria-label="Background: animation and music" @click="showBackground = true">🎧 Background<span class="bg-pill-sub">picture · snow · rain · music</span></button>
           </div>
           <div ref="heroMenuEl" class="hero-menu">
             <button type="button" class="hero-menu-btn" :aria-label="noticeCount ? noticeCount + ' updates and day menu' : 'Day menu'" :aria-expanded="menuOpen ? 'true' : 'false'" @click="menuOpen = !menuOpen">
@@ -3391,7 +3391,7 @@ a.hero-menu-item { display: block; text-decoration: none; color: inherit; }
 .app-root .content-wrap.content-wrap { max-width: 560px; padding: 0 16px calc(140px + env(safe-area-inset-bottom)); }
 .app-root .calendar-section.calendar-section { position: relative; padding-top: 20px; }
 .app-root .hero-scene { position: absolute; z-index: 0; top: 0; left: -16px; right: -16px; height: 330px; pointer-events: none;
-  background: linear-gradient(180deg, rgba(7,13,28,.25), rgba(7,13,28,0) 40%, var(--c-bg) 96%), url('~@/assets/hero-forest.jpg') 72% 30% / cover no-repeat; }
+  background: linear-gradient(180deg, rgba(7,13,28,.25), rgba(7,13,28,0) 40%, var(--c-bg) 96%), var(--hero-img, url('~@/assets/hero-forest.jpg')) 72% 30% / cover no-repeat; }
 .app-root .calendar-section > :not(.hero-scene) { position: relative; z-index: 1; }
 @media (min-width: 600px) { .app-root .hero-scene { border-radius: 0 0 28px 28px; } }
 .app-root .hero.hero { padding: 4px 0 0; }
@@ -3505,7 +3505,7 @@ body.home-v2 .app-topbar { position: absolute; top: 0; left: 0; right: 0; z-inde
 @media (min-width: 768px) { body.home-v2.sidebar-open .app-topbar { left: 16rem; } }
 .app-root .calendar-section.calendar-section { padding-top: calc(60px + env(safe-area-inset-top)); }
 .app-root .hero-scene.hero-scene { top: 0; height: calc(360px + env(safe-area-inset-top)); left: -16px; right: -16px;
-  background: linear-gradient(180deg, rgba(7,13,28,.15), rgba(7,13,28,0) 35%, rgba(7,13,28,.55) 75%, var(--c-bg) 98%), url('~@/assets/hero-forest.jpg') 72% 30% / cover no-repeat; }
+  background: linear-gradient(180deg, rgba(7,13,28,.15), rgba(7,13,28,0) 35%, rgba(7,13,28,.55) 75%, var(--c-bg) 98%), var(--hero-img, url('~@/assets/hero-forest.jpg')) 72% 30% / cover no-repeat; }
 .app-root .hero.hero { display: flex; align-items: flex-start; justify-content: space-between; padding: 0; }
 .app-root .hero-date.hero-date { margin: 0; font-size: 13px; letter-spacing: .16em; color: #5E9BFF; }
 .app-root .hero-title.hero-title { font-size: 36px; line-height: 42px; margin: 4px 0 2px; }

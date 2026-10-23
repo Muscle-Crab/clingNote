@@ -109,7 +109,7 @@ async function finish() { await persist({ onboardingComplete: true, onboardingCo
 .ob-skip { background: none; border: 0; color: #7180A0; font-weight: 600; font-size: 14px; cursor: pointer; }
 .ob-dots { display: flex; gap: 6px; flex: 1; } .ob-dots i { flex: 1; height: 4px; border-radius: 4px; background: rgba(255,255,255,.1); } .ob-dots i.on { background: linear-gradient(90deg,#1E5BFF,#3C8CFF); }
 .ob-sec { flex: 1; padding-top: 18px; }
-.ob-art { height: 220px; margin: 0 -20px 10px; background: linear-gradient(180deg, rgba(7,13,28,.1), rgba(7,13,28,.3) 55%, #070D1C), url('~@/assets/hero-forest.jpg') 72% 35%/cover; border-radius: 0 0 24px 24px; }
+.ob-art { height: 220px; margin: 0 -20px 10px; background: linear-gradient(180deg, rgba(7,13,28,.1), rgba(7,13,28,.3) 55%, #070D1C), var(--hero-img, url('~@/assets/hero-forest.jpg')) 72% 35%/cover; border-radius: 0 0 24px 24px; }
 .ob-k { margin: 8px 0 0; font-size: 12px; font-weight: 600; letter-spacing: .16em; text-transform: uppercase; color: #5E9BFF; }
 .ob-h { margin: 4px 0 10px; font-size: 30px; line-height: 36px; font-weight: 800; letter-spacing: -.02em; color: #fff; } .ob-h span { color: #3D8BFF; }
 .ob-p { color: #A9B4CC; line-height: 1.55; margin: 0 0 18px; }

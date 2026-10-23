@@ -8,7 +8,12 @@ import OneSignalVue from '@onesignal/onesignal-vue3'
 import { isNative, isNativeIOS } from './utils/platform'
 import { onAuthStateChanged } from 'firebase/auth'
 import { auth } from './firebaseConfig'
+import { loadPrefs, loadCustomImage } from './utils/bgPrefs'
+import { applyBackgroundImage } from './utils/bgImage'
 
+
+// Saved home/header background picture (per device); default = the original forest art.
+try { const bp = loadPrefs(); applyBackgroundImage(bp.image, loadCustomImage()); } catch (e) { /* cosmetic only */ }
 
 const app = createApp(App);
 
