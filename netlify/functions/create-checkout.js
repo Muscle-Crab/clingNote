@@ -25,7 +25,7 @@ const resolveUid = async (headers, body, verify) => {
 const originOf = (event) => {
   const o = event.headers?.origin || event.headers?.Origin || '';
   const site = process.env.DEPLOY_PRIME_URL || process.env.URL || 'https://clingnot.netlify.app';
-  if (/^https:\/\/([a-z0-9-]+--)?clingnot\.netlify\.app$/.test(o) || /^http:\/\/localhost(:\d+)?$/.test(o)) return o;
+  if (/^https:\/\/([a-z0-9-]+--)?clingnote?\.netlify\.app$/.test(o) || /^http:\/\/localhost(:\d+)?$/.test(o)) return o;
   return site;
 };
 

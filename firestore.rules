@@ -1,11 +1,8 @@
 rules_version = '2';
-// PROPOSED full Firestore rules for clingnote-463b4 (based on the live rules + paywall hardening).
-// NOT deployed yet: rules are shared with production, and current main's Login.vue still creates user docs with
-// credits/hasPaid from the client, which these rules reject. Deploy only after feat/paywall-onboarding is merged:
-//   firebase deploy --only firestore:rules   (needs "firestore": {"rules": "firestore.rules"} in firebase.json)
 service cloud.firestore {
   match /databases/{database}/documents {
     
+    // TIGHT ruleset + paywall hardening: isPro/plan/proExpiresAt/stripe* are written only by Netlify functions (admin SDK).
     // Helper function to check if user is authenticated
     function isAuthenticated() {
       return request.auth != null;
@@ -16,80 +13,98 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
     
-    // Billing/entitlement fields are written ONLY by Netlify functions (admin SDK: stripe-webhook, ai credits).
-    function protectedUserFields() {
-      return ['isPro', 'plan', 'proExpiresAt', 'credits', 'hasPaid',
-              'stripeCustomerId', 'stripeSubscriptionId', 'stripeStatus', 'stripePriceId', 'stripeSessionId', 'stripe'];
-    }
-    // New docs may only carry the default free values (Login.vue writes isPro:false, plan:'free').
-    function cleanCreate() {
-      let d = request.resource.data;
-      return !d.keys().hasAny(protectedUserFields().removeAll(['isPro', 'plan']))
-        && (!('isPro' in d) || d.isPro == false)
-        && (!('plan' in d) || d.plan == 'free');
-    }
-    function untouchedProtected() {
-      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(protectedUserFields());
+    function isAdmin() {
+      return isAuthenticated() && request.auth.token.admin == true;
     }
 
-    // Users collection - public read kept for compatibility (profiles/rankings); writes owner-only, billing fields locked
-    match /users/{userId} {
-      allow read: if true;
-      allow create: if isOwner(userId) && cleanCreate();
-      allow update: if isOwner(userId) && untouchedProtected();
-      allow delete: if isOwner(userId);
+    // Fields only the server (Stripe webhook / AI function, admin SDK) may change
+    function billingKeys() {
+      return ['hasPaid', 'premium', 'credits', 'subscription', 'subscriptionId', 'subscriptionStatus', 'stripeCustomerId', 'admin', 'role',
+              'proExpiresAt', 'stripeSubscriptionId', 'stripeStatus', 'stripePriceId', 'stripeSessionId', 'stripe', 'proUpdatedAt'];
     }
-    
+    // isPro / plan: clients may only ever write the free defaults, and never on a doc that is currently Pro.
+    function freeDefaultsOnly() {
+      return request.resource.data.get('isPro', false) == false
+        && request.resource.data.get('plan', 'free') == 'free';
+    }
+    function proFieldsOk() {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['isPro', 'plan'])
+        || (resource.data.get('isPro', false) != true && freeDefaultsOnly());
+    }
+
+    // Users collection - private to the owner. Other users' names/avatars come from /publicProfiles.
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      // Signup may set the starter 15 credits, nothing else billing-related
+      allow create: if isOwner(userId)
+        && request.resource.data.keys().hasAny(billingKeys().removeAll(['credits'])) == false
+        && freeDefaultsOnly()
+        && (!('credits' in request.resource.data) || request.resource.data.credits == 15);
+      allow update: if isOwner(userId)
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(billingKeys())
+        && proFieldsOk();
+      allow delete: if isOwner(userId) || isAdmin();
+    }
+
+    // Public profile (name, avatar, pickup attendance) readable by signed-in users
+    match /publicProfiles/{userId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isOwner(userId)
+        && request.resource.data.keys().hasOnly(['name', 'avatarURL', 'attending', 'updatedAt']);
+      // Pickup board: any signed-in user may toggle attendance only
+      allow update: if isAuthenticated()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['attending']);
+      allow delete: if isOwner(userId) || isAdmin();
+    }
+
     // Posts collection
     match /posts/{postId} {
-      allow read: if true;
-      allow create, update: if isAuthenticated();
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update: if isAuthenticated() && (
+        (resource.data.userId == request.auth.uid && request.resource.data.userId == request.auth.uid)
+        || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['comments', 'reactions', 'readComments']));
       allow delete: if isAuthenticated() && request.auth.uid == resource.data.userId;
     }
-    
-    // Rooms collection
+
+    // Rooms collection - owner (user_id) edits/approves/deletes; others may only append a join request
     match /rooms/{roomId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.resource.data.user_id == request.auth.uid
+        && request.resource.data.approvedUsers == [request.auth.uid];
+      allow update: if isAuthenticated() && (
+        (resource.data.user_id == request.auth.uid && request.resource.data.user_id == request.auth.uid)
+        || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['requests'])
+            && request.resource.data.requests.size() == resource.data.requests.size() + 1
+            && !(request.auth.uid in resource.data.approvedUsers)));
+      allow delete: if isAuthenticated() && resource.data.user_id == request.auth.uid;
     }
-    
-    // Tasks collection
+
+    // Tasks collection - unused by the app
     match /tasks/{taskId} {
-      allow read, write: if isAuthenticated();
+      allow read, write: if false;
     }
-    
-    // Weekly Routines - users can only access their own tasks
+
+    // Weekly Routines - routineId format: {userId}_{dayName}
     match /weeklyRoutines/{routineId} {
-      // routineId format: {userId}_{dayName}; owner-only (was: any signed-in user).
-      // Daily task limit is enforced in the UI only: rules can't count tasks by createdAt date inside an array.
-      // As a coarse backstop a single day doc can't hold more than 200 tasks.
-      allow read, delete: if isAuthenticated() && request.auth.uid == routineId.split('_')[0];
-      allow create, update: if isAuthenticated() && request.auth.uid == routineId.split('_')[0]
-        && (!('tasks' in request.resource.data) || request.resource.data.tasks.size() <= 200);
+      allow read, write: if isAuthenticated() && request.auth.uid == routineId.split('_')[0];
     }
-    
+
     // Captains collection
     match /captains/{captainId} {
-      allow read: if true;
-      allow write: if isAuthenticated();
+      allow read, write: if isAuthenticated();
     }
-    
-    // Game collection
+
+    // Game collection (incl. game/turnState)
     match /game/{gameId} {
-      allow read: if true;
-      allow write: if isAuthenticated();
+      allow read, write: if isAuthenticated();
     }
-    
-    // Turn State document
-    match /game/turnState {
-      allow read: if true;
-      allow write: if isAuthenticated();
+
+    // Streaks - doc id is the uid
+    match /streaks/{userId} {
+      allow read, write: if isOwner(userId);
     }
-    
-    // Streaks - users can read/write their own streak data
-    match /streaks/{streakId} {
-      allow read, write: if isAuthenticated();  // TODO: confirm streakId format, then restrict to owner
-    }
-    
+
     // Won't Do Tasks - users can only access their own
     match /wontDoTasks/{userId_day} {
       allow read, write: if isAuthenticated() && 
