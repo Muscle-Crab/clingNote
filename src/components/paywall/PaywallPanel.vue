@@ -26,7 +26,15 @@
       </div>
     </div>
 
-    <div class="plans" role="radiogroup">
+    <div v-if="ios && iapState !== 'ready'" class="iap-state" data-test="pw-iap-state" :data-state="iapState" role="status">
+      <template v-if="iapState === 'loading'">Loading purchase options…</template>
+      <template v-else>
+        <b>{{ iapState === 'error' ? "Couldn't load purchase options" : 'Purchase options aren’t available right now' }}</b>
+        <span>{{ iapState === 'error' ? 'Check your connection and try again.' : 'Please try again in a little while. If you already subscribed, tap Restore Purchases above.' }}</span>
+        <button class="pw-retry" data-test="pw-retry" @click="loadIap">Try again</button>
+      </template>
+    </div>
+    <div v-else class="plans" role="radiogroup">
       <button v-for="p in shownPlans" :key="p.id" class="plan" :class="{on: sel===p.id}" role="radio" :aria-checked="sel===p.id" @click="sel=p.id">
         <span v-if="badgeFor(p)" class="badge">{{ badgeFor(p) }}</span>
         <span class="pl">{{ p.label }}</span>
@@ -35,10 +43,10 @@
       </button>
     </div>
 
-    <p v-if="ios && billLine" class="due due--bill" data-test="pw-bill">{{ billLine }}</p>
+    <p v-if="ios && iapState === 'ready' && billLine" class="due due--bill" data-test="pw-bill">{{ billLine }}</p>
     <p v-if="!ios" class="due"><span>✓</span> {{ trialDaysFor(plan) ? 'No Payment Due Now' : 'Cancel anytime' }}</p>
-    <button class="cta" :disabled="busy || (ios && !iapFor(sel))" @click="buy">{{ ctaText }}</button>
-    <p class="fine">{{ fine }}</p>
+    <button v-if="!ios || iapState === 'ready'" class="cta" :disabled="busy || (ios && !iapFor(sel))" @click="buy">{{ ctaText }}</button>
+    <p v-if="!ios || iapState === 'ready'" class="fine">{{ fine }}</p>
     <p v-if="msg" class="soon">{{ msg }}</p>
     <p v-if="ios" class="legal">
       <template v-if="plan.mode === 'subscription'">Payment is charged to your Apple ID at confirmation of purchase. The subscription renews automatically unless canceled at least 24 hours before the end of the current period. Manage or cancel anytime in your Apple ID account settings.</template>
@@ -62,10 +70,14 @@ const emit = defineEmits(['close']);
 // iOS native build: Apple IAP via RevenueCat (Stripe is never shown or called). Web: Stripe, unchanged.
 const ios = isNativeIOS();
 const iapPlans = ref([]);
-onMounted(async () => { if (!ios) return;
-  try { const { loadPlans } = await import('@/utils/iap'); iapPlans.value = await loadPlans(); if (!iapPlans.value.length) msg.value = 'Purchases are not available right now. Please try again later.';
-    else if (!iapFor(sel.value)) sel.value = (iapPlans.value[0] || {}).id || sel.value; }
-  catch (e) { console.warn('loadPlans failed', e?.message || e); msg.value = 'Could not load purchase options. Check your connection and try again.'; } });
+// iapState: 'loading' (asking the store) | 'ready' (>=1 plan) | 'empty' (store returned no products, e.g. not yet approved / offline) | 'error'.
+const iapState = ref(ios ? 'loading' : 'ready');
+async function loadIap() { if (!ios) return; iapState.value = 'loading'; msg.value = '';
+  try { const { loadPlans } = await import('@/utils/iap'); iapPlans.value = await loadPlans();
+    if (!iapPlans.value.length) iapState.value = 'empty';
+    else { iapState.value = 'ready'; if (!iapFor(sel.value)) sel.value = (iapPlans.value[0] || {}).id || sel.value; } }
+  catch (e) { console.warn('loadPlans failed', e?.message || e); iapState.value = 'error'; } }
+onMounted(loadIap);
 const iapFor = (id) => iapPlans.value.find((x) => x.id === id);
 // iOS shows ONLY store-provided, localised prices (never a hardcoded USD fallback); web keeps the Stripe price list.
 const shownPlans = computed(() => ios ? PLANS.filter((p) => iapFor(p.id)) : PLANS);
@@ -150,5 +162,8 @@ async function restore() {
 .cta:disabled { opacity: .7; }
 .fine { font-size: 12px; color: #7180A0; margin: 10px 0 0; }
 .legal { margin: 14px 4px 0; font-size: 11px; line-height: 15px; color: #7180A0; } .legal a { color: #7FB0FF; text-decoration: underline; }
+.iap-state { display: flex; flex-direction: column; gap: 8px; align-items: center; margin: 22px 0 14px; padding: 18px 14px; border-radius: 14px; border: 1px solid #2A3C66; background: rgba(12,22,48,.92); color: #A9B4CC; font-size: 14px; }
+.iap-state b { color: #fff; font-size: 15px; }
+.pw-retry { margin-top: 4px; min-height: 44px; padding: 0 22px; border-radius: 12px; border: 1px solid #3C8CFF; background: transparent; color: #7FB0FF; font-weight: 700; font-size: 15px; cursor: pointer; }
 .soon { margin: 12px 0 0; padding: 10px 12px; border-radius: 12px; background: #10204A; border: 1px solid #24448F; color: #7FB0FF; font-size: 13px; font-weight: 600; }
 </style>

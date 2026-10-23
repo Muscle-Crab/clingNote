@@ -36,7 +36,7 @@ const buildUpdate = async (evt, stripe) => {
     if (!uid) return null;
     const active = evt.type !== 'customer.subscription.deleted' && ACTIVE.includes(o.status);
     const end = subEnd(o);
-    return { uid, update: { isPro: active, plan: active ? planFromSub(o) : null, proExpiresAt: end ? new Date(end * 1000) : null, stripeCustomerId: o.customer || null, stripeSubscriptionId: o.id, subscriptionStatus: o.status } };
+    return { uid, update: { isPro: active, plan: active ? planFromSub(o) : null, proExpiresAt: end ? new Date(end * 1000) : null, stripeCustomerId: o.customer || null, stripeSubscriptionId: o.id, subscriptionStatus: o.status, cancelAtPeriodEnd: !!o.cancel_at_period_end && active } };
   }
   return null;
 };

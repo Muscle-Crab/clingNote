@@ -21,7 +21,7 @@ service cloud.firestore {
     function billingKeys() {
       return ['hasPaid', 'premium', 'credits', 'subscription', 'subscriptionId', 'subscriptionStatus', 'stripeCustomerId', 'admin', 'role',
               'proExpiresAt', 'stripeSubscriptionId', 'stripeStatus', 'stripePriceId', 'stripeSessionId', 'stripe', 'proUpdatedAt',
-              'proSource', 'iapProductId', 'iapStore', 'iapEnvironment'];
+              'proSource', 'cancelAtPeriodEnd', 'iapProductId', 'iapStore', 'iapEnvironment'];
     }
     // isPro / plan: clients may only ever write the free defaults, and never on a doc that is currently Pro.
     function freeDefaultsOnly() {
