@@ -38,4 +38,11 @@ t('AI workout: disclaimer shown, no fabricated youtubeURL requested or stored; p
   assert(/to="\/privacy-policy"/.test(rd('src/views/Login.vue')) && /to="\/privacy-policy"/.test(rd('src/views/UserRegistrationForm.vue')));
   assert(!/ClingNote/.test(rd('src/App.vue') + rd('src/views/TermsandCondition.vue')));
 });
+t('firestore.rules: captains/game writes limited to pickup admins / captains; post comments constrained', () => {
+  const r = rd('firestore.rules');
+  assert(!/match \/captains\/\{captainId\} \{\s*allow read, write: if isAuthenticated\(\);/.test(r)); assert(!/match \/game\/\{gameId\} \{\s*allow read, write: if isAuthenticated\(\);/.test(r));
+  assert(/allow create, delete: if isPickupAdmin\(\);/.test(r) && /allow write: if isPickupAdmin\(\) \|\| isCaptain\(\);/.test(r) && /email_verified == true/.test(r));
+  assert(/commentsChangeOk\(\) && ownMapKeyOnly\('reactions'\) && ownMapKeyOnly\('readComments'\)/.test(r));
+  ['ds7513635@gmail.com', 'pablo.novoa89@gmail.com', 'lordsarfo123@gmail.com', 'ideastogether@yahoo.com', 'testing@gmail.com'].forEach((e) => assert(rd('src/views/Pickup.vue').includes(e) && r.includes(e), e));
+});
 console.log(`${n} passed`);
