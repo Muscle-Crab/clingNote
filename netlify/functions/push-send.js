@@ -13,7 +13,7 @@ const rawHandler = async (event, ctx, deps = {}) => {
     let body; try { body = JSON.parse(event.body || '{}'); } catch (e) { return json(400, { error: 'Bad JSON' }); }
     const admin = deps.db ? null : getAdmin();
     const env = deps.db ? { db: deps.db, messaging: deps.messaging, FieldValue: deps.FieldValue } : { db: admin.firestore(), messaging: admin.messaging(), FieldValue: admin.firestore.FieldValue };
-    const r = await sendToUser(env, uid, { title: body.title || 'CleanNote test', body: body.body || 'Push notifications are working 🎉', url: body.url || '/home', tag: 'test' });
+    const r = await sendToUser(env, uid, { title: body.title || 'ClingNote test', body: body.body || 'Push notifications are working 🎉', url: body.url || '/home', tag: 'test' });
     if (!r.tokens) return json(404, { error: 'No registered devices. Turn on notifications on this device first.' });
     return json(200, { ok: r.sent > 0, ...r });
   } catch (e) { console.error('push-send', e.message); return json(e.status || 500, { error: e.status ? e.message : 'Could not send' }); }

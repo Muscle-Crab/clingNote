@@ -18,7 +18,7 @@ const messaging = firebase.messaging();
 // Messages are sent data-only ({ title, body, url }) so we control display and click handling here.
 messaging.onBackgroundMessage((payload) => {
   const d = (payload && payload.data) || {};
-  const title = d.title || 'CleanNote';
+  const title = d.title || 'ClingNote';
   self.registration.showNotification(title, {
     body: d.body || '',
     icon: '/favicon.ico',

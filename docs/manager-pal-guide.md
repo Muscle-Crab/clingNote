@@ -17,7 +17,7 @@ Every task is either **Public** or **Private**. You choose under **Visible to** 
 
 **Opening the link (the manager's side).** The link opens straight onto your task list. From there the manager has two options:
 - **Just use the link.** They don't need an account. The first time, they're asked "What should we call you?", and that's all.
-- **Sign in to connect** (optional). They sign in with Apple or Google. If they're new to CleanNote, they go through the normal welcome and setup like anyone else. When they finish, they're automatically connected as your manager and land on your tasks. From then on you're in their **Manager mode**, and they don't need the link again.
+- **Sign in to connect** (optional). They sign in with Apple or Google. If they're new to ClingNote, they go through the normal welcome and setup like anyone else. When they finish, they're automatically connected as your manager and land on your tasks. From then on you're in their **Manager mode**, and they don't need the link again.
 
 **What a manager sees:** your **Public** tasks for the week, with overdue tasks at the top, then to-do, then done. They can't add, change or delete anything.
 

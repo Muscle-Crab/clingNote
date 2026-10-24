@@ -1,6 +1,6 @@
 {
   "appId": "app.clingnote.ios",
-  "appName": "CleanNote",
+  "appName": "ClingNote",
   "webDir": "dist",
   "ios": {
     "contentInset": "always",
