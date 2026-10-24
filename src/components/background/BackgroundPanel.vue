@@ -31,7 +31,7 @@
         </div>
         <div class="bgp-play">
           <button type="button" class="bgp-playbtn" data-test="bg-play" :disabled="!bg.audioSupported" @click="bg.toggle()">{{ bg.playing.value ? '⏸ Pause music' : '▶ Play music' }}</button>
-          <label class="bgp-vol">🔈<input type="range" min="0" max="1" step="0.05" :value="bg.prefs.volume" aria-label="Volume" data-test="bg-volume" @input="bg.setVolume($event.target.value)" /></label>
+          <label class="bgp-vol">🔈<input type="range" min="0" max="1" step="0.05" :value="bg.prefs.volume" aria-label="Volume" data-test="bg-volume" @input="bg.setVolume($event.target.value)" @pointerdown="volDown" @pointermove="volMove" @pointerup="volUp" @pointercancel="volUp" @wheel.prevent="volWheel" /></label>
         </div>
         <p v-if="bg.audioError.value" class="bgp-note bgp-err" role="alert">{{ bg.audioError.value }}</p>
         <p class="bgp-note">Music and animation are separate: use either, both, or neither. Saved on this device.</p>
@@ -59,6 +59,15 @@ const reduced = typeof window !== 'undefined' && window.matchMedia ? window.matc
 let iv = 0;
 watch(() => props.open, (o) => { clearInterval(iv); if (o) iv = setInterval(() => { level.value = bg.level(); }, 400); });
 onBeforeUnmount(() => clearInterval(iv));
+// Volume slider: iOS WKWebView only moves a range when the thumb itself is grabbed and lets a slightly vertical drag scroll the panel.
+// Pointer capture + touch-action:none make a tap or drag anywhere on the track set the volume; the wheel nudges it on web.
+import { volumeFromX, nudgeVolume } from '@/utils/bgPrefs';
+let volDragging = false;
+const volAt = (e) => bg.setVolume(volumeFromX(e.clientX, e.currentTarget.getBoundingClientRect()));
+const volDown = (e) => { if (e.pointerType === 'mouse') return; volDragging = true; e.currentTarget.setPointerCapture?.(e.pointerId); e.preventDefault(); volAt(e); };
+const volMove = (e) => { if (volDragging) { e.preventDefault(); volAt(e); } };
+const volUp = () => { volDragging = false; };
+const volWheel = (e) => bg.setVolume(nudgeVolume(bg.prefs.volume, e.deltaY || -e.deltaX));
 </script>
 
 <style>
@@ -88,7 +97,7 @@ onBeforeUnmount(() => clearInterval(iv));
 .bgp-playbtn { flex: 1; min-height: 48px; border: 0; border-radius: 12px; background: #4f6ff0; color: #fff; font-size: 1rem; font-weight: 600; cursor: pointer; }
 .bgp-playbtn:disabled { opacity: .5; }
 .bgp-vol { flex: 1; display: flex; align-items: center; gap: 6px; }
-.bgp-vol input { flex: 1; min-height: 44px; }
+.bgp-vol input { flex: 1; min-height: 44px; touch-action: none; }
 .bgp-note { margin: 8px 0 0; font-size: .78rem; color: #9aa3b8; }
 .bgp-motion { padding: 8px 10px; border: 1px solid #3a4160; border-radius: 10px; background: #181c2c; color: #c9d2ee; }
 .bgp-motion p { margin: 0 0 6px; }

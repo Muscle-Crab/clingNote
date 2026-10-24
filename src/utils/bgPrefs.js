@@ -43,3 +43,8 @@ export const clearCustomImage = (storage = typeof localStorage !== 'undefined' ?
 export const fitSize = (w, h, max = CUSTOM_MAX_SIDE) => { const k = Math.min(1, max / Math.max(w, h, 1)); return { w: Math.max(1, Math.round(w * k)), h: Math.max(1, Math.round(h * k)) }; };
 // The image to actually show: 'custom' without a valid saved picture falls back to the default.
 export const effectiveImage = (id, custom) => (id === 'custom' && !isCustomImage(custom) ? DEFAULTS.image : (IMAGE_IDS.includes(id) ? id : DEFAULTS.image));
+
+// slider helpers (BackgroundPanel): x position on the track -> 0..1 in 0.05 steps; wheel delta -> +/- one step
+const step05 = (n) => Math.round(clamp01(n) * 20) / 20;
+export const volumeFromX = (x, rect) => step05(rect && rect.width > 0 ? (x - rect.left) / rect.width : 0);
+export const nudgeVolume = (cur, deltaY) => step05(Number(cur) + (deltaY < 0 ? 0.05 : deltaY > 0 ? -0.05 : 0));
