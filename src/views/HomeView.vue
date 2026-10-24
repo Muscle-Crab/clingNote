@@ -308,7 +308,7 @@ import TimeStatsBar from '@/components/home/TimeStatsBar.vue';
 import TimerModal from '@/components/home/TimerModal.vue';
 import TransferModal from '@/components/home/TransferModal.vue';
 import VoiceModal from '@/components/home/VoiceModal.vue';
-import { ugcHidden, voiceInputBlocked } from '@/utils/platform';
+import { ugcHidden, voiceInputBlocked, isNativeIOS } from '@/utils/platform';
 import { splitSpokenTasks, voiceCapability, UNDO_MS } from '@/utils/voiceSplit';
 import WontDoModal from '@/components/home/WontDoModal.vue';
 import WorkoutModal from '@/components/home/WorkoutModal.vue';
@@ -322,6 +322,7 @@ import {db} from '@/firebaseConfig'; // Assuming you have imported the Firebase 
 import { doc, setDoc, serverTimestamp, getDoc, updateDoc, deleteDoc, getFirestore, runTransaction} from 'firebase/firestore';
 const modalOpen = ref(false);
 import { deleteObject } from "firebase/storage";
+import { widgetTaskId } from '@/utils/widgetSnapshot';
 
 const currentTime = ref([]);
 const showAdvanced = ref(false)
@@ -1153,6 +1154,22 @@ const toggleTaskCompletion = async (index) => {
   selectedDayRoutine.value = selectedDayRoutine.value.filter(task => !task.completed || showCompleted);
   showCompleted.value = false;
 };
+
+// iOS widget "complete" taps: drained through the SAME toggleTaskCompletion path (points, streak, boss, report, one-time removal).
+// mode 'effects': the widget-complete function already stored completed=true; flip the local copy back once so the app's path runs exactly once.
+const widgetComplete = async (taskId, mode) => {
+  if (!userId.value || !isToday(selectedDayIndex.value)) return false; // only today's tab; retried on next open/foreground
+  const i = selectedDayRoutine.value.findIndex((t) => t && widgetTaskId(t) === taskId);
+  if (i < 0) return false;
+  const t = selectedDayRoutine.value[i];
+  if (t.completed && mode !== 'effects') return true; // idempotent
+  if (mode === 'effects') { const { widgetEffectsPending, ...rest } = t; selectedDayRoutine.value.splice(i, 1, { ...rest, completed: false }); }
+  return (await toggleTaskCompletion(i)) !== false;
+};
+widgetComplete.tasks = () => (isToday(selectedDayIndex.value) ? selectedDayRoutine.value : []);
+let offWidget = null;
+onMounted(() => { if (isNativeIOS()) import('@/utils/widgetSync').then((m) => { offWidget = m.registerWidgetCompleter(widgetComplete); }).catch(() => {}); });
+onBeforeUnmount(() => { if (offWidget) offWidget(); });
 
 const wontDoModalOpen = ref(false);
 const wontDoReason = ref("");

@@ -135,17 +135,35 @@ struct ProgressBar: View {
 struct TaskRow: View {
     let task: WidgetTask
     var body: some View {
-        Link(destination: taskURL(task)) {
-            HStack(spacing: 8) {
-                Image(systemName: task.done ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 15)).foregroundColor(task.done ? CN.green : CN.text2.opacity(0.6))
-                Text(task.title).font(.system(size: 13, weight: .semibold)).foregroundColor(CN.text)
-                    .strikethrough(task.done, color: CN.text2).lineLimit(1)
-                Spacer(minLength: 4)
-                if !task.time.isEmpty { Text(task.time).font(.system(size: 11)).monospacedDigit().foregroundColor(CN.text2) }
-                if !chipText(task).isEmpty { Chip(text: chipText(task)) }
-            }.opacity(task.done ? 0.55 : 1)
-        }
+        HStack(spacing: 8) {
+            CheckCircle(task: task, size: 15)
+            Link(destination: taskURL(task)) {
+                HStack(spacing: 8) {
+                    Text(task.title).font(.system(size: 13, weight: .semibold)).foregroundColor(CN.text)
+                        .strikethrough(task.done, color: CN.text2).lineLimit(1)
+                    Spacer(minLength: 4)
+                    if !task.time.isEmpty { Text(task.time).font(.system(size: 11)).monospacedDigit().foregroundColor(CN.text2) }
+                    if !chipText(task).isEmpty { Chip(text: chipText(task)) }
+                }
+            }
+        }.opacity(task.done ? 0.55 : 1)
+    }
+}
+
+/// Open task on iOS 17+: a Button that runs CompleteTaskIntent in the background. Done tasks / iOS 15-16: plain icon (row taps open the app).
+struct CheckCircle: View {
+    let task: WidgetTask
+    let size: CGFloat
+    var icon: some View {
+        Image(systemName: task.done ? "checkmark.circle.fill" : "circle")
+            .font(.system(size: size)).foregroundColor(task.done ? CN.green : CN.text2.opacity(0.6))
+    }
+    var body: some View {
+        if #available(iOSApplicationExtension 17.0, *), !task.done {
+            Button(intent: CompleteTaskIntent(taskId: task.id)) {
+                Image(systemName: "circle").font(.system(size: size)).foregroundColor(CN.green.opacity(0.75)).contentShape(Circle())
+            }.buttonStyle(.plain)
+        } else { icon }
     }
 }
 
@@ -175,7 +193,10 @@ struct SmallView: View {
                 }
                 Spacer(minLength: 0)
                 Text(next == nil ? "ALL DONE" : "UP NEXT").font(.system(size: 10, weight: .bold)).kerning(0.6).foregroundColor(CN.green)
-                Text(next?.title ?? "Great work today 🎉").font(.system(size: 15, weight: .semibold)).foregroundColor(CN.text).lineLimit(2)
+                HStack(alignment: .top, spacing: 6) {
+                    if let n = next { CheckCircle(task: n, size: 18) }
+                    Text(next?.title ?? "Great work today 🎉").font(.system(size: 15, weight: .semibold)).foregroundColor(CN.text).lineLimit(2)
+                }
                 if let n = next, !chipText(n).isEmpty { Chip(text: (n.time.isEmpty ? "" : n.time + " · ") + chipText(n)) }
             }
             .widgetURL(next.map(taskURL) ?? URL(string: "clingnote://home"))

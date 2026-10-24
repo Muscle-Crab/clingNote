@@ -20,6 +20,7 @@
 		9582B6832FE993A70072D4E8 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9582B6822FE993A50072D4E8 /* SceneDelegate.swift */; };
 		C1A0E0000000000000000002 /* ClingWidgetPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A0E0000000000000000001 /* ClingWidgetPlugin.swift */; };
 		C1A0E0000000000000000004 /* ClingNoteWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A0E0000000000000000003 /* ClingNoteWidget.swift */; };
+		C1A0E0000000000000000019 /* CompleteTaskIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A0E0000000000000000018 /* CompleteTaskIntent.swift */; };
 		C1A0E0000000000000000008 /* ClingNoteWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = C1A0E0000000000000000007 /* ClingNoteWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		C1A0E0000000000000000015 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C1A0E0000000000000000014 /* WidgetKit.framework */; };
 		C1A0E0000000000000000017 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C1A0E0000000000000000016 /* SwiftUI.framework */; };
@@ -41,6 +42,7 @@
 		958DCC722DB07C7200EA8C5F /* debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = debug.xcconfig; path = ../debug.xcconfig; sourceTree = SOURCE_ROOT; };
 		C1A0E0000000000000000001 /* ClingWidgetPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClingWidgetPlugin.swift; sourceTree = "<group>"; };
 		C1A0E0000000000000000003 /* ClingNoteWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClingNoteWidget.swift; sourceTree = "<group>"; };
+		C1A0E0000000000000000018 /* CompleteTaskIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompleteTaskIntent.swift; sourceTree = "<group>"; };
 		C1A0E0000000000000000005 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		C1A0E0000000000000000006 /* ClingNoteWidget.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ClingNoteWidget.entitlements; sourceTree = "<group>"; };
 		C1A0E0000000000000000007 /* ClingNoteWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ClingNoteWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -135,6 +137,7 @@
 			isa = PBXGroup;
 			children = (
 				C1A0E0000000000000000003 /* ClingNoteWidget.swift */,
+				C1A0E0000000000000000018 /* CompleteTaskIntent.swift */,
 				C1A0E0000000000000000005 /* Info.plist */,
 				C1A0E0000000000000000006 /* ClingNoteWidget.entitlements */,
 			);
@@ -266,6 +269,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				C1A0E0000000000000000004 /* ClingNoteWidget.swift in Sources */,
+				C1A0E0000000000000000019 /* CompleteTaskIntent.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

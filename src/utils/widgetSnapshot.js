@@ -28,11 +28,12 @@ export const chipText = (est, pts) => [fmtEstimate(est), num(pts) ? `${num(pts)}
 
 // tasks: today's stored tasks (weeklyRoutines/{uid}_{Day}.tasks). The widget belongs to the owner, so full titles are kept
 // (also for anonymous/private tasks — those flags only hide a task from managers/pals).
-export const buildWidgetSnapshot = (tasks, { now = new Date(), dayName = '' } = {}) => {
+export const buildWidgetSnapshot = (tasks, { now = new Date(), dayName = '', pendingIds = [] } = {}) => {
+  const pending = new Set(pendingIds); // widget taps not yet applied by the app: keep them shown as done
   const list = (Array.isArray(tasks) ? tasks : []).filter((t) => t && typeof t.title === 'string' && t.title.trim());
   const rows = list.map((t, i) => ({
     id: widgetTaskId(t), title: t.title.trim().slice(0, 80), est: minutesOf(t), pts: num(t.points),
-    done: t.completed === true, time: timeOf(t), _i: i,
+    done: t.completed === true || pending.has(widgetTaskId(t)), time: timeOf(t), _i: i,
   }));
   // Open first; open tasks with a start time by time, then the rest in list order; done last in list order.
   rows.sort((a, b) => (a.done - b.done) || (!a.done && ((!a.time - !b.time) || (a.time && b.time && a.time.localeCompare(b.time)))) || (a._i - b._i));

@@ -1,6 +1,7 @@
 // Home-screen widget: snapshot builder + deep-link routing (src/utils/widgetSnapshot.js). Run: node scripts/test-widget.mjs
 import assert from 'node:assert/strict';
 import { buildWidgetSnapshot, widgetTaskId, widgetKeyMap, parseWidgetLink, widgetTaskUrl, chipText, fmtEstimate, taskRefKey, WIDGET_MAX_TASKS } from '../src/utils/widgetSnapshot.js';
+import { drainQueue, classifyEntry, entryKey, MAX_AGE_MS } from '../src/utils/widgetQueue.js';
 
 let n = 0; const t = (name, fn) => { fn(); n++; };
 const now = new Date(2026, 9, 24, 9, 30);
@@ -62,4 +63,45 @@ t('deep links', () => {
   assert.equal(parseWidgetLink('clingnot://localhost/pals'), null);
   assert.equal(parseWidgetLink(''), null); assert.equal(parseWidgetLink(null), null); assert.equal(parseWidgetLink('not a url'), null);
 });
+
+await (async () => {
+  n++;
+  // pending overlay keeps optimistic widget taps "done" until the app applies them
+  const base = [{ title: 'A', createdAt: '1' }, { title: 'B', createdAt: '2' }];
+  const idA = widgetTaskId(base[0]), idB = widgetTaskId(base[1]);
+  const ov = buildWidgetSnapshot(base, { now, dayName: 'Saturday', pendingIds: [idB] });
+  assert.equal(ov.done, 1); assert.equal(ov.tasks.find((t) => t.id === idB).done, true);
+
+  const T = Date.parse('2026-10-24T12:00:00Z');
+  const fresh = (tasks) => tasks.map((t) => ({ ...t }));
+  assert.equal(classifyEntry({ taskId: 'a/b' }, base, { today: 'Saturday', now: T }), 'invalid');
+  assert.equal(classifyEntry({ taskId: idA, day: 'Friday', ts: T }, base, { today: 'Saturday', now: T }), 'stale');
+  assert.equal(classifyEntry({ taskId: idA, day: 'Saturday', ts: T - MAX_AGE_MS - 1 }, base, { today: 'Saturday', now: T }), 'stale');
+  assert.equal(classifyEntry({ taskId: 'kzzz', day: 'Saturday', ts: T }, base, { today: 'Saturday', now: T }), 'missing');
+  assert.equal(classifyEntry({ taskId: idA, day: 'Saturday', ts: T }, [{ ...base[0], completed: true }], { today: 'Saturday', now: T }), 'already-done');
+  assert.equal(classifyEntry({ taskId: idA, day: 'Saturday', ts: T }, [{ ...base[0], completed: true, widgetEffectsPending: true }], { today: 'Saturday', now: T }), 'effects');
+
+  // drain: same completion path once per task, duplicates acked, already-done skipped, failures kept for retry
+  let tasks = fresh(base); const calls = [];
+  const complete = async (id, mode) => { calls.push([id, mode]); const t = tasks.find((x) => widgetTaskId(x) === id); t.completed = true; return true; };
+  const q = [{ taskId: idA, day: 'Saturday', ts: T - 3 }, { taskId: idA, day: 'Saturday', ts: T - 2 }, { taskId: idB, day: 'Saturday', ts: T - 1 }, { taskId: idB, day: 'Friday', ts: T }];
+  let r = await drainQueue({ queue: q, getTasks: () => tasks, complete, today: 'Saturday', now: T });
+  assert.deepEqual(calls, [[idA, 'complete'], [idB, 'complete']]);
+  assert.equal(r.acked.length, 4); assert.equal(r.kept.length, 0);
+  // idempotent: draining the same queue again (ack lost / app killed) never re-toggles
+  r = await drainQueue({ queue: q, getTasks: () => tasks, complete, today: 'Saturday', now: T });
+  assert.equal(calls.length, 2); assert.equal(r.acked.length, 4);
+  // server already wrote completed + widgetEffectsPending -> app runs its path once in 'effects' mode
+  tasks = [{ ...base[0], completed: true, widgetEffectsPending: true }];
+  const c2 = []; r = await drainQueue({ queue: [q[0]], getTasks: () => tasks, complete: async (id, m) => { c2.push(m); tasks[0].widgetEffectsPending = false; return true; }, today: 'Saturday', now: T });
+  assert.deepEqual(c2, ['effects']); assert.deepEqual(r.acked, [entryKey(q[0])]);
+  // failure (e.g. not on today's tab / shut window) keeps the entry; a later duplicate still gets its chance
+  tasks = fresh(base); let fails = 0;
+  r = await drainQueue({ queue: [q[0], q[1]], getTasks: () => tasks, complete: async () => { fails++; return false; }, today: 'Saturday', now: T });
+  assert.equal(fails, 2); assert.deepEqual(r.kept, [entryKey(q[0]), entryKey(q[1])]); assert.equal(r.acked.length, 0);
+  r = await drainQueue({ queue: [q[0]], getTasks: () => tasks, complete: async () => { throw new Error('x'); }, today: 'Saturday', now: T });
+  assert.deepEqual(r.kept, [entryKey(q[0])]);
+  r = await drainQueue({ queue: null, getTasks: () => tasks, complete, today: 'Saturday', now: T });
+  assert.deepEqual(r, { acked: [], kept: [], results: [] });
+})();
 console.log(`test-widget: ${n} groups passed`);

@@ -65,3 +65,6 @@ external_node_modules = ["firebase-admin", "stripe", "@opentelemetry/api"]
 [functions."manager-pal"]
 included_files = ["netlify/functions/lib/**"]
 external_node_modules = ["firebase-admin", "@opentelemetry/api"]
+
+[functions."widget-complete"]
+external_node_modules = ["firebase-admin"]
