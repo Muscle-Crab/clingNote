@@ -10,7 +10,7 @@ const MAX_TASKS_PER_DAY = 50;                   // safety max (free and Pro alik
 const LOCK_IDENTITY_SLOTS = 50;                 // Firestore rules cannot loop; they compare the first 50 slots (= task cap) of a day doc (see firestore.rules)
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const WAKE_PICKER_PRESELECT = '07:00';          // UI convenience ONLY (pre-selected picker value). There is no stored/default wake time: the user must pick one.
-const START_MODE = 'open';                      // 'open': the 8h begin the moment the app sees wake time has passed (at wake time if the app is open, else on first open)
+const START_MODE = 'wake';                      // 'wake': the 8h always count from the chosen wake time, whether or not the app is open ('open' = start on first open after wake)
                                                 // 'wake': the 8h are anchored to the wake time itself even when the app is opened later (stricter)
 const TARGET_LEVELS = { min: 0, max: 4, start: 2, base: 0.8, step: 0.05 }; // target = total task points x (0.80 + 0.05 x level)
 
