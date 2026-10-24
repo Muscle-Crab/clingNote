@@ -14,6 +14,9 @@ const CHORDS = {
 };
 
 // Extra lo-fi styles, all procedural (original, no samples): chord set, tempo, drums, timbre and ambience bed.
+// A context we can't reuse: none yet, closed, or iOS 'interrupted' (resume() often never settles there).
+export const needsNewContext = (state) => !state || state === 'closed' || state === 'interrupted';
+
 export const STYLES = {
   'lofi-rain': { chords: 'night', bpm: 66, drums: true, comp: false, wave: 'triangle', cut: 1300, mel: 0.3, bed: 'rain' },
   'lofi-jazz': { chords: 'jazz', bpm: 82, drums: true, comp: true, wave: 'triangle', cut: 1900, mel: 0.45, bed: 'vinyl', bass: true },
@@ -34,7 +37,7 @@ export const createEngine = () => {
   const AC = typeof window !== 'undefined' && (window.AudioContext || window.webkitAudioContext);
   if (!AC) return null;
   let ctx = null; let master = null; let analyser = null; let timer = 0; let nodes = []; let track = 'lofi'; let volume = 0.5; let playing = false;
-  let nextTime = 0; let step = 0; let nextCrackle = 0;
+  let nextTime = 0; let step = 0; let nextCrackle = 0; let gen = 0; let onState = null;
   const data = new Uint8Array(256);
 
   const track$ = (n) => { nodes.push(n); return n; };
@@ -136,36 +139,47 @@ export const createEngine = () => {
     get playing() { return playing; },
     get state() { return ctx ? ctx.state : 'none'; },
     // Must be called from a user gesture (tap/click)
-    async start(id, vol) {
-      track = norm(id || track); volume = vol ?? volume;
-      if (!ctx) {
+    // Must be called from a user gesture (tap/click). Everything up to ctx.resume() runs synchronously so iOS
+    // still sees the gesture (an await before resume() loses it). A closed/'interrupted' (iOS: call, Siri, other app) context is replaced.
+    start(id, vol) {
+      track = norm(id || track); volume = vol ?? volume; gen += 1;
+      if (needsNewContext(ctx && ctx.state)) {
+        if (ctx) { const old = ctx; teardownBeds(); try { old.close(); } catch (e) { /* gone */ } }
         ctx = new AC(); master = ctx.createGain(); master.gain.value = 0; analyser = ctx.createAnalyser(); analyser.fftSize = 512;
         master.connect(analyser); analyser.connect(ctx.destination);
+        const mine = ctx; ctx.onstatechange = () => { if (ctx === mine && onState) onState(mine.state); };
       }
-      if (ctx.state === 'suspended') await ctx.resume();
+      let p = null; try { p = ctx.state !== 'running' ? ctx.resume() : null; } catch (e) { /* old Safari: no promise */ }
+      try { const b = ctx.createBufferSource(); b.buffer = ctx.createBuffer(1, 1, 22050); b.connect(ctx.destination); b.start(0); } catch (e) { /* iOS unlock blip */ }
       playing = true; begin(); clearInterval(timer); timer = setInterval(schedule, 250);
       master.gain.cancelScheduledValues(ctx.currentTime); master.gain.setValueAtTime(master.gain.value, ctx.currentTime); master.gain.linearRampToValueAtTime(volume * 0.9, ctx.currentTime + 0.6);
+      return Promise.resolve(p).catch(() => {});
     },
+    // Try to un-suspend after returning to the app (may need a tap on iOS); returns the resulting state.
+    async resume() { if (!ctx || ctx.state === 'closed') return 'none'; try { await ctx.resume(); } catch (e) { /* needs a gesture */ } return ctx ? ctx.state : 'none'; },
+    set onStateChange(fn) { onState = fn; },
     setTrack(id) { track = norm(id); if (playing && ctx) begin(); },
     // Smooth change (auto-rotate): fade the mix down, swap the track at the bottom, fade back up to the saved volume. ~2.4s total.
     crossfadeTo(id, secs = 2.4) {
       if (!playing || !ctx) { track = norm(id); return; }
-      const half = secs / 2; const t0 = ctx.currentTime;
+      const half = secs / 2; const t0 = ctx.currentTime; const my = gen;
       master.gain.cancelScheduledValues(t0); master.gain.setValueAtTime(master.gain.value, t0); master.gain.linearRampToValueAtTime(0.0001, t0 + half);
       setTimeout(() => {
-        if (!playing || !ctx) return;
+        if (!playing || !ctx || gen !== my) return; // paused/restarted meanwhile: that action wins
         track = norm(id); begin(); const t1 = ctx.currentTime;
         master.gain.cancelScheduledValues(t1); master.gain.setValueAtTime(0.0001, t1); master.gain.linearRampToValueAtTime(volume * 0.9, t1 + half);
       }, half * 1000);
     },
     setVolume(v) { volume = v; if (ctx && master) { master.gain.cancelScheduledValues(ctx.currentTime); master.gain.setValueAtTime(master.gain.value, ctx.currentTime); master.gain.setTargetAtTime(v * 0.9, ctx.currentTime, 0.05); } },
     // Fade out, clear timers, free the audio context
+    // Fade out, clear timers, free the audio context. A start() during the fade wins (generation check), so play-right-after-pause works.
     async stop() {
-      if (!ctx) { playing = false; return; }
       playing = false; clearInterval(timer); timer = 0;
-      const c = ctx; const m = master;
+      if (!ctx) return;
+      const c = ctx; const m = master; const my = ++gen;
       try { m.gain.cancelScheduledValues(c.currentTime); m.gain.setValueAtTime(m.gain.value, c.currentTime); m.gain.linearRampToValueAtTime(0.0001, c.currentTime + 0.25); } catch (e) { /* closed */ }
       await new Promise((r) => setTimeout(r, 300));
+      if (gen !== my || ctx !== c) return; // restarted meanwhile
       teardownBeds(); ctx = null; master = null; analyser = null;
       try { await c.close(); } catch (e) { /* already closed */ }
     },

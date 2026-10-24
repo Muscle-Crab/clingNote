@@ -68,3 +68,12 @@ export const pickNextTrack = (ids, current, bag = [], rnd = Math.random) => {
   if (!q.length) { q = [...pool]; for (let i = q.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [q[i], q[j]] = [q[j], q[i]]; } }
   return { next: q[0], bag: q.slice(1) };
 };
+
+// Play button: if the UI says "playing" but the audio context isn't actually running (iOS suspended/interrupted it),
+// a tap must START audio, not pause it.
+export const tapAction = (uiPlaying, ctxState) => (uiPlaying && ctxState === 'running' ? 'pause' : 'play');
+// Native backup (iOS may clear WKWebView localStorage). Used only when the localStorage copy is missing.
+export const restoreFromBackup = (localRaw, backupRaw) => {
+  if (localRaw) return null; // local copy wins (it is always written first)
+  try { const o = JSON.parse(backupRaw || 'null'); return o && typeof o === 'object' ? sanitize(o) : null; } catch (e) { return null; }
+};
