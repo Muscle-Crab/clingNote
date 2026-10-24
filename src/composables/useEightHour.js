@@ -36,7 +36,13 @@ const call = async (action, body = {}) => {
 // (locks are server-authoritative), so the card can still show the plan / setup instead of a dead "Retry".
 const isUnavailable = (e) => !!(e && (e.unavailable || e.name === 'TypeError' || /load failed|failed to fetch|network/i.test(e.message || '')));
 const localState = (plan) => ({ now: Date.now(), plan: plan ? { wakeTime: plan.wakeTime, taskCount: plan.taskCount, tz: plan.tz || deviceTz() } : null, lock: null, stats: core.defaultStats(), offline: true });
-const apply = (d) => { st.data = d; st.offset = d.now - Date.now(); st.loaded = true; st.error = ''; tick.value = Date.now() + st.offset; };
+// Last started day, cached on the device so the hard stop survives a reload / app restart even when the server is unreachable.
+const LAST_LOCK_KEY = 'clingnote.ehLastLock.v1';
+export const readLastLock = () => { try { const l = JSON.parse(localStorage.getItem(LAST_LOCK_KEY) || 'null'); return l && Number.isFinite(l.endMs) && l.dayKey ? l : null; } catch (e) { return null; } };
+const cacheLock = (l) => { try { if (l && Number.isFinite(l.endMs)) localStorage.setItem(LAST_LOCK_KEY, JSON.stringify({ dayKey: l.dayKey, dayName: l.dayName, startMs: l.startMs, endMs: l.endMs, wakeTime: l.wakeTime, tz: l.tz, earned: l.earned || 0, target: l.target || 0, done: l.done || 0, taskCount: l.taskCount || 0, totalPoints: l.totalPoints || 0 })); } catch (e) { /* private mode */ } };
+// The lock that decides the hard stop: the server's, else (offline / not loaded yet) the cached one. Never invents a lock.
+export const shutLock = () => (st.data && st.data.lock) || readLastLock();
+const apply = (d) => { if (d && d.lock) cacheLock(d.lock); st.data = d; st.offset = d.now - Date.now(); st.loaded = true; st.error = ''; tick.value = Date.now() + st.offset; };
 
 export const nowMs = () => Date.now() + st.offset; // server time (offset measured at the last fetch)
 
@@ -106,10 +112,17 @@ export const useEightHour = () => {
     return plan.value ? core.fmtWakeLabel(plan.value.wakeTime) : '';
   });
   const stats = computed(() => st.data?.stats || core.defaultStats());
-  return { st, data, plan, lock, phase, phaseInfo, running, remainingMs, countdown, endsLabel, startsLabel, stats, reward: computed(() => st.data?.reward || ''),
+  // Hard stop: today's started day has ended -> shut until the next wake time (survives reload via the cached lock).
+  const shutdown = computed(() => {
+    const l = shutLock(); const now = (tick.value, nowMs());
+    if (!l || !core.isShut(l, now)) return null;
+    const until = core.shutUntilMs(l);
+    return { untilMs: until, untilLabel: core.fmtClock(until, l.tz || deviceTz()), earned: l.earned || 0, target: l.target || 0, done: l.done || 0, total: l.taskCount || 0, met: (l.target || 0) > 0 && (l.earned || 0) >= l.target };
+  });
+  return { st, data, plan, lock, phase, phaseInfo, running, remainingMs, countdown, endsLabel, startsLabel, stats, shutdown, reward: computed(() => st.data?.reward || ''),
     refresh, savePlan, startNow, reportProgress, nowMs };
 };
 
 // UI/data-layer guards read the lock through this source (server-clock based, so changing the device clock does not unlock anything in the UI;
 // the Firestore rules compare against request.time regardless).
-setLockSource(() => (st.data && st.data.lock ? { lock: st.data.lock, nowMs: nowMs() } : null));
+setLockSource(() => { const l = shutLock(); return l ? { lock: l, nowMs: nowMs() } : null; });

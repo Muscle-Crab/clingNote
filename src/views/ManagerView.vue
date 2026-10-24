@@ -19,6 +19,19 @@
         <p class="mp-muted">{{ counts.done }} done · {{ counts.open }} to do<span v-if="counts.overdue" class="mp-red"> · {{ counts.overdue }} overdue</span></p>
       </header>
 
+      <div v-if="accountMode && award" class="mp-award" data-test="award-row">
+        <button class="mp-chip" :disabled="!award.eligible || award.awardedToday || awardSent" @click="awardOpen = !awardOpen" data-test="award-btn"
+          :title="award.awardedToday || awardSent ? 'Already awarded today' : award.eligible ? 'Award a bonus or badge' : 'Unlocks when all of today\'s tasks are done or the daily points goal is hit'">
+          {{ award.awardedToday || awardSent ? '🏅 Awarded today' : '🏅 Award bonus' }}</button>
+        <span v-if="!award.eligible && !award.awardedToday && !awardSent" class="mp-muted mp-small">Unlocks when today is done</span>
+        <div v-if="awardOpen" class="mp-award-panel" data-test="award-panel">
+          <div class="mp-crow"><span class="mp-small">Bonus</span><button v-for="b in AWARD_BONUSES" :key="b" class="mp-chip" :class="{ on: awardPick.bonus === b }" @click="awardPick.bonus = awardPick.bonus === b ? 0 : b">+{{ b }}</button></div>
+          <div class="mp-crow"><span class="mp-small">Badge</span><button v-for="(v, k) in AWARD_BADGES" :key="k" class="mp-chip" :class="{ on: awardPick.badge === k }" :title="v.name" @click="awardPick.badge = awardPick.badge === k ? '' : k">{{ v.icon }}</button></div>
+          <div class="mp-crow"><input v-model="awardPick.note" maxlength="80" placeholder="Great day! (optional)" aria-label="Note" /><button class="mp-send" :disabled="(!awardPick.bonus && !awardPick.badge) || awardBusy" @click="sendAward" data-test="award-send">Send</button></div>
+          <p v-if="awardPick.badge" class="mp-muted mp-small">{{ AWARD_BADGES[awardPick.badge].name }}</p>
+        </div>
+      </div>
+
       <div class="mp-tabs" role="tablist">
         <button :class="{ on: tab === 'tasks' }" @click="tab = 'tasks'">Tasks</button>
         <button :class="{ on: tab === 'chat' }" @click="openChat">Messages</button>
@@ -98,6 +111,16 @@ const signInToConnect = async () => {
   catch (e) { alert(e.message || 'Could not connect'); } finally { connecting.value = false; }
 };
 const state = ref('loading'); const tab = ref('tasks');
+// Manager award (account mode): server re-checks eligibility + once per member per day.
+const AWARD_BONUSES = [10, 25, 50];
+const AWARD_BADGES = { mvp: { name: 'MVP of the Day', icon: '🏆' }, sweep: { name: 'Clean Sweep', icon: '🧹' }, early: { name: 'Early Bird', icon: '🐦' }, beast: { name: 'Beast Mode', icon: '🦁' }, fire: { name: 'On Fire', icon: '🔥' } };
+const award = ref(null); const awardOpen = ref(false); const awardBusy = ref(false); const awardSent = ref(false);
+const awardPick = ref({ bonus: 25, badge: '', note: '' });
+const sendAward = async () => {
+  awardBusy.value = true;
+  try { await palApi('managerAward', { ownerUid, ...awardPick.value }); awardSent.value = true; awardOpen.value = false; setTimeout(load, 300); }
+  catch (e) { alert(e.message || 'Could not send the award'); } finally { awardBusy.value = false; }
+};
 const ownerName = ref(''); const managerName = ref(''); const tasks = ref([]); const serverChat = ref([]); const pendingMsgs = ref([]);
 const sent = ref({}); const draft = ref(''); const askName = ref(false); const nameDraft = ref(''); const threadEl = ref(null);
 const now = ref(Date.now());
@@ -110,7 +133,7 @@ const api = async (method, body) => {
 const load = async () => {
   try {
     const d = await api('GET');
-    ownerName.value = d.ownerName; managerName.value = d.managerName; tasks.value = d.tasks || []; serverChat.value = d.chat || [];
+    ownerName.value = d.ownerName; managerName.value = d.managerName; award.value = d.award || null; tasks.value = d.tasks || []; serverChat.value = d.chat || [];
     pendingMsgs.value = pendingMsgs.value.filter((p) => p.failed || !serverChat.value.some((c) => c.from === 'manager' && c.text === p.text));
     if (state.value === 'loading') { state.value = 'ok'; if (!accountMode && !d.managerName && !localStorage.getItem(`mgrName:${token.slice(0, 8)}`)) askName.value = true; }
   } catch (e) { if (e.status === 404) state.value = 'gone'; else if (state.value === 'loading') state.value = 'gone'; }
@@ -208,4 +231,9 @@ onBeforeUnmount(() => { clearInterval(timer); clearInterval(tick); });
 .mp-modal .mp-card { width: 100%; max-width: 380px; } .mp-modal h2 { font-size: 20px; margin-bottom: 6px; } .mp-modal input { width: 100%; box-sizing: border-box; margin-top: 8px; }
 .mp-row { position: relative; margin-bottom: 8px; } .mp-row.late .mp-ro { box-shadow: 0 0 0 1.5px rgba(255,90,70,.5); border-radius: 16px; }
 .mp-ro { pointer-events: none; } .mp-acts { display: flex; justify-content: flex-end; align-items: center; gap: 8px; margin-top: 4px; }
+.mp-award { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 4px 0 10px; }
+.mp-award-panel { flex-basis: 100%; display: grid; gap: 6px; padding: 8px; border-radius: 12px; background: rgba(255,255,255,.04); }
+.mp-award-panel input { flex: 1; min-width: 0; }
+.mp-chip.on { outline: 2px solid #f59e0b; }
+.mp-small { font-size: 12px; }
 </style>

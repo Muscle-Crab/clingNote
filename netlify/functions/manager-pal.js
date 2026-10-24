@@ -8,6 +8,7 @@
 //        'connectManager' {token} -> {ownerUid}            (signed-in user becomes a manager of the link's owner)
 //        'managerView' {ownerUid} -> same shape as the public GET
 //        'managerAct' {ownerUid, act:'nudge'|'dm', ...}     (same as the public nudge/dm)
+//        'managerAward' {ownerUid, bonus?:10|25|50, badge?:mvp|sweep|early|beast|fire, note?} (once per member per day; member must qualify)
 //        'palTasks' {palUid} -> {tasks}   (pals; private tasks stripped)
 //        'disconnectManager' {managerUid} (owner side) | {ownerUid} (manager leaves)
 //   Safety (App Store 1.2):
@@ -24,6 +25,7 @@ const { getAdmin } = require('./lib/firebaseAdmin');
 const { verifyUser, buildPayload, sendOneSignal } = require('./lib/notify');
 const { withCors } = require('./lib/cors');
 const M = require('./lib/managerPal');
+const core = require('./lib/eightHourCore');
 
 const json = (statusCode, body) => ({ statusCode, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' }, body: JSON.stringify(body) });
 const err = (status, message) => Object.assign(new Error(message), { status });
@@ -64,13 +66,40 @@ const bumpWrites = async (db, mref, now) => {
     tx.set(mref, { writes: { hour, n: n + 1 } }, { merge: true });
   });
 };
-const push = async (deps, uid, title, message) => {
-  try { const p = buildPayload({ appId: process.env.ONESIGNAL_APP_ID, uid, kind: 'self', title, message, url: 'https://clingnot.netlify.app/pals' }); await (deps.sendPush || sendOneSignal)(p); } catch (e) { /* push is best-effort */ }
+const push = async (deps, uid, title, message, url = 'https://clingnot.netlify.app/pals') => {
+  try { const p = buildPayload({ appId: process.env.ONESIGNAL_APP_ID, uid, kind: 'self', title, message, url }); await (deps.sendPush || sendOneSignal)(p); } catch (e) { /* push is best-effort */ }
 };
 
-const viewPayload = async (db, uid, mName, now) => {
+// Award eligibility from data the manager may see: today's PUBLIC tasks all done, or today's 8-hour goal met (eightHour doc, server-only).
+const awardState = async (db, uid, tasks, now) => {
+  const eh = await db.doc(`eightHour/${uid}`).get(); const d = eh.exists ? eh.data() : {};
+  const tz = core.validTz(d.plan && d.plan.tz) ? d.plan.tz : 'UTC';
+  const dayKey = core.dayKeyIn(tz, now.getTime()); const short = core.dayNameIn(tz, now.getTime());
+  const todayTasks = (tasks || []).filter((t) => (t.scheduled ? t.scheduled.date === dayKey : String(t.day).slice(0, 3) === short));
+  const el = M.awardEligibility({ todayTasks, lock: d.lock || null, dayKey });
+  return { ...el, dayKey, awardedToday: ((d.stats || {}).lastAwardDay || '') === dayKey };
+};
+const viewPayload = async (db, uid, mName, now, withAward = false) => {
   const [name, tasks, chat] = await Promise.all([ownerName(db, uid), loadTasks(db, uid, now), loadChat(db, uid)]);
-  return json(200, { ownerName: name, managerName: mName || '', tasks, chat: chat.map(({ read, ...c }) => c) });
+  const award = withAward ? await awardState(db, uid, tasks, now).catch(() => null) : undefined;
+  return json(200, { ownerName: name, managerName: mName || '', tasks, chat: chat.map(({ read, ...c }) => c), ...(award ? { award: { eligible: award.ok, awardedToday: award.awardedToday, allDone: award.allDone, goalMet: award.goalMet } } : {}) });
+};
+// Manager award: bonus coins and/or a preset badge + short note, once per member per day, only when eligible (re-checked here).
+const managerAward = async (db, deps, now, ownerUid, managerUid, mName, body) => {
+  const a = M.parseAward(body || {}); if (!a) throw err(400, 'Pick a bonus or a badge');
+  const st = await awardState(db, ownerUid, await loadTasks(db, ownerUid, now), now);
+  if (!st.ok) throw err(409, 'Not eligible yet: all tasks done or the daily points goal is needed');
+  const ref = db.doc(`eightHour/${ownerUid}`);
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref); const stats = { ...core.defaultStats(), ...((snap.exists && snap.data().stats) || {}) };
+    if (stats.lastAwardDay === st.dayKey) throw err(409, 'Already awarded today');
+    const rec = { dayKey: st.dayKey, managerUid, from: mName, bonus: a.bonus, badge: a.badge, note: a.note, at: now.getTime() };
+    tx.set(ref, { stats: { lastAwardDay: st.dayKey, coins: (stats.coins || 0) + a.bonus, awards: [rec, ...(stats.awards || [])].slice(0, 50), pendingAward: rec } }, { merge: true });
+  });
+  const text = M.awardText(mName, a);
+  await db.collection(`users/${ownerUid}/managerChat`).add({ kind: 'award', from: 'manager', managerUid, text, bonus: a.bonus, badge: a.badge, createdAt: now, read: false });
+  await push(deps, ownerUid, `Bonus from ${mName}`, text, 'https://clingnot.netlify.app/home?n=award');
+  return json(200, { ok: true, award: a });
 };
 const managerHandler = async (event, db, deps, now) => {
   const body = event.httpMethod === 'POST' ? JSON.parse(event.body || '{}') : {};
@@ -185,7 +214,7 @@ const userHandler = async (event, db, deps, now, uid) => {
     case 'managerView': {
       const { ownerUid, conn, ref } = await resolveConn(db, body.ownerUid, uid);
       await ref.set({ managerSeenAt: now }, { merge: true }); // clears this person's unread badge in Manager mode
-      return viewPayload(db, ownerUid, conn.managerName, now);
+      return viewPayload(db, ownerUid, conn.managerName, now, true);
     }
     case 'managerList': {
       // Manager mode home: everyone I manage with overdue + unread counts, overdue first.
@@ -205,6 +234,12 @@ const userHandler = async (event, db, deps, now, uid) => {
       const p = await db.doc(`pals/${M.pairId(uid, other)}`).get();
       if (!p.exists || !(p.data().members || []).includes(uid)) throw err(403, 'Not a pal');
       return json(200, { tasks: await loadTasks(db, other, now) });
+    }
+    case 'managerAward': {
+      const { ownerUid, conn, ref } = await resolveConn(db, body.ownerUid, uid);
+      if (await isBlocked(db, ownerUid, uid)) throw err(403, 'Blocked');
+      await bumpWrites(db, ref, now);
+      return managerAward(db, deps, now, ownerUid, uid, conn.managerName || 'Your manager', body);
     }
     case 'managerAct': {
       const { ownerUid, conn, ref } = await resolveConn(db, body.ownerUid, uid);

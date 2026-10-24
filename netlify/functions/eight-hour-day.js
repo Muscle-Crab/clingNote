@@ -71,9 +71,9 @@ const settleIfOver = async (ctx, doc, now) => {
     }
   } catch (e) { /* keep the server-time progress value */ }
   const settledLock = { ...lock, earned, settled: true };
-  const stats = core.settleDay(doc.stats, { dayKey: lock.dayKey, earned, target: lock.target });
+  const stats = core.settleDay(doc.stats, { dayKey: lock.dayKey, earned, target: lock.target, allDone: (lock.totalPoints || 0) > 0 && earned >= lock.totalPoints });
   const next = { ...doc, lock: settledLock, stats };
-  await ctx.db.doc(`eightHour/${ctx.uid}`).set({ lock: { ...settledLock, startAt: ctx.ts(lock.startMs), endAt: ctx.ts(lock.endMs) }, stats }, { merge: true });
+  await ctx.db.doc(`eightHour/${ctx.uid}`).set({ lock: { ...settledLock, startAt: ctx.ts(lock.startMs), endAt: ctx.ts(lock.endMs), shutUntil: ctx.ts(core.shutUntilMs(lock)) }, stats }, { merge: true });
   await ctx.db.doc(`eightHour/${ctx.uid}/history/${lock.dayKey}`).set({ dayKey: lock.dayKey, startMs: lock.startMs, endMs: lock.endMs, taskCount: lock.taskCount, total: lock.totalPoints, target: lock.target, earned, met: stats.lastResult === 'met', settledMs: ctx.now });
   return next;
 };
@@ -84,7 +84,7 @@ const view = (doc, now) => {
   const ph = phaseOf(doc, now);
   return { now, phase: ph.phase, window: ph.phase === 'none' ? null : { startMs: ph.startMs || null, endMs: ph.endMs || null, wakeMs: ph.wakeMs || null, dayKey: ph.dayKey || null, missed: !!ph.missed },
     plan: doc.plan ? { wakeTime: doc.plan.wakeTime, tz: doc.plan.tz, taskCount: doc.plan.taskCount } : null,
-    lock: ph.phase === 'running' || (doc.lock && doc.lock.dayKey === ph.dayKey) ? publicLock(doc.lock) : null,
+    lock: ph.phase === 'running' || (doc.lock && (doc.lock.dayKey === ph.dayKey || core.isShut(doc.lock, now))) ? publicLock(doc.lock) : null, // kept while the hard stop runs (until the next wake time)
     stats: { ...core.defaultStats(), ...(doc.stats || {}) }, reward: core.rewardFor((doc.stats || {}).streak || 0) };
 };
 
@@ -161,7 +161,7 @@ const actions = {
       const l = cur.exists ? cur.data().lock : null;
       if (l && l.dayKey === lock.dayKey) return; // another device won the race
       tx.set(dayRef, { tasks: next, updatedAt: ctx.serverTime() }, { merge: true });
-      tx.set(ctx.db.doc(`eightHour/${ctx.uid}`), { lock: { ...lock, startAt: ctx.ts(lock.startMs), endAt: ctx.ts(lock.endMs) } }, { merge: true });
+      tx.set(ctx.db.doc(`eightHour/${ctx.uid}`), { lock: { ...lock, startAt: ctx.ts(lock.startMs), endAt: ctx.ts(lock.endMs), shutUntil: ctx.ts(core.shutUntilMs(lock)) } }, { merge: true });
     });
     return view(await loadDoc(ctx), ctx.now);
   },
@@ -176,7 +176,7 @@ const actions = {
     let earned = 0, done = 0;
     (lock.indexes || []).forEach((idx, n) => { if (tasks[idx] && tasks[idx].completed) { earned += lock.points[n]; done += 1; } });
     const next = { ...lock, earned, done };
-    await ctx.db.doc(`eightHour/${ctx.uid}`).set({ lock: { ...next, startAt: ctx.ts(lock.startMs), endAt: ctx.ts(lock.endMs) } }, { merge: true });
+    await ctx.db.doc(`eightHour/${ctx.uid}`).set({ lock: { ...next, startAt: ctx.ts(lock.startMs), endAt: ctx.ts(lock.endMs), shutUntil: ctx.ts(core.shutUntilMs(lock)) } }, { merge: true });
     return view({ ...doc, lock: next }, ctx.now);
   },
 };

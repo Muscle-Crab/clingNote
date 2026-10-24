@@ -36,6 +36,14 @@ service cloud.firestore {
         && get(eightHourPath(uid)).data.lock.startAt <= request.time
         && get(eightHourPath(uid)).data.lock.endAt > request.time;
     }
+    // Hard stop: after a started 8-hour day ends, task docs stay read-only until the next wake time (lock.shutUntil, written by the function).
+    function eightHourShut(uid) {
+      return exists(eightHourPath(uid))
+        && get(eightHourPath(uid)).data.get('lock', null) != null
+        && get(eightHourPath(uid)).data.lock.get('shutUntil', null) != null
+        && get(eightHourPath(uid)).data.lock.endAt <= request.time
+        && get(eightHourPath(uid)).data.lock.shutUntil > request.time;
+    }
     function lockedTaskSame(a, b) {
       return a.get('title', null) == b.get('title', null)
         && a.get('createdAt', null) == b.get('createdAt', null)
@@ -171,10 +179,11 @@ service cloud.firestore {
     // Completing tasks, timers, notes and subtasks stay editable. Rules cannot loop, so slots 0..49 are compared explicitly (the app caps a day at 50 tasks; lockedSlotSame short-circuits past the real size).
     match /weeklyRoutines/{routineId} {
       allow read: if isAuthenticated() && (request.auth.uid == routineId.split('_')[0]);  // pals/managers see tasks only via the manager-pal function (private tasks stripped)
-      allow create: if isAuthenticated() && request.auth.uid == routineId.split('_')[0] && !eightHourLocked(routineId.split('_')[0], routineId.split('_')[1]);
+      allow create: if isAuthenticated() && request.auth.uid == routineId.split('_')[0] && !eightHourLocked(routineId.split('_')[0], routineId.split('_')[1]) && !eightHourShut(routineId.split('_')[0]);
       allow update: if isAuthenticated() && request.auth.uid == routineId.split('_')[0]
+        && !eightHourShut(routineId.split('_')[0])
         && (!eightHourLocked(routineId.split('_')[0], routineId.split('_')[1]) || lockedDayUnchanged());
-      allow delete: if isAuthenticated() && request.auth.uid == routineId.split('_')[0] && !eightHourLocked(routineId.split('_')[0], routineId.split('_')[1]);
+      allow delete: if isAuthenticated() && request.auth.uid == routineId.split('_')[0] && !eightHourLocked(routineId.split('_')[0], routineId.split('_')[1]) && !eightHourShut(routineId.split('_')[0]);
     }
 
     // 8-hour day state (plan, lock, stats): readable by the owner, written ONLY by the Netlify function (admin SDK bypasses rules).

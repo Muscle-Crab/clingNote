@@ -25,11 +25,34 @@ const isOverdue = (task, dayName, now = new Date()) => {
   return di >= 0 && di < today;
 };
 // Read-only, minimal task projection for viewers (no notes, images, links, internal timers).
+// Estimate numbers only (for the read-only chips); never notes.
+const num = (v, max) => { const n = Math.round(Number(v)); return Number.isFinite(n) && n > 0 ? Math.min(n, max) : undefined; };
+const estFields = (t) => { const o = {}; const e = num(t.estimateMin, 600), m = num(t.minutes, 600), p = num(t.points, 1000), c = num(t.complexity, 5);
+  if (e) o.estimateMin = e; if (m) o.minutes = m; if (p) o.points = p; if (c) o.complexity = c; return o; };
+
+// ── Manager award (bonus coins and/or a badge), once per member per day, only when the member qualifies ──
+const AWARD_BONUSES = [10, 25, 50];
+const AWARD_BADGES = { mvp: { name: 'MVP of the Day', icon: '🏆' }, sweep: { name: 'Clean Sweep', icon: '🧹' }, early: { name: 'Early Bird', icon: '🐦' }, beast: { name: 'Beast Mode', icon: '🦁' }, fire: { name: 'On Fire', icon: '🔥' } };
+// todayTasks: the member's PUBLIC tasks for today (viewTasks output); lock: eightHour lock (server doc) or null; dayKey: member's local date.
+const awardEligibility = ({ todayTasks, lock, dayKey }) => {
+  const list = todayTasks || [];
+  const allDone = list.length > 0 && list.every((t) => t.completed);
+  const goalMet = !!(lock && lock.dayKey === dayKey && lock.target > 0 && (lock.earned || 0) >= lock.target);
+  return { ok: allDone || goalMet, allDone, goalMet };
+};
+const parseAward = (body) => {
+  const bonus = AWARD_BONUSES.includes(Number(body.bonus)) ? Number(body.bonus) : 0;
+  const badge = AWARD_BADGES[body.badge] ? body.badge : '';
+  if (!bonus && !badge) return null;
+  return { bonus, badge, note: clipText(body.note, 80) || '' };
+};
+const awardText = (mName, a) => `${mName} sent you ${[a.bonus ? `a ${a.bonus}-coin bonus` : '', a.badge ? `the ${AWARD_BADGES[a.badge].icon} ${AWARD_BADGES[a.badge].name} badge` : ''].filter(Boolean).join(' and ')}${a.note ? `: “${a.note}”` : '!'}`;
+
 const viewTasks = (dayDocs, now = new Date()) => {
   const out = [];
   for (const { day, tasks } of dayDocs) for (const t of tasks || []) {
     if (!t || !t.title || t.visibility === 'private') continue; // Private tasks (only you) never leave the server; missing = public
-    out.push({ key: taskKey(t), day, title: clipText(t.title, 200), completed: !!t.completed, important: !!t.important,
+    out.push({ key: taskKey(t), day, title: clipText(t.title, 200), completed: !!t.completed, important: !!t.important, ...estFields(t),
       reminder: t.reminder && t.reminder.date ? { date: t.reminder.date, time: t.reminder.time || '' } : null, overdue: isOverdue(t, day, now),
       ...(t.scheduledFor ? { scheduled: { date: String(t.scheduledFor), time: validTime(t.time) ? t.time : '', repeat: clipText(t.repeatText || (t.templateId ? 'Repeats' : ''), 60) } } : {}) });
   }
@@ -75,4 +98,5 @@ const viewScheduled = (entries, now = new Date(), days = 7) => {
 };
 const nudgeText = (managerName, preset, taskTitle) => `${managerName || 'Your manager'} ${NUDGE_PRESETS[preset] || NUDGE_PRESETS.ping} ${taskTitle ? `"${taskTitle}"` : 'your tasks'}`;
 
-module.exports = { WEEK, NUDGE_PRESETS, newToken, hashToken, validTokenShape, newPalCode, normCode, pairId, clipText, taskKey, tsMs, isOverdue, viewTasks, viewScheduled, occursOn, nudgeText };
+module.exports = {
+  AWARD_BONUSES, AWARD_BADGES, awardEligibility, parseAward, awardText, WEEK, NUDGE_PRESETS, newToken, hashToken, validTokenShape, newPalCode, normCode, pairId, clipText, taskKey, tsMs, isOverdue, viewTasks, viewScheduled, occursOn, nudgeText };

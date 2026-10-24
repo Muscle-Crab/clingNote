@@ -310,7 +310,8 @@ import ProgressBar from '@/components/home/ProgressBar.vue';
 import EightHourCard from '@/components/home/EightHourCard.vue';
 import { useEightHour, syncAfterAuth } from '@/composables/useEightHour';
 import { countableIndexes } from '@/utils/eightHour';
-import { isDayLocked, isLockError, assertTasksChangeAllowed, LOCKED_MESSAGE } from '@/utils/eightHourLock';
+import { estimateFor } from '@/utils/taskEstimate';
+import { isDayLocked, isLockError, assertTasksChangeAllowed, LOCKED_MESSAGE, isShutdown, SHUT_MESSAGE } from '@/utils/eightHourLock';
 import ReminderModal from '@/components/home/ReminderModal.vue';
 import ShutdownPrompt from '@/components/home/ShutdownPrompt.vue';
 import TaskDetailModal from '@/components/home/TaskDetailModal.vue';
@@ -375,6 +376,8 @@ const blockIfLocked = (dayIdx = selectedDayIndex.value) => {
   alert(LOCKED_MESSAGE);
   return true;
 };
+// 8-hour hard stop: once today's started day has ended, every task action is refused until the next wake time (data layer also guards).
+const blockIfShut = () => { if (!isShutdown()) return false; alert(SHUT_MESSAGE); return true; };
 const lockMessage = (e) => { if (isLockError(e)) { alert(e.message); return true; } return false; };
 // the planned task count (set before the countdown) limits what today's list may hold until the countdown starts
 const planFull = () => {
@@ -660,6 +663,7 @@ const endDay = async () => {
 
 
 const transferTask = async () => {
+  if (blockIfShut()) return false;
   if (!userId.value || selectedTransferTaskIndex.value === null || selectedTransferDay.value === null) {
     console.warn("Invalid task or day selection");
     return;
@@ -946,6 +950,7 @@ const showTimerModal = ref(false);
 const selectedTimerDuration = ref(5); // default to 5 minutes
 
 const startTimer = async () => {
+  if (blockIfShut()) return false;
   if (selectedTimerTaskIndex.value === null) return;
 
   const totalMinutes =
@@ -1025,6 +1030,7 @@ const sortedSelectedDayRoutine = computed(() => {
 });
 
 const deleteTask = async (index) => {
+  if (blockIfShut()) return false;
   if (blockIfLocked()) return;
   gateCache = null; gatePrefetch = null; pendingAdds.clear(); // a deleted task frees its slot under the daily limit (next check refetches)
   const confirmed = confirm("Are you sure you want to delete this task?");
@@ -1073,6 +1079,7 @@ const topIncompleteTaskIndex = computed(() => {
 const { soundEnabled, playSound, toggleSound, markUserCompletion, watchMilestones } = useSounds();
 
 const toggleTaskCompletion = async (index) => {
+  if (blockIfShut()) return false;
   const task = { ...selectedDayRoutine.value[index] }; // Create a copy of the task to avoid direct mutation
   task.completed = !task.completed; // Toggle the completed state
   startSpinning(index);
@@ -1166,6 +1173,7 @@ const openWontDoModal = (index) => {
   wontDoModalOpen.value = true;
 };
 const markTaskAsWontDo = async () => {
+  if (blockIfShut()) return false;
   if (selectedWontDoTaskIndex.value === null) return;
   if (blockIfLocked()) { wontDoModalOpen.value = false; return; } // no skipping on a locked day
   if (strictOn.value && !validReason(wontDoReason.value)) return; // "why didn't you?" is mandatory in strict mode
@@ -1201,6 +1209,7 @@ const markTaskAsWontDo = async () => {
 };
 
 const undoWontDo = async (index) => {
+  if (blockIfShut()) return false;
   if (blockIfLocked()) return;
   const task = wontDoTasks.value.splice(index, 1)[0];
   selectedDayRoutine.value.push(task);
@@ -1590,6 +1599,7 @@ onMounted(() => document.addEventListener('visibilitychange', onVisible));
 onBeforeUnmount(() => document.removeEventListener('visibilitychange', onVisible));
 
 const submitScheduledTask = async () => {
+  if (blockIfShut()) return false;
   const nt = newTask.value; const sc = nt.sched;
   const bad = validateSchedule(sc, getTodayId());
   if (bad) { error.value = bad; return false; }
@@ -1599,6 +1609,7 @@ const submitScheduledTask = async () => {
     status: nt.status || 'todo', pendingOn: nt.status === 'pending' ? (nt.pendingOn || '').trim() : '', dueDate: nt.dueDate || '', startTime: nt.startTime || '',
     estimateMin: Number(nt.estimateMin) || 0, nextAction: (nt.nextAction || '').trim(),
   };
+  Object.assign(fields, estimateFor(fields)); // scheduled / recurring copies carry the estimate too
   const entry = sc.repeat !== 'never'
     ? buildRecurringTemplate({ ...fields, scheduledTime: sc.time }, sc.date, { freq: sc.repeat, days: sc.days, dayOfMonth: sc.dayOfMonth, until: sc.until })
     : buildScheduledEntry(fields, sc.date, sc.time);
@@ -1704,6 +1715,7 @@ const deleteScheduled = async (id) => {
 };
 
 const addNewTask = async () => {
+  if (blockIfShut()) return false;
   if (!userId.value) {
     error.value = 'You must be logged in to add a task';
     return false;
@@ -1771,6 +1783,7 @@ const addNewTask = async () => {
     estimateMin: Number(newTask.value.estimateMin) || 0,
     nextAction: (newTask.value.nextAction || '').trim()
   };
+  Object.assign(task, estimateFor(task)); // heuristic complexity / minutes / points (estimateMin stays as typed; the server re-locks at countdown start)
 
   // Parse datetime-local input if provided
   if (newTask.value.reminder?.datetime) {
@@ -2686,6 +2699,7 @@ const removeTaskAttachment = async (field) => {
 
 const showImagePreview = ref(false);
 const toggleTaskImportance = async (index) => {
+  if (blockIfShut()) return false;
   const task = { ...selectedDayRoutine.value[index] };
   task.important = !task.important;
 
@@ -2923,13 +2937,16 @@ const toggleExpanded = (task) => {
   expandedKey.value = expandedKey.value === taskKey(task) ? null : taskKey(task);
 };
 const patchTask = async (index, task, patch) => {
+  if (blockIfShut()) return false;
   if (patch.status === 'pending' && !task.pendingSince) patch = { ...patch, pendingSince: new Date().toISOString() }; // wait time for the morning report
   try {
     const before = { createdAt: task.createdAt, title: task.title }; // stored identity before this edit
     const dayName = days[selectedDayIndex.value].day;
     Object.assign(task, patch);
     if (patch.estimateMin !== undefined) task.estimateMin = Number(patch.estimateMin) || 0;
-    const saved = patch.estimateMin !== undefined ? { ...patch, estimateMin: task.estimateMin } : patch;
+    let saved = patch.estimateMin !== undefined ? { ...patch, estimateMin: task.estimateMin } : patch;
+    // re-estimate when the inputs change (only possible outside a running lock: estimateMin/title are locked fields there)
+    if (['estimateMin', 'title', 'notes', 'priority'].some((k) => patch[k] !== undefined) && !isDayLocked(dayName)) { const e = estimateFor(task); Object.assign(task, e); saved = { ...saved, ...e }; }
     await patchStoredTask(userId.value, dayName, before, index, saved);
   } catch (e) {
     if (!lockMessage(e)) console.error('Error saving task field:', e);
@@ -2939,6 +2956,7 @@ const patchTask = async (index, task, patch) => {
 
 // Subtasks: saved through the same patch path; optionally complete the parent when all are done
 const onSubtaskPatch = async (index, task, patch) => {
+  if (blockIfShut()) return false;
   await patchTask(index, task, patch);
   if (shouldAutoComplete(task)) await toggleTaskCompletion(index);
 };

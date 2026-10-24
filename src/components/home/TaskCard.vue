@@ -61,14 +61,14 @@
                     </div>
 
                     <!-- Planning chips -->
-                    <div v-if="estimateOf(task) || task.startTime || task.dueDate || (task.priority && task.priority !== 'low') || (task.status && !['todo', 'pending', 'active'].includes(task.status))" class="task-chips">
+                    <div class="task-chips">
+                      <span class="chip chip--est" data-test="est-chips" :title="'Estimate: ' + est.minutes + ' min, ' + est.points + ' points' + (est.computed ? ' (estimated)' : '')">{{ fmtMin(est.minutes) }} · {{ est.points }}p</span>
                       <span v-if="task.priority && task.priority !== 'low'" class="chip" :class="'chip--' + task.priority">{{ task.priority }}</span>
                       <span v-if="task.status && !['todo', 'pending', 'active'].includes(task.status)" class="chip">{{ task.status }}</span>
                       <span v-if="task.scheduledFor" class="chip chip--due" :class="{ 'chip--overdue': task.scheduledFor < todayYmd }">{{ dueBadge(task, todayYmd) }}</span>
                       <span v-if="schedText" class="chip chip--sched" :class="{ 'chip--overdue': schedLate }" data-test="sched-label">{{ schedText }}<template v-if="schedLate"> · Overdue</template></span>
                       <span v-else-if="task.dueDate" class="chip">Due {{ task.dueDate }}</span>
-                      <span v-if="false" class="chip">⏱ {{ formatMinutes(estimateOf(task)) }}</span>
-                      <span v-if="task.startTime" class="chip">🕒 {{ formatClock(toMinutes(task.startTime)) }}<template v-if="estimateOf(task)"> – {{ formatClock(toMinutes(task.startTime) + estimateOf(task)) }}</template></span>
+                                            <span v-if="task.startTime" class="chip">🕒 {{ formatClock(toMinutes(task.startTime)) }}<template v-if="estimateOf(task)"> – {{ formatClock(toMinutes(task.startTime) + estimateOf(task)) }}</template></span>
                     </div>
                     <div v-if="subtaskProgress(task).total" class="task-chips">
                       <span class="chip chip--subtasks" :class="{ 'chip--subtasks-done': subtaskProgress(task).done === subtaskProgress(task).total }" title="Subtasks done">☑ {{ subtaskProgress(task).done }}/{{ subtaskProgress(task).total }}</span>
@@ -199,6 +199,7 @@ import { ref, watch, onBeforeUnmount, computed } from 'vue';
 import { categoryOf } from '@/utils/taskCategory';
 import { STATUSES, taskKey, estimateOf, formatClock, formatDuration as formatMinutes, toMinutes } from '@/utils/taskPlanning';
 import { subtaskProgress, subtaskPercent } from '@/utils/subtasks';
+import { chipValues, fmtMin } from '@/utils/taskEstimate';
 import { taskTimeLeft } from '@/utils/dayStats';
 import { formatShortDate, formatTime } from '@/utils/dateTime';
 import SubtaskList from '@/components/home/SubtaskList.vue';
@@ -268,6 +269,7 @@ const onCardTap = (event) => { // bound on the whole card (blank areas, chips, n
 };
 const schedText = computed(() => scheduleLabel(props.task));
 const schedLate = computed(() => !!props.task?.scheduledFor && scheduledOverdue(props.task, new Date()));
+const est = computed(() => chipValues(props.task));
 </script>
 
 <style scoped>
@@ -382,6 +384,7 @@ const schedLate = computed(() => !!props.task?.scheduledFor && scheduledOverdue(
 .importance-btn { position: relative; padding: 0 2px; font-size: var(--fs-sm); }
 .importance-btn::before { content: ''; position: absolute; inset: -12px -6px; }
 .chip { border-radius: var(--r-pill); padding: 0 8px; line-height: 18px; font-size: var(--fs-xs); background: var(--c-surface-2); border-color: var(--c-border); color: var(--c-text-2); }
+.chip--est { text-transform: none; font-variant-numeric: tabular-nums; opacity: .8; }
 .task-status { border-radius: var(--r-pill); padding: 0 8px; }
 .label-pill { border-radius: var(--r-pill); }
 .task-right { gap: 0; padding: 0; margin-left: auto; position: static; }

@@ -17,6 +17,7 @@
 
     <!-- planned: waiting for the wake time (or for the tasks) -->
     <template v-else-if="view === 'planned'">
+      <p v-if="stats.warning && !(eh.st.data && eh.st.data.offline)" class="eh-note eh-alert--boss" data-test="eh-alert">⚠️ {{ stats.warning }}</p>
       <div class="eh-line">
         <p class="eh-big" data-test="eh-starts">{{ phase === 'before' ? 'Starts ' + fmtWake : 'Ready' }}<small> · Ends {{ ends }}</small></p>
         <button v-if="phase === 'ready' && taskTotal === plan.taskCount && taskTotal > 0" class="eh-btn eh-btn--primary" data-test="eh-start" @click="$emit('start')">Start</button>
@@ -46,7 +47,14 @@
           <span data-test="eh-points">{{ progress.earned }}/{{ lock.target }} pts</span>
         </div>
       </div>
-      <p v-if="stats.notice" class="eh-note" data-test="eh-notice">{{ stats.notice }}</p>
+      <!-- draining bar: time left (track) vs points earned (fill); the pace marker is where points should be by now -->
+      <div class="eh-drain" data-test="eh-drain" :aria-label="`${pace.timePct}% of time left, ${pace.pointsPct}% of target earned`">
+        <span class="eh-drain-time" :style="{ width: pace.timePct + '%' }"></span><span class="eh-drain-pts" :style="{ width: pace.pointsPct + '%' }"></span>
+        <span class="eh-drain-pace" :style="{ left: Math.min(100, Math.round((pace.expected / Math.max(1, lock.target)) * 100)) + '%' }"></span>
+      </div>
+      <!-- at most ONE pressure line (highest priority wins), else the server notice -->
+      <p v-if="alert" class="eh-note" :class="'eh-alert--' + alert.level" data-test="eh-alert" role="status">{{ alert.text }}</p>
+      <p v-else-if="stats.notice" class="eh-note" data-test="eh-notice">{{ stats.notice }}</p>
     </template>
 
     <!-- ended -->
@@ -57,6 +65,13 @@
       </div>
       <p v-if="met && reward" class="eh-note eh-note--ok" data-test="eh-reward">{{ reward }}</p>
       <p v-if="stats.notice" class="eh-note" data-test="eh-notice">{{ stats.notice }}</p>
+      <details class="eh-hist" data-test="eh-history">
+        <summary>Lv {{ level }} · {{ stats.xp || 0 }} XP · {{ stats.coins || 0 }} coins · 🛡️{{ stats.shields || 0 }}<span v-if="badges.length"> · 🏅{{ badges.length }}</span></summary>
+        <div v-if="badges.length" class="eh-badges" data-test="eh-badges">
+          <span v-for="b in badges" :key="b.k" class="eh-bdg" :title="b.title">{{ b.icon }}<small>{{ b.name }}<template v-if="b.from"><br>{{ b.from }} · {{ b.date }}</template><template v-if="b.note"><br>“{{ b.note }}”</template></small></span>
+        </div>
+        <ul class="eh-log"><li v-for="e in (stats.log || [])" :key="e.dayKey">{{ e.dayKey }}: {{ e.met ? '✅' : '❌' }} {{ e.earned }}/{{ e.target }}<template v-if="e.reward"> · +{{ e.reward.xp }} XP · +{{ e.reward.coins }} coins</template><template v-if="e.penalty && e.penalty.coins"> · -{{ e.penalty.coins }} coins</template><template v-if="e.penalty && e.penalty.shieldUsed"> · 🛡️ used</template></li></ul>
+      </details>
       <div class="eh-ctrl"><label class="eh-mini">Tomorrow's wake <input type="time" v-model="wake" /></label><button v-if="wake !== plan.wakeTime" class="eh-btn" :disabled="busy" @click="save">Save</button></div>
     </template>
   </section>
@@ -65,6 +80,7 @@
 <script setup>
 import { ref, computed, watch } from 'vue';
 import { useEightHour } from '@/composables/useEightHour';
+import { paceOf, topAlert, badgeLabel, levelOf } from '@/utils/pressure';
 import { MAX_TASKS_PER_DAY, progressOf, countableIndexes, fmtWakeLabel } from '@/utils/eightHour';
 
 // tasks = today's stored task array (all of it; hidden recurring copies are excluded by progressOf/countable logic)
@@ -92,6 +108,14 @@ const taskTotal = computed(() => countableIndexes(props.tasks || [], dayKey.valu
 const needMore = computed(() => Math.max(0, (plan.value?.taskCount || 0) - taskTotal.value));
 const progress = computed(() => (lock.value ? progressOf({ dayKey: lock.value.dayKey, points: lock.value.points }, props.tasks) : { earned: 0, done: 0, total: 0 }));
 const pct = computed(() => (lock.value && lock.value.target > 0 ? Math.min(100, Math.round((progress.value.earned / lock.value.target) * 100)) : 0));
+const pace = computed(() => (lock.value ? paceOf({ earned: progress.value.earned, target: lock.value.target || 0, startMs: lock.value.startMs, endMs: lock.value.endMs, nowMs: (countdown.value, eh.nowMs()) }) : { timePct: 0, pointsPct: 0, expected: 0, behindBy: 0, leftMs: 0 }));
+const alert = computed(() => (lock.value ? topAlert({ offline: !!(eh.st.data && eh.st.data.offline), running: phase.value === 'running', earned: progress.value.earned, target: lock.value.target || 0, startMs: lock.value.startMs, endMs: lock.value.endMs, nowMs: (countdown.value, eh.nowMs()), streak: stats.value.streak || 0, warning: stats.value.warning || '' }) : null));
+const level = computed(() => levelOf(stats.value.xp || 0));
+const fmtDay = (ms) => { try { return new Date(ms).toLocaleDateString([], { month: 'short', day: 'numeric' }); } catch (e) { return ''; } };
+const badges = computed(() => [
+  ...(stats.value.awards || []).filter((a) => a.badge).map((a) => ({ k: 'a' + a.at, ...badgeLabel(a.badge), from: a.from || 'Manager', date: fmtDay(a.at), note: a.note || '', title: badgeLabel(a.badge).name })),
+  ...(stats.value.badges || []).map((id) => ({ k: 'b' + id, ...badgeLabel(id), title: badgeLabel(id).name })),
+]);
 const met = computed(() => (lock.value ? progress.value.earned >= lock.value.target : false));
 
 const save = async () => {
@@ -130,4 +154,13 @@ const save = async () => {
 .eh-btn { font-family: inherit; font-size: .75rem; font-weight: 700; border-radius: 999px; border: 1px solid var(--c-border, #2a2a2e); background: var(--c-surface-2, #22252a); color: inherit; padding: 4px 12px; cursor: pointer; }
 .eh-btn--primary { background: var(--c-accent, #378ADD); color: var(--c-on-accent, #fff); border-color: transparent; }
 .eh-btn:disabled { opacity: .5; cursor: not-allowed; }
+.eh-drain { position: relative; height: 6px; border-radius: 3px; background: rgba(255,255,255,.06); margin-top: 6px; overflow: hidden; }
+.eh-drain-time { position: absolute; inset: 0 auto 0 0; background: rgba(55,138,221,.28); transition: width 1s linear; }
+.eh-drain-pts { position: absolute; inset: 0 auto 0 0; background: #3cb46e; border-radius: 3px; }
+.eh-drain-pace { position: absolute; top: 0; bottom: 0; width: 2px; background: #f59e0b; }
+.eh-alert--behind { color: #f59e0b; } .eh-alert--risk { color: #e05a5a; font-weight: 700; } .eh-alert--boss { color: #e05a5a; }
+.eh-hist { margin-top: 6px; font-size: 12px; } .eh-hist summary { cursor: pointer; opacity: .8; list-style: none; } .eh-hist summary::after { content: ' ▾'; }
+.eh-badges { display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 6px; margin: 6px 0; }
+.eh-bdg { display: flex; flex-direction: column; align-items: center; font-size: 20px; text-align: center; } .eh-bdg small { font-size: 9px; opacity: .75; line-height: 1.2; }
+.eh-log { margin: 4px 0 0; padding: 0; list-style: none; opacity: .75; max-height: 120px; overflow: auto; }
 </style>

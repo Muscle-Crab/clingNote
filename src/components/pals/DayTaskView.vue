@@ -22,7 +22,7 @@ const todayIdx = new Date().getDay(); const dayIdx = ref(todayIdx);
 const tabDays = computed(() => withWeekDates(appData.days));
 const dayTasks = computed(() => { const d = tabDays.value[dayIdx.value] || {}; return props.tasks.filter((t) => (t.upcoming && t.scheduled ? t.scheduled.date === d.date : FULL.indexOf(t.day) === dayIdx.value)); });
 const dayDone = computed(() => dayTasks.value.filter((t) => t.completed).length);
-const cardTask = (t) => ({ title: t.title, completed: t.completed, important: t.important, reminder: t.reminder || undefined, status: t.completed ? 'done' : 'todo', createdAt: t.key,
+const cardTask = (t) => ({ title: t.title, completed: t.completed, estimateMin: t.estimateMin, minutes: t.minutes, points: t.points, complexity: t.complexity, important: t.important, reminder: t.reminder || undefined, status: t.completed ? 'done' : 'todo', createdAt: t.key,
   ...(t.scheduled ? { scheduledFor: t.scheduled.date, time: t.scheduled.time, repeatText: t.scheduled.repeat } : {}) });
 </script>
 <style scoped>

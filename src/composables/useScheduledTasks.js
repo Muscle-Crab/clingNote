@@ -4,7 +4,7 @@
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/firebaseConfig';
 import { loadDayTasks } from '@/composables/useDayPersistence';
-import { isDayLocked } from '@/utils/eightHourLock';
+import { isDayLocked, isShutdown, assertNotShut } from '@/utils/eightHourLock';
 import { materializeDue, pruneMaterialized, expandRecurring, rollForwardOf } from '@/utils/scheduling';
 
 const ref = (userId) => doc(db, 'users', userId);
@@ -18,6 +18,7 @@ export const loadScheduled = async (userId) => {
 
 // Read-modify-write with a fresh read; fn(list) returns the new list.
 export const mutateScheduled = async (userId, fn) => {
+  assertNotShut(); // 8-hour hard stop: no scheduling until the next wake time
   const next = fn(await loadScheduled(userId));
   await save(userId, next);
   return next;
@@ -27,7 +28,7 @@ export const mutateScheduled = async (userId, fn) => {
 // Also: expands recurring templates for this week, and rolls unfinished scheduled tasks forward to today until their date.
 // Order: write day docs first, then the scheduled list; a failed second step is healed next run via scheduledId.
 export const materializeDueForToday = async (userId, dayName, todayStr, dayNameOf = null) => {
-  if (isDayLocked(dayName)) return { added: 0, scheduled: await loadScheduled(userId) }; // 8-hour lock: today's list cannot grow while the window runs (retried on the next load)
+  if (isDayLocked(dayName) || isShutdown()) return { added: 0, scheduled: await loadScheduled(userId) }; // 8-hour lock: today's list cannot grow while the window runs (retried on the next load)
   const { list: expanded, added: generated } = expandRecurring(await loadScheduled(userId), todayStr);
   let scheduled = expanded;
   let todayTasks = await loadDayTasks(userId, dayName);

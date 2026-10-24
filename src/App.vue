@@ -6,6 +6,7 @@
     <AiConsentModal />
     <BossBriefing />
     <BrandMark v-if="showBrand" />
+    <EightHourChrome />
   </div>
 </template>
 
@@ -20,6 +21,7 @@ import SubpageHero from '@/components/ui/SubpageHero.vue';
 import AiConsentModal from '@/components/AiConsentModal.vue';
 import BossBriefing from '@/components/voiceover/BossBriefing.vue';
 import BrandMark from '@/components/brand/BrandMark.vue';
+import EightHourChrome from '@/components/eighthour/EightHourChrome.vue';
 
 const route = useRoute();
 const isHome = computed(() => route.name === 'home');

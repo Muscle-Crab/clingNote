@@ -62,6 +62,16 @@ const evaluatePhase = ({ wakeTime, tz, nowMs, lock, mode = START_MODE }) => {
   return { phase: 'ready', wakeMs, startMs, endMs, dayKey: today };
 };
 
+// Hard stop: after a started day ends, the app stays shut until the NEXT day's wake time (from the lock's own wakeTime/tz, so it survives plan edits).
+const nextDayKey = (dayKey) => new Date(Date.parse(`${dayKey}T12:00:00Z`) + 86400000).toISOString().slice(0, 10);
+const shutUntilMs = (lock) => {
+  if (!lock || !lock.dayKey || !Number.isFinite(lock.endMs)) return 0;
+  const w = parseWake(lock.wakeTime); const tz = validTz(lock.tz) ? lock.tz : 'UTC';
+  const next = w ? wakeInstant(nextDayKey(lock.dayKey), w, tz) : lock.endMs + 16 * 3600000;
+  return Math.max(next, lock.endMs);
+};
+const isShut = (lock, nowMs) => !!lock && nowMs >= lock.endMs && nowMs < shutUntilMs(lock);
+
 // ── display helpers ──
 const countdownParts = (ms) => { const s = Math.max(0, Math.floor(ms / 1000)); return { h: Math.floor(s / 3600), m: Math.floor((s % 3600) / 60), s: s % 60 }; };
 const fmtCountdown = (ms) => { const c = countdownParts(ms); return `${String(c.h).padStart(2, '0')}:${String(c.m).padStart(2, '0')}:${String(c.s).padStart(2, '0')}`; };
@@ -128,24 +138,48 @@ const progressOf = (lock, tasks) => {
 };
 
 // ── end-of-day settlement: streak, one-time target bump, reward, failure notice ──
-const defaultStats = () => ({ streak: 0, best: 0, targetLevel: TARGET_LEVELS.start, bumped: false, daysMet: 0, daysMissed: 0, lastDay: '', lastResult: '', notice: '' });
+const defaultStats = () => ({ streak: 0, best: 0, targetLevel: TARGET_LEVELS.start, bumped: false, daysMet: 0, daysMissed: 0, lastDay: '', lastResult: '', notice: '',
+  xp: 0, coins: 0, shields: 0, missRun: 0, warning: '', badges: [], lastReward: null, lastPenalty: null, log: [] });
+// Rewards & consequences (server-side only: written by the function into eightHour/{uid}, which clients cannot write).
+const MAX_SHIELDS = 2; const LOG_MAX = 14;
+const MILESTONES = [3, 7, 15, 30, 60, 100];
+const badgeFor = (streak) => (MILESTONES.includes(streak) ? `streak-${streak}` : '');
+const rewardsForDay = ({ earned, target, streak, allDone }) => {
+  const over = Math.max(0, earned - target);
+  return { xp: 10 + Math.round(earned / 10) + Math.round(over / 5), coins: 5 + Math.min(streak, 10), shield: !!allDone, badge: badgeFor(streak) };
+};
+// Escalation: the n-th miss in a row costs more coins (5, 10, 15 ... capped at 25); 3+ misses in a row keep a boss warning up until the goal is met.
+const penaltyForMiss = (missRun, coins) => Math.min(coins, Math.min(25, 5 * missRun));
+const SHIELD_MIN_RATIO = 0.5; // a shield only saves the streak when at least half the target was earned (no free passes for empty days)
 // lock: { dayKey, earned, target }. Pure: returns the new stats (never mutates).
 const settleDay = (statsIn, lock) => {
   const s = { ...defaultStats(), ...(statsIn || {}) };
   if (s.lastDay === lock.dayKey) return s; // already settled (idempotent)
   const met = lock.target > 0 && lock.earned >= lock.target;
   s.lastDay = lock.dayKey; s.lastResult = met ? 'met' : 'missed';
+  s.lastReward = null; s.lastPenalty = null;
   if (met) {
-    s.streak += 1; s.best = Math.max(s.best, s.streak); s.daysMet += 1; s.bumped = false; s.notice = '';
+    s.streak += 1; s.best = Math.max(s.best, s.streak); s.daysMet += 1; s.bumped = false; s.notice = ''; s.missRun = 0; s.warning = '';
+    const r = rewardsForDay({ earned: lock.earned, target: lock.target, streak: s.streak, allDone: !!lock.allDone });
+    s.xp += r.xp; s.coins += r.coins;
+    if (r.shield && s.shields < MAX_SHIELDS) s.shields += 1; else r.shield = false;
+    if (r.badge && !s.badges.includes(r.badge)) s.badges = [...s.badges, r.badge]; else r.badge = '';
+    s.lastReward = r;
   } else {
-    s.streak = 0; s.daysMissed += 1;
+    s.daysMissed += 1; s.missRun += 1;
+    const shieldOk = s.shields > 0 && s.streak > 0 && lock.target > 0 && lock.earned >= lock.target * SHIELD_MIN_RATIO;
+    const coins = penaltyForMiss(s.missRun, s.coins); s.coins -= coins;
+    if (shieldOk) s.shields -= 1; else s.streak = 0;
     if (!s.bumped) { s.targetLevel = clamp(s.targetLevel + 1, TARGET_LEVELS.min, TARGET_LEVELS.max); s.bumped = true; } // ONE bump; it stays until the goal is met
+    s.lastPenalty = { coins, streakLost: !shieldOk, shieldUsed: shieldOk, missRun: s.missRun };
+    s.warning = s.missRun >= 3 ? `${s.missRun} missed days in a row. Hit your target tomorrow to clear this.` : '';
     s.notice = failureNotice(lock, s);
   }
+  s.log = [{ dayKey: lock.dayKey, met, earned: lock.earned, target: lock.target, reward: s.lastReward, penalty: s.lastPenalty }, ...(s.log || [])].slice(0, LOG_MAX);
   return s;
 };
 // Failure notification text. Deterministic here; the server may swap in AI-written copy when a key is configured (REQUIRES SERVER AI, optional).
-const failureNotice = (lock, s) => `You earned ${lock.earned} of ${lock.target} points. Tomorrow is harder: your target goes up and stays there until you hit it.`;
+const failureNotice = (lock, s) => `You earned ${lock.earned} of ${lock.target} points. ${s && s.lastPenalty && s.lastPenalty.shieldUsed ? 'A streak shield saved your streak. ' : ''}${s && s.lastPenalty && s.lastPenalty.coins ? `-${s.lastPenalty.coins} coins. ` : ''}Tomorrow is harder: your target goes up and stays there until you hit it.`;
 const rewardFor = (streak) => (streak >= 30 ? '🏔️ Peak Performer' : streak >= 15 ? '🌲 Mature Tree' : streak >= 7 ? '🌳 Small Tree' : streak >= 3 ? '🌿 Sprouting Leaves' : streak >= 1 ? '🌱 Seed Starter' : '');
 
 module.exports = {
@@ -153,5 +187,5 @@ module.exports = {
   clamp, round5, parseWake, fmtWake, validTz, partsIn, dayKeyIn, dayNameIn, wakeInstant, evaluatePhase,
   countdownParts, fmtCountdown, fmtClock, fmtWakeLabel,
   complexityFromMinutes, complexityFromText, pointsFor, estimateTask, levelRatio, dailyTarget,
-  lockedChangeAllowed, countableIndexes, progressOf, defaultStats, settleDay, failureNotice, rewardFor,
+  lockedChangeAllowed, nextDayKey, shutUntilMs, isShut, countableIndexes, progressOf, defaultStats, settleDay, rewardsForDay, penaltyForMiss, badgeFor, MAX_SHIELDS, SHIELD_MIN_RATIO, failureNotice, rewardFor,
 };
