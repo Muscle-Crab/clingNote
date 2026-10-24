@@ -38,3 +38,8 @@ Permissions-Policy = "microphone=(self), camera=()"
 
 [functions."create-checkout"]
 external_node_modules = ["stripe", "firebase-admin"]
+
+# Manager & Pal (manager link + pal pairing + block/report). Uses the existing Firebase admin + OneSignal env vars; no new env vars.
+[functions."manager-pal"]
+included_files = ["netlify/functions/lib/**"]
+external_node_modules = ["firebase-admin", "@opentelemetry/api"]

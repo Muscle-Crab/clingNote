@@ -1,7 +1,7 @@
 import { initializeApp } from 'firebase/app';
-import { getFirestore } from 'firebase/firestore';
+import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore';
 import { getAnalytics } from "firebase/analytics";
-import { getAuth } from 'firebase/auth';
+import { getAuth, connectAuthEmulator } from 'firebase/auth';
 import { getStorage } from "firebase/storage"; // Import Firebase Storage
 
 const firebaseConfig = {
@@ -14,10 +14,15 @@ const firebaseConfig = {
     measurementId: "G-D7G4FQXXT7"
 };
 
+// Local end-to-end tests only (scripts/e2e): VUE_APP_FIREBASE_EMULATORS=1 at dev-server time points the app at the
+// auth + firestore emulators under a demo-* project id, which can never reach production. Never set for real builds.
+const EMU = process.env.VUE_APP_FIREBASE_EMULATORS === '1';
+if (EMU) firebaseConfig.projectId = 'demo-clingnote';
 const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
+if (!EMU) { try { getAnalytics(app); } catch (e) { /* analytics is optional */ } }
 const db = getFirestore(app);
 const auth = getAuth(app);
+if (EMU) { connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true }); connectFirestoreEmulator(db, '127.0.0.1', 8085); }
 const storage = getStorage(app); // Initialize Storage
 
 export { app, auth, db, storage };

@@ -28,3 +28,4 @@ pnpm-debug.log*
 # Local Netlify folder
 .netlify
 netlify/functions/serviceAccountKey.json
+firestore-debug.log

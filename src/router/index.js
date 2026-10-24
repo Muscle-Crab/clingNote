@@ -9,6 +9,7 @@ import TermsandCondition from '../views/TermsandCondition.vue';
 import Pickup from '../views/Pickup.vue';
 import Addiction from "@/views/addiction.vue";
 import sub from "@/views/Subs.vue";
+import { homeFor, setMode, getPendingManagerToken, clearPendingManagerToken } from '@/utils/appMode';
 
 const routes = [
   {
@@ -100,6 +101,35 @@ const routes = [
     component: Landing
   },
   {
+    // Manager & Pals hub (signed-in). ?code=XXXXXXXX pre-fills a pal invite code.
+    path: '/pals',
+    name: 'pals',
+    component: () => import('../views/PalsView.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    // Login-free manager view: the unguessable token in the URL is the only credential (revocable; see netlify/functions/manager-pal.js).
+    path: '/m/:token',
+    name: 'manager',
+    component: () => import('../views/ManagerView.vue'),
+    meta: { bare: true }
+  },
+  {
+    // Manager mode home: everyone you manage (any account can switch between User mode and Manager mode).
+    path: '/manage',
+    name: 'manager-home',
+    component: () => import('../views/ManagerHomeView.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    // Signed-in manager's view of one person (tasks + pings + DMs), served by the manager-pal function.
+    path: '/manage/:ownerUid',
+    name: 'manager-person',
+    component: () => import('../views/ManagerView.vue'),
+    meta: { requiresAuth: true, bare: true }
+  },
+  ...(process.env.NODE_ENV === 'development' ? [{ path: '/__mock/pals', component: () => import('../views/PalsMockView.vue'), meta: { bare: false } }] : []),
+  {
     path: '/:pathMatch(.*)*',
     name: 'NotFoundComponent',
     component: () => import('@/views/NotFoundComponent.vue')
@@ -171,9 +201,21 @@ router.beforeEach(async (to, from, next) => {
 
   const currentUser = auth.currentUser || await getUser();
 
+  // Manager invite accepted before sign-up: the token waited through sign-in + the normal onboarding,
+  // so connect now and land on that person's manager view.
+  if (currentUser && (to.path === '/' || to.path === '/home') && getPendingManagerToken()) {
+    const token = getPendingManagerToken(); clearPendingManagerToken();
+    try {
+      const { palApi } = await import('@/composables/usePals');
+      const r = await palApi('connectManager', { token });
+      setMode('manager');
+      return next(`/manage/${r.ownerUid}`);
+    } catch (e) { /* link revoked/invalid: just continue into the app */ }
+  }
+
   if (to.path === '/') {
     if (currentUser) {
-      return next('/home');
+      return next(homeFor()); // last mode used: User mode (/home) or Manager mode (/manage)
     } else {
       return next('/landing');
     }
@@ -185,5 +227,8 @@ router.beforeEach(async (to, from, next) => {
 
   next();
 });
+
+// Remember the last mode used (User mode = your tasks, Manager mode = people you manage).
+router.afterEach((to) => { if (to.path === '/home') setMode('user'); else if (to.path === '/manage' || to.path.startsWith('/manage/')) setMode('manager'); });
 
 export default router;
