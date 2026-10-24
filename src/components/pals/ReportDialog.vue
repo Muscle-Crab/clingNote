@@ -37,7 +37,7 @@ const submit = async () => {
   try { const r = await props.send({ reason: reason.value, block: props.canBlock && alsoBlock.value }); reportId.value = (r && r.reportId) || ''; blocked.value = props.canBlock && alsoBlock.value; done.value = true; }
   catch (e) { error.value = e.message || 'Could not send the report'; } finally { busy.value = false; }
 };
-const mailto = computed(() => `mailto:${SUPPORT}?subject=${encodeURIComponent('CleanNote report ' + (reportId.value || ''))}&body=${encodeURIComponent(`I reported a message in CleanNote (reason: ${reason.value}).\n\nMessage: "${(props.message && props.message.text) || ''}"\n\nMore details:\n`)}`);
+const mailto = computed(() => `mailto:${SUPPORT}?subject=${encodeURIComponent('ClingNote report ' + (reportId.value || ''))}&body=${encodeURIComponent(`I reported a message in ClingNote (reason: ${reason.value}).\n\nMessage: "${(props.message && props.message.text) || ''}"\n\nMore details:\n`)}`);
 </script>
 <style scoped>
 .rd-back { position: fixed; inset: 0; z-index: 80; background: rgba(3,7,18,.72); display: flex; align-items: flex-end; justify-content: center; padding: 16px; }

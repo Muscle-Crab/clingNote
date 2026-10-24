@@ -37,7 +37,7 @@ export const scheduleNotification = async (task, reminder) => {
   const message = `${task.title} at ${formattedTime}`;
   if (isNativeIOS()) { // on-device: fires while backgrounded/locked, no server dependency
     const ok = await scheduleReminder(task, reminder, message);
-    alert(ok ? `Reminder set for ${formattedTime}.` : 'Could not set the reminder. Check that notifications are allowed for CleanNote in Settings and that the time is in the future.');
+    alert(ok ? `Reminder set for ${formattedTime}.` : 'Could not set the reminder. Check that notifications are allowed for ClingNote in Settings and that the time is in the future.');
     return;
   }
   try {
@@ -59,6 +59,6 @@ export const sendNotificationToPlayer = async (userName, action) => {
 
 // Community features (Pickup / Room / Discussion) used to post to "All" from the browser with the REST key.
 // Now server-side and disabled unless ONESIGNAL_ALLOW_BROADCAST=true is set in Netlify.
-export const sendBroadcast = async (message, title = 'CleanNote') => {
+export const sendBroadcast = async (message, title = 'ClingNote') => {
   try { await sendPush({ kind: 'broadcast', title, message }); } catch (error) { console.warn('Broadcast not sent:', error.message); }
 };

@@ -61,3 +61,12 @@ if (isNativeIOS()) {
   onAuthStateChanged(auth, (u) => import('./utils/iap').then((m) => m.identifyIapUser(u)).catch(() => {}));
   onAuthStateChanged(auth, (u) => import('./utils/nativePush').then((m) => m.linkNativePushUser(u ? u.uid : null)).catch(() => {}));
 }
+
+// Universal links / custom-scheme opens (e.g. pal QR scanned with the iPhone Camera) → in-app route.
+import('@capacitor/core').then(async ({ Capacitor }) => {
+  if (!Capacitor.isNativePlatform()) return;
+  const { App: CapApp } = await import('@capacitor/app');
+  CapApp.addListener('appUrlOpen', ({ url }) => {
+    try { const u = new URL(url); const path = (u.protocol.startsWith('http') ? '' : (u.host ? '/' + u.host : '')) + u.pathname + u.search; if (/^\/(pal|pals|m)\b/.test(path)) router.push(path); } catch (e) { /* ignore */ }
+  });
+}).catch(() => {});

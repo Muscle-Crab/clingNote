@@ -144,7 +144,7 @@ const makeCard = async () => {
   } catch (e) { console.error('Share card failed:', e); }
 };
 const shareCard = async () => {
-  try { await navigator.share({ files: [new File([cardBlob], 'clingnot-streak.png', { type: 'image/png' })], title: 'My CleanNote streak' }); } catch (e) { /* cancelled */ }
+  try { await navigator.share({ files: [new File([cardBlob], 'clingnot-streak.png', { type: 'image/png' })], title: 'My ClingNote streak' }); } catch (e) { /* cancelled */ }
 };
 
 onMounted(() => onAuthStateChanged(auth, async (u) => {

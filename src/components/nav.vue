@@ -35,8 +35,8 @@
       <div class="flex items-center justify-between p-4">
         <router-link to="/" class="flex items-center space-x-3 rtl:space-x-reverse">
           <span class="flex items-center space-x-3 rtl:space-x-reverse">
-            <img src="@/assets/logo.png" class="h-8" alt="CleanNote logo"/>
-            <span class="self-center text-xl font-semibold whitespace-nowrap">CleanNote</span>
+            <img src="@/assets/logo.png" class="h-8" alt="ClingNote logo"/>
+            <span class="self-center text-xl font-semibold whitespace-nowrap">ClingNote</span>
           </span>
         </router-link>
         <button @click="closeSidebar" type="button"

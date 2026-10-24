@@ -1,4 +1,4 @@
-// Entry order for CleanNote (pure logic, unit-tested in scripts/test-entry-guard.js; the router guard only gathers inputs and applies the result):
+// Entry order for ClingNote (pure logic, unit-tested in scripts/test-entry-guard.js; the router guard only gathers inputs and applies the result):
 //   NEW user:      onboarding tutorial (/welcome, unauthenticated, once per install, no skip) -> sign in with Apple/Google (first sign-in creates the account + users doc; no email sign-up) -> post-signup setup + PAYWALL (/onboarding) -> app (/home)
 //   EXISTING user: straight to /home. The paywall is shown at most ONCE (only if not Pro and never seen/dismissed), and stays reachable from Subs / Profile ("See plans" -> /paywall).
 export const TUTORIAL_KEY = 'clingnote.tutorialSeen.v1';

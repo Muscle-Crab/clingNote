@@ -12,18 +12,18 @@
         <div class="ob-art"></div>
         <p class="ob-k">Welcome</p>
         <h1 class="ob-h">Hey {{ firstName }}, meet your <span>accountability boss.</span></h1>
-        <p class="ob-p">CleanNote clings to your to‑dos until they're done. A few quick questions and we'll set it up around you.</p>
+        <p class="ob-p">ClingNote clings to your to‑dos until they're done. A few quick questions and we'll set it up around you.</p>
         <div class="ob-asb"><AppStoreButton small /></div>
       </section>
 
       <section v-else-if="STEPS[step] === 'age'" class="ob-sec" data-test="ob-age">
-        <p class="ob-k">Quick check</p><h1 class="ob-h">How old <span>are you?</span></h1><p class="ob-p">Just your age. You must be 13 or older to use CleanNote.</p>
+        <p class="ob-k">Quick check</p><h1 class="ob-h">How old <span>are you?</span></h1><p class="ob-p">Just your age. You must be 13 or older to use ClingNote.</p>
         <div class="ob-age">
           <button type="button" class="ob-step" aria-label="Younger" @click="bumpAge(-1)">−</button>
           <input type="number" inputmode="numeric" min="1" max="100" v-model.number="a.age" placeholder="—" aria-label="Your age" data-test="ob-age-input" />
           <button type="button" class="ob-step" aria-label="Older" @click="bumpAge(1)">+</button>
         </div>
-        <p v-if="ageState === 'under'" class="ob-warn" data-test="ob-age-under">Sorry, CleanNote is for people 13 and older. Come back when you're 13 — the boss will be waiting. 👋</p>
+        <p v-if="ageState === 'under'" class="ob-warn" data-test="ob-age-under">Sorry, ClingNote is for people 13 and older. Come back when you're 13 — the boss will be waiting. 👋</p>
         <p v-else-if="ageState === 'invalid'" class="ob-warn">Enter an age between 13 and 100.</p>
       </section>
 
@@ -52,8 +52,8 @@
       <section v-else-if="STEPS[step] === 'notifications'" class="ob-sec">
         <div class="ob-bell">🔔</div>
         <p class="ob-k">Step 4</p><h1 class="ob-h">Let the boss <span>reach you</span></h1>
-        <p class="ob-p">Notifications are how CleanNote keeps you honest: start‑of‑day prompts, deadline warnings and boss check‑ins. No spam.</p>
-        <div class="ob-note"><b>⏰ 9:00 PM · CleanNote</b><span>2 tasks left before your deadline. Boss is watching 👀</span></div>
+        <p class="ob-p">Notifications are how ClingNote keeps you honest: start‑of‑day prompts, deadline warnings and boss check‑ins. No spam.</p>
+        <div class="ob-note"><b>⏰ 9:00 PM · ClingNote</b><span>2 tasks left before your deadline. Boss is watching 👀</span></div>
       </section>
 
       <div class="ob-foot">

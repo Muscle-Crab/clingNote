@@ -4,8 +4,8 @@
       <button class="pw-link" @click="$emit('close')">Maybe later</button>
       <button class="pw-link" data-test="pw-restore" @click="restore">{{ ios ? 'Restore Purchases' : 'Restore' }}</button>
     </div>
-    <h1 v-if="ios" class="pw-h" data-test="pw-heading">Unlock <span>CleanNote Pro</span></h1>
-    <h1 v-else class="pw-h">We want you to try <span>CleanNote</span> for free.</h1>
+    <h1 v-if="ios" class="pw-h" data-test="pw-heading">Unlock <span>ClingNote Pro</span></h1>
+    <h1 v-else class="pw-h">We want you to try <span>ClingNote</span> for free.</h1>
 
     <ul v-if="ios" class="feats" data-test="pw-features">
       <li v-for="f in FEATURES" :key="f.t"><span class="fi">✓</span><span><b>{{ f.t }}</b><small>{{ f.d }}</small></span></li>
@@ -117,7 +117,7 @@ async function buy() { busy.value = true; msg.value = '';
     catch (e) { msg.value = 'Purchase failed — please try again.'; }
     busy.value = false; return; }
   const r = await startCheckout({ planId: sel.value, user: auth.currentUser }); busy.value = false;
-  if (!r.ok) msg.value = r.notConfigured ? '💳 Payments coming soon — enjoy CleanNote free for now!' : 'Checkout failed — please try again.'; }
+  if (!r.ok) msg.value = r.notConfigured ? '💳 Payments coming soon — enjoy ClingNote free for now!' : 'Checkout failed — please try again.'; }
 async function restore() {
   if (!ios) { msg.value = 'Nothing to restore yet — purchases will sync to your account automatically.'; return; }
   busy.value = true; msg.value = '';

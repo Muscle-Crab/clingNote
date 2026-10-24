@@ -17,13 +17,15 @@
         <div class="pl-card">
           <h2>Invite a pal</h2>
           <p class="pl-muted">Pals see each other's tasks and can chat. It's mutual, and either of you can remove the other.</p>
-          <template v-if="palCode"><div class="pl-code" data-test="pal-code">{{ palCode }}</div><p class="pl-small" style="text-align:center">Valid for 7 days, one use</p>
+          <template v-if="palCode"><div class="pl-code" data-test="pal-code">{{ palCode }}</div><img v-if="qrSrc" :src="qrSrc" alt="Pal invite QR code" data-test="pal-qr" style="display:block;margin:10px auto;width:180px;height:180px;border-radius:12px;background:#fff;padding:8px" /><p class="pl-small" style="text-align:center">Scan with the iPhone Camera or ClingNote's Scan QR</p><p class="pl-small" style="text-align:center">Valid for 7 days, one use</p>
             <div class="pl-row"><button class="pl-btn pri" style="flex:1" @click="$emit('shareCode')">{{ codeCopied ? 'Copied ✓' : 'Share invite' }}</button></div></template>
           <div v-else class="pl-row"><button class="pl-btn pri" style="flex:1" :disabled="busy" @click="$emit('makeCode')">Get my invite code</button></div>
         </div>
         <div class="pl-card">
           <h2>Have a code?</h2>
           <form class="pl-row" @submit.prevent="$emit('accept', code)"><input class="pl-in" v-model="code" maxlength="12" placeholder="ABCD2345" autocapitalize="characters" style="letter-spacing:.15em;font-family:ui-monospace,Menlo,monospace" /><button class="pl-btn pri" :disabled="busy || code.replace(/[^A-Za-z0-9]/g, '').length < 8">Connect</button></form>
+          <div class="pl-row"><button type="button" class="pl-btn" style="flex:1" data-test="pal-scan" :disabled="busy" @click="scan">📷 Scan QR</button></div>
+          <p v-if="scanErr" class="pl-err">{{ scanErr }}</p>
           <p v-if="error" class="pl-err">{{ error }}</p>
         </div>
       </div>
@@ -34,9 +36,19 @@
 <script setup>
 import { ref, watch } from 'vue';
 import ManagerPanel from './ManagerPanel.vue';
+import QRCode from 'qrcode';
+import { palLinkUrl, scanPalCode } from '@/utils/palLink';
 const props = defineProps({ tab: { type: String, default: 'manager' }, manager: { type: Object, default: () => ({}) }, unread: { type: Number, default: 0 }, pals: { type: Array, default: () => [] }, selected: { type: Object, default: null }, palCode: { type: String, default: '' }, codeCopied: Boolean, busy: Boolean, error: { type: String, default: '' }, prefillCode: { type: String, default: '' } });
 defineEmits(['update:tab', 'createLink', 'revoke', 'share', 'reply', 'disconnect', 'blockManager', 'open', 'makeCode', 'shareCode', 'accept']);
 const code = ref(props.prefillCode);
 watch(() => props.prefillCode, (v) => { if (v) code.value = v; });
+const qrSrc = ref('');
+watch(() => props.palCode, async (c) => { qrSrc.value = c ? await QRCode.toDataURL(palLinkUrl(c), { margin: 1, width: 360 }).catch(() => '') : ''; }, { immediate: true });
+const scanErr = ref('');
+async function scan() {
+  scanErr.value = '';
+  try { const c = await scanPalCode(); if (c) code.value = c; else scanErr.value = "That QR isn't a ClingNote pal code."; }
+  catch (e) { const m = String((e && e.message) || e); if (!/cancel/i.test(m)) scanErr.value = 'Could not open the camera. You can type the code instead.'; }
+}
 </script>
 <style src="./pals.css"></style>

@@ -4,7 +4,7 @@
       <figure v-for="(s, i) in slides" :key="s.id" class="tc-slide" role="listitem" :aria-label="`${i + 1} of ${slides.length}: ${s.title}`">
         <div class="tc-phone">
           <i class="tc-notch" aria-hidden="true"></i>
-          <img :src="s.img" :alt="`${s.title}: screenshot of CleanNote`" width="600" height="1298" :loading="i < 2 ? 'eager' : 'lazy'" decoding="async" draggable="false" />
+          <img :src="s.img" :alt="`${s.title}: screenshot of ClingNote`" width="600" height="1298" :loading="i < 2 ? 'eager' : 'lazy'" decoding="async" draggable="false" />
         </div>
         <figcaption class="tc-cap"><b>{{ s.title }}</b><span>{{ s.text }}</span></figcaption>
       </figure>

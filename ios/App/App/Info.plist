@@ -38,7 +38,7 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>CleanNote uses the camera only when you choose to take a photo for a profile picture, a task attachment, a meal photo or a post.</string>
+	<string>ClingNote uses the camera only when you choose to scan a pal's QR code or take a photo for a profile picture, a task attachment, a meal photo or a post.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>CleanNote accesses your photo library only when you choose a picture for your profile, a task attachment, a meal photo or a post.</string>
 	<key>UIApplicationSceneManifest</key>

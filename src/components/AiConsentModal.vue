@@ -3,7 +3,7 @@
     <div class="aic-card">
       <template v-if="!aiConsentUi.declined">
         <h2 id="aic-title">Share your data with OpenAI?</h2>
-        <p>To use CleanNote's AI features (meal photo and text analysis, meal plans, the AI coach and workout plans), the text you type, your meal photos and your workout preferences are sent to <strong>OpenAI</strong>, a third-party AI provider, to generate the result.</p>
+        <p>To use ClingNote's AI features (meal photo and text analysis, meal plans, the AI coach and workout plans), the text you type, your meal photos and your workout preferences are sent to <strong>OpenAI</strong>, a third-party AI provider, to generate the result.</p>
         <p class="aic-small">Only what you submit for that request is sent, not your name or email. It is not used for advertising or tracking. See the <router-link to="/privacy-policy" @click="goPrivacy">Privacy Policy</router-link> for details. AI output can be wrong and is not medical advice.</p>
         <div class="aic-actions">
           <button type="button" class="aic-allow" data-test="ai-consent-allow" @click="acceptAiConsent">Allow</button>

@@ -18,7 +18,7 @@ export const drawShareCard = (canvas, d) => {
   g.addColorStop(0, '#111827'); g.addColorStop(1, '#7c2d12');
   c.fillStyle = g; c.fillRect(0, 0, W, H);
   c.textAlign = 'center'; c.fillStyle = '#fff';
-  c.font = '600 44px system-ui, sans-serif'; c.fillText('CleanNote', W / 2, 120);
+  c.font = '600 44px system-ui, sans-serif'; c.fillText('ClingNote', W / 2, 120);
   c.font = '220px system-ui, sans-serif'; c.fillText('🔥', W / 2, 440);
   c.font = '900 260px system-ui, sans-serif'; c.fillText(String(d.streak), W / 2, 720);
   c.font = '700 64px system-ui, sans-serif'; c.fillText('of 5 · day streak', W / 2, 810);

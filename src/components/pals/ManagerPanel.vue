@@ -18,7 +18,7 @@
     </div>
     <div v-if="connected.length" class="pl-card" data-test="connected-managers">
       <h2>Connected managers</h2>
-      <p class="pl-muted">Signed in to CleanNote and connected to you. They see your Public tasks and can nudge and message you.</p>
+      <p class="pl-muted">Signed in to ClingNote and connected to you. They see your Public tasks and can nudge and message you.</p>
       <div v-for="m in connected" :key="m.managerUid" class="pl-mgr" data-test="connected-manager">
         <b>{{ m.managerName || 'Manager' }}</b>
         <span style="display:flex;gap:8px">

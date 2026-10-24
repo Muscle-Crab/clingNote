@@ -6,7 +6,7 @@
       <div class="pl-grow"><div class="pl-name" style="font-size:20px">{{ name || 'Pal' }}</div><div class="pl-small">{{ done }}/{{ tasks.length }} done this week<span v-if="late" style="color:var(--c-danger)"> · {{ late }} overdue</span> · live</div></div>
     </div>
     <div class="pl-tabs"><button :class="{ on: tab === 't' }" @click="tab = 't'">Tasks</button><button :class="{ on: tab === 'c' }" @click="tab = 'c'">Chat</button></div>
-    <PalTasks v-if="tab === 't'" :tasks="tasks" />
+    <DayTaskView v-if="tab === 't'" :tasks="tasks" row-test="pal-task" />
     <div v-else class="pl-card"><ChatThread :messages="messages" :quick="QUICK" :placeholder="`Message ${name || 'your pal'}`" :empty="`Start a chat with ${name || 'your pal'}.`" :report="report" :can-block="true" :who="name || 'this pal'" @send="(t) => $emit('send', t)" /></div>
     <div class="pl-row" style="margin-top:14px">
       <button class="pl-btn bad" style="flex:1" @click="confirmRemove" data-test="remove-pal">Remove pal</button>
@@ -16,7 +16,7 @@
 </template>
 <script setup>
 import { ref, computed } from 'vue';
-import PalTasks from './PalTasks.vue';
+import DayTaskView from './DayTaskView.vue';
 import ChatThread from './ChatThread.vue';
 const props = defineProps({ name: { type: String, default: '' }, tasks: { type: Array, default: () => [] }, messages: { type: Array, default: () => [] }, initialTab: { type: String, default: 't' }, report: { type: Function, default: null } });
 const emit = defineEmits(['send', 'remove', 'back', 'block']);

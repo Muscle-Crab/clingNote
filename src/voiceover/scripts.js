@@ -5,9 +5,9 @@ export const VOICE = { name: 'en-US-AndrewNeural', rate: '+4%', pitch: '-2Hz' };
 
 export const SCRIPTS = {
   // ---- Onboarding (every user; *_manager variants when arriving via a manager link / in Manager mode) ----
-  ob_welcome: "Hey. Welcome to CleanNote. I'm your accountability boss. You write the to-dos. I make sure they get done. Five tasks a day keeps your streak alive. Timers keep you honest. And people you trust can watch your back. Let's set you up.",
-  ob_welcome_manager: "Hey. Welcome to CleanNote. Somebody picked you as their manager. Nice. Quick setup first, then I connect you straight to them. And you get your own to-do list too. Let's go.",
-  ob_age: "Quick one. How old are you? Just the number. You need to be thirteen or older to use CleanNote.",
+  ob_welcome: "Hey. Welcome to ClingNote. I'm your accountability boss. You write the to-dos. I make sure they get done. Five tasks a day keeps your streak alive. Timers keep you honest. And people you trust can watch your back. Let's set you up.",
+  ob_welcome_manager: "Hey. Welcome to ClingNote. Somebody picked you as their manager. Nice. Quick setup first, then I connect you straight to them. And you get your own to-do list too. Let's go.",
+  ob_age: "Quick one. How old are you? Just the number. You need to be thirteen or older to use ClingNote.",
   ob_goals: "What do you want to nail? Work. Fitness. Study. Habits. Pick everything that applies. I'll tune the pressure to match.",
   ob_schedule: "Here's your rhythm. Your eight-hour day starts at the time you picked, and once it starts, it's locked. Set when tasks are due, and when you go to bed. I'll nudge you to start, and to wrap up on time.",
   ob_strictness: "How hard should I push? Chill gets gentle reminders. Firm gets deadline warnings and a daily report. Drill sergeant? No excuses. Breaks are earned. Your call.",

@@ -1387,7 +1387,7 @@ const runDiscipline = async () => {
     try {
       if (!localStorage.getItem(k)) {
         localStorage.setItem(k, '1');
-        if (typeof Notification !== 'undefined' && Notification.permission === 'granted') new Notification('CleanNote deadline', { body: `${w === '30m' ? '30 min' : '2 hours'} left: ${streakProgress.value}/${DAILY_STREAK_MIN} tasks done` });
+        if (typeof Notification !== 'undefined' && Notification.permission === 'granted') new Notification('ClingNote deadline', { body: `${w === '30m' ? '30 min' : '2 hours'} left: ${streakProgress.value}/${DAILY_STREAK_MIN} tasks done` });
       }
     } catch (e) { /* notifications optional */ }
   }

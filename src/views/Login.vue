@@ -4,7 +4,7 @@
       <!-- Header -->
 
       <!-- Sign in: Apple (iOS app + web) / Google (web + iOS app). New accounts are created on first Apple/Google sign-in; there is no email sign-up. -->
-      <h1 class="text-xl font-semibold text-center text-gray-900 dark:text-gray-100 mb-1" data-test="login-title">Sign in to CleanNote</h1>
+      <h1 class="text-xl font-semibold text-center text-gray-900 dark:text-gray-100 mb-1" data-test="login-title">Sign in to ClingNote</h1>
       <p class="text-sm text-center text-gray-500 dark:text-gray-400 mb-5">New here? Signing in creates your account.</p>
       <div class="space-y-3">
         <!-- Sign in with Apple (App Store Guideline 4.8) -->

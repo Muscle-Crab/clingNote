@@ -25,7 +25,7 @@ t('meal credits checkout is a no-op on iOS', () => assert(/redirectToCheckout = 
 t('paywall iOS path has no hardcoded USD / trial wording leaks', () => {
   const s = rd('src/components/paywall/PaywallPanel.vue');
   assert(/shownPlans = computed\(\(\) => ios \?/.test(s)); assert(/priceText = \(p\) => iapFor\(p\.id\)\?\.priceString \|\| \(ios \? '' : fmt\(p\.price\)\)/.test(s));
-  assert(!/\}\/year\. Cancel/.test(s.replace(/\$\{pr\}\/\$\{periodWord\(p\)\}/g, ''))); assert(/Unlock <span>CleanNote Pro<\/span>/.test(s));
+  assert(!/\}\/year\. Cancel/.test(s.replace(/\$\{pr\}\/\$\{periodWord\(p\)\}/g, ''))); assert(/Unlock <span>ClingNote Pro<\/span>/.test(s));
 });
 t('Recovery Tracker + admin About are web-only; nav hides them on iOS; disclaimer + reworded option exist', () => {
   ['/addiction', '/about'].forEach((r) => { const i = router.indexOf(`path: '${r}'`); assert(i > 0, r); assert(/webOnly: true/.test(router.slice(i, i + 300)), r + ' webOnly'); });
@@ -33,10 +33,10 @@ t('Recovery Tracker + admin About are web-only; nav hides them on iOS; disclaime
   const a = rd('src/views/addiction.vue'); assert(/data-test="recovery-disclaimer"/.test(a) && /not medical advice/i.test(a) && /988/.test(a) && /1-800-662-4357/.test(a));
   assert(/<option value="Porn">Adult content<\/option>/.test(a)); assert(!/>Porn</.test(a) && !/porn-related/.test(a));
 });
-t('privacy policy covers retention, DOB/gender, avatar/photos, analytics, no tracking, recovery tracker, deletion and uses CleanNote', () => {
+t('privacy policy covers retention, DOB/gender, avatar/photos, analytics, no tracking, recovery tracker, deletion and uses ClingNote', () => {
   const p = rd('src/views/privacy-policy.vue');
   ['Retention', 'date of birth', 'gender', 'profile picture', 'Analytics', 'No tracking', 'Recovery Tracker', 'OneSignal', 'RevenueCat', 'Delete Account', 'comments, replies and reactions'].forEach((k) => assert(p.includes(k), k));
-  assert(!/\bClingNot\b/.test(p), 'brand is CleanNote');
+  assert(!/\bClingNot\b/.test(p), 'brand is ClingNote');
 });
 t('landing page skipped on native; landing video is not bundled in the iOS build and not loaded on native', () => {
   assert(/isNative\(\) && \(to\.path === '\/' \|\| to\.path === '\/landing'\)\) return next\(currentUser \? '\/home' : '\/login'\)/.test(router));

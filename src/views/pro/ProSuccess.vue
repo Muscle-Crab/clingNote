@@ -50,7 +50,7 @@ let timer = null, stopped = false;
 
 const planId = computed(() => docPlan.value || (typeof route.query.plan === 'string' ? route.query.plan : null));
 const planInfo = computed(() => (planId.value ? planById(planId.value) : null));
-const planLabel = computed(() => (planInfo.value ? `CleanNote Pro · ${planInfo.value.label}` : 'CleanNote Pro'));
+const planLabel = computed(() => (planInfo.value ? `ClingNote Pro · ${planInfo.value.label}` : 'ClingNote Pro'));
 const priceText = computed(() => { const p = planInfo.value; if (!p) return '';
   if (p.period === 'once') return `${fmt(p.price)} once`;
   return p.trialDays ? `${p.trialDays}-day free trial, then ${fmt(p.price)}/${p.period}` : `${fmt(p.price)}/${p.period}`; });

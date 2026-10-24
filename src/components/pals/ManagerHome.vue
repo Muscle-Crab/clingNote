@@ -7,7 +7,7 @@
     <div v-if="!loaded" class="pl-card pl-muted">Loading…</div>
     <div v-else-if="!people.length" class="pl-card" data-test="manager-empty">
       <h2>No one yet</h2>
-      <p class="pl-muted">To manage someone, ask them to open CleanNote → <b>Manager &amp; Pals → Manager</b> and send you their manager link. Open the link, tap <b>Sign in to connect</b>, and they'll show up here.</p>
+      <p class="pl-muted">To manage someone, ask them to open ClingNote → <b>Manager &amp; Pals → Manager</b> and send you their manager link. Open the link, tap <b>Sign in to connect</b>, and they'll show up here.</p>
       <button class="pl-btn" style="margin-top:12px" @click="$emit('switch')">Back to User mode</button>
     </div>
     <ul v-else class="mh-list">

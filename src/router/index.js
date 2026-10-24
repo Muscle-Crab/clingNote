@@ -114,6 +114,11 @@ const routes = [
     component: () => import('../views/landing.vue')
   },
   {
+    // Pal invite deep link (QR / iPhone Camera / universal link) → prefilled Pals hub; user confirms with Connect.
+    path: '/pal/:code',
+    redirect: (to) => ({ path: '/pals', query: { code: String(to.params.code || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase() } })
+  },
+  {
     // Manager & Pals hub (signed-in). ?code=XXXXXXXX pre-fills a pal invite code.
     path: '/pals',
     name: 'pals',

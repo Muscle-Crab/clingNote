@@ -17,12 +17,14 @@ import PalDetailLive from '@/components/pals/PalDetailLive.vue';
 import { useManager, useMyManagers, usePalList, palApi } from '@/composables/usePals';
 import { otherMember, managerLinkUrl } from '@/utils/pals';
 import { PROD_ORIGIN } from '@/config/api';
+import { palLinkUrl } from '@/utils/palLink';
 import { isNative } from '@/utils/platform';
 
 const route = useRoute();
 const uid = auth.currentUser.uid;
-const prefill = String(route.query.code || '');
-const tab = ref(prefill ? 'pals' : 'manager');
+const prefill = computed(() => String(route.query.code || ''));
+const tab = ref(prefill.value ? 'pals' : 'manager');
+watch(prefill, (v) => { if (v) { tab.value = 'pals'; selected.value = null; } });
 const busy = ref(false); const error = ref(''); const copied = ref(false); const codeCopied = ref(false); const palCode = ref(''); const selected = ref(null);
 const LINK_KEY = `mgrLink:${uid}`;
 const link = ref(localStorage.getItem(LINK_KEY) || '');
@@ -43,12 +45,12 @@ const share = async (text, url, flag) => {
   try { await navigator.clipboard.writeText(url ? `${text} ${url}` : text); flag.value = true; setTimeout(() => (flag.value = false), 2000); } catch (e) { prompt('Copy this:', url || text); }
 };
 const createLink = (name) => run(async () => { const { token } = await palApi('createManagerLink', { name }); link.value = managerLinkUrl(origin, token); localStorage.setItem(LINK_KEY, link.value); shareLink(); });
-const shareLink = () => share('Here is my CleanNote task list. You can check on me and send nudges:', link.value, copied);
+const shareLink = () => share('Here is my ClingNote task list. You can check on me and send nudges:', link.value, copied);
 const revoke = () => { if (!confirm('Turn off the manager link? It stops working right away.')) return; run(async () => { await palApi('revokeManager'); link.value = ''; localStorage.removeItem(LINK_KEY); }); };
 const disconnect = (m) => { if (!confirm(`Disconnect ${m.managerName || 'this manager'}? They won't see your tasks anymore.`)) return; run(() => palApi('disconnectManager', { managerUid: m.managerUid })); };
 const onReply = (t) => reply(t).catch(() => {});
 const makeCode = () => run(async () => { palCode.value = (await palApi('createPalCode')).code; });
-const shareCode = () => share(`Be my CleanNote pal! Open the app → Manager & Pals → enter code ${palCode.value}`, `${origin}/pals?code=${palCode.value}`, codeCopied);
+const shareCode = () => share(`Be my ClingNote pal! Open the app → Manager & Pals → enter code ${palCode.value}`, palLinkUrl(palCode.value), codeCopied);
 const accept = (code) => run(async () => { const r = await palApi('acceptPal', { code }); selected.value = { uid: r.palUid, name: '' }; setTimeout(() => { const p = palList.value.find((x) => x.uid === r.palUid); if (p) selected.value = p; }, 800); });
 const blockPal = () => run(async () => { await palApi('block', { palUid: selected.value.uid }); selected.value = null; });
 const blockManager = (m) => { if (!confirm(`Block ${m.managerName || 'this manager'}? They're disconnected, your manager link is turned off, and they can't message you or reconnect.`)) return; run(async () => { await palApi('block', { managerUid: m.managerUid }); link.value = ''; localStorage.removeItem(LINK_KEY); }); };

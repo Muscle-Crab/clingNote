@@ -35,9 +35,14 @@ external_node_modules = ["firebase-admin"]
 
 # Explicitly allow microphone (voice input) for our own origin
 [[headers]]
+for = "/.well-known/apple-app-site-association"
+[headers.values]
+Content-Type = "application/json"
+
+[[headers]]
 for = "/*"
 [headers.values]
-Permissions-Policy = "microphone=(self), camera=()"
+Permissions-Policy = "microphone=(self), camera=(self)"
 
 [functions."create-checkout"]
 external_node_modules = ["stripe", "firebase-admin"]
