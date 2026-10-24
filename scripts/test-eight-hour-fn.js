@@ -55,7 +55,7 @@ const call = async (db, body, extra = {}) => { const r = await handler(ev(body),
   r = await call(db, { action: 'start' });
   eq([r.code, r.body.phase], [200, 'running']);
   const L = r.body.lock;
-  eq([L.startMs, L.endMs, L.taskCount, L.plannedCount, L.estimateSource, L.targetSource], [clock, clock + 8 * 3600e3, 3, 3, 'heuristic', 'heuristic']);
+  eq([L.startMs, L.endMs, L.taskCount, L.plannedCount, L.estimateSource, L.targetSource], [at('2026-10-23T10:30:00Z'), at('2026-10-23T18:30:00Z'), 3, 3, 'heuristic', 'heuristic']);
   ok(L.points.length === 3 && L.points.every((p) => p >= 5), 'points per task assigned');
   eq(L.totalPoints, L.points.reduce((a, b) => a + b, 0)); ok(L.target > 0 && L.target <= L.totalPoints, 'target within total');
   const day = db.store['weeklyRoutines/u1_Fri'].tasks;

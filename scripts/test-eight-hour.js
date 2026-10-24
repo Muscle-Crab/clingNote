@@ -24,7 +24,7 @@ eq(p.phase, 'before'); eq(p.wakeMs, at('2026-10-23T11:00:00Z'));
 p = c.evaluatePhase({ wakeTime: WAKE, tz: TZ, nowMs: at('2026-10-23T11:00:00Z'), lock: null });
 eq(p.phase, 'ready'); eq(p.endMs - p.startMs, 8 * 3600e3); eq(p.startMs, at('2026-10-23T11:00:00Z'));
 // after wake time, app opened late: window starts when the app sees it (open mode) ...
-p = c.evaluatePhase({ wakeTime: WAKE, tz: TZ, nowMs: at('2026-10-23T14:30:00Z'), lock: null });
+p = c.evaluatePhase({ wakeTime: WAKE, tz: TZ, nowMs: at('2026-10-23T14:30:00Z'), lock: null, mode: 'open' });
 eq(p.phase, 'ready'); eq(p.startMs, at('2026-10-23T14:30:00Z')); eq(p.endMs, at('2026-10-23T22:30:00Z'));
 // ... or at the wake time itself in strict 'wake' anchoring
 p = c.evaluatePhase({ wakeTime: WAKE, tz: TZ, nowMs: at('2026-10-23T14:30:00Z'), lock: null, mode: 'wake' });
