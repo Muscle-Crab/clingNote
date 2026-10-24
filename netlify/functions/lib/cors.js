@@ -29,7 +29,10 @@ const corsHeaders = (event) => {
   return h;
 };
 
-const withCors = (handler) => async (event, ctx, deps) => {
+// Exactly 2 declared params: Netlify's Node 24 Lambda runtime rejects handlers with 3+ params as callback-style (502).
+// Tests may still pass deps as a 3rd argument; it is read from `arguments` so behavior is unchanged.
+const withCors = (handler) => async function corsHandler(event, ctx) {
+  const deps = arguments[2];
   const e = event || {};
   if (String(e.httpMethod || '').toUpperCase() === 'OPTIONS') {
     // Preflight: answered here, never reaches the function body (no auth, no side effects).
