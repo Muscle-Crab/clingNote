@@ -1605,7 +1605,7 @@ const submitScheduledTask = async () => {
   if (!isValidDate(nt.scheduleDate) || (repeating ? nt.scheduleDate < getTodayId() : nt.scheduleDate <= getTodayId())) { error.value = 'Pick a date after today, or clear “Schedule for later”.'; return; }
   const labels = typeof nt.labels === 'string' ? nt.labels.split(',').map(l => l.trim()).filter(Boolean) : (nt.labels || []);
   const fields = {
-    title: nt.title, important: false, time: '', priority: nt.priority, labels, notes: nt.notes, userId: userId.value,
+    title: nt.title, important: false, visibility: 'public', time: '', priority: nt.priority, labels, notes: nt.notes, userId: userId.value,
     status: nt.status || 'todo', pendingOn: nt.status === 'pending' ? (nt.pendingOn || '').trim() : '', dueDate: nt.dueDate || '', startTime: nt.startTime || '',
     estimateMin: Number(nt.estimateMin) || 0, nextAction: (nt.nextAction || '').trim(),
   };
@@ -1717,6 +1717,7 @@ const addNewTask = async () => {
     title: newTask.value.title.trim(),
     completed: false,
     important: false,
+    visibility: 'public', // Public = managers & pals can see it; 'private' = only you
     time: '', // fallback in case reminder isn't set
     priority: newTask.value.priority,
     labels: labels,

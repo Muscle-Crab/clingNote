@@ -28,7 +28,7 @@ const isOverdue = (task, dayName, now = new Date()) => {
 const viewTasks = (dayDocs, now = new Date()) => {
   const out = [];
   for (const { day, tasks } of dayDocs) for (const t of tasks || []) {
-    if (!t || !t.title) continue;
+    if (!t || !t.title || t.visibility === 'private') continue; // Private tasks (only you) never leave the server; missing = public
     out.push({ key: taskKey(t), day, title: clipText(t.title, 200), completed: !!t.completed, important: !!t.important,
       reminder: t.reminder && t.reminder.date ? { date: t.reminder.date, time: t.reminder.time || '' } : null, overdue: isOverdue(t, day, now) });
   }

@@ -10,11 +10,13 @@ const makeDb = () => {
   const store = new Map(); let auto = 0;
   const snap = (path) => { const v = store.get(path); return { exists: store.has(path), id: path.split('/').pop(), ref: docRef(path), data: () => v }; };
   const docRef = (path) => ({ path, get: async () => snap(path), set: async (v, o) => { store.set(path, o && o.merge ? { ...(store.get(path) || {}), ...v } : { ...v }); }, delete: async () => { store.delete(path); }, collection: (c) => col(`${path}/${c}`) });
-  const col = (path, ord, lim) => ({
+  const col = (path, ord, lim, wh) => ({
+    where: (f, op, v) => col(path, ord, lim, [...(wh || []), [f, v]]),
     add: async (v) => { const id = `id${++auto}`; store.set(`${path}/${id}`, v); return { id }; },
-    orderBy: (f, dir) => col(path, [f, dir], lim), limit: (n) => col(path, ord, n),
-    get: async () => { let docs = [...store.keys()].filter((k) => k.startsWith(path + '/') && k.split('/').length === path.split('/').length + 1).map(snap);
-      if (ord) docs.sort((a, b) => (+a.data()[ord[0]] - +b.data()[ord[0]]) * (ord[1] === 'desc' ? -1 : 1)); if (lim) docs = docs.slice(0, lim); return { docs }; },
+    orderBy: (f, dir) => col(path, [f, dir], lim, wh), limit: (n) => col(path, ord, n, wh),
+    get: async () => { let docs = [...store.keys()].filter((k) => k.startsWith(path + '/') && k.split('/').length === path.split('/').length + 1)
+        .map(snap).filter((d) => !wh || wh.every(([f, v]) => d.data()[f] === v));
+            if (ord) docs.sort((a, b) => (+a.data()[ord[0]] - +b.data()[ord[0]]) * (ord[1] === 'desc' ? -1 : 1)); if (lim) docs = docs.slice(0, lim); return { docs, empty: !docs.length }; },
   });
   return { store, doc: docRef, collection: (p) => col(p),
     batch: () => { const ops = []; return { delete: (r) => ops.push(r), commit: async () => { for (const r of ops) await r.delete(); } }; },
@@ -92,8 +94,37 @@ const J = (r) => JSON.parse(r.body);
     const r = await rawHandler({ httpMethod: 'POST', headers: { authorization: 'Bearer x' }, body: '{}' }, {}, { db, verify: async () => { throw new Error('bad'); } }); assert.strictEqual(r.statusCode, 401);
     assert.strictEqual((await handler({ httpMethod: 'OPTIONS', headers: { origin: 'capacitor://localhost' } })).statusCode, 204);
   });
+  await t('manager account: connect via link, list with badges, view, act, disconnect', async () => {
+    const db = makeDb();
+    const { token } = J(await asUser(db, 'zztestO', { action: 'createManagerLink', name: 'Mom' }));
+    db.store.set('publicProfiles/zztestO', { name: 'Alex ZZTEST' }); db.store.set('publicProfiles/zztestM', { name: 'Sam ZZTEST' });
+    db.store.set('weeklyRoutines/zztestO_Monday', { tasks: [{ id: 'a', title: 'ZZTEST old', completed: false }, { id: 'h', title: 'ZZTEST privatetask', completed: false, visibility: 'private' }] });
+    assert.strictEqual((await asUser(db, 'zztestO', { action: 'connectManager', token })).statusCode, 400);
+    assert.strictEqual((await asUser(db, 'zztestM', { action: 'managerView', ownerUid: 'zztestO' })).statusCode, 404);
+    const c = J(await asUser(db, 'zztestM', { action: 'connectManager', token })); assert.strictEqual(c.ownerUid, 'zztestO');
+    assert.strictEqual(db.store.get('managerConnections/zztestO_zztestM').managerName, 'Sam ZZTEST');
+    await asUser(db, 'zztestO', { action: 'reply', text: 'hi boss' });
+    let l = J(await asUser(db, 'zztestM', { action: 'managerList' })).people; assert.strictEqual(l.length, 1); assert.strictEqual(l[0].overdue, 1); assert.strictEqual(l[0].unread, 1);
+    const v = J(await asUser(db, 'zztestM', { action: 'managerView', ownerUid: 'zztestO' })); assert.strictEqual(v.ownerName, 'Alex ZZTEST');
+    assert.deepStrictEqual(v.tasks.map((x) => x.title), ['ZZTEST old']); assert(!JSON.stringify(v).includes('privatetask'));
+    assert.strictEqual(J(await view(db, token)).tasks.length, 1);
+    assert.strictEqual((await asUser(db, 'zztestM', { action: 'managerAct', ownerUid: 'zztestO', act: 'nudge', taskKey: 'h' })).statusCode, 404);
+    l = J(await asUser(db, 'zztestM', { action: 'managerList' })).people; assert.strictEqual(l[0].unread, 0);
+    assert.strictEqual((await asUser(db, 'zztestM', { action: 'managerAct', ownerUid: 'zztestO', act: 'dm', text: 'go!' })).statusCode, 200);
+    assert.strictEqual((await asUser(db, 'zztestX', { action: 'managerAct', ownerUid: 'zztestO', act: 'dm', text: 'x' })).statusCode, 404);
+    assert.strictEqual((await asUser(db, 'zztestO', { action: 'disconnectManager', managerUid: 'zztestM' })).statusCode, 200);
+    assert.strictEqual((await asUser(db, 'zztestM', { action: 'managerView', ownerUid: 'zztestO' })).statusCode, 404);
+  });
+  await t('pal task view via function: private tasks stripped, non-pals 403', async () => {
+    const db = makeDb();
+    db.store.set('pals/zztestA_zztestB', { members: ['zztestA', 'zztestB'] });
+    db.store.set('weeklyRoutines/zztestB_Tuesday', { tasks: [{ id: 'x', title: 'ZZTEST visible' }, { id: 'y', title: 'ZZTEST private', visibility: 'private' }] });
+    const r = J(await asUser(db, 'zztestA', { action: 'palTasks', palUid: 'zztestB' })); assert.deepStrictEqual(r.tasks.map((x) => x.title), ['ZZTEST visible']);
+    assert.strictEqual((await asUser(db, 'zztestC', { action: 'palTasks', palUid: 'zztestB' })).statusCode, 403);
+  });
   await t('rules: pal/manager collections present, manager writes server-only', () => {
     const rules = require('fs').readFileSync(require('path').join(__dirname, '../firestore.rules'), 'utf8');
-    for (const s of ['match /managers/{uid}', 'match /managerLinks/{hash} { allow read, write: if false; }', 'match /palInvites/{code} { allow read, write: if false; }', 'match /users/{uid}/managerChat/{msgId}', 'match /pals/{pairId}', 'match /messages/{msgId}', 'isPalOf(routineId.split']) assert(rules.includes(s), s);
+    for (const s of ['match /managers/{uid}', 'match /managerLinks/{hash} { allow read, write: if false; }', 'match /palInvites/{code} { allow read, write: if false; }', 'match /users/{uid}/managerChat/{msgId}', 'match /pals/{pairId}', 'match /messages/{msgId}', 'match /managerConnections/{connId}']) assert(rules.includes(s), s);
+    assert(!/isPalOf\(routineId|isManagerOf\(routineId/.test(rules), 'viewers must not read task docs directly');
   });
 })().catch((e) => { console.error(e); process.exit(1); });

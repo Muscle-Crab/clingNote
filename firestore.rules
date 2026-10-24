@@ -152,7 +152,7 @@ service cloud.firestore {
     // same number of tasks, and the first 10 slots keep their title/createdAt/points/complexity/estimateMin/type (no add / delete / swap / reorder / re-point).
     // Completing tasks, timers, notes and subtasks stay editable. Rules cannot loop, so slots 0..9 are compared explicitly (the app caps a day at 5 tasks).
     match /weeklyRoutines/{routineId} {
-      allow read: if isAuthenticated() && (request.auth.uid == routineId.split('_')[0] || isPalOf(routineId.split('_')[0]));
+      allow read: if isAuthenticated() && (request.auth.uid == routineId.split('_')[0]);  // pals/managers see tasks only via the manager-pal function (private tasks stripped)
       allow create: if isAuthenticated() && request.auth.uid == routineId.split('_')[0] && !eightHourLocked(routineId.split('_')[0], routineId.split('_')[1]);
       allow update: if isAuthenticated() && request.auth.uid == routineId.split('_')[0]
         && (!eightHourLocked(routineId.split('_')[0], routineId.split('_')[1]) || lockedDayUnchanged());
@@ -258,6 +258,11 @@ service cloud.firestore {
     // Manager link state: owner reads; only the function writes. Token itself is never stored (managerLinks is keyed by sha256(token)).
     match /managers/{uid} {
       allow read: if isOwner(uid);
+      allow write: if false;
+    }
+    // Signed-in manager <-> user connection. Created/removed only by the manager-pal function (admin SDK).
+    match /managerConnections/{connId} {
+      allow read: if isAuthenticated() && (request.auth.uid == resource.data.ownerUid || request.auth.uid == resource.data.managerUid);
       allow write: if false;
     }
     match /managerLinks/{hash} { allow read, write: if false; }

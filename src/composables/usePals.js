@@ -3,14 +3,14 @@ import { ref, computed, onBeforeUnmount } from 'vue';
 import { auth, db } from '@/firebaseConfig';
 import { collection, doc, query, where, orderBy, limit, onSnapshot, addDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { fnUrl } from '@/config/api';
-import { WEEK, viewTasks, pairId, tsMs } from '@/utils/pals';
+import { pairId, tsMs } from '@/utils/pals';
 import { scheduleLocal } from '@/utils/localNotify';
 
 export const palApi = async (action, payload = {}) => {
   const token = await auth.currentUser.getIdToken();
-  const r = await fetch(fnUrl('manager-pal'), { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ action, ...payload }) });
+  const r = await fetch(fnUrl('manager-pal'), { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ ...payload, action }) });
   const data = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(data.error || 'Request failed');
+  if (!r.ok) throw Object.assign(new Error(data.error || 'Request failed'), { status: r.status });
   return data;
 };
 
@@ -48,12 +48,31 @@ export function usePalList(uid) {
   return { pals, loaded };
 }
 
-// A pal's whole week, live: 7 doc listeners on weeklyRoutines (rules allow pals to read).
+// A pal's week. Pals can't read each other's task docs directly (so Private tasks never reach them):
+// the function returns Public tasks only. Refreshes every 8s while visible, and instantly when the app comes back.
 export function usePalTasks(palUid) {
-  const days = ref(Object.fromEntries(WEEK.map((d) => [d, []]))); const s = subs();
-  WEEK.forEach((d) => s.push(onSnapshot(doc(db, 'weeklyRoutines', `${palUid}_${d}`), (x) => { days.value = { ...days.value, [d]: x.exists() ? x.data().tasks || [] : [] }; }, () => {})));
-  const tasks = computed(() => viewTasks(WEEK.map((d) => ({ day: d, tasks: days.value[d] }))));
-  return { tasks };
+  const tasks = ref([]); const loaded = ref(false);
+  const load = async () => { try { tasks.value = (await palApi('palTasks', { palUid })).tasks || []; } catch (e) { /* keep last */ } loaded.value = true; };
+  load(); const t = setInterval(() => { if (!document.hidden) load(); }, 8000);
+  const onVis = () => { if (!document.hidden) load(); }; document.addEventListener('visibilitychange', onVis);
+  onBeforeUnmount(() => { clearInterval(t); document.removeEventListener('visibilitychange', onVis); });
+  return { tasks, loaded, refresh: load };
+}
+
+// People who manage me (signed-in managers), live.
+export function useMyManagers(uid) {
+  const managers = ref([]); const s = subs();
+  s.push(onSnapshot(query(collection(db, 'managerConnections'), where('ownerUid', '==', uid)), (q) => { managers.value = q.docs.map((d) => ({ id: d.id, ...d.data() })); }, () => {}));
+  return { managers };
+}
+
+// Manager mode home: everyone I manage, with overdue/unread badges (server-computed; Private tasks never counted).
+export function useManagedPeople() {
+  const people = ref([]); const loaded = ref(false);
+  const load = async () => { try { people.value = (await palApi('managerList')).people || []; } catch (e) { /* keep last */ } loaded.value = true; };
+  load(); const t = setInterval(() => { if (!document.hidden) load(); }, 20000);
+  onBeforeUnmount(() => clearInterval(t));
+  return { people, loaded, refresh: load };
 }
 
 // Pal DMs: client writes allowed by rules; the Firestore local cache shows the message instantly (optimistic) with hasPendingWrites.

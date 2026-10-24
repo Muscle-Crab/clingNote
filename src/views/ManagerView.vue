@@ -2,10 +2,17 @@
   <div class="mp" data-test="manager-view">
     <div v-if="state === 'loading'" class="mp-center"><div class="mp-spin" /></div>
     <div v-else-if="state === 'gone'" class="mp-center mp-card" data-test="manager-gone">
-      <h1>Link not available</h1>
-      <p class="mp-muted">This manager link was turned off or replaced. Ask for a new one.</p>
+      <template v-if="accountMode"><h1>Not connected</h1><p class="mp-muted">You're no longer connected to this person. They can invite you again with a new link.</p>
+        <button class="mp-link" @click="router.push('/manage')">Back to everyone you manage</button></template>
+      <template v-else><h1>Link not available</h1>
+      <p class="mp-muted">This manager link was turned off or replaced. Ask for a new one.</p></template>
     </div>
     <template v-else>
+      <button v-if="accountMode" class="mp-back" @click="router.push('/manage')" data-test="manager-back">‹ Everyone you manage</button>
+      <div v-else-if="!connectDismissed" class="mp-card mp-connect" data-test="signin-connect">
+        <div><b>Sign in to connect</b><p class="mp-muted">Optional. Keep {{ ownerName }} in your CleanNote app's Manager mode, no link needed.</p></div>
+        <div class="mp-crow"><button class="mp-send" :disabled="connecting" @click="signInToConnect" data-test="signin-connect-btn">{{ connecting ? '…' : signedIn ? 'Connect' : 'Sign in' }}</button><button class="mp-link" @click="dismissConnect">Not now</button></div>
+      </div>
       <header class="mp-head">
         <div class="mp-kicker">Manager view</div>
         <h1>{{ ownerName }}'s tasks</h1>
@@ -53,7 +60,7 @@
         </form>
       </section>
 
-      <p class="mp-foot mp-muted">You're viewing as <b>{{ managerName || 'Manager' }}</b> · <button class="mp-link" @click="askName = true">change name</button></p>
+      <p v-if="!accountMode" class="mp-foot mp-muted">You're viewing as <b>{{ managerName || 'Manager' }}</b> · <button class="mp-link" @click="askName = true">change name</button></p>
     </template>
 
     <div v-if="askName" class="mp-modal" data-test="name-prompt">
@@ -62,6 +69,7 @@
         <p class="mp-muted">{{ ownerName }} will see this name on your nudges and messages. No sign-up needed.</p>
         <input v-model="nameDraft" maxlength="40" placeholder="e.g. Mom" autofocus />
         <button class="mp-send mp-full" :disabled="!nameDraft.trim()">Continue</button>
+        <button type="button" class="mp-link mp-full" @click="askName = false; signInToConnect()" data-test="prompt-signin">Or sign in to connect</button>
       </form>
     </div>
   </div>
@@ -69,18 +77,35 @@
 
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { fnUrl } from '@/config/api';
+import { auth } from '@/firebaseConfig';
+import { palApi } from '@/composables/usePals';
+import { setMode, setPendingManagerToken } from '@/utils/appMode';
 import { groupTasks, timeAgo, QUICK_DMS } from '@/utils/pals';
 
-const route = useRoute();
+const route = useRoute(); const router = useRouter();
 const token = String(route.params.token || '');
+// Two ways in: the no-account link (/m/:token) or a signed-in manager (/manage/:ownerUid). Same screen, same actions.
+const ownerUid = String(route.params.ownerUid || '');
+const accountMode = !!ownerUid;
+const signedIn = ref(!!auth.currentUser); const connecting = ref(false);
+const connectDismissed = ref(!!localStorage.getItem(`mgrNoConnect:${token.slice(0, 8)}`));
+const dismissConnect = () => { connectDismissed.value = true; localStorage.setItem(`mgrNoConnect:${token.slice(0, 8)}`, '1'); };
+// Sign in -> (new accounts: normal onboarding) -> connected as manager -> this person's view. The token waits in localStorage.
+const signInToConnect = async () => {
+  if (!auth.currentUser) { setPendingManagerToken(token); router.push({ path: '/login', query: { returning: '1' } }); return; }
+  connecting.value = true;
+  try { const r = await palApi('connectManager', { token }); setMode('manager'); router.replace(`/manage/${r.ownerUid}`); }
+  catch (e) { alert(e.message || 'Could not connect'); } finally { connecting.value = false; }
+};
 const state = ref('loading'); const tab = ref('tasks');
 const ownerName = ref(''); const managerName = ref(''); const tasks = ref([]); const serverChat = ref([]); const pendingMsgs = ref([]);
 const sent = ref({}); const draft = ref(''); const askName = ref(false); const nameDraft = ref(''); const threadEl = ref(null);
 const now = ref(Date.now());
 
 const api = async (method, body) => {
+  if (accountMode) return method === 'GET' ? palApi('managerView', { ownerUid }) : (({ action, ...rest }) => palApi('managerAct', { ...rest, ownerUid, act: action }))(body);
   const r = method === 'GET' ? await fetch(`${fnUrl('manager-pal')}?token=${encodeURIComponent(token)}`) : await fetch(fnUrl('manager-pal'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token, ...body }) });
   const data = await r.json().catch(() => ({})); if (!r.ok) throw Object.assign(new Error(data.error || 'Error'), { status: r.status }); return data;
 };
@@ -89,7 +114,7 @@ const load = async () => {
     const d = await api('GET');
     ownerName.value = d.ownerName; managerName.value = d.managerName; tasks.value = d.tasks || []; serverChat.value = d.chat || [];
     pendingMsgs.value = pendingMsgs.value.filter((p) => p.failed || !serverChat.value.some((c) => c.from === 'manager' && c.text === p.text));
-    if (state.value === 'loading') { state.value = 'ok'; if (!d.managerName && !localStorage.getItem(`mgrName:${token.slice(0, 8)}`)) askName.value = true; }
+    if (state.value === 'loading') { state.value = 'ok'; if (!accountMode && !d.managerName && !localStorage.getItem(`mgrName:${token.slice(0, 8)}`)) askName.value = true; }
   } catch (e) { if (e.status === 404) state.value = 'gone'; else if (state.value === 'loading') state.value = 'gone'; }
 };
 const g = computed(() => groupTasks(tasks.value));
@@ -169,6 +194,9 @@ onBeforeUnmount(() => { clearInterval(timer); clearInterval(tick); });
 .mp-send:disabled { opacity: .45; } .mp-full { width: 100%; margin-top: 10px; }
 .mp-foot { text-align: center; margin-top: 18px; font-size: 13px; }
 .mp-link { background: none; border: 0; color: #5B9BFF; text-decoration: underline; font-size: 13px; padding: 0; }
+.mp-back { background: none; border: 0; color: #5B9BFF; font-weight: 600; font-size: 15px; padding: 0 0 10px; }
+.mp-connect { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; border-color: #2F6FFF; } .mp-connect p { margin: 2px 0 0; }
+.mp-crow { display: flex; align-items: center; gap: 14px; } .mp-crow .mp-send { min-height: 40px; }
 .mp-modal { position: fixed; inset: 0; background: rgba(3,6,14,.7); display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 50; }
 .mp-modal .mp-card { width: 100%; max-width: 380px; } .mp-modal h2 { font-size: 20px; margin-bottom: 6px; } .mp-modal input { width: 100%; box-sizing: border-box; margin-top: 8px; }
 </style>

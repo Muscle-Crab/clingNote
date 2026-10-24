@@ -52,11 +52,16 @@
 
       <!-- Sidebar content -->
       <nav class="px-3 py-4">
+        <!-- User mode (your tasks) / Manager mode (people you manage). Any account can use both; last one is remembered. -->
+        <div v-if="userId" class="mode-switch" role="group" aria-label="Mode" data-test="mode-switch">
+          <button type="button" :class="{ on: mode === 'user' }" :aria-pressed="mode === 'user' ? 'true' : 'false'" @click="switchMode('user')">User mode</button>
+          <button type="button" :class="{ on: mode === 'manager' }" :aria-pressed="mode === 'manager' ? 'true' : 'false'" @click="switchMode('manager')" data-test="mode-manager">Manager mode</button>
+        </div>
         <ul class="app-sidebar-list">
           <!-- My Routine -->
           <li class="app-sidebar-item">
             <i class="fas fa-calendar-check"></i>
-            <router-link to="/"
+            <router-link to="/home"
                          class="app-sidebar-link">
               My Routine
             </router-link>
@@ -127,7 +132,8 @@
 <script setup>
 import { syncPublicProfile } from '@/composables/usePublicProfile';
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRouter, useRoute } from 'vue-router';
+import { getMode, setMode, homeFor } from '@/utils/appMode';
 import AppStoreButton from '@/components/AppStoreButton.vue';
 import { ugcHidden, isNativeIOS } from '@/utils/platform';
 const isIOS = isNativeIOS(); // iOS app: no admin About page, no Recovery Tracker (see docs/ios-app-review-notes.md)
@@ -141,6 +147,9 @@ const sidebarOpen = ref(false);
 const userEmail = ref(null);
 const userId = ref(null);
 const palBadge = useManagerBadge();
+const route = useRoute();
+const mode = computed(() => (route.path === '/manage' || route.path.startsWith('/manage/') ? 'manager' : route.path === '/home' ? 'user' : getMode()));
+const switchMode = (m) => { setMode(m); router.push(homeFor(m)); };
 watch(userId, (u) => palBadge.watchUid(u));
 const avatarURL = ref(null);
 const displayName = ref('');
@@ -233,4 +242,7 @@ onMounted(() => {
 .app-sidebar-link::after { content: ''; position: absolute; inset: 0; } /* whole row is clickable */
 .app-sidebar-item:hover .app-sidebar-link, .app-sidebar-link.router-link-exact-active { color: #fff; }
 .app-sidebar-item:has(.router-link-exact-active) { background: #19224A; color: #8FA8FF; }
+.mode-switch { display: flex; gap: 4px; margin: 4px 12px 12px; padding: 4px; background: #0C1630; border: 1px solid #1A2846; border-radius: 12px; }
+.mode-switch button { flex: 1; min-height: 34px; border: 0; border-radius: 9px; background: transparent; color: #A9B4CC; font-weight: 600; font-size: 13px; }
+.mode-switch button.on { background: #12203F; color: #F2F5FC; }
 </style>

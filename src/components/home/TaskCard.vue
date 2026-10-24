@@ -36,6 +36,7 @@
                         {{ task.title }}
                       </span>
                       <span v-if="isRepeating" class="task-repeat-badge" data-test="repeat-badge" :title="'Repeats: ' + repeatLabel">🔁 {{ repeatLabel }}</span>
+                      <span v-if="task.visibility === 'private'" class="task-private" data-test="private-label" title="Private: only you can see this task">Private</span>
                       <span v-if="task.timerActive" class="task-timer-left">
                         ⏳  {{ taskTimeLeft(task, now) }}
                       </span>
@@ -87,6 +88,11 @@
                           <select class="field-select" :value="task.status || 'todo'" @change="$emit('patch', { status: $event.target.value })">
                             <option v-for="st in STATUSES" :key="st.value" :value="st.value">{{ st.label }}</option>
                           </select></label>
+                        <div class="mini-field"><span>Visible to</span>
+                          <div class="vis-toggle" role="group" aria-label="Who can see this task" data-test="visibility-toggle">
+                            <button type="button" :class="{ on: task.visibility !== 'private' }" :aria-pressed="task.visibility !== 'private' ? 'true' : 'false'" title="Your managers and pals can see this task" @click="$emit('patch', { visibility: 'public' })">Public</button>
+                            <button type="button" :class="{ on: task.visibility === 'private' }" :aria-pressed="task.visibility === 'private' ? 'true' : 'false'" title="Only you can see this task" @click="$emit('patch', { visibility: 'private' })">Private</button>
+                          </div></div>
                         <label class="mini-field"><span>Priority</span>
                           <select class="field-select" :value="task.priority || 'low'" @change="$emit('patch', { priority: $event.target.value })">
                             <option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option>
@@ -291,7 +297,11 @@ const onCardTap = (event) => { // bound on the whole card (blank areas, chips, n
 .task-body { flex: 1; min-width: 0; cursor: pointer; display: flex; flex-wrap: wrap; align-items: center; column-gap: var(--sp-2); row-gap: var(--sp-1); }
 .task-body > * { order: 10; flex: 0 0 100%; }
 .task-body > .task-title-row { order: 1; flex: 1 1 200px; }
-.task-body > .task-meta-row { order: 2; flex: 0 0 auto; margin: 0; }
+.task-body > .task-private { font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--c-text-2, #A9B4CC); border: 1px solid var(--c-border, #2A3C66); border-radius: 999px; padding: 1px 7px; margin-left: 6px; white-space: nowrap; }
+.vis-toggle { display: flex; border: 1px solid var(--c-border, #2A3C66); border-radius: 10px; overflow: hidden; }
+.vis-toggle button { flex: 1; padding: 7px 0; font-size: 13px; background: transparent; color: var(--c-text-2, #A9B4CC); border: 0; }
+.vis-toggle button.on { background: #2F6FFF; color: #fff; font-weight: 600; }
+.task-meta-row { order: 2; flex: 0 0 auto; margin: 0; }
 .task-body > .task-chips { order: 3; flex: 0 0 auto; margin: 0; justify-content: flex-end; }
 .task-body > .task-expand, .task-body > .task-labels { order: 20; }
 .task-title-row { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }

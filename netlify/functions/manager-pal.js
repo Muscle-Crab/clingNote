@@ -4,6 +4,13 @@
 // Signed in (Authorization: Bearer <Firebase ID token>):
 //   POST { action: 'createManagerLink', name? } -> { token }   (rotates: any older link stops working)
 //        'revokeManager' | 'reply' {text} | 'createPalCode' -> {code} | 'acceptPal' {code} | 'removePal' {palUid}
+//   Manager accounts (optional; the no-account link keeps working):
+//        'connectManager' {token} -> {ownerUid}            (signed-in user becomes a manager of the link's owner)
+//        'managerView' {ownerUid} -> same shape as the public GET
+//        'managerAct' {ownerUid, act:'nudge'|'dm', ...}     (same as the public nudge/dm)
+//        'palTasks' {palUid} -> {tasks}   (pals; private tasks stripped)
+//        'disconnectManager' {managerUid} (owner side) | {ownerUid} (manager leaves)
+//   managerConnections/{ownerUid}_{managerUid} {ownerUid, managerUid, ownerName, managerName, createdAt, writes}
 // Data: managers/{uid} {tokenHash,name,createdAt,writes}  managerLinks/{sha256(token)} {uid}
 //       users/{uid}/managerChat/{id} {kind:'nudge'|'dm', from:'manager'|'user', text, taskKey?, taskTitle?, createdAt, read}
 //       palInvites/{CODE} {uid,name,expiresAt}  pals/{pairId} {members:[a,b], names:{}, createdAt}
@@ -49,19 +56,30 @@ const push = async (deps, uid, title, message) => {
   try { const p = buildPayload({ appId: process.env.ONESIGNAL_APP_ID, uid, kind: 'self', title, message, url: 'https://clingnot.netlify.app/pals' }); await (deps.sendPush || sendOneSignal)(p); } catch (e) { /* push is best-effort */ }
 };
 
+const viewPayload = async (db, uid, mName, now) => {
+  const [name, tasks, chat] = await Promise.all([ownerName(db, uid), loadTasks(db, uid, now), loadChat(db, uid)]);
+  return json(200, { ownerName: name, managerName: mName || '', tasks, chat: chat.map(({ read, ...c }) => c) });
+};
 const managerHandler = async (event, db, deps, now) => {
   const body = event.httpMethod === 'POST' ? JSON.parse(event.body || '{}') : {};
   const token = event.httpMethod === 'GET' ? (event.queryStringParameters || {}).token : body.token;
   const { uid, mref, manager } = await resolveToken(db, token);
-  if (event.httpMethod === 'GET') {
-    const [name, tasks, chat] = await Promise.all([ownerName(db, uid), loadTasks(db, uid, now), loadChat(db, uid)]);
-    return json(200, { ownerName: name, managerName: manager.name || '', tasks, chat: chat.map(({ read, ...c }) => c) });
-  }
+  if (event.httpMethod === 'GET') return viewPayload(db, uid, manager.name, now);
   const { action } = body;
   if (action === 'setName') { const name = M.clipText(body.name, 40); if (!name) throw err(400, 'Name required'); await mref.set({ name }, { merge: true }); return json(200, { ok: true, managerName: name }); }
+  return managerWrite(db, deps, now, uid, mref, manager.name, action, body);
+};
+const connRef = (db, ownerUid, managerUid) => db.doc(`managerConnections/${ownerUid}_${managerUid}`);
+const resolveConn = async (db, ownerUid, managerUid) => {
+  ownerUid = String(ownerUid || ''); if (!/^[A-Za-z0-9_-]{1,128}$/.test(ownerUid)) throw err(404, 'Not connected');
+  const ref = connRef(db, ownerUid, managerUid); const c = await ref.get();
+  if (!c.exists) throw err(404, 'Not connected');
+  return { ref, conn: c.data(), ownerUid };
+};
+const managerWrite = async (db, deps, now, uid, mref, managerName, action, body) => {
   if (action !== 'nudge' && action !== 'dm') throw err(400, 'Bad action');
   await bumpWrites(db, mref, now);
-  const mName = manager.name || 'Your manager';
+  const mName = managerName || 'Your manager';
   let doc;
   if (action === 'nudge') {
     const preset = M.NUDGE_PRESETS[body.preset] ? body.preset : 'ping';
@@ -97,7 +115,8 @@ const userHandler = async (event, db, deps, now, uid) => {
     }
     case 'reply': {
       const text = M.clipText(body.text, 1000); if (!text) throw err(400, 'Empty message');
-      const m = await mref.get(); if (!m.exists) throw err(409, 'No manager link');
+      const m = await mref.get();
+      if (!m.exists) { const c = await db.collection('managerConnections').where('ownerUid', '==', uid).limit(1).get(); if (c.empty) throw err(409, 'No manager'); }
       const ref = await db.collection(`users/${uid}/managerChat`).add({ kind: 'dm', from: 'user', text, createdAt: now, read: true });
       return json(200, { ok: true, id: ref.id, at: now.getTime() });
     }
@@ -116,6 +135,49 @@ const userHandler = async (event, db, deps, now, uid) => {
       await iref.delete();
       await push(deps, other, 'New pal', `${await ownerName(db, uid)} accepted your pal invite`);
       return json(200, { ok: true, pairId: id, palUid: other });
+    }
+    case 'connectManager': {
+      const { uid: owner, manager } = await resolveToken(db, body.token);
+      if (owner === uid) throw err(400, "That's your own link");
+      const [oName, mName] = await Promise.all([ownerName(db, owner), ownerName(db, uid)]);
+      const managerName = (mName !== 'Your person' && mName) || manager.name || 'Manager';
+      await connRef(db, owner, uid).set({ ownerUid: owner, managerUid: uid, ownerName: oName, managerName, createdAt: now, writes: { hour: 0, n: 0 } }, { merge: true });
+      await push(deps, owner, 'Manager connected', `${managerName} is now connected as your manager`);
+      return json(200, { ok: true, ownerUid: owner, ownerName: oName });
+    }
+    case 'managerView': {
+      const { ownerUid, conn, ref } = await resolveConn(db, body.ownerUid, uid);
+      await ref.set({ managerSeenAt: now }, { merge: true }); // clears this person's unread badge in Manager mode
+      return viewPayload(db, ownerUid, conn.managerName, now);
+    }
+    case 'managerList': {
+      // Manager mode home: everyone I manage with overdue + unread counts, overdue first.
+      const q = await db.collection('managerConnections').where('managerUid', '==', uid).get();
+      const people = await Promise.all(q.docs.map(async (d) => {
+        const c = d.data(); const [tasks, chat] = await Promise.all([loadTasks(db, c.ownerUid, now), loadChat(db, c.ownerUid)]);
+        const seen = M.tsMs(c.managerSeenAt);
+        return { ownerUid: c.ownerUid, ownerName: c.ownerName || 'Your person', overdue: tasks.filter((t) => t.overdue).length, open: tasks.filter((t) => !t.completed).length,
+          unread: chat.filter((m) => m.from === 'user' && m.at > seen).length };
+      }));
+      people.sort((a, b) => (b.overdue > 0) - (a.overdue > 0) || b.overdue - a.overdue || b.unread - a.unread || a.ownerName.localeCompare(b.ownerName));
+      return json(200, { people });
+    }
+    case 'palTasks': {
+      // Pals read each other's tasks only through here (admin SDK), so private tasks are stripped server-side.
+      const other = String(body.palUid || ''); if (!other || other === uid) throw err(400, 'palUid required');
+      const p = await db.doc(`pals/${M.pairId(uid, other)}`).get();
+      if (!p.exists || !(p.data().members || []).includes(uid)) throw err(403, 'Not a pal');
+      return json(200, { tasks: await loadTasks(db, other, now) });
+    }
+    case 'managerAct': {
+      const { ownerUid, conn, ref } = await resolveConn(db, body.ownerUid, uid);
+      return managerWrite(db, deps, now, ownerUid, ref, conn.managerName, body.act, body);
+    }
+    case 'disconnectManager': {
+      const ref = body.managerUid ? connRef(db, uid, String(body.managerUid)) : connRef(db, String(body.ownerUid || ''), uid);
+      const c = await ref.get(); if (!c.exists) throw err(404, 'Not connected');
+      await ref.delete();
+      return json(200, { ok: true });
     }
     case 'removePal': {
       const other = String(body.palUid || ''); if (!other) throw err(400, 'palUid required');

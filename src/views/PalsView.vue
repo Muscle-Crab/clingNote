@@ -1,6 +1,6 @@
 <template>
   <PalsHub v-model:tab="tab" :manager="managerProps" :unread="unread.length" :pals="palList" :selected="selected" :pal-code="palCode" :code-copied="codeCopied"
-    :busy="busy" :error="error" :prefill-code="prefill" @create-link="createLink" @revoke="revoke" @share="shareLink" @reply="onReply" @open="(p) => (selected = p)"
+    :busy="busy" :error="error" :prefill-code="prefill" @create-link="createLink" @revoke="revoke" @share="shareLink" @reply="onReply" @disconnect="disconnect" @open="(p) => (selected = p)"
     @make-code="makeCode" @share-code="shareCode" @accept="accept">
     <template #detail>
       <PalDetailLive v-if="selected" :key="selected.uid" :my-uid="uid" :pal-uid="selected.uid" :name="selected.name" @back="selected = null" @remove="removePal" />
@@ -14,7 +14,7 @@ import { useRoute } from 'vue-router';
 import { auth } from '@/firebaseConfig';
 import PalsHub from '@/components/pals/PalsHub.vue';
 import PalDetailLive from '@/components/pals/PalDetailLive.vue';
-import { useManager, usePalList, palApi } from '@/composables/usePals';
+import { useManager, useMyManagers, usePalList, palApi } from '@/composables/usePals';
 import { otherMember, managerLinkUrl } from '@/utils/pals';
 import { PROD_ORIGIN } from '@/config/api';
 import { isNative } from '@/utils/platform';
@@ -30,9 +30,10 @@ const origin = isNative() ? PROD_ORIGIN : window.location.origin;
 
 const { managerDoc, thread, unread, markAllRead, reply } = useManager(uid);
 const { pals } = usePalList(uid);
+const { managers } = useMyManagers(uid);
 const palList = computed(() => pals.value.map((p) => { const o = otherMember(p, uid); return { uid: o, name: (p.names && p.names[o]) || 'Pal' }; }));
 const view = computed(() => thread.value.map((m) => ({ ...m, mine: m.from === 'user', unread: m.from === 'manager' && !m.read })));
-const managerProps = computed(() => ({ active: !!managerDoc.value, managerName: (managerDoc.value && managerDoc.value.name) || '', link: managerDoc.value ? link.value : '', thread: view.value, busy: busy.value, copied: copied.value }));
+const managerProps = computed(() => ({ connected: managers.value, active: !!managerDoc.value, managerName: (managerDoc.value && managerDoc.value.name) || '', link: managerDoc.value ? link.value : '', thread: view.value, busy: busy.value, copied: copied.value }));
 // Seeing the manager tab marks nudges/DMs read (clears the badge) after a short beat so new ones still flash.
 watch([tab, () => unread.value.length], ([t, n]) => { if (t === 'manager' && n) setTimeout(markAllRead, 1500); }, { immediate: true });
 
@@ -44,6 +45,7 @@ const share = async (text, url, flag) => {
 const createLink = (name) => run(async () => { const { token } = await palApi('createManagerLink', { name }); link.value = managerLinkUrl(origin, token); localStorage.setItem(LINK_KEY, link.value); shareLink(); });
 const shareLink = () => share('Here is my CleanNote task list. You can check on me and send nudges:', link.value, copied);
 const revoke = () => { if (!confirm('Turn off the manager link? It stops working right away.')) return; run(async () => { await palApi('revokeManager'); link.value = ''; localStorage.removeItem(LINK_KEY); }); };
+const disconnect = (m) => { if (!confirm(`Disconnect ${m.managerName || 'this manager'}? They won't see your tasks anymore.`)) return; run(() => palApi('disconnectManager', { managerUid: m.managerUid })); };
 const onReply = (t) => reply(t).catch(() => {});
 const makeCode = () => run(async () => { palCode.value = (await palApi('createPalCode')).code; });
 const shareCode = () => share(`Be my CleanNote pal! Open the app → Manager & Pals → enter code ${palCode.value}`, `${origin}/pals?code=${palCode.value}`, codeCopied);
