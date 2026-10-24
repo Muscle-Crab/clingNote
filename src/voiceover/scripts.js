@@ -18,7 +18,7 @@ export const SCRIPTS = {
   mi_1: "You're in Manager mode. This is your crew. Everyone you manage shows up right here, by name.",
   mi_2: "Watch the badges. Red means overdue. Blue means new messages. Tap a name to see their week.",
   mi_3: "You only see what they share. Every task is Private or Public. Public shows up here. Private stays private.",
-  mi_4: "Something slipping? Hit Ping, or Remind. Want to talk? Open Messages and DM them. Throw in some encouragement. It works.",
+  mi_4: "Something slipping? Hit Ping. Want to talk? Open Messages and DM them. Throw in some encouragement. It works.",
   mi_5: "Pals are different. Swap an eight-character code, and you keep each other accountable, side by side.",
   mi_6: "Your own list never goes away. Switch to User mode anytime. Your tasks, your five-task streak, timers, the boss panel, scheduled and repeating tasks, rankings, discipline. Pro unlocks the lot. Now go manage.",
 };
@@ -27,7 +27,7 @@ export const MANAGER_INTRO = [
   { id: 'mi_1', icon: '👥', title: 'Your people', text: 'Everyone you manage, by name.' },
   { id: 'mi_2', icon: '🔴', title: 'Badges', text: 'Red = overdue. Blue = new messages. Tap a name to open their week.' },
   { id: 'mi_3', icon: '🔒', title: 'Private / Public', text: 'You only see tasks they mark Public.' },
-  { id: 'mi_4', icon: '👋', title: 'Pings & DMs', text: 'Ping or Remind on a task, or DM them in Messages.' },
+  { id: 'mi_4', icon: '👋', title: 'Pings & DMs', text: 'Ping on a task, or DM them in Messages.' },
   { id: 'mi_5', icon: '🤝', title: 'Pals', text: 'Swap an 8-character code to keep each other accountable.' },
   { id: 'mi_6', icon: '🔁', title: 'Switch modes', text: 'User mode: your tasks, 5-task streak, timers, boss panel, schedules, Rankings, Discipline, Pro.' },
 ];

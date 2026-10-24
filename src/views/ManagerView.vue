@@ -24,24 +24,19 @@
         <button :class="{ on: tab === 'chat' }" @click="openChat">Messages</button>
       </div>
 
-      <section v-if="tab === 'tasks'">
-        <div v-if="!tasks.length" class="mp-card mp-muted">No tasks this week yet.</div>
-        <template v-for="g in groups" :key="g.id">
-          <h2 v-if="g.items.length" class="mp-sec" :class="g.cls">{{ g.label }}</h2>
-          <article v-for="t in g.items" :key="t.key" class="mp-task" :class="{ done: t.completed, late: t.overdue }" data-test="manager-task">
-            <span class="mp-check" :class="{ on: t.completed }">{{ t.completed ? '✓' : '' }}</span>
-            <div class="mp-tbody">
-              <div class="mp-ttl">{{ t.title }}</div>
-              <div class="mp-meta">{{ t.day }}<span v-if="t.upcoming && t.scheduled"> · {{ t.scheduled.date.slice(5) }}</span><span v-if="t.reminder && t.reminder.time"> · ⏰ {{ t.reminder.time }}</span><span v-if="t.scheduled && t.scheduled.repeat" data-test="pal-repeat"> · 🔁 {{ t.scheduled.repeat }}</span><span v-if="t.overdue" class="mp-pill">Overdue</span></div>
-            </div>
-            <div v-if="!t.completed" class="mp-acts">
-              <button v-if="sent[t.key]" class="mp-sent" disabled>{{ sent[t.key] }}</button>
-              <template v-else>
-                <button class="mp-chip" @click="nudge(t, t.overdue ? 'overdue' : 'ping')" data-test="nudge-btn">{{ t.overdue ? '⏰ Remind' : '👋 Ping' }}</button>
-              </template>
-            </div>
-          </article>
-        </template>
+      <section v-if="tab === 'tasks'" data-test="manager-day-view">
+        <!-- Same day-based view the member sees (DayTabs + TaskCard), read-only. Private tasks are already stripped server-side. -->
+        <DayTabs :days="tabDays" :selected-index="dayIdx" @select="(i) => (dayIdx = i)" />
+        <h2 class="mp-sec">{{ dayIdx === todayIdx ? 'Today' : FULL[dayIdx] }} <small class="mp-muted">{{ dayDone }}/{{ dayTasks.length }} done</small></h2>
+        <div v-if="!dayTasks.length" class="mp-card mp-muted">No public tasks on {{ dayIdx === todayIdx ? 'today' : FULL[dayIdx] }}.</div>
+        <div v-for="(t, k) in dayTasks" :key="t.key" class="mp-row" :class="{ late: t.overdue }" data-test="manager-task">
+          <div class="mp-ro" inert aria-readonly="true"><TaskCard :task="cardTask(t)" :index="k" :drag-disabled="true" :is-today-tab="dayIdx === todayIdx" /></div>
+          <div v-if="!t.completed" class="mp-acts">
+            <span v-if="t.overdue" class="mp-pill">Overdue</span>
+            <button v-if="sent[t.key]" class="mp-sent" disabled>{{ sent[t.key] }}</button>
+            <button v-else class="mp-chip" @click="nudge(t, t.overdue ? 'overdue' : 'ping')" data-test="nudge-btn">{{ t.overdue ? '⏰ Ping' : '👋 Ping' }}</button>
+          </div>
+        </div>
         <button class="mp-wide" @click="nudge(null, 'cheer')" :disabled="!!sent.__all">{{ sent.__all || '💪 Send encouragement' }}</button>
       </section>
 
@@ -88,6 +83,10 @@ import { palApi } from '@/composables/usePals';
 import { setMode, setPendingManagerToken } from '@/utils/appMode';
 import { groupTasks, timeAgo, QUICK_DMS } from '@/utils/pals';
 import ReportDialog from '@/components/pals/ReportDialog.vue';
+import DayTabs from '@/components/home/DayTabs.vue';
+import TaskCard from '@/components/home/TaskCard.vue';
+import { withWeekDates } from '@/utils/scheduling';
+import appData from '@/data.json';
 
 const route = useRoute(); const router = useRouter();
 const token = String(route.params.token || '');
@@ -123,11 +122,14 @@ const load = async () => {
   } catch (e) { if (e.status === 404) state.value = 'gone'; else if (state.value === 'loading') state.value = 'gone'; }
 };
 const g = computed(() => groupTasks(tasks.value));
-const groups = computed(() => [
-  { id: 'overdue', label: 'Overdue', cls: 'mp-red', items: g.value.overdue },
-  { id: 'open', label: 'To do', cls: '', items: g.value.open },
-  { id: 'done', label: 'Done', cls: 'mp-green', items: g.value.done },
-]);
+// Day view (defaults to today, like the member's Home): weekday lists by name, upcoming scheduled entries by date.
+const FULL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const todayIdx = new Date().getDay(); const dayIdx = ref(todayIdx);
+const tabDays = computed(() => withWeekDates(appData.days));
+const dayTasks = computed(() => { const d = tabDays.value[dayIdx.value] || {}; return tasks.value.filter((t) => (t.upcoming && t.scheduled ? t.scheduled.date === d.date : FULL.indexOf(t.day) === dayIdx.value)); });
+const dayDone = computed(() => dayTasks.value.filter((t) => t.completed).length);
+const cardTask = (t) => ({ title: t.title, completed: t.completed, important: t.important, reminder: t.reminder || undefined, status: t.completed ? 'done' : 'todo', createdAt: t.key,
+  ...(t.scheduled ? { scheduledFor: t.scheduled.date, time: t.scheduled.time, repeatText: t.scheduled.repeat } : {}) });
 const counts = computed(() => ({ overdue: g.value.overdue.length, open: g.value.open.length + g.value.overdue.length, done: g.value.done.length }));
 const thread = computed(() => [...serverChat.value, ...pendingMsgs.value]);
 const ago = (ms) => timeAgo(ms, now.value);
@@ -218,4 +220,6 @@ onBeforeUnmount(() => { clearInterval(timer); clearInterval(tick); });
 .mp-crow { display: flex; align-items: center; gap: 14px; } .mp-crow .mp-send { min-height: 40px; }
 .mp-modal { position: fixed; inset: 0; background: rgba(3,6,14,.7); display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 50; }
 .mp-modal .mp-card { width: 100%; max-width: 380px; } .mp-modal h2 { font-size: 20px; margin-bottom: 6px; } .mp-modal input { width: 100%; box-sizing: border-box; margin-top: 8px; }
+.mp-row { position: relative; margin-bottom: 8px; } .mp-row.late .mp-ro { box-shadow: 0 0 0 1.5px rgba(255,90,70,.5); border-radius: 16px; }
+.mp-ro { pointer-events: none; } .mp-row .mp-acts { display: flex; justify-content: flex-end; align-items: center; gap: 8px; margin-top: 4px; }
 </style>
