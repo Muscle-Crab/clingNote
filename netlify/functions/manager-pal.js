@@ -42,8 +42,14 @@ const resolveToken = async (db, token) => {
 };
 const ownerName = async (db, uid) => { const p = await db.doc(`publicProfiles/${uid}`).get(); return (p.exists && M.clipText(p.data().name, 60)) || 'Your person'; };
 const loadTasks = async (db, uid, now) => {
-  const snaps = await Promise.all(M.WEEK.map((d) => db.doc(`weeklyRoutines/${uid}_${d}`).get()));
-  return M.viewTasks(snaps.map((s, i) => ({ day: M.WEEK[i], tasks: s.exists ? s.data().tasks || [] : [] })), now);
+  // The app keys day docs by short names (src/data.json days[].day: `${uid}_Mon`); full names (`${uid}_Monday`) are read as a legacy fallback.
+  const ids = M.WEEK.flatMap((d) => [`${uid}_${d.slice(0, 3)}`, `${uid}_${d}`]);
+  const [snaps, user] = await Promise.all([Promise.all(ids.map((id) => db.doc(`weeklyRoutines/${id}`).get())), db.doc(`users/${uid}`).get()]);
+  const tasksOf = (s) => (s.exists ? s.data().tasks || [] : []);
+  const week = M.viewTasks(M.WEEK.map((day, i) => ({ day, tasks: [...tasksOf(snaps[2 * i]), ...tasksOf(snaps[2 * i + 1])] })), now);
+  // Scheduled / recurring tasks not yet in a day list (Public only; read-only projection, see lib/managerPal.js viewScheduled).
+  const sched = user.exists ? M.viewScheduled((user.data().scheduledTasks || {}).tasks, now) : [];
+  return [...week, ...sched];
 };
 const loadChat = async (db, uid) => {
   const q = await db.collection(`users/${uid}/managerChat`).orderBy('createdAt', 'desc').limit(60).get();

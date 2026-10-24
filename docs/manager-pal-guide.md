@@ -54,3 +54,9 @@ Every message you *receive* has a small **Report** link under it: manager nudges
 - *Manager side*: in Manager mode, open the person → **Block {name}** at the bottom. You're disconnected and they can't invite you again.
 
 Blocks live in `blocks/{blocker}_{blocked}` (written only by the server; readable only by the blocker). Connecting by link or code is refused (403) when a block exists in either direction. There's no unblock button yet. Removing a block means deleting that doc by hand (ask support).
+
+## Scheduled & recurring tasks (feat/ios-capacitor, local)
+- The manager and pal views include Public scheduled tasks: today's materialized occurrences carry `scheduled: {date, time, repeat}`. Upcoming Public one-time entries and series occurrences for the next 7 days come from `users/{uid}.scheduledTasks`, flagged `upcoming: true`.
+- Overdue is set once date+time passes (or the day ends when there is no time). Private entries and templates never leave the server. Managers stay read-only.
+- Fix: the function now reads the day docs the app actually writes (`weeklyRoutines/{uid}_Mon..Sun`, from `src/data.json`), with `_Monday`-style ids as a fallback. Before, it read only full-name ids, so real users' tasks would not have appeared.
+- See docs/scheduling-guide.md.

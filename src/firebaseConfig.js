@@ -25,7 +25,7 @@ const db = getFirestore(app);
 // Native shell (capacitor://localhost): the default getAuth() adds the web popup/redirect resolver, which tries to load Google's gapi script and stalls auth init (blank first screen).
 // Native uses the Apple/email credential flows only, so initialise Auth without the resolver.
 const auth = isNative() ? initializeAuth(app, { persistence: [indexedDBLocalPersistence, inMemoryPersistence] }) : getAuth(app);
-if (EMU) { connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true }); connectFirestoreEmulator(db, '127.0.0.1', 8085); }
+if (EMU) { connectAuthEmulator(auth, `http://127.0.0.1:${process.env.VUE_APP_EMU_AUTH_PORT || 9099}`, { disableWarnings: true }); connectFirestoreEmulator(db, '127.0.0.1', Number(process.env.VUE_APP_EMU_FS_PORT || 8085)); }
 const storage = getStorage(app); // Initialize Storage
 
 export { app, auth, db, storage };

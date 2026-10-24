@@ -65,6 +65,7 @@
                       <span v-if="task.priority && task.priority !== 'low'" class="chip" :class="'chip--' + task.priority">{{ task.priority }}</span>
                       <span v-if="task.status && !['todo', 'pending', 'active'].includes(task.status)" class="chip">{{ task.status }}</span>
                       <span v-if="task.scheduledFor" class="chip chip--due" :class="{ 'chip--overdue': task.scheduledFor < todayYmd }">{{ dueBadge(task, todayYmd) }}</span>
+                      <span v-if="schedText" class="chip chip--sched" :class="{ 'chip--overdue': schedLate }" data-test="sched-label">{{ schedText }}<template v-if="schedLate"> · Overdue</template></span>
                       <span v-else-if="task.dueDate" class="chip">Due {{ task.dueDate }}</span>
                       <span v-if="false" class="chip">⏱ {{ formatMinutes(estimateOf(task)) }}</span>
                       <span v-if="task.startTime" class="chip">🕒 {{ formatClock(toMinutes(task.startTime)) }}<template v-if="estimateOf(task)"> – {{ formatClock(toMinutes(task.startTime) + estimateOf(task)) }}</template></span>
@@ -184,7 +185,7 @@
 
 <script setup>
 import { bossHp } from '@/utils/discipline';
-import { dueBadge } from '@/utils/scheduling';
+import { dueBadge, scheduleLabel, scheduledOverdue } from '@/utils/scheduling';
 import { downloadTaskIcs } from '@/utils/ics';
 import { isNative } from '@/utils/platform';
 import { localDateStr } from '@/utils/streak';
@@ -265,6 +266,8 @@ const onCardTap = (event) => { // bound on the whole card (blank areas, chips, n
   }
   emit('toggle-expand');
 };
+const schedText = computed(() => scheduleLabel(props.task));
+const schedLate = computed(() => !!props.task?.scheduledFor && scheduledOverdue(props.task, new Date()));
 </script>
 
 <style scoped>
@@ -419,5 +422,6 @@ const onCardTap = (event) => { // bound on the whole card (blank areas, chips, n
 .repeat-pop button { text-align: left; padding: 6px 8px; border-radius: 6px; border: 0; background: rgba(255,255,255,.06); color: inherit; cursor: pointer; font-size: 13px; }
 .repeat-days { display: flex; flex-wrap: wrap; gap: 4px; font-size: 12px; }
 .repeat-days label { display: flex; align-items: center; gap: 2px; }
+.chip--sched { font-size: 11px; white-space: nowrap; }
 .task-repeat-badge { font-size: 11px; opacity: .8; margin-left: 6px; white-space: nowrap; }
 </style>

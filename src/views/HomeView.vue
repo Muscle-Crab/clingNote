@@ -105,7 +105,8 @@
 
       <TaskDetailModal v-if="taskDetailModalOpen" :task="taskDetail" :active-labels="activeLabels"
                        @close="closeTaskDetailModal" @preview="showImagePreview = true"
-                       @remove-attachment="removeTaskAttachment" @toggle-label="toggleLabelHighlight" />
+                       @remove-attachment="removeTaskAttachment" @toggle-label="toggleLabelHighlight"
+                       :schedule="detailSchedule" :day-date="selectedDayDate" :sched-error="schedEditError" @save-schedule="saveTaskSchedule" />
 
 
       <ImagePreview v-if="showImagePreview" :src="taskDetail.imageURL" @close="showImagePreview = false" />
@@ -203,7 +204,7 @@
 
       <TimeStatsBar v-if="isViewingToday" :stats="timeStats" :ended="!!daySession.ended" :suggest="suggestShutdown && !shutdownDismissed" @wrap-up="openShutdown" />
 
-      <ScheduledList v-if="userId" :tasks="futureScheduled" :today-str="todayStr" :error="scheduledError"
+      <ScheduledList v-if="userId" :tasks="futureScheduled" :today-str="todayStr" :error="scheduledError" :series="templatesOf(scheduledList)" @edit="editScheduledEntry"
                      @move-today="moveScheduledToToday" @update="updateScheduledDate" @delete="deleteScheduled" />
 
       <FabButtons :user-id="userId" :listening="listening" :show-voice="!voiceBlocked" @add="onAddClick" @voice="startVoiceInput" />
@@ -286,8 +287,10 @@ import { scheduleNotification, sendNotificationToPlayer, linkPushUser } from '@/
 import { speak } from '@/composables/useSpeech';
 import { completionPercentage, computeTimeStats, daysLeftInYearFrom, heroTitleFor } from '@/utils/dayStats';
 import { shouldAutoComplete, resetSubtasks } from '@/utils/subtasks';
-import { buildScheduledEntry, buildRecurringTemplate, isTaskVisibleOn, futureOf, dueOf, countsByDate, withWeekDates, isValidDate, removeScheduled, rescheduleEntry } from '@/utils/scheduling';
+import { buildScheduledEntry, buildRecurringTemplate, isTaskVisibleOn, futureOf, dueOf, countsByDate, withWeekDates, isValidDate, rescheduleEntry, templatesOf } from '@/utils/scheduling';
 import { mutateScheduled, materializeDueForToday } from '@/composables/useScheduledTasks';
+import { blankSchedule, validateSchedule, scheduleOfTask, applyTaskSchedule, deleteTaskScope, deleteEntry, editEntry } from '@/utils/schedEdit';
+import { syncScheduledNotifications } from '@/composables/useSchedNotifications';
 import ScheduledList from '@/components/home/ScheduledList.vue';
 import EmptyState from '@/components/home/EmptyState.vue';
 import StartDayPrompt from '@/components/home/StartDayPrompt.vue';
@@ -863,7 +866,7 @@ const selectedDayIndex = ref(-1);
 const blankTask = () => ({
   title: '', time: '', priority: 'low', labels: [], notes: '', selectedDays: [], position: 0, type: 'one-time',
   dueDate: '', startTime: '', estimateMin: '', nextAction: '', status: 'todo', pendingOn: '',
-  scheduleDate: '', scheduleTime: '', scheduleRepeat: '', scheduleDays: [],
+  sched: blankSchedule(),
   reminder: { datetime: '', repeat: '' },
 });
 const newTask = ref(blankTask());
@@ -1057,6 +1060,9 @@ const deleteTask = async (index) => {
     const removeAll = alsoDays.length > 0 &&
       confirm(`This task repeats on ${alsoDays.length} other day${alsoDays.length > 1 ? 's' : ''} (${alsoDays.join(', ')}).\n\nOK = delete it from all days\nCancel = delete only from this day`);
 
+    let seriesScope = 'this';
+    if (target?.templateId) seriesScope = confirm('This task repeats.\n\nOK = delete this and all future occurrences\nCancel = delete only this one') ? 'future' : 'this';
+    if (target?.scheduledId) scheduledList.value = await mutateScheduled(userId.value, (l) => deleteTaskScope(l, target, seriesScope, tabDays.value[selectedDayIndex.value]?.date || getTodayId()));
     if (target) cancelTaskNotifications(target);
     selectedDayRoutine.value.splice(index, 1);
     await updateDoc(selectedDayDocRef, {
@@ -1600,30 +1606,75 @@ onMounted(() => document.addEventListener('visibilitychange', onVisible));
 onBeforeUnmount(() => document.removeEventListener('visibilitychange', onVisible));
 
 const submitScheduledTask = async () => {
-  const nt = newTask.value;
-  const repeating = !!nt.scheduleRepeat;
-  if (!isValidDate(nt.scheduleDate) || (repeating ? nt.scheduleDate < getTodayId() : nt.scheduleDate <= getTodayId())) { error.value = 'Pick a date after today, or clear “Schedule for later”.'; return; }
+  const nt = newTask.value; const sc = nt.sched;
+  const bad = validateSchedule(sc, getTodayId());
+  if (bad) { error.value = bad; return false; }
   const labels = typeof nt.labels === 'string' ? nt.labels.split(',').map(l => l.trim()).filter(Boolean) : (nt.labels || []);
   const fields = {
     title: nt.title, important: false, visibility: 'public', time: '', priority: nt.priority, labels, notes: nt.notes, userId: userId.value,
     status: nt.status || 'todo', pendingOn: nt.status === 'pending' ? (nt.pendingOn || '').trim() : '', dueDate: nt.dueDate || '', startTime: nt.startTime || '',
     estimateMin: Number(nt.estimateMin) || 0, nextAction: (nt.nextAction || '').trim(),
   };
-  const entry = repeating
-    ? buildRecurringTemplate({ ...fields, scheduledTime: nt.scheduleTime }, nt.scheduleDate, { freq: nt.scheduleRepeat, days: nt.scheduleDays })
-    : buildScheduledEntry(fields, nt.scheduleDate, nt.scheduleTime);
-  if (!entry) { error.value = 'Could not schedule this task.'; return; }
+  const entry = sc.repeat !== 'never'
+    ? buildRecurringTemplate({ ...fields, scheduledTime: sc.time }, sc.date, { freq: sc.repeat, days: sc.days, dayOfMonth: sc.dayOfMonth, until: sc.until })
+    : buildScheduledEntry(fields, sc.date, sc.time);
+  if (!entry) { error.value = 'Could not schedule this task.'; return false; }
   try {
     scheduledList.value = await mutateScheduled(userId.value, (l) => [...l, entry]);
-    afterMaterialize(); // a date in the current week (or a recurring occurrence) shows up right away
+    await afterMaterialize(); // today's date (or today's occurrence) shows up right away
     newTask.value = blankTask();
     capWarning.value = false; capOverride.value = false;
     closeModal();
     error.value = '';
+    return true;
   } catch (e) {
     console.error('Error scheduling task:', e);
     error.value = 'Could not save the scheduled task (permissions?). Nothing was changed.';
+    return false;
   }
+};
+
+// Task details: Schedule switch / Repeat for an existing task (scope 'this' | 'future' for occurrences of a series).
+const schedEditError = ref('');
+const selectedDayDate = computed(() => tabDays.value[selectedDayIndex.value]?.date || getTodayId());
+const detailSchedule = computed(() => scheduleOfTask(taskDetail.value, scheduledList.value, selectedDayDate.value));
+const saveTaskSchedule = async ({ sched, scope }) => {
+  schedEditError.value = '';
+  if (blockIfLocked() || !userId.value) return;
+  const task = taskDetail.value; const key = taskKey(task);
+  const dayName = days[selectedDayIndex.value].day;
+  let res = null;
+  try {
+    scheduledList.value = await mutateScheduled(userId.value, (l) => { res = applyTaskSchedule({ list: l, task, sched, scope, dayDate: selectedDayDate.value }); return res.error ? l : res.list; });
+    if (res.error) { schedEditError.value = res.error; return; }
+    const ref_ = doc(db, 'weeklyRoutines', `${userId.value}_${dayName}`);
+    const cur = (await getDoc(ref_)).data()?.tasks || [];
+    const next = res.task ? cur.map((t) => (taskKey(t) === key ? res.task : t)) : cur.filter((t) => taskKey(t) !== key);
+    await updateDoc(ref_, { tasks: next, updatedAt: serverTimestamp() });
+    selectedDayRoutine.value = next;
+    cancelTaskNotifications(task);
+    if (res.task) taskDetail.value = res.task; else closeTaskDetailModal();
+    await afterMaterialize();
+    resyncNotifications();
+  } catch (e) { console.error('schedule edit', e); schedEditError.value = 'Could not save the schedule.'; }
+};
+const editScheduledEntry = async ({ id, fields, sched, scope }) => {
+  if (!userId.value) return;
+  const bad = validateSchedule(sched, sched.repeat === 'never' ? getTodayId() : null); if (bad) { scheduledError.value = bad; return; }
+  try { scheduledList.value = await mutateScheduled(userId.value, (l) => editEntry(l, id, fields || {}, sched, scope, getTodayId())); await afterMaterialize(); resyncNotifications(); }
+  catch (e) { console.error(e); scheduledError.value = 'Could not update the scheduled task.'; }
+};
+
+// Reminders for scheduled/recurring tasks: rebuilt from scratch after any change (capped, see utils/schedNotify.js).
+let notifTimer = null;
+const resyncNotifications = () => {
+  clearTimeout(notifTimer);
+  notifTimer = setTimeout(async () => {
+    if (!userId.value) return;
+    const todayName = days[new Date().getDay()]?.day;
+    const todayTasks = selectedDayIndex.value === new Date().getDay() ? selectedDayRoutine.value : await loadDayTasks(userId.value, todayName).catch(() => []);
+    await syncScheduledNotifications({ list: scheduledList.value, todayTasks, todayStr: getTodayId() });
+  }, 600);
 };
 
 // Editor: move an existing one-time task from today's list to a future date.
@@ -1659,8 +1710,12 @@ const updateScheduledDate = async ({ id, date, time }) => {
   catch (e) { console.error(e); scheduledError.value = 'Could not update the date.'; }
 };
 const deleteScheduled = async (id) => {
-  if (!userId.value || !confirm('Delete this scheduled task?')) return;
-  try { scheduledList.value = await mutateScheduled(userId.value, (l) => removeScheduled(l, id)); }
+  if (!userId.value) return;
+  const e = scheduledList.value.find((x) => x.id === id);
+  let scope = 'this';
+  if (e?.templateId) { if (!confirm('Delete this repeating task?')) return; scope = confirm('OK = this and all future occurrences\nCancel = only this one') ? 'future' : 'this'; }
+  else if (!confirm(e?.recurrence ? 'Delete this whole repeating series?' : 'Delete this scheduled task?')) return;
+  try { scheduledList.value = await mutateScheduled(userId.value, (l) => deleteEntry(l, id, scope)); }
   catch (e) { console.error(e); scheduledError.value = 'Could not delete the task.'; }
 };
 
@@ -1677,7 +1732,7 @@ const addNewTask = async () => {
 
   limitHit.value = null;
   try {
-    if (!(await dailyLimitGate(newTask.value.scheduleDate || getTodayId()))) {
+    if (!(await dailyLimitGate((newTask.value.sched?.on && newTask.value.sched.repeat === 'never' && newTask.value.sched.date) || getTodayId()))) {
       const l = limitHit.value;
       if (!l.pro) { goUpgradeForLimit(); return false; } // free user over the daily limit: open the paywall instead of an error
       error.value = l.pro ? `Daily limit reached: ${l.limit} tasks per day on Pro.` : `Daily limit reached: free accounts can add ${l.limit} tasks per day.`;
@@ -1686,7 +1741,7 @@ const addNewTask = async () => {
   } catch (e) { console.error('limit check', e); error.value = 'Could not check your daily task limit, try again.'; return false; }
 
   // Scheduled-for-later tasks go to their own doc and do not count toward today's cap.
-  if (newTask.value.scheduleDate) { await submitScheduledTask(); return true; }
+  if (newTask.value.sched?.on) { return await submitScheduledTask(); }
 
   if (isCapBlocked()) return false;
 
@@ -2956,6 +3011,9 @@ const finishShutdown = async (carry) => {
 const ehTasksCache = ref([]);
 const ehTasks = computed(() => (isToday(selectedDayIndex.value) || selectedDayLocked.value ? selectedDayRoutine.value : ehTasksCache.value));
 watch(selectedDayRoutine, (l) => { if (isToday(selectedDayIndex.value) || selectedDayLocked.value) ehTasksCache.value = [...(l || [])]; }, { deep: true });
+// Scheduled notifications: resync on any schedule/today-list change (declared after selectedDayRoutine to avoid TDZ).
+watch(scheduledList, resyncNotifications);
+watch(() => selectedDayRoutine.value.map((t) => `${t.scheduledId || ''}:${t.completed ? 1 : 0}:${t.time || ''}`).join(','), resyncNotifications);
 watch(userId, (u) => { if (u) syncAfterAuth(); }, { immediate: true }); // also saves the wake time picked in onboarding if the account has no plan yet
 const ehStartError = ref('');
 let ehStarting = false;

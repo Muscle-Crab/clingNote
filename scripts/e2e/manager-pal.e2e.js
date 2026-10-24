@@ -1,12 +1,13 @@
 // Local end-to-end run of Manager & Pal against the Firebase emulators (demo-clingnote; cannot reach production).
 // Needs: emulators (firebase.e2e.json), scripts/e2e/fn-server.js on :8888, `VUE_APP_FIREBASE_EMULATORS=1 vue-cli-service serve --port 8099`.
 // Run: NODE_PATH=<dir with playwright-core + firebase-admin> node scripts/e2e/manager-pal.e2e.js
-process.env.GCLOUD_PROJECT = 'demo-clingnote'; process.env.FIRESTORE_EMULATOR_HOST = '127.0.0.1:8085'; process.env.FIREBASE_AUTH_EMULATOR_HOST = '127.0.0.1:9099';
+const AP = process.env.EMU_AUTH_PORT || 9099, FP = process.env.EMU_FS_PORT || 8085;
+process.env.GCLOUD_PROJECT = 'demo-clingnote'; process.env.FIRESTORE_EMULATOR_HOST = `127.0.0.1:${FP}`; process.env.FIREBASE_AUTH_EMULATOR_HOST = `127.0.0.1:${AP}`;
 const { chromium } = require('playwright-core');
 const admin = require('firebase-admin');
 admin.initializeApp({ projectId: 'demo-clingnote' });
 const db = admin.firestore();
-const B = 'http://localhost:8099', FN = 'http://127.0.0.1:8888', SHOTS = process.env.SHOTS || '/workspace/eighthour_shots/';
+const B = `http://localhost:${process.env.WEB_PORT || 8099}`, FN = `http://127.0.0.1:${process.env.FN_PORT || 8888}`, SHOTS = process.env.SHOTS || '/workspace/eighthour_shots/';
 const results = []; const ok = (name, cond, extra = '') => { results.push({ name, pass: !!cond }); console.log(`${cond ? 'ok  ' : 'FAIL'} ${name} ${extra}`); if (!cond) throw new Error('E2E failed: ' + name); };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const WEEK = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -19,13 +20,14 @@ async function seedUser(email, name) {
 }
 async function seedTasks(uid, prefix) {
   const today = WEEK[(new Date().getDay() + 6) % 7];
-  for (const d of WEEK) await db.doc(`weeklyRoutines/${uid}_${d}`).set({ tasks: [] });
-  await db.doc(`weeklyRoutines/${uid}_${today}`).set({ tasks: [
+  // Same doc ids as the app (src/data.json days[].day = 'Mon'..'Sun').
+  for (const d of WEEK) await db.doc(`weeklyRoutines/${uid}_${d.slice(0, 3)}`).set({ tasks: [] });
+  await db.doc(`weeklyRoutines/${uid}_${today.slice(0, 3)}`).set({ tasks: [
     { title: `${prefix} public task`, completed: false, visibility: 'public' },
     { title: `${prefix} legacy task (no field)`, completed: false },
     { title: `${prefix} SECRET private task`, completed: false, visibility: 'private' },
   ] });
-  if (today !== 'Monday') await db.doc(`weeklyRoutines/${uid}_Monday`).set({ tasks: [ // past day: overdue
+  if (today !== 'Monday') await db.doc(`weeklyRoutines/${uid}_Mon`).set({ tasks: [ // past day: overdue
     { title: `${prefix} overdue public task`, completed: false, visibility: 'public' },
     { title: `${prefix} SECRET overdue private task`, completed: false, visibility: 'private' },
   ] });
@@ -53,7 +55,7 @@ async function emailLogin(p, email) {
 }
 async function idTokenFor(uid) {
   const ct = await admin.auth().createCustomToken(uid);
-  const r = await fetch('http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=fake', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: ct, returnSecureToken: true }) });
+  const r = await fetch(`http://127.0.0.1:${AP}/identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=fake`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: ct, returnSecureToken: true }) });
   return (await r.json()).idToken;
 }
 async function callFn(tok, body) {
@@ -61,8 +63,8 @@ async function callFn(tok, body) {
   return { status: r.status, body: await r.json().catch(() => ({})) };
 }
 async function resetEmulators() {
-  await fetch('http://127.0.0.1:8085/emulator/v1/projects/demo-clingnote/databases/(default)/documents', { method: 'DELETE' });
-  await fetch('http://127.0.0.1:9099/emulator/v1/projects/demo-clingnote/accounts', { method: 'DELETE' });
+  await fetch(`http://127.0.0.1:${FP}/emulator/v1/projects/demo-clingnote/databases/(default)/documents`, { method: 'DELETE' });
+  await fetch(`http://127.0.0.1:${AP}/emulator/v1/projects/demo-clingnote/accounts`, { method: 'DELETE' });
 }
 const shot = (p, n) => p.screenshot({ path: SHOTS + n });
 module.exports = { idTokenFor, callFn, db, admin, ok, sleep, seedUser, seedTasks, newPage, emailLogin, shot, B, FN, results };
@@ -242,14 +244,14 @@ if (require.main === module) (async () => {
   await shot(anon2, 'pal_e2e_12_revoked.png');
 
   // Firestore rules (emulator, real firestore.rules): direct client access
-  const rest = async (tok, method, path, body) => (await fetch(`http://127.0.0.1:8085/v1/projects/demo-clingnote/databases/(default)/documents/${path}`, { method, headers: { Authorization: 'Bearer ' + tok, 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined })).status;
+  const rest = async (tok, method, path, body) => (await fetch(`http://127.0.0.1:${FP}/v1/projects/demo-clingnote/databases/(default)/documents/${path}`, { method, headers: { Authorization: 'Bearer ' + tok, 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined })).status;
   const today = WEEK[(new Date().getDay() + 6) % 7];
   const [tOwner, tMgr, tPal] = await Promise.all([idTokenFor(ownerUid), idTokenFor(mgrUid), idTokenFor(palUidNow)]);
   await db.doc(`managerConnections/${ownerUid}_${mgrUid}`).set({ ownerUid, managerUid: mgrUid, managerName: 'x' });
   await db.doc(`pals/${[ownerUid, palUidNow].sort().join('_')}`).set({ members: [ownerUid, palUidNow].sort() });
-  ok('rules: owner reads own weeklyRoutines', (await rest(tOwner, 'GET', `weeklyRoutines/${ownerUid}_${today}`)) === 200);
-  ok('rules: connected manager cannot read owner weeklyRoutines', (await rest(tMgr, 'GET', `weeklyRoutines/${ownerUid}_${today}`)) === 403);
-  ok('rules: pal cannot read owner weeklyRoutines', (await rest(tPal, 'GET', `weeklyRoutines/${ownerUid}_${today}`)) === 403);
+  ok('rules: owner reads own weeklyRoutines', (await rest(tOwner, 'GET', `weeklyRoutines/${ownerUid}_${today.slice(0, 3)}`)) === 200);
+  ok('rules: connected manager cannot read owner weeklyRoutines', (await rest(tMgr, 'GET', `weeklyRoutines/${ownerUid}_${today.slice(0, 3)}`)) === 403);
+  ok('rules: pal cannot read owner weeklyRoutines', (await rest(tPal, 'GET', `weeklyRoutines/${ownerUid}_${today.slice(0, 3)}`)) === 403);
   ok('rules: manager reads own managerConnections doc', (await rest(tMgr, 'GET', `managerConnections/${ownerUid}_${mgrUid}`)) === 200);
   ok('rules: client cannot write managerConnections (manager)', (await rest(tMgr, 'PATCH', `managerConnections/${ownerUid}_${mgrUid}`, { fields: { managerName: { stringValue: 'hack' } } })) === 403);
   ok('rules: client cannot write managerConnections (owner)', (await rest(tOwner, 'PATCH', `managerConnections/${ownerUid}_x`, { fields: { ownerUid: { stringValue: ownerUid } } })) === 403);

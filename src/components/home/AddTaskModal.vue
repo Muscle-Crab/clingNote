@@ -17,25 +17,9 @@
             <input type="datetime-local" v-model="newTask.reminder.datetime" class="field-input" />
           </div>
           <div class="field-group">
-            <label class="field-label" for="nt-sched-date">Schedule for later</label>
-            <div class="field-grid">
-              <input id="nt-sched-date" type="date" v-model="newTask.scheduleDate" :min="tomorrow" class="field-input" aria-label="Schedule date" />
-              <input type="time" v-model="newTask.scheduleTime" class="field-input" :disabled="!newTask.scheduleDate" aria-label="Schedule time (optional)" />
-            </div>
-            <div v-if="newTask.scheduleDate" class="field-grid">
-              <select v-model="newTask.scheduleRepeat" class="field-select" aria-label="Repeat scheduled task">
-                <option value="">Doesn't repeat</option>
-                <option value="weekly">Weekly on…</option>
-                <option value="daily">Every day</option>
-                <option value="monthly">Monthly (same day)</option>
-              </select>
-            </div>
-            <div v-if="newTask.scheduleDate && newTask.scheduleRepeat === 'weekly'" class="sched-weekdays" role="group" aria-label="Repeat on weekdays">
-              <label v-for="(w, i) in WEEKDAYS" :key="w" class="sched-wd"><input type="checkbox" :value="i" v-model="newTask.scheduleDays" /> {{ w }}</label>
-            </div>
-            <p v-if="newTask.scheduleDate" class="field-hint">Hidden everywhere until the week of {{ newTask.scheduleDate }}; shows from that Monday with a due badge.<template v-if="newTask.scheduleRepeat"> Each occurrence is its own task.</template></p>
+            <SchedulePicker v-if="newTask.sched" v-model="newTask.sched" :min-date="today" />
           </div>
-          <div class="field-group">
+          <div v-if="!newTask.sched?.on" class="field-group">
             <label class="field-label" for="nt-repeat">Repeat</label>
             <select id="nt-repeat" v-model="repeatMode" class="field-select">
               <option value="daily">Daily</option>
@@ -135,9 +119,9 @@
 </template>
 
 <script setup>
+import SchedulePicker from './SchedulePicker.vue';
 import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { ACTIVE_CAP, STATUSES } from '@/utils/taskPlanning';
-import { WEEKDAYS } from '@/utils/scheduling';
 import { getOrdinalSuffix } from '@/utils/dateTime';
 import { TASK_LIMITS, PRO_RAISES_LIMIT } from '@/config/pricing';
 import { rcProActive } from '@/composables/usePro';
@@ -157,7 +141,7 @@ const proLimit = TASK_LIMITS.pro;
 const proRaises = PRO_RAISES_LIMIT;
 const repeatMode = defineModel('repeatMode');
 const showAdvanced = defineModel('showAdvanced');
-const tomorrow = (() => { const d = new Date(); d.setDate(d.getDate() + 1); return d.toLocaleDateString('en-CA'); })();
+const today = new Date().toLocaleDateString('en-CA');
 defineEmits(['close', 'submit', 'add-anyway', 'upgrade']);
 const titleInput = ref(null);
 onMounted(() => nextTick(() => titleInput.value && titleInput.value.focus()));

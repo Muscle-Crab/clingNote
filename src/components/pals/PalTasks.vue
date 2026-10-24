@@ -5,7 +5,7 @@
       <div v-if="g.items.length" class="pl-sec" :class="g.cls">{{ g.label }} · {{ g.items.length }}</div>
       <div v-for="t in g.items" :key="t.key" class="pl-task" :class="{ done: t.completed, late: t.overdue }">
         <span class="pl-chk" :class="{ on: t.completed }">{{ t.completed ? '✓' : '' }}</span>
-        <div class="pl-grow"><div class="pl-name">{{ t.title }}</div><div class="pl-small">{{ t.day }}<span v-if="t.reminder && t.reminder.time"> · {{ t.reminder.time }}</span></div></div>
+        <div class="pl-grow"><div class="pl-name">{{ t.title }}</div><div class="pl-small">{{ t.day }}<span v-if="t.scheduled && t.upcoming"> · {{ t.scheduled.date.slice(5) }}</span><span v-if="t.reminder && t.reminder.time"> · ⏰ {{ t.reminder.time }}</span><span v-if="t.scheduled && t.scheduled.repeat" data-test="pal-repeat"> · 🔁 {{ t.scheduled.repeat }}</span></div></div>
       </div>
     </template>
   </div>

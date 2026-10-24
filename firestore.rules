@@ -94,16 +94,26 @@ service cloud.firestore {
     }
 
     // Users collection - private to the owner. Other users' names/avatars come from /publicProfiles.
+    // Scheduled / recurring tasks (users/{uid}.scheduledTasks = { tasks: [...], updatedAt }); written only by the owner.
+    function schedOk() {
+      return !('scheduledTasks' in request.resource.data)
+        || (request.resource.data.scheduledTasks is map
+            && request.resource.data.scheduledTasks.keys().hasOnly(['tasks', 'updatedAt'])
+            && (!('tasks' in request.resource.data.scheduledTasks)
+                || (request.resource.data.scheduledTasks.tasks is list && request.resource.data.scheduledTasks.tasks.size() <= 300)));
+    }
     match /users/{userId} {
       allow read: if isOwner(userId) || isAdmin();
       // Signup may set the starter 15 credits, nothing else billing-related
       allow create: if isOwner(userId)
         && request.resource.data.keys().hasAny(billingKeys().removeAll(['credits'])) == false
         && freeDefaultsOnly()
-        && (!('credits' in request.resource.data) || request.resource.data.credits == 15);
+        && (!('credits' in request.resource.data) || request.resource.data.credits == 15)
+        && schedOk();
       allow update: if isOwner(userId)
         && !request.resource.data.diff(resource.data).affectedKeys().hasAny(billingKeys())
-        && proFieldsOk();
+        && proFieldsOk()
+        && schedOk();
       allow delete: if isOwner(userId) || isAdmin();
     }
 

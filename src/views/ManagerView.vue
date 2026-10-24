@@ -32,7 +32,7 @@
             <span class="mp-check" :class="{ on: t.completed }">{{ t.completed ? '✓' : '' }}</span>
             <div class="mp-tbody">
               <div class="mp-ttl">{{ t.title }}</div>
-              <div class="mp-meta">{{ t.day }}<span v-if="t.reminder && t.reminder.time"> · {{ t.reminder.time }}</span><span v-if="t.overdue" class="mp-pill">Overdue</span></div>
+              <div class="mp-meta">{{ t.day }}<span v-if="t.upcoming && t.scheduled"> · {{ t.scheduled.date.slice(5) }}</span><span v-if="t.reminder && t.reminder.time"> · ⏰ {{ t.reminder.time }}</span><span v-if="t.scheduled && t.scheduled.repeat" data-test="pal-repeat"> · 🔁 {{ t.scheduled.repeat }}</span><span v-if="t.overdue" class="mp-pill">Overdue</span></div>
             </div>
             <div v-if="!t.completed" class="mp-acts">
               <button v-if="sent[t.key]" class="mp-sent" disabled>{{ sent[t.key] }}</button>

@@ -33,6 +33,19 @@
           <span>{{ formatShortDate(task.reminder.date) }} at {{ formatTime(task.reminder.time) }}</span>
         </div>
 
+        <div class="detail-sched" data-test="detail-schedule">
+          <p v-if="label" class="detail-row" data-test="sched-label">{{ label }}</p>
+          <SchedulePicker v-model="sched" :min-date="sched.repeat === 'never' ? dayDate : ''" />
+          <p v-if="schedError" class="detail-err" role="alert">{{ schedError }}</p>
+          <div v-if="dirty" class="detail-sched-actions">
+            <template v-if="task.templateId">
+              <button type="button" class="btn-secondary" data-test="sched-save-this" :disabled="sched.on && sched.repeat !== original.repeat" @click="save('this')">This one</button>
+              <button type="button" class="btn-primary" data-test="sched-save-future" @click="save('future')">All future</button>
+            </template>
+            <button v-else type="button" class="btn-primary" data-test="sched-save" @click="save('future')">Save schedule</button>
+          </div>
+        </div>
+
         <div v-if="task.notes" class="detail-row detail-row--block">
           <span class="detail-row-icon">📝</span>
           <div>
@@ -61,16 +74,34 @@
 </template>
 
 <script setup>
+import { ref, computed, watch } from 'vue';
 import { formatShortDate, formatTime, extractYouTubeID } from '@/utils/dateTime';
+import { scheduleLabel } from '@/utils/scheduling';
+import SchedulePicker from './SchedulePicker.vue';
 
-defineProps({
+const props = defineProps({
   task: { type: Object, default: () => ({}) },
   activeLabels: { type: Array, default: () => [] },
+  schedule: { type: Object, default: () => ({ on: false, date: '', time: '', repeat: 'never', days: [], dayOfMonth: '', until: '' }) },
+  dayDate: { type: String, default: '' },
+  schedError: { type: String, default: '' },
 });
-defineEmits(['close', 'preview', 'remove-attachment', 'toggle-label']);
+const emit = defineEmits(['close', 'preview', 'remove-attachment', 'toggle-label', 'save-schedule']);
+const clone = (o) => JSON.parse(JSON.stringify(o || {}));
+const original = ref(clone(props.schedule));
+const sched = ref(clone(props.schedule));
+watch(() => props.schedule, (v) => { original.value = clone(v); sched.value = clone(v); });
+const dirty = computed(() => JSON.stringify(sched.value) !== JSON.stringify(original.value));
+const label = computed(() => scheduleLabel(props.task));
+const save = (scope) => emit('save-schedule', { sched: clone(sched.value), scope });
 </script>
 
 <style scoped>
+.detail-sched { border-top: 1px solid var(--c-border, #2a2a2e); border-bottom: 1px solid var(--c-border, #2a2a2e); padding: .75rem 0; margin: .5rem 0; display: flex; flex-direction: column; gap: .5rem; }
+.detail-sched-actions { display: flex; gap: .5rem; justify-content: flex-end; }
+.detail-err { color: var(--c-danger, #f87171); font-size: .8rem; margin: 0; }
+.btn-secondary { background: transparent; color: var(--c-text, #ededea); border: 1px solid var(--c-border, #2a2a2e); border-radius: var(--r, 3px); padding: .45rem .9rem; cursor: pointer; }
+.btn-secondary:disabled { opacity: .4; cursor: not-allowed; }
 .modal-backdrop {
   position: fixed;
   inset: 0;

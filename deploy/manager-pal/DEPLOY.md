@@ -49,3 +49,13 @@ Before step 4, open Firebase Console → Firestore → Rules and confirm the liv
 `managers`, `managerLinks` (sha256 of the token only), `managerConnections`, `palInvites` (10-minute codes), `pals` (+`messages` from clients), `users/{uid}/managerChat`, `blocks`, `reports`.
 
 Reports have no admin UI yet. Review them in the Firestore console (`reports`, `status: 'open'`). App Review expects reports to be handled within 24h.
+
+## Scheduling update (feat/ios-capacitor, local only)
+- `netlify/functions/manager-pal.js` + `lib/managerPal.js` on `feat/ios-capacitor` now also return Public scheduled/recurring tasks
+  (`scheduled: {date,time,repeat}`, `upcoming`, overdue once the time passes). Additive and backward compatible; Private stays server-side.
+  To ship it, build with `SRC=feat/ios-capacitor ./build-minimal.sh` (default SRC is still `feat/manager-pal`, which lacks this).
+- `firestore.rules` gained `schedOk()` on `users/{uid}` create/update (owner-only; `scheduledTasks` map, ≤300 tasks).
+  It is outside `manager-pal.rules.snippet`; merge it into prod rules separately. Nothing here was deployed.
+- **Bug fix that matters for the web deploy:** the app stores day docs as `weeklyRoutines/{uid}_Mon..Sun` (`src/data.json`), but the
+  `feat/manager-pal` function reads `{uid}_Monday..Sunday`. Real users' managers/pals would see no tasks (the e2e seeded full-name docs, so it passed).
+  The `feat/ios-capacitor` function reads both. `calendar.js` and `daily-report.js` use full names too (not changed here).
