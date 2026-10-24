@@ -5,5 +5,25 @@
   "ios": {
     "contentInset": "always",
     "scheme": "ClingNot"
+  },
+  "plugins": {
+    "FirebaseAuthentication": {
+      "skipNativeAuth": true,
+      "providers": [
+        "google.com"
+      ]
+    }
+  },
+  "experimental": {
+    "ios": {
+      "spm": {
+        "packageTraits": {
+          "@capacitor-firebase/authentication": [
+            "Google"
+          ]
+        },
+        "swiftToolsVersion": "6.1"
+      }
+    }
   }
 }

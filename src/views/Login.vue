@@ -3,7 +3,7 @@
     <div class="bg-white dark:bg-gray-800 shadow-lg rounded-2xl w-full max-w-md p-6 sm:p-8">
       <!-- Header -->
 
-      <!-- Sign in: Apple (iOS app + web) / Google (web). New accounts are created on first Apple/Google sign-in; there is no email sign-up. -->
+      <!-- Sign in: Apple (iOS app + web) / Google (web + iOS app). New accounts are created on first Apple/Google sign-in; there is no email sign-up. -->
       <h1 class="text-xl font-semibold text-center text-gray-900 dark:text-gray-100 mb-1" data-test="login-title">Sign in to CleanNote</h1>
       <p class="text-sm text-center text-gray-500 dark:text-gray-400 mb-5">New here? Signing in creates your account.</p>
       <div class="space-y-3">
@@ -13,7 +13,7 @@
           <svg class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16.37 1.43c0 1.14-.46 2.22-1.2 3.02-.8.86-2.1 1.52-3.14 1.44-.13-1.1.42-2.25 1.15-3 .82-.86 2.2-1.5 3.19-1.46zM20.5 17.1c-.55 1.27-.82 1.84-1.52 2.96-1 1.57-2.4 3.52-4.14 3.54-1.55.02-1.95-1-4.05-.99-2.1.01-2.54 1.01-4.09.99-1.74-.02-3.07-1.78-4.07-3.35C-.27 15.7-.56 10.6 1.4 7.88c1.4-1.93 3.6-3.06 5.67-3.06 2.1 0 3.42 1.15 5.16 1.15 1.68 0 2.7-1.15 5.14-1.15 1.84 0 3.79 1 5.18 2.73-4.55 2.5-3.81 9 .0 9.55z"/></svg>
           <span>Sign in with Apple</span>
         </button>
-        <!-- Google (web only: Google blocks embedded WKWebView OAuth, so it is hidden in the iOS app) -->
+        <!-- Google: web = Firebase popup; iOS app = native Google Sign-In SDK (Google blocks OAuth inside WKWebView) -->
         <button v-if="showGoogle" type="button" @click.prevent="signInWithGoogle" :disabled="isSubmitting" data-test="google-signin"
                 class="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-lg bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-600 text-sm font-medium disabled:opacity-50">
           <img src="https://img.icons8.com/color/48/000000/google-logo.png" class="h-5 w-5" alt="Google" />
@@ -61,7 +61,8 @@
 import { ref, nextTick } from 'vue';
 import PasswordField from '@/components/ui/PasswordField.vue';
 import { requestPasswordReset, loginErrorMessage } from '@/utils/authReset';
-import { signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, sendPasswordResetEmail, updateProfile } from 'firebase/auth';
+import { signInWithEmailAndPassword, sendPasswordResetEmail, updateProfile } from 'firebase/auth';
+import { signInWithGoogle as googleSignIn } from '@/utils/googleAuth';
 import { isNativeIOS } from '@/utils/platform';
 import { signInWithApple } from '@/utils/appleAuth';
 import { hasSeenTutorial, markTutorialSeen } from '@/utils/entryGuard';
@@ -72,7 +73,7 @@ import { useRouter, useRoute } from 'vue-router';
 
 const router = useRouter();
 const showApple = isNativeIOS();
-const showGoogle = !isNativeIOS(); // native Google needs @capacitor-firebase/authentication + GoogleService-Info.plist (see progress notes)
+const showGoogle = true; // iOS uses native Google Sign-In (src/utils/googleAuth.js)
 const _rd = useRoute().query.redirect;
 const afterLogin = () => (typeof _rd === 'string' && _rd.startsWith('/') && !_rd.startsWith('//') ? _rd : '/');
 // A brand-new account created from this page (Apple/Google) that never saw the tutorial goes through it first (/welcome?new=1), then on to the post-signup setup + paywall.
@@ -121,9 +122,9 @@ const loginUser = async () => {
 
 
 const signInWithGoogle = async () => {
-  const provider = new GoogleAuthProvider();
+  errorMessage.value = ''; infoMessage.value = '';
   try {
-    const result = await signInWithPopup(auth, provider);
+    const result = await googleSignIn();
     const user = result.user;
 
     console.log('Google sign-in successful:', user.email);
@@ -158,7 +159,8 @@ const signInWithGoogle = async () => {
     afterSignIn();
     router.push(afterLogin());
   } catch (error) {
-    console.error('Google sign-in failed:', error.message);
+    console.error('Google sign-in failed:', error?.code || '', error?.message);
+    if (/cancel/i.test(String(error?.message || error?.code || ''))) return; // user closed the Google sheet
     errorMessage.value = "Google sign-in failed.";
   }
 };

@@ -1,7 +1,8 @@
 import { fnUrl } from '@/config/api';
 // Client side of in-app account deletion (App Store 5.1.1(v)). Re-authenticates when needed, then asks the server
 // (netlify/functions/delete-account.js, Admin SDK) to erase Firestore data, Storage files and the Firebase Auth user.
-import { EmailAuthProvider, GoogleAuthProvider, reauthenticateWithCredential, reauthenticateWithPopup } from 'firebase/auth';
+import { EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
+import { reauthWithGoogle } from '@/utils/googleAuth';
 import { auth } from '@/firebaseConfig';
 import { isNativeIOS } from '@/utils/platform';
 import { reauthWithApple, userHasAppleProvider, userHasPasswordProvider, userHasGoogleProvider } from '@/utils/appleAuth';
@@ -10,7 +11,7 @@ import { reauthWithApple, userHasAppleProvider, userHasPasswordProvider, userHas
 export const reauthMethod = (user = auth.currentUser) => {
   if (userHasPasswordProvider(user)) return 'password';
   if (userHasAppleProvider(user) && isNativeIOS()) return 'apple';
-  if (userHasGoogleProvider(user) && !isNativeIOS()) return 'google';
+  if (userHasGoogleProvider(user)) return 'google';
   return 'none';
 };
 
@@ -34,7 +35,7 @@ export async function deleteMyAccount(opts = {}) {
     } else if (method === 'apple') {
       code = await reauthWithApple(user);
     } else if (method === 'google') {
-      await reauthenticateWithPopup(user, new GoogleAuthProvider());
+      await reauthWithGoogle(user);
     }
     const res = await callDelete(user, code);
     if (!res.ok) {
