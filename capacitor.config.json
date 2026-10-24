@@ -4,7 +4,8 @@
   "webDir": "dist",
   "ios": {
     "contentInset": "always",
-    "scheme": "ClingNot"
+    "scheme": "ClingNot",
+    "backgroundColor": "#070D1C"
   },
   "plugins": {
     "FirebaseAuthentication": {
@@ -25,5 +26,6 @@
         "swiftToolsVersion": "6.1"
       }
     }
-  }
+  },
+  "backgroundColor": "#070D1C"
 }

@@ -9,10 +9,12 @@
   --c-success: #3DDC97; --c-success-soft: #10261D; --c-warn: #F5B83D; --c-warn-soft: #2B2209; --c-warn-text: #F5C75F;
   --c-danger: #F87171; --c-danger-soft: #2E1517;
   --font: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  min-height: 100vh; background: var(--c-bg); color: var(--c-text); font-family: var(--font); -webkit-font-smoothing: antialiased;
+  min-height: 100vh; min-height: 100dvh; background: var(--c-bg); color: var(--c-text); font-family: var(--font); -webkit-font-smoothing: antialiased;
   padding-bottom: env(safe-area-inset-bottom);
 }
-html, body { background: #070D1C; }
+html, body, #app { background: #070D1C; }
+html { min-height: 100%; }
+body, #app { min-height: 100vh; min-height: 100dvh; margin: 0; }
 /* Top bar floats over each page's forest header */
 .app-shell .app-topbar { position: absolute; top: 0; left: 0; right: 0; z-index: 60; background: transparent; border-bottom: 0; pointer-events: none; }
 .app-shell .app-topbar-inner > *, .app-shell .app-topbar aside { pointer-events: auto; }

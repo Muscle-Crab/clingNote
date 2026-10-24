@@ -1,5 +1,6 @@
 <template>
   <div class="container mx-auto py-8">
+    <button type="button" class="profile-close" aria-label="Close" data-test="profile-close" @click="closeProfile">&#x2715;</button>
     <div v-if="userData" class="max-w-md mx-auto bg-white rounded-lg shadow-md overflow-hidden">
       <!-- Profile Image: own photo, or the default initials avatar -->
       <div class="relative">
@@ -74,6 +75,9 @@ import DeleteAccount from '@/components/DeleteAccount.vue';
 import { syncPublicProfile } from '@/composables/usePublicProfile';
 import { fileToAvatarDataUrl, isAvatarSrc, initialsOf } from '@/utils/avatar';
 import { ref, computed, onMounted, watch } from 'vue';
+import { useRouter as useCloseRouter } from 'vue-router';
+const closeRouter = useCloseRouter();
+const closeProfile = () => { if (window.history.state && window.history.state.back) closeRouter.back(); else closeRouter.push('/'); };
 import { onAuthStateChanged } from 'firebase/auth';
 import { ensureUserDoc } from '@/utils/userDoc';
 import { isPro } from '@/utils/pro';
@@ -200,3 +204,9 @@ const saveUserData = async () => {
   }
 };
 </script>
+
+<style scoped>
+.profile-close { position: fixed; top: calc(env(safe-area-inset-top) + 64px); right: 16px; z-index: 70; width: 40px; height: 40px; border-radius: 9999px;
+  display: flex; align-items: center; justify-content: center; font-size: 18px; line-height: 1; color: #F2F5FC; background: rgba(12,22,48,.85); border: 1px solid #2A3C66; }
+.profile-close:hover { background: #12203F; }
+</style>

@@ -1,5 +1,5 @@
 <template>
-  <div class="min-h-screen bg-gray-100 dark:bg-gray-900 flex items-center justify-center px-4">
+  <div class="login-page flex justify-center px-4 pt-4 pb-10 sm:pt-10">
     <div class="bg-white dark:bg-gray-800 shadow-lg rounded-2xl w-full max-w-md p-6 sm:p-8">
       <!-- Header -->
 
