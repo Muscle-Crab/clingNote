@@ -139,8 +139,10 @@ const userHandler = async (event, db, deps, now, uid) => {
     case 'connectManager': {
       const { uid: owner, manager } = await resolveToken(db, body.token);
       if (owner === uid) throw err(400, "That's your own link");
-      const [oName, mName] = await Promise.all([ownerName(db, owner), ownerName(db, uid)]);
-      const managerName = (mName !== 'Your person' && mName) || manager.name || 'Manager';
+      // Name the manager by their own account (a brand-new account has a users doc but often no publicProfiles yet);
+      // the owner's link label ("Mom") is only the last fallback, so several managers on one link stay distinguishable.
+      const [oName, mName, mUser] = await Promise.all([ownerName(db, owner), ownerName(db, uid), db.doc(`users/${uid}`).get()]);
+      const managerName = (mName !== 'Your person' && mName) || M.clipText(mUser.exists && mUser.data().name, 60) || manager.name || 'Manager';
       await connRef(db, owner, uid).set({ ownerUid: owner, managerUid: uid, ownerName: oName, managerName, createdAt: now, writes: { hour: 0, n: 0 } }, { merge: true });
       await push(deps, owner, 'Manager connected', `${managerName} is now connected as your manager`);
       return json(200, { ok: true, ownerUid: owner, ownerName: oName });
