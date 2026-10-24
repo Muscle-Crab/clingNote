@@ -74,7 +74,10 @@ const nextDayKey = (dayKey) => new Date(Date.parse(`${dayKey}T12:00:00Z`) + 8640
 const shutUntilMs = (lock) => {
   if (!lock || !lock.dayKey || !Number.isFinite(lock.endMs)) return 0;
   const w = parseWake(lock.wakeTime); const tz = validTz(lock.tz) ? lock.tz : 'UTC';
-  const next = w ? wakeInstant(nextDayKey(lock.dayKey), w, tz) : lock.endMs + (24 - clampHours(lock.hours)) * 3600000;
+  if (!w) return lock.endMs + (24 - clampHours(lock.hours)) * 3600000;
+  // The first wake time AFTER the day's end (a late start can run past the next morning's wake, e.g. 8 PM + 12h).
+  let k = nextDayKey(lock.dayKey); let next = wakeInstant(k, w, tz);
+  for (let i = 0; i < 3 && next <= lock.endMs; i++) { k = nextDayKey(k); next = wakeInstant(k, w, tz); }
   return Math.max(next, lock.endMs);
 };
 // Which end-of-day warnings are due: [15, 5] minutes before endMs -> the largest threshold already reached (15 or 5), else 0.
