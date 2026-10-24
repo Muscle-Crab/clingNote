@@ -90,13 +90,14 @@ const shot = (p, n) => p.screenshot({ path: SHOTS + n });
   ok('manager sees the one-time overdue', vt.some((t) => t.title === 'ZZTEST Sched one-time' && t.overdue));
   ok('private scheduled never leaves server', !JSON.stringify(view).includes('SECRET'));
   ok('manager stays read-only (bad action rejected)', (await (await fetch(`${FN}/.netlify/functions/manager-pal`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token, action: 'editTask' }) })).status) === 400);
-  const m = await newPage(br, 'manager'); await m.goto(`${B}/m/${token}`, { waitUntil: 'load' }); await sleep(3000);
-  ok('manager page shows repeat label', await m.locator('[data-test=pal-repeat]').count() > 0);
+  const m = await newPage(br, 'manager'); await m.goto(`${B}/m/${token}`, { waitUntil: 'load' }); await m.waitForSelector('[data-test=sched-label]', { timeout: 15000 }).catch(() => {}); await m.screenshot({ path: SHOTS + 'sched_mgr.png' });
+  { const mc = await m.locator('body').innerText(); ok('manager page shows the daily occurrence with its time', mc.includes('ZZTEST Sched daily') && mc.includes('11:59 PM'), mc.slice(0, 200)); }
   await shot(m, 'sched_6_manager_view.png');
 
   // detail: switch the daily occurrence off ("unscheduled")
   await p.reload({ waitUntil: 'load' }); await sleep(3000); await dismiss();
   await p.locator('.task-title', { hasText: 'ZZTEST Sched one-time' }).first().click(); await sleep(800);
+  if (!(await p.locator('[data-test=detail-schedule]').count())) { await p.locator('[data-test=edit-panel] button', { hasText: 'Full view' }).first().click(); await sleep(800); }
   ok('detail shows schedule picker', await p.locator('[data-test=detail-schedule]').count() > 0);
   await shot(p, 'sched_7_detail.png');
   await p.click('[data-test=detail-schedule] [data-test=schedule-switch]'); await p.click('[data-test=sched-save]'); await sleep(2500);

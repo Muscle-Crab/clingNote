@@ -112,6 +112,7 @@ if (require.main === module) (async () => {
   for (let i = 0; i < 12 && mgr.url().includes('/onboarding'); i++) {
     await sleep(700);
     if (await mgr.locator('.pw-link', { hasText: 'Maybe later' }).count()) { await mgr.click('.pw-link'); continue; }
+    if (await mgr.locator('[data-test=ob-age-input]').count()) await mgr.fill('[data-test=ob-age-input]', '30');
     if (await mgr.locator('.ob-opt').count() && !(await mgr.locator('.ob-opt.on').count())) await mgr.locator('.ob-opt').first().click();
     if (await mgr.locator('.ob-later').count()) { await mgr.click('.ob-later'); continue; }
     if (await mgr.locator('.ob-cta').count()) await mgr.click('.ob-cta');
@@ -124,6 +125,7 @@ if (require.main === module) (async () => {
   const mv = await mgr.content();
   ok('manager view (account): Public tasks shown, Private hidden', mv.includes('Olive public task') && !mv.includes('SECRET'));
   await shot(mgr, 'pal_e2e_3_manager_person.png');
+  { const sk = mgr.locator('button', { hasText: /^Skip$/ }); if (await sk.count()) { await sk.first().click(); await sleep(500); } }
   await mgr.click('[data-test=manager-back]'); await mgr.waitForURL(/\/manage$/); await sleep(2500);
   const rows = mgr.locator('[data-test=managed-person]');
   ok('Manager mode list shows the person', (await rows.count()) === 1 && (await rows.first().innerText()).includes('Olive ZZTEST'));
