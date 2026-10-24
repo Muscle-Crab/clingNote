@@ -15,7 +15,7 @@ const ensurePermission = async () => {
   return p.display === 'granted';
 };
 
-export const scheduleLocal = async (key, { title, body, at, on }) => {
+export const scheduleLocal = async (key, { title, body, at, on, route, type }) => {
   if (!isNativeIOS() || (!at && !on)) return false;
   const when = at ? (at instanceof Date ? at : new Date(at)) : null;
   if (!on && (isNaN(when.getTime()) || when.getTime() <= Date.now())) return false;
@@ -23,7 +23,7 @@ export const scheduleLocal = async (key, { title, body, at, on }) => {
     if (!(await ensurePermission())) return false;
     const id = notifId(key);
     await LocalNotifications.cancel({ notifications: [{ id }] }).catch(() => {});
-    await LocalNotifications.schedule({ notifications: [{ id, title, body, schedule: on ? { on, allowWhileIdle: true } : { at: when, allowWhileIdle: true } }] });
+    await LocalNotifications.schedule({ notifications: [{ id, title, body, extra: { route: route || '/home', type: type || String(key).split(':')[0] }, schedule: on ? { on, allowWhileIdle: true } : { at: when, allowWhileIdle: true } }] });
     return true;
   } catch (e) { console.warn('local notification schedule failed', e); return false; }
 };
@@ -31,7 +31,7 @@ export const cancelLocal = async (key) => { if (!isNativeIOS()) return; try { aw
 
 export const reminderKey = (t) => `rem:${taskKeyOf(t)}`;
 export const timerKey = (t) => `timer:${taskKeyOf(t)}`;
-export const scheduleTimerDone = (t) => scheduleLocal(timerKey(t), { title: 'Timer finished', body: `Time's up: ${t.title || 'your task'}`, at: t.timerEndTime });
+export const scheduleTimerDone = (t) => scheduleLocal(timerKey(t), { title: 'Timer finished', body: `Time's up: ${t.title || 'your task'}`, at: t.timerEndTime, route: '/home', type: 'timer' });
 export const cancelTaskNotifications = (t) => Promise.all([cancelLocal(timerKey(t)), cancelLocal(reminderKey(t))]);
 // Task reminder from { date:'YYYY-MM-DD', time:'HH:MM', repeat } in the phone's local timezone. Returns true if scheduled.
 const repeatOn = (dt, repeat) => {
@@ -46,5 +46,5 @@ export const scheduleReminder = (t, reminder, body) => {
   const dt = reminder && parseLocal(reminder.date, reminder.time);
   if (!dt) return Promise.resolve(false);
   const on = repeatOn(dt, reminder.repeat);
-  return scheduleLocal(reminderKey(t), { title: 'Task Reminder', body, ...(on ? { on } : { at: dt }) });
+  return scheduleLocal(reminderKey(t), { title: 'Task Reminder', body, route: '/home', type: 'reminder', ...(on ? { on } : { at: dt }) });
 };

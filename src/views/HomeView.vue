@@ -1387,7 +1387,7 @@ const runDiscipline = async () => {
     try {
       if (!localStorage.getItem(k)) {
         localStorage.setItem(k, '1');
-        if (typeof Notification !== 'undefined' && Notification.permission === 'granted') new Notification('ClingNote deadline', { body: `${w === '30m' ? '30 min' : '2 hours'} left: ${streakProgress.value}/${DAILY_STREAK_MIN} tasks done` });
+        if (typeof Notification !== 'undefined' && Notification.permission === 'granted') { const wn = new Notification('ClingNote deadline', { body: `${w === '30m' ? '30 min' : '2 hours'} left: ${streakProgress.value}/${DAILY_STREAK_MIN} tasks done` }); wn.onclick = () => { try { window.focus(); } catch (e) { /* */ } wn.close(); }; }
       }
     } catch (e) { /* notifications optional */ }
   }
@@ -1433,7 +1433,7 @@ const runStrictBoss = (now, today) => {
   if (!idleNudge.value && !anyModalOpen.value && isIdle(lastActive.value, now.getTime(), open)) {
     idleNudge.value = bossLine('idle', { open, idle: IDLE_MINUTES }, String(now.getHours()));
     lastActive.value = now.getTime(); // next nudge after another idle stretch
-    try { if (typeof Notification !== 'undefined' && Notification.permission === 'granted' && document.hidden) new Notification('Boss: focus check', { body: idleNudge.value }); } catch (e) { /* optional */ }
+    try { if (typeof Notification !== 'undefined' && Notification.permission === 'granted' && document.hidden) { const bn = new Notification('Boss: focus check', { body: idleNudge.value }); bn.onclick = () => { try { window.focus(); } catch (e) { /* */ } bn.close(); }; } } catch (e) { /* optional */ }
   }
   if (bossMsg.value?.phase === 'verdict' && discState.value.lastVerdictDate !== today && !verdictSeen(today) && !verdictScreen.value) {
     const v = dayVerdict({ done, min, total: (selectedDayRoutine.value || []).filter((t) => t.status !== 'pending').length });

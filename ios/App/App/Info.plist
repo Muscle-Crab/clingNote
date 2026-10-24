@@ -87,5 +87,7 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<key>OneSignal_suppress_launch_urls</key>
+	<true/>
 </dict>
 </plist>

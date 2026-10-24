@@ -62,6 +62,15 @@ if (isNativeIOS()) {
   onAuthStateChanged(auth, (u) => import('./utils/nativePush').then((m) => m.linkNativePushUser(u ? u.uid : null)).catch(() => {}));
 }
 
+// Notification taps (native OneSignal push + local notifications) -> the right screen, also on cold start (queued until router + auth ready).
+if (isNative()) {
+  const authReady = new Promise((res) => { const off = onAuthStateChanged(auth, () => { off(); res(); }); setTimeout(res, 4000); });
+  Promise.all([import('./utils/notifTap'), import('@capacitor/local-notifications'), import('./utils/nativePush')]).then(([t, ln, np]) => {
+    np.initNativePush();
+    t.installNotificationTaps({ router, authReady, oneSignal: window.plugins?.OneSignal, localNotifications: ln.LocalNotifications });
+  }).catch(() => {});
+}
+
 // Universal links / custom-scheme opens (e.g. pal QR scanned with the iPhone Camera) → in-app route.
 import('@capacitor/core').then(async ({ Capacitor }) => {
   if (!Capacitor.isNativePlatform()) return;

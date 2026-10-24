@@ -22,7 +22,7 @@ export function useManager(uid) {
   let primed = false;
   s.push(onSnapshot(doc(db, 'managers', uid), (d) => { managerDoc.value = d.exists() ? d.data() : null; }, () => {}));
   s.push(onSnapshot(query(collection(db, 'users', uid, 'managerChat'), orderBy('createdAt', 'desc'), limit(80)), (q) => {
-    if (primed) q.docChanges().forEach((c) => { const x = c.doc.data(); if (c.type === 'added' && x.from === 'manager' && !x.read) scheduleLocal(`mgr:${c.doc.id}`, { title: x.kind === 'nudge' ? 'Nudge' : 'New message', body: x.text, at: new Date(Date.now() + 1000) }); });
+    if (primed) q.docChanges().forEach((c) => { const x = c.doc.data(); if (c.type === 'added' && x.from === 'manager' && !x.read) scheduleLocal(`mgr:${c.doc.id}`, { title: x.kind === 'nudge' ? 'Nudge' : 'New message', body: x.text, at: new Date(Date.now() + 1000), route: '/pals?tab=manager', type: 'manager' }); });
     primed = true;
     chat.value = q.docs.map((d) => ({ id: d.id, ...d.data(), at: tsMs(d.data().createdAt) })).reverse();
     pending.value = pending.value.filter((p) => !chat.value.some((c) => c.from === 'user' && c.text === p.text && c.at >= p.at - 60000));

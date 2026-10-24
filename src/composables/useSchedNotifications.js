@@ -21,10 +21,10 @@ export const syncScheduledNotifications = async ({ list, todayTasks, todayStr })
     const { cancel, schedule } = diffPlan(prev, plan);
     if (isNativeIOS()) {
       await Promise.all(cancel.map((k) => cancelLocal(k)));
-      for (const n of schedule) await scheduleLocal(n.key, n);
+      for (const n of schedule) await scheduleLocal(n.key, { route: '/home', type: 'sched', ...n });
     } else if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
       webTimers.forEach((h) => clearTimeout(h)); webTimers.clear();
-      schedule.filter((n) => n.at - Date.now() < 86400000).forEach((n) => webTimers.set(n.key, setTimeout(() => { try { new Notification(n.title, { body: n.body }); } catch (e) { /* ignore */ } }, n.at - Date.now())));
+      schedule.filter((n) => n.at - Date.now() < 86400000).forEach((n) => webTimers.set(n.key, setTimeout(() => { try { const w = new Notification(n.title, { body: n.body }); w.onclick = () => { try { window.focus(); } catch (e) { /* */ } if (location.pathname !== '/home') location.assign('/home'); w.close(); }; } catch (e) { /* ignore */ } }, n.at - Date.now())));
     }
     localStorage.setItem(STORE, JSON.stringify(schedule.map((n) => n.key)));
     return schedule.length;

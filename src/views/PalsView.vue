@@ -23,8 +23,10 @@ import { isNative } from '@/utils/platform';
 const route = useRoute();
 const uid = auth.currentUser.uid;
 const prefill = computed(() => String(route.query.code || ''));
-const tab = ref(prefill.value ? 'pals' : 'manager');
+const qTab = () => (route.query.tab === 'pals' || route.query.tab === 'manager' ? String(route.query.tab) : '');
+const tab = ref(qTab() || (prefill.value ? 'pals' : 'manager'));
 watch(prefill, (v) => { if (v) { tab.value = 'pals'; selected.value = null; } });
+watch(() => route.query.tab, () => { const t = qTab(); if (t) { tab.value = t; selected.value = null; } }); // notification tap while already on /pals
 const busy = ref(false); const error = ref(''); const copied = ref(false); const codeCopied = ref(false); const palCode = ref(''); const selected = ref(null);
 const LINK_KEY = `mgrLink:${uid}`;
 const link = ref(localStorage.getItem(LINK_KEY) || '');
