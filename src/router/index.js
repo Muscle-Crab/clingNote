@@ -13,6 +13,7 @@ import { isPro } from '@/utils/pro';
 import { withRcPro, rcProActive, loadUserDoc } from '@/composables/usePro';
 import { db } from '../firebaseConfig';
 import { doc, getDoc } from 'firebase/firestore';
+import { homeFor, setMode, getPendingManagerToken, clearPendingManagerToken } from '@/utils/appMode';
 
 const routes = [
   {
@@ -112,6 +113,35 @@ const routes = [
     name: 'Landing',
     component: () => import('../views/landing.vue')
   },
+  {
+    // Manager & Pals hub (signed-in). ?code=XXXXXXXX pre-fills a pal invite code.
+    path: '/pals',
+    name: 'pals',
+    component: () => import('../views/PalsView.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    // Login-free manager view: the unguessable token in the URL is the only credential (revocable; see netlify/functions/manager-pal.js).
+    path: '/m/:token',
+    name: 'manager',
+    component: () => import('../views/ManagerView.vue'),
+    meta: { bare: true }
+  },
+  {
+    // Manager mode home: everyone you manage (any account can switch between User mode and Manager mode).
+    path: '/manage',
+    name: 'manager-home',
+    component: () => import('../views/ManagerHomeView.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    // Signed-in manager's view of one person (tasks + pings + DMs), served by the manager-pal function.
+    path: '/manage/:ownerUid',
+    name: 'manager-person',
+    component: () => import('../views/ManagerView.vue'),
+    meta: { requiresAuth: true, bare: true }
+  },
+  ...(process.env.NODE_ENV === 'development' ? [{ path: '/__mock/pals', component: () => import('../views/PalsMockView.vue'), meta: { bare: false } }] : []),
   {
     path: '/:pathMatch(.*)*',
     name: 'NotFoundComponent',
@@ -220,15 +250,28 @@ router.beforeEach(async (to, from, next) => {
   const entry = decideEntry({ to: { path: to.path, query: to.query }, user: currentUser, native: isNative(), tutorialSeen: hasSeenTutorial(), paywall });
   if (entry) return next(entry);
 
+  // Manager invite accepted before sign-up: the token waited through sign-in + the normal onboarding (entry above sends
+  // unfinished accounts to /onboarding first), so connect now and land on that person's manager view.
+  if (currentUser && (to.path === '/' || to.path === '/home') && getPendingManagerToken()) {
+    const token = getPendingManagerToken(); clearPendingManagerToken();
+    try {
+      const { palApi } = await import('@/composables/usePals');
+      const r = await palApi('connectManager', { token });
+      setMode('manager');
+      return next(`/manage/${r.ownerUid}`);
+    } catch (e) { /* link revoked/invalid: just continue into the app */ }
+  }
+
   // Pro users (server flag or, on iOS, RevenueCat's entitlement) never see the upgrade screen.
   if (to.path === '/paywall' && currentUser) { try { if (isPro(await loadUserDoc())) return next(to.query.from && String(to.query.from).startsWith('/') && to.query.from !== '/paywall' ? String(to.query.from) : '/home'); } catch (e) { /* show the paywall */ } }
 
   // iOS app: no marketing landing page (hero image + 26MB demo video are website-only) -> straight to Login / Home
+  if (isNative() && currentUser && to.path === '/' && homeFor() === '/manage') return next('/manage'); // last mode used was Manager mode
   if (isNative() && (to.path === '/' || to.path === '/landing')) return next(currentUser ? '/home' : '/login');
 
   if (to.path === '/') {
     if (currentUser) {
-      return next('/home');
+      return next(homeFor()); // last mode used: User mode (/home) or Manager mode (/manage)
     } else {
       return next('/landing');
     }
@@ -240,5 +283,8 @@ router.beforeEach(async (to, from, next) => {
 
   next();
 });
+
+// Remember the last mode used (User mode = your tasks, Manager mode = people you manage).
+router.afterEach((to) => { if (to.path === '/home') setMode('user'); else if (to.path === '/manage' || to.path.startsWith('/manage/')) setMode('manager'); });
 
 export default router;

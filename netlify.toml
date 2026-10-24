@@ -55,3 +55,8 @@ external_node_modules = ["firebase-admin", "@opentelemetry/api"]
 [functions."delete-account"]
 included_files = ["netlify/functions/lib/**"]
 external_node_modules = ["firebase-admin", "stripe", "@opentelemetry/api"]
+
+# Manager & Pal (login-free manager link + pal pairing). Uses the existing Firebase admin + OneSignal env vars; no new env vars.
+[functions."manager-pal"]
+included_files = ["netlify/functions/lib/**"]
+external_node_modules = ["firebase-admin", "@opentelemetry/api"]

@@ -2,8 +2,9 @@
   <nav class="app-topbar">
     <!-- Header -->
     <div class="app-topbar-inner">
-      <button @click="toggleSidebar" type="button" class="inline-flex items-center p-2 w-10 h-10 justify-center text-sm text-gray-500 rounded-lg hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-600" aria-expanded="false">
+      <button @click="toggleSidebar" type="button" class="relative inline-flex items-center p-2 w-10 h-10 justify-center text-sm text-gray-500 rounded-lg hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-600" aria-expanded="false">
         <span class="sr-only">Open sidebar</span>
+        <span v-if="palBadge.count.value" class="pl-nav-dot" aria-label="New messages"></span>
         <svg class="w-5 h-5" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 17 14">
           <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M1 1h15M1 7h15M1 13h15"/>
         </svg>
@@ -51,17 +52,23 @@
 
       <!-- Sidebar content -->
       <nav class="px-3 py-4">
+        <!-- User mode (your tasks) / Manager mode (people you manage). Any account can use both; last one is remembered. -->
+        <div v-if="userId" class="mode-switch" role="group" aria-label="Mode" data-test="mode-switch">
+          <button type="button" :class="{ on: mode === 'user' }" :aria-pressed="mode === 'user' ? 'true' : 'false'" @click="switchMode('user')">User mode</button>
+          <button type="button" :class="{ on: mode === 'manager' }" :aria-pressed="mode === 'manager' ? 'true' : 'false'" @click="switchMode('manager')" data-test="mode-manager">Manager mode</button>
+        </div>
         <ul class="app-sidebar-list">
           <!-- My Routine -->
           <li class="app-sidebar-item">
             <i class="fas fa-calendar-check"></i>
-            <router-link to="/"
+            <router-link to="/home"
                          class="app-sidebar-link">
               My Routine
             </router-link>
           </li>
           <li class="app-sidebar-item"><i class="fas fa-calendar-alt"></i><router-link to="/upcoming" class="app-sidebar-link">Upcoming</router-link></li>
           <li v-if="!hideUgc" class="app-sidebar-item"><i class="fas fa-trophy"></i><router-link to="/rankings" class="app-sidebar-link">Rankings</router-link></li>
+          <li v-if="userId" class="app-sidebar-item"><i class="fas fa-user-friends"></i><router-link to="/pals" class="app-sidebar-link" data-test="nav-pals">Manager &amp; Pals<span v-if="palBadge.count.value" class="pl-nav-badge">{{ palBadge.count.value }}</span></router-link></li>
           <li class="app-sidebar-item"><i class="fas fa-gavel"></i><router-link to="/discipline" class="app-sidebar-link">Discipline</router-link></li>
 
 
@@ -125,18 +132,25 @@
 <script setup>
 import { syncPublicProfile } from '@/composables/usePublicProfile';
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRouter, useRoute } from 'vue-router';
+import { getMode, setMode, homeFor } from '@/utils/appMode';
 import AppStoreButton from '@/components/AppStoreButton.vue';
 import { ugcHidden, isNativeIOS } from '@/utils/platform';
 const isIOS = isNativeIOS(); // iOS app: no admin About page, no Recovery Tracker (see docs/ios-app-review-notes.md)
 const hideUgc = ugcHidden(); // iOS app: no Rankings/community until report+block tools exist
 import { auth, db } from '@/firebaseConfig';
 import { doc, getDoc } from 'firebase/firestore';
+import { useManagerBadge } from '@/composables/usePals';
 
 const router = useRouter();
 const sidebarOpen = ref(false);
 const userEmail = ref(null);
 const userId = ref(null);
+const palBadge = useManagerBadge();
+const route = useRoute();
+const mode = computed(() => (route.path === '/manage' || route.path.startsWith('/manage/') ? 'manager' : route.path === '/home' ? 'user' : getMode()));
+const switchMode = (m) => { setMode(m); router.push(homeFor(m)); };
+watch(userId, (u) => palBadge.watchUid(u));
 const avatarURL = ref(null);
 const displayName = ref('');
 const initials = computed(() => { const src = (displayName.value || userEmail.value || 'U').replace(/@.*/, '').trim(); const parts = src.split(/[\s._-]+/).filter(Boolean); return ((parts[0]?.[0] || 'U') + (parts[1]?.[0] || '')).toUpperCase(); }); // New: Avatar URL from Firestore
@@ -208,6 +222,8 @@ onMounted(() => {
 
 
 <style>
+.pl-nav-badge { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; margin-left: 8px; border-radius: 999px; background: #F87171; color: #fff; font-size: 11px; font-weight: 800; }
+.pl-nav-dot { position: absolute; top: 6px; right: 6px; width: 9px; height: 9px; border-radius: 50%; background: #F87171; box-shadow: 0 0 0 2px #070D1C; }
 /* From 768px up the open sidebar pushes the page instead of covering it; below that it is an overlay. */
 @media (min-width: 768px) {
   body.sidebar-open #app { padding-left: 16rem; }
@@ -226,4 +242,7 @@ onMounted(() => {
 .app-sidebar-link::after { content: ''; position: absolute; inset: 0; } /* whole row is clickable */
 .app-sidebar-item:hover .app-sidebar-link, .app-sidebar-link.router-link-exact-active { color: #fff; }
 .app-sidebar-item:has(.router-link-exact-active) { background: #19224A; color: #8FA8FF; }
+.mode-switch { display: flex; gap: 4px; margin: 4px 12px 12px; padding: 4px; background: #0C1630; border: 1px solid #1A2846; border-radius: 12px; }
+.mode-switch button { flex: 1; min-height: 34px; border: 0; border-radius: 9px; background: transparent; color: #A9B4CC; font-weight: 600; font-size: 13px; }
+.mode-switch button.on { background: #12203F; color: #F2F5FC; }
 </style>
