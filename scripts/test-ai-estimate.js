@@ -26,5 +26,23 @@ const add = fs.readFileSync(path.join(sr.src, 'components/home/AddTaskModal.vue'
 ok(!/nt-est/.test(add), 'no estimate picker in add-task');
 ok(/const openTaskTimerModal = async[\s\S]{0,400}await startTimer\(\)/.test(home), 'play starts countdown directly');
 ok((home.match(/estimateFor\(/g) || []).length >= 2, 'estimate at creation (normal + scheduled)');
+// Distinct, realistic buckets for similar titles (rule-order / precedence guards)
+const table = { 'wash my car': 50, 'wash the car': 50, 'wash a car': 50, 'clean my car': 50, 'car wash': 15, 'drive-through car wash': 15,
+  'get gas': 10, 'fill up the tank': 10, 'refuel': 10, 'vacuum car': 30, 'vacuum my car': 30, 'clean car interior': 45, 'oil change': 90,
+  'wash clothes': 60, 'wash dishes': 15, 'wash hair': 20, 'take a shower': 15, 'mow the lawn': 50, 'mow lawn': 50, 'rake leaves': 60, 'clean gutters': 90,
+  'doctor appointment': 60, 'haircut': 45, 'dentist': 60, 'pay bills': 15, 'pay electric bill': 5, 'pay rent': 5,
+  'pick up kids': 30, 'help kids with homework': 45, 'bath the kids': 30, 'walk the dog': 30, 'take cat to vet': 60, 'groom the dog': 45,
+  'fix leaky faucet': 45, 'paint the bedroom': 240, 'change light bulb': 10, 'cook dinner': 45, 'make pasta': 30, 'make a sandwich': 10,
+  'grill burgers': 45, 'team meeting': 45, 'standup': 15, '1:1 with manager': 30, 'clean bedroom': 30, 'tidy desk': 20, 'return package': 20,
+  'bake cookies': 60, 'walk': 30, 'vacuum': 20 };
+for (const [t, want] of Object.entries(table)) near(t, want);
+const distinct = (a, b) => ok(m(a) !== m(b), `${a} (${m(a)}) must differ from ${b} (${m(b)})`);
+distinct('wash my car', 'get gas'); distinct('car wash', 'get gas'); distinct('wash my car', 'car wash');
+distinct('clean my car', 'tidy desk'); distinct('vacuum car', 'vacuum'); distinct('clean car interior', 'vacuum car');
+distinct('wash clothes', 'wash dishes'); distinct('wash dishes', 'wash my car'); distinct('wash hair', 'wash my car'); distinct('wash hair', 'wash clothes');
+distinct('mow the lawn', 'water the plants'); distinct('haircut', 'doctor appointment'); distinct('standup', 'team meeting');
+distinct('pay bills', 'pay rent'); distinct('make a sandwich', 'cook dinner'); distinct('groom the dog', 'feed the dog');
+// size multipliers and title durations still apply on new rules
+near('quick car wash', 10); near('wash my car 2h', 120); near('thoroughly wash my car', 75);
 console.log(`test-ai-estimate: ${pass} passed`);
 for (const t of ['clean kitchen', 'take out trash', 'do laundry', 'grocery shopping', 'go to the gym', 'call mom', 'reply to emails', 'study for exam', 'write report', 'walk the dog', 'read 20 min', 'meal prep']) console.log(`  ${t} -> ${m(t)} min`);
