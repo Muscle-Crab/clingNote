@@ -83,6 +83,7 @@
           <h2 class="pf-section">More</h2>
           <section class="pf-card pf-card--flush">
             <router-link to="/onboarding" data-test="replay-onboarding" class="pf-row"><span class="pf-ico" aria-hidden="true">🔄</span><span class="pf-row-title">Replay onboarding</span><span class="pf-chev" aria-hidden="true">›</span></router-link>
+            <button v-if="isOwn" type="button" data-test="rate-app" class="pf-row pf-row--divided" @click="rateApp"><span class="pf-ico" aria-hidden="true">⭐</span><span class="pf-row-title">Rate ClingNote</span><span class="pf-chev" aria-hidden="true">›</span></button>
             <router-link to="/support" class="pf-row pf-row--divided" data-test="profile-support"><span class="pf-ico" aria-hidden="true">💬</span><span class="pf-row-title">Help &amp; support</span><span class="pf-chev" aria-hidden="true">›</span></router-link>
             <router-link to="/privacy-policy" class="pf-row pf-row--divided"><span class="pf-ico" aria-hidden="true">🔒</span><span class="pf-row-title">Privacy policy</span><span class="pf-chev" aria-hidden="true">›</span></router-link>
           </section>
@@ -123,6 +124,8 @@ import { isPro } from '@/utils/pro';
 import { rewardsFor, MILESTONES } from '@/utils/rewards';
 import { withRcPro } from '@/composables/usePro';
 import { isNativeIOS } from '@/utils/platform';
+import { openWriteReview } from '@/utils/appReview';
+const rateApp = () => openWriteReview();
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { useRouter } from 'vue-router';
 import { auth, db } from '@/firebaseConfig';

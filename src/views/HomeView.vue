@@ -1168,6 +1168,8 @@ const widgetComplete = async (taskId, mode) => {
 };
 widgetComplete.tasks = () => (isToday(selectedDayIndex.value) ? selectedDayRoutine.value : []);
 let offWidget = null;
+// One-time App Store rating prompt, ~2s after landing here right after onboarding + sign-up (armed by OnboardingView.finish). No-op on web.
+onMounted(() => { const u = auth.currentUser; if (u) import('@/utils/appReview').then((m) => m.maybeRequestReview(u.uid, { stillOnHome: () => _proRouter.currentRoute.value.path === '/home' })).catch(() => {}); });
 onMounted(() => { if (isNativeIOS()) import('@/utils/widgetSync').then((m) => { offWidget = m.registerWidgetCompleter(widgetComplete); }).catch(() => {}); });
 onBeforeUnmount(() => { if (offWidget) offWidget(); });
 
