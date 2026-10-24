@@ -478,4 +478,12 @@ watch(() => route.query.post, (id) => { if (id && started) { tab.value = 'feed';
 :deep(.cm-av.sm) { width: 28px; height: 28px; font-size: .7rem; }
 :deep(.cm-av.big) { width: 72px; height: 72px; font-size: 1.4rem; }
 :deep(.cm-av--i) { display: inline-flex; align-items: center; justify-content: center; background: var(--c-primary-soft, #eef2ff); color: var(--c-primary, #6366f1); font-weight: 700; font-size: .8rem; }
+
+/* ── Compact post cards ── */
+.cm-post.cm-card { padding: 10px 12px 2px; margin-top: 8px; }
+.cm-post .cm-title { margin: 4px 0 0; font-size: 1rem; line-height: 1.3; }
+.cm-post .cm-text { margin: 2px 0 0; line-height: 1.35; }
+.cm-post .cm-stats { margin-top: 6px; padding: 5px 8px; }
+.cm-post .cm-actions { margin-top: 4px; padding-top: 0; }
+.cm-post .cm-actions button { min-height: 44px; padding: 0; }
 </style>

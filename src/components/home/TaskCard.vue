@@ -44,9 +44,9 @@
                       >
                         {{ task.title }}
                       </span>
-                      <span v-if="isRepeating" class="task-repeat-badge" data-test="repeat-badge" :title="'Repeats: ' + repeatLabel">🔁 {{ repeatLabel }}</span>
-                      <span v-if="task.anonymous === true && task.visibility !== 'private'" class="task-private task-anon" data-test="anon-label" title="Anonymous for boss: managers see it as 'Anonymous task'">🔒 Anon</span>
-                      <span v-if="task.visibility === 'private'" class="task-private" data-test="private-label" title="Private: only you can see this task">Private</span>
+                      <span v-if="isRepeating" class="task-repeat-badge" data-test="repeat-badge" :title="'Repeats: ' + repeatLabel" :aria-label="'Repeats ' + repeatLabel">🔁</span>
+                      <span v-if="task.anonymous === true && task.visibility !== 'private'" class="task-private task-anon" data-test="anon-label" title="Anonymous for boss: managers see it as 'Anonymous task'" aria-label="Anonymous for boss">🕶️</span>
+                      <span v-if="task.visibility === 'private'" class="task-private" data-test="private-label" title="Private: only you can see this task" aria-label="Private">🔒</span>
                       <span v-if="task.timerActive" class="task-timer-left">
                         ⏳  {{ taskTimeLeft(task, now) }}
                       </span>
@@ -55,10 +55,7 @@
                       <span v-if="task.fileURL" class="task-attachment" title="File">📄</span>
                     </div>
 
-                    <p class="task-sub">{{ cat.label }} · {{ whenText }}</p>
-                    <div v-if="task.reminder?.date && task.reminder?.time" class="task-reminder">
-                      📅 {{ formatShortDate(task.reminder.date) }}· ⏰ {{ formatTime(task.reminder.time) }}
-                    </div>
+                    <p class="task-sub" :title="cat.label + ' · ' + whenText">{{ cat.label }}<template v-if="!est.minutes"> · {{ whenText }}</template></p>
 
                     <div class="task-meta-row">
                       <span class="task-pts" title="Points for completing this task" data-test="task-pts">+10 pts</span>
@@ -89,29 +86,21 @@
                       <div class="boss-hp" role="progressbar" :aria-valuenow="bossHp(task)" aria-valuemin="0" aria-valuemax="100"><div class="boss-hp-fill" :style="{ width: bossHp(task) + '%' }"></div></div>
                       <span class="boss-hp-num">{{ bossHp(task) }} HP</span>
                     </div>
-                    <div v-if="task.status === 'pending' && task.pendingOn" class="task-next task-pending-on">⏳ Pending on {{ task.pendingOn }}</div>
-                    <div v-if="task.nextAction" class="task-next">→ {{ task.nextAction }}</div>
-                    <div v-if="task.notes && !expanded" class="task-note-preview">📝 {{ task.notes.length > 60 ? task.notes.slice(0, 60) + '…' : task.notes }}</div>
-
-
-                    <!-- Labels -->
-                    <div v-if="labelList.length" class="task-labels">
-                      <span
-                          v-for="(label, i) in labelList"
-                          :key="i"
-                          @click="$emit('toggle-label', label)"
-                          class="label-pill label-pill--sm"
-                          :class="{ 'label-pill--active': activeLabels.includes(label) }"
-                      >
-                        {{ label }}
-                      </span>
+                    <!-- Secondary info: one truncated line of icons -->
+                    <div v-if="hasExtras" class="task-extras" data-test="task-extras" :title="extrasTitle">
+                      <span v-if="task.reminder?.date && task.reminder?.time" class="task-reminder">⏰ {{ formatShortDate(task.reminder.date) }} {{ formatTime(task.reminder.time) }}</span>
+                      <span v-if="task.carriedFrom" class="task-rolled" data-test="rolled-tag" title="Moved from yesterday">↪︎</span>
+                      <span v-if="task.status === 'pending' && task.pendingOn" class="task-next task-pending-on">⏳ {{ task.pendingOn }}</span>
+                      <span v-if="task.nextAction" class="task-next">→ {{ task.nextAction }}</span>
+                      <span v-for="(label, i) in labelList" :key="'l' + i" @click="$emit('toggle-label', label)" class="label-pill label-pill--sm" :class="{ 'label-pill--active': activeLabels.includes(label) }">{{ label }}</span>
+                      <span v-if="task.notes && !expanded" class="task-note-preview">📝 {{ task.notes }}</span>
                     </div>
                   </div>
 
                   <!-- Right: coin + actions -->
                   <div class="task-right">
                     <div class="task-repeat-wrap" @click.stop>
-                      <button type="button" class="task-repeat" data-test="repeat-btn" :class="{ 'task-repeat--on': isRepeating }" :title="isRepeating ? 'Repeats: ' + repeatLabel : 'Make recurring'" aria-label="Repeat settings" @click="repeatOpen = !repeatOpen">🔁</button>
+                      <button v-if="false" type="button" class="task-repeat" :class="{ 'task-repeat--on': isRepeating }" :title="isRepeating ? 'Repeats: ' + repeatLabel : 'Make recurring'" aria-label="Repeat settings" @click="repeatOpen = !repeatOpen">🔁</button>
                       <div v-if="repeatOpen" class="repeat-pop" data-test="repeat-pop">
                         <button type="button" data-test="repeat-opt-daily" @click="pickRepeat(ALL)">Every day</button>
                         <button type="button" data-test="repeat-opt-weekdays" @click="pickRepeat(WEEKDAYS)">Weekdays</button>
@@ -141,6 +130,7 @@
 
                     <div v-show="moreOpen" class="task-actions" @click.stop>
                       <button @click="$emit('toggle-expand'); moreOpen = false" class="action-btn" title="Details" aria-label="Show details">📝</button>
+                      <button type="button" @click="repeatOpen = !repeatOpen; moreOpen = false" class="action-btn" data-test="repeat-btn" :class="{ 'action-btn--on': isRepeating }" :title="isRepeating ? 'Repeats: ' + repeatLabel : 'Make recurring'" aria-label="Repeat settings">🔁</button>
                       <button @click="$emit('open-reminder')" class="action-btn" title="Reminder" aria-label="Add reminder">📅</button>
                       <button @click="$emit('transfer')" class="action-btn" title="Transfer" aria-label="Transfer to another day">🔄</button>
                       <button @click="$emit('video')" class="action-btn" title="Video" aria-label="Attach video">🎥</button>
@@ -322,6 +312,8 @@ const onCardTap = (event) => {
   }
   emit('toggle-expand');
 };
+const hasExtras = computed(() => { const t = props.task; return !!((t.reminder?.date && t.reminder?.time) || t.carriedFrom || (t.status === 'pending' && t.pendingOn) || t.nextAction || labelList.value.length || (t.notes && !props.expanded)); });
+const extrasTitle = computed(() => [props.task.nextAction, props.task.notes].filter(Boolean).join(' · '));
 const schedText = computed(() => scheduleLabel(props.task));
 const schedLate = computed(() => !!props.task?.scheduledFor && scheduledOverdue(props.task, new Date()));
 const est = computed(() => chipValues(props.task));
@@ -523,4 +515,11 @@ const onPressEnd = () => { if (pressTimer !== 'fired') clearTimeout(pressTimer);
 @keyframes strikeSweep { to { transform: scaleX(1); } }
 @keyframes rowSettle { 0%, 45% { opacity: 1; transform: translateX(0); } 100% { opacity: .55; transform: translateX(3px); } }
 @media (prefers-reduced-motion: reduce) { .task-card--completing, .task-card--completing .task-body, .task-check--pop, .check-draw__disc, .check-draw__tick { animation: none !important; } .check-draw__tick { stroke-dashoffset: 0; } }
+/* ── Compact card (v2): one meta line, one truncated extras line ── */
+.task-extras { display: flex; align-items: center; gap: 6px; min-width: 0; overflow: hidden; white-space: nowrap; font-size: 12px; color: var(--c-text-2); }
+.task-extras > span { flex: 0 0 auto; }
+.task-extras > .task-note-preview { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.task-extras > .task-next { max-width: 45%; overflow: hidden; text-overflow: ellipsis; }
+.task-rolled { color: #f59e0b; font-weight: 700; }
+.action-btn--on { background: var(--c-accent-soft); }
 </style>

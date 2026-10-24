@@ -3839,4 +3839,29 @@ body.home-v2 .app-topbar { position: absolute; top: 0; left: 0; right: 0; z-inde
 .app-root .fab-group.fab-group { left: 0; right: 0; padding-left: max(16px, calc((100vw - 560px) / 2 + 16px)); padding-right: max(16px, calc((100vw - 560px) / 2 + 16px)); padding-top: var(--sp-4, 16px); padding-bottom: calc(12px + env(safe-area-inset-bottom)); gap: 12px; justify-content: center; align-items: center; pointer-events: none; }
 .app-root .fab-group.fab-group > * { pointer-events: auto; }
 .app-root .content-wrap.content-wrap { padding-bottom: calc(150px + env(safe-area-inset-bottom)); }
+
+/* ══ Compact task cards v2: title + actions on row 1, category · estimate · points on row 2, extras on one truncated line ══ */
+.app-root .task-card.task-card.task-card { min-height: 0; padding: 6px 6px 6px 4px; gap: 6px; }
+.app-root .task-card--next.task-card--next.task-card--next { min-height: 0; }
+.app-root .task-cat.task-cat { width: 30px; height: 30px; font-size: 13px; border-radius: 9px; }
+.app-root .task-avatar.task-avatar.task-avatar { height: 44px; }
+.app-root .task-check.task-check.task-check { width: 44px; height: 44px; margin: 0 -6px; font-size: 22px; }
+.app-root .task-left.task-left.task-left { gap: 2px; }
+.app-root .task-repeat-wrap.task-repeat-wrap { width: 0; height: 0; position: absolute; right: 0; top: 44px; }
+.app-root .task-edit.task-edit { width: 44px; height: 44px; margin: 0; border: 0; background: none; color: #A78BFA; font-size: 13px; border-radius: 10px; }
+.app-root .task-edit--open.task-edit--open { background: #7c3aed; color: #fff; }
+.app-root .task-right.task-right.task-right { top: 2px; right: 2px; gap: 0; }
+.app-root .task-more.task-more.task-more { width: 44px; flex: 0 0 44px; }
+.app-root .task-body.task-body.task-body { row-gap: 2px; column-gap: 6px; }
+.app-root .task-body > .task-upnext, .app-root .task-body > .task-title-row { padding-right: 134px; }
+.app-root .task-body > .task-title-row { min-height: 22px; }
+.app-root .task-body > .task-sub.task-sub { order: 2 !important; flex: 0 0 auto; padding-right: 0; font-size: 12.5px; }
+.app-root .task-body > .task-chips.task-chips { order: 3; flex: 0 1 auto; flex-wrap: wrap; }
+.app-root .task-body > .task-meta-row.task-meta-row { order: 4; flex: 0 0 auto; }
+.app-root .task-body > .task-extras { order: 5; flex: 0 0 100%; }
+.app-root .task-pts.task-pts { padding: 1px 6px; font-size: 10.5px; }
+.app-root .task-body .chip { line-height: 16px; padding: 0 6px; font-size: 11px; }
+.app-root .task-upnext { line-height: 12px; }
+.app-root .task-title-row .task-private, .app-root .task-title-row .task-repeat-badge { border: 0; padding: 0; margin: 0; font-size: 12px; text-transform: none; }
+.app-root .importance-btn.importance-btn::before { inset: -12px -15px; }
 </style>

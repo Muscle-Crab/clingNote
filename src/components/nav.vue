@@ -35,7 +35,10 @@
       <div class="flex items-center justify-between p-4">
         <router-link to="/" class="flex items-center space-x-3 rtl:space-x-reverse">
           <span class="flex items-center space-x-3 rtl:space-x-reverse">
-            <img src="@/assets/logo.png" class="h-8" alt="ClingNote logo"/>
+            <picture>
+              <source type="image/webp" :srcset="navLogoWebp" />
+              <img :src="navLogo1x" :srcset="navLogoPng" width="32" height="32" class="app-nav-logo" data-test="nav-logo" alt="ClingNote logo"/>
+            </picture>
             <span class="self-center text-xl font-semibold whitespace-nowrap">ClingNote</span>
           </span>
         </router-link>
@@ -136,6 +139,14 @@ import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { getMode, setMode, homeFor } from '@/utils/appMode';
 import AppStoreButton from '@/components/AppStoreButton.vue';
+import navLogo1x from '@/assets/clingnote-logo-128.png';
+import navLogo2x from '@/assets/clingnote-logo-128@2x.png';
+import navLogo3x from '@/assets/clingnote-logo-128@3x.png';
+import navLogoW1 from '@/assets/clingnote-logo-128.webp';
+import navLogoW2 from '@/assets/clingnote-logo-128@2x.webp';
+import navLogoW3 from '@/assets/clingnote-logo-128@3x.webp';
+const navLogoPng = `${navLogo1x} 1x, ${navLogo2x} 2x, ${navLogo3x} 3x`;
+const navLogoWebp = `${navLogoW1} 1x, ${navLogoW2} 2x, ${navLogoW3} 3x`;
 import { ugcHidden, isNativeIOS } from '@/utils/platform';
 const isIOS = isNativeIOS(); // iOS app: no admin About page, no Recovery Tracker (see docs/ios-app-review-notes.md)
 const hideUgc = ugcHidden(); // iOS app: no Rankings/community until report+block tools exist
@@ -223,6 +234,8 @@ onMounted(() => {
 
 
 <style>
+/* side-nav brand icon: same continuous-corner rounding as the iOS home-screen icon (~22.37% of the side) */
+.app-nav-logo { width: 32px; height: 32px; border-radius: 7px; object-fit: cover; display: block; }
 .pl-nav-badge { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; margin-left: 8px; border-radius: 999px; background: #F87171; color: #fff; font-size: 11px; font-weight: 800; }
 .pl-nav-dot { position: absolute; top: 6px; right: 6px; width: 9px; height: 9px; border-radius: 50%; background: #F87171; box-shadow: 0 0 0 2px #070D1C; }
 /* From 768px up the open sidebar pushes the page instead of covering it; below that it is an overlay. */
