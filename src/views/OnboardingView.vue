@@ -1,11 +1,11 @@
 <template>
-  <div class="ob">
+  <div class="ob" @pointerdown.capture="onFirstTap">
     <PaywallPanel v-if="step === STEPS.length" :name="firstName" @close="finish" />
     <template v-else>
       <div class="ob-top">
         <button v-if="step > 0" class="ob-back" @click="go(step - 1)" aria-label="Back">‹</button><span v-else></span>
         <div class="ob-dots"><i v-for="(s, i) in STEPS" :key="s" :class="{ on: i <= step }"></i></div>
-        <button class="ob-skip" @click="go(STEPS.length)">Skip</button>
+        <VoToggle class="ob-vo" @unmuted="narrate" /><button v-if="STEPS[step] !== 'age'" class="ob-skip" @click="go(ageState === 'ok' ? STEPS.length : 1)">Skip</button>
       </div>
 
       <section v-if="STEPS[step] === 'welcome'" class="ob-sec">
@@ -14,6 +14,17 @@
         <h1 class="ob-h">Hey {{ firstName }}, meet your <span>accountability boss.</span></h1>
         <p class="ob-p">CleanNote clings to your to‑dos until they're done. A few quick questions and we'll set it up around you.</p>
         <div class="ob-asb"><AppStoreButton small /></div>
+      </section>
+
+      <section v-else-if="STEPS[step] === 'age'" class="ob-sec" data-test="ob-age">
+        <p class="ob-k">Quick check</p><h1 class="ob-h">How old <span>are you?</span></h1><p class="ob-p">Just your age. You must be 13 or older to use CleanNote.</p>
+        <div class="ob-age">
+          <button type="button" class="ob-step" aria-label="Younger" @click="bumpAge(-1)">−</button>
+          <input type="number" inputmode="numeric" min="1" max="100" v-model.number="a.age" placeholder="—" aria-label="Your age" data-test="ob-age-input" />
+          <button type="button" class="ob-step" aria-label="Older" @click="bumpAge(1)">+</button>
+        </div>
+        <p v-if="ageState === 'under'" class="ob-warn" data-test="ob-age-under">Sorry, CleanNote is for people 13 and older. Come back when you're 13 — the boss will be waiting. 👋</p>
+        <p v-else-if="ageState === 'invalid'" class="ob-warn">Enter an age between 13 and 100.</p>
       </section>
 
       <section v-else-if="STEPS[step] === 'goals'" class="ob-sec">
@@ -46,7 +57,7 @@
       </section>
 
       <div class="ob-foot">
-        <button class="ob-cta" :disabled="STEPS[step] === 'goals' && !a.goals.length" @click="next">{{ ctaLabel }}</button>
+        <button class="ob-cta" :disabled="(STEPS[step] === 'goals' && !a.goals.length) || (STEPS[step] === 'age' && ageState !== 'ok')" @click="next">{{ ctaLabel }}</button>
         <button v-if="STEPS[step] === 'notifications'" class="ob-later" @click="a.notifications = 'later'; go(step + 1)">Not now</button>
       </div>
     </template>
@@ -54,7 +65,10 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, watch } from 'vue';
+import { ref, reactive, computed, onMounted, onBeforeUnmount, watch } from 'vue';
+import VoToggle from '@/components/voiceover/VoToggle.vue';
+import { playVoice, stopVoice, unlockVoice, voUnlocked } from '@/composables/useVoiceover';
+import { getMode, getPendingManagerToken } from '@/utils/appMode';
 import { useRoute, useRouter } from 'vue-router';
 import AppStoreButton from '@/components/AppStoreButton.vue';
 import { auth } from '@/firebaseConfig';
@@ -66,7 +80,7 @@ import { markPaywallSeenLocal } from '@/utils/entryGuard';
 import { readCachedPlan, useEightHour } from '@/composables/useEightHour';
 import { fmtWakeLabel } from '@/utils/eightHour';
 
-const STEPS = ['welcome', 'goals', 'schedule', 'strictness', 'notifications']; // index STEPS.length = paywall
+const STEPS = ['welcome', 'age', 'goals', 'schedule', 'strictness', 'notifications']; // index STEPS.length = paywall
 const GOALS = [
   { id: 'work', e: '💼', l: 'Crush work tasks' }, { id: 'fitness', e: '💪', l: 'Work out consistently' },
   { id: 'study', e: '📚', l: 'Study & learn' }, { id: 'habits', e: '🚭', l: 'Break bad habits' },
@@ -80,7 +94,16 @@ const STRICT = [
 const route = useRoute(); const router = useRouter();
 const step = ref(Math.min(Number(route.query.step) || 0, STEPS.length));
 const name = ref('');
-const a = reactive({ goals: [], wakeTime: '07:00', deadline: '21:00', bedTime: '23:00', strictness: 'firm', notifications: 'unknown' });
+const a = reactive({ goals: [], wakeTime: '07:00', deadline: '21:00', bedTime: '23:00', strictness: 'firm', notifications: 'unknown', age: null });
+const ageState = computed(() => { const n = Number(a.age); if (!a.age && a.age !== 0) return 'empty'; if (!Number.isInteger(n) || n < 1 || n > 100) return 'invalid'; return n < 13 ? 'under' : 'ok'; });
+const bumpAge = (d) => { const n = Number(a.age) || 18; a.age = Math.max(1, Math.min(100, n + d)); };
+// Voiceover: each screen plays its own segment as you advance (previous one stops). Manager-link arrivals get the manager welcome.
+const isManagerCtx = () => !!getPendingManagerToken() || getMode() === 'manager';
+const voKey = () => { const id = step.value >= STEPS.length ? 'paywall' : STEPS[step.value]; return id === 'welcome' && isManagerCtx() ? 'ob_welcome_manager' : `ob_${id}`; };
+const narrate = () => playVoice(voKey());
+const onFirstTap = () => { if (voUnlocked.value) return; unlockVoice(); setTimeout(narrate, 60); };
+watch(step, () => narrate());
+onBeforeUnmount(stopVoice);
 const eh = useEightHour();
 const wakeLabel = computed(() => fmtWakeLabel(eh.plan.value?.wakeTime || a.wakeTime) || '—');
 // The paywall counts as "seen" the moment it is shown (local flag + users/{uid}.paywallSeenAt) so existing users get it at most once; Subs/Profile can still open it.
@@ -93,11 +116,14 @@ onMounted(async () => {
   const u = auth.currentUser; if (!u) return;
   const cp = readCachedPlan(); if (cp) a.wakeTime = cp.wakeTime; // the wake time is picked in the pre-signup tutorial (and locked into the 8-hour day), not here
   try { const d = await ensureUserDoc(u); name.value = d.name || u.displayName || '';
+    if (d.age) a.age = d.age;
     if (d.onboarding) Object.assign(a, d.onboarding, cp ? { wakeTime: cp.wakeTime } : {}); } catch (e) { console.error('onboarding load', e.message); }
 });
 const persist = (extra = {}) => { const u = auth.currentUser; if (!u) return Promise.resolve();
   return saveUserFields(u.uid, { onboarding: { ...a }, ...extra }).catch((e) => console.error('onboarding save', e.message)); };
-function go(n) { step.value = n; router.replace({ query: { ...route.query, step: n } }); persist(); }
+function go(n) {
+  if (STEPS[step.value] === 'age' && n > step.value) { if (ageState.value !== 'ok') return; if (auth.currentUser) saveUserFields(auth.currentUser.uid, { age: Number(a.age), ageCollectedAt: new Date() }).catch(() => {}); }
+  step.value = n; router.replace({ query: { ...route.query, step: n } }); persist(); }
 async function next() {
   if (STEPS[step.value] === 'notifications') {
     try {
@@ -139,4 +165,9 @@ async function finish() { await persist({ onboardingComplete: true, onboardingCo
 .ob-cta { min-height: 56px; border: 0; border-radius: 16px; font-size: 17px; font-weight: 800; color: #fff; background: linear-gradient(90deg,#1E5BFF,#3C8CFF); box-shadow: 0 10px 26px rgba(47,111,255,.35); cursor: pointer; }
 .ob-cta:disabled { opacity: .45; box-shadow: none; }
 .ob-later { background: none; border: 0; color: #7180A0; font-weight: 600; padding: 8px; cursor: pointer; }
+.ob-vo { margin-left: auto; }
+.ob-age { display: flex; align-items: center; justify-content: center; gap: 14px; margin: 18px 0; }
+.ob-age input { width: 120px; text-align: center; font-size: 40px; font-weight: 800; padding: 10px; border-radius: 16px; border: 1.5px solid #2A3C66; background: rgba(18,32,63,.92); color: #fff; color-scheme: dark; }
+.ob-step { width: 52px; height: 52px; border-radius: 50%; border: 1.5px solid #2A3C66; background: #10204A; color: #fff; font-size: 26px; cursor: pointer; }
+.ob-warn { color: #FFB4A8; background: rgba(255,90,70,.1); border: 1px solid rgba(255,90,70,.35); border-radius: 12px; padding: 10px 12px; font-size: 14px; }
 </style>

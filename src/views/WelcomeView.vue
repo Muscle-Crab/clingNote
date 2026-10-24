@@ -27,13 +27,12 @@
       <p class="wl-k">Your 8-hour day</p>
       <h1 class="wl-h">When do you <span>start?</span></h1>
       <p class="wl-p">Pick your wake time. Each day, your 8 hours start from here.</p>
-      <label class="wl-field"><span>☀️ Wake time</span><input type="time" v-model="wake" data-test="wl-wake-input" @input="wakeConfirmed = false" /></label>
+      <label class="wl-field"><span>☀️ Wake time</span><input type="time" v-model="wake" data-test="wl-wake-input" /></label>
       <p class="wl-ends" data-test="wl-ends">Starts {{ wakeLabel }} · <b>Ends {{ endLabel }}</b></p>
       <div class="wl-field wl-count"><span>✅ Tasks per day</span>
         <div class="wl-step"><button type="button" :disabled="taskCount <= 1" @click="taskCount--" aria-label="Fewer tasks" data-test="wl-count-dec">−</button><b data-test="wl-count">{{ taskCount }}</b><button type="button" :disabled="taskCount >= MAX_TASKS_PER_DAY" @click="taskCount++" aria-label="More tasks" data-test="wl-count-inc">+</button></div>
       </div>
       <p class="wl-p wl-small">1 to {{ MAX_TASKS_PER_DAY }}. You choose it before the day starts. Then it's locked. The app sets the points per task and your daily target.</p>
-      <button class="wl-confirm" :class="{ on: wakeConfirmed }" data-test="wl-wake-confirm" @click="confirmWake">{{ wakeConfirmed ? `✓ Wake time set: ${wakeLabel}` : `Set my wake time to ${wakeLabel}` }}</button>
     </section>
 
     <section v-else class="wl-sec" data-test="wl-account">
@@ -74,20 +73,18 @@ const step = ref(0); const slide = ref(0); const sawLast = ref(false); const car
 const cached = readCachedPlan();
 const wake = ref(cached?.wakeTime || WAKE_PICKER_PRESELECT); // pre-selected for convenience only: the pick still has to be confirmed
 const taskCount = ref(Math.min(MAX_TASKS_PER_DAY, Math.max(1, Number(cached?.taskCount) || 3)));
-const wakeConfirmed = ref(false);
 const signedIn = computed(() => !!auth.currentUser && route.query.new === '1');
 
 const wakeLabel = computed(() => fmtWakeLabel(wake.value) || '—');
 const endLabel = computed(() => { const w = parseWake(wake.value); if (!w) return '—'; const t = (w.h * 60 + w.m + WINDOW_MIN) % 1440; return fmtWakeLabel(`${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`); });
 const lastSlide = TOUR_SLIDES.length - 1;
 // The tour's button always works: it pages through the slides, and only after the last one does it move on.
-const canNext = computed(() => (STEPS[step.value] === 'wake' ? wakeConfirmed.value && !!parseWake(wake.value) : true));
+const canNext = computed(() => (STEPS[step.value] === 'wake' ? !!parseWake(wake.value) : true));
 const nextLabel = computed(() => (STEPS[step.value] === 'tour' && slide.value < lastSlide ? 'Next' : 'Continue'));
 
-const confirmWake = () => { if (!parseWake(wake.value)) return; wakeConfirmed.value = true; cachePlan({ wakeTime: wake.value, taskCount: taskCount.value, tz: deviceTz() }); };
 const next = () => {
   if (STEPS[step.value] === 'tour' && slide.value < lastSlide) { slide.value += 1; carousel.value?.goTo(slide.value); if (slide.value === lastSlide) sawLast.value = true; return; }
-  if (STEPS[step.value] === 'wake' && wakeConfirmed.value) cachePlan({ wakeTime: wake.value, taskCount: taskCount.value, tz: deviceTz() });
+  if (STEPS[step.value] === 'wake' && parseWake(wake.value)) cachePlan({ wakeTime: wake.value, taskCount: taskCount.value, tz: deviceTz() });
   if (canNext.value && step.value < STEPS.length - 1) step.value += 1;
 };
 const back = () => { if (step.value > 0) step.value -= 1; };

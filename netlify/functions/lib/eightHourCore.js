@@ -6,7 +6,7 @@
 
 const WINDOW_MS = 8 * 60 * 60 * 1000;           // the day lasts exactly 8 hours after it starts
 const WINDOW_MIN = 480;
-const MAX_TASKS_PER_DAY = 5;                    // product rule (config/pricing.js TASK_LIMITS)
+const MAX_TASKS_PER_DAY = 50;                   // safety max (free and Pro alike; config/pricing.js TASK_LIMITS)
 const LOCK_IDENTITY_SLOTS = 10;                 // Firestore rules cannot loop; they compare the first 10 slots of a day doc (see firestore.rules)
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const WAKE_PICKER_PRESELECT = '07:00';          // UI convenience ONLY (pre-selected picker value). There is no stored/default wake time: the user must pick one.

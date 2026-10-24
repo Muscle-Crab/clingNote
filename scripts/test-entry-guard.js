@@ -51,7 +51,7 @@ t('router: /welcome is a public bare route; the guard applies decideEntry; /payw
 });
 t('onboarding: paywall step records "seen" (local + users/{uid}.paywallSeenAt) so existing users see it once', () => { assert.match(onb, /markPaywallSeenLocal/); assert.match(onb, /paywallSeenAt/); });
 t('welcome: no skip control, finishing marks the tutorial seen, the wake pick is explicit and cached locally before sign-up', () => {
-  assert.ok(!/skip/i.test(welcome.replace(/no skip/gi, ''))); assert.match(welcome, /markTutorialSeen/); assert.match(welcome, /cachePlan/); assert.match(welcome, /wakeConfirmed/);
+  assert.ok(!/skip/i.test(welcome.replace(/no skip/gi, ''))); assert.match(welcome, /markTutorialSeen/); assert.match(welcome, /cachePlan/); assert.doesNotMatch(welcome, /wakeConfirmed/);
 });
 t('sign-in paths flush the cached wake plan to the account (syncAfterAuth) and route new accounts correctly', () => {
   for (const f of ['src/views/Login.vue', 'src/views/WelcomeView.vue']) assert.match(read(f), /syncAfterAuth/);

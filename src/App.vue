@@ -4,6 +4,7 @@
     <SubpageHero v-if="hero" :title="hero.title" :kicker="hero.kicker" :back="hero.back !== false" />
     <router-view></router-view>
     <AiConsentModal />
+    <BossBriefing />
   </div>
 </template>
 
@@ -16,6 +17,7 @@ import { useRoute } from 'vue-router';
 import navi from '@/components/nav.vue';
 import SubpageHero from '@/components/ui/SubpageHero.vue';
 import AiConsentModal from '@/components/AiConsentModal.vue';
+import BossBriefing from '@/components/voiceover/BossBriefing.vue';
 
 const route = useRoute();
 const isHome = computed(() => route.name === 'home');

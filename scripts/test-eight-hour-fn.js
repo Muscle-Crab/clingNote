@@ -31,7 +31,7 @@ const call = async (db, body, extra = {}) => { const r = await handler(ev(body),
   eq((await call(db, { action: 'start' })).code, 409);
   // plan validation
   eq((await call(db, { action: 'plan', wakeTime: '7am', taskCount: 3, tz: TZ })).code, 400);
-  eq((await call(db, { action: 'plan', wakeTime: '07:00', taskCount: 6, tz: TZ })).code, 400, 'over the 5/day cap');
+  eq((await call(db, { action: 'plan', wakeTime: '07:00', taskCount: 51, tz: TZ })).code, 400, 'over the 50/day safety max');
   eq((await call(db, { action: 'plan', wakeTime: '07:00', taskCount: 0, tz: TZ })).code, 400);
   eq((await call(db, { action: 'plan', wakeTime: '07:00', taskCount: 3, tz: 'Mars/Base' })).code, 400);
   r = await call(db, { action: 'plan', wakeTime: '07:00', taskCount: 3, tz: TZ });
@@ -110,7 +110,7 @@ const call = async (db, body, extra = {}) => { const r = await handler(ev(body),
   db = mkDb({ 'eightHour/u1': { plan: { wakeTime: '07:00', tz: TZ, taskCount: 3 } }, 'weeklyRoutines/u1_Fri': { tasks: [T('One task'), T('Two tasks')] } });
   clock = at('2026-10-23T12:00:00Z'); r = await call(db, { action: 'start' }); eq([r.code, r.body.code], [409, 'count-mismatch']);
   // too many tasks / users are isolated
-  db = mkDb({ 'eightHour/u1': { plan: { wakeTime: '07:00', tz: TZ, taskCount: 5 } }, 'weeklyRoutines/u1_Fri': { tasks: [1, 2, 3, 4, 5, 6].map((n) => T('t'.repeat(n))) } });
+  db = mkDb({ 'eightHour/u1': { plan: { wakeTime: '07:00', tz: TZ, taskCount: 50 } }, 'weeklyRoutines/u1_Fri': { tasks: Array.from({ length: 51 }, (_, n) => T('t'.repeat(n + 1))) } });
   clock = at('2026-10-23T12:00:00Z'); r = await call(db, { action: 'start' }); eq([r.code, r.body.code], [409, 'too-many']);
 
   // ── AI path (REQUIRES SERVER AI): mocked; heuristic otherwise ──

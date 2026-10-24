@@ -246,7 +246,7 @@ import { isPro as isProUser } from '@/utils/pro';
 import { checkDailyLimit } from '@/utils/taskLimits';
 import { canUse } from '@/utils/pro';
 const _proRouter = _useRouter();
-// Daily task limit (config/pricing.js TASK_LIMITS): free 5/day, Pro 5/day
+// Daily task limit (config/pricing.js TASK_LIMITS): safety max 50/day, free and Pro alike
 const limitHit = ref(null); // { limit, count, pro, day } when the last add was blocked
 const goUpgradeForLimit = () => { if (rcProActive(auth.currentUser?.uid)) return; modalOpen.value = false; _proRouter.push({ path: '/paywall', query: { feature: 'taskLimit', from: '/home' } }); };
 // Limit data is prefetched when the add modal opens so Save does not wait on 8 Firestore reads.

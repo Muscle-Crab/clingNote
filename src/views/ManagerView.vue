@@ -64,6 +64,7 @@
       <p v-if="!accountMode" class="mp-foot mp-muted">You're viewing as <b>{{ managerName || 'Manager' }}</b> · <button class="mp-link" @click="askName = true">change name</button></p>
     </template>
 
+    <ManagerIntro v-if="accountMode && state === 'ok'" />
     <ReportDialog :open="!!reporting" :message="reporting" :who="ownerName" :can-block="accountMode" :send="sendReport" @close="onReportClose" />
     <div v-if="askName" class="mp-modal" data-test="name-prompt">
       <form class="mp-card" @submit.prevent="saveName">
@@ -78,6 +79,7 @@
 </template>
 
 <script setup>
+import ManagerIntro from '@/components/voiceover/ManagerIntro.vue';
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { fnUrl } from '@/config/api';
