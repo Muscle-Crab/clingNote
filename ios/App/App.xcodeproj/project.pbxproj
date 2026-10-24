@@ -18,6 +18,12 @@
 		504EC3121FED79650016851F /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 504EC3101FED79650016851F /* LaunchScreen.storyboard */; };
 		50B271D11FEDC1A000F3C39B /* public in Resources */ = {isa = PBXBuildFile; fileRef = 50B271D01FEDC1A000F3C39B /* public */; };
 		9582B6832FE993A70072D4E8 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9582B6822FE993A50072D4E8 /* SceneDelegate.swift */; };
+		C1A0E0000000000000000002 /* ClingWidgetPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A0E0000000000000000001 /* ClingWidgetPlugin.swift */; };
+		C1A0E0000000000000000004 /* ClingNoteWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A0E0000000000000000003 /* ClingNoteWidget.swift */; };
+		C1A0E0000000000000000019 /* CompleteTaskIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A0E0000000000000000018 /* CompleteTaskIntent.swift */; };
+		C1A0E0000000000000000008 /* ClingNoteWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = C1A0E0000000000000000007 /* ClingNoteWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		C1A0E0000000000000000015 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C1A0E0000000000000000014 /* WidgetKit.framework */; };
+		C1A0E0000000000000000017 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C1A0E0000000000000000016 /* SwiftUI.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -34,7 +40,39 @@
 		50B271D01FEDC1A000F3C39B /* public */ = {isa = PBXFileReference; lastKnownFileType = folder; path = public; sourceTree = "<group>"; };
 		9582B6822FE993A50072D4E8 /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
 		958DCC722DB07C7200EA8C5F /* debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = debug.xcconfig; path = ../debug.xcconfig; sourceTree = SOURCE_ROOT; };
+		C1A0E0000000000000000001 /* ClingWidgetPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClingWidgetPlugin.swift; sourceTree = "<group>"; };
+		C1A0E0000000000000000003 /* ClingNoteWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClingNoteWidget.swift; sourceTree = "<group>"; };
+		C1A0E0000000000000000018 /* CompleteTaskIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompleteTaskIntent.swift; sourceTree = "<group>"; };
+		C1A0E0000000000000000005 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		C1A0E0000000000000000006 /* ClingNoteWidget.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ClingNoteWidget.entitlements; sourceTree = "<group>"; };
+		C1A0E0000000000000000007 /* ClingNoteWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ClingNoteWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		C1A0E0000000000000000014 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		C1A0E0000000000000000016 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
+
+/* Begin PBXContainerItemProxy section */
+		C1A0E0000000000000000010 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 504EC2FC1FED79650016851F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = C1A0E000000000000000000C;
+			remoteInfo = ClingNoteWidget;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		C1A0E000000000000000000E /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				C1A0E0000000000000000008 /* ClingNoteWidget.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		504EC3011FED79650016851F /* Frameworks */ = {
@@ -42,6 +80,15 @@
 			buildActionMask = 2147483647;
 			files = (
 				4D22ABE92AF431CB00220026 /* CapApp-SPM in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C1A0E0000000000000000009 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C1A0E0000000000000000015 /* WidgetKit.framework in Frameworks */,
+				C1A0E0000000000000000017 /* SwiftUI.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -53,6 +100,7 @@
 			children = (
 				958DCC722DB07C7200EA8C5F /* debug.xcconfig */,
 				504EC3061FED79650016851F /* App */,
+				C1A0E000000000000000000D /* ClingNoteWidget */,
 				504EC3051FED79650016851F /* Products */,
 			);
 			sourceTree = "<group>";
@@ -61,6 +109,7 @@
 			isa = PBXGroup;
 			children = (
 				504EC3041FED79650016851F /* App.app */,
+				C1A0E0000000000000000007 /* ClingNoteWidget.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -69,6 +118,7 @@
 			isa = PBXGroup;
 			children = (
 				9582B6822FE993A50072D4E8 /* SceneDelegate.swift */,
+				C1A0E0000000000000000001 /* ClingWidgetPlugin.swift */,
 				50379B222058CBB4000EE86E /* capacitor.config.json */,
 				504EC3071FED79650016851F /* AppDelegate.swift */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
@@ -83,6 +133,17 @@
 			path = App;
 			sourceTree = "<group>";
 		};
+		C1A0E000000000000000000D /* ClingNoteWidget */ = {
+			isa = PBXGroup;
+			children = (
+				C1A0E0000000000000000003 /* ClingNoteWidget.swift */,
+				C1A0E0000000000000000018 /* CompleteTaskIntent.swift */,
+				C1A0E0000000000000000005 /* Info.plist */,
+				C1A0E0000000000000000006 /* ClingNoteWidget.entitlements */,
+			);
+			path = ClingNoteWidget;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -93,10 +154,12 @@
 				504EC3001FED79650016851F /* Sources */,
 				504EC3011FED79650016851F /* Frameworks */,
 				504EC3021FED79650016851F /* Resources */,
+				C1A0E000000000000000000E /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				C1A0E000000000000000000F /* PBXTargetDependency */,
 			);
 			name = App;
 			packageProductDependencies = (
@@ -105,6 +168,23 @@
 			productName = App;
 			productReference = 504EC3041FED79650016851F /* App.app */;
 			productType = "com.apple.product-type.application";
+		};
+		C1A0E000000000000000000C /* ClingNoteWidget */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C1A0E0000000000000000011 /* Build configuration list for PBXNativeTarget "ClingNoteWidget" */;
+			buildPhases = (
+				C1A0E000000000000000000A /* Sources */,
+				C1A0E0000000000000000009 /* Frameworks */,
+				C1A0E000000000000000000B /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ClingNoteWidget;
+			productName = ClingNoteWidget;
+			productReference = C1A0E0000000000000000007 /* ClingNoteWidget.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -118,6 +198,10 @@
 					504EC3031FED79650016851F = {
 						CreatedOnToolsVersion = 9.2;
 						LastSwiftMigration = 1100;
+						ProvisioningStyle = Automatic;
+					};
+					C1A0E000000000000000000C = {
+						CreatedOnToolsVersion = 16.0;
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -139,6 +223,7 @@
 			projectRoot = "";
 			targets = (
 				504EC3031FED79650016851F /* App */,
+				C1A0E000000000000000000C /* ClingNoteWidget */,
 			);
 		};
 /* End PBXProject section */
@@ -159,6 +244,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		C1A0E000000000000000000B /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -168,10 +260,28 @@
 			files = (
 				504EC3081FED79650016851F /* AppDelegate.swift in Sources */,
 				9582B6832FE993A70072D4E8 /* SceneDelegate.swift in Sources */,
+				C1A0E0000000000000000002 /* ClingWidgetPlugin.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C1A0E000000000000000000A /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C1A0E0000000000000000004 /* ClingNoteWidget.swift in Sources */,
+				C1A0E0000000000000000019 /* CompleteTaskIntent.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		C1A0E000000000000000000F /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = C1A0E000000000000000000C /* ClingNoteWidget */;
+			targetProxy = C1A0E0000000000000000010 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin PBXVariantGroup section */
 		504EC30B1FED79650016851F /* Main.storyboard */ = {
@@ -350,6 +460,60 @@
 			};
 			name = Release;
 		};
+		C1A0E0000000000000000012 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = ClingNoteWidget/ClingNoteWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = R856C5DK22;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = ClingNoteWidget/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = app.clingnote.ios.widget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		C1A0E0000000000000000013 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = ClingNoteWidget/ClingNoteWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = R856C5DK22;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = ClingNoteWidget/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = app.clingnote.ios.widget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -367,6 +531,15 @@
 			buildConfigurations = (
 				504EC3171FED79650016851F /* Debug */,
 				504EC3181FED79650016851F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		C1A0E0000000000000000011 /* Build configuration list for PBXNativeTarget "ClingNoteWidget" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C1A0E0000000000000000012 /* Debug */,
+				C1A0E0000000000000000013 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
