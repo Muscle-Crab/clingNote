@@ -5,14 +5,18 @@ export const VOICE = { name: 'en-US-AndrewNeural', rate: '+4%', pitch: '-2Hz' };
 
 export const SCRIPTS = {
   // ---- Onboarding (every user; *_manager variants when arriving via a manager link / in Manager mode) ----
-  ob_welcome: "Hey. Welcome to ClingNote. I'm your accountability boss. You write the to-dos. I make sure they get done. Five tasks a day keeps your streak alive. Timers keep you honest. And people you trust can watch your back. Let's set you up.",
-  ob_welcome_manager: "Hey. Welcome to ClingNote. Somebody picked you as their manager. Nice. Quick setup first, then I connect you straight to them. And you get your own to-do list too. Let's go.",
+  ob_welcome: "Hey. Welcome to ClingNote. I'm your accountability boss. Quick setup first. Once you're in, your first report walks you through everything.",
+  ob_welcome_manager: "Hey. Welcome to ClingNote. Somebody picked you as their manager. Nice. Quick setup first, then I connect you straight to them. Your first report walks you through the rest.",
   ob_age: "Quick one. How old are you? Just the number. You need to be thirteen or older to use ClingNote.",
   ob_goals: "What do you want to nail? Work. Fitness. Study. Habits. Pick everything that applies. I'll tune the pressure to match.",
   ob_schedule: "Here's your rhythm. Your eight-hour day starts at the time you picked, and once it starts, it's locked. Set when tasks are due, and when you go to bed. I'll nudge you to start, and to wrap up on time.",
   ob_strictness: "How hard should I push? Chill gets gentle reminders. Firm gets deadline warnings and a daily report. Drill sergeant? No excuses. Breaks are earned. Your call.",
   ob_notifications: "Last thing. Let me reach you. Start-of-day prompts, deadline warnings, pings from your manager. No spam. Turn them on.",
   ob_paywall: "Want the full boss? Pro unlocks everything. Or skip it for now. Either way, let's get to work.",
+
+  // ---- First report = the app explanation (onboarding voice). Played once, before yesterday's recap + today's plan. ----
+  br_intro: "Before your report, here's how this works. ClingNote is your accountability boss. You write the to-dos. I make sure they get done. Add tasks for each day, schedule them, or set them to repeat. Finish five a day to keep your streak alive. Start a timer to stay honest. Mark a task Private, and only you see it. Public tasks can be seen by your manager or your pals, who can ping you and message you. Climb the rankings, and turn on Discipline mode if you want me tougher. Every morning I'll tell you how yesterday went, and what's on today. Here we go.",
+  br_intro_manager: "Before your report, here's how this works. ClingNote is an accountability boss. In Manager mode, everyone you manage shows up by name. A red badge means someone is overdue. Tap a name to see their day, hit Ping to nudge them, or message them. You only see their public tasks. And you still get your own list, your five-task streak, and timers in User mode. Every morning I'll tell you how yesterday went, what's on today, and who on your team needs a push. Here we go.",
 
   // ---- Manager-mode intro walkthrough (after connecting) ----
   mi_1: "You're in Manager mode. This is your crew. Everyone you manage shows up right here, by name.",

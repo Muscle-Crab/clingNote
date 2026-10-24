@@ -17,6 +17,8 @@
           </g>
         </svg>
         <div class="bb-stats"><span>🔥 {{ card.streak }}/5 streak</span><span>✅ {{ card.weekDone }}/{{ card.weekPlanned }} this week</span><span>⭐ {{ card.weekPoints }} pts</span></div>
+        <p v-if="card.introText" class="bb-p bb-intro" data-test="bb-intro"><b>New here?</b> {{ card.introText }}</p>
+        <p class="bb-p" data-test="bb-recap"><b>Yesterday:</b> {{ card.recap.replace(/^First, (how )?yesterday( went)?\.\s*/, '') }}</p>
         <p v-if="card.todayList.length" class="bb-p"><b>Today:</b> {{ card.todayList.join(' · ') }}</p>
         <p v-if="card.team" class="bb-p"><b>Team:</b> {{ card.team }}</p>
       </template>
@@ -28,17 +30,18 @@
 
 <script setup>
 import BrandMark from '@/components/brand/BrandMark.vue';
-import { ref, onMounted, onBeforeUnmount } from 'vue';
+import { ref, watch, onMounted, onBeforeUnmount } from 'vue';
 import { useRoute } from 'vue-router';
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '@/firebaseConfig';
 import VoToggle from './VoToggle.vue';
-import { speakLive, stopVoice, unlockVoice, voMuted as muted } from '@/composables/useVoiceover';
+import { playFlow, stopVoice, unlockVoice, voMuted as muted } from '@/composables/useVoiceover';
+import { SCRIPTS } from '@/voiceover/scripts';
 import { loadDayTasks } from '@/composables/useDayPersistence';
 import { getMode } from '@/utils/appMode';
 import { localDateStr } from '@/utils/streak';
-import { overdueTasks, overdueLine, morningLine, morningDue, overdueDue } from '@/utils/briefing';
+import { overdueTasks, overdueLine, recapLine, planLine, morningDue, overdueDue, introKey } from '@/utils/briefing';
 
 const DAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const W = 320; const H = 150; const bw = 28;
@@ -52,7 +55,8 @@ async function run() {
   const u = auth.currentUser; if (!u || busy || card.value || SKIP.test(route.path)) return;
   const now = new Date(); const today = localDateStr(now); const mode = getMode();
   const kM = `clingnote.morning.${u.uid}`; const kO = `clingnote.overdueAt.${u.uid}`;
-  const wantMorning = morningDue(today, now.getHours(), ls(kM)); const wantOverdue = overdueDue(now.getTime(), ls(kO));
+  const kI = `clingnote.introHeard.${u.uid}`; const needIntro = !ls(kI);
+  const wantMorning = (needIntro && ls(kM) !== today) || morningDue(today, now.getHours(), ls(kM)); // first report = onboarding, any hour const wantOverdue = overdueDue(now.getTime(), ls(kO));
   if (!wantMorning && !wantOverdue) return;
   busy = true;
   try {
@@ -78,16 +82,26 @@ async function run() {
       morning = { week, streak, weekDone: week.reduce((s, d) => s + d.done, 0), weekPlanned: week.reduce((s, d) => s + d.planned, 0), weekPoints: week.reduce((s, d) => s + d.points, 0),
         todayList: todayTasks.filter((t) => !t.completed).slice(0, 4).map((t) => t.title),
         team: people.length ? (late.length ? `${late.map((p) => `${p.ownerName} (${p.overdue} overdue)`).join(', ')}` : `All ${people.length} on track`) : '',
-        speech: morningLine({ week, streak, mode, people, todayTasks }) };
+        recap: recapLine({ week }), plan: planLine({ streak, mode, people, todayTasks, deadline: ud.onboarding && ud.onboarding.deadline }) };
+      const hello = now.getHours() < 12 ? 'Good morning.' : now.getHours() < 18 ? 'Good afternoon.' : 'Good evening.';
+      morning.introKey = needIntro ? introKey(mode) : ''; morning.introText = morning.introKey ? SCRIPTS[morning.introKey] : '';
+      morning.speech = `${hello} Here's your report. ${morning.recap} ${morning.plan}`;
       ls(kM, today); ls(`morningReport_${u.uid}`, today); // the Home text report is superseded by this card today
     }
     max = morning ? max : 1;
-    card.value = { alert, morning: !!morning, ...(morning || {}), speech: [alert, morning && morning.speech].filter(Boolean).join(' ') }; // overdue first
-    spoke.value = false; if (!muted.value) spoke.value = speakLive(card.value.speech); // works once audio was unlocked by a tap; otherwise "Hear the boss"
+    // One voice flow: overdue alert first, then (first time only) the app explanation MP3, then yesterday's recap + today's plan.
+    card.value = { alert, morning: !!morning, ...(morning || {}), morningSpeech: morning ? morning.speech : '', speech: [alert, morning && morning.speech].filter(Boolean).join(' ') };
+    spoke.value = false; if (!muted.value) spoke.value = speak(false); // works once audio was unlocked by a tap; otherwise "Hear the boss"
   } catch (e) { console.error('briefing', e.message); } finally { busy = false; }
 }
-const speak = () => { unlockVoice(); if (card.value) spoke.value = speakLive(card.value.speech); };
-const close = () => { stopVoice(); card.value = null; };
+const markIntro = () => { const u = auth.currentUser; if (u && card.value && card.value.introKey) ls(`clingnote.introHeard.${u.uid}`, '1'); };
+function speak(tap = true) {
+  if (tap) unlockVoice(); const c = card.value; if (!c) return false;
+  // Order: overdue alert (live) -> app explanation (bundled MP3, first report only) -> yesterday's recap + today's plan (live).
+  const ok = playFlow({ before: c.alert || '', key: c.introKey || '', text: c.morningSpeech || '' });
+  if (ok) markIntro(); if (tap) spoke.value = ok; return ok;
+}
+const close = () => { stopVoice(); markIntro(); card.value = null; }; // muted users still saw the intro text on the card
 let unsub = null; let appSub = null;
 const onVis = () => { if (!document.hidden) run(); };
 onMounted(async () => {
@@ -95,12 +109,13 @@ onMounted(async () => {
   document.addEventListener('visibilitychange', onVis);
   try { const { Capacitor } = await import('@capacitor/core'); if (Capacitor.isNativePlatform()) { const { App } = await import('@capacitor/app'); appSub = await App.addListener('resume', () => setTimeout(run, 500)); } } catch (e) { /* web */ }
 });
+watch(() => route.path, () => setTimeout(run, 800)); // e.g. right after onboarding lands on Home -> first report (intro)
 onBeforeUnmount(() => { unsub && unsub(); document.removeEventListener('visibilitychange', onVis); appSub && appSub.remove && appSub.remove(); stopVoice(); });
 </script>
 
 <style scoped>
 .bb-wrap { position: fixed; inset: 0; z-index: 9000; display: flex; align-items: flex-end; justify-content: center; background: rgba(3,6,14,.6); padding: 12px 12px calc(12px + env(safe-area-inset-bottom)); }
-.bb { width: 100%; max-width: 460px; background: #070D1C; border: 1px solid #2A3C66; border-radius: 22px; padding: 16px; color: #F2F5FC; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
+.bb { width: 100%; max-width: 460px; max-height: 86vh; overflow-y: auto; background: #070D1C; border: 1px solid #2A3C66; border-radius: 22px; padding: 16px; color: #F2F5FC; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
 .bb-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; } .bb-head h2 { margin: 0; font-size: 18px; font-weight: 800; }
 .bb-r { display: flex; gap: 6px; align-items: center; } .bb-x { background: none; border: 0; color: #7180A0; font-size: 16px; cursor: pointer; width: 30px; height: 30px; }
 .bb-alert { margin: 12px 0 4px; padding: 10px 12px; border-radius: 12px; background: rgba(255,90,70,.12); border: 1px solid rgba(255,90,70,.4); color: #FFD2CA; font-weight: 600; }

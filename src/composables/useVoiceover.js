@@ -38,14 +38,25 @@ export function speakLive(text, { onEnd } = {}) {
 }
 
 // Play a scripted segment (stops anything already playing). Returns false if muted / not yet unlocked.
-export function playVoice(key) {
+export function playVoice(key, { onEnd } = {}) {
   stopVoice(); if (voMuted.value || !voUnlocked.value || !SCRIPTS[key]) return false;
   const my = token; const a = el();
-  if (!a) return speakLive(SCRIPTS[key]);
+  const fallback = () => { if (my === token) speakLive(SCRIPTS[key], { onEnd }); };
+  if (!a) return speakLive(SCRIPTS[key], { onEnd });
   a.src = `${base}voiceover/${key}.mp3`; voSpeaking.value = true;
-  a.play().catch(() => { if (my === token) speakLive(SCRIPTS[key]); });
-  a.onerror = () => { if (my === token) speakLive(SCRIPTS[key]); };
+  a.onended = () => { if (my === token && onEnd) onEnd(); };
+  a.play().catch(fallback);
+  a.onerror = fallback;
   return true;
+}
+
+// One voice flow: a scripted MP3 segment (natural neural voice), then dynamic text via speechSynthesis.
+// stopVoice() (close / mute / new flow) cancels the rest of the sequence.
+export function playFlow({ before = '', key = '', text = '' }) {
+  if (voMuted.value) return false;
+  if (before) { const my = token; return speakLive(before, { onEnd: () => { if (my === token) playFlow({ key, text }); } }); }
+  if (key && SCRIPTS[key] && voUnlocked.value) { const my = token + 1; return playVoice(key, { onEnd: () => { if (my === token && text) speakLive(text); } }); }
+  return speakLive(key && SCRIPTS[key] ? `${SCRIPTS[key]} ${text}` : text);
 }
 
 // Call from inside a tap handler. Primes the shared element (silent) so later swaps can autoplay on iOS.
