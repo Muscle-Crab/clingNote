@@ -97,6 +97,10 @@
                 <label class="field-label">Note</label>
                 <textarea v-model="newTask.notes" class="field-textarea" placeholder="Extra details..."></textarea>
               </div>
+              <div class="field-group anon-row" data-test="anon-toggle">
+                <div class="anon-text"><span class="field-label">🔒 Anonymous for boss</span><small>Your manager sees the time, status &amp; points, not the name or notes</small></div>
+                <button type="button" role="switch" class="anon-switch" :class="{ on: newTask.anonymous }" :aria-checked="newTask.anonymous ? 'true' : 'false'" aria-label="Anonymous for boss" @click="newTask.anonymous = !newTask.anonymous"><span></span></button>
+              </div>
             </div>
           </transition>
 
@@ -314,6 +318,13 @@ onBeforeUnmount(() => {
   .nt-sheet { width: 100%; max-width: 100%; max-height: min(92%, 100dvh); border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
   .nt-sheet .field-input, .nt-sheet .field-select, .nt-sheet .field-textarea { font-size: 16px; } /* no iOS focus-zoom (which shifts the page) */
 }
+.anon-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.anon-text { display: flex; flex-direction: column; gap: 2px; }
+.anon-text small { font-size: 11px; color: var(--c-text-2, #A9B4CC); }
+.anon-switch { flex: none; width: 44px; height: 26px; border-radius: 999px; border: 1px solid var(--c-border, #2A3C66); background: rgba(255,255,255,.06); position: relative; padding: 0; cursor: pointer; transition: background .15s; }
+.anon-switch span { position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; border-radius: 50%; background: #cfd8cf; transition: transform .15s; }
+.anon-switch.on { background: #2f7a4f; border-color: #3c9a64; }
+.anon-switch.on span { transform: translateX(18px); background: #fff; }
 </style>
 
 <style>

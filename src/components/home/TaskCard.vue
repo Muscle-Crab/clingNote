@@ -42,6 +42,7 @@
                         {{ task.title }}
                       </span>
                       <span v-if="isRepeating" class="task-repeat-badge" data-test="repeat-badge" :title="'Repeats: ' + repeatLabel">🔁 {{ repeatLabel }}</span>
+                      <span v-if="task.anonymous === true && task.visibility !== 'private'" class="task-private task-anon" data-test="anon-label" title="Anonymous for boss: managers see it as 'Anonymous task'">🔒 Anon</span>
                       <span v-if="task.visibility === 'private'" class="task-private" data-test="private-label" title="Private: only you can see this task">Private</span>
                       <span v-if="task.timerActive" class="task-timer-left">
                         ⏳  {{ taskTimeLeft(task, now) }}
@@ -99,6 +100,11 @@
                           <div class="vis-toggle" role="group" aria-label="Who can see this task" data-test="visibility-toggle">
                             <button type="button" :class="{ on: task.visibility !== 'private' }" :aria-pressed="task.visibility !== 'private' ? 'true' : 'false'" title="Your managers and pals can see this task" @click="$emit('patch', { visibility: 'public' })">Public</button>
                             <button type="button" :class="{ on: task.visibility === 'private' }" :aria-pressed="task.visibility === 'private' ? 'true' : 'false'" title="Only you can see this task" @click="$emit('patch', { visibility: 'private' })">Private</button>
+                          </div></div>
+                        <div class="mini-field"><span>Anonymous for boss</span>
+                          <div class="vis-toggle" role="group" aria-label="Anonymous for boss" data-test="anon-edit-toggle">
+                            <button type="button" :class="{ on: task.anonymous !== true }" :aria-pressed="task.anonymous !== true ? 'true' : 'false'" title="Managers see the task name" @click="$emit('patch', { anonymous: false })">Named</button>
+                            <button type="button" :class="{ on: task.anonymous === true }" :aria-pressed="task.anonymous === true ? 'true' : 'false'" title="Managers see 'Anonymous task' (time, status and points stay visible)" @click="$emit('patch', { anonymous: true })">🔒 Anonymous</button>
                           </div></div>
                         <label class="mini-field"><span>Priority</span>
                           <select class="field-select" :value="task.priority || 'low'" @change="$emit('patch', { priority: $event.target.value })">

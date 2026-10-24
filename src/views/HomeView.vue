@@ -830,7 +830,7 @@ const closeModal = () => {
 const selectedDayIndex = ref(-1);
 // Fresh Add-task form. Repeat defaults to "Just once" (one-time); Daily/Weekly are opt-in.
 const blankTask = () => ({
-  title: '', time: '', priority: 'low', labels: [], notes: '', selectedDays: [], position: 0, type: 'one-time',
+  title: '', anonymous: false, time: '', priority: 'low', labels: [], notes: '', selectedDays: [], position: 0, type: 'one-time',
   dueDate: '', startTime: '', estimateMin: '', nextAction: '', status: 'todo', pendingOn: '',
   sched: blankSchedule(),
   reminder: { datetime: '', repeat: '' },
@@ -1583,7 +1583,7 @@ const submitScheduledTask = async () => {
   if (bad) { error.value = bad; return false; }
   const labels = typeof nt.labels === 'string' ? nt.labels.split(',').map(l => l.trim()).filter(Boolean) : (nt.labels || []);
   const fields = {
-    title: nt.title, important: false, visibility: 'public', time: '', priority: nt.priority, labels, notes: nt.notes, userId: userId.value,
+    title: nt.title, important: false, visibility: 'public', anonymous: !!nt.anonymous, time: '', priority: nt.priority, labels, notes: nt.notes, userId: userId.value,
     status: nt.status || 'todo', pendingOn: nt.status === 'pending' ? (nt.pendingOn || '').trim() : '', dueDate: nt.dueDate || '', startTime: nt.startTime || '',
     estimateMin: Number(nt.estimateMin) || 0, nextAction: (nt.nextAction || '').trim(),
   };
@@ -1746,6 +1746,7 @@ const addNewTask = async () => {
     title: newTask.value.title.trim(),
     completed: false,
     important: false,
+    anonymous: !!newTask.value.anonymous, // Anonymous for boss: managers/pals see it as 'Anonymous task' (name + notes hidden server-side)
     visibility: 'public', // Public = managers & pals can see it; 'private' = only you
     time: '', // fallback in case reminder isn't set
     priority: newTask.value.priority,

@@ -48,11 +48,19 @@ const parseAward = (body) => {
 };
 const awardText = (mName, a) => `${mName} sent you ${[a.bonus ? `a ${a.bonus}-coin bonus` : '', a.badge ? `the ${AWARD_BADGES[a.badge].icon} ${AWARD_BADGES[a.badge].name} badge` : ''].filter(Boolean).join(' and ')}${a.note ? `: “${a.note}”` : '!'}`;
 
+// ── Anonymous for boss ── The owner opts a task in (task.anonymous === true; missing = false). Viewers still get day/time/status/points/estimate,
+// but the name is replaced with a placeholder and the key is hashed (the legacy key embeds the title). Notes are never sent to viewers anyway.
+const ANON_TITLE = 'Anonymous task';
+const isAnon = (t) => !!t && t.anonymous === true;
+const viewKey = (t, raw) => (isAnon(t) ? `anon:${hashToken(raw).slice(0, 24)}` : raw);
+const viewTitle = (t) => (isAnon(t) ? ANON_TITLE : clipText(t.title, 200));
+const anonFlag = (t) => (isAnon(t) ? { anonymous: true } : {});
+
 const viewTasks = (dayDocs, now = new Date()) => {
   const out = [];
   for (const { day, tasks } of dayDocs) for (const t of tasks || []) {
     if (!t || !t.title || t.visibility === 'private') continue; // Private tasks (only you) never leave the server; missing = public
-    out.push({ key: taskKey(t), day, title: clipText(t.title, 200), completed: !!t.completed, important: !!t.important, ...estFields(t),
+    out.push({ key: viewKey(t, taskKey(t)), day, title: viewTitle(t), ...anonFlag(t), completed: !!t.completed, important: !!t.important, ...estFields(t),
       reminder: t.reminder && t.reminder.date ? { date: t.reminder.date, time: t.reminder.time || '' } : null, overdue: isOverdue(t, day, now),
       ...(t.scheduledFor ? { scheduled: { date: String(t.scheduledFor), time: validTime(t.time) ? t.time : '', repeat: clipText(t.repeatText || (t.templateId ? 'Repeats' : ''), 60) } } : {}) });
   }
@@ -83,7 +91,7 @@ const viewScheduled = (entries, now = new Date(), days = 7) => {
   const list = Array.isArray(entries) ? entries.slice(0, 500) : [];
   const ids = new Set(list.map((e) => e && e.id));
   const out = [];
-  const push = (e, id, date, time, repeat) => out.push({ key: `sched:${id}`, day: DAYS[pd(date).getDay()], title: clipText(e.title, 200), completed: false, important: !!e.important,
+  const push = (e, id, date, time, repeat) => out.push({ key: viewKey(e, `sched:${id}`), day: DAYS[pd(date).getDay()], title: viewTitle(e), ...anonFlag(e), completed: false, important: !!e.important,
     reminder: validTime(time) ? { date, time } : null, overdue: passed(date, time, now), upcoming: true, scheduled: { date, time: validTime(time) ? time : '', repeat } });
   for (const e of list) {
     if (!e || !e.title || e.visibility === 'private' || e.stopped) continue;
@@ -99,4 +107,4 @@ const viewScheduled = (entries, now = new Date(), days = 7) => {
 const nudgeText = (managerName, preset, taskTitle) => `${managerName || 'Your manager'} ${NUDGE_PRESETS[preset] || NUDGE_PRESETS.ping} ${taskTitle ? `"${taskTitle}"` : 'your tasks'}`;
 
 module.exports = {
-  AWARD_BONUSES, AWARD_BADGES, awardEligibility, parseAward, awardText, WEEK, NUDGE_PRESETS, newToken, hashToken, validTokenShape, newPalCode, normCode, pairId, clipText, taskKey, tsMs, isOverdue, viewTasks, viewScheduled, occursOn, nudgeText };
+  ANON_TITLE, isAnon,   AWARD_BONUSES, AWARD_BADGES, awardEligibility, parseAward, awardText, WEEK, NUDGE_PRESETS, newToken, hashToken, validTokenShape, newPalCode, normCode, pairId, clipText, taskKey, tsMs, isOverdue, viewTasks, viewScheduled, occursOn, nudgeText };
