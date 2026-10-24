@@ -54,10 +54,6 @@
               <label class="field-label" for="nt-start">Start time</label>
               <input id="nt-start" type="time" v-model="newTask.startTime" class="field-input" />
             </div>
-            <div class="field-group">
-              <label class="field-label" for="nt-est">Estimate (min)</label>
-              <input id="nt-est" type="number" min="0" step="5" v-model="newTask.estimateMin" class="field-input" placeholder="e.g. 30" />
-            </div>
           </div>
           <div class="field-group">
             <label class="field-label" for="nt-next">Next action</label>

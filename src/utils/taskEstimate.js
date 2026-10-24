@@ -1,11 +1,14 @@
 // Client-side task estimate (same deterministic heuristic the eight-hour-day function uses; the server re-estimates and locks at countdown start).
 // The user's typed estimateMin is only an INPUT: it is never overwritten here. The result is stored as complexity / minutes / points.
 import { estimateTask } from './eightHour';
+import { localEstimateMinutes } from './aiEstimate';
 
 const typed = (t) => { const n = Math.round(Number(t && t.estimateMin)); return Number.isFinite(n) && n > 0 ? n : 0; };
 export const estimateFor = (task = {}) => {
-  const e = estimateTask({ title: task.title || '', notes: task.notes || '', priority: task.priority || '', estimateMin: typed(task) || undefined });
-  return { complexity: e.complexity, minutes: e.minutes, points: e.points };
+  // No typed estimate -> the instant local estimator (title hints + dictionary) supplies the minutes; a server AI may override later.
+  const auto = typed(task) ? null : localEstimateMinutes(task);
+  const e = estimateTask({ title: task.title || '', notes: task.notes || '', priority: task.priority || '', estimateMin: typed(task) || auto.minutes });
+  return { complexity: e.complexity, minutes: e.minutes, points: e.points, estimateSource: auto ? auto.source : 'user' };
 };
 // New task -> same task + { complexity, minutes, points }. estimateMin stays exactly as typed.
 export const withEstimate = (task) => ({ ...task, ...estimateFor(task) });

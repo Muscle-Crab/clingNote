@@ -288,7 +288,7 @@ import ProgressBar from '@/components/home/ProgressBar.vue';
 import EightHourCard from '@/components/home/EightHourCard.vue';
 import { useEightHour, syncAfterAuth } from '@/composables/useEightHour';
 import { countableIndexes } from '@/utils/eightHour';
-import { estimateFor } from '@/utils/taskEstimate';
+import { estimateFor, chipValues } from '@/utils/taskEstimate';
 import { isDayLocked, isLockError, assertTasksChangeAllowed, LOCKED_MESSAGE, isShutdown, SHUT_MESSAGE } from '@/utils/eightHourLock';
 import ReminderModal from '@/components/home/ReminderModal.vue';
 import ShutdownPrompt from '@/components/home/ShutdownPrompt.vue';
@@ -335,13 +335,14 @@ const nowTick = ref(Date.now());
 
 let timerInterval = null;
 
-const openTaskTimerModal = (index) => {
+// Play = start the countdown immediately from the task's estimate (typed override > stored/auto estimate). No picker step.
+const openTaskTimerModal = async (index) => {
+  const t = selectedDayRoutine.value[index]; if (!t) return;
+  const mins = chipValues(t).minutes || 25;
   selectedTimerTaskIndex.value = index;
-
-  selectedTimerHours.value = 0;
-  selectedTimerMinutes.value = 5;
-
-  showTimerModal.value = true;
+  selectedTimerHours.value = Math.floor(mins / 60);
+  selectedTimerMinutes.value = mins % 60;
+  await startTimer();
 };
 
 // ── 8-hour day: strict lock (UI guards; the data layer and Firestore rules enforce the same) ──
