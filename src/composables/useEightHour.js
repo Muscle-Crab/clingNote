@@ -96,7 +96,7 @@ export const useEightHour = () => {
   const phase = computed(() => phaseInfo.value.phase);
   const running = computed(() => phase.value === 'running');
   const lock = computed(() => (lockRaw.value && lockRaw.value.dayKey === phaseInfo.value.dayKey ? lockRaw.value : null));
-  const remainingMs = computed(() => (running.value ? Math.max(0, phaseInfo.value.endMs - (tick.value, nowMs())) : 0));
+  const remainingMs = computed(() => ((running.value || (phase.value === 'ready' && core.START_MODE === 'wake' && phaseInfo.value.endMs)) ? Math.max(0, phaseInfo.value.endMs - (tick.value, nowMs())) : 0));
   const countdown = computed(() => core.fmtCountdown(remainingMs.value));
   // "Ends 3:00 PM": real end while running/ended; otherwise wake time + 8h (what it will be if the countdown starts at the wake time)
   const endsLabel = computed(() => {

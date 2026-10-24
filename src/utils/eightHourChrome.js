@@ -13,6 +13,7 @@ export const pillState = ({ phase, running, countdown, startsLabel, hasPlan, shu
   }
   if (!hasPlan) return null;
   if (phase === 'before') return { kind: 'before', main: `Starts ${startsLabel}`, sub: '', aria: `8-hour day starts at ${startsLabel}` };
+  if (phase === 'ready' && countdown && countdown !== '00:00:00') return { kind: 'run', main: countdown, sub: 'add tasks', aria: `8-hour day: ${countdown} left, started at your wake time` };
   if (phase === 'ready') return { kind: 'before', main: 'Ready to start', sub: '', aria: '8-hour day ready to start' };
   return null; // ended without a started day / loading: nothing to show
 };
