@@ -138,6 +138,10 @@
 
           <p v-if="viewPrefs.filter !== 'all' && isViewingToday && visibleTaskCount === 0" class="filter-empty">No tasks match this filter.</p>
 
+          <div v-if="rollover && isViewingToday" class="rollover-banner" data-test="rollover-banner" role="status">
+            <button type="button" class="rollover-banner__body" @click="highlightRollover">🌅 {{ rollover.message }}</button>
+            <button type="button" class="rollover-banner__x" aria-label="Dismiss" data-test="rollover-dismiss" @click="dismissRollover">×</button>
+          </div>
           <div ref="taskListEl" class="tasks-list space-y-2" :class="{ 'reorder-off': !reorderable }" @pointerdown="onListPointerDown">
             <template v-for="task in displayTasks" :key="taskKey(task)">
               <TaskCard
@@ -145,7 +149,9 @@
                   :task="task" :up-next="isViewingToday && !task.completed && taskKey(task) === upNextKey" :drag-disabled="!reorderable" :index="realIndex(task)" :is-today-tab="isViewingToday" :expanded="expandedKey === taskKey(task)"
                   :active-labels="activeLabels" :now="nowTick" :show-notification="showNotification" :transfer-notification="transferNotification"
                   @toggle-expand="toggleExpanded(task)" @toggle-complete="toggleTaskCompletion(realIndex(task))" @open-detail="openTaskDetailModal(task)"
-                  @set-boss="setBoss(realIndex(task), task)" @toggle-important="toggleTaskImportance(realIndex(task))" @patch="patchTask(realIndex(task), task, $event)" @subtask-patch="onSubtaskPatch(realIndex(task), task, $event)"
+                  @set-boss="setBoss(realIndex(task), task)" @toggle-important="toggleTaskImportance(realIndex(task))" :day-locked="selectedDayLocked" :highlight="rolledKeys.includes(taskKey(task))" :all-occurrences="seriesKey === taskKey(task)"
+                  @edit="toggleExpanded(task)" @adjust-timer="adjustRunningTimer(realIndex(task), task, $event)" @set-remaining="setRunningRemaining(realIndex(task), task, $event)" @series="seriesKey = $event ? taskKey(task) : null"
+                  @patch="editTask(realIndex(task), task, $event)" @subtask-patch="onSubtaskPatch(realIndex(task), task, $event)"
                   @toggle-label="toggleLabelHighlight" @open-reminder="openModal('calendar', realIndex(task), task.title)" @transfer="openTransferModal(realIndex(task))"
                   @video="openYouTubeModal(realIndex(task))" @upload="handleUpload($event, realIndex(task))" @timer="openTaskTimerModal(realIndex(task))"
                   @wont-do="openWontDoModal(realIndex(task))" @delete="deleteTask(realIndex(task))" @schedule="scheduleExistingTask(realIndex(task), task, $event)" @set-repeat="setTaskRepeat(task, $event)"
@@ -164,7 +170,9 @@
                   :task="task" :drag-disabled="true" :index="realIndex(task)" :is-today-tab="true" :expanded="expandedKey === taskKey(task)"
                   :active-labels="activeLabels" :now="nowTick"
                   @toggle-expand="toggleExpanded(task)" @toggle-complete="toggleTaskCompletion(realIndex(task))" @open-detail="openTaskDetailModal(task)"
-                  @set-boss="setBoss(realIndex(task), task)" @toggle-important="toggleTaskImportance(realIndex(task))" @patch="patchTask(realIndex(task), task, $event)" @subtask-patch="onSubtaskPatch(realIndex(task), task, $event)"
+                  @set-boss="setBoss(realIndex(task), task)" @toggle-important="toggleTaskImportance(realIndex(task))" :day-locked="selectedDayLocked" :highlight="rolledKeys.includes(taskKey(task))" :all-occurrences="seriesKey === taskKey(task)"
+                  @edit="toggleExpanded(task)" @adjust-timer="adjustRunningTimer(realIndex(task), task, $event)" @set-remaining="setRunningRemaining(realIndex(task), task, $event)" @series="seriesKey = $event ? taskKey(task) : null"
+                  @patch="editTask(realIndex(task), task, $event)" @subtask-patch="onSubtaskPatch(realIndex(task), task, $event)"
                   @toggle-label="toggleLabelHighlight" @open-reminder="openModal('calendar', realIndex(task), task.title)" @transfer="openTransferModal(realIndex(task))"
                   @video="openYouTubeModal(realIndex(task))" @upload="handleUpload($event, realIndex(task))" @timer="openTaskTimerModal(realIndex(task))"
                   @wont-do="openWontDoModal(realIndex(task))" @delete="deleteTask(realIndex(task))" @schedule="scheduleExistingTask(realIndex(task), task, $event)" @set-repeat="setTaskRepeat(task, $event)" />
@@ -261,7 +269,7 @@ const mutateDay = (dayName, fn) => runTransaction(db, async (tx) => {
 });
 const strictAllowed = ref(true); // false for free users once ENFORCE_PAYWALL is on
 loadUserDoc().then((d) => { strictAllowed.value = canUse(d, 'strictBoss'); }).catch(() => {});
-import { scheduleTimerDone, cancelLocal, timerKey, cancelTaskNotifications } from '@/utils/localNotify';
+import { scheduleLocal, scheduleTimerDone, cancelLocal, timerKey, cancelTaskNotifications } from '@/utils/localNotify';
 import { scheduleNotification, sendNotificationToPlayer, linkPushUser } from '@/composables/useNotifications';
 import { speak } from '@/composables/useSpeech';
 import { completionPercentage, computeTimeStats, daysLeftInYearFrom, heroTitleFor } from '@/utils/dayStats';
@@ -279,6 +287,8 @@ import IdleState from '@/components/home/IdleState.vue';
 import WontDoList from '@/components/home/WontDoList.vue';
 import LoadSummary from '@/components/home/LoadSummary.vue';
 import TaskCard from '@/components/home/TaskCard.vue';
+import { safeEditPatch, cleanEstimate, estimateTimerPatch, adjustTimerPatch, setRemainingPatch, timerRunning, seriesPatch } from '@/utils/taskEdit';
+import { pendingRollover, loadSeen, markSeen, rolloverNotifBody } from '@/utils/rollover';
 import TimeBlockSchedule from '@/components/home/TimeBlockSchedule.vue';
 import AddTaskModal from '@/components/home/AddTaskModal.vue';
 import CelebrationOverlay from '@/components/home/CelebrationOverlay.vue';
@@ -289,6 +299,7 @@ import EightHourCard from '@/components/home/EightHourCard.vue';
 import { useEightHour, syncAfterAuth } from '@/composables/useEightHour';
 import { countableIndexes } from '@/utils/eightHour';
 import { estimateFor, chipValues } from '@/utils/taskEstimate';
+import { patchTouchesLocked } from '@/utils/eightHourLock';
 import { isDayLocked, isLockError, assertTasksChangeAllowed, LOCKED_MESSAGE, isShutdown, SHUT_MESSAGE } from '@/utils/eightHourLock';
 import ReminderModal from '@/components/home/ReminderModal.vue';
 import ShutdownPrompt from '@/components/home/ShutdownPrompt.vue';
@@ -410,6 +421,7 @@ onMounted(() => {
 });
 const autoTransferTaskToTomorrow = async (index) => {
   const task = {
+    rolledOverFor: getTodayId(), // rollover stamp: tomorrow shows a one-time "moved from yesterday" notice
     ...selectedDayRoutine.value[index],
     timerActive: false,
     timerStartedAt: null,
@@ -459,6 +471,7 @@ const autoTransferTaskToTomorrow = async (index) => {
   );
 
   transferNotification.value = `⏰ "${task.title}" moved to tomorrow (+1 urgency)`;
+  notifyRollover([task.title]);
 
   setTimeout(() => {
     transferNotification.value = null;
@@ -2949,6 +2962,75 @@ const patchTask = async (index, task, patch) => {
   }
 };
 
+// ── Edit task: estimate chips, live timer adjust, "all repeating days" option ──
+const seriesKey = ref(null);
+const rescheduleTimer = (task) => { cancelLocal(timerKey(task)); if (task.timerActive && task.timerEndTime) scheduleTimerDone(task); };
+const editTask = async (index, task, rawPatch) => {
+  let patch = safeEditPatch(rawPatch); // an edit never completes a task
+  if (!Object.keys(patch).length) return;
+  const dayName = days[selectedDayIndex.value].day;
+  const lockedHit = patchTouchesLocked(patch);
+  if (isDayLocked(dayName) && lockedHit.length) { alert(`${LOCKED_MESSAGE} (${lockedHit.join(', ')})`); return; }
+  const oldKey = taskKey(task);
+  if (patch.estimateMin !== undefined) {
+    patch.estimateMin = cleanEstimate(patch.estimateMin);
+    patch = { ...patch, ...estimateTimerPatch(task, patch.estimateMin) }; // running countdown follows the new estimate
+  }
+  await patchTask(index, task, patch);
+  if (patch.timerEndTime) rescheduleTimer(task);
+  if (seriesKey.value === oldKey) {
+    const sp = seriesPatch(patch);
+    if (Object.keys(sp).length) await applyToSeries(oldKey, sp);
+    if (patch.title) seriesKey.value = taskKey(task);
+  }
+};
+// Copy the editable fields to every other weekday copy of a repeating task (one transaction).
+const applyToSeries = async (key, sp) => {
+  const others = days.filter((d, i) => i !== selectedDayIndex.value);
+  if (others.some((d) => isDayLocked(d.day)) && patchTouchesLocked(sp).length) { alert(LOCKED_MESSAGE); return; }
+  try {
+    await trackWrite(runTransaction(db, async (tx) => {
+      const refs = others.map((d) => doc(db, 'weeklyRoutines', `${userId.value}_${d.day}`));
+      const snaps = await Promise.all(refs.map((r) => tx.get(r)));
+      snaps.forEach((snap, i) => {
+        if (!snap.exists()) return;
+        const l = snap.data().tasks || [];
+        if (!l.some((t) => taskKey(t) === key)) return;
+        tx.update(refs[i], { tasks: l.map((t) => (taskKey(t) === key ? { ...t, ...sp } : t)), updatedAt: serverTimestamp() });
+      });
+    }));
+  } catch (e) { console.error('series edit', e); alert('Saved for this day, but the other repeating days could not be updated.'); }
+};
+const adjustRunningTimer = async (index, task, deltaMin) => {
+  if (!timerRunning(task)) return;
+  await patchTask(index, task, adjustTimerPatch(task, deltaMin));
+  rescheduleTimer(task); nowTick.value = Date.now();
+};
+const setRunningRemaining = async (index, task, mins) => {
+  if (!timerRunning(task) || !(Number(mins) > 0)) return;
+  await patchTask(index, task, setRemainingPatch(task, mins));
+  rescheduleTimer(task); nowTick.value = Date.now();
+};
+
+// ── Rollover notice (in-app once per rollover + device notification when it runs) ──
+const rollover = ref(null);
+const rolledKeys = ref([]);
+const notifyRollover = (titles) => {
+  if (!titles || !titles.length) return;
+  scheduleLocal(`rollover:${getTodayId()}:${titles.join('|')}`, { title: 'Tasks moved to tomorrow', body: rolloverNotifBody(titles), at: new Date(Date.now() + 2000), route: '/home', type: 'rollover' });
+};
+watch([selectedDayRoutine, isViewingToday, userId], () => {
+  if (!isViewingToday.value || !userId.value || typeof localStorage === 'undefined') return;
+  const p = pendingRollover(selectedDayRoutine.value, loadSeen(localStorage, userId.value));
+  if (p) rollover.value = p;
+});
+const dismissRollover = () => { if (rollover.value) markSeen(localStorage, userId.value, rollover.value.ids); rollover.value = null; };
+const highlightRollover = () => {
+  rolledKeys.value = rollover.value ? rollover.value.tasks.map(taskKey) : [];
+  dismissRollover();
+  setTimeout(() => { rolledKeys.value = []; }, 8000);
+};
+
 // Subtasks: saved through the same patch path; optionally complete the parent when all are done
 const onSubtaskPatch = async (index, task, patch) => {
   if (blockIfShut()) return false;
@@ -2985,6 +3067,7 @@ const finishShutdown = async (carry) => {
       if (picked.length) {
         const tomorrow = days[(new Date().getDay() + 1) % days.length].day;
         await carryTasksToDay(userId.value, todayDayName(), tomorrow, strictOn.value ? picked.map(carryTask) : picked, getTodayId());
+        notifyRollover(picked.map((t) => t.title));
       }
     }
     try { await saveDailyPerformance(); } catch (e) { console.error(e); }
@@ -3039,6 +3122,9 @@ watch([() => eh.phase.value, () => (selectedDayRoutine.value || []).length, () =
 
 
 <style scoped>
+.rollover-banner { display: flex; align-items: center; gap: 6px; margin: 0 0 10px; padding: 10px 12px; border-radius: 14px; background: linear-gradient(90deg,#fff7ed,#fef3c7); border: 1px solid #fcd34d; }
+.rollover-banner__body { flex: 1; text-align: left; background: none; border: 0; font-weight: 600; font-size: 13.5px; color: #92400e; cursor: pointer; }
+.rollover-banner__x { background: none; border: 0; font-size: 20px; color: #92400e; cursor: pointer; padding: 0 4px; }
 .notification-popup {
   transition: opacity 0.5s ease-in-out;
 }

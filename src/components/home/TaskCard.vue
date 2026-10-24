@@ -4,12 +4,15 @@
                     class="task-card"
                     @mousedown="onCardDown"
                     @click="onCardTap"
+                    @touchstart.passive="onPressStart" @touchend="onPressEnd" @touchmove.passive="onPressEnd"
+                    @contextmenu.prevent="$emit('edit')"
                     :class="{
                     'task-card--completed': task.completed && isTodayTab,
                     'task-card--important': task.important,
                     'task-card--menu': moreOpen,
                     'task-card--next': upNext,
-                    'task-card--completing': completing
+                    'task-card--completing': completing,
+                    'task-card--rolled': highlight
                   }"
                 >
                   <!-- Left: drag handle, completion circle, category tile -->
@@ -37,7 +40,7 @@
                       <span
                           class="task-title"
                           :class="{ 'task-title--done': task.completed && isTodayTab }"
-                          @click="$emit('open-detail')"
+                          data-test="task-title-edit" title="Tap to edit" @click="$emit('edit')"
                       >
                         {{ task.title }}
                       </span>
@@ -65,7 +68,7 @@
                       <button @click="$emit('toggle-important')" class="importance-btn" :title="task.important ? 'Important' : 'Mark important'" :aria-label="task.important ? 'Unmark important' : 'Mark important'" :aria-pressed="task.important ? 'true' : 'false'">
                         <i :class="task.important ? 'fas fa-fire task-fire--on' : 'fas fa-fire task-fire--off'"></i>
                       </button>
-                    </div>
+                                    </div>
 
                     <!-- Planning chips -->
                     <div class="task-chips">
@@ -90,56 +93,13 @@
                     <div v-if="task.nextAction" class="task-next">→ {{ task.nextAction }}</div>
                     <div v-if="task.notes && !expanded" class="task-note-preview">📝 {{ task.notes.length > 60 ? task.notes.slice(0, 60) + '…' : task.notes }}</div>
 
-                    <div v-if="expanded" class="task-expand">
-                      <div class="field-grid">
-                        <label class="mini-field"><span>Status</span>
-                          <select class="field-select" :value="task.status || 'todo'" @change="$emit('patch', { status: $event.target.value })">
-                            <option v-for="st in STATUSES" :key="st.value" :value="st.value">{{ st.label }}</option>
-                          </select></label>
-                        <div class="mini-field"><span>Visible to</span>
-                          <div class="vis-toggle" role="group" aria-label="Who can see this task" data-test="visibility-toggle">
-                            <button type="button" :class="{ on: task.visibility !== 'private' }" :aria-pressed="task.visibility !== 'private' ? 'true' : 'false'" title="Your managers and pals can see this task" @click="$emit('patch', { visibility: 'public' })">Public</button>
-                            <button type="button" :class="{ on: task.visibility === 'private' }" :aria-pressed="task.visibility === 'private' ? 'true' : 'false'" title="Only you can see this task" @click="$emit('patch', { visibility: 'private' })">Private</button>
-                          </div></div>
-                        <div class="mini-field"><span>Anonymous for boss</span>
-                          <div class="vis-toggle" role="group" aria-label="Anonymous for boss" data-test="anon-edit-toggle">
-                            <button type="button" :class="{ on: task.anonymous !== true }" :aria-pressed="task.anonymous !== true ? 'true' : 'false'" title="Managers see the task name" @click="$emit('patch', { anonymous: false })">Named</button>
-                            <button type="button" :class="{ on: task.anonymous === true }" :aria-pressed="task.anonymous === true ? 'true' : 'false'" title="Managers see 'Anonymous task' (time, status and points stay visible)" @click="$emit('patch', { anonymous: true })">🔒 Anonymous</button>
-                          </div></div>
-                        <label class="mini-field"><span>Priority</span>
-                          <select class="field-select" :value="task.priority || 'low'" @change="$emit('patch', { priority: $event.target.value })">
-                            <option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option>
-                          </select></label>
-                        <label class="mini-field"><span>Due date</span>
-                          <input type="date" class="field-input" :value="task.dueDate || ''" @change="$emit('patch', { dueDate: $event.target.value })" /></label>
-                        <label class="mini-field"><span>Start time</span>
-                          <input type="time" class="field-input" :value="task.startTime || ''" @change="$emit('patch', { startTime: $event.target.value })" /></label>
-                        <label class="mini-field"><span>Estimate (min)</span>
-                          <input type="number" min="0" step="5" class="field-input" :value="task.estimateMin || ''" @change="$emit('patch', { estimateMin: Number($event.target.value) || 0 })" /></label>
-                        <label v-if="task.status === 'pending'" class="mini-field"><span>Pending on</span>
-                          <input type="text" class="field-input" :value="task.pendingOn || ''" placeholder="e.g. Apple review" @change="$emit('patch', { pendingOn: $event.target.value.trim() })" /></label>
-                        <label class="mini-field"><span>Next action</span>
-                          <input type="text" class="field-input" :value="task.nextAction || ''" @change="$emit('patch', { nextAction: $event.target.value.trim() })" /></label>
-                      </div>
-                      <button type="button" class="cal-btn" @click="addToCalendar">📅 Add to calendar</button>
-                      <button v-if="isTodayTab && !task.completed" type="button" class="boss-btn" @click="$emit('set-boss')">{{ task.boss ? '✖ Remove boss' : '👹 Make this the evening boss' }}</button>
-                      <label class="mini-field"><span>Note</span>
-                        <textarea class="field-textarea" rows="2" :value="task.notes || ''" placeholder="Quick note…" @change="$emit('patch', { notes: $event.target.value })"></textarea></label>
-                      <div v-if="task.type === 'one-time' && isTodayTab && !task.completed" class="mini-field sched-field"><span>Schedule for later</span>
-                        <div class="sched-row-ed">
-                          <input type="date" class="field-input" :min="tomorrow" v-model="schedDate" aria-label="Schedule date" />
-                          <input type="time" class="field-input" v-model="schedTime" :disabled="!schedDate" aria-label="Schedule time (optional)" />
-                          <button type="button" class="btn-secondary" :disabled="!schedDate" @click="$emit('schedule', { date: schedDate, time: schedTime })">Schedule</button>
-                        </div></div>
-                      <SubtaskList :task="task" @change="$emit('subtask-patch', { subtasks: $event })" @toggle-auto="$emit('subtask-patch', { autoCompleteParent: $event })" />
-                    </div>
 
                     <!-- Labels -->
                     <div v-if="labelList.length" class="task-labels">
                       <span
                           v-for="(label, i) in labelList"
                           :key="i"
-                          @click="$emit('toggle-label', label)"
+                          @click="$emit('toggle-label', 'edit', 'adjust-timer', 'set-remaining', 'series', label)"
                           class="label-pill label-pill--sm"
                           :class="{ 'label-pill--active': activeLabels.includes(label) }"
                       >
@@ -162,6 +122,9 @@
                         <button type="button" data-test="repeat-opt-none" @click="pickRepeat([])">Don't repeat</button>
                       </div>
                     </div>
+                    <button type="button" class="task-edit" data-test="edit-btn" :class="{ 'task-edit--open': expanded }" :aria-label="expanded ? 'Close edit' : 'Edit task'" :title="expanded ? 'Close edit' : 'Edit task'" @click.stop="$emit('edit')">
+                      <i class="fas fa-pen"></i>
+                    </button>
                     <button type="button" class="task-chevron" :class="{ 'task-chevron--open': expanded }" aria-label="Show details"
                         :aria-expanded="expanded ? 'true' : 'false'" :title="expanded ? 'Hide details' : 'Show details'" @click.stop="$emit('toggle-expand')">
                       <i class="fas fa-chevron-down"></i>
@@ -192,6 +155,76 @@
                   <!-- Notification toast -->
                   <div v-if="showNotification" class="task-toast">Saved ✓</div>
                   <div v-if="transferNotification" class="task-toast task-toast--info">{{ transferNotification }}</div>
+                                    <div v-if="running" class="timer-adjust" data-test="timer-adjust" @click.stop>
+                      <span class="timer-adjust__label">⏳ {{ taskTimeLeft(task, now) }} left</span>
+                      <button v-for="s in TIMER_STEPS" :key="s" type="button" class="adj-chip" :data-test="'timer-adj-' + s" @click="$emit('adjust-timer', s)">{{ s > 0 ? '+' + s : '−' + Math.abs(s) }}m</button>
+                      <span class="set-rem">
+                        <input type="number" min="1" max="600" class="field-input set-rem__in" v-model.number="remInput" placeholder="min" aria-label="Set remaining minutes" data-test="timer-set-input" />
+                        <button type="button" class="adj-chip adj-chip--set" data-test="timer-set" :disabled="!(remInput > 0)" @click="$emit('set-remaining', remInput); remInput = null">Set</button>
+                      </span>
+                    </div>
+
+                    <div v-if="expanded" class="task-expand edit-panel" data-test="edit-panel">
+                      <p v-if="dayLocked" class="lock-hint" data-test="lock-hint">🔒 {{ LOCK_HINT }}: name and time estimate can't change. Notes, privacy, reminder and timer can.</p>
+                      <label class="mini-field"><span>Name</span>
+                        <input type="text" class="field-input" data-test="edit-title" :value="task.title" :disabled="dayLocked" :title="dayLocked ? LOCK_HINT : ''" maxlength="140"
+                               @change="$event.target.value.trim() && $emit('patch', { title: $event.target.value.trim() })" /></label>
+                      <div class="mini-field"><span>Estimate (min){{ running ? ' · timer adjusts' : '' }}</span>
+                        <div class="est-chips" role="group" aria-label="Time estimate" data-test="est-edit">
+                          <button v-for="m in ESTIMATE_CHIPS" :key="m" type="button" class="adj-chip" :class="{ on: Number(task.estimateMin) === m }" :disabled="dayLocked"
+                                  :data-test="'est-chip-' + m" @click="$emit('patch', { estimateMin: m })">{{ m }}</button>
+                          <input type="number" min="1" max="1440" step="5" class="field-input est-custom" data-test="est-custom" placeholder="Custom" :disabled="dayLocked"
+                                 :value="ESTIMATE_CHIPS.includes(Number(task.estimateMin)) ? '' : (task.estimateMin || '')" @change="cleanEstimate($event.target.value) && $emit('patch', { estimateMin: cleanEstimate($event.target.value) })" />
+                        </div>
+                        <small class="field-hint">{{ est.points }} points (auto from the estimate{{ dayLocked ? ', locked' : '' }})</small></div>
+                      <div class="edit-row">
+                        <button type="button" class="adj-chip" :class="{ on: task.important }" data-test="edit-important" @click="$emit('toggle-important')">{{ task.important ? '★ Important' : '☆ Mark important' }}</button>
+                        <button type="button" class="adj-chip" data-test="edit-reminder" @click="$emit('open-reminder')">⏰ {{ task.reminder?.date ? 'Change reminder' : 'Add reminder' }}</button>
+                        <button type="button" class="adj-chip" data-test="edit-repeat" @click="repeatOpen = !repeatOpen">🔁 {{ isRepeating ? 'Repeats ' + repeatLabel : 'Repeat' }}</button>
+                        <button type="button" class="adj-chip" @click="$emit('open-detail')">⤢ Full view</button>
+                      </div>
+                      <label v-if="isRepeating" class="series-opt" data-test="edit-series"><input type="checkbox" :checked="allOccurrences" @change="$emit('series', $event.target.checked)" />
+                        Apply changes to all repeating days (default: only this day)</label>
+                      <div class="field-grid">
+                        <label class="mini-field"><span>Status</span>
+                          <select class="field-select" :value="task.status || 'todo'" @change="$emit('patch', { status: $event.target.value })">
+                            <option v-for="st in STATUSES" :key="st.value" :value="st.value">{{ st.label }}</option>
+                          </select></label>
+                        <div class="mini-field"><span>Visible to</span>
+                          <div class="vis-toggle" role="group" aria-label="Who can see this task" data-test="visibility-toggle">
+                            <button type="button" :class="{ on: task.visibility !== 'private' }" :aria-pressed="task.visibility !== 'private' ? 'true' : 'false'" title="Your managers and pals can see this task" @click="$emit('patch', { visibility: 'public' })">Public</button>
+                            <button type="button" :class="{ on: task.visibility === 'private' }" :aria-pressed="task.visibility === 'private' ? 'true' : 'false'" title="Only you can see this task" @click="$emit('patch', { visibility: 'private' })">Private</button>
+                          </div></div>
+                        <div class="mini-field"><span>Anonymous for boss</span>
+                          <div class="vis-toggle" role="group" aria-label="Anonymous for boss" data-test="anon-edit-toggle">
+                            <button type="button" :class="{ on: task.anonymous !== true }" :aria-pressed="task.anonymous !== true ? 'true' : 'false'" title="Managers see the task name" @click="$emit('patch', { anonymous: false })">Named</button>
+                            <button type="button" :class="{ on: task.anonymous === true }" :aria-pressed="task.anonymous === true ? 'true' : 'false'" title="Managers see 'Anonymous task' (time, status and points stay visible)" @click="$emit('patch', { anonymous: true })">🔒 Anonymous</button>
+                          </div></div>
+                        <label class="mini-field"><span>Priority</span>
+                          <select class="field-select" :value="task.priority || 'low'" @change="$emit('patch', { priority: $event.target.value })">
+                            <option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option>
+                          </select></label>
+                        <label class="mini-field"><span>Due date</span>
+                          <input type="date" class="field-input" :value="task.dueDate || ''" @change="$emit('patch', { dueDate: $event.target.value })" /></label>
+                        <label class="mini-field"><span>Start time</span>
+                          <input type="time" class="field-input" :value="task.startTime || ''" @change="$emit('patch', { startTime: $event.target.value })" /></label>
+                        <label v-if="task.status === 'pending'" class="mini-field"><span>Pending on</span>
+                          <input type="text" class="field-input" :value="task.pendingOn || ''" placeholder="e.g. Apple review" @change="$emit('patch', { pendingOn: $event.target.value.trim() })" /></label>
+                        <label class="mini-field"><span>Next action</span>
+                          <input type="text" class="field-input" :value="task.nextAction || ''" @change="$emit('patch', { nextAction: $event.target.value.trim() })" /></label>
+                      </div>
+                      <button type="button" class="cal-btn" @click="addToCalendar">📅 Add to calendar</button>
+                      <button v-if="isTodayTab && !task.completed" type="button" class="boss-btn" @click="$emit('set-boss')">{{ task.boss ? '✖ Remove boss' : '👹 Make this the evening boss' }}</button>
+                      <label class="mini-field"><span>Note</span>
+                        <textarea class="field-textarea" rows="2" :value="task.notes || ''" placeholder="Quick note…" @change="$emit('patch', { notes: $event.target.value })"></textarea></label>
+                      <div v-if="task.type === 'one-time' && isTodayTab && !task.completed" class="mini-field sched-field"><span>Schedule for later</span>
+                        <div class="sched-row-ed">
+                          <input type="date" class="field-input" :min="tomorrow" v-model="schedDate" aria-label="Schedule date" />
+                          <input type="time" class="field-input" v-model="schedTime" :disabled="!schedDate" aria-label="Schedule time (optional)" />
+                          <button type="button" class="btn-secondary" :disabled="!schedDate" @click="$emit('schedule', { date: schedDate, time: schedTime })">Schedule</button>
+                        </div></div>
+                      <SubtaskList :task="task" @change="$emit('subtask-patch', { subtasks: $event })" @toggle-auto="$emit('subtask-patch', { autoCompleteParent: $event })" />
+                    </div>
                 </div>
 </template>
 
@@ -215,6 +248,7 @@ import { subtaskProgress, subtaskPercent } from '@/utils/subtasks';
 import { chipValues, fmtMin } from '@/utils/taskEstimate';
 import { taskTimeLeft } from '@/utils/dayStats';
 import { formatShortDate, formatTime } from '@/utils/dateTime';
+import { ESTIMATE_CHIPS, TIMER_STEPS, LOCK_HINT, cleanEstimate, timerRunning } from '@/utils/taskEdit';
 import SubtaskList from '@/components/home/SubtaskList.vue';
 
 const props = defineProps({
@@ -228,6 +262,9 @@ const props = defineProps({
   now: { type: Number, default: 0 }, // ticking clock from HomeView for running task timers
   showNotification: { type: Boolean, default: false },
   transferNotification: { type: String, default: null },
+  dayLocked: { type: Boolean, default: false }, // 8-hour lock on this day: title/estimate/points frozen
+  highlight: { type: Boolean, default: false }, // just rolled over (tapped from the rollover banner)
+  allOccurrences: { type: Boolean, default: false },
 });
 const emit = defineEmits(['set-repeat', 'set-boss', 'toggle-expand', 'toggle-complete', 'open-detail', 'toggle-important', 'patch', 'subtask-patch',
   'toggle-label', 'open-reminder', 'transfer', 'video', 'upload', 'timer', 'wont-do', 'delete', 'schedule']);
@@ -283,7 +320,8 @@ const fileInput = ref(null); // hidden <input type=file> for this card (was a st
 // Tap on the card body toggles the inline expansion, unless the tap hit an interactive element.
 let downPos = null;
 const onCardDown = (e) => { downPos = { x: e.clientX, y: e.clientY }; };
-const onCardTap = (event) => { // bound on the whole card (blank areas, chips, next-action line, coin/right side)
+const onCardTap = (event) => {
+  if (pressTimer === 'fired') { pressTimer = null; return; } // bound on the whole card (blank areas, chips, next-action line, coin/right side)
   if (event.target.closest('button, input, textarea, select, a, label, .task-title, .label-pill, .task-expand, .drag-handle')) return;
   // Only a click that ends a *drag-select* inside this card is ignored; a stale selection elsewhere must not block taps.
   if (downPos && Math.hypot(event.clientX - downPos.x, event.clientY - downPos.y) > 5) {
@@ -295,9 +333,36 @@ const onCardTap = (event) => { // bound on the whole card (blank areas, chips, n
 const schedText = computed(() => scheduleLabel(props.task));
 const schedLate = computed(() => !!props.task?.scheduledFor && scheduledOverdue(props.task, new Date()));
 const est = computed(() => chipValues(props.task));
+const running = computed(() => timerRunning(props.task, props.now || Date.now()));
+const remInput = ref(null);
+// Long-press (550 ms, finger kept still) on the card opens the editor.
+let pressTimer = null;
+const onPressStart = (e) => { if (e.target.closest('button, input, textarea, select, a, .task-expand, .drag-handle')) return; clearTimeout(pressTimer); pressTimer = setTimeout(() => { pressTimer = 'fired'; emit('edit'); }, 550); };
+const onPressEnd = () => { if (pressTimer !== 'fired') clearTimeout(pressTimer); };
 </script>
 
 <style scoped>
+.task-card { flex-wrap: wrap; }
+.task-card > .timer-adjust, .task-card > .task-expand { flex: 0 0 100%; order: 20; margin-left: 4px; margin-right: 4px; cursor: default; }
+.task-edit { width: 28px; height: 28px; margin-right: 2px; border-radius: 10px; border: 1px solid rgba(124,58,237,.25); background: rgba(124,58,237,.08); color: #7c3aed; display: inline-flex; align-items: center; justify-content: center; font-size: 13px; cursor: pointer; }
+.task-edit--open { background: #7c3aed; color: #fff; }
+.task-title { cursor: pointer; }
+.task-card--rolled { box-shadow: 0 0 0 2px #f59e0b, 0 6px 18px rgba(245,158,11,.25); }
+.timer-adjust { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 8px 0 2px; padding: 8px; border-radius: 12px; background: rgba(124,58,237,.07); }
+.timer-adjust__label { font-weight: 700; font-size: 13px; color: #6d28d9; margin-right: 2px; }
+.adj-chip { border: 1px solid rgba(124,58,237,.3); background: #fff; color: #5b21b6; border-radius: 999px; padding: 5px 10px; font-size: 12.5px; font-weight: 600; cursor: pointer; min-height: 30px; }
+.adj-chip.on, .adj-chip--set { background: #7c3aed; color: #fff; border-color: #7c3aed; }
+.adj-chip:disabled { opacity: .45; cursor: not-allowed; }
+.set-rem { display: inline-flex; gap: 4px; align-items: center; }
+.set-rem__in { width: 64px; padding: 4px 6px; }
+.edit-panel > .mini-field { margin-bottom: 10px; }
+.est-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.est-custom { width: 84px; }
+.field-hint { display: block; margin-top: 4px; font-size: 11.5px; opacity: .7; }
+.edit-row { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 10px; }
+.lock-hint { font-size: 12px; background: #fff7ed; color: #9a3412; border: 1px solid #fed7aa; border-radius: 10px; padding: 6px 8px; margin: 0 0 10px; }
+.series-opt { display: flex; gap: 6px; align-items: center; font-size: 12.5px; margin-bottom: 10px; }
+.field-input:disabled { opacity: .55; cursor: not-allowed; }
 .drag-handle--disabled { opacity: .35; cursor: not-allowed !important; }
 .field-input, .field-select, .field-textarea { width: 100%; box-sizing: border-box; background: var(--c-bg); border: 1px solid var(--c-border); border-radius: var(--r); padding: 6px 8px; min-height: 32px; color: var(--c-text); font-family: inherit; font-size: var(--fs-md); transition: border-color .15s, background .15s; }
 .field-input:hover, .field-select:hover, .field-textarea:hover { background: var(--c-surface-2); }
