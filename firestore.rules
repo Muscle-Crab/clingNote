@@ -338,12 +338,13 @@ service cloud.firestore {
         && (l.size() < 4 || (l[3] is string && l[3].matches('https://firebasestorage\\.googleapis\\.com/.*') && l[3].size() <= 2048));
     }
     function cmStatsOk(s) {
-      return s == null || (s is map && s.keys().hasOnly(['tasksDone', 'points', 'streak', 'milestone', 'icon'])
+      return s == null || (s is map && s.keys().hasOnly(['tasksDone', 'points', 'streak', 'milestone', 'icon', 'badges'])
         && s.tasksDone is int && s.tasksDone >= 0 && s.tasksDone <= 100000
         && s.points is int && s.points >= 0 && s.points <= 100000
         && s.streak is int && s.streak >= 0 && s.streak <= 100000
         && s.milestone is string && s.milestone.size() <= 30
-        && (!('icon' in s) || (s.icon is string && s.icon.size() <= 8)));
+        && (!('icon' in s) || (s.icon is string && s.icon.size() <= 8))
+        && (!('badges' in s) || (s.badges is list && s.badges.size() <= 3)));
     }
     function cmBlockedBy(owner) {
       return exists(/databases/$(database)/documents/users/$(owner)/blocks/$(request.auth.uid));
@@ -439,10 +440,23 @@ service cloud.firestore {
       allow create: if isOwner(userId) && otherId != userId && request.resource.data.keys().hasOnly(['createdAt']) && request.resource.data.createdAt == request.time;
       allow update: if false;
     }
+    // Display-safe public community profile (streak, best streak, badges). Owner-written, computed client-side.
+    match /communityProfiles/{uid} {
+      allow read: if isAuthenticated();
+      allow create, update: if isOwner(uid)
+        && request.resource.data.keys().hasOnly(['name', 'avatar', 'streak', 'bestStreak', 'badges', 'updatedAt'])
+        && request.resource.data.name is string && request.resource.data.name.size() <= 40 && !request.resource.data.name.matches('.*@.*')
+        && request.resource.data.avatar is string && request.resource.data.avatar.size() <= 2048 && (request.resource.data.avatar == '' || request.resource.data.avatar.matches('https://.*'))
+        && request.resource.data.streak is int && request.resource.data.streak >= 0 && request.resource.data.streak <= 100000
+        && request.resource.data.bestStreak is int && request.resource.data.bestStreak >= request.resource.data.streak && request.resource.data.bestStreak <= 100000
+        && request.resource.data.badges is list && request.resource.data.badges.size() <= 30;
+      allow delete: if isOwner(uid) || cmAdmin();
+    }
     match /users/{userId}/community/prefs {
       allow read: if isOwner(userId);
       allow create, update: if isOwner(userId)
-        && request.resource.data.keys().hasOnly(['eulaVersion', 'eulaAcceptedAt', 'notif', 'updatedAt'])
+        && request.resource.data.keys().hasOnly(['eulaVersion', 'eulaAcceptedAt', 'notif', 'ach', 'updatedAt'])
+        && (!('ach' in request.resource.data) || request.resource.data.ach is map)
         && (!('eulaVersion' in request.resource.data) || request.resource.data.eulaVersion is int)
         && (!('notif' in request.resource.data) || (request.resource.data.notif is map && request.resource.data.notif.keys().hasOnly(['follow', 'like', 'comment', 'share', 'post'])));
       allow delete: if isOwner(userId);

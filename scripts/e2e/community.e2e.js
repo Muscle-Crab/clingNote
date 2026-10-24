@@ -86,5 +86,49 @@ async function seedUser(email, name) {
   await p.goto(B + '/community', { waitUntil: 'load' }); await sleep(2000);
   await p.locator('[data-test=cm-post]').nth(1).locator('.cm-author').click().catch(() => {}); await sleep(1200);
   if (await p.$('[data-test=cm-profile]')) await shot('10-profile.png');
+
+  // ── Achievements: 7 consecutive counted days on the EXISTING streaks doc -> combined tier/badge pop-up -> one-tap share
+  const zed = await seedUser('zztest-cm-zed@example.com', 'Zed ZZTEST');
+  const dstr = (k) => { const d = new Date(); d.setDate(d.getDate() - k); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+  const counted = [6, 5, 4, 3, 2, 1, 0].map(dstr);
+  await db.doc(`streaks/${zed}`).set({ streak: 5, bestStreak: 5, lastCompletionDate: dstr(0), dayDate: dstr(0), dayDone: ['a', 'b', 'c', 'd', 'e', 'f'], counted });
+  await db.doc(`users/${zed}/community/prefs`).set({ eulaVersion: 1 });
+  const z = await br.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  await z.addInitScript(() => { localStorage.setItem('clingnote.tutorialSeen.v1', '1'); });
+  await z.route('**/.netlify/functions/**', (r) => r.fulfill({ status: 200, json: {} }));
+  const q = await z.newPage(); q.on('pageerror', (e) => console.log('[zed pageerror]', e.message));
+  await q.goto(B + '/login?returning=1', { waitUntil: 'load' }); await q.click('[data-test=email-toggle]');
+  await q.fill('[data-test=login-email]', 'zztest-cm-zed@example.com'); await q.fill('input[autocomplete=current-password]', 'zztest-pass-123');
+  await q.click('[data-test=email-login]'); await q.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 20000 });
+  await q.waitForSelector('.drama', { timeout: 15000 }).catch(() => {});
+  ok('pop-up waits while the app streak celebration is showing', !(await q.$('[data-test=ach-prompt]')) || !(await q.$('.drama')));
+  for (let i = 0; i < 10 && await q.$('.drama'); i++) { await q.locator('.drama button').last().click().catch(() => {}); await sleep(500); }
+  await q.waitForSelector('[data-test=ach-prompt]', { timeout: 20000 }); await sleep(600);
+  const txt = await q.textContent('[data-test=ach-prompt]');
+  ok('streak pop-up combines tiers 3 + 7 (uncapped run from counted dates)', /7-day streak/.test(txt) && /3-day streak/.test(txt));
+  await q.screenshot({ path: SHOTS + '11-streak-popup.png' });
+  await q.click('[data-test=ach-dismiss]'); await sleep(800);
+  const pz = (await db.doc(`users/${zed}/community/prefs`).get()).data();
+  ok('shown keys persisted (tier:3, tier:7)', pz.ach.shown.includes('tier:3') && pz.ach.shown.includes('tier:7'));
+  const cp = (await db.doc(`communityProfiles/${zed}`).get()).data();
+  ok('public communityProfile: display-safe fields + streak 7', cp && cp.streak === 7 && cp.bestStreak >= 7 && !('email' in cp) && cp.badges.includes('streak-7'));
+  // Perfect Day (the all-done celebration calls the same sync with perfect=true)
+  await q.evaluate(() => window.__cmPerfectDay()); await q.waitForSelector('[data-test=ach-prompt]', { timeout: 15000 }); await sleep(600);
+  const t2 = await q.textContent('[data-test=ach-prompt]');
+  ok('perfect day pop-up merged with the Perfect Day badge', /Finished all 6 tasks today/.test(t2) && /Perfect Day/.test(t2) && !/3-day streak/.test(t2));
+  await q.screenshot({ path: SHOTS + '12-perfect-day-popup.png' });
+  await q.click('[data-test=ach-share]'); await q.waitForSelector('[data-test=ach-toast]', { timeout: 15000 });
+  await q.screenshot({ path: SHOTS + '13-shared-toast.png' });
+  const zp = await db.collection('communityPosts').where('uid', '==', zed).get();
+  ok('one-tap post created under rules with streak + badge in the stats card', zp.size === 1 && zp.docs[0].data().stats.streak === 7 && zp.docs[0].data().stats.badges.includes('perfect-1') && /Finished all 6 tasks/.test(zp.docs[0].data().title));
+  await q.evaluate(() => window.__cmPerfectDay()); await sleep(3000);
+  ok('no second Perfect Day prompt the same day', !(await q.$('[data-test=ach-prompt]')) || !/Finished all/.test(await q.textContent('[data-test=ach-prompt]')));
+  if (await q.$('[data-test=ach-prompt]')) await q.click('[data-test=ach-dismiss]');
+  await q.click('[data-test=ach-toast] button').catch(async () => { await q.goto(B + '/community?post=' + zp.docs[0].id); });
+  await q.waitForURL((u) => u.pathname.startsWith('/community'), { timeout: 10000 }); await sleep(2500);
+  await q.screenshot({ path: SHOTS + '14-post-with-badges.png' });
+  await q.locator('[data-test=cm-post]').first().locator('.cm-author').click(); await sleep(1500);
+  ok('profile sheet shows streak + badge grid', /7/.test(await q.textContent('[data-test=cm-profile-streak]')) && (await q.$$('[data-test=cm-badges] .cm-badge:not(.off)')).length >= 3);
+  await q.screenshot({ path: SHOTS + '15-profile-badges.png' });
   console.log('done'); await br.close(); process.exit(0);
 })().catch((e) => { console.error(e); process.exit(1); });

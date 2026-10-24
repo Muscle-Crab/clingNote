@@ -62,7 +62,7 @@
         <p v-if="!feed.length && feedLoaded" class="cm-muted cm-empty">{{ onlyFollowing ? 'No posts from people you follow yet.' : 'No posts yet. Be the first to share your progress!' }}</p>
         <article v-for="p in feed" :key="p.id" :id="'post-' + p.id" class="cm-card cm-post" :class="{ hl: p.id === highlight }" data-test="cm-post">
           <div class="cm-row">
-            <button class="cm-author" @click="openProfile(p)"><Avatar :name="p.name" :src="p.avatar" /><span><strong>{{ nameOf(p.name) }}</strong><span class="cm-muted"> · {{ ago(p.createdAt) }}</span></span></button>
+            <button class="cm-author" @click="openProfile(p)"><Avatar :name="p.name" :src="p.avatar" /><span><strong>{{ nameOf(p.name) }}</strong><AuthorFlair :p="cprof[p.uid]" /><span class="cm-muted"> · {{ ago(p.createdAt) }}</span></span></button>
             <span class="cm-sp"></span>
             <button v-if="p.uid !== uid" class="cm-follow" :class="{ on: following.has(p.uid) }" @click="toggleFollow(p.uid, p.name)">{{ following.has(p.uid) ? 'Following' : 'Follow' }}</button>
             <button class="cm-more" @click="menuFor = { kind: 'post', item: p }" aria-label="More">⋯</button>
@@ -79,7 +79,7 @@
           </div>
           <div v-if="openComments === p.id" class="cm-comments">
             <div v-for="c in shownComments" :key="c.id" class="cm-comment">
-              <Avatar :name="c.name" :src="c.avatar" small /><div class="cm-cbody"><strong>{{ nameOf(c.name) }}</strong> {{ c.text }} <span class="cm-muted">· {{ ago(c.createdAt) }}</span></div>
+              <Avatar :name="c.name" :src="c.avatar" small /><div class="cm-cbody"><strong>{{ nameOf(c.name) }}</strong><AuthorFlair :p="cprof[c.uid]" /> {{ c.text }} <span class="cm-muted">· {{ ago(c.createdAt) }}</span></div>
               <button class="cm-more" @click="menuFor = { kind: 'comment', item: c, post: p }" aria-label="More">⋯</button>
             </div>
             <form class="cm-row" @submit.prevent="submitComment(p)"><input v-model="commentText" class="cm-input" :maxlength="LIMITS.comment" placeholder="Add a comment" /><button class="cm-btn" :disabled="busy">Send</button></form>
@@ -137,6 +137,10 @@
       <div class="cm-sheet cm-profile" data-test="cm-profile">
         <Avatar :name="profile.name" :src="profile.avatar" big />
         <strong>{{ nameOf(profile.name) }}</strong>
+        <div class="cm-pstreak" data-test="cm-profile-streak">🔥 <b>{{ (cprof[profile.uid] || {}).streak || 0 }}</b>-day streak <span class="cm-muted">· best {{ (cprof[profile.uid] || {}).bestStreak || 0 }}</span></div>
+        <div class="cm-badgegrid" data-test="cm-badges">
+          <div v-for="b in BADGES" :key="b.id" class="cm-badge" :class="{ off: !((cprof[profile.uid] || {}).badges || []).includes(b.id) }" :title="b.desc"><span>{{ b.icon }}</span><small>{{ b.name }}</small></div>
+        </div>
         <div class="cm-muted"><b>{{ profile.counts.followers }}</b> followers · <b>{{ profile.counts.following }}</b> following</div>
         <template v-if="profile.uid !== uid">
           <button class="cm-btn" @click="toggleFollow(profile.uid, profile.name)">{{ following.has(profile.uid) ? 'Unfollow' : 'Follow' }}</button>
@@ -155,6 +159,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '@/firebaseConfig';
 import { getPublicProfile } from '@/composables/usePublicProfile';
 import * as C from '@/composables/useCommunity';
+import { BADGES, topBadges, badgeInfo } from '@/utils/badges';
 import { LIMITS, EULA_VERSION, NOTIF_TYPES, DEFAULT_NOTIF_PREFS, validateText, displayNameOf, safeAvatar, progressText, filterBlocked, sortFeed, filterFollowing, chatOrder, mergeById, toggleLikeState, createRateLimiter, postLink, shareTextFor, visibleNotifs, unreadCount, isAdminEmail, tsMs } from '@/utils/community';
 import { timeAgo } from '@/utils/pals';
 import { isNative } from '@/utils/platform';
@@ -166,11 +171,23 @@ const SR_ROW = 'display:grid;grid-template-columns:repeat(4,1fr);text-align:cent
 const SR_B = 'display:block;font-size:1.05rem;line-height:1.25;font-weight:700';
 const SR_S = 'display:block;font-size:.7rem;opacity:.85;line-height:1.2';
 const stat = (v, l) => h('div', [h('b', { style: SR_B }, v), h('small', { style: SR_S }, l)]);
-const StatsRow = (props) => h('div', { class: 'cm-statsrow', style: SR_ROW }, [
+const statBadges = (s) => topBadges(s.badges, 3).map(badgeInfo);
+const StatsRow = (props) => h('div', [h('div', { class: 'cm-statsrow', style: SR_ROW }, [
   stat(props.s.tasksDone, 'tasks done'), stat(props.s.points, 'points'),
   stat(`${props.s.streak}🔥`, 'day streak'), stat(`${props.s.icon || ''} ${props.s.milestone}`, 'milestone'),
-]);
+]), statBadges(props.s).length ? h('div', { style: 'margin-top:8px;display:flex;flex-wrap:wrap;gap:6px;justify-content:center' }, statBadges(props.s).map((b) => h('span', { style: 'background:rgba(255,255,255,.2);border-radius:999px;padding:2px 9px;font-size:.75rem;font-weight:600' }, `${b.icon} ${b.name}`))) : null]);
 StatsRow.props = ['s'];
+// Streak flame + top badges next to a name (from communityProfiles/{uid}).
+const AuthorFlair = (props) => { const p = props.p; if (!p) return null; const b = topBadges(p.badges, 3).map(badgeInfo);
+  if (!(p.streak > 0) && !b.length) return null;
+  return h('span', { class: 'cm-flair', style: 'margin-left:6px;font-size:.78rem;white-space:nowrap' }, [p.streak > 0 ? h('span', { style: 'color:#f59e0b;font-weight:700' }, `🔥${p.streak}`) : null, ...b.map((x) => h('span', { title: x.name, style: 'margin-left:3px' }, x.icon))]); };
+AuthorFlair.props = ['p'];
+const cprof = reactive({}); const cprofAt = {};
+async function loadCProf(uids, force = false) {
+  const todo = [...new Set(uids)].filter((u) => u && (force || !cprofAt[u] || Date.now() - cprofAt[u] > 5 * 60000));
+  todo.forEach((u) => { cprofAt[u] = Date.now(); });
+  await Promise.all(todo.map(async (u) => { try { const p = await C.getCommunityProfile(u); if (p) cprof[u] = p; } catch (e) { /* rules not deployed */ } }));
+}
 
 const KIND_LABEL = { post: 'post', comment: 'comment', chat: 'message', user: 'user' };
 const REASONS = ['Spam', 'Harassment or bullying', 'Hate speech', 'Sexual or violent content', 'Something else objectionable'];
@@ -207,6 +224,7 @@ const feed = computed(() => {
 });
 const chat = computed(() => chatOrder(filterBlocked(mergeById(chatOlder.value, chatLive.value), blocked.value)));
 const shownComments = computed(() => filterBlocked(comments.value, blocked.value));
+watch(() => [...feed.value.map((p) => p.uid), ...comments.value.map((c) => c.uid)], (u) => loadCProf(u));
 const shownNotifs = computed(() => visibleNotifs(notifs.value, blocked.value, notifPrefs));
 const unread = computed(() => unreadCount(shownNotifs.value));
 const canDelete = (it) => it && (it.uid === uid.value || isAdmin.value);
@@ -352,6 +370,7 @@ async function toggleFollow(other, name) {
 }
 async function openProfile(item) {
   profile.value = { uid: item.uid, name: item.name, avatar: item.avatar, counts: { followers: 0, following: 0 } };
+  loadCProf([item.uid], true);
   try { profile.value.counts = await C.followCounts(item.uid); } catch (e) { /* ignore */ }
 }
 
@@ -450,6 +469,11 @@ watch(() => route.query.post, (id) => { if (id && started) { tab.value = 'feed';
 .cm-sheet > button { padding: 12px; border-radius: 10px; text-align: center; font-weight: 600; }
 .cm-sheet > button.danger { color: #dc2626; }
 .cm-profile { align-items: center; text-align: center; }
+.cm-pstreak { font-size: .95rem; }
+.cm-badgegrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; width: 100%; margin: 6px 0; }
+.cm-badge { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 2px; border-radius: 10px; background: var(--c-surface-2, #f1f5f9); }
+.cm-badge span { font-size: 1.3rem; } .cm-badge small { font-size: .62rem; line-height: 1.15; opacity: .9; }
+.cm-badge.off { opacity: .28; filter: grayscale(1); }
 :deep(.cm-av) { width: 36px; height: 36px; border-radius: 999px; object-fit: cover; flex: none; }
 :deep(.cm-av.sm) { width: 28px; height: 28px; font-size: .7rem; }
 :deep(.cm-av.big) { width: 72px; height: 72px; font-size: 1.4rem; }

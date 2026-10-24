@@ -7,6 +7,7 @@
     <BossBriefing />
     <BrandMark v-if="showBrand" />
     <EightHourChrome />
+    <AchievementPrompt />
   </div>
 </template>
 
@@ -22,6 +23,7 @@ import AiConsentModal from '@/components/AiConsentModal.vue';
 import BossBriefing from '@/components/voiceover/BossBriefing.vue';
 import BrandMark from '@/components/brand/BrandMark.vue';
 import EightHourChrome from '@/components/eighthour/EightHourChrome.vue';
+import AchievementPrompt from '@/components/AchievementPrompt.vue';
 
 const route = useRoute();
 const isHome = computed(() => route.name === 'home');

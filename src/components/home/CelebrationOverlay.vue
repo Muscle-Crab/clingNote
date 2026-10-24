@@ -11,8 +11,12 @@
 </template>
 
 <script setup>
+import { onMounted } from 'vue';
+import { syncAchievements } from '@/composables/useAchievements';
 defineProps({ streak: { type: Number, default: 0 } });
 defineEmits(['close']);
+// All tasks done: offer the one-tap Perfect Day share (merged with any streak tier / badge earned now).
+onMounted(() => { syncAchievements({ perfect: true }).catch(() => {}); });
 </script>
 
 <style scoped>

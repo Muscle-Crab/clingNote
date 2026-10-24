@@ -105,3 +105,8 @@ export const uploadImage = async (uid, file) => {
   await uploadBytes(r, blob, { contentType: 'image/jpeg' });
   return getDownloadURL(r);
 };
+
+// ── Community profiles (display-safe only: name, avatar, streak, bestStreak, badges) + my post count
+export const getCommunityProfile = async (uid) => { const s = await getDoc(doc(db, 'communityProfiles', uid)); return s.exists() ? { id: uid, ...s.data() } : null; };
+export const saveCommunityProfile = (uid, p) => setDoc(doc(db, 'communityProfiles', uid), { ...p, updatedAt: serverTimestamp() });
+export const myPostCount = async (uid) => (await getCountFromServer(query(postsCol(), where('uid', '==', uid)))).data().count;
