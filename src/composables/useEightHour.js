@@ -24,10 +24,18 @@ export const clearCachedPlan = () => { try { localStorage.removeItem(PLAN_KEY); 
 const call = async (action, body = {}) => {
   const u = auth.currentUser; if (!u) throw Object.assign(new Error('Not signed in'), { status: 401 });
   const r = await fetch(fnUrl('eight-hour-day'), { method: 'POST', headers: { Authorization: `Bearer ${await u.getIdToken()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ action, ...body }) });
+  const ct = (r.headers && r.headers.get && r.headers.get('content-type')) || '';
+  // A missing function (not deployed) comes back as Netlify's SPA index.html (GET) or "Bad request, missing form" (POST): not JSON.
+  if (!/json/i.test(ct)) throw Object.assign(new Error('8-hour day service is unavailable'), { status: r.status, unavailable: true });
   const data = await r.json().catch(() => ({}));
+  if (r.status === 404) throw Object.assign(new Error(data.error || '8-hour day service is unavailable'), { status: 404, unavailable: true });
   if (!r.ok) throw Object.assign(new Error(data.error || `Request failed (${r.status})`), { status: r.status, code: data.code });
   return data;
 };
+// Local fallback when the server function is unreachable/not deployed: plan only (from the device cache), never a lock
+// (locks are server-authoritative), so the card can still show the plan / setup instead of a dead "Retry".
+const isUnavailable = (e) => !!(e && (e.unavailable || e.name === 'TypeError' || /load failed|failed to fetch|network/i.test(e.message || '')));
+const localState = (plan) => ({ now: Date.now(), plan: plan ? { wakeTime: plan.wakeTime, taskCount: plan.taskCount, tz: plan.tz || deviceTz() } : null, lock: null, stats: core.defaultStats(), offline: true });
 const apply = (d) => { st.data = d; st.offset = d.now - Date.now(); st.loaded = true; st.error = ''; tick.value = Date.now() + st.offset; };
 
 export const nowMs = () => Date.now() + st.offset; // server time (offset measured at the last fetch)
@@ -41,14 +49,20 @@ const ensureTimers = () => {
 export const refresh = async () => {
   if (st.loading) return st.data;
   st.loading = true;
-  try { apply(await call('state')); } catch (e) { st.error = e.message || 'Could not load your 8-hour day'; } finally { st.loading = false; }
+  try { apply(await call('state')); } catch (e) {
+    if (isUnavailable(e) && e.status !== 401) { apply(localState(readCachedPlan())); st.error = e.message || 'Offline'; }
+    else st.error = e.message || 'Could not load your 8-hour day';
+  } finally { st.loading = false; }
   ensureTimers();
   return st.data;
 };
 
 export const savePlan = async ({ wakeTime, taskCount }) => {
   st.busy = true;
-  try { const d = await call('plan', { wakeTime, taskCount, tz: st.data?.plan?.tz || deviceTz() }); apply(d); clearCachedPlan(); return d; } finally { st.busy = false; }
+  const tz = st.data?.plan?.tz || deviceTz();
+  try { const d = await call('plan', { wakeTime, taskCount, tz }); apply(d); clearCachedPlan(); return d; }
+  catch (e) { if (!isUnavailable(e)) throw e; cachePlan({ wakeTime, taskCount, tz }); const d = localState(readCachedPlan()); apply(d); st.error = e.message; return d; } // synced on next successful refresh
+  finally { st.busy = false; }
 };
 export const startNow = async () => { st.busy = true; try { const d = await call('start'); apply(d); return d; } finally { st.busy = false; } };
 export const reportProgress = async () => { try { apply(await call('progress')); } catch (e) { /* server recounts at the end of the window anyway */ } };
@@ -59,7 +73,7 @@ export const syncAfterAuth = async () => {
   await refresh();
   const cached = readCachedPlan();
   if (cached && st.loaded && !st.data?.plan) { try { await savePlan(cached); } catch (e) { st.error = e.message; return false; } }
-  else if (cached && st.data?.plan) clearCachedPlan();
+  else if (cached && st.data?.plan && !st.data.offline) clearCachedPlan();
   return true;
 };
 

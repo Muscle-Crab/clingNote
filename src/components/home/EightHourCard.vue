@@ -2,8 +2,9 @@
   <section class="eh" :class="'eh--' + view" data-test="eight-hour-card" aria-label="Your 8-hour day">
     <!-- loading / offline -->
     <p v-if="view === 'loading'" class="eh-muted" data-test="eh-loading">Loading your 8-hour day…</p>
-    <div v-else-if="view === 'error'" class="eh-line"><p class="eh-muted">Couldn't reach your 8-hour day.</p><button class="eh-btn" @click="$emit('retry')">Retry</button></div>
+    <div v-else-if="view === 'error'" class="eh-line"><p class="eh-muted">Couldn't reach your 8-hour day<span v-if="eh.st.error"> ({{ eh.st.error }})</span>.</p><button class="eh-btn" @click="$emit('retry')">Retry</button></div>
 
+    <p v-if="view !== 'error' && view !== 'loading' && eh.st.data && eh.st.data.offline" class="eh-muted" data-test="eh-offline">Offline mode: the countdown lock starts once the server is reachable. <button class="eh-btn" @click="$emit('retry')">Retry</button></p>
     <!-- no plan yet: one compact row (wake time + task count), then it is locked when the day starts -->
     <template v-else-if="view === 'setup'">
       <div class="eh-line"><b class="eh-title">⏱ Set your 8-hour day</b><button class="eh-btn eh-btn--primary" :disabled="busy || !wake" @click="save" data-test="eh-save">Lock in</button></div>
