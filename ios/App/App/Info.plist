@@ -30,6 +30,14 @@
 				<string>com.googleusercontent.apps.168239327702-ajjtim56djmf04mrulb28lh2197knu99</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>app.clingnote.ios.widget</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>clingnote</string>
+			</array>
+		</dict>
 	</array>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
