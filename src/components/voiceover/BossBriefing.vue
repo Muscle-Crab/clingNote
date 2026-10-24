@@ -2,7 +2,7 @@
   <div v-if="card" class="bb-wrap" data-test="boss-briefing">
     <section class="bb" role="dialog" aria-label="Boss briefing">
       <div class="bb-head">
-        <h2>{{ card.morning ? '☀️ Morning report' : '⏰ Boss alert' }}</h2>
+        <div><h2>{{ card.morning ? '☀️ Morning report' : '⏰ Boss alert' }}</h2><BrandMark inline /></div>
         <div class="bb-r"><VoToggle @unmuted="speak" /><button class="bb-x" aria-label="Close" @click="close">✕</button></div>
       </div>
       <p v-if="card.alert" class="bb-alert" data-test="bb-overdue">{{ card.alert }}</p>
@@ -27,6 +27,7 @@
 </template>
 
 <script setup>
+import BrandMark from '@/components/brand/BrandMark.vue';
 import { ref, onMounted, onBeforeUnmount } from 'vue';
 import { useRoute } from 'vue-router';
 import { onAuthStateChanged } from 'firebase/auth';

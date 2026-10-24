@@ -5,6 +5,7 @@
     <router-view></router-view>
     <AiConsentModal />
     <BossBriefing />
+    <BrandMark v-if="showBrand" />
   </div>
 </template>
 
@@ -18,9 +19,13 @@ import navi from '@/components/nav.vue';
 import SubpageHero from '@/components/ui/SubpageHero.vue';
 import AiConsentModal from '@/components/AiConsentModal.vue';
 import BossBriefing from '@/components/voiceover/BossBriefing.vue';
+import BrandMark from '@/components/brand/BrandMark.vue';
 
 const route = useRoute();
 const isHome = computed(() => route.name === 'home');
+// Wordmark on key screens only; off on sign-in, onboarding, paywall and marketing pages (clutter).
+const BRAND_ROUTES = ['home', 'upcoming', 'rankings', 'discipline', 'procrastination-log', 'pals', 'manager', 'manager-home', 'manager-person'];
+const showBrand = computed(() => BRAND_ROUTES.includes(route.name));
 // Page titles for the shared sub-page header (home and the marketing landing page have their own hero).
 const HEROES = {
   rankings: { title: 'Monthly Rankings', kicker: 'Compete' },
