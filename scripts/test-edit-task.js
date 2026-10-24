@@ -1,4 +1,4 @@
-// Edit-task tests: estimate chips, live timer adjust (incl. persistence through the patch layer), 8-hour lock, series patch,
+// Edit-task tests: estimate chips, timer lock once started, 8-hour lock, series patch,
 // never-complete guard, rollover notice text + once-only, and UI wiring. ZZTEST data only.
 // Run: node scripts/test-edit-task.js
 const assert = require('assert'); const fs = require('fs'); const path = require('path');
@@ -11,26 +11,19 @@ const { applyTaskPatch } = sr.load('utils/taskPatch.js');
 const core = require('../netlify/functions/lib/eightHourCore.js');
 const MIN = 60000; const now = Date.UTC(2026, 9, 24, 15, 0, 0);
 const running = { title: 'ZZTEST run', createdAt: 'ZZTEST-1', estimateMin: 30, timerActive: true, timerStartedAt: new Date(now - 10 * MIN).toISOString(), timerEndTime: new Date(now + 20 * MIN).toISOString() };
-const left = (p) => (new Date(p.timerEndTime).getTime() - now) / MIN;
 
 t('chips', () => assert.deepStrictEqual(E.ESTIMATE_CHIPS, [15, 30, 45, 60, 90]));
 t('cleanEstimate', () => { assert.strictEqual(E.cleanEstimate('25'), 25); assert.strictEqual(E.cleanEstimate(-3), 0); assert.strictEqual(E.cleanEstimate('x'), 0); assert.strictEqual(E.cleanEstimate(99999), 1440); });
-t('timer +5/+10/+15/-5', () => { assert.strictEqual(left(E.adjustTimerPatch(running, 5, now)), 25); assert.strictEqual(left(E.adjustTimerPatch(running, 15, now)), 35); assert.strictEqual(left(E.adjustTimerPatch(running, -5, now)), 15); });
-t('timer never below 1 min', () => assert.strictEqual(left(E.adjustTimerPatch({ ...running, timerEndTime: new Date(now + 2 * MIN).toISOString() }, -5, now)), 1));
-t('set remaining', () => { const p = E.setRemainingPatch(running, 42, now); assert.strictEqual(left(p), 42); assert.strictEqual(p.timerDurationMinutes, 52); });
-t('estimate change keeps elapsed', () => { assert.strictEqual(left(E.estimateTimerPatch(running, 60, now)), 50); assert.strictEqual(left(E.estimateTimerPatch(running, 5, now)), 1); });
-t('estimate change w/o timer: no timer patch', () => assert.deepStrictEqual(E.estimateTimerPatch({ estimateMin: 30 }, 60, now), {}));
-t('timer adjust persists via patch layer (reload reads the new end)', () => {
-  const stored = [{ title: 'ZZTEST other', createdAt: 'ZZTEST-0' }, { ...running }];
-  const out = applyTaskPatch(stored, running, 1, E.adjustTimerPatch(running, 10, now));
-  assert.strictEqual(left(out[1]), 30); assert.strictEqual(out[1].timerActive, true); assert.strictEqual(out[1].completed, undefined);
+t('estimate locked once play pressed (running, paused, finished)', () => {
+  assert.strictEqual(E.TIMER_LOCK_HINT, 'Timer locked once started');
+  assert.ok(E.timerStarted(running));
+  assert.ok(E.timerStarted({ ...running, timerActive: false })); // paused/finished
+  assert.ok(!E.timerStarted({ title: 'ZZTEST fresh', estimateMin: 30 })); // before play: editable
 });
-t('timer fields are not 8-hour locked; title/estimate are', () => {
-  assert.ok(!core.LOCKED_FIELDS.includes('timerEndTime') && !core.LOCKED_FIELDS.includes('timerDurationMinutes'));
+t('live adjust removed', () => ['TIMER_STEPS', 'adjustTimerPatch', 'setRemainingPatch', 'estimateTimerPatch'].forEach((k) => assert.strictEqual(E[k], undefined, k)));
+t('8-hour lock unchanged: title/estimate locked, notes not', () => {
   E.EDIT_LOCKED.forEach((f) => assert.ok(core.LOCKED_FIELDS.includes(f), f));
   assert.ok(E.isFieldLocked('title', true) && E.isFieldLocked('estimateMin', true) && !E.isFieldLocked('notes', true) && !E.isFieldLocked('title', false));
-  const before = [{ ...running }]; const after = applyTaskPatch(before, running, 0, E.setRemainingPatch(running, 5, now));
-  assert.ok(core.lockedChangeAllowed(before, after).ok);
 });
 t('never completes', () => { const p = E.safeEditPatch({ title: 'ZZTEST', completed: true, completedAt: 'x' }); assert.deepStrictEqual(p, { title: 'ZZTEST' }); });
 t('series patch only copies edit fields', () => assert.deepStrictEqual(E.seriesPatch({ title: 'ZZTEST', estimateMin: 45, timerEndTime: 'x', completed: true, notes: 'n' }), { title: 'ZZTEST', estimateMin: 45, notes: 'n' }));
@@ -56,14 +49,17 @@ t('rollover shown once', () => {
 
 // UI wiring (static)
 const card = read('src/components/home/TaskCard.vue'); const home = read('src/views/HomeView.vue');
-t('card: pencil, title tap, long-press, chips, timer adjust, lock hint', () => {
-  ['data-test="edit-btn"', 'data-test="task-title-edit"', 'onPressStart', "data-test=\"timer-adjust\"", 'data-test="timer-set"', 'data-test="est-custom"', 'data-test="lock-hint"', 'data-test="edit-title"', 'data-test="edit-series"', ':disabled="dayLocked"']
+t('card: pencil, title tap, long-press, chips, timer lock, lock hint', () => {
+  ['data-test="edit-btn"', 'data-test="task-title-edit"', 'onPressStart', 'data-test="timer-lock-hint"', ':disabled="estLocked"', 'data-test="est-custom"', 'data-test="lock-hint"', 'data-test="edit-title"', 'data-test="edit-series"', ':disabled="dayLocked"']
     .forEach((s) => assert.ok(card.includes(s), s));
+  ['timer-adjust', 'timer-set', 'timer-adj-', 'adjust-timer', 'set-remaining'].forEach((k) => assert.ok(!card.includes(k), 'removed ' + k));
+  assert.ok(card.includes('props.dayLocked || timerLocked.value'));
   assert.ok(!/estimateMin: Number\(\$event\.target\.value\) \|\| 0/.test(card), 'old raw estimate input removed');
 });
 t('home: handlers wired, rollover stamped + notified', () => {
-  ['@edit="toggleExpanded(task)"', '@adjust-timer=', '@set-remaining=', 'editTask(realIndex(task)', 'rolledOverFor: getTodayId()', 'notifyRollover(picked', 'notifyRollover([task.title])', 'data-test="rollover-banner"', 'scheduleLocal(`rollover:']
+  ['@edit="toggleExpanded(task)"', 'if (timerStarted(task)) { alert(TIMER_LOCK_HINT); return; }', 'editTask(realIndex(task)', 'rolledOverFor: getTodayId()', 'notifyRollover(picked', 'notifyRollover([task.title])', 'data-test="rollover-banner"', 'scheduleLocal(`rollover:']
     .forEach((s) => assert.ok(home.includes(s), s));
+  ['@adjust-timer=', '@set-remaining=', 'adjustRunningTimer'].forEach((k) => assert.ok(!home.includes(k), 'removed ' + k));
   assert.ok(!/editTask[\s\S]{0,1500}completed: true/.test(home.slice(home.indexOf('const editTask'), home.indexOf('const editTask') + 1500)));
 });
 console.log(`ok - test-edit-task: ${n} checks`);

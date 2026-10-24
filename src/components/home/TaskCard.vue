@@ -99,7 +99,7 @@
                       <span
                           v-for="(label, i) in labelList"
                           :key="i"
-                          @click="$emit('toggle-label', 'edit', 'adjust-timer', 'set-remaining', 'series', label)"
+                          @click="$emit('toggle-label', label)"
                           class="label-pill label-pill--sm"
                           :class="{ 'label-pill--active': activeLabels.includes(label) }"
                       >
@@ -155,28 +155,20 @@
                   <!-- Notification toast -->
                   <div v-if="showNotification" class="task-toast">Saved ✓</div>
                   <div v-if="transferNotification" class="task-toast task-toast--info">{{ transferNotification }}</div>
-                                    <div v-if="running" class="timer-adjust" data-test="timer-adjust" @click.stop>
-                      <span class="timer-adjust__label">⏳ {{ taskTimeLeft(task, now) }} left</span>
-                      <button v-for="s in TIMER_STEPS" :key="s" type="button" class="adj-chip" :data-test="'timer-adj-' + s" @click="$emit('adjust-timer', s)">{{ s > 0 ? '+' + s : '−' + Math.abs(s) }}m</button>
-                      <span class="set-rem">
-                        <input type="number" min="1" max="600" class="field-input set-rem__in" v-model.number="remInput" placeholder="min" aria-label="Set remaining minutes" data-test="timer-set-input" />
-                        <button type="button" class="adj-chip adj-chip--set" data-test="timer-set" :disabled="!(remInput > 0)" @click="$emit('set-remaining', remInput); remInput = null">Set</button>
-                      </span>
-                    </div>
-
-                    <div v-if="expanded" class="task-expand edit-panel" data-test="edit-panel">
-                      <p v-if="dayLocked" class="lock-hint" data-test="lock-hint">🔒 {{ LOCK_HINT }}: name and time estimate can't change. Notes, privacy, reminder and timer can.</p>
+                                    <div v-if="expanded" class="task-expand edit-panel" data-test="edit-panel">
+                      <p v-if="dayLocked" class="lock-hint" data-test="lock-hint">🔒 {{ LOCK_HINT }}: name and time estimate can't change. Notes, privacy and reminder can.</p>
                       <label class="mini-field"><span>Name</span>
                         <input type="text" class="field-input" data-test="edit-title" :value="task.title" :disabled="dayLocked" :title="dayLocked ? LOCK_HINT : ''" maxlength="140"
                                @change="$event.target.value.trim() && $emit('patch', { title: $event.target.value.trim() })" /></label>
-                      <div class="mini-field"><span>Estimate (min){{ running ? ' · timer adjusts' : '' }}</span>
+                      <div class="mini-field"><span>Estimate (min)</span>
+                        <p v-if="timerLocked" class="lock-hint" data-test="timer-lock-hint">⏱️ {{ TIMER_LOCK_HINT }}</p>
                         <div class="est-chips" role="group" aria-label="Time estimate" data-test="est-edit">
-                          <button v-for="m in ESTIMATE_CHIPS" :key="m" type="button" class="adj-chip" :class="{ on: Number(task.estimateMin) === m }" :disabled="dayLocked"
+                          <button v-for="m in ESTIMATE_CHIPS" :key="m" type="button" class="adj-chip" :class="{ on: Number(task.estimateMin) === m }" :disabled="estLocked"
                                   :data-test="'est-chip-' + m" @click="$emit('patch', { estimateMin: m })">{{ m }}</button>
-                          <input type="number" min="1" max="1440" step="5" class="field-input est-custom" data-test="est-custom" placeholder="Custom" :disabled="dayLocked"
+                          <input type="number" min="1" max="1440" step="5" class="field-input est-custom" data-test="est-custom" placeholder="Custom" :disabled="estLocked" :title="timerLocked ? TIMER_LOCK_HINT : ''"
                                  :value="ESTIMATE_CHIPS.includes(Number(task.estimateMin)) ? '' : (task.estimateMin || '')" @change="cleanEstimate($event.target.value) && $emit('patch', { estimateMin: cleanEstimate($event.target.value) })" />
                         </div>
-                        <small class="field-hint">{{ est.points }} points (auto from the estimate{{ dayLocked ? ', locked' : '' }})</small></div>
+                        <small class="field-hint">{{ est.points }} points (auto from the estimate{{ estLocked ? ', locked' : '' }})</small></div>
                       <div class="edit-row">
                         <button type="button" class="adj-chip" :class="{ on: task.important }" data-test="edit-important" @click="$emit('toggle-important')">{{ task.important ? '★ Important' : '☆ Mark important' }}</button>
                         <button type="button" class="adj-chip" data-test="edit-reminder" @click="$emit('open-reminder')">⏰ {{ task.reminder?.date ? 'Change reminder' : 'Add reminder' }}</button>
@@ -248,7 +240,7 @@ import { subtaskProgress, subtaskPercent } from '@/utils/subtasks';
 import { chipValues, fmtMin } from '@/utils/taskEstimate';
 import { taskTimeLeft } from '@/utils/dayStats';
 import { formatShortDate, formatTime } from '@/utils/dateTime';
-import { ESTIMATE_CHIPS, TIMER_STEPS, LOCK_HINT, cleanEstimate, timerRunning } from '@/utils/taskEdit';
+import { ESTIMATE_CHIPS, LOCK_HINT, TIMER_LOCK_HINT, cleanEstimate, timerStarted } from '@/utils/taskEdit';
 import SubtaskList from '@/components/home/SubtaskList.vue';
 
 const props = defineProps({
@@ -333,8 +325,8 @@ const onCardTap = (event) => {
 const schedText = computed(() => scheduleLabel(props.task));
 const schedLate = computed(() => !!props.task?.scheduledFor && scheduledOverdue(props.task, new Date()));
 const est = computed(() => chipValues(props.task));
-const running = computed(() => timerRunning(props.task, props.now || Date.now()));
-const remInput = ref(null);
+const timerLocked = computed(() => timerStarted(props.task)); // estimate frozen once play was pressed
+const estLocked = computed(() => props.dayLocked || timerLocked.value);
 // Long-press (550 ms, finger kept still) on the card opens the editor.
 let pressTimer = null;
 const onPressStart = (e) => { if (e.target.closest('button, input, textarea, select, a, .task-expand, .drag-handle')) return; clearTimeout(pressTimer); pressTimer = setTimeout(() => { pressTimer = 'fired'; emit('edit'); }, 550); };
@@ -343,18 +335,14 @@ const onPressEnd = () => { if (pressTimer !== 'fired') clearTimeout(pressTimer);
 
 <style scoped>
 .task-card { flex-wrap: wrap; }
-.task-card > .timer-adjust, .task-card > .task-expand { flex: 0 0 100%; order: 20; margin-left: 4px; margin-right: 4px; cursor: default; }
+.task-card > .task-card > .task-expand { flex: 0 0 100%; order: 20; margin-left: 4px; margin-right: 4px; cursor: default; }
 .task-edit { width: 28px; height: 28px; margin-right: 2px; border-radius: 10px; border: 1px solid rgba(124,58,237,.25); background: rgba(124,58,237,.08); color: #7c3aed; display: inline-flex; align-items: center; justify-content: center; font-size: 13px; cursor: pointer; }
 .task-edit--open { background: #7c3aed; color: #fff; }
 .task-title { cursor: pointer; }
 .task-card--rolled { box-shadow: 0 0 0 2px #f59e0b, 0 6px 18px rgba(245,158,11,.25); }
-.timer-adjust { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 8px 0 2px; padding: 8px; border-radius: 12px; background: rgba(124,58,237,.07); }
-.timer-adjust__label { font-weight: 700; font-size: 13px; color: #6d28d9; margin-right: 2px; }
 .adj-chip { border: 1px solid rgba(124,58,237,.3); background: #fff; color: #5b21b6; border-radius: 999px; padding: 5px 10px; font-size: 12.5px; font-weight: 600; cursor: pointer; min-height: 30px; }
-.adj-chip.on, .adj-chip--set { background: #7c3aed; color: #fff; border-color: #7c3aed; }
+.adj-chip.on { background: #7c3aed; color: #fff; border-color: #7c3aed; }
 .adj-chip:disabled { opacity: .45; cursor: not-allowed; }
-.set-rem { display: inline-flex; gap: 4px; align-items: center; }
-.set-rem__in { width: 64px; padding: 4px 6px; }
 .edit-panel > .mini-field { margin-bottom: 10px; }
 .est-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .est-custom { width: 84px; }

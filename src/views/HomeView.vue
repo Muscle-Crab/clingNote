@@ -150,7 +150,7 @@
                   :active-labels="activeLabels" :now="nowTick" :show-notification="showNotification" :transfer-notification="transferNotification"
                   @toggle-expand="toggleExpanded(task)" @toggle-complete="toggleTaskCompletion(realIndex(task))" @open-detail="openTaskDetailModal(task)"
                   @set-boss="setBoss(realIndex(task), task)" @toggle-important="toggleTaskImportance(realIndex(task))" :day-locked="selectedDayLocked" :highlight="rolledKeys.includes(taskKey(task))" :all-occurrences="seriesKey === taskKey(task)"
-                  @edit="toggleExpanded(task)" @adjust-timer="adjustRunningTimer(realIndex(task), task, $event)" @set-remaining="setRunningRemaining(realIndex(task), task, $event)" @series="seriesKey = $event ? taskKey(task) : null"
+                  @edit="toggleExpanded(task)" @series="seriesKey = $event ? taskKey(task) : null"
                   @patch="editTask(realIndex(task), task, $event)" @subtask-patch="onSubtaskPatch(realIndex(task), task, $event)"
                   @toggle-label="toggleLabelHighlight" @open-reminder="openModal('calendar', realIndex(task), task.title)" @transfer="openTransferModal(realIndex(task))"
                   @video="openYouTubeModal(realIndex(task))" @upload="handleUpload($event, realIndex(task))" @timer="openTaskTimerModal(realIndex(task))"
@@ -171,7 +171,7 @@
                   :active-labels="activeLabels" :now="nowTick"
                   @toggle-expand="toggleExpanded(task)" @toggle-complete="toggleTaskCompletion(realIndex(task))" @open-detail="openTaskDetailModal(task)"
                   @set-boss="setBoss(realIndex(task), task)" @toggle-important="toggleTaskImportance(realIndex(task))" :day-locked="selectedDayLocked" :highlight="rolledKeys.includes(taskKey(task))" :all-occurrences="seriesKey === taskKey(task)"
-                  @edit="toggleExpanded(task)" @adjust-timer="adjustRunningTimer(realIndex(task), task, $event)" @set-remaining="setRunningRemaining(realIndex(task), task, $event)" @series="seriesKey = $event ? taskKey(task) : null"
+                  @edit="toggleExpanded(task)" @series="seriesKey = $event ? taskKey(task) : null"
                   @patch="editTask(realIndex(task), task, $event)" @subtask-patch="onSubtaskPatch(realIndex(task), task, $event)"
                   @toggle-label="toggleLabelHighlight" @open-reminder="openModal('calendar', realIndex(task), task.title)" @transfer="openTransferModal(realIndex(task))"
                   @video="openYouTubeModal(realIndex(task))" @upload="handleUpload($event, realIndex(task))" @timer="openTaskTimerModal(realIndex(task))"
@@ -287,7 +287,7 @@ import IdleState from '@/components/home/IdleState.vue';
 import WontDoList from '@/components/home/WontDoList.vue';
 import LoadSummary from '@/components/home/LoadSummary.vue';
 import TaskCard from '@/components/home/TaskCard.vue';
-import { safeEditPatch, cleanEstimate, estimateTimerPatch, adjustTimerPatch, setRemainingPatch, timerRunning, seriesPatch } from '@/utils/taskEdit';
+import { safeEditPatch, cleanEstimate, timerStarted, TIMER_LOCK_HINT, seriesPatch } from '@/utils/taskEdit';
 import { pendingRollover, loadSeen, markSeen, rolloverNotifBody } from '@/utils/rollover';
 import TimeBlockSchedule from '@/components/home/TimeBlockSchedule.vue';
 import AddTaskModal from '@/components/home/AddTaskModal.vue';
@@ -2979,9 +2979,8 @@ const patchTask = async (index, task, patch) => {
   }
 };
 
-// ── Edit task: estimate chips, live timer adjust, "all repeating days" option ──
+// ── Edit task: estimate chips (locked once the timer starts), "all repeating days" option ──
 const seriesKey = ref(null);
-const rescheduleTimer = (task) => { cancelLocal(timerKey(task)); if (task.timerActive && task.timerEndTime) scheduleTimerDone(task); };
 const editTask = async (index, task, rawPatch) => {
   let patch = safeEditPatch(rawPatch); // an edit never completes a task
   if (!Object.keys(patch).length) return;
@@ -2990,11 +2989,10 @@ const editTask = async (index, task, rawPatch) => {
   if (isDayLocked(dayName) && lockedHit.length) { alert(`${LOCKED_MESSAGE} (${lockedHit.join(', ')})`); return; }
   const oldKey = taskKey(task);
   if (patch.estimateMin !== undefined) {
+    if (timerStarted(task)) { alert(TIMER_LOCK_HINT); return; } // estimate is frozen once play was pressed
     patch.estimateMin = cleanEstimate(patch.estimateMin);
-    patch = { ...patch, ...estimateTimerPatch(task, patch.estimateMin) }; // running countdown follows the new estimate
   }
   await patchTask(index, task, patch);
-  if (patch.timerEndTime) rescheduleTimer(task);
   if (seriesKey.value === oldKey) {
     const sp = seriesPatch(patch);
     if (Object.keys(sp).length) await applyToSeries(oldKey, sp);
@@ -3017,16 +3015,6 @@ const applyToSeries = async (key, sp) => {
       });
     }));
   } catch (e) { console.error('series edit', e); alert('Saved for this day, but the other repeating days could not be updated.'); }
-};
-const adjustRunningTimer = async (index, task, deltaMin) => {
-  if (!timerRunning(task)) return;
-  await patchTask(index, task, adjustTimerPatch(task, deltaMin));
-  rescheduleTimer(task); nowTick.value = Date.now();
-};
-const setRunningRemaining = async (index, task, mins) => {
-  if (!timerRunning(task) || !(Number(mins) > 0)) return;
-  await patchTask(index, task, setRemainingPatch(task, mins));
-  rescheduleTimer(task); nowTick.value = Date.now();
 };
 
 // ── Rollover notice (in-app once per rollover + device notification when it runs) ──
