@@ -2,7 +2,7 @@
 // data layer fail fast with a clear message instead of a rejected write).
 // While the window runs for a weekday doc: no add / delete / swap / reorder / retitle / re-point of tasks, no plan or wake changes.
 // Completing tasks, timers, notes and subtasks stay allowed.
-import { lockedChangeAllowed, LOCKED_FIELDS, isShut } from './eightHour';
+import { lockedChangeAllowed, LOCKED_FIELDS, isShut, hoursLabel } from './eightHour';
 
 export const LOCKED_MESSAGE = 'Locked: your 8-hour day is running. Tasks, points and the target cannot be changed until it ends.';
 
@@ -17,13 +17,17 @@ export const isDayLocked = (dayName) => {
 
 // Hard stop: once a started 8-hour day has ended, ALL task changes (add, edit, complete, transfer, timers) are blocked until the next wake time.
 export const SHUT_MESSAGE = 'Your 8 hours are up. ClingNote is shut for today. Come back tomorrow.';
+// Same messages with the CURRENT day's length ("your 6.5-hour day"); the constants above are the 8h defaults.
+const curHours = () => { const s = source(); return hoursLabel(s && s.lock ? s.lock.hours : undefined); };
+export const lockedMessage = () => `Locked: your ${curHours()}-hour day is running. Tasks, points and the target cannot be changed until it ends.`;
+export const shutMessage = () => `Your ${curHours()} hours are up. ClingNote is shut for today. Come back tomorrow.`;
 export const isShutdown = () => { const s = source(); return !!(s && s.lock && isShut(s.lock, s.nowMs)); };
 
 export class LockError extends Error {
-  constructor(what) { super(what ? `${LOCKED_MESSAGE} (${what})` : LOCKED_MESSAGE); this.name = 'LockError'; this.code = 'eight-hour-locked'; }
+  constructor(what) { super(what ? `${lockedMessage()} (${what})` : lockedMessage()); this.name = 'LockError'; this.code = 'eight-hour-locked'; }
 }
 export class ShutError extends Error {
-  constructor() { super(SHUT_MESSAGE); this.name = 'ShutError'; this.code = 'eight-hour-locked'; this.shut = true; }
+  constructor() { super(shutMessage()); this.name = 'ShutError'; this.code = 'eight-hour-locked'; this.shut = true; }
 }
 export const assertNotShut = () => { if (isShutdown()) throw new ShutError(); };
 export const isLockError = (e) => !!e && e.code === 'eight-hour-locked';

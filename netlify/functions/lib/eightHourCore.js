@@ -4,13 +4,20 @@
 // Nothing here talks to a network or a clock: callers pass `nowMs`, which the server takes from its own clock (never the device clock).
 // Nothing here needs a server AI key. The deterministic heuristic below is the complete fallback for every AI-assisted value.
 
-const WINDOW_MS = 8 * 60 * 60 * 1000;           // the day lasts exactly 8 hours after it starts
-const WINDOW_MIN = 480;
+// Day length is user-chosen: 3h..12h in half-hour steps, default 8h (users/{uid}.dayLengthHours is only the DEFAULT; the hours confirmed
+// in the morning are frozen into the day's lock). WINDOW_MS / WINDOW_MIN are the 8h default for callers that have no hours yet.
+const DAY_HOURS = Object.freeze({ min: 3, max: 12, step: 0.5, default: 8 });
+const clampHours = (h) => { const n = Number(h); if (h === null || h === undefined || h === '' || !Number.isFinite(n)) return DAY_HOURS.default; return Math.min(DAY_HOURS.max, Math.max(DAY_HOURS.min, Math.round(n / DAY_HOURS.step) * DAY_HOURS.step)); };
+const hoursMs = (h) => clampHours(h) * 3600000;
+const hoursLabel = (h) => { const n = clampHours(h); return Number.isInteger(n) ? `${n}` : `${Math.floor(n)}.5`; }; // "8", "6.5"
+const WINDOW_MS = hoursMs(DAY_HOURS.default);
+const WINDOW_MIN = DAY_HOURS.default * 60;
+const WARN_MINUTES = [15, 5];                    // in-app warnings before the day shuts down; the local notification goes out at 5
 const MAX_TASKS_PER_DAY = 50;                   // safety max (free and Pro alike; config/pricing.js TASK_LIMITS)
 const LOCK_IDENTITY_SLOTS = 50;                 // Firestore rules cannot loop; they compare the first 50 slots (= task cap) of a day doc (see firestore.rules)
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const WAKE_PICKER_PRESELECT = '07:00';          // UI convenience ONLY (pre-selected picker value). There is no stored/default wake time: the user must pick one.
-const START_MODE = 'wake';                      // 'wake': the 8h always count from the chosen wake time, whether or not the app is open ('open' = start on first open after wake)
+const START_MODE = 'confirm';                   // 'confirm': the window starts when the user confirms the morning prompt (end = confirm + hours). Legacy: 'wake' (anchored to the wake time), 'open'.                      // 'wake': the 8h always count from the chosen wake time, whether or not the app is open ('open' = start on first open after wake)
                                                 // 'wake': the 8h are anchored to the wake time itself even when the app is opened later (stricter)
 const TARGET_LEVELS = { min: 0, max: 4, start: 2, base: 0.8, step: 0.05 }; // target = total task points x (0.80 + 0.05 x level)
 
@@ -48,7 +55,7 @@ const wakeInstant = (dayKey, wake, tz) => {
 //   ready    wake time has arrived and the window has not begun yet (server begins it now, if there are tasks)
 //   running  window in progress (everything locked)
 //   ended    today's window is over (next one begins at tomorrow's wake time)
-const evaluatePhase = ({ wakeTime, tz, nowMs, lock, mode = START_MODE }) => {
+const evaluatePhase = ({ wakeTime, tz, nowMs, lock, mode = START_MODE, hours = DAY_HOURS.default }) => {
   if (lock && nowMs >= lock.startMs && nowMs < lock.endMs) return { phase: 'running', startMs: lock.startMs, endMs: lock.endMs, dayKey: lock.dayKey };
   const wake = parseWake(wakeTime);
   if (!wake || !validTz(tz)) return { phase: 'none' };
@@ -56,8 +63,8 @@ const evaluatePhase = ({ wakeTime, tz, nowMs, lock, mode = START_MODE }) => {
   if (lock && lock.dayKey === today) return { phase: 'ended', startMs: lock.startMs, endMs: lock.endMs, dayKey: today };
   const wakeMs = wakeInstant(today, wake, tz);
   if (nowMs < wakeMs) return { phase: 'before', wakeMs, dayKey: today };
-  const startMs = mode === 'wake' ? wakeMs : nowMs;
-  const endMs = startMs + WINDOW_MS;
+  const startMs = mode === 'wake' ? wakeMs : nowMs; // 'confirm' / 'open': the window would start now
+  const endMs = startMs + hoursMs(hours);
   if (endMs <= nowMs) return { phase: 'ended', startMs, endMs, dayKey: today, missed: true };
   return { phase: 'ready', wakeMs, startMs, endMs, dayKey: today };
 };
@@ -67,9 +74,11 @@ const nextDayKey = (dayKey) => new Date(Date.parse(`${dayKey}T12:00:00Z`) + 8640
 const shutUntilMs = (lock) => {
   if (!lock || !lock.dayKey || !Number.isFinite(lock.endMs)) return 0;
   const w = parseWake(lock.wakeTime); const tz = validTz(lock.tz) ? lock.tz : 'UTC';
-  const next = w ? wakeInstant(nextDayKey(lock.dayKey), w, tz) : lock.endMs + 16 * 3600000;
+  const next = w ? wakeInstant(nextDayKey(lock.dayKey), w, tz) : lock.endMs + (24 - clampHours(lock.hours)) * 3600000;
   return Math.max(next, lock.endMs);
 };
+// Which end-of-day warnings are due: [15, 5] minutes before endMs -> the largest threshold already reached (15 or 5), else 0.
+const warningDue = (endMs, nowMs) => { const left = endMs - nowMs; if (!(left > 0)) return 0; for (const m of [...WARN_MINUTES].sort((a, b) => a - b)) if (left <= m * 60000) return m; return 0; };
 const isShut = (lock, nowMs) => !!lock && nowMs >= lock.endMs && nowMs < shutUntilMs(lock);
 
 // ── display helpers ──
@@ -108,14 +117,15 @@ const estimateTask = (task = {}) => {
 // ── daily points target ──
 const levelRatio = (level) => TARGET_LEVELS.base + TARGET_LEVELS.step * clamp(level, TARGET_LEVELS.min, TARGET_LEVELS.max);
 // tasks: [{points, minutes}], stats: { targetLevel } -> { target, total, ratio, level, minutes, slackMin, tight }
-const dailyTarget = (tasks = [], stats = {}) => {
+const dailyTarget = (tasks = [], stats = {}, windowMin = WINDOW_MIN) => {
   const total = tasks.reduce((s, t) => s + (Number(t.points) || 0), 0);
   const minutes = tasks.reduce((s, t) => s + (Number(t.minutes) || 0), 0);
   const level = clamp(Number.isFinite(stats.targetLevel) ? stats.targetLevel : TARGET_LEVELS.start, TARGET_LEVELS.min, TARGET_LEVELS.max);
   const ratio = levelRatio(level);
   const target = total === 0 ? 0 : clamp(round5(total * ratio), 5, total);
-  const slackMin = WINDOW_MIN - minutes; // backlog: keep the gap between planned work and the window small
-  return { target, total, ratio, level, minutes, slackMin, tight: slackMin <= 120 && slackMin >= 0 };
+  const slackMin = windowMin - minutes; // backlog: keep the gap between planned work and the window small
+  const tightMin = Math.round(120 * windowMin / WINDOW_MIN); // 2h of an 8h day, scaled to the chosen span
+  return { target, total, ratio, level, minutes, slackMin, tight: slackMin <= tightMin && slackMin >= 0 };
 };
 
 // ── lock integrity (mirrors the Firestore rule in firestore.rules for the weeklyRoutines day doc while a window runs) ──
@@ -183,6 +193,7 @@ const failureNotice = (lock, s) => `You earned ${lock.earned} of ${lock.target} 
 const rewardFor = (streak) => (streak >= 30 ? '🏔️ Peak Performer' : streak >= 15 ? '🌲 Mature Tree' : streak >= 7 ? '🌳 Small Tree' : streak >= 3 ? '🌿 Sprouting Leaves' : streak >= 1 ? '🌱 Seed Starter' : '');
 
 module.exports = {
+  DAY_HOURS, clampHours, hoursMs, hoursLabel, WARN_MINUTES, warningDue,
   WINDOW_MS, WINDOW_MIN, MAX_TASKS_PER_DAY, LOCK_IDENTITY_SLOTS, WEEKDAYS, WAKE_PICKER_PRESELECT, START_MODE, TARGET_LEVELS, LOCKED_FIELDS,
   clamp, round5, parseWake, fmtWake, validTz, partsIn, dayKeyIn, dayNameIn, wakeInstant, evaluatePhase,
   countdownParts, fmtCountdown, fmtClock, fmtWakeLabel,

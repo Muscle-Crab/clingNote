@@ -3,7 +3,7 @@
 export const ESTIMATE_CHIPS = [15, 30, 45, 60, 90];
 // Locked during a running 8-hour day (same list as netlify/functions/lib/eightHourCore.js LOCKED_FIELDS).
 export const EDIT_LOCKED = ['title', 'estimateMin', 'points', 'complexity', 'type'];
-export const LOCK_HINT = 'Locked while your 8-hour day runs';
+export const LOCK_HINT = 'Locked while your day runs';
 export const isFieldLocked = (field, dayLocked) => !!dayLocked && EDIT_LOCKED.includes(field);
 
 export const cleanEstimate = (v) => { const n = Math.round(Number(v)); return Number.isFinite(n) && n > 0 ? Math.min(n, 24 * 60) : 0; };

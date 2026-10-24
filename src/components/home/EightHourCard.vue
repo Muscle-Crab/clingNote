@@ -1,13 +1,13 @@
 <template>
-  <section class="eh" :class="'eh--' + view" data-test="eight-hour-card" aria-label="Your 8-hour day">
+  <section class="eh" :class="'eh--' + view" data-test="eight-hour-card" :aria-label="`Your ${hl}-hour day`">
     <!-- loading / offline -->
-    <p v-if="view === 'loading'" class="eh-muted" data-test="eh-loading">Loading your 8-hour day…</p>
-    <div v-else-if="view === 'error'" class="eh-line"><p class="eh-muted">Couldn't reach your 8-hour day<span v-if="eh.st.error"> ({{ eh.st.error }})</span>.</p><button class="eh-btn" @click="$emit('retry')">Retry</button></div>
+    <p v-if="view === 'loading'" class="eh-muted" data-test="eh-loading">Loading your day…</p>
+    <div v-else-if="view === 'error'" class="eh-line"><p class="eh-muted">Couldn't reach your {{ hl }}-hour day<span v-if="eh.st.error"> ({{ eh.st.error }})</span>.</p><button class="eh-btn" @click="$emit('retry')">Retry</button></div>
 
     <p v-if="view !== 'error' && view !== 'loading' && eh.st.data && eh.st.data.offline" class="eh-muted" data-test="eh-offline">Offline mode: the countdown lock starts once the server is reachable. <button class="eh-btn" @click="$emit('retry')">Retry</button></p>
     <!-- no plan yet: one compact row (wake time + task count), then it is locked when the day starts -->
     <template v-else-if="view === 'setup'">
-      <div class="eh-line"><b class="eh-title">⏱ Set your 8-hour day</b><button class="eh-btn eh-btn--primary" :disabled="busy || !wake" @click="save" data-test="eh-save">Lock in</button></div>
+      <div class="eh-line"><b class="eh-title">⏱ Set your day</b><button class="eh-btn eh-btn--primary" :disabled="busy || !wake" @click="save" data-test="eh-save">Lock in</button></div>
       <div class="eh-ctrl">
         <label class="eh-mini">Wake <input type="time" v-model="wake" data-test="eh-wake" /></label>
         <span class="eh-mini">Tasks <span class="eh-stepper"><button type="button" :disabled="count <= 1" @click="count--" aria-label="Fewer tasks">−</button><strong data-test="eh-count">{{ count }}</strong><button type="button" :disabled="count >= max" @click="count++" aria-label="More tasks">+</button></span></span>
@@ -25,7 +25,7 @@
       </div>
       <p class="eh-muted" v-if="phase === 'ready' && needMore <= 0" data-test="eh-all-added">All {{ plan.taskCount }} task{{ plan.taskCount === 1 ? '' : 's' }} added.</p>
       <p class="eh-muted" v-else-if="phase === 'ready'" data-test="eh-needs-tasks">Add {{ needMore }} more task{{ needMore === 1 ? '' : 's' }} to start the countdown ({{ taskTotal }}/{{ plan.taskCount }}).</p>
-      <p class="eh-muted" v-else>Add {{ plan.taskCount }} task{{ plan.taskCount === 1 ? '' : 's' }} ({{ taskTotal }}/{{ plan.taskCount }}). Countdown starts at wake time.</p>
+      <p class="eh-muted" v-else>Add {{ plan.taskCount }} task{{ plan.taskCount === 1 ? '' : 's' }} ({{ taskTotal }}/{{ plan.taskCount }}). After your wake time you'll pick today's hours and confirm.</p>
       <div class="eh-ctrl">
         <label class="eh-mini" v-if="phase === 'before'">Wake <input type="time" v-model="wake" data-test="eh-wake" /></label>
         <button v-if="phase === 'before' && wake !== plan.wakeTime" class="eh-btn" :disabled="busy" @click="save">Save</button>
@@ -81,7 +81,7 @@
 import { ref, computed, watch } from 'vue';
 import { useEightHour } from '@/composables/useEightHour';
 import { paceOf, topAlert, badgeLabel, levelOf } from '@/utils/pressure';
-import { MAX_TASKS_PER_DAY, progressOf, countableIndexes, fmtWakeLabel } from '@/utils/eightHour';
+import { MAX_TASKS_PER_DAY, progressOf, countableIndexes, fmtWakeLabel, hoursLabel } from '@/utils/eightHour';
 
 // tasks = today's stored task array (all of it; hidden recurring copies are excluded by progressOf/countable logic)
 const props = defineProps({ tasks: { type: Array, default: () => [] }, startError: { type: String, default: '' } });
@@ -102,6 +102,7 @@ const view = computed(() => {
   return 'planned';
 });
 const ends = computed(() => eh.endsLabel.value);
+const hl = computed(() => hoursLabel(eh.dayHours.value));
 const fmtWake = computed(() => (plan.value ? fmtWakeLabel(plan.value.wakeTime) : ''));
 const dayKey = computed(() => eh.phaseInfo.value.dayKey || '');
 const taskTotal = computed(() => countableIndexes(props.tasks || [], dayKey.value).length);
@@ -120,7 +121,7 @@ const met = computed(() => (lock.value ? progress.value.earned >= lock.value.tar
 
 const save = async () => {
   msg.value = '';
-  try { await eh.savePlan({ wakeTime: wake.value, taskCount: count.value }); } catch (e) { msg.value = e.status === 423 ? 'Locked: your 8-hour day is running.' : (e.message || 'Could not save'); }
+  try { await eh.savePlan({ wakeTime: wake.value, taskCount: count.value }); } catch (e) { msg.value = e.status === 423 ? `Locked: your ${hl.value}-hour day is running.` : (e.message || 'Could not save'); }
 };
 </script>
 

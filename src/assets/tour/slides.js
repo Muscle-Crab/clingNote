@@ -15,7 +15,7 @@ import fire from './s10_fire.webp';
 import music from './s11_music.webp';
 
 export const TOUR_SLIDES = [
-  { id: 'day', img: day, title: '8 hours. Locked.', text: 'Your day starts at your wake time. Tasks, points and target are fixed once it starts.' },
+  { id: 'day', img: day, title: 'Your hours. Locked.', text: 'Each morning, choose 3 to 12 hours and confirm. Tasks, points and target are fixed once it starts.' },
   { id: 'tasks', img: tasks, title: 'Tasks with points', text: 'Plan up to 5 a day. Each task is worth points based on how big it is.' },
   { id: 'timer', img: timer, title: 'Focus timers', text: 'Start a timer on any task and stay on it.' },
   { id: 'boss', img: boss, title: 'The boss is watching', text: 'Orders in the morning. A verdict at your deadline.' },

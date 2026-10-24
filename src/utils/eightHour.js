@@ -43,3 +43,11 @@ export const penaltyForMiss = core.penaltyForMiss;
 export const badgeFor = core.badgeFor;
 export const failureNotice = core.failureNotice;
 export const rewardFor = core.rewardFor;
+export const DAY_HOURS = core.DAY_HOURS;
+export const clampHours = core.clampHours;
+export const hoursMs = core.hoursMs;
+export const hoursLabel = core.hoursLabel;
+export const WARN_MINUTES = core.WARN_MINUTES;
+export const warningDue = core.warningDue;
+// 3, 3.5, ... 12 for pickers/steppers
+export const HOUR_OPTIONS = (() => { const o = []; for (let h = core.DAY_HOURS.min; h <= core.DAY_HOURS.max; h += core.DAY_HOURS.step) o.push(h); return o; })();

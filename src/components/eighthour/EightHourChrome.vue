@@ -4,10 +4,15 @@
     <span class="ehp-dot" aria-hidden="true"></span><span class="ehp-main" role="timer">{{ pill.main }}</span><span v-if="pill.sub" class="ehp-sub">{{ pill.sub }}</span>
   </button>
 
+  <div v-if="warnVisible" class="ehw" :class="'ehw--' + warnMin" role="alert" data-test="eh-warning" :data-min="warnMin">
+    <span>⏰ <b>{{ warnMin }} min left</b> in your {{ hoursText }}-hour day. ClingNote shuts down at <b data-test="eh-warning-end">{{ endsText }}</b>.</span>
+    <button type="button" class="ehw-x" aria-label="Dismiss warning" @click="dismissWarn">✕</button>
+  </div>
+
   <div v-if="shutVisible" class="ehs" role="dialog" aria-modal="true" aria-labelledby="ehs-t" data-test="eh-shutdown">
     <div class="ehs-card">
       <div class="ehs-icon" aria-hidden="true">🌙</div>
-      <h2 id="ehs-t">Your 8 hours are up.</h2>
+      <h2 id="ehs-t">Your {{ hoursText }} hours are up.</h2>
       <p>ClingNote is shut for today. Come back tomorrow at <b data-test="eh-shut-until">{{ shut.untilLabel }}</b>.</p>
       <p class="ehs-res" :class="shut.met ? 'ok' : 'miss'" data-test="eh-shut-result">{{ shut.met ? 'Goal met' : 'Goal missed' }} · {{ shut.earned }}/{{ shut.target }} pts</p>
       <nav class="ehs-links">
@@ -31,6 +36,8 @@ import { useEightHour } from '@/composables/useEightHour';
 import { paceOf, pendingCelebration } from '@/utils/pressure';
 import { pillState, SHUT_ROUTES, PILL_ROUTES, SEEN_KEY } from '@/utils/eightHourChrome';
 import { speak } from '@/composables/useSpeech';
+import { hoursLabel, WARN_MINUTES } from '@/utils/eightHour';
+import { scheduleLocal } from '@/utils/localNotify';
 
 const route = useRoute(); const router = useRouter();
 const eh = useEightHour();
@@ -44,6 +51,7 @@ const pill = computed(() => {
   const l = eh.lock.value;
   return pillState({ phase: eh.phase.value, running: eh.running.value, countdown: eh.countdown.value, startsLabel: eh.startsLabel.value, hasPlan: !!eh.plan.value,
     shut: !!eh.shutdown.value, untilLabel: eh.shutdown.value?.untilLabel, earned: l ? l.earned || 0 : 0, target: l ? l.target || 0 : 0,
+    hours: eh.dayHours.value,
     pace: l && eh.running.value ? paceOf({ earned: l.earned || 0, target: l.target || 0, startMs: l.startMs, endMs: l.endMs, nowMs: eh.nowMs() }) : null });
 });
 const shut = computed(() => eh.shutdown.value);
@@ -64,9 +72,27 @@ watch(() => [uid.value, eh.stats.value, eh.st.data?.offline], () => {
   setTimeout(() => { if (cele.value === c) cele.value = null; }, 7000);
 }, { immediate: true });
 const dismiss = () => { cele.value = null; };
+
+// ── end-of-day warnings: in-app banner at 15 and 5 min before the end; one local notification at 5 min (native iOS only, no-op on web) ──
+const hoursText = computed(() => hoursLabel(eh.dayHours.value));
+const endsText = computed(() => eh.endsLabel.value);
+const warnMin = computed(() => eh.warning.value);
+const warnDismissed = ref('');
+const warnKey = computed(() => (eh.lock.value && warnMin.value ? `${eh.lock.value.dayKey}:${warnMin.value}` : ''));
+const warnVisible = computed(() => !!(uid.value && warnKey.value && warnDismissed.value !== warnKey.value && !shutVisible.value));
+const dismissWarn = () => { warnDismissed.value = warnKey.value; };
+watch(() => eh.lock.value && eh.running.value && `${eh.lock.value.dayKey}|${eh.lock.value.endMs}`, (k) => {
+  const l = eh.lock.value; if (!k || !l) return;
+  const m = WARN_MINUTES[WARN_MINUTES.length - 1]; // 5
+  scheduleLocal(`dayend:${l.dayKey}`, { title: `${m} minutes left`, body: `Your ${hoursLabel(l.hours)}-hour day ends at ${eh.endsLabel.value}. ClingNote shuts down then.`, at: l.endMs - m * 60000, route: '/home', type: 'dayend' }).catch(() => {});
+}, { immediate: true });
 </script>
 
 <style scoped>
+.ehw { position: fixed; top: calc(env(safe-area-inset-top) + 50px); left: 12px; right: 12px; z-index: 61; display: flex; align-items: center; gap: 8px; padding: 8px 8px 8px 12px;
+  border-radius: 12px; background: #3a2a06; border: 1px solid #d9a21b; color: #ffe7a8; font: 600 13px/1.3 system-ui, -apple-system, sans-serif; }
+.ehw--5 { background: #3d0d0d; border-color: #e05a5a; color: #ffd0d0; }
+.ehw span { flex: 1; } .ehw-x { min-width: 44px; min-height: 44px; border: 0; background: transparent; color: inherit; font-size: 16px; cursor: pointer; }
 .ehp { position: fixed; top: calc(env(safe-area-inset-top) + 14px); left: 50%; transform: translateX(-50%); z-index: 60; height: 28px; max-width: 46vw;
   display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; border-radius: 999px; border: 1px solid rgba(55,138,221,.45); background: rgba(10,18,38,.92);
   color: #e6e9ef; font: 700 12px/1 system-ui, -apple-system, sans-serif; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; cursor: pointer; }

@@ -48,8 +48,11 @@ onMounted(() => {
 });
 // Wait for the app's own streak/reward celebration (.drama) to close so the two never stack.
 const otherModal = ref(false);
-const poll = setInterval(() => { otherModal.value = !!document.querySelector('.drama'); }, 400);
-onBeforeUnmount(() => { clearInterval(poll); if (stopAuth) stopAuth(); if (stopDoc) stopDoc(); clearTimeout(t); });
+const checkOther = () => { otherModal.value = !!document.querySelector('.drama'); };
+// MutationObserver reacts in the same frame the celebration is inserted (a 400ms poll could let both show briefly); poll kept as a fallback.
+let mo = null; try { mo = new MutationObserver(checkOther); mo.observe(document.body, { childList: true, subtree: true }); } catch (e) { mo = null; }
+const poll = setInterval(checkOther, 400);
+onBeforeUnmount(() => { clearInterval(poll); if (mo) mo.disconnect(); if (stopAuth) stopAuth(); if (stopDoc) stopDoc(); clearTimeout(t); });
 </script>
 
 <style scoped>

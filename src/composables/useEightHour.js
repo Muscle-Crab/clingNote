@@ -4,7 +4,8 @@
 //  - caches the wake pick made BEFORE sign-up (onboarding) and saves it to the server right after sign-in,
 //  - feeds the lock source used by the UI/data-layer guards (utils/eightHourLock.js).
 import { reactive, computed, ref } from 'vue';
-import { auth } from '@/firebaseConfig';
+import { auth, db } from '@/firebaseConfig';
+import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { fnUrl } from '@/config/api';
 import * as core from '@/utils/eightHour';
 import { setLockSource } from '@/utils/eightHourLock';
@@ -13,6 +14,27 @@ const st = reactive({ loaded: false, loading: false, error: '', data: null, offs
 const tick = ref(Date.now());
 let timer = null; let syncTimer = null; let visHooked = false;
 const PLAN_KEY = 'clingnote.ehPlan.v1';
+const HOURS_KEY = 'clingnote.dayLengthHours.v1';
+const PROMPT_KEY = 'clingnote.dayPromptSeen.v1';
+
+// ── day length preference (3..12h, 0.5 steps, default 8): users/{uid}.dayLengthHours, localStorage fallback ──
+const hoursPref = ref(core.clampHours((() => { try { return localStorage.getItem(HOURS_KEY); } catch (e) { return null; } })()));
+export const dayLengthHours = () => hoursPref.value;
+export const setDayLengthHours = async (h) => {
+  const v = core.clampHours(h); hoursPref.value = v;
+  try { localStorage.setItem(HOURS_KEY, String(v)); } catch (e) { /* ignore */ }
+  const u = auth.currentUser;
+  if (u) { try { await setDoc(doc(db, 'users', u.uid), { dayLengthHours: v }, { merge: true }); } catch (e) { /* offline: local value is used */ } }
+  return v;
+};
+export const loadDayLengthHours = async () => {
+  const u = auth.currentUser; if (!u) return hoursPref.value;
+  try { const s = await getDoc(doc(db, 'users', u.uid)); const v = s.exists() && s.data().dayLengthHours; if (v != null) { hoursPref.value = core.clampHours(v); try { localStorage.setItem(HOURS_KEY, String(hoursPref.value)); } catch (e) { /* ignore */ } } } catch (e) { /* ignore */ }
+  return hoursPref.value;
+};
+// Morning prompt bookkeeping: shown once per day key until the day is confirmed.
+export const promptSeenFor = () => { try { return localStorage.getItem(PROMPT_KEY) || ''; } catch (e) { return ''; } };
+export const markPromptSeen = (dayKey) => { try { localStorage.setItem(PROMPT_KEY, dayKey || ''); } catch (e) { /* ignore */ } };
 
 export const deviceTz = () => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch (e) { return 'UTC'; } };
 
@@ -35,11 +57,13 @@ const call = async (action, body = {}) => {
 // Local fallback when the server function is unreachable/not deployed: plan only (from the device cache), never a lock
 // (locks are server-authoritative), so the card can still show the plan / setup instead of a dead "Retry".
 const isUnavailable = (e) => !!(e && (e.unavailable || e.name === 'TypeError' || /load failed|failed to fetch|network/i.test(e.message || '')));
-const localState = (plan) => ({ now: Date.now(), plan: plan ? { wakeTime: plan.wakeTime, taskCount: plan.taskCount, tz: plan.tz || deviceTz() } : null, lock: null, stats: core.defaultStats(), offline: true });
+const localState = (plan) => ({ now: Date.now(), plan: plan ? { wakeTime: plan.wakeTime, taskCount: plan.taskCount, tz: plan.tz || deviceTz() } : null, lock: localLockToday(plan), stats: core.defaultStats(), offline: true });
 // Last started day, cached on the device so the hard stop survives a reload / app restart even when the server is unreachable.
 const LAST_LOCK_KEY = 'clingnote.ehLastLock.v1';
+// Offline: a day confirmed on THIS device (startNow with the function unreachable) is kept locally so countdown/shutdown still work.
+const localLockToday = (plan) => { const l = readLastLock(); if (!l || !l.local) return null; const tz = (plan && plan.tz) || l.tz || deviceTz(); return l.dayKey === core.dayKeyIn(tz, Date.now()) ? l : null; };
 export const readLastLock = () => { try { const l = JSON.parse(localStorage.getItem(LAST_LOCK_KEY) || 'null'); return l && Number.isFinite(l.endMs) && l.dayKey ? l : null; } catch (e) { return null; } };
-const cacheLock = (l) => { try { if (l && Number.isFinite(l.endMs)) localStorage.setItem(LAST_LOCK_KEY, JSON.stringify({ dayKey: l.dayKey, dayName: l.dayName, startMs: l.startMs, endMs: l.endMs, wakeTime: l.wakeTime, tz: l.tz, earned: l.earned || 0, target: l.target || 0, done: l.done || 0, taskCount: l.taskCount || 0, totalPoints: l.totalPoints || 0 })); } catch (e) { /* private mode */ } };
+const cacheLock = (l) => { try { if (l && Number.isFinite(l.endMs)) localStorage.setItem(LAST_LOCK_KEY, JSON.stringify({ dayKey: l.dayKey, dayName: l.dayName, startMs: l.startMs, endMs: l.endMs, hours: l.hours, local: !!l.local, wakeTime: l.wakeTime, tz: l.tz, earned: l.earned || 0, target: l.target || 0, done: l.done || 0, taskCount: l.taskCount || 0, totalPoints: l.totalPoints || 0 })); } catch (e) { /* private mode */ } };
 // The lock that decides the hard stop: the server's, else (offline / not loaded yet) the cached one. Never invents a lock.
 export const shutLock = () => (st.data && st.data.lock) || readLastLock();
 const apply = (d) => { if (d && d.lock) cacheLock(d.lock); st.data = d; st.offset = d.now - Date.now(); st.loaded = true; st.error = ''; tick.value = Date.now() + st.offset; };
@@ -57,7 +81,7 @@ export const refresh = async () => {
   st.loading = true;
   try { apply(await call('state')); } catch (e) {
     if (isUnavailable(e) && e.status !== 401) { apply(localState(readCachedPlan())); st.error = e.message || 'Offline'; }
-    else st.error = e.message || 'Could not load your 8-hour day';
+    else st.error = e.message || 'Could not load your day';
   } finally { st.loading = false; }
   ensureTimers();
   return st.data;
@@ -70,7 +94,19 @@ export const savePlan = async ({ wakeTime, taskCount }) => {
   catch (e) { if (!isUnavailable(e)) throw e; cachePlan({ wakeTime, taskCount, tz }); const d = localState(readCachedPlan()); apply(d); st.error = e.message; return d; } // synced on next successful refresh
   finally { st.busy = false; }
 };
-export const startNow = async () => { st.busy = true; try { const d = await call('start'); apply(d); return d; } finally { st.busy = false; } };
+// Starts the day NOW for `hours` (only called from the morning Confirm). End = confirm time + hours; frozen for the day.
+export const startNow = async (hours) => {
+  const h = core.clampHours(hours == null ? hoursPref.value : hours);
+  st.busy = true;
+  try { const d = await call('start', { hours: h }); apply(d); return d; }
+  catch (e) {
+    if (!isUnavailable(e) || e.status === 401) throw e;
+    const plan = st.data?.plan || readCachedPlan(); const tz = plan?.tz || deviceTz(); const now = nowMs();
+    const prev = localLockToday(plan); if (prev) return st.data; // already confirmed today: frozen
+    const lock = { dayKey: core.dayKeyIn(tz, now), dayName: core.dayNameIn ? core.dayNameIn(tz, now) : '', startMs: now, endMs: now + core.hoursMs(h), hours: h, wakeTime: plan?.wakeTime, tz, local: true };
+    cacheLock(lock); const d = { ...localState(plan), now }; d.lock = lock; apply(d); st.error = e.message; return d;
+  } finally { st.busy = false; }
+};
 export const reportProgress = async () => { try { apply(await call('progress')); } catch (e) { /* server recounts at the end of the window anyway */ } };
 
 // After sign-up / sign-in: fetch the server state and, if the account has no plan yet, save the wake time picked in onboarding.
@@ -91,18 +127,18 @@ export const useEightHour = () => {
   const phaseInfo = computed(() => {
     if (!st.data) return { phase: 'loading' };
     const lk = lockRaw.value && { startMs: lockRaw.value.startMs, endMs: lockRaw.value.endMs, dayKey: lockRaw.value.dayKey };
-    return core.evaluatePhase({ wakeTime: plan.value?.wakeTime, tz: plan.value?.tz, nowMs: (tick.value, nowMs()), lock: lk });
+    return core.evaluatePhase({ wakeTime: plan.value?.wakeTime, tz: plan.value?.tz, nowMs: (tick.value, nowMs()), lock: lk, hours: hoursPref.value });
   });
   const phase = computed(() => phaseInfo.value.phase);
   const running = computed(() => phase.value === 'running');
   const lock = computed(() => (lockRaw.value && lockRaw.value.dayKey === phaseInfo.value.dayKey ? lockRaw.value : null));
   const remainingMs = computed(() => ((running.value || (phase.value === 'ready' && core.START_MODE === 'wake' && phaseInfo.value.endMs)) ? Math.max(0, phaseInfo.value.endMs - (tick.value, nowMs())) : 0));
   const countdown = computed(() => core.fmtCountdown(remainingMs.value));
-  // "Ends 3:00 PM": real end while running/ended; otherwise wake time + 8h (what it will be if the countdown starts at the wake time)
+  // "Ends 3:00 PM": real end while running/ended; otherwise now + the chosen hours (what it will be if you confirm now)
   const endsLabel = computed(() => {
     const tz = plan.value?.tz || deviceTz();
     if (lock.value && (running.value || phase.value === 'ended')) return core.fmtClock(lock.value.endMs, tz);
-    if (phaseInfo.value.phase === 'before' || phaseInfo.value.phase === 'ready') return core.fmtClock((phaseInfo.value.startMs || phaseInfo.value.wakeMs) + core.WINDOW_MS, tz);
+    if (phaseInfo.value.phase === 'before' || phaseInfo.value.phase === 'ready') return core.fmtClock((phaseInfo.value.startMs || phaseInfo.value.wakeMs) + core.hoursMs(hoursPref.value), tz);
     return '';
   });
   // "7:00 AM": the real (locked) start while running/ended; otherwise the planned wake time
@@ -111,6 +147,10 @@ export const useEightHour = () => {
     if (lock.value && (running.value || phase.value === 'ended')) return core.fmtClock(lock.value.startMs, tz);
     return plan.value ? core.fmtWakeLabel(plan.value.wakeTime) : '';
   });
+  // Hours of TODAY's day: the confirmed (locked) value, else the preference.
+  const dayHours = computed(() => core.clampHours(lock.value && lock.value.hours != null ? lock.value.hours : hoursPref.value));
+  // 15 / 5 / 0: in-app end-of-day warning currently due
+  const warning = computed(() => (running.value && lock.value ? core.warningDue(lock.value.endMs, (tick.value, nowMs())) : 0));
   const stats = computed(() => st.data?.stats || core.defaultStats());
   // Hard stop: today's started day has ended -> shut until the next wake time (survives reload via the cached lock).
   const shutdown = computed(() => {
@@ -119,7 +159,7 @@ export const useEightHour = () => {
     const until = core.shutUntilMs(l);
     return { untilMs: until, untilLabel: core.fmtClock(until, l.tz || deviceTz()), earned: l.earned || 0, target: l.target || 0, done: l.done || 0, total: l.taskCount || 0, met: (l.target || 0) > 0 && (l.earned || 0) >= l.target };
   });
-  return { st, data, plan, lock, phase, phaseInfo, running, remainingMs, countdown, endsLabel, startsLabel, stats, shutdown, reward: computed(() => st.data?.reward || ''),
+  return { st, dayHours, warning, hoursPref, data, plan, lock, phase, phaseInfo, running, remainingMs, countdown, endsLabel, startsLabel, stats, shutdown, reward: computed(() => st.data?.reward || ''),
     refresh, savePlan, startNow, reportProgress, nowMs };
 };
 

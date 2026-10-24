@@ -31,7 +31,7 @@ const aiRefine = async (items, stats, { fetch: f, apiKey }) => {
   const body = {
     model: 'gpt-4o-mini', temperature: 0, response_format: { type: 'json_object' },
     messages: [
-      { role: 'system', content: 'You rate to-do tasks for a strict 8-hour productivity day. Reply with JSON only: {"tasks":[{"n":0,"complexity":1-5,"minutes":1-600}],"targetRatio":0.8-1.0}. complexity 1=trivial, 5=very demanding. targetRatio is the share of total points the user must earn (use higher values for easy, short plans and a tight schedule).' },
+      { role: 'system', content: 'You rate to-do tasks for a strict fixed-length productivity day (3 to 12 hours). Reply with JSON only: {"tasks":[{"n":0,"complexity":1-5,"minutes":1-600}],"targetRatio":0.8-1.0}. complexity 1=trivial, 5=very demanding. targetRatio is the share of total points the user must earn (use higher values for easy, short plans and a tight schedule).' },
       { role: 'user', content: JSON.stringify({ tasks: list, streak: stats.streak || 0, lastResult: stats.lastResult || '' }) },
     ],
   };
@@ -52,7 +52,7 @@ const aiRefine = async (items, stats, { fetch: f, apiKey }) => {
   } catch (e) { return null; }
 };
 
-const publicLock = (l) => (l ? { dayKey: l.dayKey, dayName: l.dayName, tz: l.tz, wakeTime: l.wakeTime, startMs: l.startMs, endMs: l.endMs, taskCount: l.taskCount, plannedCount: l.plannedCount,
+const publicLock = (l) => (l ? { hours: core.clampHours(l.hours), dayKey: l.dayKey, dayName: l.dayName, tz: l.tz, wakeTime: l.wakeTime, startMs: l.startMs, endMs: l.endMs, taskCount: l.taskCount, plannedCount: l.plannedCount,
   points: l.points, totalPoints: l.totalPoints, target: l.target, targetSource: l.targetSource, estimateSource: l.estimateSource, earned: l.earned || 0, done: l.done || 0, settled: !!l.settled } : null);
 
 // Settle a finished window once: final earned, history row, new stats. Idempotent (settled flag + settleDay's lastDay check).
@@ -107,7 +107,7 @@ const actions = {
     if (!(count >= 1 && count <= core.MAX_TASKS_PER_DAY)) throw fail(400, `Plan between 1 and ${core.MAX_TASKS_PER_DAY} tasks`);
     const ph = phaseOf(doc, ctx.now);
     const wakeTime = core.fmtWake(wake);
-    if (ph.phase === 'running') throw fail(423, 'Locked: your 8-hour day is running. Plan changes open after it ends.', { code: 'locked' });
+    if (ph.phase === 'running') throw fail(423, `Locked: your ${core.hoursLabel(doc.lock && doc.lock.hours)}-hour day is running.`+' Plan changes open after it ends.', { code: 'locked' });
     if (ph.phase === 'ready' && doc.plan && (doc.plan.wakeTime !== wakeTime)) throw fail(423, 'Locked: the countdown is about to begin, so the wake time can no longer change today.', { code: 'locked' });
     const plan = { wakeTime, tz: ph.phase === 'ready' && doc.plan ? doc.plan.tz : tz, taskCount: count, updatedMs: ctx.now };
     await ctx.db.doc(`eightHour/${ctx.uid}`).set({ plan }, { merge: true });
@@ -115,12 +115,15 @@ const actions = {
   },
 
   // Begin the window (idempotent). Snapshot the day's tasks, let the estimator (AI if available, else heuristic) assign points, fix the target, lock.
-  async start(ctx) {
+  // body.hours: the span confirmed in the morning prompt (clamped to 3..12, 0.5 steps; default 8). The window runs from NOW (server clock) to now + hours.
+  async start(ctx, body = {}) {
     let doc = await loadDoc(ctx);
     doc = await settleIfOver(ctx, doc, ctx.now);
     const ph = phaseOf(doc, ctx.now);
     if (ph.phase === 'running') return view(doc, ctx.now); // already started (second device / retry)
-    if (ph.phase !== 'ready') throw fail(409, ph.phase === 'before' ? 'Your wake time has not arrived yet.' : ph.phase === 'ended' ? 'Today\'s 8-hour day is already over.' : 'Pick a wake time first.', { code: ph.phase });
+    if (ph.phase !== 'ready') throw fail(409, ph.phase === 'before' ? 'Your wake time has not arrived yet.' : ph.phase === 'ended' ? 'Today\'s day is already over.' : 'Pick a wake time first.', { code: ph.phase });
+    const hours = core.clampHours(body.hours);
+    ph.startMs = ctx.now; ph.endMs = ctx.now + core.hoursMs(hours); // confirm-time start: end = confirm + hours
     const dayName = core.dayNameIn(doc.plan.tz, ph.startMs);
     const dayRef = ctx.db.doc(`weeklyRoutines/${ctx.uid}_${dayName}`);
     const dsnap = await dayRef.get();
@@ -145,7 +148,7 @@ const actions = {
         }
       }
     }
-    const tgt = core.dailyTarget(est.map((e) => ({ points: e.points, minutes: e.minutes })), stats);
+    const tgt = core.dailyTarget(est.map((e) => ({ points: e.points, minutes: e.minutes })), stats, hours * 60);
     let target = tgt.target; let targetSource = 'heuristic';
     if (ratioAi != null && tgt.total > 0) { // the model can only make the target tighter than the level-based one, never easier
       const raised = core.clamp(core.round5(tgt.total * Math.max(ratioAi, tgt.ratio)), 5, tgt.total);
@@ -154,7 +157,7 @@ const actions = {
     const next = stored.map((t) => ({ ...t })); // identical order and size: the lock compares by index
     rows.forEach(({ i }, n) => { next[i] = { ...next[i], completed: false, completedAt: null, timerActive: false, points: est[n].points, complexity: est[n].complexity, estimateMin: est[n].minutes }; });
     const points = rows.map((_, n) => est[n].points);
-    const lock = { dayKey: ph.dayKey, dayName, tz: doc.plan.tz, wakeTime: doc.plan.wakeTime, startMs: ph.startMs, endMs: ph.endMs, taskCount: rows.length, plannedCount: doc.plan.taskCount,
+    const lock = { hours, dayKey: ph.dayKey, dayName, tz: doc.plan.tz, wakeTime: doc.plan.wakeTime, startMs: ph.startMs, endMs: ph.endMs, taskCount: rows.length, plannedCount: doc.plan.taskCount,
       indexes: rows.map(({ i }) => i), points, totalPoints: points.reduce((a, b) => a + b, 0), target, targetSource, targetLevel: tgt.level, estimateSource: source, earned: 0, done: 0, settled: false };
     await ctx.db.runTransaction(async (tx) => {
       const cur = await tx.get(ctx.db.doc(`eightHour/${ctx.uid}`));

@@ -36,8 +36,8 @@
 
       <section v-else-if="STEPS[step] === 'schedule'" class="ob-sec">
         <p class="ob-k">Step 2</p><h1 class="ob-h">Your daily <span>rhythm</span></h1><p class="ob-p">We'll nudge you to start your day and wrap it up on time.</p>
-        <div class="ob-field" data-test="ob-wake-locked"><span>☀️ Your 8-hour day starts</span><b>{{ wakeLabel }}</b></div>
-        <p class="ob-p ob-small">You picked this before signing up. Once a day starts, the 8 hours are locked.</p>
+        <div class="ob-field" data-test="ob-wake-locked"><span>☀️ Your day can start from</span><b>{{ wakeLabel }}</b></div>
+        <p class="ob-p ob-small">You picked this before signing up. Each morning you pick 3 to 12 hours and confirm. Once confirmed, those hours are locked.</p>
         <label class="ob-field"><span>🎯 Tasks done by</span><input type="time" v-model="a.deadline" /></label>
         <label class="ob-field"><span>🌙 Bedtime</span><input type="time" v-model="a.bedTime" /></label>
       </section>

@@ -11,8 +11,8 @@
       <h1 class="wl-h">Discipline, <span>not wishes.</span></h1>
       <p class="wl-p">ClingNote is a strict daily system. No streak-gaming, no editing the rules once you've started.</p>
       <ul class="wl-list">
-        <li><span>☀️</span><div><b>Pick your wake time</b><small>Your 8-hour day starts then, every day.</small></div></li>
-        <li><span>🔒</span><div><b>8 hours, locked</b><small>The task count, the points per task and the daily target are set when the day starts. No edits.</small></div></li>
+        <li><span>☀️</span><div><b>Pick your wake time</b><small>Each morning you choose 3 to 12 hours, confirm, and your day runs from then.</small></div></li>
+        <li><span>🔒</span><div><b>Your hours, locked</b><small>The task count, the points per task and the daily target are set when the day starts. No edits.</small></div></li>
         <li><span>🎯</span><div><b>Finish the goal</b><small>Hit the points target before the clock runs out.</small></div></li>
         <li><span>🔥</span><div><b>Build streaks, climb ranks</b><small>Miss a day and the streak pays for it.</small></div></li>
       </ul>
@@ -24,9 +24,9 @@
     </section>
 
     <section v-else-if="STEPS[step] === 'wake'" class="wl-sec" data-test="wl-wake">
-      <p class="wl-k">Your 8-hour day</p>
+      <p class="wl-k">Your {{ hl }}-hour day</p>
       <h1 class="wl-h">When do you <span>start?</span></h1>
-      <p class="wl-p">Pick your wake time. Each day, your 8 hours start from here.</p>
+      <p class="wl-p">Pick your wake time. From then, each morning you choose your hours (3 to 12) and confirm to start.</p>
       <label class="wl-field"><span>☀️ Wake time</span><input type="time" v-model="wake" data-test="wl-wake-input" /></label>
       <p class="wl-ends" data-test="wl-ends">Starts {{ wakeLabel }} · <b>Ends {{ endLabel }}</b></p>
       <div class="wl-field wl-count"><span>✅ Tasks per day</span>
@@ -63,7 +63,7 @@ import { markTutorialSeen } from '@/utils/entryGuard';
 import { isNativeIOS } from '@/utils/platform';
 const native = isNativeIOS(); // iOS app: Apple sign-in only; web: Google
 import { cachePlan, readCachedPlan, syncAfterAuth, deviceTz } from '@/composables/useEightHour';
-import { fmtWakeLabel, parseWake, MAX_TASKS_PER_DAY, WAKE_PICKER_PRESELECT, WINDOW_MIN } from '@/utils/eightHour';
+import { fmtWakeLabel, parseWake, MAX_TASKS_PER_DAY, WAKE_PICKER_PRESELECT, clampHours, hoursLabel } from '@/utils/eightHour';
 
 // Pre-sign-up tutorial: explainer -> real-app screenshot carousel -> explicit wake pick -> sign-in (Apple/Google; no email sign-up). The user cannot leave it
 // half-way: the only exits are the account actions on the last step (the flag is set there, once per install).
@@ -75,8 +75,10 @@ const wake = ref(cached?.wakeTime || WAKE_PICKER_PRESELECT); // pre-selected for
 const taskCount = ref(Math.min(MAX_TASKS_PER_DAY, Math.max(1, Number(cached?.taskCount) || 3)));
 const signedIn = computed(() => !!auth.currentUser && route.query.new === '1');
 
+const hoursPrefW = clampHours((() => { try { return localStorage.getItem('clingnote.dayLengthHours.v1'); } catch (e) { return null; } })());
+const hl = hoursLabel(hoursPrefW);
 const wakeLabel = computed(() => fmtWakeLabel(wake.value) || '—');
-const endLabel = computed(() => { const w = parseWake(wake.value); if (!w) return '—'; const t = (w.h * 60 + w.m + WINDOW_MIN) % 1440; return fmtWakeLabel(`${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`); });
+const endLabel = computed(() => { const w = parseWake(wake.value); if (!w) return '—'; const t = (w.h * 60 + w.m + Math.round(hoursPrefW * 60)) % 1440; return fmtWakeLabel(`${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`); });
 const lastSlide = TOUR_SLIDES.length - 1;
 // The tour's button always works: it pages through the slides, and only after the last one does it move on.
 const canNext = computed(() => (STEPS[step.value] === 'wake' ? !!parseWake(wake.value) : true));

@@ -79,6 +79,11 @@
 
           <h2 class="pf-section">Preferences</h2>
           <section class="pf-card pf-card--flush pf-push"><PushSettings /></section>
+          <section v-if="isOwn" class="pf-card pf-card--flush" data-test="day-length-setting">
+            <div class="pf-row"><span class="pf-ico" aria-hidden="true">⏱</span><span class="pf-row-title">Day length<small class="pf-dl-sub">Preselected each morning · 3 to 12 h</small></span>
+              <span class="pf-dl"><button type="button" class="pf-dl-btn" :disabled="dayLen <= DAY_HOURS.min" aria-label="Half an hour less" data-test="day-length-minus" @click="bumpDayLen(-0.5)">−</button><b data-test="day-length-value">{{ hoursLabel(dayLen) }} h</b><button type="button" class="pf-dl-btn" :disabled="dayLen >= DAY_HOURS.max" aria-label="Half an hour more" data-test="day-length-plus" @click="bumpDayLen(0.5)">+</button></span>
+            </div>
+          </section>
 
           <h2 class="pf-section">More</h2>
           <section class="pf-card pf-card--flush">
@@ -125,6 +130,8 @@ import { rewardsFor, MILESTONES } from '@/utils/rewards';
 import { withRcPro } from '@/composables/usePro';
 import { isNativeIOS } from '@/utils/platform';
 import { openWriteReview } from '@/utils/appReview';
+import { DAY_HOURS, hoursLabel } from '@/utils/eightHour';
+import { dayLengthHours, setDayLengthHours, loadDayLengthHours } from '@/composables/useEightHour';
 const rateApp = () => openWriteReview();
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { useRouter } from 'vue-router';
@@ -258,6 +265,11 @@ const saveUserData = async () => {
     console.error('Error saving user data:', error.message);
   }
 };
+
+// Day length preference (users/{uid}.dayLengthHours, localStorage fallback). Today's confirmed day never changes; this preselects the next morning.
+const dayLen = ref(dayLengthHours());
+const bumpDayLen = async (d) => { dayLen.value = await setDayLengthHours(dayLen.value + d); };
+onMounted(() => { loadDayLengthHours().then((v) => { dayLen.value = v; }).catch(() => {}); });
 </script>
 
 <style scoped>
@@ -312,6 +324,9 @@ const saveUserData = async () => {
 .pf-ico { width: 36px; height: 36px; border-radius: 10px; background: var(--c-surface-2); display: inline-flex; align-items: center; justify-content: center; font-size: 17px; flex-shrink: 0; }
 .pf-ico--lg { width: 52px; height: 52px; border-radius: 14px; font-size: 24px; background: var(--c-accent-soft); }
 .pf-row-text { flex: 1; min-width: 0; }
+.pf-dl { display: inline-flex; align-items: center; gap: 6px; } .pf-dl b { min-width: 48px; text-align: center; font-variant-numeric: tabular-nums; }
+.pf-dl-btn { width: 44px; height: 44px; border-radius: 12px; border: 1px solid var(--c-border, #2a2a2e); background: var(--c-surface-2, #22252a); color: var(--c-text); font-size: 18px; }
+.pf-dl-sub { display: block; font-size: 12px; font-weight: 500; color: var(--c-text-3, #9aa3b5); }
 .pf-row-title { margin: 0; font-size: 16px; font-weight: 600; color: var(--c-text); flex: 1; text-align: left; }
 .pf-row-sub { margin: 2px 0 0; font-size: 13px; color: var(--c-text-2); }
 .pf-pill-ok { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 999px; font-size: 13px; color: var(--c-success); background: var(--c-success-soft); border: 1px solid rgba(61,220,151,.35); }

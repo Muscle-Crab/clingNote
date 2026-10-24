@@ -14,7 +14,7 @@ let n = 0; const ok = (c, m) => { assert.ok(c, m); n++; };
   const warn = console.warn; console.warn = () => {};
   const base = { plan: { wakeTime: '07:00', tz: TZ, taskCount: 3 }, stats: core.defaultStats() };
   let html = await render(at('2026-10-23T10:00:00Z'), { ...base, plan: null }); // none
-  ok(/Set your 8-hour day/.test(html) && /data-test="eh-save"/.test(html), 'no plan => setup form');
+  ok(/Set your day/.test(html) && /data-test="eh-save"/.test(html), 'no plan => setup form');
   html = await render(at('2026-10-23T09:00:00Z'), base, [T('a')]); // 05:00 local, before wake
   ok(/Starts 7:00 AM/.test(html) && /Ends 3:00 PM/.test(html) && /1\/3 added|1\/3\)/.test(html), 'before wake: start + end label and task count');
   html = await render(at('2026-10-23T11:30:00Z'), base, [T('a')]); // 07:30 ready

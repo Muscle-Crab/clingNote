@@ -57,7 +57,8 @@
 
         <DayTabs :days="tabDays" :selected-index="selectedDayIndex" :scheduled-counts="scheduledCounts" @select="handleDayTabClick" />
 
-        <EightHourCard :tasks="ehTasks" :start-error="ehStartError" @retry="syncAfterAuth" @start="tryStartEightHour" />
+        <EightHourCard :tasks="ehTasks" :start-error="ehStartError" @retry="syncAfterAuth" @start="openDayPrompt" />
+        <DayStartPrompt v-if="dayPromptOpen" :initial-hours="eh.hoursPref.value" :now-ms="eh.nowMs" :tz="eh.plan.value?.tz || ''" :busy="ehBusy" :error="ehStartError" @confirm="confirmDayStart" />
 
         <ProgressBar :percentage="calculateCompletionPercentage()" :milestones="milestones" :done="completedTaskCount || 0" :total="dayTasks.length"
                      :streak="streak" :streak-status="streakStatus" :streak-progress="streakProgress" :streak-min="DAILY_STREAK_MIN" :points="pointsAccumulated || 0" />
@@ -296,11 +297,12 @@ import DayTabs from '@/components/home/DayTabs.vue';
 import ImagePreview from '@/components/home/ImagePreview.vue';
 import ProgressBar from '@/components/home/ProgressBar.vue';
 import EightHourCard from '@/components/home/EightHourCard.vue';
-import { useEightHour, syncAfterAuth } from '@/composables/useEightHour';
+import DayStartPrompt from '@/components/eighthour/DayStartPrompt.vue';
+import { useEightHour, syncAfterAuth, setDayLengthHours, loadDayLengthHours, promptSeenFor, markPromptSeen } from '@/composables/useEightHour';
 import { countableIndexes } from '@/utils/eightHour';
 import { estimateFor, chipValues } from '@/utils/taskEstimate';
 import { patchTouchesLocked } from '@/utils/eightHourLock';
-import { isDayLocked, isLockError, assertTasksChangeAllowed, LOCKED_MESSAGE, isShutdown, SHUT_MESSAGE } from '@/utils/eightHourLock';
+import { isDayLocked, isLockError, assertTasksChangeAllowed, lockedMessage, isShutdown, shutMessage } from '@/utils/eightHourLock';
 import ReminderModal from '@/components/home/ReminderModal.vue';
 import ShutdownPrompt from '@/components/home/ShutdownPrompt.vue';
 import TaskDetailModal from '@/components/home/TaskDetailModal.vue';
@@ -364,11 +366,11 @@ const selectedDayLocked = computed(() => !!lockedDayName.value && days[selectedD
 // true (after telling the user) when the given weekday tab is the locked day; every list-changing action calls this first
 const blockIfLocked = (dayIdx = selectedDayIndex.value) => {
   if (dayIdx === -1 || !days[dayIdx] || !isDayLocked(days[dayIdx].day)) return false;
-  alert(LOCKED_MESSAGE);
+  alert(lockedMessage());
   return true;
 };
 // 8-hour hard stop: once today's started day has ended, every task action is refused until the next wake time (data layer also guards).
-const blockIfShut = () => { if (!isShutdown()) return false; alert(SHUT_MESSAGE); return true; };
+const blockIfShut = () => { if (!isShutdown()) return false; alert(shutMessage()); return true; };
 const lockMessage = (e) => { if (isLockError(e)) { alert(e.message); return true; } return false; };
 // the planned task count (set before the countdown) limits what today's list may hold until the countdown starts
 const planFull = () => {
@@ -1765,7 +1767,7 @@ const addNewTask = async () => {
           : [days[selectedDayIndex.value]];
 
   // 8-hour lock: nothing can be added to the locked day (including repeating copies); before the countdown the plan count is the cap
-  if (selectedDays.some((d) => isDayLocked(d.day))) { error.value = LOCKED_MESSAGE; return false; }
+  if (selectedDays.some((d) => isDayLocked(d.day))) { error.value = lockedMessage(); return false; }
   if (selectedDays.some((d) => d.day === days[selectedDayIndex.value].day) && isToday(selectedDayIndex.value) && planFull()) {
     error.value = `Your plan is ${eh.plan.value.taskCount} task${eh.plan.value.taskCount === 1 ? '' : 's'} today. Raise the task count in the 8-hour card first (only possible before the countdown starts).`; return false;
   }
@@ -1853,7 +1855,7 @@ let lastAddPersist = Promise.resolve(true);
 // Copies keep the original createdAt, so making a task recurring never counts as a new task toward the daily limit.
 const setTaskRepeat = async (task, dayNames) => {
   if (!userId.value || !task) return;
-  if (days.some((d) => isDayLocked(d.day))) { alert(LOCKED_MESSAGE); return; } // a repeat edit rewrites copies on every weekday, including the locked one
+  if (days.some((d) => isDayLocked(d.day))) { alert(lockedMessage()); return; } // a repeat edit rewrites copies on every weekday, including the locked one
   const viewDay = days[selectedDayIndex.value].day;
   const want = new Set(dayNames && dayNames.length ? dayNames : [viewDay]);
   want.add(viewDay); // the card being edited stays where it is
@@ -2954,7 +2956,7 @@ const addAnyway = () => { capOverride.value = true; capWarning.value = false; ad
 watch(modalOpen, (open) => { if (!open) { capWarning.value = false; capOverride.value = false; limitHit.value = null; } });
 
 // Load summary + schedule
-const todayLoad = computed(() => loadSummary(selectedDayRoutine.value));
+const todayLoad = computed(() => loadSummary(selectedDayRoutine.value, eh.dayHours.value * 60));
 const schedule = computed(() => buildSchedule(selectedDayRoutine.value));
 const showSchedule = ref(false);
 
@@ -2988,7 +2990,7 @@ const editTask = async (index, task, rawPatch) => {
   if (!Object.keys(patch).length) return;
   const dayName = days[selectedDayIndex.value].day;
   const lockedHit = patchTouchesLocked(patch);
-  if (isDayLocked(dayName) && lockedHit.length) { alert(`${LOCKED_MESSAGE} (${lockedHit.join(', ')})`); return; }
+  if (isDayLocked(dayName) && lockedHit.length) { alert(`${lockedMessage()} (${lockedHit.join(', ')})`); return; }
   const oldKey = taskKey(task);
   if (patch.estimateMin !== undefined) {
     if (timerStarted(task)) { alert(TIMER_LOCK_HINT); return; } // estimate is frozen once play was pressed
@@ -3004,7 +3006,7 @@ const editTask = async (index, task, rawPatch) => {
 // Copy the editable fields to every other weekday copy of a repeating task (one transaction).
 const applyToSeries = async (key, sp) => {
   const others = days.filter((d, i) => i !== selectedDayIndex.value);
-  if (others.some((d) => isDayLocked(d.day)) && patchTouchesLocked(sp).length) { alert(LOCKED_MESSAGE); return; }
+  if (others.some((d) => isDayLocked(d.day)) && patchTouchesLocked(sp).length) { alert(lockedMessage()); return; }
   try {
     await trackWrite(runTransaction(db, async (tx) => {
       const refs = others.map((d) => doc(db, 'weeklyRoutines', `${userId.value}_${d.day}`));
@@ -3111,20 +3113,34 @@ const ensureLegacyDayStarted = async () => {
   await setDoc(doc(db, 'userSettings', userId.value), { daySessions: { [getTodayId()]: { started: true, ended: false, startTime: serverTimestamp(), endTime: null, updatedAt: serverTimestamp() } } }, { merge: true });
   daySession.value = { started: true, ended: false, startTime: now, endTime: null, startedAtText: formatSessionTime(now), endedAtText: '' };
 };
-const tryStartEightHour = async () => {
-  if (ehStarting || eh.phase.value !== 'ready' || !userId.value || !isToday(selectedDayIndex.value)) return;
-  const plan = eh.plan.value;
-  const n = countableIndexes(selectedDayRoutine.value || [], eh.phaseInfo.value.dayKey || '').length;
-  if (!plan || n !== plan.taskCount) return; // the countdown starts only when the task list matches the plan
-  ehStarting = true; ehStartError.value = '';
+// Morning flow (replaces the old auto-start at the wake time / when the task list matched the plan):
+// on the first open of a new day (phase 'ready', no lock today) ask "How many hours will you dedicate today?" (3..12h, half hours,
+// preselected to the last choice or 8), then "Are you sure? Your day will end at H:MM". The countdown starts ONLY on Confirm
+// (end = confirm time + hours, frozen for the day). Nothing starts by itself any more.
+const dayPromptOpen = ref(false);
+const ehBusy = ref(false);
+const openDayPrompt = () => { if (eh.phase.value === 'ready' && !eh.lock.value && isToday(selectedDayIndex.value)) { ehStartError.value = ''; dayPromptOpen.value = true; } };
+const maybeShowDayPrompt = () => {
+  if (!userId.value || eh.phase.value !== 'ready' || eh.lock.value || dayPromptOpen.value || !isToday(selectedDayIndex.value)) return;
+  const dk = eh.phaseInfo.value.dayKey || '';
+  if (!dk || promptSeenFor() === dk) return; // once per day; the card's Start button reopens it
+  markPromptSeen(dk); openDayPrompt();
+};
+const confirmDayStart = async (hours) => {
+  if (ehStarting) return;
+  ehStarting = true; ehBusy.value = true; ehStartError.value = '';
   try {
+    await setDayLengthHours(hours); // remembered as next morning's preselection (users/{uid}.dayLengthHours + localStorage)
     await lastAddPersist; // the server counts what is stored: wait for any pending add
-    await eh.startNow();
+    await eh.startNow(hours);
+    dayPromptOpen.value = false;
     await ensureLegacyDayStarted().catch((e) => console.warn('day session:', e));
     await fetchSelectedDayRoutine();
-  } catch (e) { ehStartError.value = e.message || 'Could not start the countdown'; } finally { ehStarting = false; }
+  } catch (e) { ehStartError.value = e.code === 'no-tasks' ? 'Add at least one task first, then confirm.' : (e.message || 'Could not start the countdown'); }
+  finally { ehStarting = false; ehBusy.value = false; }
 };
-watch([() => eh.phase.value, () => (selectedDayRoutine.value || []).length, () => eh.plan.value?.taskCount], tryStartEightHour);
+watch(userId, (u) => { if (u) loadDayLengthHours().catch(() => {}); }, { immediate: true });
+watch([() => eh.phase.value, () => eh.phaseInfo.value.dayKey, userId, selectedDayIndex], maybeShowDayPrompt, { immediate: true });
 </script>
 
 
