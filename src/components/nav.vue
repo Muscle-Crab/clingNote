@@ -69,6 +69,7 @@
           <li class="app-sidebar-item"><i class="fas fa-calendar-alt"></i><router-link to="/upcoming" class="app-sidebar-link">Upcoming</router-link></li>
           <li v-if="!hideUgc" class="app-sidebar-item"><i class="fas fa-trophy"></i><router-link to="/rankings" class="app-sidebar-link">Rankings</router-link></li>
           <li v-if="userId" class="app-sidebar-item"><i class="fas fa-user-friends"></i><router-link to="/pals" class="app-sidebar-link" data-test="nav-pals">Manager &amp; Pals<span v-if="palBadge.count.value" class="pl-nav-badge">{{ palBadge.count.value }}</span></router-link></li>
+          <li v-if="userId" class="app-sidebar-item"><i class="fas fa-users"></i><router-link to="/community" class="app-sidebar-link" data-test="nav-community">Community</router-link></li>
           <li class="app-sidebar-item"><i class="fas fa-gavel"></i><router-link to="/discipline" class="app-sidebar-link">Discipline</router-link></li>
 
 

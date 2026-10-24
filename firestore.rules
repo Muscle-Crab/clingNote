@@ -320,6 +320,148 @@ service cloud.firestore {
       }
     }
 
+    // ── Community (feed, comments, likes, group chat, follows, notifications, reports, blocks) ──
+    // Moderation per App Store 1.2: reports collection, per-user blocks, admin delete; the profanity filter and rate limits run client-side.
+    function cmAdmin() {
+      return isAuthenticated() && request.auth.token.email_verified == true && request.auth.token.email == 'ds7513635@gmail.com';
+    }
+    function cmProfileOk(d) {
+      return d.uid == request.auth.uid
+        && d.name is string && d.name.size() <= 40 && !d.name.matches('.*@.*')
+        && d.avatar is string && d.avatar.size() <= 2048 && (d.avatar == '' || d.avatar.matches('https://.*'));
+    }
+    function cmImagesOk(l, max) {
+      return l is list && l.size() <= max
+        && (l.size() < 1 || (l[0] is string && l[0].matches('https://firebasestorage\\.googleapis\\.com/.*') && l[0].size() <= 2048))
+        && (l.size() < 2 || (l[1] is string && l[1].matches('https://firebasestorage\\.googleapis\\.com/.*') && l[1].size() <= 2048))
+        && (l.size() < 3 || (l[2] is string && l[2].matches('https://firebasestorage\\.googleapis\\.com/.*') && l[2].size() <= 2048))
+        && (l.size() < 4 || (l[3] is string && l[3].matches('https://firebasestorage\\.googleapis\\.com/.*') && l[3].size() <= 2048));
+    }
+    function cmStatsOk(s) {
+      return s == null || (s is map && s.keys().hasOnly(['tasksDone', 'points', 'streak', 'milestone', 'icon'])
+        && s.tasksDone is int && s.tasksDone >= 0 && s.tasksDone <= 100000
+        && s.points is int && s.points >= 0 && s.points <= 100000
+        && s.streak is int && s.streak >= 0 && s.streak <= 100000
+        && s.milestone is string && s.milestone.size() <= 30
+        && (!('icon' in s) || (s.icon is string && s.icon.size() <= 8)));
+    }
+    function cmBlockedBy(owner) {
+      return exists(/databases/$(database)/documents/users/$(owner)/blocks/$(request.auth.uid));
+    }
+    match /communityPosts/{postId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated()
+        && request.resource.data.keys().hasOnly(['uid', 'name', 'avatar', 'title', 'text', 'images', 'stats', 'likeCount', 'commentCount', 'createdAt'])
+        && cmProfileOk(request.resource.data)
+        && request.resource.data.title is string && request.resource.data.title.size() <= 120
+        && request.resource.data.text is string && request.resource.data.text.size() <= 2000
+        && (request.resource.data.title.size() > 0 || request.resource.data.text.size() > 0 || request.resource.data.images.size() > 0 || request.resource.data.stats != null)
+        && cmImagesOk(request.resource.data.images, 4)
+        && cmStatsOk(request.resource.data.stats)
+        && request.resource.data.likeCount == 0 && request.resource.data.commentCount == 0
+        && request.resource.data.createdAt == request.time;
+      // Counters only, each paired with the like/comment doc written in the same transaction/batch.
+      allow update: if isAuthenticated() && (
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likeCount'])
+          && ((request.resource.data.likeCount == resource.data.likeCount + 1
+               && !exists(/databases/$(database)/documents/communityPosts/$(postId)/likes/$(request.auth.uid))
+               && existsAfter(/databases/$(database)/documents/communityPosts/$(postId)/likes/$(request.auth.uid)))
+           || (request.resource.data.likeCount == resource.data.likeCount - 1
+               && exists(/databases/$(database)/documents/communityPosts/$(postId)/likes/$(request.auth.uid))
+               && !existsAfter(/databases/$(database)/documents/communityPosts/$(postId)/likes/$(request.auth.uid)))))
+        || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['commentCount'])
+          && (request.resource.data.commentCount == resource.data.commentCount + 1
+              || (request.resource.data.commentCount == resource.data.commentCount - 1 && request.resource.data.commentCount >= 0))));
+      allow delete: if isOwner(resource.data.uid) || cmAdmin();
+      match /likes/{likerId} {
+        allow read: if isAuthenticated();
+        allow create: if isOwner(likerId) && request.resource.data.keys().hasOnly(['uid', 'createdAt'])
+          && request.resource.data.uid == likerId && request.resource.data.createdAt == request.time
+          && getAfter(/databases/$(database)/documents/communityPosts/$(postId)).data.likeCount == get(/databases/$(database)/documents/communityPosts/$(postId)).data.likeCount + 1;
+        allow delete: if isOwner(likerId)
+          && (!existsAfter(/databases/$(database)/documents/communityPosts/$(postId))
+              || getAfter(/databases/$(database)/documents/communityPosts/$(postId)).data.likeCount == get(/databases/$(database)/documents/communityPosts/$(postId)).data.likeCount - 1);
+        allow update: if false;
+      }
+      match /comments/{commentId} {
+        allow read: if isAuthenticated();
+        allow create: if isAuthenticated()
+          && request.resource.data.keys().hasOnly(['uid', 'name', 'avatar', 'text', 'createdAt'])
+          && cmProfileOk(request.resource.data)
+          && request.resource.data.text is string && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 500
+          && request.resource.data.createdAt == request.time
+          && getAfter(/databases/$(database)/documents/communityPosts/$(postId)).data.commentCount == get(/databases/$(database)/documents/communityPosts/$(postId)).data.commentCount + 1;
+        allow delete: if (isOwner(resource.data.uid) || cmAdmin()
+          || (isAuthenticated() && get(/databases/$(database)/documents/communityPosts/$(postId)).data.uid == request.auth.uid));
+        allow update: if false;
+      }
+    }
+    match /communityChat/{msgId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated()
+        && request.resource.data.keys().hasOnly(['uid', 'name', 'avatar', 'text', 'image', 'createdAt'])
+        && cmProfileOk(request.resource.data)
+        && request.resource.data.text is string && request.resource.data.text.size() <= 1000
+        && request.resource.data.image is string && request.resource.data.image.size() <= 2048
+        && (request.resource.data.image == '' || request.resource.data.image.matches('https://firebasestorage\\.googleapis\\.com/.*'))
+        && (request.resource.data.text.size() > 0 || request.resource.data.image.size() > 0)
+        && request.resource.data.createdAt == request.time;
+      allow update: if false;
+      allow delete: if isOwner(resource.data.uid) || cmAdmin();
+    }
+    match /follows/{followId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated()
+        && followId == request.auth.uid + '_' + request.resource.data.to
+        && request.resource.data.keys().hasOnly(['from', 'to', 'createdAt'])
+        && request.resource.data.from == request.auth.uid
+        && request.resource.data.to is string && request.resource.data.to != request.auth.uid && request.resource.data.to.size() <= 128
+        && request.resource.data.createdAt == request.time;
+      allow delete: if isOwner(resource.data.from);
+      allow update: if false;
+    }
+    match /reports/{reportId} {
+      allow create: if isAuthenticated()
+        && request.resource.data.keys().hasOnly(['reporter', 'targetType', 'targetId', 'targetUid', 'postId', 'reason', 'status', 'createdAt'])
+        && request.resource.data.reporter == request.auth.uid
+        && request.resource.data.targetType in ['post', 'comment', 'chat', 'user']
+        && request.resource.data.targetId is string && request.resource.data.targetId.size() > 0 && request.resource.data.targetId.size() <= 128
+        && request.resource.data.targetUid is string && request.resource.data.targetUid.size() <= 128
+        && request.resource.data.postId is string && request.resource.data.postId.size() <= 128
+        && request.resource.data.reason is string && request.resource.data.reason.size() <= 300
+        && request.resource.data.status == 'open'
+        && request.resource.data.createdAt == request.time;
+      allow read, update, delete: if cmAdmin();
+    }
+    // Blocks + community prefs (EULA acceptance, notification toggles): private to the owner.
+    match /users/{userId}/blocks/{otherId} {
+      allow read, delete: if isOwner(userId);
+      allow create: if isOwner(userId) && otherId != userId && request.resource.data.keys().hasOnly(['createdAt']) && request.resource.data.createdAt == request.time;
+      allow update: if false;
+    }
+    match /users/{userId}/community/prefs {
+      allow read: if isOwner(userId);
+      allow create, update: if isOwner(userId)
+        && request.resource.data.keys().hasOnly(['eulaVersion', 'eulaAcceptedAt', 'notif', 'updatedAt'])
+        && (!('eulaVersion' in request.resource.data) || request.resource.data.eulaVersion is int)
+        && (!('notif' in request.resource.data) || (request.resource.data.notif is map && request.resource.data.notif.keys().hasOnly(['follow', 'like', 'comment', 'share', 'post'])));
+      allow delete: if isOwner(userId);
+    }
+    // In-app notifications: written by the actor (never as someone else, never to self, never when the recipient blocked them).
+    match /users/{userId}/notifications/{notifId} {
+      allow read, delete: if isOwner(userId);
+      allow update: if isOwner(userId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']) && request.resource.data.read is bool;
+      allow create: if isAuthenticated() && request.auth.uid != userId && !cmBlockedBy(userId)
+        && request.resource.data.keys().hasOnly(['type', 'from', 'fromName', 'postId', 'text', 'read', 'createdAt'])
+        && request.resource.data.type in ['follow', 'like', 'comment', 'share', 'post']
+        && request.resource.data.from == request.auth.uid
+        && request.resource.data.fromName is string && request.resource.data.fromName.size() <= 40
+        && (request.resource.data.postId == null || (request.resource.data.postId is string && request.resource.data.postId.size() <= 128))
+        && request.resource.data.text is string && request.resource.data.text.size() <= 140
+        && request.resource.data.read == false
+        && request.resource.data.createdAt == request.time;
+    }
+
     // Default deny all other collections
     match /{document=**} {
       allow read, write: if false;
