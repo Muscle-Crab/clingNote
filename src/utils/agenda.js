@@ -73,3 +73,8 @@ export const agendaForRange = ({ scheduled = [], dayLists = {}, today, from, to 
   for (const d of Object.keys(out)) out[d].sort(byTime);
   return out;
 };
+
+// Upcoming page: only tasks the user gave a specific date (scheduled / due date) strictly after today.
+// Undated weekday-routine tasks and repeating occurrences are left out; past and today's dates stay empty.
+export const datedFutureOnly = (agenda, today) => Object.fromEntries(Object.entries(agenda || {}).map(([date, items]) =>
+  [date, date > today ? items.filter((it) => (it.kind === 'scheduled' || it.kind === 'due') && !it.recurring) : []]));

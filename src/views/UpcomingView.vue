@@ -84,7 +84,7 @@ import { localDateStr } from '@/utils/streak';
 import { futureOf, groupByDate, formatScheduledDate, isTemplate, describeRecurrence, nextOccurrences, sundayOf, addDaysStr, visibleFrom, removeScheduled, rescheduleEntry, WEEKDAYS, isValidDate } from '@/utils/scheduling';
 import { loadScheduled, mutateScheduled } from '@/composables/useScheduledTasks';
 import { loadDayTasks } from '@/composables/useDayPersistence';
-import { agendaForRange, weekStartOf, dowOf } from '@/utils/agenda';
+import { agendaForRange, datedFutureOnly, weekStartOf, dowOf } from '@/utils/agenda';
 
 const uid = ref(null);
 const list = ref([]);
@@ -101,7 +101,7 @@ const weekEndLabel = formatScheduledDate(weekEnd, today);
 // Native calendar: tasks by date (scheduled, recurring occurrences, this week's lists) for the selected week.
 const weekStart = computed(() => addDaysStr(weekStartOf(today), weekOffset.value * 7));
 const weekEndDate = computed(() => addDaysStr(weekStart.value, 6));
-const agenda = computed(() => agendaForRange({ scheduled: list.value, dayLists: dayLists.value, today, from: weekStart.value, to: weekEndDate.value }));
+const agenda = computed(() => datedFutureOnly(agendaForRange({ scheduled: list.value, dayLists: dayLists.value, today, from: weekStart.value, to: weekEndDate.value }), today)); // dated, future tasks only
 const mdLabel = (s) => new Date(`${s}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 const rangeLabel = computed(() => `${mdLabel(weekStart.value)} – ${mdLabel(weekEndDate.value)}`);
 const weekDays = computed(() => Object.keys(agenda.value).map((date) => ({ date, dow: WEEKDAYS[dowOf(date)], dom: Number(date.slice(8)), items: agenda.value[date] })));
