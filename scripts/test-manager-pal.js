@@ -40,7 +40,7 @@ const J = (r) => JSON.parse(r.body);
   const db = makeDb();
   db.store.set('publicProfiles/zztestU', { name: 'ZZTEST Tacanda' }); db.store.set('publicProfiles/zztestP', { name: 'ZZTEST Pal' });
   db.store.set('weeklyRoutines/zztestU_Monday', { tasks: [{ id: 't1', title: 'ZZTEST late', notes: 'private' }, { id: 't2', title: 'ZZTEST done', completed: true }] });
-  db.store.set('weeklyRoutines/zztestU_Saturday', { tasks: [{ id: 't3', title: 'ZZTEST later' }] });
+  db.store.set('weeklyRoutines/zztestU_Sat', { tasks: [{ id: 't3', title: 'ZZTEST later' }] });
   let token;
   await t('owner creates link; only the sha256 hash is stored', async () => {
     const r = await asUser(db, 'zztestU', { action: 'createManagerLink', name: 'Mom' }); assert.strictEqual(r.statusCode, 200); token = J(r).token;

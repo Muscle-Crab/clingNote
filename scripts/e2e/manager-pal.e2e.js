@@ -19,13 +19,14 @@ async function seedUser(email, name) {
 }
 async function seedTasks(uid, prefix) {
   const today = WEEK[(new Date().getDay() + 6) % 7];
-  for (const d of WEEK) await db.doc(`weeklyRoutines/${uid}_${d}`).set({ tasks: [] });
-  await db.doc(`weeklyRoutines/${uid}_${today}`).set({ tasks: [
+  // Same doc ids as the app saves (src/data.json days[].day = 'Mon'..'Sun'; HomeView `${uid}_${day}`).
+  for (const d of WEEK) await db.doc(`weeklyRoutines/${uid}_${d.slice(0, 3)}`).set({ tasks: [] });
+  await db.doc(`weeklyRoutines/${uid}_${today.slice(0, 3)}`).set({ tasks: [
     { title: `${prefix} public task`, completed: false, visibility: 'public' },
     { title: `${prefix} legacy task (no field)`, completed: false },
     { title: `${prefix} SECRET private task`, completed: false, visibility: 'private' },
   ] });
-  if (today !== 'Monday') await db.doc(`weeklyRoutines/${uid}_Monday`).set({ tasks: [ // past day: overdue
+  if (today !== 'Monday') await db.doc(`weeklyRoutines/${uid}_Mon`).set({ tasks: [ // past day: overdue
     { title: `${prefix} overdue public task`, completed: false, visibility: 'public' },
     { title: `${prefix} SECRET overdue private task`, completed: false, visibility: 'private' },
   ] });
@@ -247,9 +248,9 @@ if (require.main === module) (async () => {
   const [tOwner, tMgr, tPal] = await Promise.all([idTokenFor(ownerUid), idTokenFor(mgrUid), idTokenFor(palUidNow)]);
   await db.doc(`managerConnections/${ownerUid}_${mgrUid}`).set({ ownerUid, managerUid: mgrUid, managerName: 'x' });
   await db.doc(`pals/${[ownerUid, palUidNow].sort().join('_')}`).set({ members: [ownerUid, palUidNow].sort() });
-  ok('rules: owner reads own weeklyRoutines', (await rest(tOwner, 'GET', `weeklyRoutines/${ownerUid}_${today}`)) === 200);
-  ok('rules: connected manager cannot read owner weeklyRoutines', (await rest(tMgr, 'GET', `weeklyRoutines/${ownerUid}_${today}`)) === 403);
-  ok('rules: pal cannot read owner weeklyRoutines', (await rest(tPal, 'GET', `weeklyRoutines/${ownerUid}_${today}`)) === 403);
+  ok('rules: owner reads own weeklyRoutines', (await rest(tOwner, 'GET', `weeklyRoutines/${ownerUid}_${today.slice(0, 3)}`)) === 200);
+  ok('rules: connected manager cannot read owner weeklyRoutines', (await rest(tMgr, 'GET', `weeklyRoutines/${ownerUid}_${today.slice(0, 3)}`)) === 403);
+  ok('rules: pal cannot read owner weeklyRoutines', (await rest(tPal, 'GET', `weeklyRoutines/${ownerUid}_${today.slice(0, 3)}`)) === 403);
   ok('rules: manager reads own managerConnections doc', (await rest(tMgr, 'GET', `managerConnections/${ownerUid}_${mgrUid}`)) === 200);
   ok('rules: client cannot write managerConnections (manager)', (await rest(tMgr, 'PATCH', `managerConnections/${ownerUid}_${mgrUid}`, { fields: { managerName: { stringValue: 'hack' } } })) === 403);
   ok('rules: client cannot write managerConnections (owner)', (await rest(tOwner, 'PATCH', `managerConnections/${ownerUid}_x`, { fields: { ownerUid: { stringValue: ownerUid } } })) === 403);
