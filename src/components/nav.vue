@@ -2,8 +2,9 @@
   <nav class="app-topbar">
     <!-- Header -->
     <div class="app-topbar-inner">
-      <button @click="toggleSidebar" type="button" class="inline-flex items-center p-2 w-10 h-10 justify-center text-sm text-gray-500 rounded-lg hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-600" aria-expanded="false">
+      <button @click="toggleSidebar" type="button" class="relative inline-flex items-center p-2 w-10 h-10 justify-center text-sm text-gray-500 rounded-lg hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-600" aria-expanded="false">
         <span class="sr-only">Open sidebar</span>
+        <span v-if="palBadge.count.value" class="pl-nav-dot" aria-label="New messages"></span>
         <svg class="w-5 h-5" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 17 14">
           <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M1 1h15M1 7h15M1 13h15"/>
         </svg>
@@ -62,6 +63,7 @@
           </li>
           <li class="app-sidebar-item"><i class="fas fa-calendar-alt"></i><router-link to="/upcoming" class="app-sidebar-link">Upcoming</router-link></li>
           <li v-if="!hideUgc" class="app-sidebar-item"><i class="fas fa-trophy"></i><router-link to="/rankings" class="app-sidebar-link">Rankings</router-link></li>
+          <li v-if="userId" class="app-sidebar-item"><i class="fas fa-user-friends"></i><router-link to="/pals" class="app-sidebar-link" data-test="nav-pals">Manager &amp; Pals<span v-if="palBadge.count.value" class="pl-nav-badge">{{ palBadge.count.value }}</span></router-link></li>
           <li class="app-sidebar-item"><i class="fas fa-gavel"></i><router-link to="/discipline" class="app-sidebar-link">Discipline</router-link></li>
 
 
@@ -132,11 +134,14 @@ const isIOS = isNativeIOS(); // iOS app: no admin About page, no Recovery Tracke
 const hideUgc = ugcHidden(); // iOS app: no Rankings/community until report+block tools exist
 import { auth, db } from '@/firebaseConfig';
 import { doc, getDoc } from 'firebase/firestore';
+import { useManagerBadge } from '@/composables/usePals';
 
 const router = useRouter();
 const sidebarOpen = ref(false);
 const userEmail = ref(null);
 const userId = ref(null);
+const palBadge = useManagerBadge();
+watch(userId, (u) => palBadge.watchUid(u));
 const avatarURL = ref(null);
 const displayName = ref('');
 const initials = computed(() => { const src = (displayName.value || userEmail.value || 'U').replace(/@.*/, '').trim(); const parts = src.split(/[\s._-]+/).filter(Boolean); return ((parts[0]?.[0] || 'U') + (parts[1]?.[0] || '')).toUpperCase(); }); // New: Avatar URL from Firestore
@@ -208,6 +213,8 @@ onMounted(() => {
 
 
 <style>
+.pl-nav-badge { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; margin-left: 8px; border-radius: 999px; background: #F87171; color: #fff; font-size: 11px; font-weight: 800; }
+.pl-nav-dot { position: absolute; top: 6px; right: 6px; width: 9px; height: 9px; border-radius: 50%; background: #F87171; box-shadow: 0 0 0 2px #070D1C; }
 /* From 768px up the open sidebar pushes the page instead of covering it; below that it is an overlay. */
 @media (min-width: 768px) {
   body.sidebar-open #app { padding-left: 16rem; }

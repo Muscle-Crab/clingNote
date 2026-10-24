@@ -113,6 +113,21 @@ const routes = [
     component: () => import('../views/landing.vue')
   },
   {
+    // Manager & Pals hub (signed-in). ?code=XXXXXXXX pre-fills a pal invite code.
+    path: '/pals',
+    name: 'pals',
+    component: () => import('../views/PalsView.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    // Login-free manager view: the unguessable token in the URL is the only credential (revocable; see netlify/functions/manager-pal.js).
+    path: '/m/:token',
+    name: 'manager',
+    component: () => import('../views/ManagerView.vue'),
+    meta: { bare: true }
+  },
+  ...(process.env.NODE_ENV === 'development' ? [{ path: '/__mock/pals', component: () => import('../views/PalsMockView.vue'), meta: { bare: false } }] : []),
+  {
     path: '/:pathMatch(.*)*',
     name: 'NotFoundComponent',
     component: () => import('@/views/NotFoundComponent.vue')
