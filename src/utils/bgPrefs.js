@@ -5,6 +5,13 @@ export const TRACKS = [
   { id: 'lofi', label: 'Lo-fi chill', hint: 'Mellow keys, soft beat, vinyl dust' },
   { id: 'lofi-night', label: 'Lo-fi night', hint: 'Slow, drum-free late-night keys' },
   { id: 'ambient', label: 'Ambient drift', hint: 'Warm evolving pads' },
+  { id: 'lofi-rain', label: 'Rainy lo-fi', hint: 'Soft beat under a window of rain' },
+  { id: 'lofi-jazz', label: 'Jazzy lo-fi', hint: 'ii-V-I chords, walking bass, brushed beat' },
+  { id: 'chill-beats', label: 'Chill beats', hint: 'Bouncier tempo, muted keys, deep bass' },
+  { id: 'lofi-piano', label: 'Lo-fi piano', hint: 'Drum-free piano with gentle arpeggios' },
+  { id: 'midnight-drive', label: 'Midnight drive', hint: 'Dark minor synths, low bass, slow pulse' },
+  { id: 'cafe-corner', label: 'Café corner', hint: 'Warm keys, coffee-shop murmur, cup clinks' },
+  { id: 'sunset-tape', label: 'Sunset tape', hint: 'Golden-hour chords with tape wobble' },
   { id: 'fireside', label: 'Fireside crackle', hint: 'Soft crackling fire sounds' },
 ];
 // Home / page-header picture. 'forest' = the original art (default); 'custom' = the user's own photo (stored separately, see CUSTOM_KEY).
@@ -13,7 +20,8 @@ export const IMAGES = [
   { id: 'sunrise', label: 'Sunrise' }, { id: 'mountains', label: 'Mountains' }, { id: 'dark', label: 'Plain dark' },
 ];
 export const IMAGE_IDS = [...IMAGES.map((i) => i.id), 'custom'];
-export const DEFAULTS = Object.freeze({ anim: 'none', track: 'lofi', volume: 0.5, forceMotion: false, musicOn: false, image: 'forest' });
+export const DEFAULTS = Object.freeze({ anim: 'none', track: 'lofi', volume: 0.5, forceMotion: false, musicOn: false, image: 'forest', autoRotate: false, rotateMins: 20 });
+export const ROTATE_MINS = [10, 20, 30];
 const clamp01 = (n) => Math.min(1, Math.max(0, Number.isFinite(n) ? n : DEFAULTS.volume));
 export const sanitize = (p) => {
   const o = p && typeof p === 'object' ? p : {};
@@ -24,6 +32,8 @@ export const sanitize = (p) => {
     forceMotion: o.forceMotion === true, // "play anyway" when the device asks for reduced motion
     musicOn: o.musicOn === true, // music was playing when the user left: resume it on return
     image: IMAGE_IDS.includes(o.image) ? o.image : DEFAULTS.image,
+    autoRotate: o.autoRotate === true, // off by default so existing users keep their chosen track
+    rotateMins: ROTATE_MINS.includes(Number(o.rotateMins)) ? Number(o.rotateMins) : DEFAULTS.rotateMins,
   };
 };
 export const loadPrefs = (storage = typeof localStorage !== 'undefined' ? localStorage : null) => {
@@ -48,3 +58,13 @@ export const effectiveImage = (id, custom) => (id === 'custom' && !isCustomImage
 const step05 = (n) => Math.round(clamp01(n) * 20) / 20;
 export const volumeFromX = (x, rect) => step05(rect && rect.width > 0 ? (x - rect.left) / rect.width : 0);
 export const nudgeVolume = (cur, deltaY) => step05(Number(cur) + (deltaY < 0 ? 0.05 : deltaY > 0 ? -0.05 : 0));
+
+// Auto-rotate (time-based): shuffle-bag picker. Every track plays once per cycle, never the same track twice in a row
+// (also across cycle boundaries). Returns { next, bag } where bag is the remaining queue to pass back next time.
+export const pickNextTrack = (ids, current, bag = [], rnd = Math.random) => {
+  const pool = ids.filter((id) => id !== current);
+  if (!pool.length) return { next: current, bag: [] };
+  let q = (bag || []).filter((id) => ids.includes(id) && id !== current);
+  if (!q.length) { q = [...pool]; for (let i = q.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [q[i], q[j]] = [q[j], q[i]]; } }
+  return { next: q[0], bag: q.slice(1) };
+};

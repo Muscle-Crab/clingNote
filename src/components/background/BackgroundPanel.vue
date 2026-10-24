@@ -33,8 +33,15 @@
           <button type="button" class="bgp-playbtn" data-test="bg-play" :disabled="!bg.audioSupported" @click="bg.toggle()">{{ bg.playing.value ? '⏸ Pause music' : '▶ Play music' }}</button>
           <label class="bgp-vol">🔈<input type="range" min="0" max="1" step="0.05" :value="bg.prefs.volume" aria-label="Volume" data-test="bg-volume" @input="bg.setVolume($event.target.value)" @pointerdown="volDown" @pointermove="volMove" @pointerup="volUp" @pointercancel="volUp" @wheel.prevent="volWheel" /></label>
         </div>
+        <div class="bgp-rot" data-test="bg-rotate">
+          <label class="bgp-rot-row"><span><b>🔀 Auto-rotate</b><small>Switch to a different track every {{ bg.prefs.rotateMins }} min, with a soft crossfade</small></span>
+            <input type="checkbox" role="switch" class="bgp-switch" data-test="bg-rotate-toggle" :checked="bg.prefs.autoRotate" @change="bg.setAutoRotate($event.target.checked)" /></label>
+          <div v-if="bg.prefs.autoRotate" class="bgp-rot-mins" role="radiogroup" aria-label="Rotate every">
+            <button v-for="m in ROTATE_MINS" :key="m" type="button" role="radio" class="bgp-chip bgp-min" :class="{ on: bg.prefs.rotateMins === m }" :aria-checked="bg.prefs.rotateMins === m" :data-test="'bg-rotate-' + m" @click="bg.setRotateMins(m)">{{ m }} min</button>
+          </div>
+        </div>
         <p v-if="bg.audioError.value" class="bgp-note bgp-err" role="alert">{{ bg.audioError.value }}</p>
-        <p class="bgp-note">Music and animation are separate: use either, both, or neither. Saved on this device.</p>
+        <p class="bgp-note">All music is original and generated live on your device. Music and animation are separate: use either, both, or neither. Saved on this device.</p>
         <button type="button" class="bgp-reset" data-test="bg-reset" @click="bg.reset()">Reset to default look</button>
       </section>
     </div>
@@ -44,7 +51,7 @@
 <script setup>
 import { ref, watch, onBeforeUnmount } from 'vue';
 import { useBackground } from '@/composables/useBackground';
-import { ANIMS, TRACKS, IMAGES } from '@/utils/bgPrefs';
+import { ANIMS, TRACKS, IMAGES, ROTATE_MINS } from '@/utils/bgPrefs';
 import { imageCss } from '@/utils/bgImage';
 
 const props = defineProps({ open: { type: Boolean, default: false } });
@@ -104,4 +111,14 @@ const volWheel = (e) => bg.setVolume(nudgeVolume(bg.prefs.volume, e.deltaY || -e
 .bgp-force { display: flex; align-items: center; gap: 8px; min-height: 44px; font-size: .9rem; color: #fff; cursor: pointer; }
 .bgp-err { color: #ff8c8c; }
 .bgp-reset { margin-top: 12px; width: 100%; min-height: 44px; border-radius: 12px; border: 1px solid #2a2f3f; background: transparent; color: inherit; cursor: pointer; }
+.bgp-rot { margin-top: 10px; padding: 8px 12px; border: 1.5px solid #2a2f3f; border-radius: 12px; background: #1a1d29; }
+.bgp-rot-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 44px; cursor: pointer; }
+.bgp-rot-row span { display: flex; flex-direction: column; gap: 2px; }
+.bgp-rot-row small { color: #9aa3b8; }
+.bgp-switch { appearance: none; -webkit-appearance: none; flex: none; width: 46px; height: 28px; border-radius: 14px; background: #2a2f3f; position: relative; cursor: pointer; transition: background .2s; }
+.bgp-switch::after { content: ''; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: #fff; transition: transform .2s; }
+.bgp-switch:checked { background: #4f6ff0; }
+.bgp-switch:checked::after { transform: translateX(18px); }
+.bgp-rot-mins { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 6px; }
+.bgp-min { min-height: 44px; }
 </style>

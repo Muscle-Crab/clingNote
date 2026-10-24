@@ -1,6 +1,6 @@
 // Shared Background state: prefs (saved per device in localStorage) + music playback. Music never starts on its own.
 import { reactive, ref } from 'vue';
-import { loadPrefs, savePrefs, sanitize, DEFAULTS, loadCustomImage, saveCustomImage, clearCustomImage, effectiveImage } from '@/utils/bgPrefs';
+import { loadPrefs, savePrefs, sanitize, DEFAULTS, loadCustomImage, saveCustomImage, clearCustomImage, effectiveImage, TRACKS, pickNextTrack } from '@/utils/bgPrefs';
 import { applyBackgroundImage, fileToBackgroundDataUrl } from '@/utils/bgImage';
 import { createEngine } from '@/composables/useBackgroundAudio';
 
@@ -11,8 +11,21 @@ const playing = ref(false);
 const audioError = ref('');
 let engine = null;
 let resumeArmed = false;
+// Auto-rotate: purely time-based. While playing, every rotateMins minutes crossfade to another track (shuffled, no immediate repeat).
+// Generative tracks never "end", so nothing else triggers a change.
+let rotTimer = 0; let rotBag = [];
+const stopRotate = () => { clearTimeout(rotTimer); rotTimer = 0; };
+const armRotate = () => {
+  stopRotate();
+  if (!prefs.autoRotate || !playing.value || !engine) return;
+  rotTimer = setTimeout(() => {
+    if (!prefs.autoRotate || !playing.value || !engine) return;
+    const r = pickNextTrack(TRACKS.map((t) => t.id), prefs.track, rotBag); rotBag = r.bag;
+    prefs.track = r.next; persist(); engine.crossfadeTo(r.next); armRotate();
+  }, prefs.rotateMins * 60000);
+};
 
-const persist = () => savePrefs({ anim: prefs.anim, track: prefs.track, volume: prefs.volume, forceMotion: prefs.forceMotion, musicOn: prefs.musicOn, image: prefs.image });
+const persist = () => savePrefs({ anim: prefs.anim, track: prefs.track, volume: prefs.volume, forceMotion: prefs.forceMotion, musicOn: prefs.musicOn, image: prefs.image, autoRotate: prefs.autoRotate, rotateMins: prefs.rotateMins });
 const showImage = () => applyBackgroundImage(prefs.image, custom.value);
 
 export const useBackground = () => ({
@@ -25,10 +38,10 @@ export const useBackground = () => ({
       engine = engine || createEngine();
       if (!engine) { audioError.value = "This browser can't play audio."; return; }
       await engine.start(prefs.track, prefs.volume); playing.value = true;
-      prefs.musicOn = true; persist();
+      prefs.musicOn = true; persist(); armRotate();
     } catch (e) { console.error('Background audio failed:', e); audioError.value = 'Could not start audio. Tap play again.'; playing.value = false; }
   },
-  async pause() { playing.value = false; prefs.musicOn = false; persist(); if (engine) await engine.stop(); engine = null; },
+  async pause() { stopRotate(); playing.value = false; prefs.musicOn = false; persist(); if (engine) await engine.stop(); engine = null; },
   // Returning to the app: if music was on when the user left, bring it back. Browsers/iOS may block audio until a tap, so fall back to the next tap.
   resumeIfWanted() {
     if (!prefs.musicOn || playing.value || resumeArmed) return;
@@ -47,7 +60,9 @@ export const useBackground = () => ({
     go();
   },
   async toggle() { if (playing.value) await this.pause(); else await this.play(); },
-  setTrack(id) { Object.assign(prefs, sanitize({ ...prefs, track: id })); persist(); if (engine && playing.value) engine.setTrack(prefs.track); },
+  setTrack(id) { Object.assign(prefs, sanitize({ ...prefs, track: id })); persist(); if (engine && playing.value) { engine.setTrack(prefs.track); armRotate(); } },
+  setAutoRotate(on) { Object.assign(prefs, sanitize({ ...prefs, autoRotate: !!on })); persist(); armRotate(); },
+  setRotateMins(m) { Object.assign(prefs, sanitize({ ...prefs, rotateMins: Number(m) })); persist(); armRotate(); },
   setForceMotion(on) { Object.assign(prefs, sanitize({ ...prefs, forceMotion: !!on })); persist(); },
   setVolume(v) { Object.assign(prefs, sanitize({ ...prefs, volume: Number(v) })); persist(); if (engine) engine.setVolume(prefs.volume); },
   setImage(id) { Object.assign(prefs, sanitize({ ...prefs, image: effectiveImage(id, custom.value) })); imageError.value = ''; persist(); showImage(); },
