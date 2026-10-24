@@ -138,32 +138,10 @@
 
           <p v-if="viewPrefs.filter !== 'all' && isViewingToday && visibleTaskCount === 0" class="filter-empty">No tasks match this filter.</p>
 
-          <draggable
-              handle=".drag-handle"
-              :item-key="taskKey"
-              :prevent-on-filter="false"
-              :force-fallback="true"
-              :fallback-tolerance="3"
-              :touch-start-threshold="3"
-              :scroll-sensitivity="90"
-              :scroll-speed="14"
-              easing="cubic-bezier(.2, .8, .2, 1)"
-              :animation="reducedMotion ? 0 : 220"
-              :disabled="!reorderable"
-              :model-value="displayTasks"
-              @update:model-value="onReorder"
-              tag="div"
-              class="tasks-list space-y-2"
-              ghost-class="task-ghost"
-              chosen-class="task-chosen"
-              drag-class="task-dragging"
-              fallback-class="sortable-fallback-card"
-              @start="onDragStart()"
-              @end="isDraggingTask = false; settleReorder(); playSound('dragEnd'); handleDragEnd()"
-          >
-            <template #item="{ element: task, index }">
+          <div ref="taskListEl" class="tasks-list space-y-2" :class="{ 'reorder-off': !reorderable }" @pointerdown="onListPointerDown">
+            <template v-for="task in displayTasks" :key="taskKey(task)">
               <TaskCard
-                  v-if="!task.completed || !isViewingToday"
+                  v-if="!task.completed || !isViewingToday" :data-reorder-key="taskKey(task)"
                   :task="task" :up-next="isViewingToday && !task.completed && taskKey(task) === upNextKey" :drag-disabled="!reorderable" :index="realIndex(task)" :is-today-tab="isViewingToday" :expanded="expandedKey === taskKey(task)"
                   :active-labels="activeLabels" :now="nowTick" :show-notification="showNotification" :transfer-notification="transferNotification"
                   @toggle-expand="toggleExpanded(task)" @toggle-complete="toggleTaskCompletion(realIndex(task))" @open-detail="openTaskDetailModal(task)"
@@ -173,7 +151,7 @@
                   @wont-do="openWontDoModal(realIndex(task))" @delete="deleteTask(realIndex(task))" @schedule="scheduleExistingTask(realIndex(task), task, $event)" @set-repeat="setTaskRepeat(task, $event)"
               />
             </template>
-          </draggable>
+          </div>
 
           <div v-if="isViewingToday && completedTaskCount > 0" class="done-section">
             <button type="button" class="done-toggle" :aria-expanded="showCompleted ? 'true' : 'false'" @click="showCompleted = !showCompleted">
@@ -215,7 +193,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount, computed, watch, reactive } from 'vue';
+import { ref, onMounted, onBeforeUnmount, computed, watch, reactive, nextTick } from 'vue';
 import { useSounds } from '@/composables/useSounds';
 import { patchStoredTask, loadDayTasks, carryTasksToDay } from '@/composables/useDayPersistence';
 import { activeFromForDay, isHiddenOnDate, seriesDays, withoutSeries } from '@/utils/repeat';
@@ -328,7 +306,7 @@ import { auth } from '@/firebaseConfig'; // Assuming you have Firebase authentic
 import { onAuthStateChanged } from 'firebase/auth';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import data from '@/data.json';
-import draggable from "vuedraggable";
+import { useSmoothReorder } from "@/composables/useSmoothReorder";
 import {db} from '@/firebaseConfig'; // Assuming you have imported the Firebase setup file and exported the db instance
 import { doc, setDoc, serverTimestamp, getDoc, updateDoc, deleteDoc, getFirestore, runTransaction} from 'firebase/firestore';
 const modalOpen = ref(false);
@@ -2892,6 +2870,21 @@ const FULL_DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 
 const isDraggingTask = ref(false);
 const reorderSettling = ref(false); // keeps entrance animations off while the DOM settles after a drop (no replay/flash)
 let settleTimer = null;
+const taskListEl = ref(null);
+const { onPointerDown: onListPointerDown } = useSmoothReorder({
+  listRef: taskListEl,
+  enabled: () => reorderable.value,
+  onStart: () => onDragStart(),
+  onCommit: async (fromKey, toKey) => {
+    const list = [...displayTasks.value];
+    const fi = list.findIndex((t) => taskKey(t) === fromKey), ti = list.findIndex((t) => taskKey(t) === toKey);
+    if (fi < 0 || ti < 0) return;
+    const [moved] = list.splice(fi, 1); list.splice(ti, 0, moved);
+    onReorder(list);
+    await nextTick();
+  },
+  onEnd: (changed) => { isDraggingTask.value = false; settleReorder(); playSound('dragEnd'); if (changed) handleDragEnd(); },
+});
 const settleReorder = () => { reorderSettling.value = true; clearTimeout(settleTimer); settleTimer = setTimeout(() => { reorderSettling.value = false; }, 600); };
 const onDragStart = () => {
   isDraggingTask.value = true; reorderSettling.value = true;
@@ -3307,8 +3300,6 @@ watch([() => eh.phase.value, () => (selectedDayRoutine.value || []).length, () =
 .task-section { }
 
 .tasks-list { display: flex; flex-direction: column; gap: 8px; }
-.task-ghost { opacity: 0.3; background: var(--c-border, #2a2a2e) !important; }
-.task-dragging { transform: rotate(1.5deg); box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
 
 /* ── Task Card ── */
 .task-title {
@@ -3728,12 +3719,20 @@ body.home-v2 .app-topbar { position: absolute; top: 0; left: 0; right: 0; z-inde
   .app-root .task-more.task-more.task-more { width: 32px; }
   .app-root .task-body > .task-upnext, .app-root .task-body > .task-title-row, .app-root .task-body > .task-sub { padding-right: 118px; }
 }
-/* 2) Smooth reorder: the drag clone is the real card, the placeholder keeps its slot (no layout jump), no entrance replay on drop */
-.app-root .tasks-list > .sortable-fallback-card { animation: none !important; margin: 0 !important; z-index: 1000 !important; box-shadow: 0 14px 34px rgba(0,0,0,.55); transform-origin: 50% 50%; will-change: transform; }
-.app-root .tasks-list > .task-ghost { opacity: .35; background: var(--c-border, #2a2a2e) !important; animation: none; }
-.app-root .tasks-list > .task-chosen { cursor: grabbing; }
+/* 2) Smooth reorder (useSmoothReorder): transforms are written inline by JS; CSS only styles lift/settle.
+   No CSS transition targets transform on list items outside JS control, so nothing fights the drag loop. */
+.app-root .tasks-list > * { position: relative; }
 .app-root.reorder-active .tasks-list > * { animation: none !important; }
-.app-root .tasks-list > * { transition: opacity .15s; }
+.app-root .tasks-list.reorder-live { user-select: none; -webkit-user-select: none; }
+.app-root .tasks-list > .reorder-lift { box-shadow: 0 16px 36px rgba(0,0,0,.45), 0 0 0 1px rgba(124,156,255,.35); cursor: grabbing; }
+.app-root .tasks-list > .reorder-settle { animation: reorderSettle .5s cubic-bezier(0.22,1,0.36,1) !important; }
+@keyframes reorderSettle {
+  0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(124,156,255,.55); }
+  35% { transform: scale(1.012); box-shadow: 0 0 0 4px rgba(124,156,255,.28); }
+  65% { transform: scale(.996); }
+  100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(124,156,255,0); }
+}
+@media (prefers-reduced-motion: reduce) { .app-root .tasks-list > .reorder-settle { animation: none !important; } }
 .app-root .drag-handle { touch-action: none; }
 /* 3) Bottom area: stats bar centered in a tidy grid, fab bar aligned to the same 16px gutters, safe-area aware */
 .app-root .stats-bar.stats-bar.stats-bar { flex-wrap: wrap; gap: 8px 0; padding: 10px; }

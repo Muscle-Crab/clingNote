@@ -1,5 +1,6 @@
 <template>
                 <div
+                    ref="cardEl"
                     class="task-card"
                     @mousedown="onCardDown"
                     @click="onCardTap"
@@ -7,7 +8,8 @@
                     'task-card--completed': task.completed && isTodayTab,
                     'task-card--important': task.important,
                     'task-card--menu': moreOpen,
-                    'task-card--next': upNext
+                    'task-card--next': upNext,
+                    'task-card--completing': completing
                   }"
                 >
                   <!-- Left: drag handle, completion circle, category tile -->
@@ -17,8 +19,12 @@
                          :aria-disabled="dragDisabled ? 'true' : 'false'" :aria-label="'Task ' + (index + 1) + ', drag to reorder'">
                       <i class="fas fa-grip-vertical"></i>
                     </div>
-                    <button v-if="isTodayTab" @click="$emit('toggle-complete')" class="task-check" :aria-label="task.completed ? 'Mark not done' : 'Mark done'" :class="{ 'task-check--done': task.completed }">
-                      <i :class="task.completed ? 'fas fa-check-circle' : 'far fa-circle'"></i>
+                    <button v-if="isTodayTab" ref="checkEl" @click="onCheck" class="task-check" :aria-label="task.completed ? 'Mark not done' : 'Mark done'" :class="{ 'task-check--done': task.completed, 'task-check--pop': completing }">
+                      <i v-if="!completing" :class="task.completed ? 'fas fa-check-circle' : 'far fa-circle'"></i>
+                      <svg v-else class="check-draw" viewBox="0 0 24 24" aria-hidden="true">
+                        <circle class="check-draw__disc" cx="12" cy="12" r="10.5" />
+                        <path class="check-draw__tick" d="M7 12.5l3.2 3.2L17 9" />
+                      </svg>
                     </button>
                     <div class="task-cat" :class="'task-cat--' + cat.tone" aria-hidden="true"><i :class="'fas ' + cat.icon"></i></div>
                   </div>
@@ -184,6 +190,7 @@
 </template>
 
 <script setup>
+import { burstFrom, lightHaptic, prefersReducedMotion, COMPLETE_MS } from '@/composables/useTaskMotion';
 import { bossHp } from '@/utils/discipline';
 import { dueBadge, scheduleLabel, scheduledOverdue } from '@/utils/scheduling';
 import { downloadTaskIcs } from '@/utils/ics';
@@ -253,6 +260,18 @@ onBeforeUnmount(() => { document.removeEventListener('pointerdown', onDocDown, t
 const schedDate = ref('');
 const schedTime = ref('');
 const tomorrow = (() => { const d = new Date(); d.setDate(d.getDate() + 1); return d.toLocaleDateString('en-CA'); })();
+const cardEl = ref(null);
+const checkEl = ref(null);
+// Completion: play the pop / tick / burst / sweep first, then tell the parent (which moves or removes the row).
+const completing = ref(false);
+const onCheck = () => {
+  if (completing.value) return;
+  if (props.task.completed || prefersReducedMotion()) { if (!props.task.completed) lightHaptic(); emit('toggle-complete'); return; }
+  completing.value = true;
+  lightHaptic();
+  burstFrom(checkEl.value);
+  setTimeout(() => { emit('toggle-complete'); completing.value = false; }, COMPLETE_MS);
+};
 const fileInput = ref(null); // hidden <input type=file> for this card (was a string ref on HomeView)
 
 // Tap on the card body toggles the inline expansion, unless the tap hit an interactive element.
@@ -427,4 +446,22 @@ const est = computed(() => chipValues(props.task));
 .repeat-days label { display: flex; align-items: center; gap: 2px; }
 .chip--sched { font-size: 11px; white-space: nowrap; }
 .task-repeat-badge { font-size: 11px; opacity: .8; margin-left: 6px; white-space: nowrap; }
+
+/* ── Completion animation (≈560ms, transform/opacity only) ── */
+.task-check { position: relative; }
+.check-draw { width: 1em; height: 1em; overflow: visible; display: block; margin: auto; }
+.check-draw__disc { fill: var(--c-success, #34D399); transform-origin: 12px 12px; animation: checkDisc .42s cubic-bezier(.34,1.56,.64,1) both; }
+.check-draw__tick { fill: none; stroke: #fff; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 16; stroke-dashoffset: 16; animation: checkTick .3s .14s cubic-bezier(.22,1,.36,1) forwards; }
+.task-check--pop { animation: checkPop .45s cubic-bezier(.34,1.56,.64,1); }
+@keyframes checkDisc { 0% { transform: scale(.2); opacity: .4; } 100% { transform: scale(1); opacity: 1; } }
+@keyframes checkTick { to { stroke-dashoffset: 0; } }
+@keyframes checkPop { 0% { transform: scale(1); } 40% { transform: scale(1.22); } 70% { transform: scale(.94); } 100% { transform: scale(1); } }
+.task-card--completing { animation: rowGlow .56s ease-out both; }
+.task-card--completing .task-title { position: relative; }
+.task-card--completing .task-title::after { content: ''; position: absolute; left: 0; right: 0; top: 52%; height: 2px; border-radius: 2px; background: currentColor; opacity: .7; transform: scaleX(0); transform-origin: left center; animation: strikeSweep .32s .16s cubic-bezier(.22,1,.36,1) forwards; }
+.task-card--completing .task-body { animation: rowSettle .56s ease-out both; }
+@keyframes rowGlow { 0% { box-shadow: 0 0 0 0 rgba(52,211,153,0); } 30% { box-shadow: 0 0 0 3px rgba(52,211,153,.35), 0 0 18px rgba(52,211,153,.25); } 100% { box-shadow: 0 0 0 0 rgba(52,211,153,0); } }
+@keyframes strikeSweep { to { transform: scaleX(1); } }
+@keyframes rowSettle { 0%, 45% { opacity: 1; transform: translateX(0); } 100% { opacity: .55; transform: translateX(3px); } }
+@media (prefers-reduced-motion: reduce) { .task-card--completing, .task-card--completing .task-body, .task-check--pop, .check-draw__disc, .check-draw__tick { animation: none !important; } .check-draw__tick { stroke-dashoffset: 0; } }
 </style>
