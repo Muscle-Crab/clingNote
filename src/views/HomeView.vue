@@ -244,6 +244,7 @@ import { useRouter as _useRouter } from 'vue-router';
 import { requirePro, loadUserDoc, rcProActive } from '@/composables/usePro';
 import { isPro as isProUser } from '@/utils/pro';
 import { checkDailyLimit } from '@/utils/taskLimits';
+import { defaultTransferDay, transferFits, MAX_TASKS_PER_DAY } from '@/utils/transfer';
 import { canUse } from '@/utils/pro';
 const _proRouter = _useRouter();
 // Daily task limit (config/pricing.js TASK_LIMITS): safety max 50/day, free and Pro alike
@@ -343,6 +344,8 @@ const selectedTransferDay = ref(null);
 
 const openTransferModal = (index) => {
   selectedTransferTaskIndex.value = index;
+  // preselect a real target (the <select> otherwise looks like it shows Monday while its value is null, so Transfer did nothing)
+  selectedTransferDay.value = defaultTransferDay(selectedDayIndex.value, days.length);
   transferModalOpen.value = true;
 };
 const selectedTimerHours = ref(0);
@@ -673,58 +676,39 @@ const transferTask = async () => {
   if (blockIfLocked(currentDayIndex) || blockIfLocked(targetDayIndex)) { closeTransferModal(); return; }
   const currentDay = days[currentDayIndex].day;
   const targetDay = days[targetDayIndex].day;
-
-  const currentDayDocRef = doc(db, 'weeklyRoutines', `${userId.value}_${currentDay}`);
-  const targetDayDocRef = doc(db, 'weeklyRoutines', `${userId.value}_${targetDay}`);
+  const picked = (selectedDayRoutine.value || [])[selectedTransferTaskIndex.value];
+  if (!picked) { closeTransferModal(); return; }
+  const key = taskKey(picked);
 
   try {
-    const currentDayDocSnapshot = await getDoc(currentDayDocRef);
-    const targetDayDocSnapshot = await getDoc(targetDayDocRef);
+    // daily cap on the target day (same 50/day limit as adding a task)
+    const tSnap = await getDoc(doc(db, 'weeklyRoutines', `${userId.value}_${targetDay}`));
+    const targetLen = tSnap.exists() ? (tSnap.data().tasks || []).length : 0;
+    if (!transferFits(targetLen)) { alert(`${targetDay} already has ${targetLen} tasks (limit ${MAX_TASKS_PER_DAY}).`); return; }
 
-    let currentTasks = currentDayDocSnapshot.exists() ? currentDayDocSnapshot.data().tasks : [];
-    let targetTasks = targetDayDocSnapshot.exists() ? targetDayDocSnapshot.data().tasks : [];
-
-    // Remove the task from the current day and add it to the selected day
-    const [rawTask] = currentTasks.splice(selectedTransferTaskIndex.value, 1);
-    if (!rawTask) return;
+    // remove by identity (not by a list index that may have shifted), then append to the target day; both in transactions
+    let rawTask = null;
+    const currentTasks = await trackWrite(mutateDay(currentDay, (cur) => {
+      const i = cur.findIndex((t) => taskKey(t) === key);
+      rawTask = i === -1 ? null : cur[i];
+      return i === -1 ? cur : [...cur.slice(0, i), ...cur.slice(i + 1)];
+    }));
+    if (!rawTask) { closeTransferModal(); return; }
     const task = strictOn.value ? carryTask(rawTask) : rawTask;
     if (strictOn.value) {
       logStrict('deferred', `${task.title} → ${targetDay}: ${deferReason.value.trim()}`);
       if (task.bossWatching && !rawTask.bossWatching) logStrict('boss-watching', task.title);
       deferReason.value = '';
     }
+    await trackWrite(mutateDay(targetDay, (cur) => [...cur, task]));
 
-    targetTasks.push(task);
-
-    // Update Firestore
-    await updateDoc(currentDayDocRef, {
-      tasks: currentTasks,
-      updatedAt: serverTimestamp()
-    });
-
-    await setDoc(targetDayDocRef, {
-      tasks: targetTasks,
-      updatedAt: serverTimestamp()
-    });
-
-    // Update UI
-    selectedDayRoutine.value = currentTasks;
-    if (selectedDayIndex.value === targetDayIndex) {
-      selectedDayRoutine.value = targetTasks;
-    }
-
-    console.log(`Task "${task.title}" moved to ${targetDay}`);
-
-    // **Show Transfer Notification**
+    if (selectedDayIndex.value === currentDayIndex) selectedDayRoutine.value = currentTasks;
     transferNotification.value = `Task "${task.title}" moved to ${targetDay}`;
-    setTimeout(() => {
-      transferNotification.value = null;
-    }, 3000); // Auto-hide after 3 seconds
-
-    // Close modal
+    setTimeout(() => { transferNotification.value = null; }, 3000);
     closeTransferModal();
   } catch (error) {
     console.error('Error transferring task:', error);
+    if (!lockMessage(error)) alert("Couldn't move the task. Check your connection and try again.");
   }
 };
 const resetTasksToIncomplete = async (dayIndex = selectedDayIndex.value, isCurrent = () => true) => {

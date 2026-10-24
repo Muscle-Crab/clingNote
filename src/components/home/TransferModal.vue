@@ -17,6 +17,7 @@
           <label class="field-label" for="defer-reason">🗣️ Why didn't you do it today?</label>
           <textarea id="defer-reason" v-model="reason" class="field-textarea" placeholder="Required. It goes in your procrastination log."></textarea>
           <p v-if="carryCount >= 1" class="field-hint">This task was already carried once. Defer again and it's marked overdue, and the boss blocks new non-urgent tasks until it's done.</p>
+          <p v-if="!validReason(reason)" class="field-hint">Write a short reason (at least {{ MIN_REASON }} characters) to enable Transfer.</p>
         </div>
       </div>
       <div class="modal-footer">
@@ -28,7 +29,7 @@
 </template>
 
 <script setup>
-import { validReason } from '@/utils/strictBoss';
+import { validReason, MIN_REASON } from '@/utils/strictBoss';
 const targetDay = defineModel('day');
 const reason = defineModel('reason');
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
