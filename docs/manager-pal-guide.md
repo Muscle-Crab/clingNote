@@ -39,3 +39,18 @@ The **Connected managers** card lists everyone who signed in and connected to yo
 2. They send the code to a friend, who enters it under **Have a code?** and taps **Connect**.
 3. Now you're pals. Each of you sees the other's **Public** tasks, and the list refreshes every few seconds. You can chat, and messages arrive instantly. Pals never see Private tasks.
 4. Either of you can tap **Remove pal** at any time. That disconnects you both and deletes your chat.
+
+## Block & Report (App Store guideline 1.2)
+
+Every message you *receive* has a small **Report** link under it: manager nudges/messages in your Manager tab, your pal's messages in pal chat, and (for managers) the person's replies in the manager view.
+
+- **Report** opens a short sheet: pick a reason (Harassment, Inappropriate, Spam, Something else) and tap Report. The report is stored server-side (`reports/{id}`, with a snapshot of the message text, who sent it, and the reason) for review within 24 hours. The confirmation offers an optional "Email support" link to musclecrabs@gmail.com. Reporting the same message twice just updates the reason.
+- **Also block**: tick it on the report sheet to report and block in one step.
+
+**Block**
+- *Pal*: pal screen → **Block**. The pal is removed, the chat is deleted, and neither of you can pair again with a code.
+- *Connected manager*: Manager tab → Connected managers → **Block**. They're disconnected, your current manager link is turned off (they had it), and they can't reconnect with any future link. Make a new link for anyone else.
+- *No-account (link) manager*: they have no account to block, so blocking them turns the link off (same as **Turn off**).
+- *Manager side*: in Manager mode, open the person → **Block {name}** at the bottom. You're disconnected and they can't invite you again.
+
+Blocks live in `blocks/{blocker}_{blocked}` (written only by the server; readable only by the blocker). Connecting by link or code is refused (403) when a block exists in either direction. There's no unblock button yet. Removing a block means deleting that doc by hand (ask support).

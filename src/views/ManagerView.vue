@@ -50,7 +50,7 @@
           <p v-if="!thread.length" class="mp-muted mp-c">Say hi to {{ ownerName }}. They'll get it in the app.</p>
           <div v-for="m in thread" :key="m.id" class="mp-msg" :class="[m.from === 'manager' ? 'me' : 'them', m.kind]">
             <div class="mp-bub">{{ m.text }}</div>
-            <div class="mp-time">{{ m.failed ? 'Not sent' : m.pending ? 'Sending…' : ago(m.at) }}</div>
+            <div class="mp-time">{{ m.failed ? 'Not sent' : m.pending ? 'Sending…' : ago(m.at) }}<button v-if="m.from === 'user' && !m.pending" type="button" class="mp-report" @click="reporting = m" data-test="report-msg">Report</button></div>
           </div>
         </div>
         <div class="mp-quick"><button v-for="q in QUICK_DMS" :key="q" class="mp-chip" @click="sendDm(q)">{{ q }}</button></div>
@@ -60,9 +60,11 @@
         </form>
       </section>
 
+      <p v-if="accountMode" class="mp-foot mp-muted"><button class="mp-link mp-bad" @click="blockOwner" data-test="block-owner">Block {{ ownerName || 'this person' }}</button></p>
       <p v-if="!accountMode" class="mp-foot mp-muted">You're viewing as <b>{{ managerName || 'Manager' }}</b> · <button class="mp-link" @click="askName = true">change name</button></p>
     </template>
 
+    <ReportDialog :open="!!reporting" :message="reporting" :who="ownerName" :can-block="accountMode" :send="sendReport" @close="onReportClose" />
     <div v-if="askName" class="mp-modal" data-test="name-prompt">
       <form class="mp-card" @submit.prevent="saveName">
         <h2>What should we call you?</h2>
@@ -83,6 +85,7 @@ import { auth } from '@/firebaseConfig';
 import { palApi } from '@/composables/usePals';
 import { setMode, setPendingManagerToken } from '@/utils/appMode';
 import { groupTasks, timeAgo, QUICK_DMS } from '@/utils/pals';
+import ReportDialog from '@/components/pals/ReportDialog.vue';
 
 const route = useRoute(); const router = useRouter();
 const token = String(route.params.token || '');
@@ -141,6 +144,18 @@ const sendDm = async (text) => {
   try { await api('POST', { action: 'dm', text }); p.pending = false; pendingMsgs.value = [...pendingMsgs.value]; load(); }
   catch (e) { p.failed = true; pendingMsgs.value = [...pendingMsgs.value]; }
 };
+// Block & Report (App Store 1.2). Link viewers can report; signed-in managers can also block (disconnects, can't reconnect).
+const reporting = ref(null); const blockedNow = ref(false);
+const sendReport = async ({ reason, block }) => {
+  const r = accountMode ? await palApi('report', { scope: 'manager', ownerUid, messageId: reporting.value.id, reason }) : await api('POST', { action: 'report', messageId: reporting.value.id, reason });
+  if (block) { await palApi('block', { ownerUid }); blockedNow.value = true; }
+  return r;
+};
+const onReportClose = () => { reporting.value = null; if (blockedNow.value) router.replace('/manage'); };
+const blockOwner = async () => {
+  if (!confirm(`Block ${ownerName.value || 'this person'}? You'll be disconnected and they can't invite you again.`)) return;
+  try { await palApi('block', { ownerUid }); router.replace('/manage'); } catch (e) { alert(e.message || 'Could not block'); }
+};
 const openChat = () => { tab.value = 'chat'; scrollDown(); };
 const saveName = async () => {
   const n = nameDraft.value.trim(); if (!n) return; askName.value = false; managerName.value = n;
@@ -187,6 +202,8 @@ onBeforeUnmount(() => { clearInterval(timer); clearInterval(tick); });
 .mp-msg.me .mp-bub { background: var(--ac); border-color: var(--ac); color: #fff; }
 .mp-msg.nudge .mp-bub { background: #2B2209; border-color: #5a4512; color: #F5C75F; }
 .mp-time { font-size: 11px; color: var(--t3); margin-top: 2px; }
+.mp-report { background: none; border: 0; color: var(--t3); font-size: 11px; text-decoration: underline; margin-left: 8px; padding: 6px 4px; }
+.mp-bad { color: var(--bad) !important; }
 .mp-quick { display: flex; gap: 6px; overflow-x: auto; padding: 8px 0; } .mp-quick::-webkit-scrollbar { display: none; }
 .mp-compose { display: flex; gap: 8px; }
 .mp-compose input, .mp-modal input { flex: 1; min-height: 46px; border-radius: 12px; border: 1px solid var(--bd); background: rgba(7,13,28,.6); color: var(--t); padding: 0 14px; font-size: 16px; }

@@ -7,7 +7,7 @@
         <button :class="{ on: tab === 'manager' }" @click="$emit('update:tab', 'manager')">Manager<span v-if="unread" class="pl-badge">{{ unread }}</span></button>
         <button :class="{ on: tab === 'pals' }" @click="$emit('update:tab', 'pals')">Pals<span v-if="pals.length" class="pl-small" style="margin-left:6px">{{ pals.length }}</span></button>
       </div>
-      <ManagerPanel v-if="tab === 'manager'" v-bind="manager" @create="(n) => $emit('createLink', n)" @revoke="$emit('revoke')" @share="$emit('share')" @reply="(t) => $emit('reply', t)" @disconnect="(m) => $emit('disconnect', m)" />
+      <ManagerPanel v-if="tab === 'manager'" v-bind="manager" @create="(n) => $emit('createLink', n)" @revoke="$emit('revoke')" @share="$emit('share')" @reply="(t) => $emit('reply', t)" @disconnect="(m) => $emit('disconnect', m)" @block="(m) => $emit('blockManager', m)" />
       <div v-else data-test="pals-panel">
         <button v-for="p in pals" :key="p.uid" class="pl-item" @click="$emit('open', p)" data-test="pal-item">
           <span class="pl-av">{{ (p.name || '?').slice(0, 1).toUpperCase() }}</span>
@@ -35,7 +35,7 @@
 import { ref, watch } from 'vue';
 import ManagerPanel from './ManagerPanel.vue';
 const props = defineProps({ tab: { type: String, default: 'manager' }, manager: { type: Object, default: () => ({}) }, unread: { type: Number, default: 0 }, pals: { type: Array, default: () => [] }, selected: { type: Object, default: null }, palCode: { type: String, default: '' }, codeCopied: Boolean, busy: Boolean, error: { type: String, default: '' }, prefillCode: { type: String, default: '' } });
-defineEmits(['update:tab', 'createLink', 'revoke', 'share', 'reply', 'disconnect', 'open', 'makeCode', 'shareCode', 'accept']);
+defineEmits(['update:tab', 'createLink', 'revoke', 'share', 'reply', 'disconnect', 'blockManager', 'open', 'makeCode', 'shareCode', 'accept']);
 const code = ref(props.prefillCode);
 watch(() => props.prefillCode, (v) => { if (v) code.value = v; });
 </script>

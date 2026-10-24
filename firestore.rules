@@ -266,6 +266,9 @@ service cloud.firestore {
       allow write: if false;
     }
     match /managerLinks/{hash} { allow read, write: if false; }
+    // Block + Report (App Store 1.2): written only by the manager-pal function.
+    match /blocks/{blockId} { allow read: if isAuthenticated() && request.auth.uid == resource.data.blockerUid; allow write: if false; }
+    match /reports/{reportId} { allow read, write: if false; }
     match /palInvites/{code} { allow read, write: if false; }
     // Manager nudges + DMs (both directions). Owner reads and may only flip `read`.
     match /users/{uid}/managerChat/{msgId} {
