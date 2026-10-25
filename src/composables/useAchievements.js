@@ -85,7 +85,7 @@ export async function shareAchievement() {
   ach.busy = true; ach.error = '';
   try {
     const me = { uid: ctx.uid, name: ctx.name, avatar: ctx.avatar };
-    const id = await C.createPost(me, { title: t.text, text: '', images: [], stats: ach.card });
+    const id = await C.createPost(me, { text: t.text, images: [], stats: ach.card });
     limiter.hit('post');
     if (ach.pending.perfectDate) { ctx.autoPostDate = today; const s = { ...lsGet(ctx.uid), autoPostDate: today }; lsSet(ctx.uid, s); try { await C.savePrefs(ctx.uid, { ach: s }); } catch (e) { /* ignore */ } }
     C.notifyFollowers(me, id, t.text).catch(() => {});

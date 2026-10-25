@@ -354,9 +354,8 @@ service cloud.firestore {
       allow create: if isAuthenticated()
         && request.resource.data.keys().hasOnly(['uid', 'name', 'avatar', 'title', 'text', 'images', 'stats', 'likeCount', 'commentCount', 'createdAt'])
         && cmProfileOk(request.resource.data)
-        && request.resource.data.title is string && request.resource.data.title.size() <= 120
-        && request.resource.data.text is string && request.resource.data.text.size() <= 2000
-        && (request.resource.data.title.size() > 0 || request.resource.data.text.size() > 0 || request.resource.data.images.size() > 0 || request.resource.data.stats != null)
+        && (!('title' in request.resource.data) || (request.resource.data.title is string && request.resource.data.title.size() <= 120))
+        && request.resource.data.text is string && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 2000
         && cmImagesOk(request.resource.data.images, 4)
         && cmStatsOk(request.resource.data.stats)
         && request.resource.data.likeCount == 0 && request.resource.data.commentCount == 0

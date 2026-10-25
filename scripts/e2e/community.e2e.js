@@ -70,6 +70,8 @@ async function seedUser(email, name) {
   await p.click('[data-test=cm-post-submit]'); await sleep(2500);
   const mine = await db.collection('communityPosts').where('uid', '==', me).get();
   ok('own post created under rules', mine.size === 1);
+  ok('composer has no title input; post stores no title (caption only)', (await p.locator('[data-test=cm-composer] input[placeholder^=Title]').count()) === 0 && !('title' in mine.docs[0].data()) && /Onwards/.test(mine.docs[0].data().text));
+  ok('legacy titled post still renders its title', (await p.locator('.cm-title', { hasText: 'Day 12' }).count()) > 0);
   ok('follower (Ava) got a post notification', (await db.collection(`users/${ava}/notifications`).where('type', '==', 'post').get()).size === 1);
   ok('Ava got a like notification', (await db.collection(`users/${ava}/notifications`).where('type', '==', 'like').get()).size === 1);
   await p.click('[data-test=cm-bell]'); await sleep(1000); await shot('05-notifications.png');
@@ -120,7 +122,7 @@ async function seedUser(email, name) {
   await q.click('[data-test=ach-share]'); await q.waitForSelector('[data-test=ach-toast]', { timeout: 15000 });
   await q.screenshot({ path: SHOTS + '13-shared-toast.png' });
   const zp = await db.collection('communityPosts').where('uid', '==', zed).get();
-  ok('one-tap post created under rules with streak + badge in the stats card', zp.size === 1 && zp.docs[0].data().stats.streak === 7 && zp.docs[0].data().stats.badges.includes('perfect-1') && /Finished all 6 tasks/.test(zp.docs[0].data().title));
+  ok('one-tap post created under rules with streak + badge in the stats card', zp.size === 1 && zp.docs[0].data().stats.streak === 7 && zp.docs[0].data().stats.badges.includes('perfect-1') && /Finished all 6 tasks/.test(zp.docs[0].data().text) && !('title' in zp.docs[0].data()));
   await q.evaluate(() => window.__cmPerfectDay()); await sleep(3000);
   ok('no second Perfect Day prompt the same day', !(await q.$('[data-test=ach-prompt]')) || !/Finished all/.test(await q.textContent('[data-test=ach-prompt]')));
   if (await q.$('[data-test=ach-prompt]')) await q.click('[data-test=ach-dismiss]');

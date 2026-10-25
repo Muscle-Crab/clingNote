@@ -41,7 +41,6 @@
       <template v-if="tab === 'feed'">
         <section class="cm-card cm-composer" data-test="cm-composer">
           <button class="cm-quick" @click="quickFill" :disabled="busy" data-test="cm-quickfill">📈 Share today's progress</button>
-          <input v-model="draft.title" class="cm-input" :maxlength="LIMITS.title" placeholder="Title (optional)" />
           <textarea v-model="draft.text" class="cm-input" rows="3" :maxlength="LIMITS.text" placeholder="What did you get done today?" data-test="cm-post-text"></textarea>
           <div v-if="draft.stats" class="cm-stats cm-stats--draft"><StatsRow :s="draft.stats" /><button class="cm-x" @click="draft.stats = null" aria-label="Remove stats">✕</button></div>
           <div v-if="draft.previews.length" class="cm-thumbs"><div v-for="(p, i) in draft.previews" :key="p" class="cm-thumb"><img :src="p" alt="" /><button class="cm-x" @click="removeImage(i)" aria-label="Remove image">✕</button></div></div>
@@ -207,7 +206,7 @@ const openComments = ref(''); const comments = ref([]); const commentText = ref(
 const chatLive = ref([]); const chatOlder = ref([]); const chatCursor = ref(null); const chatText = ref(''); const chatBox = ref(null);
 const notifs = ref([]); const showNotifs = ref(false); const showPrefs = ref(false); const notifPrefs = reactive({ ...DEFAULT_NOTIF_PREFS });
 const menuFor = ref(null); const reporting = ref(null); const reportReason = ref(''); const profile = ref(null);
-const draft = reactive({ title: '', text: '', stats: null, files: [], previews: [] });
+const draft = reactive({ text: '', stats: null, files: [], previews: [] });
 const limiter = createRateLimiter(undefined, { load: () => { try { return JSON.parse(localStorage.getItem('cm.rate') || '{}'); } catch (e) { return {}; } }, save: (x) => localStorage.setItem('cm.rate', JSON.stringify(x)) });
 const unsubs = [];
 
@@ -267,24 +266,23 @@ async function focusPost(id) {
 
 // ── composer
 async function attachStats() { try { draft.stats = await C.loadTodayStats(uid.value); } catch (e) { fail(e, 'Could not load today\'s stats.'); } }
-async function quickFill() { await attachStats(); if (draft.stats) { if (!draft.title) draft.title = `Day done: ${draft.stats.tasksDone} tasks ✅`; if (!draft.text) draft.text = progressText(draft.stats); } }
+async function quickFill() { await attachStats(); if (draft.stats) { if (!draft.text) draft.text = progressText(draft.stats); } }
 function pickPostImages(e) {
   const files = [...(e.target.files || [])].filter((f) => /^image\//.test(f.type)); e.target.value = '';
   for (const f of files.slice(0, LIMITS.images - draft.files.length)) { draft.files.push(f); draft.previews.push(URL.createObjectURL(f)); }
 }
 function removeImage(i) { URL.revokeObjectURL(draft.previews[i]); draft.files.splice(i, 1); draft.previews.splice(i, 1); }
 async function submitPost() {
-  const t = validateText(draft.title, LIMITS.title, { allowEmpty: true }); if (!t.ok) return (error.value = t.error);
-  const x = validateText(draft.text, LIMITS.text, { allowEmpty: !!(draft.title.trim() || draft.files.length || draft.stats) }); if (!x.ok) return (error.value = x.error);
+  const x = validateText(draft.text, LIMITS.text, { allowEmpty: false }); if (!x.ok) return (error.value = x.error);
   if (!gate('post')) return;
   busy.value = true; error.value = '';
   try {
     const images = []; for (const f of draft.files) images.push(await C.uploadImage(uid.value, f));
-    const id = await C.createPost(me, { title: t.text, text: x.text, images, stats: draft.stats });
+    const id = await C.createPost(me, { text: x.text, images, stats: draft.stats });
     limiter.hit('post');
-    draft.files.forEach((_, i) => URL.revokeObjectURL(draft.previews[i])); Object.assign(draft, { title: '', text: '', stats: null, files: [], previews: [] });
+    draft.files.forEach((_, i) => URL.revokeObjectURL(draft.previews[i])); Object.assign(draft, { text: '', stats: null, files: [], previews: [] });
     flash('Posted 🎉');
-    C.notifyFollowers(me, id, t.text || x.text).catch(() => {});
+    C.notifyFollowers(me, id, x.text).catch(() => {});
   } catch (e) { fail(e, 'Could not post. Please try again.'); } finally { busy.value = false; }
 }
 

@@ -20,8 +20,8 @@ export const savePrefs = (uid, patch) => setDoc(prefsRef(uid), { ...patch, updat
 export const watchFeed = (cb, n = PAGE) => onSnapshot(query(postsCol(), orderBy('createdAt', 'desc'), limit(n)), (s) => cb(s.docs.map((d) => ({ id: d.id, ...d.data() })), s.docs[s.docs.length - 1] || null), (e) => cb(null, null, e));
 export const morePosts = async (cursor, n = PAGE) => { const s = await getDocs(query(postsCol(), orderBy('createdAt', 'desc'), startAfter(cursor), limit(n))); return { items: s.docs.map((d) => ({ id: d.id, ...d.data() })), cursor: s.docs[s.docs.length - 1] || null }; };
 export const getPost = async (id) => { const s = await getDoc(doc(db, 'communityPosts', id)); return s.exists() ? { id, ...s.data() } : null; };
-export const createPost = async (me, { title, text, images, stats }) => {
-  const r = await addDoc(postsCol(), { uid: me.uid, name: me.name, avatar: me.avatar || '', title: title || '', text: text || '', images: images || [], stats: stats || null, likeCount: 0, commentCount: 0, createdAt: serverTimestamp() });
+export const createPost = async (me, { text, images, stats }) => {
+  const r = await addDoc(postsCol(), { uid: me.uid, name: me.name, avatar: me.avatar || '', text: text || '', images: images || [], stats: stats || null, likeCount: 0, commentCount: 0, createdAt: serverTimestamp() });
   return r.id;
 };
 export const deletePost = (id) => deleteDoc(doc(db, 'communityPosts', id));
