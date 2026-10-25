@@ -65,6 +65,10 @@ export const sortFeed = (posts, mode = 'new', now = Date.now()) => {
     const d = new Date(now); const start = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
     return list.filter((p) => tsMs(p.createdAt) >= start || !p.createdAt).sort((a, b) => (b.likeCount || 0) - (a.likeCount || 0) || tsMs(b.createdAt) - tsMs(a.createdAt));
   }
+  if (mode === 'foryou') { // engagement with time decay (Hacker-News style); brand-new posts still surface
+    const score = (p) => ((p.likeCount || 0) + 2 * (p.commentCount || 0) + 1) / Math.pow((Math.max(0, now - (tsMs(p.createdAt) || now)) / 36e5) + 2, 1.5);
+    return list.sort((a, b) => score(b) - score(a) || tsMs(b.createdAt) - tsMs(a.createdAt));
+  }
   return list.sort((a, b) => tsMs(b.createdAt) - tsMs(a.createdAt));
 };
 export const filterFollowing = (posts, following, me) => { const f = following instanceof Set ? following : new Set(following || []); return (posts || []).filter((p) => f.has(p.uid) || p.uid === me); };

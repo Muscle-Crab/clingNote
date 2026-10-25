@@ -61,13 +61,22 @@ async function seedUser(email, name) {
   ok('eula accepted -> prefs saved under rules', (await db.doc(`users/${me}/community/prefs`).get()).exists);
   ok('feed shows 3 seeded posts', (await p.$$('[data-test=cm-post]')).length === 3);
   await shot('overview.png'); await shot('02-feed.png');
-  await p.locator('[data-test=cm-like]').first().click(); await sleep(1500);
+  await p.locator('#post-pAva [data-test=cm-like]').click(); await sleep(1500);
   ok('heart like transaction allowed (likeCount 6)', (await db.doc('communityPosts/pAva').get()).data().likeCount === 6);
   ok('like doc written', (await db.doc(`communityPosts/pAva/likes/${me}`).get()).exists);
   await shot('03-liked.png');
-  await p.click('[data-test=cm-quickfill]'); await sleep(800);
+  ok('no always-visible composer on the feed', (await p.locator('[data-test=cm-composer]').count()) === 0 && (await p.locator('[data-test=cm-compose-open]').count()) === 1);
+  await p.click('[data-test=cm-compose-open]'); await p.waitForSelector('[data-test=cm-composer]');
+  ok('sheet: caption font >= 16px, 0/500 counter', parseFloat(await p.$eval('[data-test=cm-post-text]', (e) => getComputedStyle(e).fontSize)) >= 16 && /^0\/500$/.test((await p.textContent('[data-test=cm-post-count]')).trim()));
+  await p.click('[data-test=cm-compose-close]'); await sleep(400);
+  const closedX = (await p.locator('[data-test=cm-composer]').count()) === 0;
+  await p.click('[data-test=cm-compose-open]'); await p.waitForSelector('[data-test=cm-composer]'); await p.mouse.click(200, 40); await sleep(400);
+  ok('sheet closes via x and via backdrop', closedX && (await p.locator('[data-test=cm-composer]').count()) === 0);
+  await p.click('[data-test=cm-compose-open]'); await p.waitForSelector('[data-test=cm-composer]');
+  await p.click('[data-test=cm-stats-btn]'); await sleep(800);
   await p.fill('[data-test=cm-post-text]', 'Quiet but productive day. Onwards! ✨'); await shot('04-composer.png');
   await p.click('[data-test=cm-post-submit]'); await sleep(2500);
+  ok('sheet closes after posting and post is first in feed', (await p.locator('[data-test=cm-composer]').count()) === 0 && /Onwards/.test(await p.locator('[data-test=cm-post]').first().textContent()));
   const mine = await db.collection('communityPosts').where('uid', '==', me).get();
   ok('own post created under rules', mine.size === 1);
   ok('composer has no title input; post stores no title (caption only)', (await p.locator('[data-test=cm-composer] input[placeholder^=Title]').count()) === 0 && !('title' in mine.docs[0].data()) && /Onwards/.test(mine.docs[0].data().text));
@@ -75,6 +84,7 @@ async function seedUser(email, name) {
   // Storage is unavailable (Spark plan, bucket locked): a photo upload failure must not post, must keep the caption, and must show a friendly message.
   await p.route('**/firebasestorage.googleapis.com/**', (r) => r.abort()); await p.route('**/v0/b/**', (r) => r.abort());
   const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+  await p.click('[data-test=cm-compose-open]'); await p.waitForSelector('[data-test=cm-composer]');
   await p.setInputFiles('[data-test=cm-composer] input[type=file]', { name: 'zz.png', mimeType: 'image/png', buffer: png });
   await sleep(21000); // post rate-limit min gap
   await p.fill('[data-test=cm-post-text]', 'ZZTEST photo post'); await p.click('[data-test=cm-post-submit]');
@@ -82,7 +92,7 @@ async function seedUser(email, name) {
   const errTxt = (await p.locator('.cm-error').count()) ? await p.textContent('.cm-error') : '';
   console.log('PHOTOFAIL', JSON.stringify(errTxt), await p.inputValue('[data-test=cm-post-text]'));
   ok('photo upload failure: friendly message, caption kept, nothing posted', /Photo upload isn.t available/.test(errTxt) && (await p.inputValue('[data-test=cm-post-text]')) === 'ZZTEST photo post' && (await db.collection('communityPosts').where('uid', '==', me).get()).size === 1);
-  await p.click('.cm-thumb .cm-x'); await p.fill('[data-test=cm-post-text]', '');
+  await p.click('.cm-thumb .cm-x'); await p.fill('[data-test=cm-post-text]', ''); await p.click('[data-test=cm-compose-close]'); await sleep(400);
   const own = p.locator('[data-test=cm-post]', { hasText: 'Onwards' }).first();
   ok('caption-only post visible in feed', (await own.count()) === 1);
   await own.locator('.cm-more').first().click(); await p.click('button.danger:has-text("Delete")'); await sleep(2000);
@@ -144,7 +154,7 @@ async function seedUser(email, name) {
   await q.click('[data-test=ach-toast] button').catch(async () => { await q.goto(B + '/community?post=' + zp.docs[0].id); });
   await q.waitForURL((u) => u.pathname.startsWith('/community'), { timeout: 10000 }); await sleep(2500);
   await q.screenshot({ path: SHOTS + '14-post-with-badges.png' });
-  await q.locator('[data-test=cm-post]').first().locator('.cm-author').click(); await sleep(1500);
+  await q.locator('#post-' + zp.docs[0].id + ' .cm-author').click(); await sleep(1500);
   ok('profile sheet shows streak + badge grid', /7/.test(await q.textContent('[data-test=cm-profile-streak]')) && (await q.$$('[data-test=cm-badges] .cm-badge:not(.off)')).length >= 3);
   await q.screenshot({ path: SHOTS + '15-profile-badges.png' });
   console.log('done'); await br.close(); process.exit(0);

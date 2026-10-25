@@ -16,15 +16,18 @@
     </section>
 
     <template v-else-if="ready">
+      <div class="cm-hero">
+        <div><h1 class="cm-h1">Community</h1><p class="cm-sub">Small wins. Shared together.</p></div>
+        <button class="cm-bell" @click="showNotifs = !showNotifs" aria-label="Notifications" data-test="cm-bell"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 8 3 8H3s3-1 3-8"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg><span v-if="unread" class="cm-badge">{{ unread > 99 ? '99+' : unread }}</span></button>
+      </div>
       <header class="cm-head">
         <div class="cm-tabs" role="tablist">
           <button role="tab" :class="{ on: tab === 'feed' }" @click="tab = 'feed'" data-test="cm-tab-feed">Feed</button>
           <button role="tab" :class="{ on: tab === 'chat' }" @click="openChat" data-test="cm-tab-chat">Chat</button>
         </div>
-        <button class="cm-bell" @click="showNotifs = !showNotifs" aria-label="Notifications" data-test="cm-bell">🔔<span v-if="unread" class="cm-badge">{{ unread > 99 ? '99+' : unread }}</span></button>
         <button v-if="isAdmin" class="cm-chip" @click="adminMode = !adminMode" data-test="cm-admin">{{ adminMode ? 'Admin: on' : 'Admin' }}</button>
       </header>
-      <p v-if="error" class="cm-error" role="alert">{{ error }}</p>
+      <p v-if="error && !composeOpen" class="cm-error" role="alert">{{ error }}</p>
       <p v-if="toast" class="cm-toast" role="status">{{ toast }}</p>
 
       <!-- Notifications inbox -->
@@ -39,23 +42,40 @@
 
       <!-- ── FEED ── -->
       <template v-if="tab === 'feed'">
-        <section class="cm-card cm-composer" data-test="cm-composer">
-          <button class="cm-quick" @click="quickFill" :disabled="busy" data-test="cm-quickfill">📈 Share today's progress</button>
-          <textarea v-model="draft.text" class="cm-input" rows="3" :maxlength="LIMITS.text" placeholder="What did you get done today?" data-test="cm-post-text"></textarea>
-          <div v-if="draft.stats" class="cm-stats cm-stats--draft"><StatsRow :s="draft.stats" /><button class="cm-x" @click="draft.stats = null" aria-label="Remove stats">✕</button></div>
-          <div v-if="draft.previews.length" class="cm-thumbs"><div v-for="(p, i) in draft.previews" :key="p" class="cm-thumb"><img :src="p" alt="" /><button class="cm-x" @click="removeImage(i)" aria-label="Remove image">✕</button></div></div>
-          <div class="cm-row">
-            <label class="cm-chip" :class="{ off: draft.files.length >= LIMITS.images }">📷 Photo<input type="file" accept="image/*" multiple hidden @change="pickPostImages" :disabled="draft.files.length >= LIMITS.images" /></label>
-            <button class="cm-chip" v-if="!draft.stats" @click="attachStats">📊 Stats card</button>
-            <span class="cm-sp"></span>
-            <button class="cm-btn" :disabled="busy" @click="submitPost" data-test="cm-post-submit">{{ busy ? 'Posting…' : 'Post' }}</button>
-          </div>
-        </section>
+        <button class="cm-share" @click="openCompose" data-test="cm-compose-open">
+          <span class="cm-share-plus" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+          <span class="cm-share-t">Share your progress</span>
+          <svg class="cm-share-chev" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+        </button>
+        <Teleport to="body">
+          <Transition name="cm-qp">
+            <div v-if="composeOpen" class="cm-qp-bg" @click.self="closeCompose" data-test="cm-compose-backdrop">
+              <section class="cm-qp" role="dialog" aria-modal="true" aria-labelledby="cm-qp-title" data-test="cm-composer">
+                <div class="cm-qp-handle" aria-hidden="true"></div>
+                <div class="cm-qp-head"><h2 id="cm-qp-title">Share your progress</h2><button class="cm-qp-x" @click="closeCompose" aria-label="Close" data-test="cm-compose-close"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
+                <div class="cm-qp-me"><Avatar :name="me.name" :src="me.avatar" /><div><strong>You</strong><span class="cm-qp-to"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><path d="M3 19c.6-3.2 3-5 6-5s5.4 1.8 6 5M16 5.5a3 3 0 0 1 0 5.6M18 14.3c1.7.6 2.7 2.2 3 4.7"/></svg>Posting to Community</span></div></div>
+                <div class="cm-qp-field">
+                  <textarea v-model="draft.text" class="cm-qp-input" rows="4" :maxlength="CAPTION_MAX" placeholder="What did you get done today?" data-test="cm-post-text"></textarea>
+                  <span class="cm-qp-count" data-test="cm-post-count">{{ draft.text.length }}/{{ CAPTION_MAX }}</span>
+                </div>
+                <div v-if="draft.stats" class="cm-stats cm-stats--draft"><StatsRow :s="draft.stats" /><button class="cm-x" @click="draft.stats = null" aria-label="Remove stats">✕</button></div>
+                <div v-if="draft.previews.length" class="cm-thumbs"><div v-for="(p, i) in draft.previews" :key="p" class="cm-thumb"><img :src="p" alt="" /><button class="cm-x" @click="removeImage(i)" aria-label="Remove image">✕</button></div></div>
+                <p v-if="error" class="cm-error" role="alert">{{ error }}</p>
+                <p class="cm-qp-lbl">Add to your post</p>
+                <div class="cm-qp-add">
+                  <label class="cm-qp-opt" :class="{ off: draft.files.length >= LIMITS.images }"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-2.5h6L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Photo<input type="file" accept="image/*" multiple hidden @change="pickPostImages" :disabled="draft.files.length >= LIMITS.images" /></label>
+                  <button type="button" class="cm-qp-opt" :class="{ on: draft.stats }" :disabled="busy" @click="draft.stats ? (draft.stats = null) : attachStats()" data-test="cm-stats-btn"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><rect x="4" y="11" width="3.2" height="9" rx="1"/><rect x="10.4" y="5" width="3.2" height="15" rx="1"/><rect x="16.8" y="8" width="3.2" height="12" rx="1"/></svg>Stats card</button>
+                </div>
+                <button class="cm-qp-post" :disabled="busy || !draft.text.trim()" @click="submitPost" data-test="cm-post-submit">{{ busy ? 'Posting…' : 'Post to community' }}</button>
+              </section>
+            </div>
+          </Transition>
+        </Teleport>
 
         <div class="cm-filters">
-          <button :class="{ on: sort === 'new' }" @click="sort = 'new'">Newest</button>
-          <button :class="{ on: sort === 'liked' }" @click="sort = 'liked'">Most liked today</button>
-          <button :class="{ on: onlyFollowing }" @click="onlyFollowing = !onlyFollowing" data-test="cm-following">Following</button>
+          <button :class="{ on: sort === 'foryou' && !onlyFollowing }" @click="sort = 'foryou'; onlyFollowing = false" data-test="cm-foryou">For you</button>
+          <button v-if="following.size || onlyFollowing" :class="{ on: onlyFollowing }" @click="onlyFollowing = !onlyFollowing" data-test="cm-following">Following</button>
+          <button :class="{ on: sort === 'new' && !onlyFollowing }" @click="sort = 'new'; onlyFollowing = false" data-test="cm-newest">Newest</button>
         </div>
 
         <p v-if="!feed.length && feedLoaded" class="cm-muted cm-empty">{{ onlyFollowing ? 'No posts from people you follow yet.' : 'No posts yet. Be the first to share your progress!' }}</p>
@@ -71,10 +91,10 @@
           <div v-if="p.stats" class="cm-stats"><StatsRow :s="p.stats" /></div>
           <div v-if="p.images && p.images.length" class="cm-gallery" :class="'n' + p.images.length"><img v-for="u in p.images" :key="u" :src="u" alt="Post image" loading="lazy" /></div>
           <div class="cm-actions">
-            <button class="cm-heart" :class="{ on: liked[p.id], pop: popping === p.id }" @click="like(p)" :aria-pressed="liked[p.id] ? 'true' : 'false'" aria-label="Like" data-test="cm-like"><span class="h">{{ liked[p.id] ? '❤️' : '🤍' }}</span> {{ p.likeCount || 0 }}</button>
-            <button @click="toggleComments(p)">💬 {{ p.commentCount || 0 }}</button>
-            <button @click="share(p)">↗ Share</button>
-            <button @click="copyLink(p)">🔗 Copy link</button>
+            <button class="cm-heart" :class="{ on: liked[p.id], pop: popping === p.id }" @click="like(p)" :aria-pressed="liked[p.id] ? 'true' : 'false'" aria-label="Like" data-test="cm-like"><svg class="h" viewBox="0 0 24 24" width="17" height="17" :fill="liked[p.id] ? '#F0506E' : 'none'" :stroke="liked[p.id] ? '#F0506E' : 'currentColor'" stroke-width="1.9" aria-hidden="true"><path d="M12 20.3s-7.8-4.6-7.8-10.3A4.4 4.4 0 0 1 12 7.4 4.4 4.4 0 0 1 19.8 10c0 5.7-7.8 10.3-7.8 10.3Z"/></svg> {{ p.likeCount || 0 }}</button>
+            <button @click="toggleComments(p)" aria-label="Comments"><svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor" aria-hidden="true"><path d="M12 3.5c-4.9 0-8.8 3.4-8.8 7.6 0 2.2 1.1 4.2 2.9 5.6l-.7 3.4 3.7-1.9c.9.3 1.9.4 2.9.4 4.9 0 8.8-3.4 8.8-7.5S16.9 3.5 12 3.5Z"/></svg> {{ p.commentCount || 0 }}</button>
+            <button @click="share(p)"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 5h5v5M19 5l-8 8M18 14v4a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h4"/></svg> Share</button>
+            <button @click="copyLink(p)"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1"/></svg> Copy link</button>
           </div>
           <div v-if="openComments === p.id" class="cm-comments">
             <div v-for="c in shownComments" :key="c.id" class="cm-comment">
@@ -171,10 +191,12 @@ const SR_B = 'display:block;font-size:1.05rem;line-height:1.25;font-weight:700';
 const SR_S = 'display:block;font-size:.7rem;opacity:.85;line-height:1.2';
 const stat = (v, l) => h('div', [h('b', { style: SR_B }, v), h('small', { style: SR_S }, l)]);
 const statBadges = (s) => topBadges(s.badges, 3).map(badgeInfo);
-const StatsRow = (props) => h('div', [h('div', { class: 'cm-statsrow', style: SR_ROW }, [
-  stat(props.s.tasksDone, 'tasks done'), stat(props.s.points, 'points'),
-  stat(`${props.s.streak}🔥`, 'day streak'), stat(`${props.s.icon || ''} ${props.s.milestone}`, 'milestone'),
-]), statBadges(props.s).length ? h('div', { style: 'margin-top:8px;display:flex;flex-wrap:wrap;gap:6px;justify-content:center' }, statBadges(props.s).map((b) => h('span', { style: 'background:rgba(255,255,255,.2);border-radius:999px;padding:2px 9px;font-size:.75rem;font-weight:600' }, `${b.icon} ${b.name}`))) : null]);
+const StatsRow = (props) => { const s = props.s; const wk = Math.min(7, s.streak || 0); const badges = statBadges(s);
+  return h('div', { class: 'cm-pc' }, [
+    h('div', { class: 'cm-pc-row' }, [h('span', { class: 'cm-pc-ic ok' }, '✓'), h('div', { class: 'cm-pc-mid' }, [h('div', { class: 'cm-pc-top' }, [h('strong', 'Daily progress'), h('span', { class: 'cm-pc-n' }, `${s.tasksDone} task${s.tasksDone === 1 ? '' : 's'} done`)]), h('div', { class: 'cm-pc-bar' }, [h('i', { style: `width:${s.tasksDone ? 100 : 4}%` })])]), h('span', { class: 'cm-pc-pts' }, `${s.points} pts`)]),
+    h('div', { class: 'cm-pc-row' }, [h('span', { class: 'cm-pc-ic fire' }, '🔥'), h('div', { class: 'cm-pc-mid' }, [h('strong', `${s.streak} day streak`), h('small', `${s.icon || ''} ${s.milestone} · Keep going!`)]), h('div', { class: 'cm-pc-days' }, Array.from({ length: 7 }, (_, i) => h('span', { class: i < wk ? 'on' : '' }, i < wk ? '✓' : '')))]),
+    badges.length ? h('div', { class: 'cm-pc-badges' }, badges.map((x) => h('span', `${x.icon} ${x.name}`))) : null,
+  ]); };
 StatsRow.props = ['s'];
 // Streak flame + top badges next to a name (from communityProfiles/{uid}).
 const AuthorFlair = (props) => { const p = props.p; if (!p) return null; const b = topBadges(p.badges, 3).map(badgeInfo);
@@ -201,7 +223,9 @@ const busy = ref(false); const error = ref(''); const toast = ref('');
 const blocked = ref(new Set()); const following = ref(new Set());
 const hidden = ref(new Set(JSON.parse(localStorage.getItem('cm.hidden') || '[]')));
 const posts = ref([]); const morePostsList = ref([]); const feedCursor = ref(null); const feedLoaded = ref(false);
-const sort = ref('new'); const onlyFollowing = ref(false); const liked = reactive({}); const popping = ref(''); const highlight = ref(route.query.post || '');
+const sort = ref('foryou'); const composeOpen = ref(false); const CAPTION_MAX = 500;
+const openCompose = () => { error.value = ''; composeOpen.value = true; };
+const closeCompose = () => { if (!busy.value) composeOpen.value = false; }; const onlyFollowing = ref(false); const liked = reactive({}); const popping = ref(''); const highlight = ref(route.query.post || '');
 const openComments = ref(''); const comments = ref([]); const commentText = ref('');
 const chatLive = ref([]); const chatOlder = ref([]); const chatCursor = ref(null); const chatText = ref(''); const chatBox = ref(null);
 const notifs = ref([]); const showNotifs = ref(false); const showPrefs = ref(false); const notifPrefs = reactive({ ...DEFAULT_NOTIF_PREFS });
@@ -274,7 +298,7 @@ function pickPostImages(e) {
 function removeImage(i) { URL.revokeObjectURL(draft.previews[i]); draft.files.splice(i, 1); draft.previews.splice(i, 1); }
 const withTimeout = (pr, ms) => Promise.race([pr, new Promise((_, rej) => setTimeout(() => rej(new Error('upload timeout')), ms))]);
 async function submitPost() {
-  const x = validateText(draft.text, LIMITS.text, { allowEmpty: false }); if (!x.ok) return (error.value = x.error);
+  const x = validateText(draft.text, CAPTION_MAX, { allowEmpty: false }); if (!x.ok) return (error.value = x.error);
   if (!gate('post')) return;
   busy.value = true; error.value = '';
   try {
@@ -284,6 +308,7 @@ async function submitPost() {
     const id = await C.createPost(me, { text: x.text, images, stats: draft.stats });
     limiter.hit('post');
     draft.files.forEach((_, i) => URL.revokeObjectURL(draft.previews[i])); Object.assign(draft, { text: '', stats: null, files: [], previews: [] });
+    composeOpen.value = false; sort.value = 'new'; onlyFollowing.value = false; window.scrollTo({ top: 0, behavior: 'smooth' });
     flash('Posted 🎉');
     C.notifyFollowers(me, id, x.text).catch(() => {});
   } catch (e) { fail(e, 'Could not post. Please try again.'); } finally { busy.value = false; }
@@ -488,4 +513,76 @@ watch(() => route.query.post, (id) => { if (id && started) { tab.value = 'feed';
 .cm-post .cm-stats { margin-top: 6px; padding: 5px 8px; }
 .cm-post .cm-actions { margin-top: 4px; padding-top: 0; }
 .cm-post .cm-actions button { min-height: 44px; padding: 0; }
+
+/* ── Mockup restyle (navy) ── */
+.cm-page { --cm-blue: #2F6BFF; --cm-card: #0E1A36; --cm-line: #1B2A4C; --cm-dim: #8A9BC0; padding-top: 18px; }
+.cm-hero { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.cm-h1 { font-size: 28px; font-weight: 800; letter-spacing: -.02em; line-height: 1.15; margin: 0; color: #F3F6FF; }
+.cm-sub { margin: 4px 0 0; color: var(--cm-dim); font-size: 15px; }
+.cm-bell { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 999px; background: var(--cm-card); border: 1px solid var(--cm-line); color: #DCE4F7; padding: 0; }
+.cm-tabs { background: #0A1430; border: 1px solid var(--cm-line); padding: 4px; }
+.cm-tabs button { padding: 9px 0; font-size: 15px; color: var(--cm-dim); }
+.cm-tabs button.on { background: var(--cm-blue); color: #fff; box-shadow: 0 4px 14px rgba(47,107,255,.35); }
+.cm-share { width: 100%; display: flex; align-items: center; gap: 12px; margin-top: 14px; padding: 14px 16px; border-radius: 16px; background: linear-gradient(180deg, #3874FF, #2A62F0); color: #fff; font-weight: 700; font-size: 16px; box-shadow: 0 8px 22px rgba(47,107,255,.35); }
+.cm-share-plus { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 999px; background: rgba(255,255,255,.22); }
+.cm-share-t { flex: 1; text-align: left; }
+.cm-share-chev { opacity: .9; }
+.cm-filters { gap: 8px; margin-top: 16px; }
+.cm-filters button { padding: 8px 16px; font-size: 14px; font-weight: 600; color: #C9D3EA; background: var(--cm-card); border-color: var(--cm-line); }
+.cm-filters button.on { background: rgba(47,107,255,.16); color: #7FA6FF; border-color: rgba(47,107,255,.55); }
+.cm-post { background: var(--cm-card); border: 1px solid var(--cm-line); border-radius: 18px; padding: 16px; box-shadow: 0 6px 18px rgba(0,0,0,.25); margin-top: 14px; }
+.cm-post .cm-author strong { font-size: 15px; color: #F0F4FF; }
+.cm-post .cm-muted { color: var(--cm-dim); }
+.cm-text { font-size: 15px; line-height: 1.45; color: #DDE5F7; margin-top: 10px; }
+.cm-follow { border-color: var(--cm-line); color: #9DB8FF; }
+.cm-more { color: var(--cm-dim); font-size: 1.3rem; }
+.cm-stats { background: transparent; padding: 0; color: inherit; }
+.cm-actions { border-top: 1px solid var(--cm-line); margin-top: 14px; padding-top: 10px; }
+.cm-actions button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; font-size: 14px; color: #AFBCD8; padding: 8px 0; }
+.cm-heart.on { color: #F0506E; }
+:deep(.cm-pc) { display: flex; flex-direction: column; gap: 8px; }
+:deep(.cm-pc-row) { display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 14px; background: #0A1430; border: 1px solid var(--cm-line); }
+:deep(.cm-pc-ic) { flex: 0 0 34px; height: 34px; display: grid; place-items: center; border-radius: 999px; font-weight: 800; }
+:deep(.cm-pc-ic.ok) { background: rgba(47,107,255,.18); color: #6E9BFF; }
+:deep(.cm-pc-ic.fire) { background: rgba(255,140,50,.15); }
+:deep(.cm-pc-mid) { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+:deep(.cm-pc-mid strong) { font-size: 14px; color: #F0F4FF; }
+:deep(.cm-pc-mid small) { font-size: 12.5px; color: var(--cm-dim); }
+:deep(.cm-pc-top) { display: flex; justify-content: space-between; gap: 8px; }
+:deep(.cm-pc-n) { font-size: 13px; color: var(--cm-dim); }
+:deep(.cm-pc-bar) { height: 6px; border-radius: 99px; background: #1A2A52; overflow: hidden; }
+:deep(.cm-pc-bar i) { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, #2F6BFF, #5B8CFF); }
+:deep(.cm-pc-pts) { font-size: 14px; font-weight: 700; color: #7FA6FF; }
+:deep(.cm-pc-days) { display: flex; gap: 3px; }
+:deep(.cm-pc-days span) { width: 16px; height: 16px; border-radius: 99px; border: 1.5px solid #2A3C66; font-size: 9px; display: grid; place-items: center; color: #fff; }
+:deep(.cm-pc-days span.on) { background: #2F6BFF; border-color: #2F6BFF; }
+:deep(.cm-pc-badges) { display: flex; flex-wrap: wrap; gap: 6px; }
+:deep(.cm-pc-badges span) { background: #12203F; border-radius: 999px; padding: 3px 10px; font-size: 12px; font-weight: 600; color: #C9D3EA; }
+/* bottom sheet */
+.cm-qp-bg { position: fixed; inset: 0; z-index: 300; background: rgba(2,6,18,.62); display: flex; align-items: flex-end; justify-content: center; }
+.cm-qp { width: 100%; max-width: 640px; max-height: 92vh; overflow-y: auto; background: #0C1630; border: 1px solid #1B2A4C; border-bottom: 0; border-radius: 24px 24px 0 0; padding: 10px 18px calc(18px + env(safe-area-inset-bottom)); color: #EAF0FF; box-shadow: 0 -10px 40px rgba(0,0,0,.45); }
+.cm-qp-handle { width: 40px; height: 5px; border-radius: 99px; background: #2A3C66; margin: 0 auto 12px; }
+.cm-qp-head { display: flex; align-items: center; justify-content: space-between; }
+.cm-qp-head h2 { font-size: 20px; font-weight: 800; margin: 0; }
+.cm-qp-x { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 999px; color: #AFBCD8; }
+.cm-qp-me { display: flex; align-items: center; gap: 10px; margin: 14px 0 12px; }
+.cm-qp-me strong { display: block; font-size: 15px; }
+.cm-qp-to { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; color: #8A9BC0; }
+.cm-qp-field { position: relative; }
+.cm-qp-input { width: 100%; min-height: 120px; resize: none; padding: 14px 14px 28px; border-radius: 16px; background: #0A1430; border: 1px solid #1B2A4C; color: #EAF0FF; font-size: 16px; line-height: 1.45; }
+.cm-qp-input:focus { outline: none; border-color: #2F6BFF; }
+.cm-qp-input::placeholder { color: #6B7A9C; }
+.cm-qp-count { position: absolute; right: 12px; bottom: 10px; font-size: 12px; color: #6B7A9C; }
+.cm-stats--draft { margin-top: 10px; }
+.cm-qp-lbl { margin: 16px 0 8px; font-size: 13px; font-weight: 700; color: #8A9BC0; text-transform: uppercase; letter-spacing: .04em; }
+.cm-qp-add { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.cm-qp-opt { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; border-radius: 14px; background: #12203F; border: 1px solid #1B2A4C; color: #DCE4F7; font-weight: 600; font-size: 15px; cursor: pointer; }
+.cm-qp-opt.on { border-color: #2F6BFF; color: #7FA6FF; background: rgba(47,107,255,.14); }
+.cm-qp-opt.off { opacity: .45; }
+.cm-qp-post { width: 100%; margin-top: 18px; min-height: 52px; border-radius: 16px; background: linear-gradient(180deg, #3874FF, #2A62F0); color: #fff; font-weight: 800; font-size: 16px; box-shadow: 0 8px 22px rgba(47,107,255,.35); }
+.cm-qp-post:disabled { opacity: .5; box-shadow: none; }
+.cm-qp-enter-active, .cm-qp-leave-active { transition: opacity .22s ease; }
+.cm-qp-enter-active .cm-qp, .cm-qp-leave-active .cm-qp { transition: transform .26s cubic-bezier(.2,.8,.2,1); }
+.cm-qp-enter-from, .cm-qp-leave-to { opacity: 0; }
+.cm-qp-enter-from .cm-qp, .cm-qp-leave-to .cm-qp { transform: translateY(100%); }
 </style>
