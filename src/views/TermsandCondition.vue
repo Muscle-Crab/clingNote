@@ -1,5 +1,5 @@
 <template>
-  <div class="p-6 max-w-4xl mx-auto bg-white dark:bg-gray-900 rounded-xl shadow-lg">
+  <div class="legal-card p-5 sm:p-6 max-w-4xl mx-4 sm:mx-auto mb-8 bg-white dark:bg-gray-900 rounded-xl shadow-lg">
     <p class="mb-4 text-gray-700 dark:text-gray-300">
       Welcome to our app. By accessing or using our services, you agree to be bound by the following terms and conditions.
     </p>

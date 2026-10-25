@@ -3769,7 +3769,7 @@ body.home-v2 .app-topbar { position: absolute; top: 0; left: 0; right: 0; z-inde
 .app-root .hero.hero { position: relative; }
 .app-root .hero-text { flex: 1 1 100%; min-width: 0; }
 .app-root .hero-menu.hero-menu { position: absolute; right: 0; top: 22px; }
-.app-root .hero-menu-btn.hero-menu-btn { width: 36px; height: 36px; border-radius: 50%; font-size: 14px; color: #C9D5F0; background: rgba(12,22,48,.55); border: 1px solid rgba(90,120,190,.35); box-shadow: none; position: relative; }
+.app-root .hero-menu-btn.hero-menu-btn { width: 44px; height: 44px; border-radius: 50%; font-size: 14px; color: #C9D5F0; background: rgba(12,22,48,.55); border: 1px solid rgba(90,120,190,.35); box-shadow: none; position: relative; }
 .app-root .hero-badge { position: absolute; top: -4px; right: -4px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: #2F6FFF; color: #fff; font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; border: 2px solid #070D1C; }
 .app-root .hero-badge--alert { background: #EF4444; }
 .app-root .hero-menu-pop.hero-menu-pop { position: fixed; top: calc(64px + env(safe-area-inset-top)); left: 12px; right: 12px; max-width: 420px; margin-left: auto; max-height: 72vh; overflow-y: auto; padding: 10px; border-radius: 18px; }
@@ -3810,7 +3810,7 @@ body.home-v2 .app-topbar { position: absolute; top: 0; left: 0; right: 0; z-inde
 .app-root .foot-item { padding: 10px 14px; }
 .app-root .task-list-header.task-list-header { padding: 12px 0 8px; }
 .app-root .task-count-label.task-count-label { font-size: 28px; line-height: 32px; }
-.app-root .toggle-visibility.toggle-visibility { width: 40px; min-width: 40px; height: 40px; min-height: 40px; }
+.app-root .toggle-visibility.toggle-visibility { width: 44px; min-width: 44px; height: 44px; min-height: 44px; }
 .app-root .task-card.task-card.task-card { min-height: 58px; padding: 8px 8px 8px 4px; }
 .app-root .task-card--next.task-card--next.task-card--next { min-height: 72px; }
 .app-root .tasks-list.tasks-list > * + * { margin-top: 7px; }

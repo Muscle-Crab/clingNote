@@ -45,7 +45,7 @@ const step = async (name, fn) => { try { const v = await fn(); const ok = v !== 
     const after = await p.evaluate(() => localStorage.getItem('zz_rev'));
     if (!uidNow) throw new Error('no uid'); if (first !== '1' || after !== '1') throw new Error(`fired ${first} then ${after}`); return true; });
   await step('Profile has Rate ClingNote row', async () => { await p.goto(B + '/profile/' + uid, { waitUntil: 'load' }); await sleep(3000); await dismiss(); return (await p.locator('[data-test=rate-app]').count()) > 0; });
-  const routes = ['/home', '/rankings', '/community', '/discipline', '/discipline/log', '/upcoming', '/addiction', '/about', '/pals', '/manage', '/paywall', '/pro/success', '/gate', '/support', '/terms', '/privacy-policy', '/mealPlan', '/chat', '/sub', '/pickup', '/landing', '/profile/' + uid, '/payment-success', '/no-such-page'];
+  const routes = ['/home', '/rankings', '/community', '/discipline', '/discipline/log', '/upcoming', '/addiction', '/about', '/pals', '/manage', '/paywall', '/pro/success', '/gate', '/support', '/terms', '/privacy-policy', '/chat', '/sub', '/landing', '/profile/' + uid, '/payment-success', '/no-such-page'];
   for (const r of routes) {
     await step('route ' + r, async () => { const n0 = errs.length; await p.goto(B + r, { waitUntil: 'load' }); await sleep(2500); await shot('route' + r.replace(/\//g, '_')); const txt = (await p.locator('body').innerText()).trim(); if (errs.length > n0) throw new Error('pageerror: ' + errs.slice(n0).join(' | ').slice(0, 200)); return txt.length > 20; });
   }

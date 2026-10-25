@@ -7,7 +7,7 @@ t('askAi refuses to run without consent (before the fetch)', () => {
   assert(a > 0 && b > a, 'consent check must come before fetch'); assert(/consent-declined/.test(s));
 });
 t('every view that calls askAi also asks for consent first', () => {
-  for (const f of ['src/views/HomeView.vue', 'src/views/MealPlan.vue']) {
+  for (const f of ['src/views/HomeView.vue']) {
     const s = read(f); assert(/ensureAiConsent\(\)/.test(s), f);
     const calls = [...s.matchAll(/askAi\('/g)].map((m) => m.index);
     for (const i of calls) { const before = s.slice(Math.max(0, i - 2500), i); assert(/ensureAiConsent\(\)/.test(before), f + ' askAi call without a consent check shortly before'); }

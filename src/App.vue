@@ -25,6 +25,7 @@ import BossBriefing from '@/components/voiceover/BossBriefing.vue';
 import BrandMark from '@/components/brand/BrandMark.vue';
 import EightHourChrome from '@/components/eighthour/EightHourChrome.vue';
 import AchievementPrompt from '@/components/AchievementPrompt.vue';
+import { pageTitle } from '@/composables/usePageTitle';
 import AppTabBar from '@/components/shell/AppTabBar.vue';
 import CreateTaskFab from '@/components/shell/CreateTaskFab.vue';
 import { ref, onBeforeUnmount } from 'vue';
@@ -44,26 +45,24 @@ const HEROES = {
   upcoming: { title: 'Upcoming Tasks', kicker: 'Schedule' },
   addiction: { title: 'Addiction Tracker', kicker: 'Habits' },
   about: { title: 'About ClingNote', kicker: 'Info' },
-  'payment-success': { title: 'Payment Complete', kicker: 'Thank you' },
+  'payment-success': { title: 'Payment complete', kicker: 'Thank you' },
   Profile: { title: 'Your Profile', kicker: 'Account' },
-  Pickup: { title: 'Pickup Game', kicker: 'Community' },
   Discussion: { title: 'Discussion Rooms', kicker: 'Community' },
   RoomInterior: { title: 'Chat Rooms', kicker: 'Community' },
   Login: { title: 'Welcome back', kicker: 'ClingNote', back: false },
   TermsandCondition: { title: 'Terms & Conditions', kicker: 'Legal', back: false },
   privacy: { title: 'Privacy Policy', kicker: 'Legal', back: false },
   support: { title: 'Support', kicker: 'Help', back: false },
-  subs: { title: 'Go Premium', kicker: 'Plans' },
-  MealPlan: { title: 'Meal Tracker', kicker: 'Nutrition' },
+  subs: { title: 'ClingNote Pro', kicker: 'Plans' },
   NotFoundComponent: { title: 'Page not found', kicker: '404' },
 };
-const hero = computed(() => HEROES[route.name] || null);
+const hero = computed(() => (route.name === 'Profile' && pageTitle.value) || HEROES[route.name] || null);
 // Footer tab bar + Create-task FAB (signed in only; never on auth/onboarding/paywall; FAB also off on locked/shutdown screens).
 const uid = ref(auth.currentUser?.uid || null);
 const shutOn = ref(false);
-const NO_TABS = ['Login', 'welcome', 'landing', 'onboarding', 'paywall', 'pro-success', 'Landing', 'RoomInterior', 'Discussion'];
+const NO_TABS = ['Login', 'welcome', 'landing', 'onboarding', 'paywall', 'pro-success', 'Landing', 'Discussion'];
 const showTabs = computed(() => !!uid.value && !route.meta.bare && !NO_TABS.includes(route.name) && !/^\/(login|welcome|landing|onboarding|paywall|pro\/)/.test(route.path));
-const showFab = computed(() => showTabs.value && route.name !== 'gate' && !shutOn.value);
+const showFab = computed(() => showTabs.value && route.name !== 'gate' && route.name !== 'RoomInterior' && !shutOn.value);
 let mo = null;
 onMounted(() => { try { onAuthStateChanged(auth, (u) => { uid.value = u ? u.uid : null; }); } catch (e) { /* ignore */ }
   const sync = () => { shutOn.value = !!document.querySelector('[data-test="eh-shutdown"]'); }; mo = new MutationObserver(sync); mo.observe(document.body, { childList: true, subtree: true }); sync(); });

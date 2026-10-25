@@ -57,7 +57,7 @@ export const sendNotificationToPlayer = async (userName, action) => {
   try { await sendPush({ title, message }); } catch (error) { console.warn('Push notification not sent:', error?.message || error); }
 };
 
-// Community features (Pickup / Room / Discussion) used to post to "All" from the browser with the REST key.
+// Community features (Room / Discussion; Pickup was removed) used to post to "All" from the browser with the REST key.
 // Now server-side and disabled unless ONESIGNAL_ALLOW_BROADCAST=true is set in Netlify.
 export const sendBroadcast = async (message, title = 'ClingNote') => {
   try { await sendPush({ kind: 'broadcast', title, message }); } catch (error) { console.warn('Broadcast not sent:', error.message); }

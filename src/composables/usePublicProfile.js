@@ -1,4 +1,4 @@
-// publicProfiles/{uid}: the only per-user data other signed-in users may read (name, avatar, pickup attendance).
+// publicProfiles/{uid}: the only per-user data other signed-in users may read (name, avatar).
 // users/{uid} (email, dob, gender, credits, billing, scheduled tasks) is owner-only under firestore.rules.tight.
 import { db } from '@/firebaseConfig';
 import { doc, getDoc, setDoc, collection, getDocs, serverTimestamp } from 'firebase/firestore';

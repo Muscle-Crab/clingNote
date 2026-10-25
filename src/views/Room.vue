@@ -366,32 +366,11 @@
       </div>
     </div>
 
-    <!-- Bottom Navigation Bar -->
-    <div class="fixed bottom-0 left-0 right-0 bg-gray-800 dark:bg-gray-900 shadow-lg py-2 flex justify-around">
-      <button  class="flex flex-col items-center text-gray-400 dark:text-gray-300 hover:text-indigo-400 dark:hover:text-indigo-500">
-        <i class="fa fa-home w-6 h-6"></i>
-        <router-link to="/"><span class="text-xs">Home</span>
-        </router-link>
-      </button>
-      <button class="flex flex-col items-center text-gray-400 dark:text-gray-300 hover:text-indigo-400 dark:hover:text-indigo-500">
-        <i class="fa fa-search w-6 h-6"></i>
-        <a href="#target-section" class="text-xs">Search</a>
-      </button>
-      <button class="flex flex-col items-center text-gray-400 dark:text-gray-300 hover:text-indigo-400 dark:hover:text-indigo-500">
-        <i class="fa fa-bell w-6 h-6"></i>
-        <span class="text-xs">Notifications</span>
-      </button>
-      <button  class="flex flex-col items-center text-gray-400 dark:text-gray-300 hover:text-indigo-400 dark:hover:text-indigo-500">
-        <i class="fa fa-user w-6 h-6"></i>
-        <router-link :to="'/profile/' + ids"><span class="text-xs">Profile</span></router-link>
-      </button>
-    </div>
-
-
+    <!-- (old gray bottom bar removed: the app-wide 4-tab bar is shown here instead) -->
 
     <!-- Floating Action Button -->
     <div>
-      <button v-if="currentUser" @click="showCreatePostModal()" class="fixed bottom-16 right-4 bg-indigo-600 text-white p-4 rounded-full shadow-lg animate-jump">
+      <button v-if="currentUser" @click="showCreatePostModal()" class="fixed right-4 text-white rounded-full shadow-lg animate-jump room-create" data-test="room-create">
 <!--        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">-->
 <!--          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>-->
 <!--        </svg>-->
@@ -1058,4 +1037,5 @@ const copyToClipboard = () => {
 .animate-jump {
   animation: jump 2.5s ease-in-out infinite;
 }
+.room-create { bottom: calc(var(--tabbar-h, 64px) + 16px + env(safe-area-inset-bottom)); min-height: 52px; padding: 0 22px; font-weight: 700; background: linear-gradient(180deg, #3D8BFF, #2563EB); z-index: 60; }
 </style>

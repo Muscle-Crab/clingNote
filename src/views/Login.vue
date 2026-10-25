@@ -4,7 +4,7 @@
       <!-- Header -->
 
       <!-- Sign in: Apple (iOS app + web) / Google (web + iOS app). New accounts are created on first Apple/Google sign-in; there is no email sign-up. -->
-      <h1 class="text-xl font-semibold text-center text-gray-900 dark:text-gray-100 mb-1" data-test="login-title">Sign in to ClingNote</h1>
+      <h2 class="text-xl font-semibold text-center text-gray-900 dark:text-gray-100 mb-1" data-test="login-title">Sign in to ClingNote</h2>
       <p class="text-sm text-center text-gray-500 dark:text-gray-400 mb-5">New here? Signing in creates your account.</p>
       <div class="space-y-3">
         <!-- Sign in with Apple (App Store Guideline 4.8) -->
@@ -21,9 +21,9 @@
         </button>
         <p class="text-xs text-gray-500 dark:text-gray-400 text-center">
           By continuing, you agree to our
-          <router-link to="/terms" class="text-blue-600 hover:underline dark:text-blue-400" data-test="login-terms">Terms & Conditions</router-link>
-          and <router-link to="/privacy-policy" class="text-blue-600 hover:underline dark:text-blue-400" data-test="login-privacy">Privacy Policy</router-link>.
-          <router-link to="/support" class="block mt-2 text-gray-500 dark:text-gray-400 underline" data-test="login-support">Support</router-link>
+          <router-link to="/terms" class="lg-link text-blue-600 hover:underline dark:text-blue-400" data-test="login-terms">Terms & Conditions</router-link>
+          and <router-link to="/privacy-policy" class="lg-link text-blue-600 hover:underline dark:text-blue-400" data-test="login-privacy">Privacy Policy</router-link>.
+          <router-link to="/support" class="lg-link lg-link--block text-gray-500 dark:text-gray-400 underline" data-test="login-support">Support</router-link>
         </p>
       </div>
 
@@ -195,3 +195,8 @@ const signInWithAppleClick = async () => {
   }
 };
 </script>
+
+<style scoped>
+.lg-link { display: inline-flex; align-items: center; min-height: 44px; padding: 0 2px; }
+.lg-link--block { display: flex; justify-content: center; margin-top: 2px; }
+</style>

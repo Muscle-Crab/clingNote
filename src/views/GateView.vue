@@ -7,7 +7,7 @@
 
       <template v-else-if="state.mode === 'on-break'">
         <div class="gate-icon">☕</div>
-        <h1>Break time</h1>
+        <h2 class="gv-h">Break time</h2>
         <p class="gate-timer">{{ fmtCountdown(state.remainingMs) }}</p>
         <p class="muted">Enjoy it. When the timer ends, it's back to work.</p>
         <button class="gate-btn gate-btn--ghost" @click="stopBreak">End break early (refund unused)</button>
@@ -15,14 +15,14 @@
 
       <template v-else-if="ended">
         <div class="gate-icon">⏰</div>
-        <h1>Break's over</h1>
+        <h2 class="gv-h">Break's over</h2>
         <p class="muted">Back to work — close {{ appName }}.</p>
         <router-link to="/home" class="gate-btn">💪 Back to work</router-link>
       </template>
 
       <template v-else-if="state.mode === 'locked'">
         <div class="gate-icon">🔒</div>
-        <h1>Locked: {{ state.left }}/{{ DAILY_STREAK_MIN }} tasks left</h1>
+        <h2 class="gv-h">Locked: {{ state.left }}/{{ DAILY_STREAK_MIN }} tasks left</h2>
         <p v-if="settings.enabled" class="gate-timer">⏳ {{ fmtCountdown(state.msToDeadline) }} to your {{ settings.deadline }} deadline</p>
         <router-link to="/home" class="gate-btn">✅ Do a task</router-link>
         <template v-if="state.available > 0">
@@ -33,14 +33,14 @@
 
       <template v-else-if="state.mode === 'can-break'">
         <div class="gate-icon">🎉</div>
-        <h1>Unlocked</h1>
+        <h2 class="gv-h">Unlocked</h2>
         <p>{{ state.available }} min of break available.</p>
         <button class="gate-btn" @click="beginBreak">Start break ({{ state.available }} min)</button>
       </template>
 
       <template v-else>
         <div class="gate-icon">🚫</div>
-        <h1>No break minutes left</h1>
+        <h2 class="gv-h">No break minutes left</h2>
         <p class="muted">Finish more tasks to earn more ({{ BREAK_PER_TASK }} min each).</p>
         <router-link to="/home" class="gate-btn">Back to work</router-link>
       </template>
@@ -105,13 +105,13 @@ onBeforeUnmount(() => clearInterval(timer));
 </script>
 
 <style scoped>
-.gate { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 16px; background: #0f172a; color: #fff; }
+.gate { min-height: 60vh; display: flex; align-items: flex-start; justify-content: center; padding: 8px 16px 24px; background: #0f172a; color: #fff; }
 .gate--locked { background: radial-gradient(circle at top, #7f1d1d, #0f172a 70%); }
 .gate--on-break { background: radial-gradient(circle at top, #065f46, #0f172a 70%); }
 .gate-card { max-width: 380px; width: 100%; text-align: center; }
 .gate-app { text-transform: uppercase; letter-spacing: .2em; font-size: .75rem; opacity: .7; }
 .gate-icon { font-size: 4rem; margin: 8px 0; }
-.gate h1 { font-size: 1.8rem; font-weight: 900; margin: 0 0 8px; }
+.gate h1, .gate .gv-h { font-size: 1.8rem; font-weight: 900; margin: 0 0 8px; }
 .gate-timer { font-size: 2.2rem; font-weight: 800; font-variant-numeric: tabular-nums; margin: 8px 0; }
 .gate-btn { display: inline-block; margin-top: 14px; padding: 12px 22px; border-radius: 999px; background: #fff; color: #0f172a; font-weight: 800; text-decoration: none; border: none; }
 .gate-btn--ghost { background: transparent; color: #fff; border: 1px solid rgba(255,255,255,.5); font-weight: 600; }

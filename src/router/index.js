@@ -4,7 +4,6 @@ import Login from '../views/Login.vue';
 import { auth } from '../firebaseConfig';
 import Room from '../views/Room.vue';
 import TermsandCondition from '../views/TermsandCondition.vue';
-import Pickup from '../views/Pickup.vue';
 import Addiction from "@/views/addiction.vue";
 import sub from "@/views/Subs.vue";
 import { ugcHidden, isNativeIOS, isNative } from '@/utils/platform';
@@ -45,7 +44,7 @@ const routes = [
   {
     path: '/paywall',
     name: 'paywall',
-    redirect: (to) => ({ path: '/onboarding', query: { ...to.query, step: 5 } })
+    redirect: (to) => ({ path: '/onboarding', query: { ...to.query, step: 6 } }) // 6 = STEPS.length in OnboardingView = the plans (paywall) panel
   },
   {
     path: '/pro/success',
@@ -99,7 +98,7 @@ const routes = [
     path: '/about',
     name: 'about',
     component: () => import('../views/AboutView.vue'),
-    meta: { webOnly: true } // admin user list (hardcoded admin email in nav) -> never in the iOS app
+    meta: { webOnly: true } // About ClingNote (web nav only; iOS has Support instead)
   },
   {
     path: '/payment-success',
@@ -159,11 +158,6 @@ const routes = [
     component: () => import('@/views/NotFoundComponent.vue')
   },
   {
-    path: '/pickup',
-    name: 'Pickup',
-    component: Pickup
-  },
-  {
     path: '/fdfd',
     name: 'Discussion',
     component: () => import('@/views/Discussion.vue'),
@@ -203,12 +197,6 @@ const routes = [
     name: 'privacy',
     component: () => import('../views/privacy-policy.vue')
   }
-  ,{
-    path: '/mealPlan',
-    name: 'MealPlan',
-    component: () => import('../views/MealPlan.vue'),
-    meta: { webOnly: true } // credits are bought with Stripe (digital goods) -> not available in the iOS app, see guard
-  }
 ];
 
 const router = createRouter({
@@ -247,7 +235,7 @@ router.beforeEach(async (to, from, next) => {
 
   // iOS app: community/UGC screens are not offered (App Store 1.2) -> back to Home (or Login when signed out)
   if (ugcHidden()) {
-    const UGC_PATHS = ['/rankings', '/pickup', '/fdfd', '/chat'];
+    const UGC_PATHS = ['/rankings', '/fdfd', '/chat'];
     const otherProfile = to.path.startsWith('/profile/') && to.params.userId !== (currentUser && currentUser.uid);
     if (UGC_PATHS.includes(to.path) || otherProfile) return next(currentUser ? '/home' : '/login');
   }

@@ -165,7 +165,8 @@ onMounted(() => onAuthStateChanged(auth, async (u) => {
 .disc-head h1 { font-size: 1.4rem; font-weight: 700; margin: 0; }
 .disc-back { color: var(--c-text-3, #64748b); text-decoration: none; }
 .disc-card { margin-top: 12px; padding: 14px; border-radius: 12px; background: var(--c-surface, #fff); box-shadow: 0 1px 3px rgba(0,0,0,.08); }
-.disc-row { display: flex; gap: 8px; align-items: center; margin: 6px 0; }
+.disc-row { display: flex; gap: 8px; align-items: center; margin: 2px 0; min-height: 44px; padding: 8px 0; cursor: pointer; }
+.disc-row input[type=checkbox] { width: 20px; height: 20px; flex: 0 0 20px; }
 .disc-row input[type=time] { border: 1px solid var(--c-border, #e2e8f0); border-radius: 6px; padding: 2px 6px; }
 .disc-btn { display: inline-block; text-decoration: none;
 }

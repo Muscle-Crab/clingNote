@@ -1,7 +1,7 @@
 <template>
   <!-- Hero Section -->
   <section class="bg-gray-900 bg-cover bg-center bg-no-repeat bg-blend-multiply" :style="heroStyle">
-    <div class="max-w-screen-xl px-4 py-20 mx-auto text-center">
+    <div class="max-w-screen-xl px-4 pt-8 pb-14 md:py-20 mx-auto text-center">
       <h1 class="text-3xl md:text-5xl font-extrabold text-white leading-tight mb-4">
         One App for Tasks, Assignments, Workouts & Groceries
       </h1>

@@ -152,7 +152,7 @@ const save = async () => {
 .eh-stepper button { width: 24px; height: 24px; border-radius: 50%; border: 1px solid var(--c-border, #2a2a2e); background: var(--c-surface-2, #22252a); color: inherit; font-size: .9rem; line-height: 1; cursor: pointer; padding: 0; }
 .eh-stepper button:disabled { opacity: .4; cursor: not-allowed; }
 .eh-stepper strong { font-size: .9rem; min-width: 1ch; color: var(--c-text, #e6e6e6); text-transform: none; }
-.eh-btn { font-family: inherit; font-size: .75rem; font-weight: 700; border-radius: 999px; border: 1px solid var(--c-border, #2a2a2e); background: var(--c-surface-2, #22252a); color: inherit; padding: 4px 12px; cursor: pointer; }
+.eh-btn { font-family: inherit; font-size: .75rem; font-weight: 700; min-height: 44px; min-width: 44px; border-radius: 999px; border: 1px solid var(--c-border, #2a2a2e); background: var(--c-surface-2, #22252a); color: inherit; padding: 4px 12px; cursor: pointer; }
 .eh-btn--primary { background: var(--c-accent, #378ADD); color: var(--c-on-accent, #fff); border-color: transparent; }
 .eh-btn:disabled { opacity: .5; cursor: not-allowed; }
 .eh-drain { position: relative; height: 6px; border-radius: 3px; background: rgba(255,255,255,.06); margin-top: 6px; overflow: hidden; }

@@ -414,7 +414,8 @@ watch(() => route.query.post, (id) => { if (id && started) { tab.value = 'feed';
 .cm-chip { padding: 6px 12px; border-radius: 999px; border: 1px solid var(--c-border, #e2e8f0); font-size: .85rem; cursor: pointer; }
 .cm-chip.off { opacity: .4; }
 .cm-link { color: var(--c-primary, #6366f1); font-size: .85rem; }
-.cm-check { display: flex; gap: 8px; align-items: flex-start; font-size: .9rem; margin: 6px 0; }
+.cm-check { display: flex; gap: 8px; align-items: flex-start; font-size: .9rem; margin: 2px 0; min-height: 44px; padding: 10px 0; cursor: pointer; }
+.cm-check input[type=checkbox] { width: 20px; height: 20px; flex: 0 0 20px; margin-top: 1px; }
 .cm-eula h2 { font-size: 1.2rem; font-weight: 700; margin: 0 0 6px; }
 .cm-eula ul { margin: 8px 0 12px 18px; list-style: disc; font-size: .9rem; line-height: 1.45; }
 .cm-eula a { color: var(--c-primary, #6366f1); text-decoration: underline; }

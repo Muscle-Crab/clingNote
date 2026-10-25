@@ -48,6 +48,16 @@
         </section>
 
         <!-- Stats -->
+        <template v-if="!isOwn && otherStats">
+          <section class="pf-stats" aria-label="Their stats" data-test="profile-other-stats">
+            <div class="pf-stat"><span class="pf-stat-v">🔥 {{ otherStats.streak }}</span><span class="pf-stat-l">Day streak</span></div>
+            <div class="pf-stat"><span class="pf-stat-v">🏆 {{ otherStats.best }}</span><span class="pf-stat-l">Best streak</span></div>
+            <div class="pf-stat"><span class="pf-stat-v">🎖 {{ otherStats.badges.length }}</span><span class="pf-stat-l">Badges</span></div>
+          </section>
+          <section class="pf-card pf-badges" aria-label="Badges" data-test="profile-other-badges">
+            <div v-for="b in BADGES" :key="b.id" class="pf-badge" :class="{ 'pf-badge--off': !otherStats.badges.includes(b.id) }" :title="b.desc"><span aria-hidden="true">{{ b.icon }}</span><small>{{ b.name }}</small></div>
+          </section>
+        </template>
         <section v-if="isOwn && stats" class="pf-stats" aria-label="Your stats" data-test="profile-stats">
           <div class="pf-stat"><span class="pf-stat-v">🔥 {{ stats.streak }}</span><span class="pf-stat-l">Day streak</span></div>
           <div class="pf-stat"><span class="pf-stat-v">🏆 {{ stats.best }}</span><span class="pf-stat-l">Best streak</span></div>
@@ -104,7 +114,10 @@ import PushSettings from '@/components/PushSettings.vue';
 import DeleteAccount from '@/components/DeleteAccount.vue';
 import { syncPublicProfile } from '@/composables/usePublicProfile';
 import { fileToAvatarDataUrl, isAvatarSrc, initialsOf } from '@/utils/avatar';
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
+import { BADGES } from '@/utils/badges';
+import { getCommunityProfile } from '@/composables/useCommunity';
+import { pageTitle } from '@/composables/usePageTitle';
 import { useRouter as useCloseRouter } from 'vue-router';
 const closeRouter = useCloseRouter();
 const loggingOut = ref(false);
@@ -135,6 +148,8 @@ const userData = ref(null);
 const editedUserData = ref(null);
 const editMode = ref(false);
 const isOwn = ref(false);
+const otherStats = ref(null); // another user's streak + badges (communityProfiles/{uid})
+onBeforeUnmount(() => { pageTitle.value = null; });
 const notFound = ref(false);
 // Merged Pro: Firestore/server flag OR (iOS) RevenueCat's active 'pro' entitlement (reactive).
 const proDoc = computed(() => (isOwn.value && userData.value ? withRcPro(auth.currentUser?.uid, userData.value) : userData.value));
@@ -195,7 +210,7 @@ const fetchUserData = async () => {
   const targetId = route.currentRoute.value.params.userId;
   const user = auth.currentUser;
   const own = !!user && user.uid === targetId;
-  isOwn.value = own;
+  isOwn.value = own; otherStats.value = null; pageTitle.value = null;
   try {
     const docSnap = await withTimeout(getDoc(doc(db, own ? 'users' : 'publicProfiles', targetId)), 10000, 'getDoc');
     if (docSnap.exists()) {
@@ -212,6 +227,12 @@ const fetchUserData = async () => {
     if (own) userData.value = fromAuth(user); else notFound.value = true;
   }
   if (userData.value) editedUserData.value = { ...userData.value };
+  if (!own && userData.value) {
+    pageTitle.value = { title: userData.value.name || 'Profile', kicker: 'Profile' };
+    try { const cp = await withTimeout(getCommunityProfile(targetId), 8000, 'communityProfile'); const n = (v) => Math.max(0, Number(v) || 0);
+      otherStats.value = { streak: n(cp?.streak), best: n(cp?.bestStreak ?? cp?.streak), badges: Array.isArray(cp?.badges) ? cp.badges : [] };
+    } catch (e) { otherStats.value = { streak: 0, best: 0, badges: [] }; }
+  }
   stats.value = null;
   if (own) loadStats(targetId);
 };
@@ -284,7 +305,7 @@ onMounted(() => { loadDayLengthHours().then((v) => { dayLen.value = v; }).catch(
 .pf-av-wrap { position: relative; flex-shrink: 0; }
 .pf-av { width: 88px; height: 88px; border-radius: 50%; object-fit: cover; border: 3px solid rgba(255,255,255,.85); box-shadow: 0 6px 18px rgba(0,0,0,.35); display: inline-flex; }
 .pf-av--default { align-items: center; justify-content: center; background: linear-gradient(135deg, #2F6FFF, #1e3a8a); color: #fff; font-weight: 800; font-size: 28px; }
-.pf-av-cam { position: absolute; right: -2px; bottom: -2px; width: 32px; height: 32px; border-radius: 50%; background: #12203F; border: 1.5px solid var(--c-border-strong); color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.pf-av-cam { position: absolute; right: -6px; bottom: -6px; width: 44px; height: 44px; border-radius: 50%; background: #12203F; border: 1.5px solid var(--c-border-strong); color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; }
 .pf svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
 .pf-id-text { min-width: 0; }
 .pf-name { margin: 0; font-size: 22px; font-weight: 800; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -294,7 +315,7 @@ onMounted(() => { loadDayLengthHours().then((v) => { dayLen.value = v; }).catch(
 .pf-meta { margin: 12px 0 0; font-size: 13px; color: var(--c-text-3); }
 .pf-id-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
 .pf-links { display: flex; align-items: center; gap: 8px; }
-.pf-link { background: none; border: 0; padding: 6px 0; font-size: 14px; color: var(--c-accent-text); cursor: pointer; }
+.pf-link { background: none; border: 0; padding: 6px 0; min-height: 44px; font-size: 14px; color: var(--c-accent-text); cursor: pointer; }
 .pf-link--muted { color: var(--c-text-2); }
 .pf-dot { color: var(--c-text-3); font-size: 10px; }
 .pf-btn-outline { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 16px; border-radius: 12px; border: 1.5px solid #6b8cff; background: rgba(79,111,240,.12); color: #fff; font-weight: 600; font-size: 15px; cursor: pointer; }
@@ -346,4 +367,8 @@ onMounted(() => { loadDayLengthHours().then((v) => { dayLen.value = v; }).catch(
 .pf :focus-visible { outline: 2px solid var(--c-accent-text); outline-offset: 2px; border-radius: 10px; }
 @media (min-width: 600px) { .pf-scene { border-radius: 0 0 28px 28px; } .pf-title { font-size: 40px; line-height: 46px; } }
 @media (prefers-reduced-motion: reduce) { .pf * { transition: none !important; animation: none !important; } .pf-btn-outline:active, .pf-logout:active, .pf-upgrade:active, .pf-row:active { transform: none; } }
+.pf-badges { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; padding: 12px; margin-top: 12px; }
+.pf-badge { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 4px; border-radius: 12px; background: rgba(255,255,255,.04); text-align: center; }
+.pf-badge span { font-size: 22px; } .pf-badge small { font-size: 10.5px; line-height: 1.2; color: var(--c-text-2, #A9B4CC); }
+.pf-badge--off { opacity: .35; filter: grayscale(1); }
 </style>

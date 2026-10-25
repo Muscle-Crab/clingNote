@@ -11,7 +11,7 @@ const OUT = process.env.HDR_OUT || '/tmp/hdr/';
   const br = await chromium.launch({ executablePath: process.env.CHROME });
   const uid = await seedUser('zztest-hdr@example.com', 'Hana ZZTEST');
   const p = await newPage(br, 'hdr'); await emailLogin(p, 'zztest-hdr@example.com'); await sleep(2500);
-  const routes = ['/profile/' + uid, '/rankings', '/community', '/discipline', '/discipline/log', '/gate', '/upcoming', '/addiction', '/about', '/pals', '/manage', '/pickup', '/chat', '/mealPlan', '/support', '/terms', '/privacy-policy', '/sub', '/payment-success', '/no-such-page'];
+  const routes = ['/profile/' + uid, '/rankings', '/community', '/discipline', '/discipline/log', '/gate', '/upcoming', '/addiction', '/about', '/pals', '/manage', '/chat', '/support', '/terms', '/privacy-policy', '/sub', '/payment-success', '/no-such-page'];
   let bad = 0;
   for (const r of routes) {
     await p.goto(B + r, { waitUntil: 'load' }); await sleep(2500);

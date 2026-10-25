@@ -146,7 +146,7 @@ async function finish() { await persist({ onboardingComplete: true, onboardingCo
 .ob { min-height: 100vh; max-width: 480px; margin: 0 auto; display: flex; flex-direction: column; padding: calc(14px + env(safe-area-inset-top)) 20px calc(24px + env(safe-area-inset-bottom)); color: var(--c-text,#F2F5FC); }
 .ob-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 36px; }
 .ob-back { background: none; border: 0; color: #A9B4CC; font-size: 28px; line-height: 1; cursor: pointer; width: 32px; }
-.ob-skip { background: none; border: 0; color: #7180A0; font-weight: 600; font-size: 14px; cursor: pointer; }
+.ob-skip { background: none; border: 0; color: #7180A0; font-weight: 600; font-size: 14px; cursor: pointer; min-height: 44px; min-width: 44px; padding: 0 10px; }
 .ob-dots { display: flex; gap: 6px; flex: 1; } .ob-dots i { flex: 1; height: 4px; border-radius: 4px; background: rgba(255,255,255,.1); } .ob-dots i.on { background: linear-gradient(90deg,#1E5BFF,#3C8CFF); }
 .ob-sec { flex: 1; padding-top: 18px; }
 .ob-art { height: 220px; margin: 0 -20px 10px; background: linear-gradient(180deg, rgba(7,13,28,.1), rgba(7,13,28,.3) 55%, #070D1C), var(--hero-img, url('~@/assets/hero-forest.jpg')) 72% 35%/cover; border-radius: 0 0 24px 24px; }

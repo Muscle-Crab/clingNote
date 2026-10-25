@@ -1,5 +1,5 @@
 <template>
-  <div class="max-w-xl mx-auto mt-10 p-6 bg-white rounded shadow">
+  <div class="max-w-xl mx-auto mt-2 p-6 bg-white rounded shadow">
     <h2 class="text-2xl font-bold mb-4">Manage Subscription</h2>
 
     <div v-if="ios">

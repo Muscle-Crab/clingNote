@@ -4,7 +4,7 @@ const rd = (p) => fs.readFileSync(path.join(__dirname, '..', p), 'utf8');
 let n = 0; const t = (name, fn) => { fn(); n++; console.log('ok -', name); };
 const router = rd('src/router/index.js');
 t('web-only routes are flagged and guarded on iOS', () => {
-  ['/mealPlan', '/pro/success', '/payment-success'].forEach((r) => { const i = router.indexOf(`path: '${r}'`); assert(i > 0, r); assert(/webOnly: true/.test(router.slice(i, i + 300)), r + ' webOnly'); });
+  ['/pro/success', '/payment-success'].forEach((r) => { const i = router.indexOf(`path: '${r}'`); assert(i > 0, r); assert(/webOnly: true/.test(router.slice(i, i + 300)), r + ' webOnly'); });
   assert(/isNativeIOS\(\) && to\.matched\.some\(r => r\.meta && r\.meta\.webOnly\)/.test(router));
 });
 t('paywall iOS: empty / failed / loading store offerings show a friendly state with Try again + Restore, never a blank or a dead Subscribe button', () => {
@@ -21,7 +21,7 @@ t('iap purchase hands RevenueCat a raw (non-Proxy) package: the paywall plans li
   const raw = toRaw(plan.pkg); assert(!isProxy(raw) && raw === pkg, 'toRaw returns the original, un-serialised package object');
 });
 t('terms hides the Stripe sentence on iOS only', () => { const s = rd('src/views/TermsandCondition.vue'); assert(/<span v-if="!ios"[^>]*>On the website, payments are processed by Stripe\. <\/span>/.test(s)); });
-t('meal credits checkout is a no-op on iOS', () => assert(/redirectToCheckout = async \(\) => \{\s*if \(isNativeIOS\(\)\) return;/.test(rd('src/views/MealPlan.vue'))));
+t('pickup + meal plan pages are removed', () => { assert(!/'\/pickup'|'\/mealPlan'|Pickup\.vue|MealPlan\.vue/.test(router)); assert(!require('fs').existsSync('src/views/Pickup.vue') && !require('fs').existsSync('src/views/MealPlan.vue')); });
 t('paywall iOS path has no hardcoded USD / trial wording leaks', () => {
   const s = rd('src/components/paywall/PaywallPanel.vue');
   assert(/shownPlans = computed\(\(\) => ios \?/.test(s)); assert(/priceText = \(p\) => iapFor\(p\.id\)\?\.priceString \|\| \(ios \? '' : fmt\(p\.price\)\)/.test(s));
@@ -56,7 +56,7 @@ t('firestore.rules: captains/game writes limited to pickup admins / captains; po
   assert(!/match \/captains\/\{captainId\} \{\s*allow read, write: if isAuthenticated\(\);/.test(r)); assert(!/match \/game\/\{gameId\} \{\s*allow read, write: if isAuthenticated\(\);/.test(r));
   assert(/allow create, delete: if isPickupAdmin\(\);/.test(r) && /allow write: if isPickupAdmin\(\) \|\| isCaptain\(\);/.test(r) && /email_verified == true/.test(r));
   assert(/commentsChangeOk\(\) && ownMapKeyOnly\('reactions'\) && ownMapKeyOnly\('readComments'\)/.test(r));
-  ['ds7513635@gmail.com', 'pablo.novoa89@gmail.com', 'lordsarfo123@gmail.com', 'ideastogether@yahoo.com', 'testing@gmail.com'].forEach((e) => assert(rd('src/views/Pickup.vue').includes(e) && r.includes(e), e));
+  ['ds7513635@gmail.com', 'pablo.novoa89@gmail.com', 'lordsarfo123@gmail.com', 'ideastogether@yahoo.com', 'testing@gmail.com'].forEach((e) => assert(r.includes(e), e));
 });
 t('privacy manifest exists, declares no tracking and is part of the Xcode project; Xcode is pinned in the workflow', () => {
   const m = rd('ios/App/App/PrivacyInfo.xcprivacy'); assert(/NSPrivacyTracking<\/key>\s*<false\/>/.test(m)); assert(/NSPrivacyAccessedAPICategoryUserDefaults/.test(m));

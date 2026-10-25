@@ -47,7 +47,7 @@ t('local flags: tutorial once per install, paywall once per uid', () => {
 const router = read('src/router/index.js'); const onb = read('src/views/OnboardingView.vue'); const welcome = read('src/views/WelcomeView.vue');
 t('router: /welcome is a public bare route; the guard applies decideEntry; /paywall alias is intact', () => {
   assert.match(router, /path: '\/welcome'[\s\S]{0,200}meta: \{ bare: true \}/); assert.ok(!/path: '\/welcome'[\s\S]{0,200}requiresAuth/.test(router));
-  assert.match(router, /decideEntry\(/); assert.match(router, /path: '\/paywall'[\s\S]{0,120}step: 5/);
+  assert.match(router, /decideEntry\(/); assert.match(router, /path: '\/paywall'[\s\S]{0,120}step: 6/);
 });
 t('onboarding: paywall step records "seen" (local + users/{uid}.paywallSeenAt) so existing users see it once', () => { assert.match(onb, /markPaywallSeenLocal/); assert.match(onb, /paywallSeenAt/); });
 t('welcome: no skip control, finishing marks the tutorial seen, the wake pick is explicit and cached locally before sign-up', () => {

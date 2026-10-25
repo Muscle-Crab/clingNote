@@ -1,7 +1,7 @@
 <template>
-  <div class="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-100 py-12 px-4 sm:px-6 lg:px-8">
-    <div class="max-w-3xl mx-auto bg-white/70 backdrop-blur-md shadow-2xl rounded-2xl p-8 transition-all duration-300">
-      <h1 class="text-4xl font-extrabold text-center text-indigo-800 mb-4 tracking-tight">🌱 Recovery Tracker</h1>
+  <div class="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-100 pt-2 pb-8 px-4 sm:px-6 lg:px-8">
+    <div class="max-w-3xl mx-auto bg-white/70 backdrop-blur-md shadow-2xl rounded-2xl p-5 sm:p-8 transition-all duration-300">
+      <h2 class="text-2xl font-extrabold text-center text-indigo-800 mb-4 tracking-tight">🌱 Recovery Tracker</h2>
       <!-- Not medical advice (always visible) -->
       <div class="mb-6 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900" role="note" data-test="recovery-disclaimer">
         <p class="font-semibold mb-1">This is a self-tracking tool, not medical advice.</p>

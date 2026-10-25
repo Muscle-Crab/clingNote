@@ -2,7 +2,7 @@
   <nav class="app-topbar">
     <!-- Header -->
     <div class="app-topbar-inner">
-      <button @click="toggleSidebar" type="button" class="relative inline-flex items-center p-2 w-10 h-10 justify-center text-sm text-gray-500 rounded-lg hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-600" aria-expanded="false">
+      <button v-if="!(route.name === 'Landing' && !userId)" @click="toggleSidebar" type="button" data-test="nav-menu" class="relative inline-flex items-center p-2 w-11 h-11 justify-center text-sm text-gray-500 rounded-lg hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-600" aria-expanded="false">
         <span class="sr-only">Open sidebar</span>
         <span v-if="palBadge.count.value" class="pl-nav-dot" aria-label="New messages"></span>
         <svg class="w-5 h-5" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 17 14">
@@ -10,7 +10,7 @@
         </svg>
       </button>
       <!-- Display user's email and profile picture -->
-      <router-link :to="userId ? '/profile/' + userId : '/login'" class="flex items-center space-x-3">
+      <router-link :to="userId ? '/profile/' + userId : '/login'" class="app-avatar-link flex items-center space-x-3" data-test="nav-avatar">
 
 <!--        <div v-if="userEmail" class="text-gray-800 dark:text-gray-200">-->
 <!--          {{ userEmail }}-->
@@ -246,6 +246,7 @@ onMounted(() => {
 .app-topbar { background: #070D1C; border-bottom: 1px solid #121C33; padding-top: env(safe-area-inset-top); }
 .app-topbar-inner { max-width: 1200px; margin: 0 auto; height: 56px; padding: 0 16px; display: flex; align-items: center; justify-content: space-between; }
 .app-topbar-inner > a { margin-left: auto; }
+.app-avatar-link { min-width: 44px; min-height: 44px; justify-content: center; }
 .app-avatar { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; font-size: 14px; font-weight: 700; letter-spacing: .02em; color: #fff; background: rgba(12,22,48,.7); border: 1.5px solid #3D6FD8; }
 .app-sidebar { background: #0A1226; border-right: 1px solid #16223F; color: #E6E9EF; }
 .app-sidebar-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
