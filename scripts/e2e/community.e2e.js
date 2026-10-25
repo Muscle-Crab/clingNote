@@ -72,6 +72,21 @@ async function seedUser(email, name) {
   ok('own post created under rules', mine.size === 1);
   ok('composer has no title input; post stores no title (caption only)', (await p.locator('[data-test=cm-composer] input[placeholder^=Title]').count()) === 0 && !('title' in mine.docs[0].data()) && /Onwards/.test(mine.docs[0].data().text));
   ok('legacy titled post still renders its title', (await p.locator('.cm-title', { hasText: 'Day 12' }).count()) > 0);
+  // Storage is unavailable (Spark plan, bucket locked): a photo upload failure must not post, must keep the caption, and must show a friendly message.
+  await p.route('**/firebasestorage.googleapis.com/**', (r) => r.abort()); await p.route('**/v0/b/**', (r) => r.abort());
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+  await p.setInputFiles('[data-test=cm-composer] input[type=file]', { name: 'zz.png', mimeType: 'image/png', buffer: png });
+  await sleep(21000); // post rate-limit min gap
+  await p.fill('[data-test=cm-post-text]', 'ZZTEST photo post'); await p.click('[data-test=cm-post-submit]');
+  await p.waitForSelector('.cm-error', { timeout: 25000 }).catch(() => {}); await shot('04b-photo-fail.png');
+  const errTxt = (await p.locator('.cm-error').count()) ? await p.textContent('.cm-error') : '';
+  console.log('PHOTOFAIL', JSON.stringify(errTxt), await p.inputValue('[data-test=cm-post-text]'));
+  ok('photo upload failure: friendly message, caption kept, nothing posted', /Photo upload isn.t available/.test(errTxt) && (await p.inputValue('[data-test=cm-post-text]')) === 'ZZTEST photo post' && (await db.collection('communityPosts').where('uid', '==', me).get()).size === 1);
+  await p.click('.cm-thumb .cm-x'); await p.fill('[data-test=cm-post-text]', '');
+  const own = p.locator('[data-test=cm-post]', { hasText: 'Onwards' }).first();
+  ok('caption-only post visible in feed', (await own.count()) === 1);
+  await own.locator('.cm-more').first().click(); await p.click('button.danger:has-text("Delete")'); await sleep(2000);
+  ok('caption-only post deleted under rules', (await db.collection('communityPosts').where('uid', '==', me).get()).size === 0 && (await p.locator('[data-test=cm-post]', { hasText: 'Onwards' }).count()) === 0);
   ok('follower (Ava) got a post notification', (await db.collection(`users/${ava}/notifications`).where('type', '==', 'post').get()).size === 1);
   ok('Ava got a like notification', (await db.collection(`users/${ava}/notifications`).where('type', '==', 'like').get()).size === 1);
   await p.click('[data-test=cm-bell]'); await sleep(1000); await shot('05-notifications.png');

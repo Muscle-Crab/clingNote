@@ -272,12 +272,15 @@ function pickPostImages(e) {
   for (const f of files.slice(0, LIMITS.images - draft.files.length)) { draft.files.push(f); draft.previews.push(URL.createObjectURL(f)); }
 }
 function removeImage(i) { URL.revokeObjectURL(draft.previews[i]); draft.files.splice(i, 1); draft.previews.splice(i, 1); }
+const withTimeout = (pr, ms) => Promise.race([pr, new Promise((_, rej) => setTimeout(() => rej(new Error('upload timeout')), ms))]);
 async function submitPost() {
   const x = validateText(draft.text, LIMITS.text, { allowEmpty: false }); if (!x.ok) return (error.value = x.error);
   if (!gate('post')) return;
   busy.value = true; error.value = '';
   try {
-    const images = []; for (const f of draft.files) images.push(await C.uploadImage(uid.value, f));
+    const images = [];
+    try { for (const f of draft.files) images.push(await withTimeout(C.uploadImage(uid.value, f), 20000)); }
+    catch (e) { console.warn('[community] photo upload failed:', e && (e.code || e.message)); error.value = 'Photo upload isn\'t available right now. Your caption is saved here: remove the photo to post it as text.'; return; }
     const id = await C.createPost(me, { text: x.text, images, stats: draft.stats });
     limiter.hit('post');
     draft.files.forEach((_, i) => URL.revokeObjectURL(draft.previews[i])); Object.assign(draft, { text: '', stats: null, files: [], previews: [] });
@@ -330,7 +333,7 @@ async function submitChat() {
 }
 async function sendChatImage(e) {
   const f = e.target.files && e.target.files[0]; e.target.value = ''; if (!f || !gate('chat')) return;
-  busy.value = true; try { const url = await C.uploadImage(uid.value, f); await C.sendChat(me, { image: url }); limiter.hit('chat'); scrollBottom(); } catch (err) { fail(err, 'Could not send the photo.'); } finally { busy.value = false; }
+  busy.value = true; try { const url = await withTimeout(C.uploadImage(uid.value, f), 20000); await C.sendChat(me, { image: url }); limiter.hit('chat'); scrollBottom(); } catch (err) { fail(err, 'Photo upload isn\'t available right now. Please try again later.'); } finally { busy.value = false; }
 }
 let pressTimer = null;
 const pressStart = (m) => { pressTimer = setTimeout(() => { menuFor.value = { kind: 'chat', item: m }; }, 550); };
