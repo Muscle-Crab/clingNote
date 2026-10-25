@@ -31,7 +31,7 @@
         </div>
         <div class="bgp-play">
           <button type="button" class="bgp-playbtn" data-test="bg-play" :disabled="!bg.audioSupported" @click="bg.toggle()">{{ bg.playing.value ? '⏸ Pause music' : '▶ Play music' }}</button>
-          <label class="bgp-vol">🔈<input type="range" min="0" max="1" step="0.05" :value="bg.prefs.volume" aria-label="Volume" data-test="bg-volume" @input="bg.setVolume($event.target.value)" @pointerdown="volDown" @pointermove="volMove" @pointerup="volUp" @pointercancel="volUp" @wheel.prevent="volWheel" /></label>
+          <label class="bgp-vol">🔈<input type="range" min="0" max="1" step="0.05" :value="bg.prefs.volume" aria-label="Volume" data-test="bg-volume" @input="bg.setVolume($event.target.value)" @pointerdown="volDown" @pointermove="volMove" @pointerup="volUp" @pointercancel="volUp" @touchstart.prevent="volTouch" @touchmove.prevent="volTouch" @wheel.prevent="volWheel" /></label>
         </div>
         <div class="bgp-rot" data-test="bg-rotate">
           <label class="bgp-rot-row"><span><b>🔀 Auto-rotate</b><small>Switch to a different track every {{ bg.prefs.rotateMins }} min, with a soft crossfade</small></span>
@@ -71,7 +71,9 @@ onBeforeUnmount(() => clearInterval(iv));
 import { volumeFromX, nudgeVolume } from '@/utils/bgPrefs';
 let volDragging = false;
 const volAt = (e) => bg.setVolume(volumeFromX(e.clientX, e.currentTarget.getBoundingClientRect()));
-const volDown = (e) => { if (e.pointerType === 'mouse') return; volDragging = true; e.currentTarget.setPointerCapture?.(e.pointerId); e.preventDefault(); volAt(e); };
+// iOS WKWebView: pointer capture / preventDefault on a range input can kill the native drag, so touches are handled directly.
+const volTouch = (e) => { const t = e.touches && e.touches[0]; if (t) bg.setVolume(volumeFromX(t.clientX, e.currentTarget.getBoundingClientRect())); };
+const volDown = (e) => { if (e.pointerType !== 'pen') return; volDragging = true; e.currentTarget.setPointerCapture?.(e.pointerId); e.preventDefault(); volAt(e); };
 const volMove = (e) => { if (volDragging) { e.preventDefault(); volAt(e); } };
 const volUp = () => { volDragging = false; };
 const volWheel = (e) => bg.setVolume(nudgeVolume(bg.prefs.volume, e.deltaY || -e.deltaX));

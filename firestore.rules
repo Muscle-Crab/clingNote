@@ -45,12 +45,9 @@ service cloud.firestore {
         && get(eightHourPath(uid)).data.lock.shutUntil > request.time;
     }
     function lockedTaskSame(a, b) {
-      return a.get('title', null) == b.get('title', null)
-        && a.get('createdAt', null) == b.get('createdAt', null)
-        && a.get('points', null) == b.get('points', null)
-        && a.get('complexity', null) == b.get('complexity', null)
-        && a.get('estimateMin', null) == b.get('estimateMin', null)
-        && a.get('type', null) == b.get('type', null);
+      // edits allowed while locked; slot identity (createdAt) and server-set points must not change (blocks delete/reorder)
+      return a.get('createdAt', null) == b.get('createdAt', null)
+        && a.get('points', null) == b.get('points', null);
     }
     function lockedSlotSame(o, n, i) {
       return i >= o.size() || lockedTaskSame(o[i], n[i]);
@@ -58,7 +55,8 @@ service cloud.firestore {
     function lockedDayUnchanged() {
       let o = resource.data.get('tasks', []);
       let n = request.resource.data.get('tasks', []);
-      return n.size() == o.size()
+      // adds allowed (append only), deletes blocked: every existing slot must be unchanged
+      return n.size() >= o.size()
         && lockedSlotSame(o, n, 0) && lockedSlotSame(o, n, 1) && lockedSlotSame(o, n, 2) && lockedSlotSame(o, n, 3) && lockedSlotSame(o, n, 4)
         && lockedSlotSame(o, n, 5) && lockedSlotSame(o, n, 6) && lockedSlotSame(o, n, 7) && lockedSlotSame(o, n, 8) && lockedSlotSame(o, n, 9)
         && lockedSlotSame(o, n, 10) && lockedSlotSame(o, n, 11) && lockedSlotSame(o, n, 12) && lockedSlotSame(o, n, 13) && lockedSlotSame(o, n, 14)

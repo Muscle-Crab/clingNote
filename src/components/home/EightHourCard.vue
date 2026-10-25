@@ -52,9 +52,9 @@
         <span class="eh-drain-time" :style="{ width: pace.timePct + '%' }"></span><span class="eh-drain-pts" :style="{ width: pace.pointsPct + '%' }"></span>
         <span class="eh-drain-pace" :style="{ left: Math.min(100, Math.round((pace.expected / Math.max(1, lock.target)) * 100)) + '%' }"></span>
       </div>
-      <!-- at most ONE pressure line (highest priority wins), else the server notice -->
+      <!-- at most ONE pressure line. The server notice belongs to the last SETTLED day, never to the running one
+           (it said "0 of 30" from an earlier day under today's 0/260 header). -->
       <p v-if="alert" class="eh-note" :class="'eh-alert--' + alert.level" data-test="eh-alert" role="status">{{ alert.text }}</p>
-      <p v-else-if="stats.notice" class="eh-note" data-test="eh-notice">{{ stats.notice }}</p>
     </template>
 
     <!-- ended -->
@@ -64,7 +64,7 @@
         <div class="eh-meta eh-meta--end"><span data-test="eh-points">{{ progress.earned }}/{{ lock.target }} pts</span><span>🔥 {{ stats.streak }} day streak</span></div>
       </div>
       <p v-if="met && reward" class="eh-note eh-note--ok" data-test="eh-reward">{{ reward }}</p>
-      <p v-if="stats.notice" class="eh-note" data-test="eh-notice">{{ stats.notice }}</p>
+      <p v-if="stats.notice && stats.lastDay === lock.dayKey" class="eh-note" data-test="eh-notice">{{ stats.notice }}</p>
       <details class="eh-hist" data-test="eh-history">
         <summary>Lv {{ level }} · {{ stats.xp || 0 }} XP · {{ stats.coins || 0 }} coins · 🛡️{{ stats.shields || 0 }}<span v-if="badges.length"> · 🏅{{ badges.length }}</span></summary>
         <div v-if="badges.length" class="eh-badges" data-test="eh-badges">
@@ -127,7 +127,7 @@ const save = async () => {
 
 <style scoped>
 /* Compact strip (replaces the old big card). Sits between the day tabs and the progress card. */
-.eh { background: var(--c-surface, #16181c); border: 1px solid var(--c-border, #2a2a2e); border-radius: 14px; padding: 6px 12px; margin: 6px 0; color: var(--c-text, #e6e6e6); }
+.eh { max-width: 100%; box-sizing: border-box; overflow-x: hidden; touch-action: pan-y; overscroll-behavior-x: none; background: var(--c-surface, #16181c); border: 1px solid var(--c-border, #2a2a2e); border-radius: 14px; padding: 6px 12px; margin: 6px 0; color: var(--c-text, #e6e6e6); }
 .eh--running { border-color: rgba(55,138,221,.55); padding: 4px 12px; }
 .eh-line { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 30px; }
 .eh-line--run { justify-content: flex-start; gap: 10px; min-height: 40px; }
@@ -147,9 +147,9 @@ const save = async () => {
 .eh-note--ok { background: rgba(60,180,110,.12); color: #3cb46e; }
 .eh-ctrl { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 2px 0 2px; }
 .eh-mini { display: inline-flex; align-items: center; gap: 6px; font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--c-text-3, #9aa3b5); }
-.eh-mini input[type=time] { background: var(--c-bg, #0f1113); color: var(--c-text, #e6e6e6); border: 1px solid var(--c-border, #2a2a2e); border-radius: 8px; padding: 3px 6px; font-size: .8rem; }
+.eh-mini input[type=time] { background: var(--c-bg, #0f1113); color: var(--c-text, #e6e6e6); border: 1px solid var(--c-border, #2a2a2e); border-radius: 8px; padding: 3px 6px; font-size: 16px; max-width: 100%; }
 .eh-stepper { display: inline-flex; align-items: center; gap: 6px; }
-.eh-stepper button { width: 24px; height: 24px; border-radius: 50%; border: 1px solid var(--c-border, #2a2a2e); background: var(--c-surface-2, #22252a); color: inherit; font-size: .9rem; line-height: 1; cursor: pointer; padding: 0; }
+.eh-stepper button { touch-action: manipulation; width: 24px; height: 24px; border-radius: 50%; border: 1px solid var(--c-border, #2a2a2e); background: var(--c-surface-2, #22252a); color: inherit; font-size: .9rem; line-height: 1; cursor: pointer; padding: 0; }
 .eh-stepper button:disabled { opacity: .4; cursor: not-allowed; }
 .eh-stepper strong { font-size: .9rem; min-width: 1ch; color: var(--c-text, #e6e6e6); text-transform: none; }
 .eh-btn { font-family: inherit; font-size: .75rem; font-weight: 700; min-height: 44px; min-width: 44px; border-radius: 999px; border: 1px solid var(--c-border, #2a2a2e); background: var(--c-surface-2, #22252a); color: inherit; padding: 4px 12px; cursor: pointer; }

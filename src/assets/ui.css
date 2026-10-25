@@ -96,3 +96,9 @@ body, #app { min-height: 100vh; min-height: 100dvh; margin: 0; }
 @media (max-width: 1024px), (pointer: coarse) {
   input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]), textarea, select, [contenteditable="true"] { font-size: max(16px, 1em) !important; }
 }
+
+/* iOS: lock horizontal pan + zoom app-wide; vertical scroll stays. */
+html, body, #app { max-width: 100%; overflow-x: hidden; overscroll-behavior-x: none; }
+html, body { touch-action: pan-y; }
+button, [role="button"], a { touch-action: manipulation; }
+input, select, textarea { font-size: max(16px, 1em); }

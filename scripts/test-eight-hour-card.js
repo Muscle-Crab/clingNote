@@ -29,9 +29,12 @@ let n = 0; const ok = (c, m) => { assert.ok(c, m); n++; };
   ok(/data-test="eh-lock"/.test(html), 'lock badge'); ok(!/type="time"|eh-stepper|<button/.test(html), 'no edit controls while running');
   // device clock far off: offset keeps the countdown on server time
   st.offset = 0; html = await render(at('2026-10-23T13:00:00Z'), { ...base, lock }, [T('a', true), T('b'), T('c', true)]); ok(/06:00:00|05:59:5\d/.test(html), 'server clock decides');
-  html = await render(at('2026-10-23T20:00:00Z'), { ...base, lock, stats: { ...core.defaultStats(), streak: 1, notice: 'Tomorrow is harder.' }, reward: 'Nice' }, [T('a', true), T('b', true), T('c', true)]);
+  html = await render(at('2026-10-23T20:00:00Z'), { ...base, lock, stats: { ...core.defaultStats(), streak: 1, lastDay: '2026-10-23', notice: 'Tomorrow is harder.' }, reward: 'Nice' }, [T('a', true), T('b', true), T('c', true)]);
   ok(/Goal met/.test(html) && /data-test="eh-reward"/.test(html) && /data-test="eh-notice"/.test(html), 'ended + met shows reward and notice');
   html = await render(at('2026-10-23T20:00:00Z'), { ...base, lock, stats: { ...core.defaultStats(), notice: 'Tomorrow is harder.' } }, [T('a', true), T('b'), T('c')]);
   ok(/Goal missed/.test(html), 'ended + missed');
+  ok(!/data-test="eh-notice"/.test(html), 'stale notice from an earlier day is hidden');
+  html = await render(at('2026-10-23T13:00:00Z'), { ...base, lock, stats: { ...core.defaultStats(), lastDay: '2026-10-22', notice: 'You earned 0 of 30 points.' } }, [T('a'), T('b'), T('c')]);
+  ok(!/data-test="eh-notice"/.test(html) && !/You earned/.test(html) && /0\/70 pts/.test(html), 'running day never shows the previous day notice');
   console.warn = warn; console.log(`eight-hour card: ${n} checks passed`); process.exit(0);
 })().catch((e) => { console.error(e); process.exit(1); });

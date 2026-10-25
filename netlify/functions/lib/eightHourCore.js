@@ -133,11 +133,12 @@ const dailyTarget = (tasks = [], stats = {}, windowMin = WINDOW_MIN) => {
 
 // ── lock integrity (mirrors the Firestore rule in firestore.rules for the weeklyRoutines day doc while a window runs) ──
 // Allowed during the window: completing tasks, timers, notes, subtasks. Never: add, remove, reorder/swap, retitle, re-point.
-const LOCKED_FIELDS = ['title', 'createdAt', 'points', 'complexity', 'estimateMin', 'type'];
+// While locked: tasks can be ADDED (appended) and EDITED; only deletes/reorders (slot identity = createdAt) and the server-set points are blocked.
+const LOCKED_FIELDS = ['createdAt', 'points'];
 const sameLocked = (a, b) => LOCKED_FIELDS.every((k) => JSON.stringify(a ? a[k] ?? null : null) === JSON.stringify(b ? b[k] ?? null : null));
 const lockedChangeAllowed = (oldTasks, newTasks) => {
   const o = Array.isArray(oldTasks) ? oldTasks : []; const n = Array.isArray(newTasks) ? newTasks : [];
-  if (o.length !== n.length) return { ok: false, reason: 'count' };
+  if (n.length < o.length) return { ok: false, reason: 'count' }; // adds (appended) are allowed while locked; deletes are not
   for (let i = 0; i < Math.min(o.length, LOCK_IDENTITY_SLOTS); i++) if (!sameLocked(o[i], n[i])) return { ok: false, reason: 'identity', index: i };
   return { ok: true };
 };

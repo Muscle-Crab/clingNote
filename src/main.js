@@ -35,6 +35,9 @@ app.use(router);
 // Native shell only: if the app fails to start (blank screen), show the reason on screen instead of an empty page, so a TestFlight tester can report it.
 if (isNative()) {
   const show = (title, detail) => {
+    console.error('[ClingNote] ' + title + ':', detail);
+    // Production: log only, never a red overlay over the UI. The on-screen box is for dev/debug builds (VUE_APP_DEBUG_OVERLAY=1).
+    if (process.env.NODE_ENV === 'production' && process.env.VUE_APP_DEBUG_OVERLAY !== '1') return;
     try {
       let box = document.getElementById('native-startup-error');
       if (!box) {
@@ -82,3 +85,10 @@ import('@capacitor/core').then(async ({ Capacitor }) => {
     try { const u = new URL(url); const path = (u.protocol.startsWith('http') ? '' : (u.host ? '/' + u.host : '')) + u.pathname + u.search; if (/^\/(pal|pals|m)\b/.test(path)) router.push(path); } catch (e) { /* ignore */ }
   });
 }).catch(() => {});
+
+// iOS WKWebView: block pinch (gesturestart) and double-tap zoom.
+if (typeof document !== 'undefined' && /iPhone|iPad|iPod/.test(navigator.userAgent || '')) {
+  const stop = (e) => e.preventDefault();
+  ['gesturestart', 'gesturechange', 'gestureend'].forEach((t) => document.addEventListener(t, stop, { passive: false }));
+  document.addEventListener('dblclick', stop, { passive: false });
+}

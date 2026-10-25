@@ -414,7 +414,14 @@ const startCountdownWatcher = () => {
           task.timerEndTime &&
           new Date(task.timerEndTime).getTime() <= Date.now()
       ) {
-        await autoTransferTaskToTomorrow(i);
+        // 8-hour lock: a locked day can never lose a task, so an expired timer only stops in place (no carry to tomorrow).
+        // Before: the carry spliced the task and saveSelectedDayTasks threw a LockError inside this interval -> "Unhandled:" overlay.
+        if (selectedDayLocked.value || isShutdown()) {
+          selectedDayRoutine.value[i] = { ...task, timerActive: false, timerStartedAt: null, timerEndTime: null };
+          await saveSelectedDayTasks().catch((e) => console.warn('timer stop not saved:', e));
+        } else {
+          await autoTransferTaskToTomorrow(i).catch((e) => { console.warn('auto-carry failed:', e); fetchSelectedDayRoutine(); });
+        }
       }
     }
   }, 1000);
@@ -1772,8 +1779,8 @@ const addNewTask = async () => {
           : [days[selectedDayIndex.value]];
 
   // 8-hour lock: nothing can be added to the locked day (including repeating copies); before the countdown the plan count is the cap
-  if (selectedDays.some((d) => isDayLocked(d.day))) { error.value = lockedMessage(); return false; }
-  if (selectedDays.some((d) => d.day === days[selectedDayIndex.value].day) && isToday(selectedDayIndex.value) && planFull()) {
+  // (adds ARE allowed during the locked window; they are appended so the locked slots never move. Deletes stay blocked.)
+  if (selectedDays.some((d) => d.day === days[selectedDayIndex.value].day) && isToday(selectedDayIndex.value) && !isDayLocked(days[selectedDayIndex.value].day) && planFull()) {
     error.value = `Your plan is ${eh.plan.value.taskCount} task${eh.plan.value.taskCount === 1 ? '' : 's'} today. Raise the task count in the 8-hour card first (only possible before the countdown starts).`; return false;
   }
 
@@ -1825,10 +1832,10 @@ const addNewTask = async () => {
     const activeFrom = newTask.value.selectedDays.length > 0 && task.type === 'recurring' && dayIdx !== selectedDayIndex.value && dayIdx >= 0 ? activeFromForDay(dayIdx) : '';
     return activeFrom ? { ...task, activeFrom } : { ...task };
   };
-  const insertAt = (list, copy) => { const l = [...list]; l.splice(Number.isNaN(position) ? l.length : position, 0, copy); return l; };
+  const insertAt = (list, copy, dayName) => { const l = [...list]; l.splice(Number.isNaN(position) || isDayLocked(dayName) ? l.length : position, 0, copy); return l; }; // locked day: append only
   const viewDay = days[selectedDayIndex.value].day;
   const key = taskKey(task);
-  if (selectedDays.some((d) => d.day === viewDay)) selectedDayRoutine.value = insertAt(selectedDayRoutine.value || [], copyFor({ day: viewDay }));
+  if (selectedDays.some((d) => d.day === viewDay)) selectedDayRoutine.value = insertAt(selectedDayRoutine.value || [], copyFor({ day: viewDay }), viewDay);
   if (gateCache) gateCache.extra.push(task);
   pendingAdds.set(key, task);
   const hadReminder = !!task.reminder;
@@ -1838,7 +1845,7 @@ const addNewTask = async () => {
   error.value = '';
   lastAddPersist = trackWrite((async () => {
     try {
-      await Promise.all(selectedDays.map((d) => mutateDay(d.day, (l) => (l.some((t) => taskKey(t) === key) ? l : insertAt(l, copyFor(d))))));
+      await Promise.all(selectedDays.map((d) => mutateDay(d.day, (l) => (l.some((t) => taskKey(t) === key) ? l : insertAt(l, copyFor(d), d.day)))));
     } catch (e) {
       console.error('Error adding task:', e);
       selectedDayRoutine.value = (selectedDayRoutine.value || []).filter((t) => taskKey(t) !== key);
@@ -2001,7 +2008,7 @@ const startEditingTask = (index) => {
 };
 
 const updateTask = async () => {
-  if (blockIfLocked()) return;
+  if (isShutdown()) { alert(shutMessage()); return; } // edits are allowed during the locked window; only the post-day shutdown blocks them
   if (editedTask.value.title.trim() === '') {
     error.value = 'Task name cannot be empty';
     return;
