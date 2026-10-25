@@ -1,6 +1,5 @@
 <template>
   <div class="max-w-xl mx-auto p-6 text-gray-800 dark:text-gray-100" data-test="support-page">
-    <h1 class="text-2xl font-bold mb-3">ClingNote Support</h1>
     <p class="mb-4">Need help? Email us at
       <a :href="'mailto:' + EMAIL" class="text-blue-600 dark:text-blue-400 underline font-semibold" data-test="support-email">{{ EMAIL }}</a>
       and we will get back to you.</p>

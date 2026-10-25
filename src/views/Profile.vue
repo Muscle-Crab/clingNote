@@ -1,13 +1,6 @@
 <template>
   <div class="pf">
-    <div class="pf-scene" aria-hidden="true"></div>
     <div class="pf-wrap">
-      <button type="button" class="pf-back" aria-label="Close" data-test="profile-close" @click="closeProfile"><span aria-hidden="true">‹</span> Profile</button>
-      <header class="pf-hero">
-        <h1 class="pf-title">{{ isOwn ? 'Your ' : '' }}<span class="pf-accent">{{ isOwn ? 'space.' : 'Profile' }}</span></h1>
-        <p v-if="isOwn" class="pf-sub">Make it feel like you.</p>
-      </header>
-
       <template v-if="userData">
         <!-- Identity card: avatar, name, email, plan -->
         <section class="pf-card pf-id">
@@ -122,7 +115,6 @@ const logout = async () => {
   catch (error) { console.error('Error logging out:', error.message); }
   finally { loggingOut.value = false; }
 };
-const closeProfile = () => { if (window.history.state && window.history.state.back) closeRouter.back(); else closeRouter.push('/'); };
 import { onAuthStateChanged } from 'firebase/auth';
 import { ensureUserDoc } from '@/utils/userDoc';
 import { isPro } from '@/utils/pro';
@@ -276,7 +268,7 @@ onMounted(() => { loadDayLengthHours().then((v) => { dayLen.value = v; }).catch(
 .pf { position: relative; min-height: 100%; color: var(--c-text); font-family: var(--font); padding-bottom: calc(env(safe-area-inset-bottom) + 32px); }
 .pf-scene { position: absolute; z-index: 0; inset: 0 0 auto 0; height: 340px; pointer-events: none;
   background: linear-gradient(180deg, rgba(7,13,28,.2), rgba(7,13,28,0) 40%, var(--c-bg) 97%), var(--hero-img, url('~@/assets/hero-forest.jpg')) 72% 30% / cover no-repeat; }
-.pf-wrap { position: relative; z-index: 1; max-width: 520px; margin: 0 auto; padding: calc(env(safe-area-inset-top) + 12px) max(16px, env(safe-area-inset-right)) 0 max(16px, env(safe-area-inset-left)); }
+.pf-wrap { position: relative; z-index: 1; max-width: 520px; margin: 0 auto; padding: 4px max(16px, env(safe-area-inset-right)) 0 max(16px, env(safe-area-inset-left)); }
 .pf-back { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 4px; background: none; border: 0; color: var(--c-text); font-size: 17px; cursor: pointer; }
 .pf-back span { font-size: 28px; line-height: 1; margin-top: -3px; }
 .pf-hero { padding: 72px 4px 18px; }

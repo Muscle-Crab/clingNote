@@ -1,6 +1,5 @@
 <template>
   <div class="p-6 max-w-4xl mx-auto bg-white dark:bg-gray-900 rounded-xl shadow-lg">
-    <h1 class="text-3xl font-bold mb-4 text-gray-900 dark:text-white">Terms and Conditions</h1>
     <p class="mb-4 text-gray-700 dark:text-gray-300">
       Welcome to our app. By accessing or using our services, you agree to be bound by the following terms and conditions.
     </p>

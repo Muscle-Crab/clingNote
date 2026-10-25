@@ -1,6 +1,5 @@
 <template>
   <div class="max-w-3xl mx-auto p-6 text-gray-800" data-test="privacy-policy">
-    <h1 class="text-3xl font-bold mb-6">Privacy Policy</h1>
 
     <p class="mb-4">
       ClingNote ("we", "our", or "us") is committed to protecting your privacy. This Privacy Policy explains what we collect, why, who we share it with, how long we keep it, and how you can delete it when you use the ClingNote iPhone app and website.
