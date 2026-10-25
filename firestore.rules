@@ -431,7 +431,8 @@ service cloud.firestore {
         && request.resource.data.reason is string && request.resource.data.reason.size() <= 300
         && request.resource.data.status == 'open'
         && request.resource.data.createdAt == request.time;
-      allow read, update, delete: if cmAdmin();
+      // Community admin may only touch Community reports (targetType set, no manager-pal `scope`); manager-pal reports stay server-only.
+      allow read, update, delete: if cmAdmin() && ('targetType' in resource.data) && !('scope' in resource.data);
     }
     // Blocks + community prefs (EULA acceptance, notification toggles): private to the owner.
     match /users/{userId}/blocks/{otherId} {
