@@ -1,3 +1,4 @@
+import { localYMD } from './localDate.js';
 export const getTodayId = () => {
   return new Date().toLocaleDateString("en-CA");
 };
@@ -47,13 +48,8 @@ export const getOrdinalSuffix = (number) => {
   return suffixes[(v - 20) % 10] || suffixes[v] || suffixes[0];
 };
 
-export const getTodayDate = () => {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0); // Reset time to midnight for accurate comparison
-  const formattedDate = today.toISOString().split('T')[0]; // Format as YYYY-MM-DD
-  console.log("Today's Date:", formattedDate); // Log the date for debugging
-  return formattedDate;
-};
+// Local (phone timezone) YYYY-MM-DD. Was UTC (toISOString), which is tomorrow after ~8PM in the US.
+export const getTodayDate = () => localYMD();
 
 export const extractYouTubeID = (url) => {
   const match = url.match(/(?:\?v=|\/embed\/|\.be\/)([a-zA-Z0-9_-]{11})/);

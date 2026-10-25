@@ -209,7 +209,8 @@ import { activeFromForDay, isHiddenOnDate, seriesDays, withoutSeries } from '@/u
 import { useTaskViewPrefs } from '@/composables/useTaskViewPrefs';
 import { viewTasks, canReorder, normalizePrefs, visibleCount, shouldHandleShortcut } from '@/utils/taskView';
 import { ACTIVE_CAP, taskKey, activeCount, loadSummary, buildSchedule } from '@/utils/taskPlanning';
-import { getTodayId, formatSessionTime, getCurrentDate, formatTime, getTodayDate, isToday } from '@/utils/dateTime';
+import { localYMD, isStaleCompletion } from '@/utils/localDate';
+import { getTodayId, formatSessionTime, getCurrentDate, formatTime, isToday } from '@/utils/dateTime';
 import { badges } from '@/utils/gamification';
 import { recordMonthlyToggle, awardFinishedMonth } from '@/composables/useMonthlyStats';
 import { loadDisciplineSettings, settleDeadlines, clearLossPending, loadDisciplineState, setBossForDay, setBossCleared, tryFreeze, logDiscipline, patchDisciplineState } from '@/composables/useDiscipline';
@@ -321,7 +322,7 @@ import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'fire
 import data from '@/data.json';
 import { useSmoothReorder } from "@/composables/useSmoothReorder";
 import {db} from '@/firebaseConfig'; // Assuming you have imported the Firebase setup file and exported the db instance
-import { doc, setDoc, serverTimestamp, getDoc, updateDoc, deleteDoc, getFirestore, runTransaction} from 'firebase/firestore';
+import { doc, setDoc, serverTimestamp, getDoc, updateDoc, getFirestore, runTransaction} from 'firebase/firestore';
 const modalOpen = ref(false);
 import { deleteObject } from "firebase/storage";
 import { widgetTaskId } from '@/utils/widgetSnapshot';
@@ -925,20 +926,16 @@ const fetchSelectedDayRoutine = async () => {
     if (selectedDayDocSnapshot.exists()) {
       let tasks = selectedDayDocSnapshot.data().tasks || [];
 
-      const isPastDay = new Date(selectedDay.date) < new Date(getTodayDate());
-
-      // If it's a past day, reset all tasks to incomplete
-      if (isPastDay && !isDayLocked(selectedDay.day)) { // (the 8-hour window can run past midnight: its day is never reset)
-        tasks = tasks.map(task => resetSubtasks({
-          ...task,
-          completed: false
-        }));
-
-        if (seq !== fetchSeq) return; // stale: no daily-reset write for a day that is no longer selected
-        await updateDoc(selectedDayDocRef, {
-          tasks: tasks,
-          updatedAt: serverTimestamp()
-        });
+      // Old-week reset: a task completed before this weekday's most recent (local) occurrence is left over from a
+      // previous week -> incomplete again. Completions from the current occurrence (e.g. today) are never touched.
+      // (The old check compared data.json's empty `date` with a UTC getTodayDate(), so it never ran.)
+      const dayIdx = selectedDayIndex.value;
+      if (!isDayLocked(selectedDay.day) && tasks.some((t) => isStaleCompletion(t, dayIdx))) { // (8-hour locked day is never reset)
+        if (seq !== fetchSeq) return; // stale: no reset write for a day that is no longer selected
+        const now = new Date();
+        tasks = await mutateDay(selectedDay.day, (cur) => cur.map((t) => (isStaleCompletion(t, dayIdx, now)
+          ? resetSubtasks({ ...t, completed: false, completedAt: null, timerActive: false, timerStoppedAt: null })
+          : t)));
         if (seq !== fetchSeq) return;
       }
 
@@ -1085,6 +1082,8 @@ const topIncompleteTaskIndex = computed(() => {
 
 const { soundEnabled, playSound, toggleSound, markUserCompletion, watchMilestones } = useSounds();
 
+// Stable task identity for transactional updates (id when both have one, else createdAt|title).
+const sameTask = (a, b) => !!a && !!b && ((a.id && b.id) ? a.id === b.id : taskKey(a) === taskKey(b));
 const toggleTaskCompletion = async (index) => {
   if (blockIfShut()) return false;
   const task = { ...selectedDayRoutine.value[index] }; // Create a copy of the task to avoid direct mutation
@@ -1128,36 +1127,30 @@ const toggleTaskCompletion = async (index) => {
   const selectedDayDocRef = doc(db, 'weeklyRoutines', `${userId.value}_${days[selectedDayIndex.value].day}`);
 
   try {
-    const selectedDayDocSnapshot = await getDoc(selectedDayDocRef);
-
-    if (selectedDayDocSnapshot.exists()) {
-      let tasks = selectedDayDocSnapshot.data().tasks || [];
+    // Transaction + match by task identity (id, else createdAt|title) — never by array index, which shifts under concurrent edits.
+    await runTransaction(db, async (tx) => {
+      const snap = await tx.get(selectedDayDocRef);
+      if (!snap.exists()) return;
+      let tasks = [...(snap.data().tasks || [])];
+      const at = tasks.findIndex((t) => sameTask(t, task));
+      if (at < 0) return; // deleted/moved meanwhile: nothing to update
 
       if (lockedToggle) {
-        // 8-hour lock: update in place by identity; the array never shrinks and no locked field changes
-        const at = tasks.findIndex((t) => t.createdAt === task.createdAt && t.title === task.title);
-        const slot = at >= 0 ? at : index;
-        tasks[slot] = { ...tasks[slot], completed: task.completed, completedAt: task.completedAt, timerActive: false, timerStoppedAt: task.timerStoppedAt };
-      } else if (task.type === "one-time") {
-        // Remove the one-time task completely
-        tasks = tasks.filter((_, i) => i !== index);
+        // 8-hour lock: update in place; the array never shrinks and no locked field changes
+        tasks[at] = { ...tasks[at], completed: task.completed, completedAt: task.completedAt, timerActive: false, timerStoppedAt: task.timerStoppedAt };
+      } else if (task.type === "one-time" && task.completed) {
+        tasks.splice(at, 1); // Remove the one-time task completely
       } else {
-        tasks[index] = task; // Otherwise, update the task
+        tasks[at] = { ...tasks[at], ...task };
       }
 
       if (tasks.length > 0 || lockedToggle) {
-        // Update Firestore with remaining tasks
-        await updateDoc(selectedDayDocRef, {
-          tasks: tasks,
-          updatedAt: serverTimestamp(),
-        });
+        tx.update(selectedDayDocRef, { tasks, updatedAt: serverTimestamp() });
       } else {
-        // If no tasks remain, delete the entire document
-        await deleteDoc(selectedDayDocRef);
+        tx.delete(selectedDayDocRef); // the only task was this one-time task
       }
-
-      console.log("Task completion updated successfully");
-    }
+    });
+    console.log("Task completion updated successfully");
   } catch (error) {
     console.error("Error updating task completion:", error);
   }
@@ -1165,8 +1158,8 @@ const toggleTaskCompletion = async (index) => {
   if (lockedToggle) eh.reportProgress(); // server recounts earned points from the day doc (server clock)
   checkAllTasksCompleted();
   await saveDailyPerformance();
-  selectedDayRoutine.value = selectedDayRoutine.value.filter(task => !task.completed || showCompleted);
-  showCompleted.value = false;
+  // Completed tasks stay in the routine (the Done section renders them); the Done section keeps whatever state the user chose.
+  // (Previously `filter(... || showCompleted)` was missing .value and then forced showCompleted=false, collapsing Done on every tap.)
 };
 
 // iOS widget "complete" taps: drained through the SAME toggleTaskCompletion path (points, streak, boss, report, one-time removal).
@@ -1179,6 +1172,14 @@ const widgetComplete = async (taskId, mode) => {
   if (t.completed && mode !== 'effects') return true; // idempotent
   if (mode === 'effects') { const { widgetEffectsPending, ...rest } = t; selectedDayRoutine.value.splice(i, 1, { ...rest, completed: false }); }
   return (await toggleTaskCompletion(i)) !== false;
+};
+// Widget tap made before midnight, drained after: mark the task done on the day it was made (that day's doc), instead of dropping it.
+// Points/streak for that past day are not re-run (the streak day has already closed). Locked day / missing task: acked as no-op.
+widgetComplete.prior = async (taskId, dayName) => {
+  if (!userId.value || !dayName || isDayLocked(dayName)) return !!userId.value;
+  const at = new Date().toISOString();
+  await mutateDay(dayName, (tasks) => tasks.map((t) => (t && !t.completed && widgetTaskId(t) === taskId ? { ...t, completed: true, completedAt: at, timerActive: false, widgetEffectsPending: false } : t)));
+  return true;
 };
 widgetComplete.tasks = () => (isToday(selectedDayIndex.value) ? selectedDayRoutine.value : []);
 let offWidget = null;
@@ -1324,27 +1325,17 @@ const checkAllTasksCompleted = async () => {
     fetchSelectedDayRoutine();
     await saveDailyPerformance();
 
-    // 🗑 Remove one-time tasks & reset recurring tasks
-    selectedDayRoutine.value = selectedDayRoutine.value.filter(task => {
-      if (task.type === "one-time") {
-        return false; // Remove from array (will also be removed from Firestore)
-      }
-    });
+    // 🗑 Remove completed one-time tasks only; recurring/routine tasks are always kept.
+    // (The old filter callback returned undefined for every non-one-time task, so the whole routine was dropped and the doc deleted.)
+    if (selectedDayLocked.value) return; // 8-hour lock: the day's array never shrinks
+    const isDoneOneTime = (t) => t && t.type === 'one-time' && t.completed;
+    selectedDayRoutine.value = selectedDayRoutine.value.filter((t) => !isDoneOneTime(t));
 
-    // 🔄 Update Firestore
+    // 🔄 Update Firestore (transaction on the server copy: never overwrite with a stale local list, never delete the doc)
     try {
-      const selectedDayDocRef = doc(db, 'weeklyRoutines', `${userId.value}_${days[selectedDayIndex.value].day}`);
-
-      if (selectedDayRoutine.value.length > 0) {
-        await updateDoc(selectedDayDocRef, {
-          tasks: selectedDayRoutine.value,
-          updatedAt: serverTimestamp()
-        });
-        console.log("✅ One-time tasks removed, recurring tasks reset.");
-      } else {
-        await deleteDoc(selectedDayDocRef); // Remove document if no tasks remain
-        console.log("🗑 All tasks removed. Firestore document deleted.");
-      }
+      const dayName = days[selectedDayIndex.value].day;
+      await mutateDay(dayName, (tasks) => tasks.filter((t) => !isDoneOneTime(t)));
+      console.log("✅ Completed one-time tasks removed; recurring tasks kept.");
 
     } catch (error) {
       console.error("❌ Error updating Firestore:", error);
@@ -1525,10 +1516,15 @@ const updateStreakOnCompletion = async (task) => {
   if (!isTaskVisibleOn(task, localDateStr())) return; // scheduled task before its week: never counts (central visibility check)
   const streakDocRef = doc(db, 'streaks', userId.value);
   try {
-    const snap = await getDoc(streakDocRef);
-    const prev = snap.exists() ? snap.data() : null;
-    const next = applyTaskToggle(prev, localDateStr(), { key: taskKey(task), completed: !!task.completed, pending: task.status === 'pending', gate: streakGateNow() && !!daySession.value.started }, streakGap());
-    await setDoc(streakDocRef, { ...next, updatedAt: serverTimestamp() }, { merge: true });
+    // Transaction: two quick toggles (or two devices) can no longer read the same doc and overwrite each other's update.
+    const toggle = { key: taskKey(task), completed: !!task.completed, pending: task.status === 'pending', gate: streakGateNow() && !!daySession.value.started };
+    const today = localDateStr(), gap = streakGap();
+    const next = await runTransaction(db, async (tx) => {
+      const snap = await tx.get(streakDocRef);
+      const n = applyTaskToggle(snap.exists() ? snap.data() : null, today, toggle, gap);
+      tx.set(streakDocRef, { ...n, updatedAt: serverTimestamp() }, { merge: true });
+      return n;
+    });
     applyStreakState(next);
     recordMonthlyToggle(userId.value, localDateStr(), { key: taskKey(task), completed: !!task.completed, pending: task.status === 'pending' }, next.bestStreak)
       .then(() => loadDisciplineState(userId.value)).then((st) => { discState.value = st; checkProgression(st); })
@@ -1814,7 +1810,7 @@ const addNewTask = async () => {
   // Parse datetime-local input if provided
   if (newTask.value.reminder?.datetime) {
     const dateObj = new Date(newTask.value.reminder.datetime);
-    const date = dateObj.toISOString().split('T')[0];
+    const date = localYMD(dateObj); // local date (UTC flipped 8PM+ reminders to the next day)
     const time = dateObj.toTimeString().slice(0, 5); // "HH:MM"
 
     task.time = time;
@@ -1909,7 +1905,7 @@ const speakDailyReport = async () => {
   const today = new Date();
   const yesterday = new Date(today);
   yesterday.setDate(yesterday.getDate() - 1);
-  const yesterdayStr = yesterday.toISOString().split('T')[0];
+  const yesterdayStr = localYMD(yesterday);
 
   const docRef = doc(db, 'dailyReports', `${userId.value}_${yesterdayStr}`);
   const snapshot = await getDoc(docRef);
@@ -1940,14 +1936,14 @@ const speakDailyReport = async () => {
 const showDailyReportPopup = ref(false);
 const lastSpokenDate = ref(localStorage.getItem("lastSpokenDate") || null);
 onMounted(() => {
-  const todayStr = new Date().toISOString().split("T")[0];
+  const todayStr = localYMD();
 
   if (lastSpokenDate.value !== todayStr) {
     showDailyReportPopup.value = true; // show popup
   }
 });
 watch(selectedDayIndex, () => {
-  const todayStr = new Date().toISOString().split("T")[0];
+  const todayStr = localYMD();
 
   if (lastSpokenDate.value !== todayStr && isToday(selectedDayIndex.value)) {
     showDailyReportPopup.value = true;
@@ -1957,13 +1953,13 @@ watch(selectedDayIndex, () => {
 const userCredits = ref(0);
 const playDailyReport = () => {
   speakDailyReport(); // Call your existing function
-  const todayStr = new Date().toISOString().split("T")[0];
+  const todayStr = localYMD();
   localStorage.setItem("lastSpokenDate", todayStr);
   lastSpokenDate.value = todayStr;
   showDailyReportPopup.value = false;
 };
 const dismissReportPopup = () => {
-  const todayStr = new Date().toISOString().split("T")[0];
+  const todayStr = localYMD();
   localStorage.setItem("lastSpokenDate", todayStr);
   lastSpokenDate.value = todayStr;
   showDailyReportPopup.value = false;
@@ -2202,10 +2198,10 @@ const checkTasksAndReduceStreak = async () => {
   if (!userId.value) return;
 
   const now = new Date();
-  const todayStr = now.toISOString().split('T')[0]; // Current date in YYYY-MM-DD format
+  const todayStr = localYMD(now); // Current date in YYYY-MM-DD format
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
-  const yesterdayStr = yesterday.toISOString().split('T')[0]; // Yesterday's date
+  const yesterdayStr = localYMD(yesterday); // Yesterday's date
 
   try {
     const streakDocRef = doc(db, 'streaks', userId.value);
@@ -2360,7 +2356,7 @@ const checkForBadges = async () => {
 
 
 
-const currentDayKey = new Date().toISOString().split('T')[0]; // Format: YYYY-MM-DD
+const currentDayKey = localYMD(); // Format: YYYY-MM-DD
 const pointsAccumulated = ref(0);
 const totalPoints = computed(() => selectedDayRoutine?.value?.length * 10); // Total points (10 points per task)
 
@@ -2748,7 +2744,7 @@ const toggleTaskImportance = async (index) => {
 
 const saveDailyPerformance = async () => {
   const today = new Date();
-  const dateStr = today.toISOString().split('T')[0]; // YYYY-MM-DD
+  const dateStr = localYMD(today); // local YYYY-MM-DD
   const docRef = doc(db, 'dailyReports', `${userId.value}_${dateStr}`);
 
   const completedCount = selectedDayRoutine.value.filter(task => task.completed).length;
