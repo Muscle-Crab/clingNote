@@ -29,7 +29,7 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, ref, onBeforeUnmount } from 'vue';
 import { HOUR_OPTIONS, hoursLabel, clampHours, hoursMs, fmtClock } from '@/utils/eightHour';
 
 const props = defineProps({ initialHours: { type: Number, default: 8 }, nowMs: { type: Function, default: () => Date.now() }, tz: { type: String, default: '' }, busy: Boolean, error: { type: String, default: '' } });
@@ -37,7 +37,7 @@ defineEmits(['confirm']);
 const step = ref('pick');
 const hours = ref(clampHours(props.initialHours));
 const idx = computed({ get: () => Math.max(0, HOUR_OPTIONS.indexOf(hours.value)), set: (i) => { hours.value = HOUR_OPTIONS[Math.min(HOUR_OPTIONS.length - 1, Math.max(0, i))]; } });
-const tick = ref(0); setInterval(() => { tick.value++; }, 15000);
+const tick = ref(0); const tickId = setInterval(() => { tick.value++; }, 15000); onBeforeUnmount(() => clearInterval(tickId));
 const endLabel = computed(() => { void tick.value; const tz = props.tz || Intl.DateTimeFormat().resolvedOptions().timeZone; return fmtClock(props.nowMs() + hoursMs(hours.value), tz); });
 </script>
 
