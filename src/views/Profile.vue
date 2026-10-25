@@ -6,7 +6,7 @@
         <section class="pf-card pf-id">
           <div class="pf-id-row">
             <div class="pf-av-wrap">
-              <img v-if="avatarSrc" class="profile-avatar pf-av" :src="avatarSrc" alt="Profile picture" data-test="profile-avatar" />
+              <img v-if="avatarSrc && !avFailed" :key="avatarSrc" class="profile-avatar pf-av" :src="avatarSrc" alt="Profile picture" data-test="profile-avatar" width="88" height="88" decoding="async" @error="avFailed = true" />
               <span v-else class="profile-avatar profile-avatar--default pf-av pf-av--default" data-test="profile-avatar-default" aria-label="Default profile picture">{{ initials }}</span>
               <button v-if="isOwn" type="button" class="pf-av-cam" aria-label="Change photo" :disabled="avatarBusy" @click="fileInput && fileInput.click()">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-2.5h6L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
@@ -114,6 +114,7 @@ import PushSettings from '@/components/PushSettings.vue';
 import DeleteAccount from '@/components/DeleteAccount.vue';
 import { syncPublicProfile } from '@/composables/usePublicProfile';
 import { fileToAvatarDataUrl, isAvatarSrc, initialsOf } from '@/utils/avatar';
+import { myAvatar } from '@/composables/useAvatar';
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
 import { BADGES } from '@/utils/badges';
 import { getCommunityProfile } from '@/composables/useCommunity';
@@ -175,7 +176,9 @@ const fileInput = ref(null);
 const avatarBusy = ref(false);
 const avatarMsg = ref('');
 const avatarErr = ref(false);
-const avatarSrc = computed(() => (userData.value && isAvatarSrc(userData.value.avatarURL) ? userData.value.avatarURL : ''));
+const avFailed = ref(false);
+const avatarSrc = computed(() => { const own = isOwn.value && myAvatar.uid === auth.currentUser?.uid && myAvatar.url; const v = userData.value ? userData.value.avatarURL : own; return isAvatarSrc(v) ? v : (isAvatarSrc(own) ? own : ''); });
+watch(avatarSrc, () => { avFailed.value = false; });
 const initials = computed(() => initialsOf(userData.value?.name, userData.value?.email));
 const saveAvatar = async (value, okMsg) => {
   const uid = auth.currentUser?.uid;

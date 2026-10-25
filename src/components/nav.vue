@@ -18,8 +18,11 @@
 
           <div  v-if="userEmail" class="flex items-center space-x-3">
             <img
-                v-if="avatarURL "
+                v-if="avatarURL && !avatarFailed"
+                :key="avatarURL"
                 :src="avatarURL"
+                width="40" height="40" decoding="async"
+                @error="avatarFailed = true"
                 alt="Avatar"
                 class="w-10 h-10 rounded-full border object-cover"
             />
@@ -152,6 +155,7 @@ const isIOS = isNativeIOS(); // iOS app: no admin About page, no Recovery Tracke
 const hideUgc = ugcHidden(); // iOS app: no Rankings/community until report+block tools exist
 import { auth, db } from '@/firebaseConfig';
 import { doc, getDoc } from 'firebase/firestore';
+import { myAvatar, primeAvatar, setAvatar } from '@/composables/useAvatar';
 import { useManagerBadge } from '@/composables/usePals';
 
 const router = useRouter();
@@ -163,7 +167,9 @@ const route = useRoute();
 const mode = computed(() => (route.path === '/manage' || route.path.startsWith('/manage/') ? 'manager' : route.path === '/home' ? 'user' : getMode()));
 const switchMode = (m) => { setMode(m); router.push(homeFor(m)); };
 watch(userId, (u) => palBadge.watchUid(u));
-const avatarURL = ref(null);
+const avatarURL = computed(() => myAvatar.url || null); // shared, localStorage-cached (instant paint)
+const avatarFailed = ref(false);
+watch(avatarURL, () => { avatarFailed.value = false; });
 const displayName = ref('');
 const initials = computed(() => { const src = (displayName.value || userEmail.value || 'U').replace(/@.*/, '').trim(); const parts = src.split(/[\s._-]+/).filter(Boolean); return ((parts[0]?.[0] || 'U') + (parts[1]?.[0] || '')).toUpperCase(); }); // New: Avatar URL from Firestore
 
@@ -201,19 +207,20 @@ onMounted(() => {
   sidebarOpen.value = mq ? mq.matches : window.innerWidth >= 768;
   if (mq) mq.addEventListener('change', onMq);
   document.addEventListener('keydown', onEsc);
-  window.addEventListener('clingnot:avatar', (e) => { avatarURL.value = (e && e.detail) || null; });
+  window.addEventListener('clingnot:avatar', (e) => { if (userId.value) setAvatar(userId.value, (e && e.detail) || ''); });
 
   auth.onAuthStateChanged(async (user) => {
     if (user) {
       console.log("[AUTH] User logged in:", user.uid);
       userEmail.value = user.email;
       userId.value = user.uid;
+      primeAvatar(user.uid); // paint cached photo before the Firestore round trip
 
       try {
         const userDocRef = doc(db, 'users', user.uid);
         const userDocSnap = await getDoc(userDocRef);
         if (userDocSnap.exists()) {
-          avatarURL.value = userDocSnap.data().avatarURL || null;
+          setAvatar(user.uid, userDocSnap.data().avatarURL || '');
           displayName.value = userDocSnap.data().name || userDocSnap.data().displayName || user.displayName || '';
           syncPublicProfile(user.uid, userDocSnap.data()).catch(() => {}); // others only ever read publicProfiles
         } else {
@@ -226,7 +233,7 @@ onMounted(() => {
       console.log("[AUTH] User not logged in");
       userEmail.value = null;
       userId.value = null;
-      avatarURL.value = null;
+      primeAvatar('');
     }
   });
 });

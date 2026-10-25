@@ -162,9 +162,9 @@ import { BADGES, topBadges, badgeInfo } from '@/utils/badges';
 import { LIMITS, EULA_VERSION, NOTIF_TYPES, DEFAULT_NOTIF_PREFS, validateText, displayNameOf, safeAvatar, progressText, filterBlocked, sortFeed, filterFollowing, chatOrder, mergeById, toggleLikeState, createRateLimiter, postLink, shareTextFor, visibleNotifs, unreadCount, isAdminEmail, tsMs } from '@/utils/community';
 import { timeAgo } from '@/utils/pals';
 import { isNative } from '@/utils/platform';
-import { initialsOf } from '@/utils/avatar';
+import AvatarImg from '@/components/common/AvatarImg.vue';
 
-const Avatar = (props, { attrs }) => props.src ? h('img', { src: props.src, alt: '', class: ['cm-av', props.small && 'sm', props.big && 'big'], ...attrs }) : h('span', { class: ['cm-av', 'cm-av--i', props.small && 'sm', props.big && 'big'], ...attrs }, initialsOf(displayNameOf(props.name)));
+const Avatar = (props, { attrs }) => h(AvatarImg, { src: props.src || '', name: displayNameOf(props.name), size: props.big ? 72 : props.small ? 28 : 36, class: ['cm-av', 'cm-av--i', props.small && 'sm', props.big && 'big'], ...attrs }); // initials first, photo fades in; onerror/timeout keeps initials
 Avatar.props = ['name', 'src', 'small', 'big'];
 const SR_ROW = 'display:grid;grid-template-columns:repeat(4,1fr);text-align:center;gap:4px;align-items:start';
 const SR_B = 'display:block;font-size:1.05rem;line-height:1.25;font-weight:700';
