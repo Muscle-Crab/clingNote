@@ -933,9 +933,11 @@ const fetchSelectedDayRoutine = async () => {
       if (!isDayLocked(selectedDay.day) && tasks.some((t) => isStaleCompletion(t, dayIdx))) { // (8-hour locked day is never reset)
         if (seq !== fetchSeq) return; // stale: no reset write for a day that is no longer selected
         const now = new Date();
-        tasks = await mutateDay(selectedDay.day, (cur) => cur.map((t) => (isStaleCompletion(t, dayIdx, now)
+        const resetStale = (list) => list.map((t) => (isStaleCompletion(t, dayIdx, now)
           ? resetSubtasks({ ...t, completed: false, completedAt: null, timerActive: false, timerStoppedAt: null })
-          : t)));
+          : t));
+        // A rejected write (e.g. shut 8-hour window, offline) must never hide the day's tasks: show the server copy as-is.
+        try { tasks = await mutateDay(selectedDay.day, resetStale); } catch (e) { console.warn('old-week reset skipped:', e && (e.code || e.message)); }
         if (seq !== fetchSeq) return;
       }
 
