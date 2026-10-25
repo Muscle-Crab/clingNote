@@ -41,6 +41,24 @@ const buildUpdate = async (evt, stripe) => {
   return null;
 };
 
+// Pure: current users/{uid} doc + webhook update -> what to write (or null). A Stripe subscription revoke (isPro:false)
+// only switches Pro off when Pro came from THAT Stripe subscription: never a lifetime purchase, never Apple/RevenueCat Pro,
+// never a different (newer) Stripe subscription. Grants are written as before.
+const decideStripeWrite = (current, update) => {
+  if (!update || update.isPro) return update;
+  const cur = current || {};
+  const lifetime = cur.plan === 'lifetime' && cur.isPro === true;
+  const apple = cur.proSource === 'revenuecat' && cur.isPro === true;
+  const otherSub = !!cur.stripeSubscriptionId && !!update.stripeSubscriptionId && cur.stripeSubscriptionId !== update.stripeSubscriptionId;
+  const notStripe = cur.isPro === true && cur.proSource && cur.proSource !== 'stripe';
+  if (lifetime || apple || otherSub || notStripe) {
+    if (otherSub) return null; // stale/old subscription: leave the current one's fields alone
+    // Keep the entitlement; only record the Stripe subscription's own status.
+    return { stripeCustomerId: update.stripeCustomerId, stripeSubscriptionId: update.stripeSubscriptionId, subscriptionStatus: update.subscriptionStatus, cancelAtPeriodEnd: false };
+  }
+  return update;
+};
+
 const handler = async (event, deps = {}) => {
   const stripe = deps.stripe || require('stripe')(process.env.STRIPE_SECRET_KEY);
   const sig = event.headers?.['stripe-signature'];
@@ -55,11 +73,18 @@ const handler = async (event, deps = {}) => {
   try {
     const r = await buildUpdate(evt, stripe);
     if (r) {
-      const write = deps.write || (async (uid, data) => {
+      if (deps.write) {
+        const d = decideStripeWrite(deps.read ? await deps.read(r.uid) : null, r.update);
+        if (d) await deps.write(r.uid, d);
+      } else {
         const admin = getAdmin();
-        await admin.firestore().collection('users').doc(uid).set({ ...data, ...(data.isPro ? { proSource: 'stripe' } : {}), proUpdatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
-      });
-      await write(r.uid, r.update);
+        const ref = admin.firestore().collection('users').doc(r.uid);
+        await admin.firestore().runTransaction(async (tx) => {
+          const snap = await tx.get(ref);
+          const d = decideStripeWrite(snap.exists ? snap.data() : null, r.update);
+          if (d) tx.set(ref, { ...d, ...(d.isPro ? { proSource: 'stripe' } : {}), proUpdatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+        });
+      }
       console.log(`Pro sync ${evt.type} uid=${r.uid} isPro=${r.update.isPro}`);
     }
   } catch (e) {
@@ -71,3 +96,4 @@ const handler = async (event, deps = {}) => {
 exports.handler = withCors((event) => handler(event));
 exports._handler = handler;
 exports.buildUpdate = buildUpdate;
+exports.decideStripeWrite = decideStripeWrite;
