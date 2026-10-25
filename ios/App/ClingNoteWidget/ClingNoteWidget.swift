@@ -40,10 +40,21 @@ struct WidgetSnapshot: Codable {
     var open: [WidgetTask] { tasks.filter { !$0.done } }
 
     static func load(today: Date = Date()) -> WidgetSnapshot {
-        guard let json = UserDefaults(suiteName: appGroup)?.string(forKey: snapshotKey),
-              let snap = try? JSONDecoder().decode(WidgetSnapshot.self, from: Data(json.utf8)) else { return .empty }
-        let f = DateFormatter(); f.calendar = Calendar(identifier: .gregorian); f.dateFormat = "yyyy-MM-dd"
-        return snap.date == f.string(from: today) ? snap : .empty // yesterday's list never shows as today
+        if FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroup) == nil {
+            NSLog("[ClingNoteWidget] App Group %@ missing from widget entitlements/profile", appGroup)
+        }
+        guard let json = UserDefaults(suiteName: appGroup)?.string(forKey: snapshotKey) else {
+            NSLog("[ClingNoteWidget] no snapshot in App Group"); return .empty
+        }
+        let snap: WidgetSnapshot
+        do { snap = try JSONDecoder().decode(WidgetSnapshot.self, from: Data(json.utf8)) }
+        catch { NSLog("[ClingNoteWidget] snapshot decode failed: %@", String(describing: error)); return .empty }
+        // POSIX locale: the JS side always writes ASCII yyyy-MM-dd; a non-Latin-digit device locale must not break the match.
+        let f = DateFormatter(); f.calendar = Calendar(identifier: .gregorian); f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = .current; f.dateFormat = "yyyy-MM-dd"
+        let todayStr = f.string(from: today)
+        if snap.date != todayStr { NSLog("[ClingNoteWidget] stale snapshot %@ (today %@)", snap.date, todayStr); return .empty }
+        return snap // yesterday's list never shows as today
     }
 }
 

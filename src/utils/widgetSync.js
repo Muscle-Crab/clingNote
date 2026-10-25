@@ -52,7 +52,7 @@ const write = (snapshot) => {
   const json = snapshot ? JSON.stringify(snapshot) : '';
   if (json === lastJson) return;
   lastJson = json;
-  (snapshot ? ClingWidget.setSnapshot({ json }) : ClingWidget.clear()).catch(() => {});
+  (snapshot ? ClingWidget.setSnapshot({ json }) : ClingWidget.clear()).catch((e) => { lastJson = ''; console.warn('[widgetSync] write failed:', e && (e.message || e)); });
 };
 
 export const installWidgetSync = () => {
@@ -68,7 +68,7 @@ export const installWidgetSync = () => {
       keyMap = widgetKeyMap(tasks);
       lastTasks = tasks; lastDay = today;
       write(buildWidgetSnapshot(tasks, { dayName: today, pendingIds }));
-    }, () => {});
+    }, (e) => { console.warn('[widgetSync] today listener failed:', e && (e.code || e.message || e)); });
   };
   onAuthStateChanged(auth, (u) => {
     uid = u ? u.uid : null;

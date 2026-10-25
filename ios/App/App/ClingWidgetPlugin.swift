@@ -37,8 +37,15 @@ public class ClingWidgetPlugin: CAPPlugin, CAPBridgedPlugin {
               (try? JSONSerialization.jsonObject(with: Data(json.utf8))) != nil else {
             call.reject("invalid snapshot"); return
         }
+        // containerURL is nil when the signed app lacks the App Group entitlement (provisioning profile without the group);
+        // UserDefaults(suiteName:) would then silently write to a private store the widget can never read.
+        guard FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: Self.appGroup) != nil else {
+            NSLog("[ClingWidget] App Group %@ not in entitlements/profile; widget cannot read the snapshot", Self.appGroup)
+            call.reject("app group container unavailable (entitlement missing)"); return
+        }
         guard let defaults = UserDefaults(suiteName: Self.appGroup) else { call.reject("app group unavailable"); return }
         defaults.set(json, forKey: Self.key)
+        NSLog("[ClingWidget] snapshot written (%d bytes), reloading timelines", json.utf8.count)
         WidgetCenter.shared.reloadAllTimelines()
         call.resolve()
     }
