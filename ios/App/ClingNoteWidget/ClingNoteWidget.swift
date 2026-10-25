@@ -257,7 +257,7 @@ struct ClingNoteWidgetView: View {
     }
 }
 
-@main
+// Registered in ClingNoteWidgets (MatchupWidget.swift).
 struct TodayTasksWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: "ClingNoteToday", provider: Provider()) { entry in

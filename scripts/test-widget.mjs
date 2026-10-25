@@ -119,3 +119,17 @@ console.log(`test-widget: ${n} groups passed`);
   if (r2.kept.length !== 1) throw new Error('prior-day kept without completer');
   console.log('test-widget: prior-day taps ok');
 }
+
+// lockStartMs/lockEndMs: backward-compatible (0 when no active lock for today)
+{
+  const { buildWidgetSnapshot: b } = await import('../src/utils/widgetSnapshot.js');
+  const now = new Date(2026, 9, 25, 12); const ms = now.getTime();
+  const none = b([{ title: 'a' }], { now, dayName: 'Sun' });
+  if (none.lockStartMs !== 0 || none.lockEndMs !== 0) throw new Error('no lock');
+  const on = b([{ title: 'a' }], { now, dayName: 'Sun', lock: { dayName: 'Sun', startMs: ms - 3600e3, endMs: ms + 3600e3 } });
+  if (on.lockStartMs !== ms - 3600e3 || on.lockEndMs !== ms + 3600e3) throw new Error('lock');
+  const ended = b([{ title: 'a' }], { now, dayName: 'Sun', lock: { dayName: 'Sun', startMs: ms - 9e6, endMs: ms - 1 } });
+  const other = b([{ title: 'a' }], { now, dayName: 'Sun', lock: { dayName: 'Mon', startMs: ms - 1, endMs: ms + 1e6 } });
+  if (ended.lockEndMs || other.lockEndMs) throw new Error('lock filter');
+  console.log('test-widget: lock fields ok');
+}

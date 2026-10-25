@@ -28,7 +28,9 @@ export const chipText = (est, pts) => [fmtEstimate(est), num(pts) ? `${num(pts)}
 
 // tasks: today's stored tasks (weeklyRoutines/{uid}_{Day}.tasks). The widget belongs to the owner, so full titles are kept
 // (also for anonymous/private tasks — those flags only hide a task from managers/pals).
-export const buildWidgetSnapshot = (tasks, { now = new Date(), dayName = '', pendingIds = [] } = {}) => {
+// lock: optional 8-hour lock { dayName, startMs, endMs }; written as lockStartMs/lockEndMs (0 = none) only when it is today's,
+// still running, so older widgets/snapshots without these fields keep working (Swift decodes them as optional).
+export const buildWidgetSnapshot = (tasks, { now = new Date(), dayName = '', pendingIds = [], lock = null } = {}) => {
   const pending = new Set(pendingIds); // widget taps not yet applied by the app: keep them shown as done
   const list = (Array.isArray(tasks) ? tasks : []).filter((t) => t && typeof t.title === 'string' && t.title.trim());
   const rows = list.map((t, i) => ({
@@ -48,9 +50,16 @@ export const buildWidgetSnapshot = (tasks, { now = new Date(), dayName = '', pen
     total: rows.length, done,
     estTotal: sum(rows, 'est'), estLeft: sum(rows.filter((r) => !r.done), 'est'),
     ptsTotal: sum(rows, 'pts'), ptsDone: sum(rows.filter((r) => r.done), 'pts'),
+    ...lockFields(lock, dayName, now),
     tasks: rows.slice(0, WIDGET_MAX_TASKS).map(({ _i, ...r }) => r),
   };
 };
+
+function lockFields(lock, dayName, now) {
+  const ms = now.getTime();
+  const ok = lock && Number(lock.startMs) > 0 && Number(lock.endMs) > ms && (!dayName || !lock.dayName || lock.dayName === dayName);
+  return { lockStartMs: ok ? Number(lock.startMs) : 0, lockEndMs: ok ? Number(lock.endMs) : 0 };
+}
 
 // Map widget id -> HomeView card key, so a deep link can find the card in the DOM.
 export const widgetKeyMap = (tasks) => {

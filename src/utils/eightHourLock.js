@@ -9,6 +9,9 @@ export const LOCKED_MESSAGE = 'Locked: your 8-hour day is running. Tasks, points
 let source = () => null; // () => ({ lock: { dayName, startMs, endMs } | null, nowMs })
 export const setLockSource = (fn) => { source = typeof fn === 'function' ? fn : () => null; };
 
+// Current 8-hour lock { dayName, startMs, endMs } or null (for the widget snapshot).
+export const currentLock = () => { const s = source(); return (s && s.lock) || null; };
+
 export const isDayLocked = (dayName) => {
   const s = source();
   if (!s || !s.lock || !dayName) return false;

@@ -6,6 +6,7 @@ import { registerPlugin } from '@capacitor/core';
 import { db, auth } from '@/firebaseConfig';
 import { buildWidgetSnapshot, widgetKeyMap, parseWidgetLink } from './widgetSnapshot';
 import { drainQueue } from './widgetQueue';
+import { currentLock } from './eightHourLock';
 import { API_BASE } from '@/config/api';
 
 const ClingWidget = registerPlugin('ClingWidget');
@@ -38,7 +39,7 @@ const readPending = async () => {
   return items;
 };
 const ackStash = (keys) => { const u = auth.currentUser; if (u) writeStash(u.uid, readStash(u.uid).filter((e) => !keys.includes(ekey(e)))); };
-const rewrite = () => { if (lastTasks) write(buildWidgetSnapshot(lastTasks, { dayName: lastDay, pendingIds })); };
+const rewrite = () => { if (lastTasks) write(buildWidgetSnapshot(lastTasks, { dayName: lastDay, pendingIds, lock: currentLock() })); };
 
 // HomeView registers its completion path; returns an unregister function.
 export const registerWidgetCompleter = (fn) => { completer = fn; drainWidgetQueue(); return () => { if (completer === fn) completer = null; }; };
@@ -88,7 +89,7 @@ export const installWidgetSync = () => {
       const tasks = snap.exists() ? (snap.data().tasks || []) : [];
       keyMap = widgetKeyMap(tasks);
       lastTasks = tasks; lastDay = today;
-      write(buildWidgetSnapshot(tasks, { dayName: today, pendingIds }));
+      write(buildWidgetSnapshot(tasks, { dayName: today, pendingIds, lock: currentLock() }));
     }, (e) => { console.warn('[widgetSync] today listener failed:', e && (e.code || e.message || e)); });
   };
   onAuthStateChanged(auth, async (u) => {
@@ -101,7 +102,13 @@ export const installWidgetSync = () => {
     if (uid) drainWidgetQueue();
   });
   // Day rollover while the app stays open / comes back from background.
-  setInterval(subscribe, 60 * 1000);
+  // Also re-publish when the 8-hour lock starts/ends (widget shows locked-in time).
+  let lockSig = '';
+  setInterval(() => {
+    subscribe();
+    const l = currentLock(); const sig = l && l.endMs > Date.now() ? `${l.dayName}|${l.startMs}|${l.endMs}` : '';
+    if (sig !== lockSig) { lockSig = sig; rewrite(); }
+  }, 60 * 1000);
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) return;
     subscribe(); drainWidgetQueue(); if (auth.currentUser) pushAuth(auth.currentUser);
