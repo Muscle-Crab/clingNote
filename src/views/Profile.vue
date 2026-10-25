@@ -84,6 +84,7 @@
             <button v-if="isOwn" type="button" data-test="rate-app" class="pf-row pf-row--divided" @click="rateApp"><span class="pf-ico" aria-hidden="true">⭐</span><span class="pf-row-title">Rate ClingNote</span><span class="pf-chev" aria-hidden="true">›</span></button>
             <router-link to="/support" class="pf-row pf-row--divided" data-test="profile-support"><span class="pf-ico" aria-hidden="true">💬</span><span class="pf-row-title">Help &amp; support</span><span class="pf-chev" aria-hidden="true">›</span></router-link>
             <router-link to="/privacy-policy" class="pf-row pf-row--divided"><span class="pf-ico" aria-hidden="true">🔒</span><span class="pf-row-title">Privacy policy</span><span class="pf-chev" aria-hidden="true">›</span></router-link>
+            <router-link to="/terms" class="pf-row pf-row--divided" data-test="profile-terms"><span class="pf-ico" aria-hidden="true">📄</span><span class="pf-row-title">Terms &amp; conditions</span><span class="pf-chev" aria-hidden="true">›</span></router-link>
           </section>
 
           <button type="button" class="pf-logout" data-test="profile-logout" :disabled="loggingOut" @click="logout">

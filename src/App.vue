@@ -1,5 +1,5 @@
 <template>
-  <div class="app-shell" :class="{ 'app-shell--home': isHome }">
+  <div class="app-shell" :class="{ 'app-shell--home': isHome, 'app-shell--tabs': showTabs }">
     <navi v-if="!route.meta.bare"/>
     <SubpageHero v-if="hero" :title="hero.title" :kicker="hero.kicker" :back="hero.back !== false" />
     <router-view></router-view>
@@ -8,6 +8,7 @@
     <BrandMark v-if="showBrand" />
     <EightHourChrome />
     <AchievementPrompt />
+    <Teleport to="body"><AppTabBar v-if="showTabs" :uid="uid" /><CreateTaskFab v-if="showFab" /></Teleport>
   </div>
 </template>
 
@@ -24,6 +25,9 @@ import BossBriefing from '@/components/voiceover/BossBriefing.vue';
 import BrandMark from '@/components/brand/BrandMark.vue';
 import EightHourChrome from '@/components/eighthour/EightHourChrome.vue';
 import AchievementPrompt from '@/components/AchievementPrompt.vue';
+import AppTabBar from '@/components/shell/AppTabBar.vue';
+import CreateTaskFab from '@/components/shell/CreateTaskFab.vue';
+import { ref, onBeforeUnmount } from 'vue';
 
 const route = useRoute();
 const isHome = computed(() => route.name === 'home');
@@ -54,6 +58,22 @@ const HEROES = {
   NotFoundComponent: { title: 'Page not found', kicker: '404' },
 };
 const hero = computed(() => HEROES[route.name] || null);
+// Footer tab bar + Create-task FAB (signed in only; never on auth/onboarding/paywall; FAB also off on locked/shutdown screens).
+const uid = ref(auth.currentUser?.uid || null);
+const shutOn = ref(false);
+const NO_TABS = ['Login', 'welcome', 'landing', 'onboarding', 'paywall', 'pro-success', 'Landing', 'RoomInterior', 'Discussion'];
+const showTabs = computed(() => !!uid.value && !route.meta.bare && !NO_TABS.includes(route.name) && !/^\/(login|welcome|landing|onboarding|paywall|pro\/)/.test(route.path));
+const showFab = computed(() => showTabs.value && route.name !== 'gate' && !shutOn.value);
+let mo = null;
+onMounted(() => { try { onAuthStateChanged(auth, (u) => { uid.value = u ? u.uid : null; }); } catch (e) { /* ignore */ }
+  const sync = () => { shutOn.value = !!document.querySelector('[data-test="eh-shutdown"]'); }; mo = new MutationObserver(sync); mo.observe(document.body, { childList: true, subtree: true }); sync(); });
+onBeforeUnmount(() => mo && mo.disconnect());
 // Returning users who already turned push on get the foreground handler back (never prompts).
 onMounted(() => { try { onAuthStateChanged(auth, (u) => { if (u) resumePush(); }); } catch (e) { /* ignore */ } });
 </script>
+
+<style>
+/* Room for the footer tab bar + FAB so page content never ends behind them. */
+:root { --tabbar-h: 64px; }
+.app-shell.app-shell--tabs { padding-bottom: calc(var(--tabbar-h) + 84px + env(safe-area-inset-bottom)) !important; }
+</style>

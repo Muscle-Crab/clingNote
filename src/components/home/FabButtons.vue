@@ -1,6 +1,6 @@
 <template>
-  <div class="fab-group">
-    <router-link
+  <div class="fab-group" :class="{ 'fab-group--voice-only': !showAdd }">
+    <router-link v-if="showAdd"
         :to="userId ? '#' : '/login'"
         @click.native.prevent="userId && $emit('add')"
         class="fab fab-add"
@@ -26,6 +26,7 @@ defineProps({
   userId: { type: String, default: null },
   listening: { type: Boolean, default: false },
   showVoice: { type: Boolean, default: true },
+  showAdd: { type: Boolean, default: true },
 });
 defineEmits(['add', 'voice']);
 </script>

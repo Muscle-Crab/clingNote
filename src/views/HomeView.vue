@@ -194,7 +194,7 @@
       <ScheduledList v-if="userId" :tasks="futureScheduled" :today-str="todayStr" :error="scheduledError" :series="templatesOf(scheduledList)" @edit="editScheduledEntry"
                      @move-today="moveScheduledToToday" @update="updateScheduledDate" @delete="deleteScheduled" />
 
-      <FabButtons :user-id="userId" :listening="listening" :show-voice="!voiceBlocked" @add="onAddClick" @voice="startVoiceInput" />
+      <FabButtons :show-add="false" :user-id="userId" :listening="listening" :show-voice="!voiceBlocked" @add="onAddClick" @voice="startVoiceInput" />
 
 
     </div>
@@ -834,6 +834,11 @@ const onShortcutKey = (e) => {
   openModal('task');
 };
 onMounted(() => document.addEventListener('keydown', onShortcutKey));
+// Global "Create task" FAB (App.vue): same flow as the old Add Task bar, incl. free/Pro limits.
+const onCreateTaskEvt = () => onAddClick();
+onMounted(() => { window.addEventListener('cn:create-task', onCreateTaskEvt);
+  if (_proRouter.currentRoute.value.query.new === '1') { const q = { ..._proRouter.currentRoute.value.query }; delete q.new; _proRouter.replace({ query: q }); setTimeout(onAddClick, 600); } });
+onBeforeUnmount(() => window.removeEventListener('cn:create-task', onCreateTaskEvt));
 onBeforeUnmount(() => document.removeEventListener('keydown', onShortcutKey));
 
 
@@ -3747,7 +3752,7 @@ a.hero-menu-item { display: block; text-decoration: none; color: inherit; }
 .app-root .hero-menu-item.hero-menu-item { color: var(--c-text); background: transparent; }
 .app-root .hero-menu-item.hero-menu-item:hover { background: #1A2A52; }
 /* Room for the fixed Add Task bar + iOS home indicator so the last rows / empty state stay visible */
-.app-root .content-wrap.content-wrap { padding-bottom: calc(170px + env(safe-area-inset-bottom)); }
+.app-root .content-wrap.content-wrap { padding-bottom: calc(24px + env(safe-area-inset-bottom)); }
 .app-root .fab-group.fab-group { padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
 
 /* ══ v3: pixel-close mockup layout ══ */
@@ -3880,4 +3885,6 @@ body.home-v2 .app-topbar { position: absolute; top: 0; left: 0; right: 0; z-inde
 .app-root .task-upnext { line-height: 12px; }
 .app-root .task-title-row .task-private, .app-root .task-title-row .task-repeat-badge { border: 0; padding: 0; margin: 0; font-size: 12px; text-transform: none; }
 .app-root .importance-btn.importance-btn::before { inset: -12px -15px; }
+/* Voice button sits bottom-left above the footer tab bar; the global Create-task FAB is bottom-right. */
+.app-root .fab-group.fab-group.fab-group--voice-only { left: max(16px, calc((100vw - 540px) / 2 + 16px)); right: auto; width: auto; padding: 0; background: none; bottom: calc(var(--tabbar-h, 64px) + 14px + env(safe-area-inset-bottom)); }
 </style>

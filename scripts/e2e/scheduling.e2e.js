@@ -24,7 +24,7 @@ const shot = (p, n) => p.screenshot({ path: SHOTS + n });
   await dismiss();
   const sd = p.locator('button', { hasText: 'Start Day' }); if (await sd.count()) { await sd.first().click(); await sleep(2000); await dismiss(); }
 
-  const openAdd = async (title) => { await p.click('.fab-add'); await p.fill('#nt-name', title); };
+  const openAdd = async (title) => { await p.click('[data-test=create-task-fab], .fab-add'); await p.fill('#nt-name', title); };
   // 1) one-time today, time already passed -> appears today, labelled, overdue
   await openAdd('ZZTEST Sched one-time');
   ok('Schedule switch starts off', (await p.getAttribute('[data-test=schedule-switch]', 'aria-checked')) === 'false');
