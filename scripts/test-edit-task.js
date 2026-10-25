@@ -21,9 +21,9 @@ t('estimate locked once play pressed (running, paused, finished)', () => {
   assert.ok(!E.timerStarted({ title: 'ZZTEST fresh', estimateMin: 30 })); // before play: editable
 });
 t('live adjust removed', () => ['TIMER_STEPS', 'adjustTimerPatch', 'setRemainingPatch', 'estimateTimerPatch'].forEach((k) => assert.strictEqual(E[k], undefined, k)));
-t('8-hour lock unchanged: title/estimate locked, notes not', () => {
+t('8-hour lock: edits allowed (title/estimate/notes), only points locked', () => {
   E.EDIT_LOCKED.forEach((f) => assert.ok(core.LOCKED_FIELDS.includes(f), f));
-  assert.ok(E.isFieldLocked('title', true) && E.isFieldLocked('estimateMin', true) && !E.isFieldLocked('notes', true) && !E.isFieldLocked('title', false));
+  assert.ok(!E.isFieldLocked('title', true) && !E.isFieldLocked('estimateMin', true) && !E.isFieldLocked('notes', true) && E.isFieldLocked('points', true));
 });
 t('never completes', () => { const p = E.safeEditPatch({ title: 'ZZTEST', completed: true, completedAt: 'x' }); assert.deepStrictEqual(p, { title: 'ZZTEST' }); });
 t('series patch only copies edit fields', () => assert.deepStrictEqual(E.seriesPatch({ title: 'ZZTEST', estimateMin: 45, timerEndTime: 'x', completed: true, notes: 'n' }), { title: 'ZZTEST', estimateMin: 45, notes: 'n' }));
