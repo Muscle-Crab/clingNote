@@ -67,14 +67,14 @@ struct Provider: TimelineProvider {
     }
 }
 
-// MARK: - Design (matches the app: forest green, pill chips "30m · 15p", done = check + dimmed + strikethrough)
+// MARK: - Design (matches the app: brand blue, pill chips "30m · 15p", done = check + dimmed + strikethrough)
 
 enum CN {
-    static let bgTop = Color(red: 0.055, green: 0.165, blue: 0.122)     // #0E2A1F
-    static let bgBottom = Color(red: 0.027, green: 0.090, blue: 0.067)  // #071711
-    static let green = Color(red: 0.239, green: 0.863, blue: 0.592)     // #3DDC97 (--c-success)
+    static let bgTop = Color(red: 0.047, green: 0.086, blue: 0.188)     // #0C1630 (--c-surface)
+    static let bgBottom = Color(red: 0.027, green: 0.051, blue: 0.110)  // #070D1C (--c-bg)
+    static let green = Color(red: 0.357, green: 0.608, blue: 1.0)     // #5B9BFF (--c-accent-text, brand blue)
     static let text = Color(red: 0.949, green: 0.961, blue: 0.988)      // #F2F5FC
-    static let text2 = Color(red: 0.663, green: 0.737, blue: 0.690)
+    static let text2 = Color(red: 0.663, green: 0.706, blue: 0.800)  // #A9B4CC
     static let chip = Color.white.opacity(0.08)
     static let ring = Color.white.opacity(0.12)
     static var background: LinearGradient { LinearGradient(colors: [bgTop, bgBottom], startPoint: .top, endPoint: .bottom) }
