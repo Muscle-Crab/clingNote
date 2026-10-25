@@ -9,9 +9,12 @@ export const MAX_AGE_MS = 36 * 3600 * 1000;
 export const entryKey = (e) => `${e && e.taskId}@${e && e.ts}`;
 
 // -> 'complete' | 'effects' | 'already-done' | 'missing' | 'stale' | 'invalid'
-export const classifyEntry = (entry, tasks, { today, now = Date.now() } = {}) => {
+// A tap made yesterday (entry.day === yesterday, within MAX_AGE_MS) is 'prior-day' (when classified without its day's tasks):
+// it is applied to the day it was made, not dropped. Older days / older than MAX_AGE_MS stay 'stale'.
+export const classifyEntry = (entry, tasks, { today, yesterday, now = Date.now() } = {}) => {
   if (!entry || typeof entry.taskId !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(entry.taskId)) return 'invalid';
-  if ((entry.day && today && entry.day !== today) || (Number(entry.ts) && now - Number(entry.ts) > MAX_AGE_MS)) return 'stale';
+  if (Number(entry.ts) && now - Number(entry.ts) > MAX_AGE_MS) return 'stale';
+  if (entry.day && today && entry.day !== today) return (yesterday && entry.day === yesterday) ? 'prior-day' : 'stale';
   const t = (tasks || []).find((x) => x && widgetTaskId(x) === entry.taskId);
   if (!t) return 'missing'; // deleted, or a one-time task already completed and removed
   if (t.completed === true) return t.widgetEffectsPending === true ? 'effects' : 'already-done';
@@ -21,13 +24,20 @@ export const classifyEntry = (entry, tasks, { today, now = Date.now() } = {}) =>
 // queue: entries from the App Group. getTasks(): today's current task list (re-read after every completion — indices shift).
 // complete(taskId, mode): runs the app's completion path; resolve true on success, false/throw to retry later.
 // Returns { acked: [entryKey], kept: [entryKey], results: [{taskId, action, ok}] }; ack(acked) removes only those entries.
-export const drainQueue = async ({ queue, getTasks, complete, today, now = Date.now() }) => {
+// completePrior(taskId, day): optional; marks the task done on the day the tap was made. Without it prior-day taps are kept.
+export const drainQueue = async ({ queue, getTasks, complete, completePrior, today, yesterday, now = Date.now() }) => {
   const acked = [], kept = [], results = [], seen = new Set();
   const list = (Array.isArray(queue) ? queue : []).slice().sort((a, b) => (Number(a && a.ts) || 0) - (Number(b && b.ts) || 0));
   for (const e of list) {
     const k = entryKey(e);
     if (e && seen.has(e.taskId)) { acked.push(k); results.push({ taskId: e.taskId, action: 'duplicate', ok: true }); continue; }
-    const action = classifyEntry(e, await getTasks(), { today, now });
+    const action = classifyEntry(e, await getTasks(), { today, yesterday, now });
+    if (action === 'prior-day') {
+      let ok = false;
+      try { ok = !!completePrior && (await completePrior(e.taskId, e.day)) === true; } catch (err) { ok = false; }
+      (ok ? acked : kept).push(k); results.push({ taskId: e.taskId, action, ok });
+      continue; // a prior-day tap never dedupes a same-id tap for today
+    }
     if (e && typeof e.taskId === 'string') seen.add(e.taskId);
     if (action === 'complete' || action === 'effects') {
       let ok = false;

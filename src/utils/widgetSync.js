@@ -18,7 +18,26 @@ let pendingIds = [];
 let completer = null; // registered by HomeView: (taskId, mode) => Promise<boolean>
 let draining = false;
 
-const readPending = async () => { try { const r = await ClingWidget.getPending(); return Array.isArray(r && r.items) ? r.items : []; } catch (e) { return []; } };
+const readNative = async () => { try { const r = await ClingWidget.getPending(); return Array.isArray(r && r.items) ? r.items : []; } catch (e) { return []; } };
+// Sign-out wipes the App Group (ClingWidget.clear), so pending taps are first stashed per uid and merged back on that
+// user's next sign-in (another account never drains them).
+const stashKey = (uid) => `widgetPendingStash_${uid}`;
+const readStash = (uid) => { try { const a = JSON.parse(localStorage.getItem(stashKey(uid)) || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } };
+const writeStash = (uid, a) => { try { if (a.length) localStorage.setItem(stashKey(uid), JSON.stringify(a)); else localStorage.removeItem(stashKey(uid)); } catch (e) { /* ignore */ } };
+const ekey = (e) => `${e && e.taskId}@${e && e.ts}`;
+const stashPending = async (uid) => {
+  if (!uid) return;
+  const merged = [...readStash(uid)];
+  for (const e of await readNative()) if (!merged.some((x) => ekey(x) === ekey(e))) merged.push(e);
+  writeStash(uid, merged);
+};
+const readPending = async () => {
+  const items = await readNative();
+  const u = auth.currentUser;
+  if (u) for (const e of readStash(u.uid)) if (!items.some((x) => ekey(x) === ekey(e))) items.push(e);
+  return items;
+};
+const ackStash = (keys) => { const u = auth.currentUser; if (u) writeStash(u.uid, readStash(u.uid).filter((e) => !keys.includes(ekey(e)))); };
 const rewrite = () => { if (lastTasks) write(buildWidgetSnapshot(lastTasks, { dayName: lastDay, pendingIds })); };
 
 // HomeView registers its completion path; returns an unregister function.
@@ -31,10 +50,11 @@ export const drainWidgetQueue = async () => {
     const queue = await readPending();
     pendingIds = queue.map((e) => e && e.taskId).filter(Boolean);
     if (!queue.length || !completer || !auth.currentUser) { rewrite(); return; }
-    const today = DAYS[new Date().getDay()];
+    const dow = new Date().getDay();
+    const today = DAYS[dow], yesterday = DAYS[(dow + 6) % 7];
     const fn = completer;
-    const { acked } = await drainQueue({ queue, today, getTasks: () => fn.tasks ? fn.tasks() : (lastTasks || []), complete: (id, mode) => fn(id, mode) });
-    if (acked.length) await ClingWidget.ackPending({ keys: acked }).catch(() => {});
+    const { acked } = await drainQueue({ queue, today, yesterday, getTasks: () => fn.tasks ? fn.tasks() : (lastTasks || []), complete: (id, mode) => fn(id, mode), completePrior: fn.prior ? (id, d) => fn.prior(id, d) : undefined });
+    if (acked.length) { await ClingWidget.ackPending({ keys: acked }).catch(() => {}); ackStash(acked); }
     pendingIds = (await readPending()).map((e) => e && e.taskId).filter(Boolean);
     rewrite();
   } finally { draining = false; }
@@ -71,11 +91,12 @@ export const installWidgetSync = () => {
       write(buildWidgetSnapshot(tasks, { dayName: today, pendingIds }));
     }, (e) => { console.warn('[widgetSync] today listener failed:', e && (e.code || e.message || e)); });
   };
-  onAuthStateChanged(auth, (u) => {
+  onAuthStateChanged(auth, async (u) => {
+    const prevUid = uid;
     uid = u ? u.uid : null;
     if (off) { off(); off = null; }
     day = null;
-    if (uid) subscribe(); else { keyMap = {}; lastTasks = null; write(null); }
+    if (uid) subscribe(); else { await stashPending(prevUid); keyMap = {}; lastTasks = null; write(null); } // keep taps across sign-out
     pushAuth(u);
     if (uid) drainWidgetQueue();
   });

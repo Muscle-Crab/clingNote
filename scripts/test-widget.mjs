@@ -105,3 +105,17 @@ await (async () => {
   assert.deepEqual(r, { acked: [], kept: [], results: [] });
 })();
 console.log(`test-widget: ${n} groups passed`);
+
+// prior-day taps (made before midnight) are applied to their own day, not dropped
+{
+  const { classifyEntry: c, drainQueue: dq } = await import('../src/utils/widgetQueue.js');
+  const T = Date.now();
+  if (c({ taskId: 'abc', day: 'Fri', ts: T - 3600e3 }, [], { today: 'Sat', yesterday: 'Fri', now: T }) !== 'prior-day') throw new Error('prior-day classify');
+  if (c({ taskId: 'abc', day: 'Thu', ts: T - 3600e3 }, [], { today: 'Sat', yesterday: 'Fri', now: T }) !== 'stale') throw new Error('older day stale');
+  const calls = [];
+  const r = await dq({ queue: [{ taskId: 'abc', day: 'Fri', ts: T }], getTasks: () => [], complete: async () => true, completePrior: async (id, d) => { calls.push([id, d]); return true; }, today: 'Sat', yesterday: 'Fri', now: T });
+  if (r.acked.length !== 1 || calls[0][1] !== 'Fri') throw new Error('prior-day drain');
+  const r2 = await dq({ queue: [{ taskId: 'abc', day: 'Fri', ts: T }], getTasks: () => [], complete: async () => true, today: 'Sat', yesterday: 'Fri', now: T });
+  if (r2.kept.length !== 1) throw new Error('prior-day kept without completer');
+  console.log('test-widget: prior-day taps ok');
+}
