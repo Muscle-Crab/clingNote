@@ -17,7 +17,7 @@
 
     <template v-else-if="ready">
       <div class="cm-hero">
-        <div><h1 class="cm-h1">Community</h1><p class="cm-sub">Small wins. Shared together.</p></div>
+        <p class="cm-sub">Small wins. Shared together.</p>
         <button class="cm-bell" @click="showNotifs = !showNotifs" aria-label="Notifications" data-test="cm-bell"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 8 3 8H3s3-1 3-8"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg><span v-if="unread" class="cm-badge">{{ unread > 99 ? '99+' : unread }}</span></button>
       </div>
       <header class="cm-head">
@@ -516,9 +516,9 @@ watch(() => route.query.post, (id) => { if (id && started) { tab.value = 'feed';
 
 /* ── Mockup restyle (navy) ── */
 .cm-page { --cm-blue: #2F6BFF; --cm-card: #0E1A36; --cm-line: #1B2A4C; --cm-dim: #8A9BC0; padding-top: 18px; }
-.cm-hero { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.cm-hero { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
 .cm-h1 { font-size: 28px; font-weight: 800; letter-spacing: -.02em; line-height: 1.15; margin: 0; color: #F3F6FF; }
-.cm-sub { margin: 4px 0 0; color: var(--cm-dim); font-size: 15px; }
+.cm-sub { margin: 0; color: var(--cm-dim); font-size: 15px; }
 .cm-bell { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 999px; background: var(--cm-card); border: 1px solid var(--cm-line); color: #DCE4F7; padding: 0; }
 .cm-tabs { background: #0A1430; border: 1px solid var(--cm-line); padding: 4px; }
 .cm-tabs button { padding: 9px 0; font-size: 15px; color: var(--cm-dim); }
@@ -574,6 +574,7 @@ watch(() => route.query.post, (id) => { if (id && started) { tab.value = 'feed';
 .cm-qp-input::placeholder { color: #6B7A9C; }
 .cm-qp-count { position: absolute; right: 12px; bottom: 10px; font-size: 12px; color: #6B7A9C; }
 .cm-stats--draft { margin-top: 10px; }
+.cm-stats--draft > .cm-x { top: -8px; right: -6px; }
 .cm-qp-lbl { margin: 16px 0 8px; font-size: 13px; font-weight: 700; color: #8A9BC0; text-transform: uppercase; letter-spacing: .04em; }
 .cm-qp-add { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .cm-qp-opt { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; border-radius: 14px; background: #12203F; border: 1px solid #1B2A4C; color: #DCE4F7; font-weight: 600; font-size: 15px; cursor: pointer; }
