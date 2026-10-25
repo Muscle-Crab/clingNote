@@ -1,6 +1,6 @@
 // Community (feed + group chat): pure helpers only, no Firebase. Tested by scripts/test-community.js.
 export const ADMIN_EMAIL = 'ds7513635@gmail.com';
-export const LIMITS = { title: 120, text: 2000, comment: 500, chat: 1000, images: 4, imageMaxPx: 1600, imageBytes: 5 * 1024 * 1024, reason: 300, fanout: 500 };
+export const LIMITS = { title: 120, text: 2000, comment: 500, chat: 1000, reason: 300, fanout: 500 };
 export const EULA_VERSION = 1;
 export const NOTIF_TYPES = ['follow', 'like', 'comment', 'share', 'post'];
 export const DEFAULT_NOTIF_PREFS = { follow: true, like: true, comment: true, share: true, post: true };
@@ -101,7 +101,6 @@ export const createRateLimiter = (cfg = RATE, store = null) => {
 };
 
 // ── Image downscale target (keeps aspect, longest side <= max).
-export const fitWithin = (w, h, max = LIMITS.imageMaxPx) => { const s = Math.min(1, max / Math.max(w, h || 1)); return { w: Math.round(w * s), h: Math.round(h * s) }; };
 
 // ── Share
 export const postLink = (id) => `${SHARE_BASE}/community?post=${String(id).replace(/[^A-Za-z0-9_-]/g, '')}`;

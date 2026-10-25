@@ -16,13 +16,13 @@ let fails = 0; const ok = (n, c, x = '') => { console.log(c ? 'PASS' : 'FAIL', n
   await emailLogin(p, 'zztest-ff@example.com'); await sleep(3000); await p.goto(B + '/home'); await sleep(3000); await dismiss();
   const geo = () => p.evaluate(() => { const r = (s) => { const e = document.querySelector(s); if (!e) return null; const b = e.getBoundingClientRect(); return { t: b.top, b: b.bottom, l: b.left, r: b.right, w: b.width, h: b.height }; };
     const tabs = [...document.querySelectorAll('.tb-tab')].map((e) => { const b = e.getBoundingClientRect(); return [Math.round(b.width), Math.round(b.height)]; });
-    const de = document.documentElement; return { fab: r('[data-test=create-task-fab]'), bar: r('[data-test=tabbar]'), voice: r('.fab-voice'), tabs, active: document.querySelector('.tb-tab--on')?.innerText, hOv: de.scrollWidth > de.clientWidth }; });
+    const de = document.documentElement; return { fab: r('.ctf'), bar: r('[data-test=tabbar]'), voice: r('.fab-voice'), tabs, active: document.querySelector('.tb-tab--on')?.innerText, hOv: de.scrollWidth > de.clientWidth }; });
   const chk = async (name) => { const g = await geo(); ok(name + ': bar + FAB present', g.bar && g.fab); if (!g.bar || !g.fab) return g;
     ok(name + ': FAB above bar, no overlap', g.fab.b <= g.bar.t - 4, `${Math.round(g.fab.b)}<=${Math.round(g.bar.t)}`); ok(name + ': FAB >=44', g.fab.h >= 44 && g.fab.w >= 44); ok(name + ': tabs >=44', g.tabs.length === 4 && g.tabs.every(([w, h]) => w >= 44 && h >= 44), JSON.stringify(g.tabs));
     if (g.voice) ok(name + ': voice not overlapping FAB/bar', g.voice.r < g.fab.l && g.voice.b <= g.bar.t);
     ok(name + ': no h-overflow', !g.hOv);
     await p.evaluate(() => window.scrollTo(0, 1e6)); await sleep(500);
-    const under = await p.evaluate(() => { const bar = document.querySelector('[data-test=tabbar]').getBoundingClientRect().top; const fab = document.querySelector('[data-test=create-task-fab]').getBoundingClientRect();
+    const under = await p.evaluate(() => { const bar = document.querySelector('[data-test=tabbar]').getBoundingClientRect().top; const fab = document.querySelector('.ctf').getBoundingClientRect();
       const els = [...document.querySelectorAll('.app-shell button, .app-shell a, .app-shell p, .app-shell h2, .app-shell li')].filter((e) => !e.closest('[data-test=tabbar],[data-test=create-task-fab],.fab-group,[role=dialog]') && getComputedStyle(e).position !== 'fixed' && e.getBoundingClientRect().height > 0 && e.offsetParent);
       return els.filter((e) => { const b = e.getBoundingClientRect(); return b.bottom > bar + 1 && b.top < innerHeight || (b.bottom > fab.top && b.top < fab.bottom && b.right > fab.left && b.left < fab.right); }).map((e) => (e.innerText || '').trim().slice(0, 30)); });
     ok(name + ': nothing hidden under bar/FAB at scroll end', under.length === 0, JSON.stringify(under)); await p.evaluate(() => window.scrollTo(0, 0)); await sleep(300); return g; };

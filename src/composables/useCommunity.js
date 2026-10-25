@@ -1,7 +1,6 @@
-// Community data layer (Firestore + Storage). Pure logic lives in @/utils/community.
-import { db, storage } from '@/firebaseConfig';
+// Community data layer (Firestore). Pure logic lives in @/utils/community.
+import { db } from '@/firebaseConfig';
 import { collection, doc, addDoc, setDoc, getDoc, getDocs, deleteDoc, updateDoc, query, where, orderBy, limit, startAfter, onSnapshot, serverTimestamp, runTransaction, writeBatch, getCountFromServer, increment } from 'firebase/firestore';
-import { ref as sref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { LIMITS, fitWithin, buildNotif, fanoutTargets, followId, buildProgressCard } from '@/utils/community';
 import { loadMyMonth } from '@/composables/useMonthlyStats';
 import { monthKey } from '@/utils/ranking';
@@ -20,8 +19,8 @@ export const savePrefs = (uid, patch) => setDoc(prefsRef(uid), { ...patch, updat
 export const watchFeed = (cb, n = PAGE) => onSnapshot(query(postsCol(), orderBy('createdAt', 'desc'), limit(n)), (s) => cb(s.docs.map((d) => ({ id: d.id, ...d.data() })), s.docs[s.docs.length - 1] || null), (e) => cb(null, null, e));
 export const morePosts = async (cursor, n = PAGE) => { const s = await getDocs(query(postsCol(), orderBy('createdAt', 'desc'), startAfter(cursor), limit(n))); return { items: s.docs.map((d) => ({ id: d.id, ...d.data() })), cursor: s.docs[s.docs.length - 1] || null }; };
 export const getPost = async (id) => { const s = await getDoc(doc(db, 'communityPosts', id)); return s.exists() ? { id, ...s.data() } : null; };
-export const createPost = async (me, { text, images, stats }) => {
-  const r = await addDoc(postsCol(), { uid: me.uid, name: me.name, avatar: me.avatar || '', text: text || '', images: images || [], stats: stats || null, likeCount: 0, commentCount: 0, createdAt: serverTimestamp() });
+export const createPost = async (me, { text, stats }) => {
+  const r = await addDoc(postsCol(), { uid: me.uid, name: me.name, avatar: me.avatar || '', text: text || '', images: [] /* photos removed; field kept for rules compatibility */, stats: stats || null, likeCount: 0, commentCount: 0, createdAt: serverTimestamp() });
   return r.id;
 };
 export const deletePost = (id) => deleteDoc(doc(db, 'communityPosts', id));
@@ -49,7 +48,7 @@ export const deleteComment = async (postId, cid) => { const b = writeBatch(db); 
 // ── Chat
 export const watchChat = (cb, n = 30) => onSnapshot(query(chatCol(), orderBy('createdAt', 'desc'), limit(n)), (s) => cb(s.docs.map((d) => ({ id: d.id, ...d.data() })), s.docs[s.docs.length - 1] || null), (e) => cb(null, null, e));
 export const moreChat = async (cursor, n = 30) => { const s = await getDocs(query(chatCol(), orderBy('createdAt', 'desc'), startAfter(cursor), limit(n))); return { items: s.docs.map((d) => ({ id: d.id, ...d.data() })), cursor: s.docs[s.docs.length - 1] || null }; };
-export const sendChat = (me, { text, image }) => addDoc(chatCol(), { uid: me.uid, name: me.name, avatar: me.avatar || '', text: text || '', image: image || '', createdAt: serverTimestamp() });
+export const sendChat = (me, { text }) => addDoc(chatCol(), { uid: me.uid, name: me.name, avatar: me.avatar || '', text: text || '', image: '', createdAt: serverTimestamp() });
 export const deleteChat = (id) => deleteDoc(doc(db, 'communityChat', id));
 
 // ── Moderation
@@ -89,21 +88,6 @@ export const loadTodayStats = async (uid) => {
   try { const s = await getDoc(doc(db, 'streaks', uid)); if (s.exists()) { const d = s.data(); streak = capStreak(d.streak); tasksDone = todayCount(d, localDateStr()); } } catch (e) { /* ignore */ }
   try { const m = await loadMyMonth(uid, monthKey()); points = (m && m.stats && m.stats.points) || 0; } catch (e) { /* ignore */ }
   return buildProgressCard({ tasksDone, points, streak });
-};
-
-// ── Images: downscale to <= 1600px JPEG, upload to community/{uid}/...
-export const compressImage = (file, max = LIMITS.imageMaxPx, q = 0.82) => new Promise((resolve, reject) => {
-  const url = URL.createObjectURL(file); const img = new window.Image();
-  img.onload = () => { const { w, h } = fitWithin(img.naturalWidth, img.naturalHeight, max); const c = document.createElement('canvas'); c.width = w; c.height = h; c.getContext('2d').drawImage(img, 0, 0, w, h); URL.revokeObjectURL(url); c.toBlob((b) => (b ? resolve(b) : reject(new Error('Could not read image'))), 'image/jpeg', q); };
-  img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Could not read image')); };
-  img.src = url;
-});
-export const uploadImage = async (uid, file) => {
-  const blob = await compressImage(file);
-  if (blob.size > LIMITS.imageBytes) throw new Error('Image too large');
-  const r = sref(storage, `community/${uid}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.jpg`);
-  await uploadBytes(r, blob, { contentType: 'image/jpeg' });
-  return getDownloadURL(r);
 };
 
 // ── Community profiles (display-safe only: name, avatar, streak, bestStreak, badges) + my post count

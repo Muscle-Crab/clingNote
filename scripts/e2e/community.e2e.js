@@ -65,14 +65,15 @@ async function seedUser(email, name) {
   ok('heart like transaction allowed (likeCount 6)', (await db.doc('communityPosts/pAva').get()).data().likeCount === 6);
   ok('like doc written', (await db.doc(`communityPosts/pAva/likes/${me}`).get()).exists);
   await shot('03-liked.png');
-  ok('no always-visible composer on the feed', (await p.locator('[data-test=cm-composer]').count()) === 0 && (await p.locator('[data-test=cm-compose-open]').count()) === 1);
-  await p.click('[data-test=cm-compose-open]'); await p.waitForSelector('[data-test=cm-composer]');
+  ok('no always-visible composer and no Share your progress button on the feed', (await p.locator('[data-test=cm-composer]').count()) === 0 && (await p.locator('.cm-share').count()) === 0 && (await p.getByText('Share your progress', { exact: true }).count()) === 0);
+  ok('FAB reads exactly "Create post" on Community', (await p.textContent('[data-test=create-post-fab] [data-test=fab-label]')).trim() === 'Create post' && (await p.locator('[data-test=create-task-fab]').count()) === 0);
+  await p.click('[data-test=create-post-fab]'); await p.waitForSelector('[data-test=cm-composer]');
   ok('sheet: caption font >= 16px, 0/500 counter', parseFloat(await p.$eval('[data-test=cm-post-text]', (e) => getComputedStyle(e).fontSize)) >= 16 && /^0\/500$/.test((await p.textContent('[data-test=cm-post-count]')).trim()));
   await p.click('[data-test=cm-compose-close]'); await sleep(400);
   const closedX = (await p.locator('[data-test=cm-composer]').count()) === 0;
-  await p.click('[data-test=cm-compose-open]'); await p.waitForSelector('[data-test=cm-composer]'); await p.mouse.click(200, 40); await sleep(400);
+  await p.click('[data-test=create-post-fab]'); await p.waitForSelector('[data-test=cm-composer]'); await p.mouse.click(200, 40); await sleep(400);
   ok('sheet closes via x and via backdrop', closedX && (await p.locator('[data-test=cm-composer]').count()) === 0);
-  await p.click('[data-test=cm-compose-open]'); await p.waitForSelector('[data-test=cm-composer]');
+  await p.click('[data-test=create-post-fab]'); await p.waitForSelector('[data-test=cm-composer]');
   await p.click('[data-test=cm-stats-btn]'); await sleep(800);
   await p.fill('[data-test=cm-post-text]', 'Quiet but productive day. Onwards! ✨'); await shot('04-composer.png');
   await p.click('[data-test=cm-post-submit]'); await sleep(2500);
@@ -81,18 +82,10 @@ async function seedUser(email, name) {
   ok('own post created under rules', mine.size === 1);
   ok('composer has no title input; post stores no title (caption only)', (await p.locator('[data-test=cm-composer] input[placeholder^=Title]').count()) === 0 && !('title' in mine.docs[0].data()) && /Onwards/.test(mine.docs[0].data().text));
   ok('legacy titled post still renders its title', (await p.locator('.cm-title', { hasText: 'Day 12' }).count()) > 0);
-  // Storage is unavailable (Spark plan, bucket locked): a photo upload failure must not post, must keep the caption, and must show a friendly message.
-  await p.route('**/firebasestorage.googleapis.com/**', (r) => r.abort()); await p.route('**/v0/b/**', (r) => r.abort());
-  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
-  await p.click('[data-test=cm-compose-open]'); await p.waitForSelector('[data-test=cm-composer]');
-  await p.setInputFiles('[data-test=cm-composer] input[type=file]', { name: 'zz.png', mimeType: 'image/png', buffer: png });
-  await sleep(21000); // post rate-limit min gap
-  await p.fill('[data-test=cm-post-text]', 'ZZTEST photo post'); await p.click('[data-test=cm-post-submit]');
-  await p.waitForSelector('.cm-error', { timeout: 25000 }).catch(() => {}); await shot('04b-photo-fail.png');
-  const errTxt = (await p.locator('.cm-error').count()) ? await p.textContent('.cm-error') : '';
-  console.log('PHOTOFAIL', JSON.stringify(errTxt), await p.inputValue('[data-test=cm-post-text]'));
-  ok('photo upload failure: friendly message, caption kept, nothing posted', /Photo upload isn.t available/.test(errTxt) && (await p.inputValue('[data-test=cm-post-text]')) === 'ZZTEST photo post' && (await db.collection('communityPosts').where('uid', '==', me).get()).size === 1);
-  await p.click('.cm-thumb .cm-x'); await p.fill('[data-test=cm-post-text]', ''); await p.click('[data-test=cm-compose-close]'); await sleep(400);
+  await p.click('[data-test=create-post-fab]'); await p.waitForSelector('[data-test=cm-composer]');
+  ok('sheet has no Photo option or file input (only caption + Stats card)', (await p.locator('[data-test=cm-composer] input[type=file]').count()) === 0 && (await p.locator('[data-test=cm-composer] .cm-qp-opt').count()) === 1);
+  await p.click('[data-test=cm-compose-close]'); await sleep(400);
+  ok('legacy post images are not rendered', (await p.locator('#post-pBen2 img').count()) === 0 && (await p.locator('.cm-gallery').count()) === 0);
   const own = p.locator('[data-test=cm-post]', { hasText: 'Onwards' }).first();
   ok('caption-only post visible in feed', (await own.count()) === 1);
   await own.locator('.cm-more').first().click(); await p.click('button.danger:has-text("Delete")'); await sleep(2000);
@@ -157,5 +150,7 @@ async function seedUser(email, name) {
   await q.locator('#post-' + zp.docs[0].id + ' .cm-author').click(); await sleep(1500);
   ok('profile sheet shows streak + badge grid', /7/.test(await q.textContent('[data-test=cm-profile-streak]')) && (await q.$$('[data-test=cm-badges] .cm-badge:not(.off)')).length >= 3);
   await q.screenshot({ path: SHOTS + '15-profile-badges.png' });
+  await q.goto(B + '/home', { waitUntil: 'load' }); await sleep(2500);
+  ok('FAB reads exactly "Create tasks" on Home', (await q.textContent('[data-test=create-task-fab] [data-test=fab-label]')).trim() === 'Create tasks');
   console.log('done'); await br.close(); process.exit(0);
 })().catch((e) => { console.error(e); process.exit(1); });

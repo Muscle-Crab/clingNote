@@ -85,9 +85,6 @@ await t('toggleLikeState: like/unlike, never negative', () => {
   assert.deepEqual(C.toggleLikeState({ likeCount: 2 }, false), { liked: true, likeCount: 3 });
   assert.deepEqual(C.toggleLikeState({ likeCount: 0 }, true), { liked: false, likeCount: 0 });
 });
-await t('fitWithin caps longest side at 1600 and keeps aspect', () => {
-  assert.deepEqual(C.fitWithin(4032, 3024), { w: 1600, h: 1200 }); assert.deepEqual(C.fitWithin(800, 600), { w: 800, h: 600 }); assert.deepEqual(C.fitWithin(1000, 3200), { w: 500, h: 1600 });
-});
 await t('share link + text', () => { assert.equal(C.postLink('ab c&x'), 'https://clingnot.netlify.app/community?post=abcx'); assert.match(C.shareTextFor({ title: 'Day 5' }), /Day 5/); });
 await t('buildNotif: allowed types, no self, no emails, text capped', () => {
   assert.equal(C.buildNotif({ type: 'hack', from: 'a', to: 'b' }), null); assert.equal(C.buildNotif({ type: 'like', from: 'a', to: 'a' }), null);

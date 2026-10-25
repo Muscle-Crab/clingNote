@@ -1,14 +1,18 @@
 <template>
-  <button type="button" class="ctf" data-test="create-task-fab" aria-label="Create task" @click="create">
-    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>Create task</span>
+  <button type="button" class="ctf" :data-test="onCommunity ? 'create-post-fab' : 'create-task-fab'" :aria-label="label" @click="create">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span data-test="fab-label">{{ label }}</span>
   </button>
 </template>
 
 <script setup>
+import { computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 const route = useRoute(); const router = useRouter();
+// Label + action follow the active tab: Community -> "Create post" (opens the post sheet), everywhere else -> "Create tasks".
+const onCommunity = computed(() => route.name === 'community');
+const label = computed(() => (onCommunity.value ? 'Create post' : 'Create tasks'));
 // Reuses Home's add-task flow (limits/paywall handled there): on Home fire the event, elsewhere go Home with ?new=1.
-const create = () => { if (route.name === 'home') window.dispatchEvent(new CustomEvent('cn:create-task')); else router.push({ path: '/home', query: { new: '1' } }); };
+const create = () => { if (onCommunity.value) window.dispatchEvent(new CustomEvent('cn:create-post')); else if (route.name === 'home') window.dispatchEvent(new CustomEvent('cn:create-task')); else router.push({ path: '/home', query: { new: '1' } }); };
 </script>
 
 <style scoped>

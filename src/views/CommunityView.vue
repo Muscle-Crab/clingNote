@@ -42,11 +42,6 @@
 
       <!-- ── FEED ── -->
       <template v-if="tab === 'feed'">
-        <button class="cm-share" @click="openCompose" data-test="cm-compose-open">
-          <span class="cm-share-plus" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
-          <span class="cm-share-t">Share your progress</span>
-          <svg class="cm-share-chev" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
-        </button>
         <Teleport to="body">
           <Transition name="cm-qp">
             <div v-if="composeOpen" class="cm-qp-bg" @click.self="closeCompose" data-test="cm-compose-backdrop">
@@ -59,11 +54,9 @@
                   <span class="cm-qp-count" data-test="cm-post-count">{{ draft.text.length }}/{{ CAPTION_MAX }}</span>
                 </div>
                 <div v-if="draft.stats" class="cm-stats cm-stats--draft"><StatsRow :s="draft.stats" /><button class="cm-x" @click="draft.stats = null" aria-label="Remove stats">✕</button></div>
-                <div v-if="draft.previews.length" class="cm-thumbs"><div v-for="(p, i) in draft.previews" :key="p" class="cm-thumb"><img :src="p" alt="" /><button class="cm-x" @click="removeImage(i)" aria-label="Remove image">✕</button></div></div>
                 <p v-if="error" class="cm-error" role="alert">{{ error }}</p>
                 <p class="cm-qp-lbl">Add to your post</p>
                 <div class="cm-qp-add">
-                  <label class="cm-qp-opt" :class="{ off: draft.files.length >= LIMITS.images }"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-2.5h6L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Photo<input type="file" accept="image/*" multiple hidden @change="pickPostImages" :disabled="draft.files.length >= LIMITS.images" /></label>
                   <button type="button" class="cm-qp-opt" :class="{ on: draft.stats }" :disabled="busy" @click="draft.stats ? (draft.stats = null) : attachStats()" data-test="cm-stats-btn"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><rect x="4" y="11" width="3.2" height="9" rx="1"/><rect x="10.4" y="5" width="3.2" height="15" rx="1"/><rect x="16.8" y="8" width="3.2" height="12" rx="1"/></svg>Stats card</button>
                 </div>
                 <button class="cm-qp-post" :disabled="busy || !draft.text.trim()" @click="submitPost" data-test="cm-post-submit">{{ busy ? 'Posting…' : 'Post to community' }}</button>
@@ -89,7 +82,6 @@
           <h3 v-if="p.title" class="cm-title">{{ p.title }}</h3>
           <p v-if="p.text" class="cm-text">{{ p.text }}</p>
           <div v-if="p.stats" class="cm-stats"><StatsRow :s="p.stats" /></div>
-          <div v-if="p.images && p.images.length" class="cm-gallery" :class="'n' + p.images.length"><img v-for="u in p.images" :key="u" :src="u" alt="Post image" loading="lazy" /></div>
           <div class="cm-actions">
             <button class="cm-heart" :class="{ on: liked[p.id], pop: popping === p.id }" @click="like(p)" :aria-pressed="liked[p.id] ? 'true' : 'false'" aria-label="Like" data-test="cm-like"><svg class="h" viewBox="0 0 24 24" width="17" height="17" :fill="liked[p.id] ? '#F0506E' : 'none'" :stroke="liked[p.id] ? '#F0506E' : 'currentColor'" stroke-width="1.9" aria-hidden="true"><path d="M12 20.3s-7.8-4.6-7.8-10.3A4.4 4.4 0 0 1 12 7.4 4.4 4.4 0 0 1 19.8 10c0 5.7-7.8 10.3-7.8 10.3Z"/></svg> {{ p.likeCount || 0 }}</button>
             <button @click="toggleComments(p)" aria-label="Comments"><svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor" aria-hidden="true"><path d="M12 3.5c-4.9 0-8.8 3.4-8.8 7.6 0 2.2 1.1 4.2 2.9 5.6l-.7 3.4 3.7-1.9c.9.3 1.9.4 2.9.4 4.9 0 8.8-3.4 8.8-7.5S16.9 3.5 12 3.5Z"/></svg> {{ p.commentCount || 0 }}</button>
@@ -115,7 +107,6 @@
             <Avatar v-if="m.uid !== uid" :name="m.name" :src="m.avatar" small @click="openProfile(m)" />
             <div class="cm-bubble">
               <div v-if="m.uid !== uid" class="cm-mname">{{ nameOf(m.name) }}</div>
-              <img v-if="m.image" :src="m.image" alt="Shared image" class="cm-mimg" loading="lazy" />
               <div v-if="m.text">{{ m.text }}</div>
               <div class="cm-mtime">{{ ago(m.createdAt) }} <button class="cm-more" @click="menuFor = { kind: 'chat', item: m }" aria-label="More">⋯</button></div>
             </div>
@@ -123,7 +114,6 @@
           <p v-if="!chat.length" class="cm-muted cm-empty">Say hi to everyone 👋</p>
         </div>
         <form class="cm-chatbar" @submit.prevent="submitChat">
-          <label class="cm-chip" aria-label="Send a photo">📷<input type="file" accept="image/*" hidden @change="sendChatImage" /></label>
           <input v-model="chatText" class="cm-input" :maxlength="LIMITS.chat" placeholder="Message everyone" data-test="cm-chat-input" />
           <button class="cm-btn" :disabled="busy">Send</button>
         </form>
@@ -225,12 +215,14 @@ const hidden = ref(new Set(JSON.parse(localStorage.getItem('cm.hidden') || '[]')
 const posts = ref([]); const morePostsList = ref([]); const feedCursor = ref(null); const feedLoaded = ref(false);
 const sort = ref('foryou'); const composeOpen = ref(false); const CAPTION_MAX = 500;
 const openCompose = () => { error.value = ''; composeOpen.value = true; };
+const onCreatePost = () => { if (eulaOk.value && tab.value === 'feed') openCompose(); else if (eulaOk.value) { tab.value = 'feed'; openCompose(); } };
+onMounted(() => window.addEventListener('cn:create-post', onCreatePost)); onBeforeUnmount(() => window.removeEventListener('cn:create-post', onCreatePost));
 const closeCompose = () => { if (!busy.value) composeOpen.value = false; }; const onlyFollowing = ref(false); const liked = reactive({}); const popping = ref(''); const highlight = ref(route.query.post || '');
 const openComments = ref(''); const comments = ref([]); const commentText = ref('');
 const chatLive = ref([]); const chatOlder = ref([]); const chatCursor = ref(null); const chatText = ref(''); const chatBox = ref(null);
 const notifs = ref([]); const showNotifs = ref(false); const showPrefs = ref(false); const notifPrefs = reactive({ ...DEFAULT_NOTIF_PREFS });
 const menuFor = ref(null); const reporting = ref(null); const reportReason = ref(''); const profile = ref(null);
-const draft = reactive({ text: '', stats: null, files: [], previews: [] });
+const draft = reactive({ text: '', stats: null });
 const limiter = createRateLimiter(undefined, { load: () => { try { return JSON.parse(localStorage.getItem('cm.rate') || '{}'); } catch (e) { return {}; } }, save: (x) => localStorage.setItem('cm.rate', JSON.stringify(x)) });
 const unsubs = [];
 
@@ -245,7 +237,7 @@ const feed = computed(() => {
   if (onlyFollowing.value) list = filterFollowing(list, following.value, uid.value);
   return sortFeed(list, sort.value);
 });
-const chat = computed(() => chatOrder(filterBlocked(mergeById(chatOlder.value, chatLive.value), blocked.value)));
+const chat = computed(() => chatOrder(filterBlocked(mergeById(chatOlder.value, chatLive.value), blocked.value)).filter((m) => m.text)); // photo-only legacy messages are hidden (photos removed)
 const shownComments = computed(() => filterBlocked(comments.value, blocked.value));
 watch(() => [...feed.value.map((p) => p.uid), ...comments.value.map((c) => c.uid)], (u) => loadCProf(u));
 const shownNotifs = computed(() => visibleNotifs(notifs.value, blocked.value, notifPrefs));
@@ -291,23 +283,14 @@ async function focusPost(id) {
 // ── composer
 async function attachStats() { try { draft.stats = await C.loadTodayStats(uid.value); } catch (e) { fail(e, 'Could not load today\'s stats.'); } }
 async function quickFill() { await attachStats(); if (draft.stats) { if (!draft.text) draft.text = progressText(draft.stats); } }
-function pickPostImages(e) {
-  const files = [...(e.target.files || [])].filter((f) => /^image\//.test(f.type)); e.target.value = '';
-  for (const f of files.slice(0, LIMITS.images - draft.files.length)) { draft.files.push(f); draft.previews.push(URL.createObjectURL(f)); }
-}
-function removeImage(i) { URL.revokeObjectURL(draft.previews[i]); draft.files.splice(i, 1); draft.previews.splice(i, 1); }
-const withTimeout = (pr, ms) => Promise.race([pr, new Promise((_, rej) => setTimeout(() => rej(new Error('upload timeout')), ms))]);
 async function submitPost() {
   const x = validateText(draft.text, CAPTION_MAX, { allowEmpty: false }); if (!x.ok) return (error.value = x.error);
   if (!gate('post')) return;
   busy.value = true; error.value = '';
   try {
-    const images = [];
-    try { for (const f of draft.files) images.push(await withTimeout(C.uploadImage(uid.value, f), 20000)); }
-    catch (e) { console.warn('[community] photo upload failed:', e && (e.code || e.message)); error.value = 'Photo upload isn\'t available right now. Your caption is saved here: remove the photo to post it as text.'; return; }
-    const id = await C.createPost(me, { text: x.text, images, stats: draft.stats });
+    const id = await C.createPost(me, { text: x.text, stats: draft.stats });
     limiter.hit('post');
-    draft.files.forEach((_, i) => URL.revokeObjectURL(draft.previews[i])); Object.assign(draft, { text: '', stats: null, files: [], previews: [] });
+    Object.assign(draft, { text: '', stats: null });
     composeOpen.value = false; sort.value = 'new'; onlyFollowing.value = false; window.scrollTo({ top: 0, behavior: 'smooth' });
     flash('Posted 🎉');
     C.notifyFollowers(me, id, x.text).catch(() => {});
@@ -355,10 +338,6 @@ async function submitChat() {
   const v = validateText(chatText.value, LIMITS.chat); if (!v.ok) return (error.value = v.error);
   if (!gate('chat')) return;
   busy.value = true; try { await C.sendChat(me, { text: v.text }); limiter.hit('chat'); chatText.value = ''; scrollBottom(); } catch (e) { fail(e, 'Could not send.'); } finally { busy.value = false; }
-}
-async function sendChatImage(e) {
-  const f = e.target.files && e.target.files[0]; e.target.value = ''; if (!f || !gate('chat')) return;
-  busy.value = true; try { const url = await withTimeout(C.uploadImage(uid.value, f), 20000); await C.sendChat(me, { image: url }); limiter.hit('chat'); scrollBottom(); } catch (err) { fail(err, 'Photo upload isn\'t available right now. Please try again later.'); } finally { busy.value = false; }
 }
 let pressTimer = null;
 const pressStart = (m) => { pressTimer = setTimeout(() => { menuFor.value = { kind: 'chat', item: m }; }, 550); };
@@ -459,13 +438,6 @@ watch(() => route.query.post, (id) => { if (id && started) { tab.value = 'feed';
 .cm-text { margin: 6px 0 0; white-space: pre-wrap; word-break: break-word; }
 .cm-stats { position: relative; margin-top: 10px; padding: 10px; border-radius: 12px; background: linear-gradient(135deg, #6366f1, #8b5cf6); color: #fff; }
 .cm-x { position: absolute; top: 4px; right: 6px; background: rgba(0,0,0,.45); color: #fff; border-radius: 999px; width: 22px; height: 22px; font-size: .7rem; }
-.cm-thumbs { display: flex; gap: 6px; margin-top: 8px; }
-.cm-thumb { position: relative; width: 64px; height: 64px; }
-.cm-thumb img { width: 100%; height: 100%; object-fit: cover; border-radius: 8px; }
-.cm-gallery { display: grid; gap: 4px; margin-top: 10px; border-radius: 12px; overflow: hidden; }
-.cm-gallery.n2, .cm-gallery.n3, .cm-gallery.n4 { grid-template-columns: 1fr 1fr; }
-.cm-gallery img { width: 100%; max-height: 360px; object-fit: cover; aspect-ratio: 4 / 3; }
-.cm-gallery.n1 img { aspect-ratio: auto; }
 .cm-actions { display: flex; gap: 4px; margin-top: 10px; border-top: 1px solid var(--c-border, #e2e8f0); padding-top: 8px; }
 .cm-actions button { flex: 1; padding: 6px 0; border-radius: 8px; font-size: .85rem; color: var(--c-text-2, #475569); }
 .cm-heart.on { color: #ef4444; font-weight: 700; }
@@ -483,7 +455,6 @@ watch(() => route.query.post, (id) => { if (id && started) { tab.value = 'feed';
 .cm-bubble { max-width: 75%; padding: 7px 11px; border-radius: 16px; background: var(--c-surface-2, #f1f5f9); color: var(--c-text, inherit); word-break: break-word; }
 .cm-msg.mine .cm-bubble { background: var(--c-primary, #6366f1); color: #fff; }
 .cm-mname { font-size: .72rem; font-weight: 700; color: var(--c-primary, #6366f1); }
-.cm-mimg { max-width: 100%; border-radius: 10px; margin: 2px 0; }
 .cm-mtime { font-size: .65rem; opacity: .7; text-align: right; }
 .cm-mtime .cm-more { font-size: .8rem; padding: 0 2px; color: inherit; }
 .cm-chatbar { display: flex; gap: 6px; align-items: center; padding-top: 8px; border-top: 1px solid var(--c-border, #e2e8f0); }
@@ -523,10 +494,6 @@ watch(() => route.query.post, (id) => { if (id && started) { tab.value = 'feed';
 .cm-tabs { background: #0A1430; border: 1px solid var(--cm-line); padding: 4px; }
 .cm-tabs button { padding: 9px 0; font-size: 15px; color: var(--cm-dim); }
 .cm-tabs button.on { background: var(--cm-blue); color: #fff; box-shadow: 0 4px 14px rgba(47,107,255,.35); }
-.cm-share { width: 100%; display: flex; align-items: center; gap: 12px; margin-top: 14px; padding: 14px 16px; border-radius: 16px; background: linear-gradient(180deg, #3874FF, #2A62F0); color: #fff; font-weight: 700; font-size: 16px; box-shadow: 0 8px 22px rgba(47,107,255,.35); }
-.cm-share-plus { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 999px; background: rgba(255,255,255,.22); }
-.cm-share-t { flex: 1; text-align: left; }
-.cm-share-chev { opacity: .9; }
 .cm-filters { gap: 8px; margin-top: 16px; }
 .cm-filters button { padding: 8px 16px; font-size: 14px; font-weight: 600; color: #C9D3EA; background: var(--cm-card); border-color: var(--cm-line); }
 .cm-filters button.on { background: rgba(47,107,255,.16); color: #7FA6FF; border-color: rgba(47,107,255,.55); }
