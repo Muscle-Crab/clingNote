@@ -24,11 +24,11 @@
     </section>
 
     <section v-else-if="STEPS[step] === 'wake'" class="wl-sec" data-test="wl-wake">
-      <p class="wl-k">Your {{ hl }}-hour day</p>
+      <p class="wl-k">Your day</p>
       <h1 class="wl-h">When do you <span>start?</span></h1>
       <p class="wl-p">Pick your wake time. From then, each morning you choose your hours (3 to 12) and confirm to start.</p>
       <label class="wl-field"><span>☀️ Wake time</span><input type="time" v-model="wake" data-test="wl-wake-input" /></label>
-      <p class="wl-ends" data-test="wl-ends">Starts {{ wakeLabel }} · <b>Ends {{ endLabel }}</b></p>
+      <p class="wl-ends" data-test="wl-ends">Starts {{ wakeLabel }} · <b>ends based on the hours you pick each morning</b></p>
       <div class="wl-field wl-count"><span>✅ Tasks per day</span>
         <div class="wl-step"><button type="button" :disabled="taskCount <= 1" @click="taskCount--" aria-label="Fewer tasks" data-test="wl-count-dec">−</button><b data-test="wl-count">{{ taskCount }}</b><button type="button" :disabled="taskCount >= MAX_TASKS_PER_DAY" @click="taskCount++" aria-label="More tasks" data-test="wl-count-inc">+</button></div>
       </div>

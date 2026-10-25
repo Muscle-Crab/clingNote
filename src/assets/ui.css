@@ -90,3 +90,9 @@ body, #app { min-height: 100vh; min-height: 100dvh; margin: 0; }
 .app-shell:not(.app-shell--home) .bg-white\/70, .app-shell:not(.app-shell--home) .bg-white\/80, .app-shell:not(.app-shell--home) .bg-white\/90 { background-color: rgba(12,22,48,.85); border: 1px solid var(--c-border-strong); }
 .app-shell:not(.app-shell--home) .text-white\/70 { color: var(--c-text-2); }
 .app-shell:not(.app-shell--home) .bg-blue-50 { background-color: var(--c-accent-soft); }
+
+/* iOS Safari zooms the page when a focused field is under 16px. Keep every form field >= 16px on phones/tablets
+   (beats scoped component sizes on purpose). Pinch-zoom stays enabled (no maximum-scale / user-scalable=no). */
+@media (max-width: 1024px), (pointer: coarse) {
+  input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]), textarea, select, [contenteditable="true"] { font-size: max(16px, 1em) !important; }
+}

@@ -29,6 +29,14 @@ const step = async (name, fn) => { try { const v = await fn(); const ok = v !== 
   await step('start day (8-hour)', async () => { const s = p.locator('[data-test=eh-start], button:has-text("Start Day"), button:has-text("Start")').first(); if (await s.count()) { await s.click(); await sleep(1200); if (await p.locator('[data-test=day-prompt]').count()) { await p.click('[data-test=day-prompt-next]'); await p.click('[data-test=day-prompt-confirm]'); } await sleep(2500); await dismiss(); } await shot('3_started'); return (await p.locator('[data-test=eh-countdown], [data-test=eh-ends]').count()) > 0 || (await p.locator('[data-test=create-task-fab], .fab-add').count()) > 0; });
   await step('rollover banner shows for yesterday leftover', async () => { await p.waitForSelector('[data-test=rollover-banner]', { timeout: 8000 }); return true; });
   await p.locator('[data-test=rollover-dismiss]').first().click().catch(() => {}); await dismiss();
+  await step('add-task modal: every input/textarea/select >= 16px (no iOS focus zoom) and FAB has no scale-on-tap', async () => {
+    await p.click('[data-test=create-task-fab], .fab-add'); await p.waitForSelector('#nt-name', { timeout: 6000 }); await sleep(500);
+    const small = await p.evaluate(() => { const m = document.querySelector('#nt-name').closest('[role=dialog], .modal, form') || document.body;
+      return [...m.querySelectorAll('input, textarea, select')].filter((e) => !['checkbox', 'radio', 'range', 'hidden', 'color'].includes(e.type)).map((e) => [e.id || e.name || e.type || e.tagName, parseFloat(getComputedStyle(e).fontSize)]).filter(([, f]) => f < 16); });
+    const vp = await p.evaluate(() => (document.querySelector('meta[name=viewport]') || {}).content || '');
+    await p.keyboard.press('Escape'); await sleep(600); if (await p.locator('#nt-name').count()) { const c = p.locator('button:has-text("Cancel"), [aria-label=Close]').first(); if (await c.count()) await c.click(); await sleep(500); }
+    if (small.length || /user-scalable=no|maximum-scale=1/.test(vp)) throw new Error('small fields ' + JSON.stringify(small) + ' viewport ' + vp);
+  });
   await step('add task', async () => { await p.click('[data-test=create-task-fab], .fab-add'); await p.fill('#nt-name', 'ZZTEST Wash the car'); await sleep(800); await shot('2_add'); await p.click('button[type=submit]'); await sleep(2500); await dismiss(); return (await p.locator('.task-title', { hasText: 'ZZTEST Wash the car' }).count()) > 0; });
   await step('auto time estimate on new task', async () => /\d+m · \d+p/.test(await p.locator('body').innerText()));
   await step('play timer starts', async () => { await p.locator('.task-play').first().click(); await sleep(2000); await shot('4_play'); await dismiss(); return true; });
