@@ -11,7 +11,7 @@ const { verifyUser } = require('./lib/notify');
 const { getAdmin } = require('./lib/firebaseAdmin');
 const { withCors } = require('./lib/cors');
 
-const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']; // app doc ids are weeklyRoutines/{uid}_{Sun..Sat}
 const json = (statusCode, body) => ({ statusCode, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 const fail = (status, error) => Object.assign(new Error(error), { status });
 

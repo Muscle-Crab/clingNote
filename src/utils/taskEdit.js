@@ -2,7 +2,7 @@
 // Pure functions (no Firestore) so scripts/test-edit-task.js can cover them.
 export const ESTIMATE_CHIPS = [15, 30, 45, 60, 90];
 // Locked during a running 8-hour day (same list as netlify/functions/lib/eightHourCore.js LOCKED_FIELDS).
-export const EDIT_LOCKED = ['points']; // while a day is locked, everything but the server-set points stays editable
+export const EDIT_LOCKED = ['title', 'estimateMin', 'points', 'complexity', 'type'];
 export const LOCK_HINT = 'Locked while your day runs';
 export const isFieldLocked = (field, dayLocked) => !!dayLocked && EDIT_LOCKED.includes(field);
 

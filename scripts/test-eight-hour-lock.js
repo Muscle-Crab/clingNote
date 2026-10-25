@@ -36,23 +36,22 @@ lockMod.setLockSource(() => ({ lock: { dayName: 'Fri', startMs: start, endMs: en
     const a = [T('Alpha'), T('Beta'), T('Gamma')];
     assert.throws(() => lockMod.assertTasksChangeAllowed('Fri', a, [a[1], a[0], a[2]]), lockMod.isLockError, 'reorder');
     assert.throws(() => lockMod.assertTasksChangeAllowed('Fri', a, a.slice(0, 2)), lockMod.isLockError, 'delete');
-    lockMod.assertTasksChangeAllowed('Fri', a, [...a, T('Delta')]); // add (append) allowed while locked
-    lockMod.assertTasksChangeAllowed('Fri', a, [{ ...a[0], title: 'Alpha edited', estimateMin: 5 }, a[1], a[2]]); // edit allowed while locked
+    assert.throws(() => lockMod.assertTasksChangeAllowed('Fri', a, [...a, T('Delta')]), lockMod.isLockError, 'add');
     assert.throws(() => lockMod.assertTasksChangeAllowed('Fri', a, [a[0], T('Other'), a[2]]), lockMod.isLockError, 'swap');
     assert.throws(() => lockMod.assertTasksChangeAllowed('Fri', a, [{ ...a[0], points: 99 }, a[1], a[2]]), lockMod.isLockError, 'points');
     lockMod.assertTasksChangeAllowed('Fri', a, [{ ...a[0], completed: true, notes: 'x', timerActive: true }, a[1], a[2]]);
     lockMod.assertTasksChangeAllowed('Sat', a, a.slice(0, 1)); // other day: free
   });
   await t('patches: locked fields refused, completion/notes/timer/boss/subtasks allowed', () => {
-    for (const k of ['createdAt', 'points']) assert.throws(() => lockMod.assertPatchAllowed('Fri', { [k]: 1 }), lockMod.isLockError, k);
-    lockMod.assertPatchAllowed('Fri', { title: 'edit ok', estimateMin: 5, completed: true, notes: 'n', boss: true, status: 'done', timerActive: true, subtasks: [] });
+    for (const k of ['title', 'createdAt', 'points', 'complexity', 'estimateMin', 'type']) assert.throws(() => lockMod.assertPatchAllowed('Fri', { [k]: 1 }), lockMod.isLockError, k);
+    lockMod.assertPatchAllowed('Fri', { completed: true, notes: 'n', boss: true, status: 'done', timerActive: true, subtasks: [] });
     lockMod.assertPatchAllowed('Sat', { title: 'free' });
   });
 
   // ── data layer ──
   await t('patchStoredTask refuses locked fields before any read/write', async () => {
     calls.length = 0; docs['weeklyRoutines/u_Fri'] = { tasks: [T('Alpha')] };
-    assert.throws(() => persist.patchStoredTask('u', 'Fri', T('Alpha'), 0, { points: 5 }), lockMod.isLockError);
+    assert.throws(() => persist.patchStoredTask('u', 'Fri', T('Alpha'), 0, { estimateMin: 5 }), lockMod.isLockError);
     assert.strictEqual(calls.length, 0);
     assert.strictEqual(await persist.patchStoredTask('u', 'Fri', T('Alpha'), 0, { completed: true }), true);
     assert.strictEqual(docs['weeklyRoutines/u_Fri'].tasks[0].completed, true);
@@ -77,11 +76,10 @@ lockMod.setLockSource(() => ({ lock: { dayName: 'Fri', startMs: start, endMs: en
   const home = read('src/views/HomeView.vue');
   const body = (name) => { const i = home.search(new RegExp(`const ${name} = async`)); assert.ok(i >= 0, name); const j = home.indexOf('\nconst ', i + 10); return home.slice(i, j); };
   await t('every list-changing HomeView action checks the lock', () => {
-    for (const fn of ['deleteTask', 'markTaskAsWontDo', 'undoWontDo', 'handleDragEnd', 'scheduleExistingTask']) assert.ok(/blockIfLocked\(/.test(body(fn)), fn);
+    for (const fn of ['deleteTask', 'markTaskAsWontDo', 'undoWontDo', 'handleDragEnd', 'scheduleExistingTask', 'updateTask']) assert.ok(/blockIfLocked\(/.test(body(fn)), fn);
     assert.ok(/blockIfLocked\(currentDayIndex\)\s*\|\|\s*blockIfLocked\(targetDayIndex\)/.test(body('transferTask')), 'transfer checks both days');
     assert.ok(/isDayLocked\(d\.day\)/.test(body('setTaskRepeat')), 'repeat edits touch every weekday');
-    assert.ok(!/blockIfLocked\(/.test(body('updateTask')), 'edits allowed while locked');
-    assert.ok(/isDayLocked\(dayName\) \? l\.length/.test(home) || /isDayLocked\(dayName\)/.test(body('addNewTask')), 'adds allowed on the locked day, appended only');
+    assert.ok(/isDayLocked\(d\.day\)/.test(body('addNewTask')), 'add (incl. repeating copies) refused on the locked day');
     assert.ok(/assertTasksChangeAllowed/.test(body('saveSelectedDayTasks')), 'whole-array saves are checked');
     assert.ok(/isDayLocked\(days\[dayIndex\]/.test(body('resetTasksToIncomplete')), 'past-day reset skips the locked day');
     assert.ok(/!selectedDayLocked\.value/.test(home.match(/const reorderable = .*/)[0]), 'drag/reorder disabled');

@@ -1,5 +1,5 @@
 // iOS only: keep the home-screen widget's App Group snapshot in sync with today's tasks, and route widget taps.
-// Listens to weeklyRoutines/{uid}_{Today} directly (independent of HomeView), so any task change anywhere refreshes the widget.
+// Listens to weeklyRoutines/{uid}_{Sun..Sat} directly (independent of HomeView), so any task change anywhere refreshes the widget.
 import { doc, onSnapshot } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
 import { registerPlugin } from '@capacitor/core';
@@ -9,7 +9,8 @@ import { drainQueue } from './widgetQueue';
 import { API_BASE } from '@/config/api';
 
 const ClingWidget = registerPlugin('ClingWidget');
-const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+// Same doc ids as HomeView (src/data.json days[].day): weeklyRoutines/{uid}_Sun..Sat, NOT full weekday names.
+const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 let keyMap = {};
 let lastJson = '';
 let lastTasks = null, lastDay = '';

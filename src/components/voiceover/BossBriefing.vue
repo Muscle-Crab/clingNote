@@ -56,7 +56,8 @@ async function run() {
   const now = new Date(); const today = localDateStr(now); const mode = getMode();
   const kM = `clingnote.morning.${u.uid}`; const kO = `clingnote.overdueAt.${u.uid}`;
   const kI = `clingnote.introHeard.${u.uid}`; const needIntro = !ls(kI);
-  const wantMorning = (needIntro && ls(kM) !== today) || morningDue(today, now.getHours(), ls(kM)); // first report = onboarding, any hour const wantOverdue = overdueDue(now.getTime(), ls(kO));
+  const wantMorning = (needIntro && ls(kM) !== today) || morningDue(today, now.getHours(), ls(kM)); // first report = onboarding, any hour
+  const wantOverdue = overdueDue(now.getTime(), ls(kO));
   if (!wantMorning && !wantOverdue) return;
   busy = true;
   try {

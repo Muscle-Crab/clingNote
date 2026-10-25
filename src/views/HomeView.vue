@@ -1779,7 +1779,9 @@ const addNewTask = async () => {
           : [days[selectedDayIndex.value]];
 
   // 8-hour lock: nothing can be added to the locked day (including repeating copies); before the countdown the plan count is the cap
-  // (adds ARE allowed during the locked window; they are appended so the locked slots never move. Deletes stay blocked.)
+  // The LIVE Firestore rules still require an unchanged task count on the locked day (append-only adds need the 82e1569 rules
+  // deployed first), so block here with a clear message instead of an optimistic add that the server rejects.
+  if (selectedDays.some((d) => isDayLocked(d.day))) { error.value = lockedMessage(); alert(error.value); return false; }
   if (selectedDays.some((d) => d.day === days[selectedDayIndex.value].day) && isToday(selectedDayIndex.value) && !isDayLocked(days[selectedDayIndex.value].day) && planFull()) {
     error.value = `Your plan is ${eh.plan.value.taskCount} task${eh.plan.value.taskCount === 1 ? '' : 's'} today. Raise the task count in the 8-hour card first (only possible before the countdown starts).`; return false;
   }
@@ -2008,7 +2010,8 @@ const startEditingTask = (index) => {
 };
 
 const updateTask = async () => {
-  if (isShutdown()) { alert(shutMessage()); return; } // edits are allowed during the locked window; only the post-day shutdown blocks them
+  if (isShutdown()) { alert(shutMessage()); return; }
+  if (blockIfLocked()) return; // LIVE rules freeze title/estimate/type on the locked day
   if (editedTask.value.title.trim() === '') {
     error.value = 'Task name cannot be empty';
     return;
