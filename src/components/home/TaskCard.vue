@@ -440,6 +440,10 @@ const onPressEnd = () => { if (pressTimer !== 'fired') clearTimeout(pressTimer);
 .task-left { padding: 0; }
 .task-index { display: none; }
 .task-avatar { width: 16px; height: 40px; font-size: 11px; opacity: .6; touch-action: none; }
+/* iOS: bigger touch target, no callout/selection on long-press, never let the page pan from the handle */
+.drag-handle { position: relative; touch-action: none !important; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+.drag-handle::before { content: ''; position: absolute; inset: -4px -12px; }
+.drag-handle i { pointer-events: none; }
 .task-body { gap: 2px var(--sp-2); padding: 2px 0; }
 .task-body > * { flex: 0 0 100%; }
 .task-body > .task-title-row { order: 1; flex: 1 1 100%; }

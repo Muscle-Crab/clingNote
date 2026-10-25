@@ -51,7 +51,11 @@ export function useSmoothReorder({ listRef, handle = '.drag-handle', enabled = (
 
   const onMove = (e) => { if (!st) return; st.py = e.clientY; e.preventDefault(); schedule(); };
 
+  // iOS WKWebView: pointer events alone don't stop the native scroll, which steals the gesture and fires
+  // pointercancel. A non-passive touchmove preventDefault while dragging keeps the finger on the item.
+  const blockTouch = (e) => { if (st && e.cancelable) e.preventDefault(); };
   const cleanupListeners = () => {
+    document.removeEventListener('touchmove', blockTouch, { passive: false });
     window.removeEventListener('pointermove', onMove);
     window.removeEventListener('pointerup', onUp);
     window.removeEventListener('pointercancel', onUp);
@@ -109,6 +113,7 @@ export function useSmoothReorder({ listRef, handle = '.drag-handle', enabled = (
     items.forEach((n) => { n.style.willChange = 'transform'; if (n !== el) { n.classList.add('reorder-shift'); n.style.transition = reduced ? 'none' : `transform ${SLIDE_MS}ms ${EASE_OUT}`; } });
     el.style.transition = 'none'; el.style.zIndex = '50'; el.classList.add('reorder-lift');
     try { h.setPointerCapture?.(e.pointerId); } catch (_) { /* ignore */ }
+    document.addEventListener('touchmove', blockTouch, { passive: false });
     window.addEventListener('pointermove', onMove, { passive: false });
     window.addEventListener('pointerup', onUp);
     window.addEventListener('pointercancel', onUp);
