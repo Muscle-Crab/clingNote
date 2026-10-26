@@ -81,7 +81,9 @@ export function parseClause(text, now = new Date()) {
   if (start && !date.explicit && !(time && time.rel != null)) { const [h, m] = start.split(':').map(Number); if (h * 60 + m <= now.getHours() * 60 + now.getMinutes()) d = addDays(now, 1); }
   if (!kind) {
     if (durationMin && (start || date.explicit)) kind = 'schedule';
-    else if (start && !durationMin) kind = 'reminder';
+    // "go to the store at 6 PM": a timed TASK (startTime set; the phone pings at that time). Another day -> scheduled task.
+    // Only an explicit "remind me ..." (kind set above) stays a plain reminder.
+    else if (start && !durationMin) kind = ymdEq(d, now) ? 'task' : 'schedule';
     else if (date.explicit && !ymdEq(d, now)) kind = 'schedule';
     else kind = 'task';
   }

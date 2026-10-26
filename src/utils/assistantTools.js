@@ -5,10 +5,11 @@ import { normalizeItems } from './voiceIntent';
 import { estimateFor } from './taskEstimate';
 import { clampHours } from './eightHour';
 import { validateText, LIMITS } from './community';
+import { repeatFields } from './assistantExtras';
 
 // Never run without an explicit user confirm (tap or spoken yes). A model-supplied "confirmed" flag is ignored.
 export const CONFIRM_TOOLS = new Set(['delete_task', 'complete_task', 'start_day', 'post_to_community']);
-export const READ_TOOLS = new Set(['get_overview', 'navigate']);
+export const READ_TOOLS = new Set(['get_overview', 'navigate', 'get_stats', 'find_tasks', 'suggest_next']);
 export const PAGES = { home: '/home', upcoming: '/upcoming', rankings: '/rankings', community: '/community', discipline: '/discipline', pals: '/pals', about: '/about', support: '/support', paywall: '/paywall' };
 export const SETTINGS = ['sounds', 'boss_voice', 'spoken_replies'];
 export const MAX_CREATE = 15;
@@ -47,7 +48,8 @@ export const validateCall = (name, args = {}, { refs = {}, tasksByKey = new Map(
   switch (name) {
     case 'create_tasks': {
       const raw = (Array.isArray(a.items) ? a.items : []).slice(0, MAX_CREATE);
-      const items = normalizeItems(raw).map((it, i) => ({ ...it, ...pointsForItem({ ...raw[i], ...it }), priority: raw[i] && raw[i].priority === 'high' ? 'high' : '' }));
+      const items = normalizeItems(raw).map((it, i) => ({ ...it, ...pointsForItem({ ...raw[i], ...it }), priority: raw[i] && raw[i].priority === 'high' ? 'high' : '' }))
+        .map((it, i) => { const rep = raw[i] && repeatFields(raw[i].repeat, raw[i].days); return rep ? { ...it, type: 'schedule', date: it.date || today, start: it.start || '09:00', repeat: rep.repeat, days: rep.days.length ? rep.days : undefined } : it; });
       if (!items.length) return { ok: false, error: 'No valid items.' };
       const counted = items.filter((x) => x.type !== 'reminder').length;
       if (limitRemaining != null && counted > limitRemaining) return { ok: false, error: `Daily limit: only ${Math.max(0, limitRemaining)} more task(s) today (5/day on free and Pro).`, limit: true };
@@ -80,7 +82,10 @@ export const validateCall = (name, args = {}, { refs = {}, tasksByKey = new Map(
     case 'start_day': case 'set_day_hours': { const h = Number(a.hours); if (!Number.isFinite(h) || h <= 0) return { ok: false, error: 'Ask the user how many hours.' }; return { ok: true, args: { hours: clampHours(h) } }; }
     case 'set_setting': return SETTINGS.includes(a.setting) ? { ok: true, args: { setting: a.setting, on: !!a.on } } : { ok: false, error: 'Unknown setting.' };
     case 'navigate': return PAGES[a.page] ? { ok: true, args: { path: PAGES[a.page] } } : { ok: false, error: 'Unknown page.' };
-    case 'get_overview': return { ok: true, args: {} };
+    case 'get_overview': case 'get_stats': case 'suggest_next': return { ok: true, args: {} };
+    case 'find_tasks': { const q = String(a.query || '').slice(0, 80).trim(); const d = String(a.day || '').slice(0, 12).trim(); return q || d ? { ok: true, args: { query: q, day: d } } : { ok: false, error: 'Say what to look for.' }; }
+    case 'snooze_task': { const r = needTask(); if (!r.ok) return r; const m = Math.round(Number(a.minutes)); if (!(m > 0 && m <= 1440)) return { ok: false, error: 'Minutes 1..1440.' }; return { ok: true, args: { task: r.task, minutes: m } }; }
+    case 'add_subtasks': { const r = needTask(); if (!r.ok) return r; const items = (Array.isArray(a.items) ? a.items : []).map((x) => String(x || '').replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, 100)).filter(Boolean).slice(0, 12); return items.length ? { ok: true, args: { task: r.task, items } } : { ok: false, error: 'No subtasks.' }; }
     case 'post_to_community': {
       const text = String(a.text || '').replace(/[\u0000-\u0009\u000b-\u001f]/g, ' ').trim();
       const v = validateText(text, LIMITS.text);

@@ -204,6 +204,9 @@
 </template>
 
 <script setup>
+import { addSubtask, subtasksOf } from '@/utils/subtasks';
+import { parseAsk } from '@/utils/assistantFab';
+import { weekStats, searchTasks, suggestNext, snoozeTo } from '@/utils/assistantExtras';
 import { ref, onMounted, onBeforeUnmount, computed, watch, reactive, nextTick } from 'vue';
 import { useSounds } from '@/composables/useSounds';
 import { patchStoredTask, loadDayTasks, carryTasksToDay } from '@/composables/useDayPersistence';
@@ -860,6 +863,7 @@ onMounted(() => document.addEventListener('keydown', onShortcutKey));
 // Global "Create task" FAB (App.vue): same flow as the old Add Task bar, incl. free/Pro limits.
 const onCreateTaskEvt = () => onAddClick();
 onMounted(() => { window.addEventListener('cn:create-task', onCreateTaskEvt);
+  { const ask = parseAsk(_proRouter.currentRoute.value.query); if (ask.open) { const q = { ..._proRouter.currentRoute.value.query }; delete q.ask; _proRouter.replace({ query: q }); setTimeout(() => openAssistant(ask.listen), 400); } }
   if (_proRouter.currentRoute.value.query.new === '1') { const q = { ..._proRouter.currentRoute.value.query }; delete q.new; _proRouter.replace({ query: q }); setTimeout(onAddClick, 600); } });
 onBeforeUnmount(() => window.removeEventListener('cn:create-task', onCreateTaskEvt));
 // Drill-sergeant report buttons (components/voiceover/BossBriefing.vue) -> real Home actions on today's list.
@@ -3216,6 +3220,8 @@ const finishShutdown = async (carry) => {
 // ── 8-hour day: sync with the server, auto-start the locked window, keep the card's task list ──
 const ehTasksCache = ref([]);
 const ehTasks = computed(() => (isToday(selectedDayIndex.value) || selectedDayLocked.value ? selectedDayRoutine.value : ehTasksCache.value));
+// timed tasks: any add / edit / reschedule / delete / complete on today's list re-plans the on-device pings (debounced)
+watch(selectedDayRoutine, () => { if (isToday(selectedDayIndex.value)) resyncNotifications(); }, { deep: true });
 watch(selectedDayRoutine, (l) => { if (isToday(selectedDayIndex.value) || selectedDayLocked.value) ehTasksCache.value = [...(l || [])]; }, { deep: true });
 // Scheduled notifications: resync on any schedule/today-list change (declared after selectedDayRoutine to avoid TDZ).
 watch(scheduledList, resyncNotifications);
@@ -3267,6 +3273,18 @@ const openAssistant = (listen = false) => {
   if (!isViewingToday.value && todayIdx.value >= 0) selectedDayIndex.value = todayIdx.value; // the assistant works on today's list
   assistantListen.value = !!listen; askOpen.value = true;
 };
+// Assistant extras: read-only week snapshot (today = live list; other days one getDoc each, stale old-week completions shown as open).
+const agentWeek = async (untilToday) => {
+  const out = [];
+  for (let i = 0; i < 7; i++) {
+    if (untilToday && i > todayIdx.value) break;
+    let tasks = [];
+    if (i === todayIdx.value && isViewingToday.value) tasks = selectedDayRoutine.value;
+    else { try { const snap = await getDoc(doc(db, 'weeklyRoutines', `${userId.value}_${days[i].day}`)); tasks = snap.exists() ? (snap.data().tasks || []) : []; } catch (e) { tasks = []; } }
+    out.push({ day: days[i].day, tasks: (tasks || []).map((t) => (isStaleCompletion(t, i) ? { ...t, completed: false } : t)) });
+  }
+  return out;
+};
 const agentIdx = (task) => { const i = realIndex(task); if (i < 0) throw new Error('That task is no longer in today\'s list.'); return i; };
 const assistantExecutor = createAssistantExecutor({
   tasks: () => todayTasksForTarget.value,
@@ -3286,7 +3304,7 @@ const assistantExecutor = createAssistantExecutor({
     if (it.type === 'reminder') { const r = await saveReminder({ title: it.title, remindAt: it.remindAt }, { schedule: scheduleLocal }); return { ok: r.ok, error: r.error }; }
     newTask.value = { ...blankTask(), title: it.title, startTime: it.start || '', estimateMin: it.durationMin || '', priority: it.priority || newTask.value.priority,
       aiPoints: it.points || 0, aiComplexity: it.complexity || 0,
-      ...(it.type === 'schedule' ? { sched: { ...blankSchedule(it.date), on: true, date: it.date, time: it.start || '09:00' } } : {}) };
+      ...(it.type === 'schedule' ? { sched: { ...blankSchedule(it.date), on: true, date: it.date, time: it.start || '09:00', ...(it.repeat ? { repeat: it.repeat, days: it.days || [] } : {}) } } : {}) };
     capOverride.value = true; agentAdd.value = true;
     try {
       const ok = !!(await addNewTask()) && (it.type === 'schedule' || (await lastAddPersist));
@@ -3299,6 +3317,11 @@ const assistantExecutor = createAssistantExecutor({
     if (date) return scheduleExistingTask(agentIdx(task), task, { date, time });
     return editTask(agentIdx(task), task, { startTime: time });
   },
+  weekStats: async () => ({ ...weekStats(await agentWeek(true), { streak: streak.value, bestStreak: bestStreak.value }), pointsToday: pointsAccumulated.value }),
+  findTasks: async ({ query, day }) => searchTasks(await agentWeek(false), scheduledList.value || [], { query, day }),
+  suggestNext: async () => suggestNext(selectedDayRoutine.value, { minutesLeft: eh.running.value ? Math.round(eh.remainingMs.value / 60000) : null }),
+  snooze: async (task, minutes) => { const t = snoozeTo(new Date(), minutes); if (t.nextDay) return { error: 'That runs past midnight: reschedule it to tomorrow instead.' }; await editTask(agentIdx(task), task, { startTime: t.time }); return t; },
+  addSubtasks: (task, items) => editTask(agentIdx(task), task, { subtasks: items.reduce((l, x) => addSubtask(l, x), subtasksOf(task)) }),
   deleteTask: (task) => deleteTask(agentIdx(task), { skipConfirm: true }),
   complete: (task) => toggleTaskCompletion(agentIdx(task)),
   startTimer: async (task, minutes) => { selectedTimerTaskIndex.value = agentIdx(task); selectedTimerHours.value = Math.floor(minutes / 60); selectedTimerMinutes.value = minutes % 60; await startTimer(); },

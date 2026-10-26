@@ -79,7 +79,9 @@ const snapOf = (limitRemaining = 5) => { const b = T.buildContext({ tasks }); re
     deleteTask: async (t) => { log.push(['del', t.id]); return true; }, editTask: async (t, p) => log.push(['edit', t.id, p]), reschedule: async (t, x) => log.push(['move', t.id, x]),
     complete: async (t) => log.push(['done', t.id]), startTimer: async (t, m) => log.push(['timer', t.id, m]), bossCheckin: async (t, on) => log.push(['boss', t.id, on]),
     startDay: async (h) => { log.push(['start', h]); return { target: 120 }; }, setHours: async (h) => log.push(['hours', h]), setSetting: async (k, on) => log.push(['set', k, on]),
-    navigate: async (p) => log.push(['nav', p]), post: async (a) => { log.push(['post', a.text]); return { ok: true }; } });
+    navigate: async (p) => log.push(['nav', p]),
+    weekStats: async () => ({ streak: 3, completionRate: 50 }), findTasks: async (q) => [{ title: 'Dentist', day: 'Friday', q }], suggestNext: async () => ({ task: { title: 'Store', startTime: '18:00', points: 10 }, reason: 'due' }),
+    snooze: async (t, m) => { log.push(['snooze', t.id, m]); return { time: '18:00' }; }, addSubtasks: async (t, items) => log.push(['subs', t.id, items]), post: async (a) => { log.push(['post', a.text]); return { ok: true }; } });
   const sn = await ex.snapshot();
   ok(sn.limitRemaining === 3 && sn.context.limit.remainingToday === 3 && sn.context.hoursToday === 6, 'snapshot: limit + hours');
   let out = await ex.run('create_tasks', { items: [{ title: 'Gym', points: 40, complexity: 3 }, { title: 'bad' }, { title: 'never' }] });
@@ -88,5 +90,17 @@ const snapOf = (limitRemaining = 5) => { const b = T.buildContext({ tasks }); re
   await ex.run('set_day_hours', { hours: 9 }); ok(log.some((l) => l[0] === 'hours' && l[1] === 9), 'set_day_hours -> the one hours setting');
   await ex.run('delete_task', { task: tasks[0] }); ok(log.some((l) => l[0] === 'del'), 'delete mapped');
   out = await ex.run('get_overview', {}); ok(out.overview && out.overview.tasks.length === 2, 'overview');
+  // extras
+  ok((await ex.run('get_stats', {})).stats.streak === 3, 'get_stats');
+  ok((await ex.run('find_tasks', { query: 'dentist' })).found[0].title === 'Dentist', 'find_tasks');
+  ok((await ex.run('suggest_next', {})).next === 'Store', 'suggest_next');
+  out = await ex.run('snooze_task', { task: tasks[0], minutes: 30 }); ok(out.ok && log.some((l) => l[0] === 'snooze' && l[2] === 30), 'snooze_task');
+  await ex.run('add_subtasks', { task: tasks[0], items: ['a', 'b'] }); ok(log.some((l) => l[0] === 'subs' && l[2].length === 2), 'add_subtasks');
+  const ctx2 = { refs: { t1: T.taskKeyOf(tasks[0]) }, tasksByKey: new Map([[T.taskKeyOf(tasks[0]), tasks[0]]]), today: '2026-10-26' };
+  ok(!T.validateCall('snooze_task', { ref: 't1', minutes: 0 }, ctx2).ok && T.validateCall('snooze_task', { ref: 't1', minutes: 30 }, ctx2).ok, 'snooze validation');
+  ok(T.validateCall('add_subtasks', { ref: 't1', items: [' x ', '', 'y'] }, ctx2).args.items.join() === 'x,y', 'subtasks validation');
+  ok(!T.validateCall('find_tasks', {}, ctx2).ok && T.READ_TOOLS.has('find_tasks') && !T.CONFIRM_TOOLS.has('snooze_task'), 'find/read tools');
+  const rec = T.validateCall('create_tasks', { items: [{ title: 'Run', start: '07:00', repeat: 'weekdays', points: 20 }] }, ctx2);
+  ok(rec.ok && rec.args.items[0].type === 'schedule' && rec.args.items[0].repeat === 'weekly' && rec.args.items[0].days.join() === '1,2,3,4,5' && rec.args.items[0].date === '2026-10-26', 'recurring create');
   console.log(`test-assistant: ${pass} passed`);
 })().catch((e) => { console.error(e); process.exit(1); });

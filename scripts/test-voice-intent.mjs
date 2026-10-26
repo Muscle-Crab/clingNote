@@ -11,8 +11,8 @@ const S = (title, date, start, durationMin) => ({ type: 'schedule', title, date,
 const CASES = [
   ['buy milk', [T('Buy milk')]],
   ['Gym at 6 pm for 45 minutes', [S('Gym', '2026-10-26', '18:00', 45)]],
-  ['go to the store 6 PM', [R('Go to the store', '2026-10-26', '18:00')]],
-  ['go to the store 9 am', [R('Go to the store', '2026-10-27', '09:00')]],
+  ['go to the store 6 PM', [T('Go to the store', { start: '18:00' })]], // timed task: the phone pings at 6 PM
+  ['go to the store 9 am', [S('Go to the store', '2026-10-27', '09:00', 0)]], // 9 am passed -> tomorrow, a scheduled task
   ['remind me to call mom at 3', [R('Call mom', '2026-10-26', '15:00')]],
   ['remind me to take the pills in 20 minutes', [R('Take the pills', '2026-10-26', '10:20')]],
   ['remind me in an hour to stretch', [R('Stretch', '2026-10-26', '11:00')]],

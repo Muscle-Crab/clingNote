@@ -34,7 +34,7 @@ await t('AI (mocked) mixed items used and validated', async () => {
 });
 await t('AI error / timeout / no ask -> local parser', async () => {
   for (const ask of [async () => { throw new Error('404'); }, () => new Promise(() => {}), null]) {
-    const r = await VI.interpretSpeech('go to the store 6 pm', { ask, now: now2, timeoutMs: 50 }); assert.equal(r.source, 'local'); assert.equal(r.items[0].type, 'reminder');
+    const r = await VI.interpretSpeech('go to the store 6 pm', { ask, now: now2, timeoutMs: 50 }); assert.equal(r.source, 'local'); assert.ok(['task', 'schedule'].includes(r.items[0].type) && r.items[0].start === '18:00'); // timed task (alerts at 18:00), not a reminder
   }
 });
 console.log(`${n} passed`);

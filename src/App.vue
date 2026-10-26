@@ -8,7 +8,7 @@
     <BrandMark v-if="showBrand" />
     <EightHourChrome />
     <AchievementPrompt />
-    <Teleport to="body"><AppTabBar v-if="showTabs" :uid="uid" /><CreateTaskFab v-if="showFab" /></Teleport>
+    <Teleport to="body"><AppTabBar v-if="showTabs" :uid="uid" /><CreateTaskFab v-if="showFab" /><AssistantFab v-if="showFab && !isHome" /></Teleport>
   </div>
 </template>
 
@@ -28,6 +28,7 @@ import AchievementPrompt from '@/components/AchievementPrompt.vue';
 import { pageTitle } from '@/composables/usePageTitle';
 import AppTabBar from '@/components/shell/AppTabBar.vue';
 import CreateTaskFab from '@/components/shell/CreateTaskFab.vue';
+import AssistantFab from '@/components/shell/AssistantFab.vue';
 import { ref, onBeforeUnmount } from 'vue';
 
 const route = useRoute();

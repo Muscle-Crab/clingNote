@@ -38,6 +38,11 @@ export function createAssistantExecutor(deps) {
       case 'set_setting': await deps.setSetting(a.setting, a.on); return { ok: true, summary: `${a.setting.replace('_', ' ')} ${a.on ? 'on' : 'off'}` };
       case 'navigate': await deps.navigate(a.path); return { ok: true, summary: a.path.replace('/', '') };
       case 'get_overview': { const s = await snapshot(); return { ok: true, overview: s.context }; }
+      case 'get_stats': return { ok: true, stats: await deps.weekStats() };
+      case 'find_tasks': { const found = await deps.findTasks(a); return { ok: true, count: found.length, found }; }
+      case 'suggest_next': { const r = await deps.suggestNext(); return r.task ? { ok: true, next: r.task.title, start: r.task.startTime || '', points: Number(r.task.points) || 0, reason: r.reason } : { ok: true, next: null, reason: r.reason }; }
+      case 'snooze_task': { const r = await deps.snooze(a.task, a.minutes); return r && r.error ? { error: r.error } : { ok: true, summary: `${a.task.title} → ${r.time}` }; }
+      case 'add_subtasks': await deps.addSubtasks(a.task, a.items); return { ok: true, summary: `${a.task.title}: ${a.items.length} subtasks` };
       case 'post_to_community': { const r = await deps.post(a); return r && r.error ? { error: r.error } : { ok: true, summary: 'Community' }; }
       default: return { error: 'Unknown tool' };
     }

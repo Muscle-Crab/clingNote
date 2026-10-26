@@ -7,6 +7,8 @@ export const IOS_PENDING_LIMIT = 64;
 export const SCHED_BUDGET = 48;
 const at = (date, time) => { const [y, mo, d] = date.split('-').map(Number); const [h, mi] = time.split(':').map(Number); return new Date(y, mo - 1, d, h, mi, 0, 0); };
 export const schedKey = (id) => `sched:${id}`;
+// Plain day tasks with a start time ("go to the store at 6 PM"): one ping today at that time. Key = the task's stable identity.
+export const timeKey = (t) => `time:${t.id || `${t.createdAt?.seconds ?? t.createdAt ?? ''}|${t.title || ''}`}`;
 
 // list = users.scheduledTasks; todayTasks = today's day list (materialized occurrences); budget may be reduced by other pending ones.
 export const planNotifications = ({ list = [], todayTasks = [], todayStr, now = new Date(), budget = SCHED_BUDGET, horizonDays = 35 }) => {
@@ -22,6 +24,13 @@ export const planNotifications = ({ list = [], todayTasks = [], todayStr, now = 
     if (!t?.scheduledFor || !t.scheduledId) return;
     seen.add(t.scheduledId);
     if (!t.completed && t.status !== 'wontdo') add(t.scheduledId, t.scheduledFor, t.time, t.title);
+  });
+  // timed day tasks (today only; completed / won't-do / deleted / time cleared drop out of the plan -> cancelled by diffPlan)
+  (todayTasks || []).forEach((t) => {
+    if (!t || t.scheduledFor || t.completed || t.status === 'wontdo' || t.status === 'pending' || !isValidTime(t.startTime)) return;
+    const k = timeKey(t); const when = at(todayStr, t.startTime);
+    if (!isValidDate(todayStr) || when.getTime() <= now.getTime() || out.has(k)) return;
+    out.set(k, { key: k, at: when, title: 'ClingNote', body: `${t.title || 'Task'} at ${fmtTime(t.startTime)}`, kind: 'time' });
   });
   const items = list || [];
   const ids = new Set(items.map((e) => e?.id));
