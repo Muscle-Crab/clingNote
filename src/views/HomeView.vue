@@ -318,9 +318,15 @@ import TransferModal from '@/components/home/TransferModal.vue';
 import VoiceModal from '@/components/home/VoiceModal.vue';
 import AssistantSheet from '@/components/home/AssistantSheet.vue';
 import { createAssistantExecutor } from '@/utils/assistantExecutor';
+import { validateCall } from '@/utils/assistantTools';
 import { clampPoints as _clampPts, clampComplexity as _clampCx } from '@/utils/assistantTools';
 import { loadAssistant, assistantSession, saveAssistant } from '@/utils/assistantSession';
-import { voMuted, setVoMuted } from '@/composables/useVoiceover';
+import { voMuted, setVoMuted, speakLive } from '@/composables/useVoiceover';
+import { reactionLine, shouldRoast, checkinMarks, checkinLine, dueMark, overbooked, rollCandidates, tomorrowStr } from '@/utils/bossCoach';
+import { loadHabits, saveHabits, addHabit, logHabit, habitSummary } from '@/utils/habits';
+import { autoSchedule } from '@/utils/autoSchedule';
+import { clingLock, clingNative, lockAvailable, nativeAvailable } from '@/native/clingNative';
+import { LOCK_PREF, PENALTY_KEY, EMERGENCY_PENALTY, shouldShield, busyToDay } from '@/utils/appLock';
 import { previewDayTarget, requiredPoints } from '@/utils/dayTarget';
 const askOpen = ref(false); // Assistant sheet (✨ next to the bell, and the bubble in the task list header)
 const assistantListen = ref(false);
@@ -1566,6 +1572,7 @@ const updateStreakOnCompletion = async (task) => {
       if (streak.value > prevStreak || (prevProg < DAILY_STREAK_MIN && streakProgress.value >= DAILY_STREAK_MIN)) playSound('streakHit');
       else if (streakProgress.value > prevProg && streakProgress.value <= DAILY_STREAK_MIN) playSound('streakStep', { step: streakProgress.value, of: DAILY_STREAK_MIN });
     }
+    if (task.completed) bossReact(streak.value > prevStreak || (prevProg < DAILY_STREAK_MIN && streakProgress.value >= DAILY_STREAK_MIN) ? 'streak' : 'done', task.title);
     recordMonthlyToggle(userId.value, localDateStr(), { key: taskKey(task), completed: !!task.completed, pending: task.status === 'pending' }, next.bestStreak)
       .then(() => loadDisciplineState(userId.value)).then((st) => { discState.value = st; checkProgression(st); })
       .catch((e) => console.error('Monthly stats update failed:', e));
@@ -3267,6 +3274,51 @@ const confirmDayStart = async (hours) => {
 const todayTasksForTarget = computed(() => (isViewingToday.value ? selectedDayRoutine.value || [] : []));
 // required day points: the locked boss target while the day runs, else the projection from today's tasks + chosen hours
 const dayRequiredPts = computed(() => requiredPoints({ lock: eh.running.value ? eh.lock.value : null, tasks: todayTasksForTarget.value, hours: eh.hoursPref.value, stats: eh.stats.value }));
+
+// ---- Boss coach: spoken reactions, focus check-ins, overbooked warning, missed-streak roast (in-app only, respect the Boss voice toggle) ----
+const bossReact = (kind, title = '') => { if (voMuted.value || document.hidden) return; speakLive(reactionLine({ kind, title, seed: Date.now() })); };
+const onceToday = (k) => { const day = localDateStr(); try { if (localStorage.getItem(k) === day) return false; localStorage.setItem(k, day); } catch (e) { /* ignore */ } return true; };
+watch(streakStatus, (st) => { let last = null; try { last = localStorage.getItem('cn.boss.roast'); } catch (e) { /* ignore */ }
+  if (shouldRoast(st, localDateStr(), last) && onceToday('cn.boss.roast')) setTimeout(() => bossReact('missed'), 2500); });
+const focusSpoken = new Map(); // task key -> Set(marks)
+const focusTick = () => {
+  const t = (selectedDayRoutine.value || []).find((x) => x && x.timerActive && x.timerEndTime && !x.timerPausedAt);
+  if (!t) { if (focusLive) { focusLive = false; clingNative.endFocusActivity(); } return; }
+  const end = new Date(t.timerEndTime).getTime(); const k = `${taskKey(t)}|${end}`;
+  if (!focusLive || focusLive !== k) { focusLive = k; clingNative.startFocusActivity(t.title, end); }
+  const total = Math.max(1, Math.round((end - new Date(t.timerStartedAt || Date.now()).getTime()) / 60000));
+  const spoken = focusSpoken.get(k) || new Set(); const m = dueMark(checkinMarks(total), end - Date.now(), spoken);
+  if (m != null) { spoken.add(m); focusSpoken.set(k, spoken); if (!voMuted.value && !document.hidden) speakLive(checkinLine(m, t.title)); }
+};
+let focusLive = false; let focusIv = null;
+onMounted(() => { focusIv = setInterval(focusTick, 15000); });
+onBeforeUnmount(() => { clearInterval(focusIv); });
+watch(() => [eh.running.value, isViewingToday.value, (selectedDayRoutine.value || []).length], () => {
+  if (!eh.running.value || !isViewingToday.value) return;
+  const r = overbooked(selectedDayRoutine.value || [], Math.round(eh.remainingMs.value / 60000));
+  if (r.over && onceToday('cn.boss.overbooked')) { error.value = r.line; if (!voMuted.value && !document.hidden) speakLive(r.line); }
+});
+// ---- App lock (Screen Time shield) ----
+const lockUnlockedDay = ref((() => { try { const p = JSON.parse(localStorage.getItem(PENALTY_KEY) || '[]'); return p.length ? p[p.length - 1].day : ''; } catch (e) { return ''; } })());
+const lockEnabled = () => { try { return localStorage.getItem(LOCK_PREF) === '1'; } catch (e) { return false; } };
+let lockOn = null;
+const syncAppLock = async () => {
+  if (!lockAvailable() || !isViewingToday.value) return;
+  const st = await clingLock.status();
+  const want = shouldShield({ enabled: lockEnabled(), running: eh.running.value, endMs: eh.lock.value && eh.lock.value.endMs, selectionCount: st.selectionCount || 0,
+    earned: pointsAccumulated.value || 0, required: dayRequiredPts.value || 0, openTasks: (selectedDayRoutine.value || []).filter((t) => t && !t.completed && t.status !== 'wontdo').length,
+    unlockedToday: lockUnlockedDay.value === localDateStr() });
+  if (want && lockOn !== eh.lock.value.endMs) { lockOn = eh.lock.value.endMs; await clingLock.startLock(lockOn, 'ClingNote lock-in'); }
+  else if (!want && (lockOn || st.locked)) { lockOn = null; await clingLock.stopLock(); }
+};
+watch(() => [eh.running.value, pointsAccumulated.value, dayRequiredPts.value, streakProgress.value, lockUnlockedDay.value], () => { syncAppLock(); });
+// ---- Siri / Shortcuts / Action Button "Add task" queue ----
+const drainIntents = async () => { if (!nativeAvailable()) return; const r = await clingNative.takeIntents(); for (const it of (r.items || [])) {
+  if (!it || !it.title) continue; try { const snap = await assistantExecutor.snapshot(); const v = validateCall('create_tasks', { items: [{ title: String(it.title).slice(0, 120), ...(/^\d{2}:\d{2}$/.test(it.time || '') ? { start: it.time } : {}) }] }, snap);
+    if (v.ok) await assistantExecutor.run('create_tasks', v.args); } catch (e) { console.error('siri add', e.message); } } };
+const onIntentVisible = () => { if (!document.hidden) { drainIntents(); syncAppLock(); } };
+onMounted(() => { setTimeout(drainIntents, 1500); document.addEventListener('visibilitychange', onIntentVisible); });
+onBeforeUnmount(() => document.removeEventListener('visibilitychange', onIntentVisible));
 watch(dayRequiredPts, (n) => { if (isViewingToday.value && isNativeIOS()) import('@/utils/widgetSync').then((m) => m.setWidgetDayTarget(n)).catch(() => {}); }, { immediate: true });
 const openAssistant = (listen = false) => {
   if (userId.value) loadAssistant(userId.value);
@@ -3317,11 +3369,43 @@ const assistantExecutor = createAssistantExecutor({
     if (date) return scheduleExistingTask(agentIdx(task), task, { date, time });
     return editTask(agentIdx(task), task, { startTime: time });
   },
-  weekStats: async () => ({ ...weekStats(await agentWeek(true), { streak: streak.value, bestStreak: bestStreak.value }), pointsToday: pointsAccumulated.value }),
+  weekStats: async () => ({ ...weekStats(await agentWeek(true), { streak: streak.value, bestStreak: bestStreak.value }), pointsToday: pointsAccumulated.value, pointsNeededToday: dayRequiredPts.value || 0, streakDoneToday: streakProgress.value, streakLeft: Math.max(0, DAILY_STREAK_MIN - streakProgress.value), habits: habitSummary(loadHabits(userId.value), localDateStr()) }),
   findTasks: async ({ query, day }) => searchTasks(await agentWeek(false), scheduledList.value || [], { query, day }),
   suggestNext: async () => suggestNext(selectedDayRoutine.value, { minutesLeft: eh.running.value ? Math.round(eh.remainingMs.value / 60000) : null }),
   snooze: async (task, minutes) => { const t = snoozeTo(new Date(), minutes); if (t.nextDay) return { error: 'That runs past midnight: reschedule it to tomorrow instead.' }; await editTask(agentIdx(task), task, { startTime: t.time }); return t; },
   addSubtasks: (task, items) => editTask(agentIdx(task), task, { subtasks: items.reduce((l, x) => addSubtask(l, x), subtasksOf(task)) }),
+  rollUnfinished: async () => { if (!isViewingToday.value) return { moved: 0 }; const to = tomorrowStr(); let moved = 0;
+    for (const t of rollCandidates(selectedDayRoutine.value)) { const i = agentIdx(t); if (i < 0) continue; await scheduleExistingTask(i, t, { date: to, time: t.startTime || '' }); moved++; }
+    return { moved }; },
+  autoSchedule: async ({ writeCalendar }) => {
+    const acc = await clingNative.calendarAccess(); const now = new Date(); const d1 = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime();
+    const busy = acc.granted ? busyToDay((await clingNative.busy(now.getTime(), d1)).busy, now) : [];
+    const untilMin = (() => { const [h, m] = String(disciplineSettings.value.deadline || '22:00').split(':').map(Number); return (h || 22) * 60 + (m || 0); })();
+    const r = autoSchedule(selectedDayRoutine.value.filter((t) => !t.completed && t.status !== 'wontdo'), busy, { nowMin: now.getHours() * 60 + now.getMinutes(), untilMin: Math.max(untilMin, now.getHours() * 60 + 60) });
+    for (const p of r.plan) { if (p.task.startTime === p.start) continue; await editTask(agentIdx(p.task), p.task, { startTime: p.start });
+      if (writeCalendar && acc.granted) { const [h, m] = p.start.split(':').map(Number); const [eh2, em] = p.end.split(':').map(Number); const b = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        await clingNative.addEvent({ title: p.task.title, startMs: b.getTime() + (h * 60 + m) * 60000, endMs: b.getTime() + (eh2 * 60 + em) * 60000 }); } }
+    return { ...r, calendar: acc.granted ? 'used' : 'no access (free time = whole day)' };
+  },
+  habit: async (name, a) => { const uid = userId.value; let list = loadHabits(uid);
+    if (name === 'add_habit') { list = addHabit(list, a.name); saveHabits(uid, list); return { habits: habitSummary(list) }; }
+    if (name === 'log_habit') { const r = logHabit(list, a.name, localDateStr(), a.done); if (!r.habit) return { error: `No habit called ${a.name}. Add it first?` }; saveHabits(uid, r.list); return { habit: habitSummary([r.habit], localDateStr())[0] }; }
+    return { habits: habitSummary(list, localDateStr()) }; },
+  placeReminder: async ({ title, place, saveHere }) => { const KEYP = `cn.places.${userId.value}`; let places = {}; try { places = JSON.parse(localStorage.getItem(KEYP) || '{}') || {}; } catch (e) { /* ignore */ }
+    if (saveHere || !places[place]) { const here = await clingNative.currentLocation(); if (!here || here.error || !Number.isFinite(here.lat)) return { error: nativeAvailable() ? `I couldn't get your location${here && here.error ? ` (${here.error})` : ''}. Be at ${place} and say "save this place as ${place}".` : 'Place reminders need the iPhone app.' };
+      if (!saveHere && !places[place]) return { error: `I don't know where "${place}" is yet. Are you there now? Then ask me to save this place as ${place}.` };
+      places[place] = { lat: here.lat, lng: here.lng }; try { localStorage.setItem(KEYP, JSON.stringify(places)); } catch (e) { /* ignore */ } }
+    const p = places[place]; const r = await clingNative.addGeofence({ id: `${place}-${Date.now()}`, lat: p.lat, lng: p.lng, radius: 150, body: title, repeats: false });
+    return r.error ? { error: r.error } : { ok: true }; },
+  appLock: async (action) => {
+    if (!lockAvailable()) return { error: 'App lock needs the iPhone app (iOS 16+).' };
+    if (action === 'pick_apps') { const a0 = await clingLock.requestAuthorization(); if (a0.status !== 'approved') return { error: 'Screen Time permission was not given.' }; const r = await clingLock.pickApps(); if (r.saved) { try { localStorage.setItem(LOCK_PREF, '1'); } catch (e) { /* ignore */ } } syncAppLock(); return { saved: !!r.saved, apps: r.apps || 0 }; }
+    if (action === 'turn_off') { try { localStorage.removeItem(LOCK_PREF); } catch (e) { /* ignore */ } await clingLock.stopLock(); return { summary: 'App lock off' }; }
+    if (action === 'emergency_unlock') { await clingLock.stopLock(); const day = localDateStr(); let pen = []; try { pen = JSON.parse(localStorage.getItem(PENALTY_KEY) || '[]'); } catch (e) { /* ignore */ }
+      pen.push({ day, points: EMERGENCY_PENALTY, at: Date.now() }); try { localStorage.setItem(PENALTY_KEY, JSON.stringify(pen.slice(-60))); } catch (e) { /* ignore */ }
+      lockUnlockedDay.value = day; return { summary: `Unlocked. Penalty: ${EMERGENCY_PENALTY} extra points owed today.`, penalty: EMERGENCY_PENALTY }; }
+    return { ...(await clingLock.status()), enabled: lockEnabled() };
+  },
   deleteTask: (task) => deleteTask(agentIdx(task), { skipConfirm: true }),
   complete: (task) => toggleTaskCompletion(agentIdx(task)),
   startTimer: async (task, minutes) => { selectedTimerTaskIndex.value = agentIdx(task); selectedTimerHours.value = Math.floor(minutes / 60); selectedTimerMinutes.value = minutes % 60; await startTimer(); },

@@ -44,6 +44,11 @@ export function createAssistantExecutor(deps) {
       case 'snooze_task': { const r = await deps.snooze(a.task, a.minutes); return r && r.error ? { error: r.error } : { ok: true, summary: `${a.task.title} → ${r.time}` }; }
       case 'add_subtasks': await deps.addSubtasks(a.task, a.items); return { ok: true, summary: `${a.task.title}: ${a.items.length} subtasks` };
       case 'post_to_community': { const r = await deps.post(a); return r && r.error ? { error: r.error } : { ok: true, summary: 'Community' }; }
+      case 'roll_unfinished': { const r = await deps.rollUnfinished(); return { ok: true, summary: `${r.moved} moved to tomorrow` }; }
+      case 'auto_schedule': { const r = await deps.autoSchedule(a); return r.error ? { error: r.error } : { ok: true, placed: r.plan.map((p) => `${p.task.title} ${p.start}`), unplaced: r.unplaced.map((t) => t.title), summary: `${r.plan.length} scheduled` }; }
+      case 'add_habit': case 'log_habit': case 'get_habits': { const r = await deps.habit(name, a); return r.error ? { error: r.error } : { ok: true, ...r }; }
+      case 'place_reminder': { const r = await deps.placeReminder(a); return r.error ? { error: r.error } : { ok: true, summary: `${a.title} @ ${a.place}` }; }
+      case 'app_lock': { const r = await deps.appLock(a.action); return r.error ? { error: r.error } : { ok: true, ...r }; }
       default: return { error: 'Unknown tool' };
     }
   };

@@ -102,5 +102,9 @@ const snapOf = (limitRemaining = 5) => { const b = T.buildContext({ tasks }); re
   ok(!T.validateCall('find_tasks', {}, ctx2).ok && T.READ_TOOLS.has('find_tasks') && !T.CONFIRM_TOOLS.has('snooze_task'), 'find/read tools');
   const rec = T.validateCall('create_tasks', { items: [{ title: 'Run', start: '07:00', repeat: 'weekdays', points: 20 }] }, ctx2);
   ok(rec.ok && rec.args.items[0].type === 'schedule' && rec.args.items[0].repeat === 'weekly' && rec.args.items[0].days.join() === '1,2,3,4,5' && rec.args.items[0].date === '2026-10-26', 'recurring create');
+  ok(!T.needsConfirm('create_tasks', { items: [{}, {}] }) && T.needsConfirm('create_tasks', { items: [{}, {}, {}] }) && T.needsConfirm('roll_unfinished') && T.needsConfirm('auto_schedule')
+    && !T.needsConfirm('app_lock', { action: 'status' }) && T.needsConfirm('app_lock', { action: 'emergency_unlock' }), 'brain dump / rollover / emergency unlock need confirm');
+  ok(/3\. C/.test(T.describeCall('create_tasks', { items: [{ title: 'A' }, { title: 'B', start: '18:00' }, { title: 'C' }] })), 'brain dump review lists every item');
+  ok(T.validateCall('log_habit', { name: 'water' }).ok && !T.validateCall('place_reminder', { title: 'milk' }).ok && !T.validateCall('app_lock', { action: 'x' }).ok && T.validateCall('auto_schedule', { write_calendar: true }).args.writeCalendar === true, 'new tool validation');
   console.log(`test-assistant: ${pass} passed`);
 })().catch((e) => { console.error(e); process.exit(1); });

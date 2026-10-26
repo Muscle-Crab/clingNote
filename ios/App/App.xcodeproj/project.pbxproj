@@ -7,6 +7,13 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		C1A0E1000000000000000017 /* FocusLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A0E1000000000000000006 /* FocusLiveActivity.swift */; };
+		C1A0E1000000000000000016 /* FocusActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A0E1000000000000000005 /* FocusActivityAttributes.swift */; };
+		C1A0E1000000000000000015 /* FocusActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A0E1000000000000000005 /* FocusActivityAttributes.swift */; };
+		C1A0E1000000000000000014 /* LockShared.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A0E1000000000000000004 /* LockShared.swift */; };
+		C1A0E1000000000000000013 /* ClingIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A0E1000000000000000003 /* ClingIntents.swift */; };
+		C1A0E1000000000000000012 /* ClingNativePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A0E1000000000000000002 /* ClingNativePlugin.swift */; };
+		C1A0E1000000000000000011 /* ClingLockPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A0E1000000000000000001 /* ClingLockPlugin.swift */; };
 		A1B2C3D4E5F60718293A4C02 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4C01 /* GoogleService-Info.plist */; };
 		A1B2C3D4E5F60718293A4B02 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B01 /* PrivacyInfo.xcprivacy */; };
 		2FAD9763203C412B000D30F8 /* config.xml in Resources */ = {isa = PBXBuildFile; fileRef = 2FAD9762203C412B000D30F8 /* config.xml */; };
@@ -29,6 +36,12 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		C1A0E1000000000000000006 /* FocusLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = FocusLiveActivity.swift; path = FocusLiveActivity.swift; sourceTree = "<group>"; };
+		C1A0E1000000000000000005 /* FocusActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = FocusActivityAttributes.swift; path = ../Shared/FocusActivityAttributes.swift; sourceTree = "<group>"; };
+		C1A0E1000000000000000004 /* LockShared.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = LockShared.swift; path = ../Shared/LockShared.swift; sourceTree = "<group>"; };
+		C1A0E1000000000000000003 /* ClingIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ClingIntents.swift; path = ClingIntents.swift; sourceTree = "<group>"; };
+		C1A0E1000000000000000002 /* ClingNativePlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ClingNativePlugin.swift; path = ClingNativePlugin.swift; sourceTree = "<group>"; };
+		C1A0E1000000000000000001 /* ClingLockPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ClingLockPlugin.swift; path = ClingLockPlugin.swift; sourceTree = "<group>"; };
 		A1B2C3D4E5F60718293A4C01 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
 		A1B2C3D4E5F60718293A4B01 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		2FAD9762203C412B000D30F8 /* config.xml */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = config.xml; sourceTree = "<group>"; };
@@ -124,6 +137,11 @@
 				9582B6822FE993A50072D4E8 /* SceneDelegate.swift */,
 				C1A0E0000000000000000001 /* ClingWidgetPlugin.swift */,
 				C1A0E00000000000000000F0 /* ClingVoicePlugin.swift */,
+				C1A0E1000000000000000005 /* FocusActivityAttributes.swift */,
+				C1A0E1000000000000000004 /* LockShared.swift */,
+				C1A0E1000000000000000003 /* ClingIntents.swift */,
+				C1A0E1000000000000000002 /* ClingNativePlugin.swift */,
+				C1A0E1000000000000000001 /* ClingLockPlugin.swift */,
 				50379B222058CBB4000EE86E /* capacitor.config.json */,
 				504EC3071FED79650016851F /* AppDelegate.swift */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
@@ -144,6 +162,7 @@
 				C1A0E0000000000000000003 /* ClingNoteWidget.swift */,
 				C1A0E0000000000000000018 /* CompleteTaskIntent.swift */,
 				C1A0E000000000000000001A /* MatchupWidget.swift */,
+				C1A0E1000000000000000006 /* FocusLiveActivity.swift */,
 				C1A0E0000000000000000005 /* Info.plist */,
 				C1A0E0000000000000000006 /* ClingNoteWidget.entitlements */,
 			);
@@ -268,6 +287,11 @@
 				9582B6832FE993A70072D4E8 /* SceneDelegate.swift in Sources */,
 				C1A0E0000000000000000002 /* ClingWidgetPlugin.swift in Sources */,
 				C1A0E00000000000000000F1 /* ClingVoicePlugin.swift in Sources */,
+				C1A0E1000000000000000015 /* FocusActivityAttributes.swift in Sources */,
+				C1A0E1000000000000000014 /* LockShared.swift in Sources */,
+				C1A0E1000000000000000013 /* ClingIntents.swift in Sources */,
+				C1A0E1000000000000000012 /* ClingNativePlugin.swift in Sources */,
+				C1A0E1000000000000000011 /* ClingLockPlugin.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -278,6 +302,8 @@
 				C1A0E0000000000000000004 /* ClingNoteWidget.swift in Sources */,
 				C1A0E0000000000000000019 /* CompleteTaskIntent.swift in Sources */,
 				C1A0E000000000000000001B /* MatchupWidget.swift in Sources */,
+				C1A0E1000000000000000017 /* FocusLiveActivity.swift in Sources */,
+				C1A0E1000000000000000016 /* FocusActivityAttributes.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -360,7 +386,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				MTL_ENABLE_DEBUG_INFO = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
@@ -411,7 +437,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				SDKROOT = iphoneos;
 				SWIFT_COMPILATION_MODE = wholemodule;
@@ -428,7 +454,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				INFOPLIST_FILE = App/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -452,7 +478,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				INFOPLIST_FILE = App/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -478,7 +504,7 @@
 				DEVELOPMENT_TEAM = R856C5DK22;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = ClingNoteWidget/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -505,7 +531,7 @@
 				DEVELOPMENT_TEAM = R856C5DK22;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = ClingNoteWidget/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",

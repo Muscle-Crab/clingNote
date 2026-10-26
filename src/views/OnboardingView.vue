@@ -56,8 +56,16 @@
         <div class="ob-note"><b>⏰ 9:00 PM · ClingNote</b><span>2 tasks left before your deadline. Boss is watching 👀</span></div>
       </section>
 
+      <section v-else-if="STEPS[step] === 'applock'" class="ob-sec" data-test="ob-applock">
+        <div class="ob-bell">🔒</div>
+        <p class="ob-k">Step 5</p><h1 class="ob-h">Lock your <span>distractions</span></h1>
+        <p class="ob-p">Pick apps to block while you're locked in. They unlock when your tasks or points goal are done, or when your hours end. Optional, and you can change it later.</p>
+        <p v-if="a.appLock" class="ob-p">{{ a.appLock }}</p>
+      </section>
+
       <div class="ob-foot">
         <button class="ob-cta" :disabled="(STEPS[step] === 'goals' && !a.goals.length) || (STEPS[step] === 'age' && ageState !== 'ok')" @click="next">{{ ctaLabel }}</button>
+        <button v-if="STEPS[step] === 'applock'" class="ob-later" @click="a.appLock = 'later'; go(step + 1)">Not now</button>
         <button v-if="STEPS[step] === 'notifications'" class="ob-later" @click="a.notifications = 'later'; go(step + 1)">Not now</button>
       </div>
     </template>
@@ -67,6 +75,8 @@
 <script setup>
 import { ref, reactive, computed, onMounted, onBeforeUnmount, watch } from 'vue';
 import VoToggle from '@/components/voiceover/VoToggle.vue';
+import { clingLock, lockAvailable } from '@/native/clingNative';
+import { LOCK_PREF } from '@/utils/appLock';
 import { playVoice, stopVoice, unlockVoice, voUnlocked } from '@/composables/useVoiceover';
 import { getMode, getPendingManagerToken } from '@/utils/appMode';
 import { useRoute, useRouter } from 'vue-router';
@@ -82,7 +92,7 @@ import { readCachedPlan, useEightHour } from '@/composables/useEightHour';
 import { fmtWakeLabel } from '@/utils/eightHour';
 import BossSergeant from '@/components/boss/BossSergeant.vue';
 
-const STEPS = ['welcome', 'age', 'goals', 'schedule', 'strictness', 'notifications']; // index STEPS.length = paywall
+const STEPS = ['welcome', 'age', 'goals', 'schedule', 'strictness', 'notifications', ...(lockAvailable() ? ['applock'] : [])]; // index STEPS.length = paywall
 const GOALS = [
   { id: 'work', e: '💼', l: 'Crush work tasks' }, { id: 'fitness', e: '💪', l: 'Work out consistently' },
   { id: 'study', e: '📚', l: 'Study & learn' }, { id: 'habits', e: '🚭', l: 'Break bad habits' },
@@ -111,7 +121,7 @@ const wakeLabel = computed(() => fmtWakeLabel(eh.plan.value?.wakeTime || a.wakeT
 // The paywall counts as "seen" the moment it is shown (local flag + users/{uid}.paywallSeenAt) so existing users get it at most once; Subs/Profile can still open it.
 watch(step, (n) => { if (n === STEPS.length) { const u = auth.currentUser; if (u) { markPaywallSeenLocal(u.uid); saveUserFields(u.uid, { paywallSeenAt: new Date() }).catch(() => {}); } } }, { immediate: true });
 const firstName = computed(() => (name.value || 'there').split(' ')[0]);
-const ctaLabel = computed(() => ({ welcome: "Let's go", notifications: 'Turn on notifications' }[STEPS[step.value]] || 'Continue'));
+const ctaLabel = computed(() => ({ welcome: "Let's go", notifications: 'Turn on notifications', applock: 'Choose apps to block' }[STEPS[step.value]] || 'Continue'));
 const toggle = (id) => { const i = a.goals.indexOf(id); i < 0 ? a.goals.push(id) : a.goals.splice(i, 1); };
 
 onMounted(async () => {
@@ -134,6 +144,11 @@ async function next() {
         a.notifications = ok ? 'granted' : (await getNativePushState()).status === 'denied' ? 'denied' : 'default';
       } else if ('Notification' in window) a.notifications = await Notification.requestPermission();
     } catch (e) { a.notifications = 'error'; }
+  }
+  if (STEPS[step.value] === 'applock') {
+    const auth0 = await clingLock.requestAuthorization();
+    if (auth0.status === 'approved') { const r = await clingLock.pickApps(); if (r.saved && (r.apps + r.categories + r.sites) > 0) { try { localStorage.setItem(LOCK_PREF, '1'); } catch (e) { /* ignore */ } a.appLock = 'on'; } else a.appLock = 'none'; }
+    else a.appLock = auth0.status || 'denied';
   }
   go(step.value + 1);
 }

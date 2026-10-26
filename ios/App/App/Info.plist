@@ -2,6 +2,18 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>ClingNote reads when you're busy so it can schedule tasks into your free time, and can add task blocks to your calendar if you turn that on.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>ClingNote reads when you're busy so it can schedule tasks into your free time, and can add task blocks to your calendar if you turn that on.</string>
+	<key>NSCalendarsWriteOnlyAccessUsageDescription</key>
+	<string>ClingNote can add your scheduled task blocks to your calendar.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>ClingNote uses your location only for reminders you set for a place, like "when I get to the store".</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>ClingNote uses your location only for reminders you set for a place, like "when I get to the store", even when the app is closed.</string>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>ClingNote uses the microphone so you can add tasks, reminders and scheduled blocks by voice.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>

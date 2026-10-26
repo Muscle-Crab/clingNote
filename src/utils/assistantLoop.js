@@ -1,6 +1,6 @@
 // Client tool loop for the ClingNote assistant (pure: network, executor and confirm UI are injected; tested in scripts/test-assistant.js).
 // One user message = one server call per round; the model's raw parts (incl. thought signatures) are kept in `contents` unchanged.
-import { validateCall, CONFIRM_TOOLS, describeCall } from './assistantTools';
+import { validateCall, needsConfirm, describeCall } from './assistantTools';
 
 export const MAX_STEPS = 5;
 // call(input) -> { parts, toolCalls, text, remaining }; executor: { snapshot() -> { refs, context, tasksByKey, today, limitRemaining }, run(name, args) -> result }
@@ -21,7 +21,7 @@ export async function runAgentTurn({ text, contents = [], call, executor, confir
       const v = validateCall(c.name, c.args, snap);
       let response;
       if (!v.ok) response = { error: v.error, ...(v.limit ? { limitReached: true } : {}) };
-      else if (CONFIRM_TOOLS.has(c.name) && !(await confirm({ name: c.name, args: v.args, summary: describeCall(c.name, v.args) }))) { response = { declined: true, note: 'The user said no. Do not retry.' }; onEvent({ type: 'declined', name: c.name }); }
+      else if (needsConfirm(c.name, v.args) && !(await confirm({ name: c.name, args: v.args, summary: describeCall(c.name, v.args) }))) { response = c.name === 'create_tasks' ? { declined: true, note: 'Not saved. If the user said what to change, apply it and call create_tasks again with the full corrected list; otherwise drop it.' } : { declined: true, note: 'The user said no. Do not retry.' }; onEvent({ type: 'declined', name: c.name }); }
       else {
         try { response = (await executor.run(c.name, v.args)) || { ok: true }; }
         catch (e) { response = { error: (e && e.message) || 'Failed' }; }

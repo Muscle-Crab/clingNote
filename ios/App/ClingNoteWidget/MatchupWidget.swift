@@ -305,5 +305,6 @@ struct ClingNoteWidgets: WidgetBundle {
     var body: some Widget {
         TodayTasksWidget()
         MatchupWidget()
+        if #available(iOS 16.1, *) { FocusLiveActivity() }
     }
 }
