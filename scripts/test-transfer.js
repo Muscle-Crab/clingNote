@@ -5,7 +5,7 @@ const tr = sr.load('utils/transfer.js'); const Modal = sr.load('components/home/
 let n = 0; const ok = (c, m) => { assert.ok(c, m); n++; };
 (async () => {
   ok(tr.defaultTransferDay(0, 7) === 1 && tr.defaultTransferDay(6, 7) === 0 && tr.defaultTransferDay(-1, 7) === 0, 'default target = next tab, never the current one');
-  ok(tr.MAX_TASKS_PER_DAY === 50 && tr.transferFits(49) && !tr.transferFits(50), 'cap 50 on the target day');
+  ok(tr.MAX_TASKS_PER_DAY === 5 && tr.transferFits(4) && !tr.transferFits(5), 'cap 5 on the target day');
   const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => ({ day, date: '' }));
   const r = (props) => renderToString(createSSRApp({ render: () => h(Modal, { days, selectedDayIndex: 0, day: 1, ...props }) }));
   let html = await r({ strict: false, reason: '' });

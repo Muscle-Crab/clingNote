@@ -13,7 +13,7 @@ const hoursLabel = (h) => { const n = clampHours(h); return Number.isInteger(n) 
 const WINDOW_MS = hoursMs(DAY_HOURS.default);
 const WINDOW_MIN = DAY_HOURS.default * 60;
 const WARN_MINUTES = [15, 5];                    // in-app warnings before the day shuts down; the local notification goes out at 5
-const MAX_TASKS_PER_DAY = 50;                   // safety max (free and Pro alike; config/pricing.js TASK_LIMITS)
+const MAX_TASKS_PER_DAY = 5;                    // free and Pro alike (config/pricing.js TASK_LIMITS)
 const LOCK_IDENTITY_SLOTS = 50;                 // Firestore rules cannot loop; they compare the first 50 slots (= task cap) of a day doc (see firestore.rules)
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const WAKE_PICKER_PRESELECT = '07:00';          // UI convenience ONLY (pre-selected picker value). There is no stored/default wake time: the user must pick one.
