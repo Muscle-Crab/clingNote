@@ -28,7 +28,7 @@
             <button type="button" class="bg-pill" data-test="open-background-pill" aria-label="Background: animation and music" @click="showBackground = true">🎧 Background<span class="bg-pill-sub">picture · snow · rain · music</span></button>
           </div>
           <div ref="heroMenuEl" class="hero-menu">
-            <button type="button" class="hero-menu-btn hero-ask-btn" data-test="open-ask" aria-label="Ask Anything (AI assistant)" title="Ask Anything" @click="askOpen = true">✨</button>
+            <button type="button" class="hero-menu-btn hero-ask-btn" data-test="open-ask" aria-label="Assistant (AI)" title="Assistant" @click="openAssistant(false)">✨</button>
             <button type="button" class="hero-menu-btn" :aria-label="noticeCount ? noticeCount + ' updates and day menu' : 'Day menu'" :aria-expanded="menuOpen ? 'true' : 'false'" @click="menuOpen = !menuOpen">
               <i class="fas fa-bell" aria-hidden="true"></i>
               <span v-if="noticeCount" class="hero-badge" :class="{ 'hero-badge--alert': disciplineWarning === '30m' || bossLines.some((l) => l.kind === 'evening' || l.kind === 'watching') }">{{ noticeCount }}</span>
@@ -59,7 +59,7 @@
         <DayTabs :days="tabDays" :selected-index="selectedDayIndex" :scheduled-counts="scheduledCounts" @select="handleDayTabClick" />
 
         <EightHourCard :tasks="ehTasks" :start-error="ehStartError" @retry="syncAfterAuth" @start="openDayPrompt" />
-        <DayStartPrompt v-if="dayPromptOpen" :initial-hours="eh.hoursPref.value" :now-ms="eh.nowMs" :tz="eh.plan.value?.tz || ''" :busy="ehBusy" :error="ehStartError" @confirm="confirmDayStart" />
+        <DayStartPrompt v-if="dayPromptOpen" :initial-hours="eh.hoursPref.value" :now-ms="eh.nowMs" :tz="eh.plan.value?.tz || ''" :busy="ehBusy" :error="ehStartError" :tasks="todayTasksForTarget" :stats="eh.stats.value" @confirm="confirmDayStart" />
 
         <ProgressBar :percentage="calculateCompletionPercentage()" :milestones="milestones" :done="completedTaskCount || 0" :total="dayTasks.length"
                      :streak="streak" :streak-status="streakStatus" :streak-progress="streakProgress" :streak-min="DAILY_STREAK_MIN" :points="pointsAccumulated || 0" />
@@ -117,7 +117,7 @@
       <ReminderModal v-if="isModalOpen" :reminder="reminder" :task-title="selectedTaskTitle" @close="closeModal" @submit="handleAddReminder" />
 
 
-      <AskSheet v-if="askOpen" @close="askOpen = false" />
+      <AssistantSheet v-if="askOpen" :executor="assistantExecutor" :listen-on-open="assistantListen" @close="askOpen = false" />
       <VoiceModal v-if="voiceOpen" :transcript="liveTranscript" :supported="voiceSupported" :capability="voiceCap" :error="voiceError" :hint="voiceHint" :added="voiceAdded" :items="voiceItems" :busy="voiceBusy" :source="voiceSource" @undo="undoVoiceTask" @cancel="cancelVoiceInput" @finish="finishVoiceInput" @confirm="confirmVoiceItems" @relisten="relistenVoice" />
       <div v-if="!voiceOpen && voiceAdded.some((e) => e.undoUntil > nowTick)" class="voice-toasts" role="status">
         <div v-for="e in voiceAdded.filter((x) => x.undoUntil > nowTick)" :key="e.id" class="voice-toast">🎙 Added “{{ e.title }}” <button type="button" @click="undoVoiceTask(e)">Undo</button></div>
@@ -132,7 +132,7 @@
 
         <div v-else class="task-list-wrap">
           <TaskListHeader :label="isViewingToday ? 'Today' : FULL_DAY_NAMES[selectedDayIndex]" :is-today="isViewingToday" :completed="completedTaskCount" :total="dayTasks.length"
-                          :sound-enabled="soundEnabled" :show-completed="showCompleted" v-model:prefs="viewPrefs" @toggle-sound="toggleSound" @toggle-completed="showCompleted = !showCompleted" />
+                          :sound-enabled="soundEnabled" :boss-voice-on="!voMuted" :assistant-live="askOpen" :show-completed="showCompleted" v-model:prefs="viewPrefs" @toggle-sound="toggleSound" @toggle-boss-voice="setVoMuted(!voMuted)" @open-assistant="openAssistant" @toggle-completed="showCompleted = !showCompleted" />
 
 
 
@@ -313,8 +313,15 @@ import TimeStatsBar from '@/components/home/TimeStatsBar.vue';
 import TimerModal from '@/components/home/TimerModal.vue';
 import TransferModal from '@/components/home/TransferModal.vue';
 import VoiceModal from '@/components/home/VoiceModal.vue';
-import AskSheet from '@/components/home/AskSheet.vue';
-const askOpen = ref(false); // Ask Anything sheet (✨ next to the bell)
+import AssistantSheet from '@/components/home/AssistantSheet.vue';
+import { createAssistantExecutor } from '@/utils/assistantExecutor';
+import { clampPoints as _clampPts, clampComplexity as _clampCx } from '@/utils/assistantTools';
+import { loadAssistant, assistantSession, saveAssistant } from '@/utils/assistantSession';
+import { voMuted, setVoMuted } from '@/composables/useVoiceover';
+import { previewDayTarget } from '@/utils/dayTarget';
+const askOpen = ref(false); // Assistant sheet (✨ next to the bell, and the bubble in the task list header)
+const assistantListen = ref(false);
+const agentAdd = ref(false); // true while the assistant adds tasks: over-limit returns an error to the model instead of opening the paywall
 import { ugcHidden, voiceInputBlocked, isNativeIOS } from '@/utils/platform';
 import { splitSpokenTasks, voiceCapability, UNDO_MS } from '@/utils/voiceSplit';
 import { interpretSpeech } from '@/utils/voiceInterpret';
@@ -1054,11 +1061,11 @@ const sortedSelectedDayRoutine = computed(() => {
   });
 });
 
-const deleteTask = async (index) => {
+const deleteTask = async (index, { skipConfirm = false } = {}) => { // skipConfirm: the assistant already showed its own confirm card
   if (blockIfShut()) return false;
-  if (blockIfLocked()) return;
+  if (blockIfLocked()) return false;
   gateCache = null; gatePrefetch = null; pendingAdds.clear(); // a deleted task frees its slot under the daily limit (next check refetches)
-  const confirmed = confirm("Are you sure you want to delete this task?");
+  const confirmed = skipConfirm || confirm("Are you sure you want to delete this task?");
   if (!confirmed) return;
   const dayName = days[selectedDayIndex.value].day;
   const selectedDayDocRef = doc(db, 'weeklyRoutines', `${userId.value}_${dayName}`);
@@ -1072,11 +1079,11 @@ const deleteTask = async (index) => {
       await Promise.all(days.map(async (d) => { if (d.day !== dayName) byDay[d.day] = await loadDayTasks(userId.value, d.day); }));
       alsoDays = seriesDays(byDay, target, dayName);
     }
-    const removeAll = alsoDays.length > 0 &&
+    const removeAll = !skipConfirm && alsoDays.length > 0 &&
       confirm(`This task repeats on ${alsoDays.length} other day${alsoDays.length > 1 ? 's' : ''} (${alsoDays.join(', ')}).\n\nOK = delete it from all days\nCancel = delete only from this day`);
 
     let seriesScope = 'this';
-    if (target?.templateId) seriesScope = confirm('This task repeats.\n\nOK = delete this and all future occurrences\nCancel = delete only this one') ? 'future' : 'this';
+    if (target?.templateId && !skipConfirm) seriesScope = confirm('This task repeats.\n\nOK = delete this and all future occurrences\nCancel = delete only this one') ? 'future' : 'this';
     if (target?.scheduledId) scheduledList.value = await mutateScheduled(userId.value, (l) => deleteTaskScope(l, target, seriesScope, tabDays.value[selectedDayIndex.value]?.date || getTodayId()));
     if (target) cancelTaskNotifications(target);
     selectedDayRoutine.value.splice(index, 1);
@@ -1774,7 +1781,7 @@ const addNewTask = async () => {
   try {
     if (!(await dailyLimitGate((newTask.value.sched?.on && newTask.value.sched.repeat === 'never' && newTask.value.sched.date) || getTodayId()))) {
       const l = limitHit.value;
-      if (!l.pro) { goUpgradeForLimit(); return false; } // free user over the daily limit: open the paywall instead of an error
+      if (!l.pro && !agentAdd.value) { goUpgradeForLimit(); return false; } // free user over the daily limit: open the paywall instead of an error
       error.value = l.pro ? `Daily limit reached: ${l.limit} tasks per day on Pro.` : `Daily limit reached: free accounts can add ${l.limit} tasks per day.`;
       return false;
     }
@@ -1832,6 +1839,7 @@ const addNewTask = async () => {
     nextAction: (newTask.value.nextAction || '').trim()
   };
   Object.assign(task, estimateFor(task)); // heuristic complexity / minutes / points (estimateMin stays as typed; the server re-locks at countdown start)
+  { const ap = _clampPts(newTask.value.aiPoints); if (ap) { task.points = ap; task.pointsSource = 'ai'; const cx = _clampCx(newTask.value.aiComplexity); if (cx) task.complexity = cx; } } // assistant: Gemini-rated points
 
   // Parse datetime-local input if provided
   if (newTask.value.reminder?.datetime) {
@@ -3242,6 +3250,71 @@ const confirmDayStart = async (hours) => {
   } catch (e) { ehStartError.value = e.code === 'no-tasks' ? 'Add at least one task first, then confirm.' : (e.message || 'Could not start the countdown'); }
   finally { ehStarting = false; ehBusy.value = false; }
 };
+
+// ── ClingNote assistant (AssistantSheet): tool calls run through the same handlers as the buttons above ──
+const todayTasksForTarget = computed(() => (isViewingToday.value ? selectedDayRoutine.value || [] : []));
+const openAssistant = (listen = false) => {
+  if (userId.value) loadAssistant(userId.value);
+  if (!isViewingToday.value && todayIdx.value >= 0) selectedDayIndex.value = todayIdx.value; // the assistant works on today's list
+  assistantListen.value = !!listen; askOpen.value = true;
+};
+const agentIdx = (task) => { const i = realIndex(task); if (i < 0) throw new Error('That task is no longer in today\'s list.'); return i; };
+const assistantExecutor = createAssistantExecutor({
+  tasks: () => todayTasksForTarget.value,
+  today: () => getTodayId(),
+  pro: () => rcProActive(auth.currentUser?.uid) || !!(gateCache && gateCache.pro),
+  limitRemaining: async () => {
+    const g = gateCache && Date.now() - gateCache.at < 60000 ? gateCache : await fetchGateData();
+    const r = checkDailyLimit(g.pro, getTodayId(), [...g.lists, g.extra, [...pendingAdds.values()]], scheduledList.value || []);
+    return Math.max(0, (Number(r.limit) || 5) - (Number(r.count) || 0));
+  },
+  stats: () => ({ streak: streak.value, points: pointsAccumulated.value, hours: eh.hoursPref.value,
+    target: eh.lock.value ? eh.lock.value.target : previewDayTarget(todayTasksForTarget.value, eh.hoursPref.value, eh.stats.value).target,
+    lock: eh.lock.value ? { endsAt: eh.endsLabel.value || '', earned: eh.lock.value.earned || 0, target: eh.lock.value.target || 0 } : null,
+    upcoming: scheduledList.value || [], settings: { sounds: !!soundEnabled.value, boss_voice: !voMuted.value, spoken_replies: !!assistantSession.speak.value }, route: '/home' }),
+  addTask: async (it) => {
+    error.value = '';
+    if (it.type === 'reminder') { const r = await saveReminder({ title: it.title, remindAt: it.remindAt }, { schedule: scheduleLocal }); return { ok: r.ok, error: r.error }; }
+    newTask.value = { ...blankTask(), title: it.title, startTime: it.start || '', estimateMin: it.durationMin || '', priority: it.priority || newTask.value.priority,
+      aiPoints: it.points || 0, aiComplexity: it.complexity || 0,
+      ...(it.type === 'schedule' ? { sched: { ...blankSchedule(it.date), on: true, date: it.date, time: it.start || '09:00' } } : {}) };
+    capOverride.value = true; agentAdd.value = true;
+    try {
+      const ok = !!(await addNewTask()) && (it.type === 'schedule' || (await lastAddPersist));
+      const lim = limitHit.value;
+      return ok ? { ok: true } : { ok: false, error: lim ? `Daily limit reached (${lim.limit}/day).` : error.value || 'not saved', limit: !!lim };
+    } finally { capOverride.value = false; agentAdd.value = false; newTask.value = blankTask(); }
+  },
+  editTask: (task, patch) => editTask(agentIdx(task), task, patch),
+  reschedule: async (task, { date, time }) => {
+    if (date) return scheduleExistingTask(agentIdx(task), task, { date, time });
+    return editTask(agentIdx(task), task, { startTime: time });
+  },
+  deleteTask: (task) => deleteTask(agentIdx(task), { skipConfirm: true }),
+  complete: (task) => toggleTaskCompletion(agentIdx(task)),
+  startTimer: async (task, minutes) => { selectedTimerTaskIndex.value = agentIdx(task); selectedTimerHours.value = Math.floor(minutes / 60); selectedTimerMinutes.value = minutes % 60; await startTimer(); },
+  bossCheckin: async (task, on) => { if (!!task.boss !== !!on) await setBoss(agentIdx(task), task); },
+  startDay: async (hours) => { await confirmDayStart(hours); return ehStartError.value ? { error: ehStartError.value } : { target: eh.lock.value && eh.lock.value.target }; },
+  setHours: (hours) => setDayLengthHours(hours), // the ONE "hours today" setting (also the DayStartPrompt preselection); the agent only calls it when asked
+  setSetting: (k, on) => {
+    if (k === 'sounds') { if (!!soundEnabled.value !== on) toggleSound(); }
+    else if (k === 'boss_voice') setVoMuted(!on);
+    else if (k === 'spoken_replies') { assistantSession.speak.value = on; saveAssistant(); }
+  },
+  navigate: (path) => { askOpen.value = path === '/home' ? askOpen.value : false; return _proRouter.push(path); },
+  post: async ({ text, includeStats }) => {
+    const u = auth.currentUser; if (!u) return { error: 'Not signed in.' };
+    const C = await import('@/composables/useCommunity'); const cu = await import('@/utils/community');
+    let prefs = {}; try { prefs = await C.loadPrefs(u.uid); } catch (e) { /* ignore */ }
+    const eula = Number(prefs.eulaVersion) >= cu.EULA_VERSION || localStorage.getItem(`cm.eula.${u.uid}`) === String(cu.EULA_VERSION);
+    if (!eula) return { error: 'The user must accept the Community rules first: open the Community page once.' };
+    let name = cu.displayNameOf(u.displayName); let avatar = cu.safeAvatar(u.photoURL);
+    try { const { getPublicProfile } = await import('@/composables/usePublicProfile'); const p = await getPublicProfile(u.uid); if (p) { name = cu.displayNameOf(p.name || u.displayName); avatar = cu.safeAvatar(p.avatarURL || u.photoURL); } } catch (e) { /* ignore */ }
+    const stats = includeStats ? await C.loadTodayStats(u.uid).catch(() => null) : null;
+    await C.createPost({ uid: u.uid, name, avatar }, { text, stats });
+    return { ok: true };
+  },
+});
 watch(userId, (u) => { if (u) loadDayLengthHours().catch(() => {}); }, { immediate: true });
 watch([() => eh.phase.value, () => eh.phaseInfo.value.dayKey, userId, selectedDayIndex], maybeShowDayPrompt, { immediate: true });
 </script>

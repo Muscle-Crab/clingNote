@@ -62,7 +62,7 @@ const cases = [
   ['FabButtons', { userId: 'u1', listening: true }, ['fab-add']],
   ['SubtaskList', { task }, ['Outline', '(1/2)']],
   ['TaskCard', { task, index: 0, isTodayTab: true, expanded: true, activeLabels: [], now: Date.now(), showNotification: true, transferNotification: 'moved' }, ['Write report', '1/2', 'Outline', 'task-expand', 'data-test="timer-ring"', 'moved', 'Saved', 'Add a subtask', 'Auto-complete task', 'Next action', 'Estimate (min)', 'chip--subtasks', 'Delete', 'task-chevron', 'aria-label="Show details"', 'aria-expanded="true"', 'task-chevron--open', 'aria-label="Delete task"', 'aria-label="Add reminder"', 'aria-label="Transfer to another day"', 'aria-label="Attach video"', 'aria-label="Attach file"', 'aria-label="Mark as won', 'aria-pressed="true"']],
-  ['TaskListHeader', { completed: 1, total: 3, soundEnabled: true, showCompleted: false }, ['1/3', 'Sounds on', 'aria-pressed="true"', 'aria-label="Sounds"']],
+  ['TaskListHeader', { completed: 1, total: 3, soundEnabled: true, showCompleted: false }, ['1/3', 'assistant-bubble', 'aria-label="Open assistant"'], ['Sounds on']], // sounds + boss voice moved into the sort menu
   ['EmptyState', {}, ['Nothing here yet'], ['Add task']],
   ['EmptyState', { showAdd: true }, ['Nothing here yet', 'empty-add', 'Add task']],
   ['TaskListHeader', { completed: 0, total: 1, prefs: { sort: 'priority', filter: 'waiting' } }, ['aria-label="Sort and filter"', 'sort-btn--active']],

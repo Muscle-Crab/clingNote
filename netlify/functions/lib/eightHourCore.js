@@ -125,10 +125,17 @@ const dailyTarget = (tasks = [], stats = {}, windowMin = WINDOW_MIN) => {
   const minutes = tasks.reduce((s, t) => s + (Number(t.minutes) || 0), 0);
   const level = clamp(Number.isFinite(stats.targetLevel) ? stats.targetLevel : TARGET_LEVELS.start, TARGET_LEVELS.min, TARGET_LEVELS.max);
   const ratio = levelRatio(level);
-  const target = total === 0 ? 0 : clamp(round5(total * ratio), 5, total);
+  // Dynamic & demanding: the boss reads the user's chosen hours (windowMin) against the planned work. Spare hours raise the bar toward
+  // 100% (half of the free share is added); a plan bigger than the window is capped to what fits (never below 60%). Unknown minutes = level ratio only.
+  let eff = ratio;
+  if (minutes > 0) {
+    eff = ratio + (1 - ratio) * clamp((windowMin - minutes) / windowMin, 0, 1) * 0.5;
+    if (minutes > windowMin) eff = Math.min(eff, Math.max(0.6, windowMin / minutes));
+  }
+  const target = total === 0 ? 0 : clamp(round5(total * eff), 5, total);
   const slackMin = windowMin - minutes; // backlog: keep the gap between planned work and the window small
   const tightMin = Math.round(120 * windowMin / WINDOW_MIN); // 2h of an 8h day, scaled to the chosen span
-  return { target, total, ratio, level, minutes, slackMin, tight: slackMin <= tightMin && slackMin >= 0 };
+  return { target, total, ratio, effRatio: eff, hours: windowMin / 60, level, minutes, slackMin, tight: slackMin <= tightMin && slackMin >= 0 };
 };
 
 // ── lock integrity (mirrors the Firestore rule in firestore.rules for the weeklyRoutines day doc while a window runs) ──

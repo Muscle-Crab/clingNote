@@ -21,18 +21,23 @@
             </select>
           </label>
           <p v-if="!canReorder(prefs)" class="sort-hint">Drag reorder is off unless sorted manually with no filter.</p>
+          <button type="button" class="sort-toggle" data-test="menu-sounds" :aria-pressed="soundEnabled ? 'true' : 'false'" @click="$emit('toggle-sound')">
+            <i :class="soundEnabled ? 'fas fa-volume-up' : 'fas fa-volume-mute'" aria-hidden="true"></i> Sounds: {{ soundEnabled ? 'On' : 'Off' }}
+          </button>
+          <button type="button" class="sort-toggle" data-test="menu-boss-voice" :aria-pressed="bossVoiceOn ? 'true' : 'false'" @click="$emit('toggle-boss-voice')">
+            <i :class="bossVoiceOn ? 'fas fa-microphone' : 'fas fa-microphone-slash'" aria-hidden="true"></i> Boss voice: {{ bossVoiceOn ? 'On' : 'Off' }}
+          </button>
           <button v-if="!isDefaultPrefs(prefs)" class="sort-reset" @click="$emit('update:prefs', { sort: 'manual', filter: 'all' })">Reset</button>
         </div>
       </div>
-      <button v-if="isToday" @click="$emit('toggle-sound')" class="toggle-visibility" :aria-pressed="soundEnabled ? 'true' : 'false'" aria-label="Sounds" :title="soundEnabled ? 'Sounds on' : 'Sounds off'">
-        <i :class="soundEnabled ? 'fas fa-volume-up' : 'fas fa-volume-mute'"></i>
-      </button>
+      <AssistantBubble :live="assistantLive" @open="$emit('open-assistant', $event)" />
     </div>
   </div>
 </template>
 
 <script setup>
 import { ref, watch, onBeforeUnmount } from 'vue';
+import AssistantBubble from './AssistantBubble.vue';
 import { SORT_OPTIONS, FILTER_OPTIONS, DEFAULT_PREFS, isDefaultPrefs, canReorder } from '@/utils/taskView';
 const open = ref(false);
 const sortWrap = ref(null);
@@ -43,6 +48,8 @@ watch(open, (o) => { unbind(); if (o) { document.addEventListener('pointerdown',
 onBeforeUnmount(unbind);
 defineProps({
   label: { type: String, default: 'Today' },
+  bossVoiceOn: { type: Boolean, default: true },
+  assistantLive: Boolean,
   isToday: { type: Boolean, default: true }, // sort/filter/completed toggles only apply to today's list
   prefs: { type: Object, default: () => ({ ...DEFAULT_PREFS }) },
   completed: { type: Number, default: 0 },
@@ -50,7 +57,7 @@ defineProps({
   soundEnabled: { type: Boolean, default: false },
   showCompleted: { type: Boolean, default: false },
 });
-defineEmits(['toggle-sound', 'toggle-completed', 'update:prefs']);
+defineEmits(['toggle-sound', 'toggle-boss-voice', 'open-assistant', 'toggle-completed', 'update:prefs']);
 </script>
 
 <style scoped>
@@ -69,4 +76,5 @@ defineEmits(['toggle-sound', 'toggle-completed', 'update:prefs']);
 .sort-select { min-height: 36px; background: var(--c-surface); color: var(--c-text); border: 1px solid var(--c-border); border-radius: var(--r); padding: 0 var(--sp-2); }
 .sort-hint { margin: 0; font-size: var(--fs-xs); color: var(--c-text-3); }
 .sort-reset { align-self: flex-start; background: none; border: none; color: var(--c-accent-text); cursor: pointer; padding: 4px 0; }
+.sort-toggle { display: flex; align-items: center; gap: .4rem; width: 100%; min-height: 44px; background: none; border: none; color: inherit; font: inherit; cursor: pointer; text-align: left; padding: .25rem 0; }
 </style>

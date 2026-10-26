@@ -5,8 +5,9 @@
 const { getAdmin } = require('./lib/firebaseAdmin');
 const { requirePro, userIsPro } = require('./lib/requirePro');
 const { verifyUser } = require('./lib/notify');
-const { callChat } = require('./lib/aiProvider');
-const { ASK_LIMITS } = require('./lib/askConfig');
+const { callChat, callGeminiRaw } = require('./lib/aiProvider');
+const { ASK_LIMITS, AGENT_LIMITS } = require('./lib/askConfig');
+const agentLib = require('./lib/agentTools');
 const { buildRequest } = require('./lib/aiPrompts');
 
 const json = (statusCode, body) => ({ statusCode, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -55,11 +56,48 @@ const handleAsk = async (event, body, deps) => {
   }
 };
 
+// task 'agent' (ClingNote assistant): Gemini function calling, tools executed on the client. input: { contents (Gemini turns), context, step }.
+// 1 quota unit per NEW user message (shared with 'ask'); tool-result round trips are free but capped (per turn + per day).
+const takeSteps = async (db, uid) => db.runTransaction(async (tx) => {
+  const ref = db.doc(`aiUsage/${uid}_${dayKey()}`); const snap = await tx.get(ref);
+  const used = Number(snap.exists ? snap.data().agentSteps : 0) || 0;
+  if (used >= AGENT_LIMITS.STEPS_PER_DAY) throw Object.assign(new Error('Daily limit reached'), { status: 429 });
+  tx.set(ref, { agentSteps: used + 1, uid, day: dayKey() }, { merge: true });
+});
+const handleAgent = async (event, body, deps) => {
+  const uid = await verifyUser(event.headers, deps.verify || ((t) => getAdmin().auth().verifyIdToken(t)));
+  const input = body.input || {};
+  const contents = agentLib.sanitizeContents(input.contents);
+  if (!contents.length || contents[contents.length - 1].role !== 'user') return json(400, { error: 'Empty conversation' });
+  const step = Math.round(Number(input.step)) || 0;
+  if (step < 0 || step > AGENT_LIMITS.MAX_STEPS_PER_TURN) return json(400, { error: 'Too many steps' });
+  const fresh = agentLib.isNewUserTurn(contents);
+  if (!fresh && step === 0) return json(400, { error: 'Bad step' });
+  if (!process.env.GEMINI_API_KEY) return json(500, { error: 'Server not configured' });
+  const db = deps.db || getAdmin().firestore();
+  const pro = await userIsPro(db, uid);
+  const limit = pro ? AGENT_LIMITS.PRO_PER_DAY : ASK_LIMITS.FREE_PER_DAY;
+  let used = null;
+  try { if (fresh) used = await takeAskQuota(db, uid, limit); else await takeSteps(db, uid); }
+  catch (e) { if (e.status === 429) return json(429, { error: pro ? 'Daily limit reached' : `Free plan: ${limit} assistant messages a day. Upgrade to Pro for more.`, limit, remaining: 0, pro }); throw e; }
+  try {
+    const out = await callGeminiRaw(agentLib.buildAgentRequest(contents, input.context), { fetch: deps.fetch });
+    const parts = out.parts.filter((p) => p && (typeof p.text === 'string' || p.functionCall)).map((p) => (p.functionCall && !agentLib.TOOL_NAMES.has(p.functionCall.name) ? null : p)).filter(Boolean);
+    const toolCalls = parts.filter((p) => p.functionCall).map((p) => ({ name: p.functionCall.name, args: p.functionCall.args || {} }));
+    const text = parts.filter((p) => typeof p.text === 'string' && !p.thought).map((p) => p.text).join('').trim();
+    return json(200, { parts, toolCalls, text, pro, limit, remaining: used == null ? undefined : Math.max(0, limit - used) });
+  } catch (e) {
+    if (fresh) await giveBackAsk(db, uid).catch(() => {});
+    return json(e.status === 500 ? 500 : 502, { error: e.status === 500 ? 'Server not configured' : 'AI request failed' });
+  }
+};
+
 const rawHandler = async (event, ctx, deps = {}) => {
   if (event.httpMethod !== 'POST') return json(405, { error: 'Method not allowed' });
   try {
     let body; try { body = JSON.parse(event.body || '{}'); } catch (e) { return json(400, { error: 'Bad JSON' }); }
     if (body && body.task === 'ask') return await handleAsk(event, body, deps);
+    if (body && body.task === 'agent') return await handleAgent(event, body, deps);
     const uid = await requirePro(event, { verify: deps.verify, db: deps.db }); // 401 / 402 unless Pro
     if (!process.env.OPENAI_API_KEY && !process.env.GEMINI_API_KEY) return json(500, { error: 'Server not configured' });
     const req = buildRequest(body.task, body.input);

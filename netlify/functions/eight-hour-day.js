@@ -148,10 +148,13 @@ const actions = {
         }
       }
     }
+    // Assistant-rated points (Gemini, stored on the task as pointsSource 'ai') survive the lock, clamped to the same 5..150 range as pointsFor.
+    est = est.map((e, n) => { const t = rows[n].t; const p = Math.round(Number(t.points)); if (t.pointsSource !== 'ai' || !(p > 0)) return e;
+      const cx = Math.round(Number(t.complexity)); return { ...e, points: Math.min(150, Math.max(5, p)), complexity: cx >= 1 && cx <= 5 ? cx : e.complexity, source: 'assistant' }; });
     const tgt = core.dailyTarget(est.map((e) => ({ points: e.points, minutes: e.minutes })), stats, hours * 60);
     let target = tgt.target; let targetSource = 'heuristic';
     if (ratioAi != null && tgt.total > 0) { // the model can only make the target tighter than the level-based one, never easier
-      const raised = core.clamp(core.round5(tgt.total * Math.max(ratioAi, tgt.ratio)), 5, tgt.total);
+      const raised = core.clamp(core.round5(tgt.total * Math.max(ratioAi, tgt.effRatio)), 5, tgt.total);
       if (raised > target) { target = raised; targetSource = 'ai'; }
     }
     const next = stored.map((t) => ({ ...t })); // identical order and size: the lock compares by index

@@ -1,0 +1,46 @@
+// ClingNote assistant executor: maps validated tool calls (utils/assistantTools.validateCall) onto the app's own flows.
+// Pure factory: HomeView injects the real handlers (same paths as the buttons: daily limit, boss, points, lock rules); tested in scripts/test-assistant.js.
+import { buildContext, taskKeyOf, clampPoints, clampComplexity } from './assistantTools';
+
+// deps: { tasks(), today(), pro(), limitRemaining() async, stats() -> {streak,points,target,hours,lock,upcoming,settings,route},
+//   addTask(item) -> {ok,error}, deleteTask(task), editTask(task, patch), reschedule(task,{date,time}), complete(task), startTimer(task, minutes),
+//   bossCheckin(task, on), startDay(hours), setHours(hours), setSetting(setting, on), navigate(path), post({text, includeStats}) }
+export function createAssistantExecutor(deps) {
+  let refs = {};
+  const snapshot = async () => {
+    const tasks = deps.tasks() || [];
+    let limitRemaining = null;
+    try { limitRemaining = await deps.limitRemaining(); } catch (e) { limitRemaining = null; }
+    const s = deps.stats ? deps.stats() : {};
+    const b = buildContext({ tasks, pro: deps.pro(), limit: limitRemaining == null ? null : { remainingToday: limitRemaining, perDay: 5 }, ...s,
+      tz: (typeof Intl !== 'undefined' && Intl.DateTimeFormat().resolvedOptions().timeZone) || '' });
+    refs = b.refs;
+    return { refs: b.refs, context: b.context, tasksByKey: new Map(tasks.map((t) => [taskKeyOf(t), t])), today: deps.today(), limitRemaining };
+  };
+  const run = async (name, a) => {
+    switch (name) {
+      case 'create_tasks': {
+        const added = []; const failed = [];
+        for (const it of a.items) {
+          const r = await deps.addTask({ ...it, points: clampPoints(it.points), complexity: clampComplexity(it.complexity) });
+          if (r && r.ok) added.push(`${it.title}${it.points ? ` (${it.points} pts)` : ''}`); else { failed.push({ title: it.title, error: (r && r.error) || 'not saved' }); if (r && r.limit) break; }
+        }
+        return { ok: !failed.length, added: added.length, summary: added.join(', '), ...(failed.length ? { failed } : {}) };
+      }
+      case 'edit_task': await deps.editTask(a.task, a.patch); return { ok: true, summary: a.task.title };
+      case 'reschedule_task': await deps.reschedule(a.task, { date: a.date, time: a.time }); return { ok: true, summary: `${a.task.title} → ${[a.date || 'today', a.time].filter(Boolean).join(' ')}` };
+      case 'delete_task': { const ok = await deps.deleteTask(a.task); return ok === false ? { error: 'Could not delete (day locked or shut).' } : { ok: true, summary: a.task.title }; }
+      case 'complete_task': { const ok = await deps.complete(a.task); return ok === false ? { error: 'Could not complete.' } : { ok: true, summary: a.task.title }; }
+      case 'start_timer': await deps.startTimer(a.task, a.minutes); return { ok: true, summary: `${a.task.title}, ${a.minutes} min` };
+      case 'set_boss_checkin': await deps.bossCheckin(a.task, a.on); return { ok: true, summary: `${a.task.title}: ${a.on ? 'on' : 'off'}` };
+      case 'start_day': { const r = await deps.startDay(a.hours); return r && r.error ? { error: r.error } : { ok: true, summary: `${a.hours}h`, target: r && r.target }; }
+      case 'set_day_hours': await deps.setHours(a.hours); return { ok: true, summary: `${a.hours}h` };
+      case 'set_setting': await deps.setSetting(a.setting, a.on); return { ok: true, summary: `${a.setting.replace('_', ' ')} ${a.on ? 'on' : 'off'}` };
+      case 'navigate': await deps.navigate(a.path); return { ok: true, summary: a.path.replace('/', '') };
+      case 'get_overview': { const s = await snapshot(); return { ok: true, overview: s.context }; }
+      case 'post_to_community': { const r = await deps.post(a); return r && r.error ? { error: r.error } : { ok: true, summary: 'Community' }; }
+      default: return { error: 'Unknown tool' };
+    }
+  };
+  return { snapshot, run, refs: () => refs };
+}

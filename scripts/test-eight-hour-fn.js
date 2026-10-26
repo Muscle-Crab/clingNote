@@ -127,7 +127,7 @@ const call = async (db, body, extra = {}) => { const r = await handler(ev(body),
   ok(!JSON.stringify(r.body).includes('test-key'), 'key never in a response');
   // AI wants an easier target => ignored
   f = mkFetch(JSON.stringify({ tasks: [], targetRatio: 0.1 })); db = seed(); r = await call(db, { action: 'start' }, { fetch: f, apiKey: 'k' });
-  eq(r.body.lock.target, core.dailyTarget(r.body.lock.points.map((p) => ({ points: p })), {}).target, 'ratio floor');
+  ok(r.body.lock.target >= core.dailyTarget(r.body.lock.points.map((p) => ({ points: p })), {}).target, 'ratio floor (hours-aware target is never easier)');
   // no key / no consent / AI error / garbage => heuristic, still 200, no call when not allowed
   f = mkFetch('{}'); db = seed(); r = await call(db, { action: 'start' }, { fetch: f, apiKey: undefined }); eq([r.code, r.body.lock.estimateSource, f.calls.length], [200, 'heuristic', 0]);
   f = mkFetch('{}'); db = seed(); db.store['users/u1'] = { aiConsent: false }; r = await call(db, { action: 'start' }, { fetch: f, apiKey: 'k' }); eq([r.body.lock.estimateSource, f.calls.length], ['heuristic', 0], 'no consent => nothing sent');

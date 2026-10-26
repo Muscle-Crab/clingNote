@@ -33,4 +33,15 @@ const callChat = async (body, { fetch: f = fetch, prefer } = {}) => {
   if (!r.ok) throw Object.assign(new Error('AI request failed'), { status: 502 });
   return { provider, content: data.choices?.[0]?.message?.content || '' };
 };
-module.exports = { callChat, pickProvider, toGemini };
+// Native Gemini call (function calling): returns the model's raw parts so the client can echo thought signatures back.
+const callGeminiRaw = async (reqBody, { fetch: f = fetch } = {}) => {
+  if (!process.env.GEMINI_API_KEY) throw Object.assign(new Error('Server not configured'), { status: 500 });
+  const model = process.env.GEMINI_AGENT_MODEL || process.env.GEMINI_MODEL || 'gemini-3-flash-preview';
+  const r = await f(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': process.env.GEMINI_API_KEY }, body: JSON.stringify(reqBody),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw Object.assign(new Error('AI request failed'), { status: r.status === 429 ? 429 : 502 });
+  return { parts: data.candidates?.[0]?.content?.parts || [], finishReason: data.candidates?.[0]?.finishReason || '' };
+};
+module.exports = { callChat, pickProvider, toGemini, callGeminiRaw };

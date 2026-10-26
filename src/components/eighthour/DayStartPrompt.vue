@@ -12,11 +12,13 @@
           <button type="button" class="dsp-step" :disabled="idx >= HOUR_OPTIONS.length - 1" aria-label="Half an hour more" data-test="day-prompt-plus" @click="idx++">+</button>
         </div>
         <p class="dsp-sub">Ends around <b data-test="day-prompt-preview">{{ endLabel }}</b> if you start now.</p>
+        <p v-if="target.total" class="dsp-sub" data-test="day-prompt-target">Boss target: <b>{{ target.target }}</b> of {{ target.total }} pts</p>
         <button type="button" class="dsp-btn dsp-btn--primary" data-test="day-prompt-next" @click="step = 'confirm'">Continue</button>
       </template>
       <template v-else>
         <h2 id="dsp-t">Are you sure?</h2>
         <p class="dsp-sub" data-test="day-prompt-confirm-text">Your day will end at <b data-test="day-prompt-end">{{ endLabel }}</b> and the app shuts down then.</p>
+        <p v-if="target.total" class="dsp-sub" data-test="day-prompt-target-confirm">You need <b>{{ target.target }}</b> of {{ target.total }} points.</p>
         <p class="dsp-fine">{{ hoursLabel(hours) }} hours, starting when you confirm. This can't be changed today.</p>
         <p v-if="error" class="dsp-err" role="alert" data-test="day-prompt-error">{{ error }}</p>
         <div class="dsp-row">
@@ -31,12 +33,14 @@
 <script setup>
 import { computed, ref, onBeforeUnmount } from 'vue';
 import { HOUR_OPTIONS, hoursLabel, clampHours, hoursMs, fmtClock } from '@/utils/eightHour';
+import { previewDayTarget } from '@/utils/dayTarget';
 
-const props = defineProps({ initialHours: { type: Number, default: 8 }, nowMs: { type: Function, default: () => Date.now() }, tz: { type: String, default: '' }, busy: Boolean, error: { type: String, default: '' } });
+const props = defineProps({ initialHours: { type: Number, default: 8 }, nowMs: { type: Function, default: () => Date.now() }, tz: { type: String, default: '' }, busy: Boolean, error: { type: String, default: '' }, tasks: { type: Array, default: () => [] }, stats: { type: Object, default: () => ({}) } });
 defineEmits(['confirm']);
 const step = ref('pick');
 const hours = ref(clampHours(props.initialHours));
 const idx = computed({ get: () => Math.max(0, HOUR_OPTIONS.indexOf(hours.value)), set: (i) => { hours.value = HOUR_OPTIONS[Math.min(HOUR_OPTIONS.length - 1, Math.max(0, i))]; } });
+const target = computed(() => previewDayTarget(props.tasks, hours.value, props.stats)); // recomputed as the user changes hours or tasks
 const tick = ref(0); const tickId = setInterval(() => { tick.value++; }, 15000); onBeforeUnmount(() => clearInterval(tickId));
 const endLabel = computed(() => { void tick.value; const tz = props.tz || Intl.DateTimeFormat().resolvedOptions().timeZone; return fmtClock(props.nowMs() + hoursMs(hours.value), tz); });
 </script>

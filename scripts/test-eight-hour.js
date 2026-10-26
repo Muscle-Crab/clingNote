@@ -74,9 +74,9 @@ for (const t of [{}, { title: '' }, { title: 'x'.repeat(500), notes: 'y'.repeat(
 }
 eq(c.pointsFor(3, 60), 45); eq(c.pointsFor(5, 600), 150); eq(c.pointsFor(1, 1), 5);
 
-// daily target: fixed share of the planned points, never above them, one-time bump by level
+// daily target: hours-aware share of the planned points, never above them, one-time bump by level
 let tg = c.dailyTarget([{ points: 60, minutes: 60 }, { points: 40, minutes: 30 }], { targetLevel: 2 });
-eq(tg.total, 100); eq(tg.target, 90); ok(tg.target <= tg.total);
+eq(tg.total, 100); eq(tg.target, 95); // 90% level + spare hours raise ok(tg.target <= tg.total);
 eq(c.dailyTarget([{ points: 60 }, { points: 40 }], { targetLevel: 3 }).target, 95);
 eq(c.dailyTarget([{ points: 60 }, { points: 40 }], { targetLevel: 4 }).target, 100);
 eq(c.dailyTarget([{ points: 60 }, { points: 40 }], { targetLevel: 99 }).target, 100, 'level clamped');
