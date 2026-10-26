@@ -77,14 +77,16 @@ lockMod.setLockSource(() => ({ lock: { dayName: 'Fri', startMs: start, endMs: en
   const home = read('src/views/HomeView.vue');
   const body = (name) => { const i = home.search(new RegExp(`const ${name} = async`)); assert.ok(i >= 0, name); const j = home.indexOf('\nconst ', i + 10); return home.slice(i, j); };
   await t('every list-changing HomeView action checks the lock', () => {
-    for (const fn of ['deleteTask', 'markTaskAsWontDo', 'undoWontDo', 'handleDragEnd', 'scheduleExistingTask']) assert.ok(/blockIfLocked\(/.test(body(fn)), fn);
+    for (const fn of ['deleteTask', 'markTaskAsWontDo', 'undoWontDo', 'scheduleExistingTask']) assert.ok(/blockIfLocked\(/.test(body(fn)), fn);
     assert.ok(/blockIfLocked\(currentDayIndex\)\s*\|\|\s*blockIfLocked\(targetDayIndex\)/.test(body('transferTask')), 'transfer checks both days');
     assert.ok(/isDayLocked\(d\.day\)/.test(body('setTaskRepeat')), 'repeat edits touch every weekday');
     assert.ok(!/blockIfLocked\(/.test(body('updateTask')), 'edits allowed while locked');
+    // drag reorder is allowed while locked: it only writes task.sortOrder, slot positions (locked identity) never move
+    assert.ok(/applyManualOrder\(selectedDayRoutine\.value/.test(home), 'drag keeps positions (sortOrder only)');
     assert.ok(/isDayLocked\(dayName\) \? l\.length/.test(home) || /isDayLocked\(dayName\)/.test(body('addNewTask')), 'adds allowed on the locked day, appended only');
     assert.ok(/assertTasksChangeAllowed/.test(body('saveSelectedDayTasks')), 'whole-array saves are checked');
     assert.ok(/isDayLocked\(days\[dayIndex\]/.test(body('resetTasksToIncomplete')), 'past-day reset skips the locked day');
-    assert.ok(/!selectedDayLocked\.value/.test(home.match(/const reorderable = .*/)[0]), 'drag/reorder disabled');
+    assert.ok(!/selectedDayLocked/.test(home.match(/const reorderable = .*/)[0]), 'drag reorder stays on while locked (sortOrder only)');
     const tog = body('toggleTaskCompletion'); assert.ok(/lockedToggle/.test(tog) && /reportProgress/.test(tog), 'completion keeps working in place and reports progress');
     assert.ok(/isLockError/.test(body('patchTask').replace(/^/, '') || home.slice(home.indexOf('const patchTask'), home.indexOf('const patchTask') + 900)), 'patchTask reports lock errors');
   });

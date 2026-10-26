@@ -19,7 +19,9 @@ export const widgetTaskId = (t) => {
 };
 
 const num = (v) => { const n = Math.round(Number(v)); return Number.isFinite(n) && n > 0 ? n : 0; };
-const minutesOf = (t) => num(t.minutes) || num(t.estimateMin);
+// Fallback only (pure tests / no estimator injected). Same precedence as the app chip (utils/taskEstimate.chipValues): the typed estimateMin
+// wins over the stored/server-locked minutes. The app injects chipValues itself (widgetSync.js) so the widget shows exactly the card chip.
+const storedChip = (t) => ({ minutes: num(t.estimateMin) || num(t.minutes), points: num(t.points) });
 const timeOf = (t) => (typeof t.startTime === 'string' && /^\d{1,2}:\d{2}$/.test(t.startTime) ? t.startTime.padStart(5, '0') : '');
 
 // "30m", "1h", "1h 15m" — same format as the card chip "30m · 15p".
@@ -30,15 +32,17 @@ export const chipText = (est, pts) => [fmtEstimate(est), num(pts) ? `${num(pts)}
 // (also for anonymous/private tasks — those flags only hide a task from managers/pals).
 // lock: optional 8-hour lock { dayName, startMs, endMs }; written as lockStartMs/lockEndMs (0 = none) only when it is today's,
 // still running, so older widgets/snapshots without these fields keep working (Swift decodes them as optional).
-export const buildWidgetSnapshot = (tasks, { now = new Date(), dayName = '', pendingIds = [], lock = null } = {}) => {
+// estimate: (task) -> { minutes, points } as displayed on the card (HomeView TaskCard = chipValues). Written as est/pts, so the widget never recomputes.
+export const buildWidgetSnapshot = (tasks, { now = new Date(), dayName = '', pendingIds = [], lock = null, estimate = storedChip, ptsTarget = 0 } = {}) => {
   const pending = new Set(pendingIds); // widget taps not yet applied by the app: keep them shown as done
   const list = (Array.isArray(tasks) ? tasks : []).filter((t) => t && typeof t.title === 'string' && t.title.trim());
+  const chip = (t) => { try { const c = estimate(t) || {}; return { est: num(c.minutes), pts: num(c.points) }; } catch (e) { const c = storedChip(t); return { est: c.minutes, pts: c.points }; } };
   const rows = list.map((t, i) => ({
-    id: widgetTaskId(t), title: t.title.trim().slice(0, 80), est: minutesOf(t), pts: num(t.points),
-    done: t.completed === true || pending.has(widgetTaskId(t)), time: timeOf(t), ...timerFields(t), _i: i,
+    id: widgetTaskId(t), title: t.title.trim().slice(0, 80), ...chip(t),
+    done: t.completed === true || pending.has(widgetTaskId(t)), time: timeOf(t), ...timerFields(t), _run: !!(t.timerActive && t.completed !== true), _i: i,
   }));
-  // Open first; open tasks with a start time by time, then the rest in list order; done last in list order.
-  rows.sort((a, b) => (a.done - b.done) || (!a.done && ((!a.time - !b.time) || (a.time && b.time && a.time.localeCompare(b.time)))) || (a._i - b._i));
+  // Running timers first (same as the app list, utils/taskView.pinRunning), then open; open tasks with a start time by time, then the rest in list order; done last in list order.
+  rows.sort((a, b) => (b._run - a._run) || (a.done - b.done) || (!a.done && ((!a.time - !b.time) || (a.time && b.time && a.time.localeCompare(b.time)))) || (a._i - b._i));
   const done = rows.filter((r) => r.done).length;
   const sum = (arr, k) => arr.reduce((s, r) => s + r[k], 0);
   const pad = (n) => String(n).padStart(2, '0');
@@ -49,9 +53,9 @@ export const buildWidgetSnapshot = (tasks, { now = new Date(), dayName = '', pen
     updatedAt: now.getTime(),
     total: rows.length, done,
     estTotal: sum(rows, 'est'), estLeft: sum(rows.filter((r) => !r.done), 'est'),
-    ptsTotal: sum(rows, 'pts'), ptsDone: sum(rows.filter((r) => r.done), 'pts'),
+    ptsTotal: sum(rows, 'pts'), ptsDone: sum(rows.filter((r) => r.done), 'pts'), ptsTarget: Math.max(0, Math.round(Number(ptsTarget) || 0)), // boss day target (locked or projected); widget shows ptsDone/ptsTarget
     ...lockFields(lock, dayName, now),
-    tasks: rows.slice(0, WIDGET_MAX_TASKS).map(({ _i, ...r }) => r),
+    tasks: rows.slice(0, WIDGET_MAX_TASKS).map(({ _i, _run, ...r }) => r),
   };
 };
 

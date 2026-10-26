@@ -70,6 +70,9 @@ const cases = [
   ['TaskListHeader', { label: 'Monday', isToday: false, completed: 0, total: 2 }, ['Monday', '0/2'], ['Sort and filter', 'Show completed', 'Sounds']],
   ['DayTabs', { days: [{ day: 'Sat', date: '2026-10-17' }], selectedIndex: 0, scheduledCounts: { '2026-10-17': 2 } }, ['day-tab-dot', '2 scheduled', '>17<']],
   ['TaskCard', { task: { ...task, type: 'one-time' }, index: 0, isTodayTab: true, expanded: true, activeLabels: [], now: 0 }, ['Schedule for later', 'Schedule date']],
+  // points shown once, in the badge, with the task's real points (no flat +10, no '· Np' after the time chip)
+  ['TaskCard', { task: { title: 'House cleaning', createdAt: 't', estimateMin: 90, points: 60, pointsSource: 'ai' }, index: 0, isTodayTab: true, expanded: false, activeLabels: [], now: 0 }, ['+60 pts', '1h 30m</span>'], ['+10 pts', '· 60p']],
+  ['TaskCard', { task: { title: 'Check email', createdAt: 'u', estimateMin: 5 }, index: 0, isTodayTab: true, expanded: false, activeLabels: [], now: 0 }, ['data-test="task-pts"', '5m</span>'], ['+10 pts']],
   ['TaskCard', { task: { ...task, type: 'recurring' }, index: 0, isTodayTab: true, expanded: true, activeLabels: [], now: 0 }, ['task-expand'], ['Schedule for later']],
   ['StartDayPrompt', {}, ['Start Day']],
   // collapsed card with subtasks: n/m chip stays visible, editor + subtask input are not rendered

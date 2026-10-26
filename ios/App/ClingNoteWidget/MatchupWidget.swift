@@ -40,7 +40,7 @@ struct MatchupData {
         home = open.first
         away = open.dropFirst().first
         left = max(0, s.total - s.done)
-        let frac: Double = s.ptsTotal > 0 ? Double(s.ptsDone) / Double(s.ptsTotal) : s.progress
+        let frac: Double = s.ptsRequired > 0 ? min(1, Double(s.ptsDone) / Double(s.ptsRequired)) : s.progress
         earnedPct = Int((min(1, max(0, frac)) * 100).rounded())
         kickoff = (home?.time.isEmpty == false) ? home?.time : nil
         let end: Date
@@ -141,7 +141,7 @@ struct MatchupAllDone: View {
         VStack(spacing: 4) {
             Image(systemName: "trophy.fill").font(.system(size: 22)).foregroundColor(CN.green)
             Text(snap.total == 0 ? "No tasks today" : "All done").font(.system(size: 15, weight: .bold)).foregroundColor(CN.text)
-            Text(snap.total == 0 ? "Tap to plan your day" : "\(snap.done)/\(snap.total) · \(snap.ptsDone) pts")
+            Text(snap.total == 0 ? "Tap to plan your day" : "\(snap.done)/\(snap.total) · \(snap.ptsLabel)")
                 .font(.system(size: 11)).monospacedDigit().foregroundColor(CN.text2)
         }.frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -204,7 +204,7 @@ struct MatchupRectangularView: View {
                 }
             } else {
                 Text(m.snap.total == 0 ? "No tasks today" : "All done").font(.system(size: 14, weight: .semibold)).widgetAccentable()
-                Text("\(m.snap.ptsDone) pts").font(.system(size: 12)).monospacedDigit()
+                Text(m.snap.ptsLabel).font(.system(size: 12)).monospacedDigit()
             }
             ProgressView(value: Double(m.earnedPct), total: 100).progressViewStyle(.linear).widgetAccentable()
         }.frame(maxWidth: .infinity, alignment: .leading)
@@ -248,7 +248,7 @@ struct MatchupInlineView: View {
         if let h = m.home {
             Text("Next: \(short(h.title))\(m.away.map { " vs \(short($0.title))" } ?? "") · \(m.left) left")
         } else {
-            Text(m.snap.total == 0 ? "No tasks today" : "All done · \(m.snap.ptsDone) pts")
+            Text(m.snap.total == 0 ? "No tasks today" : "All done · \(m.snap.ptsLabel)")
         }
     }
 }

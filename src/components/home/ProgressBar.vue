@@ -29,7 +29,7 @@
         <span class="foot-icon" aria-hidden="true">🔥</span>
         <span class="foot-text"><span><strong data-test="streak-count">{{ Math.min(streak, STREAK_CAP) }}/{{ STREAK_CAP }}</strong>&nbsp;day streak</span><small data-test="streak-today">{{ Math.min(streakProgress, streakMin) }}/{{ streakMin }} done today to keep it</small></span>
       </p>
-      <p class="foot-item foot-item--pts"><span class="coin" aria-hidden="true">★</span><strong>{{ points }}</strong>&nbsp;points</p>
+      <p class="foot-item foot-item--pts"><span class="coin" aria-hidden="true">★</span><strong data-test="day-pts">{{ target > 0 ? dayPtsLabel(points, target) : `${points} pts` }}</strong></p>
     </div>
   </div>
 </template>
@@ -37,6 +37,7 @@
 <script setup>
 import { computed } from 'vue';
 import { STREAK_CAP } from '@/utils/streak';
+import { dayPtsLabel } from '@/utils/dayTarget';
 import stage0 from '@/assets/stages/stage-0-sprout.jpg';
 import stage1 from '@/assets/stages/stage-1-leafy.jpg';
 import stage2 from '@/assets/stages/stage-2-tree.jpg';
@@ -52,6 +53,7 @@ const props = defineProps({
   streakProgress: { type: Number, default: 0 },
   streakMin: { type: Number, default: 5 },
   points: { type: Number, default: 0 },
+  target: { type: Number, default: 0 }, // boss day target (required); shown as earned/required
 });
 const C = 2 * Math.PI * 42;
 // Scene art per stage, same order as the milestone icons: 🌱 sprout, 🌿 leafy plant, 🌳 tree, 🌲 pine, 🏔️ peak

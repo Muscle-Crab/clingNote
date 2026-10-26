@@ -14,9 +14,9 @@ export const topAlert = ({ offline, running, earned = 0, target = 0, startMs, en
   if (offline) return null;
   if (running && target > 0 && earned < target) {
     const p = paceOf({ earned, target, startMs, endMs, nowMs }); const need = target - earned;
-    if (p.leftMs <= RISK_MS && streak > 0) return { level: 'risk', text: `🔥 Streak at risk: ${need} pts in ${hm(p.leftMs)}` };
-    if (p.leftMs <= RISK_MS) return { level: 'risk', text: `⏳ ${need} pts to go, ${hm(p.leftMs)} left` };
-    if (p.behindBy >= Math.max(5, Math.round(target * 0.1))) return { level: 'behind', text: `Behind pace by ${p.behindBy} pts` };
+    if (p.leftMs <= RISK_MS && streak > 0) return { level: 'risk', text: `🔥 Streak at risk: ${earned}/${target} pts, ${need} to go in ${hm(p.leftMs)}` };
+    if (p.leftMs <= RISK_MS) return { level: 'risk', text: `⏳ ${earned}/${target} pts, ${need} to go, ${hm(p.leftMs)} left` };
+    if (p.behindBy >= Math.max(5, Math.round(target * 0.1))) return { level: 'behind', text: `Behind pace by ${p.behindBy} pts (${earned}/${target} pts)` };
   }
   if (warning) return { level: 'boss', text: `⚠️ ${warning}` };
   return null;

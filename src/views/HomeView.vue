@@ -59,10 +59,10 @@
         <DayTabs :days="tabDays" :selected-index="selectedDayIndex" :scheduled-counts="scheduledCounts" @select="handleDayTabClick" />
 
         <EightHourCard :tasks="ehTasks" :start-error="ehStartError" @retry="syncAfterAuth" @start="openDayPrompt" />
-        <DayStartPrompt v-if="dayPromptOpen" :initial-hours="eh.hoursPref.value" :now-ms="eh.nowMs" :tz="eh.plan.value?.tz || ''" :busy="ehBusy" :error="ehStartError" :tasks="todayTasksForTarget" :stats="eh.stats.value" @confirm="confirmDayStart" />
+        <DayStartPrompt v-if="dayPromptOpen" :initial-hours="eh.hoursPref.value" :now-ms="eh.nowMs" :tz="eh.plan.value?.tz || ''" :busy="ehBusy" :error="ehStartError" :tasks="todayTasksForTarget" :stats="eh.stats.value" :earned="pointsAccumulated || 0" @confirm="confirmDayStart" />
 
         <ProgressBar :percentage="calculateCompletionPercentage()" :milestones="milestones" :done="completedTaskCount || 0" :total="dayTasks.length"
-                     :streak="streak" :streak-status="streakStatus" :streak-progress="streakProgress" :streak-min="DAILY_STREAK_MIN" :points="pointsAccumulated || 0" />
+                     :streak="streak" :streak-status="streakStatus" :streak-progress="streakProgress" :streak-min="DAILY_STREAK_MIN" :points="pointsAccumulated || 0" :target="isViewingToday ? dayRequiredPts : 0" />
 
       </section>
       <ShutdownPrompt class="home-notice" :suggest="false" :open="shutdownOpen" :done="shutdownDone" :open-tasks="shutdownOpenTasks"
@@ -209,7 +209,7 @@ import { useSounds } from '@/composables/useSounds';
 import { patchStoredTask, loadDayTasks, carryTasksToDay } from '@/composables/useDayPersistence';
 import { activeFromForDay, isHiddenOnDate, seriesDays, withoutSeries } from '@/utils/repeat';
 import { useTaskViewPrefs } from '@/composables/useTaskViewPrefs';
-import { viewTasks, canReorder, normalizePrefs, visibleCount, shouldHandleShortcut } from '@/utils/taskView';
+import { viewTasks, canReorder, applyManualOrder, normalizePrefs, visibleCount, shouldHandleShortcut } from '@/utils/taskView';
 import { ACTIVE_CAP, taskKey, activeCount, loadSummary, buildSchedule } from '@/utils/taskPlanning';
 import { localYMD, isStaleCompletion } from '@/utils/localDate';
 import { getTodayId, formatSessionTime, getCurrentDate, formatTime, isToday } from '@/utils/dateTime';
@@ -318,7 +318,7 @@ import { createAssistantExecutor } from '@/utils/assistantExecutor';
 import { clampPoints as _clampPts, clampComplexity as _clampCx } from '@/utils/assistantTools';
 import { loadAssistant, assistantSession, saveAssistant } from '@/utils/assistantSession';
 import { voMuted, setVoMuted } from '@/composables/useVoiceover';
-import { previewDayTarget } from '@/utils/dayTarget';
+import { previewDayTarget, requiredPoints } from '@/utils/dayTarget';
 const askOpen = ref(false); // Assistant sheet (✨ next to the bell, and the bubble in the task list header)
 const assistantListen = ref(false);
 const agentAdd = ref(false); // true while the assistant adds tasks: over-limit returns an error to the model instead of opening the paywall
@@ -843,9 +843,9 @@ const hasHiddenCopies = computed(() => dayTasks.value.length !== selectedDayRout
 const viewItems = computed(() => viewTasks(selectedDayRoutine.value, effectivePrefs.value).filter((i) => !isHiddenOnDate(i.task, viewTabDate.value)));
 const displayTasks = computed(() => viewItems.value.map((i) => i.task));
 const visibleTaskCount = computed(() => visibleCount(viewItems.value, showCompleted.value));
-const reorderable = computed(() => canReorder(effectivePrefs.value) && !hasHiddenCopies.value && !selectedDayLocked.value); // locked day: order is frozen
+const reorderable = computed(() => canReorder(effectivePrefs.value) && !hasHiddenCopies.value); // locked day too: a drag only writes sortOrder (slot positions never move)
 const realIndex = (task) => (selectedDayRoutine.value || []).indexOf(task);
-const onReorder = (list) => { if (reorderable.value && Array.isArray(list)) selectedDayRoutine.value = list; };
+const onReorder = (list) => { if (reorderable.value && Array.isArray(list)) selectedDayRoutine.value = applyManualOrder(selectedDayRoutine.value, list.map(taskKey), taskKey); };
 const reducedMotion = typeof window !== 'undefined' && window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)').matches : false;
 
 // "n" opens Add task (not while typing or when any modal/overlay is open)
@@ -1283,7 +1283,7 @@ const undoWontDo = async (index) => {
 
 
 const handleDragEnd = async () => {
-  if (blockIfLocked()) { fetchSelectedDayRoutine(); return; } // restore the stored order
+  // no lock guard: a drag only changes task.sortOrder, positions (locked slot identity) are untouched, so the lock rules allow it
   if (selectedDayIndex.value === -1 || !userId.value) {
     console.error('No selected day or user is not logged in');
     return;
@@ -1555,7 +1555,13 @@ const updateStreakOnCompletion = async (task) => {
       tx.set(streakDocRef, { ...n, updatedAt: serverTimestamp() }, { merge: true });
       return n;
     });
+    const prevStreak = streak.value, prevProg = streakProgress.value;
     applyStreakState(next);
+    // streak music (respects the Sounds toggle inside playSound): fanfare when the streak is hit / goes up, else a rising step 1→5
+    if (task.completed) {
+      if (streak.value > prevStreak || (prevProg < DAILY_STREAK_MIN && streakProgress.value >= DAILY_STREAK_MIN)) playSound('streakHit');
+      else if (streakProgress.value > prevProg && streakProgress.value <= DAILY_STREAK_MIN) playSound('streakStep', { step: streakProgress.value, of: DAILY_STREAK_MIN });
+    }
     recordMonthlyToggle(userId.value, localDateStr(), { key: taskKey(task), completed: !!task.completed, pending: task.status === 'pending' }, next.bestStreak)
       .then(() => loadDisciplineState(userId.value)).then((st) => { discState.value = st; checkProgression(st); })
       .catch((e) => console.error('Monthly stats update failed:', e));
@@ -2393,7 +2399,7 @@ const checkForBadges = async () => {
 
 const currentDayKey = localYMD(); // Format: YYYY-MM-DD
 const pointsAccumulated = ref(0);
-const totalPoints = computed(() => selectedDayRoutine?.value?.length * 10); // Total points (10 points per task)
+const totalPoints = computed(() => (selectedDayRoutine?.value || []).reduce((n, t) => n + chipValues(t).points, 0)); // real per-task points (AI / estimate)
 
 
 
@@ -2401,7 +2407,7 @@ const totalPoints = computed(() => selectedDayRoutine?.value?.length * 10); // T
 watch(
     () => selectedDayRoutine.value,
     (tasks) => {
-      pointsAccumulated.value = tasks?.filter((task) => task.completed).length * 10;
+      pointsAccumulated.value = (tasks || []).filter((task) => task.completed).reduce((n, t) => n + chipValues(t).points, 0); // real points, same as the card
     },
     { deep: true }
 );
@@ -3253,6 +3259,9 @@ const confirmDayStart = async (hours) => {
 
 // ── ClingNote assistant (AssistantSheet): tool calls run through the same handlers as the buttons above ──
 const todayTasksForTarget = computed(() => (isViewingToday.value ? selectedDayRoutine.value || [] : []));
+// required day points: the locked boss target while the day runs, else the projection from today's tasks + chosen hours
+const dayRequiredPts = computed(() => requiredPoints({ lock: eh.running.value ? eh.lock.value : null, tasks: todayTasksForTarget.value, hours: eh.hoursPref.value, stats: eh.stats.value }));
+watch(dayRequiredPts, (n) => { if (isViewingToday.value && isNativeIOS()) import('@/utils/widgetSync').then((m) => m.setWidgetDayTarget(n)).catch(() => {}); }, { immediate: true });
 const openAssistant = (listen = false) => {
   if (userId.value) loadAssistant(userId.value);
   if (!isViewingToday.value && todayIdx.value >= 0) selectedDayIndex.value = todayIdx.value; // the assistant works on today's list
@@ -3991,7 +4000,7 @@ body.home-v2 .app-topbar { position: absolute; top: 0; left: 0; right: 0; z-inde
 .app-root .task-upnext { font-size: 10px; }
 
 /* ══ Mobile UI fixes: task-card controls, smooth reorder, bottom bar alignment ══ */
-/* 1) Right-hand controls: one aligned row [repeat][play][more], pinned top-right; "+10" is a small badge so it never changes the row height */
+/* 1) Right-hand controls: one aligned row [repeat][play][more], pinned top-right; the points badge is small so it never changes the row height */
 .app-root .task-right.task-right.task-right { top: 8px; right: 6px; height: 44px; display: flex; align-items: center; justify-content: flex-end; gap: 2px; }
 .app-root .task-repeat-wrap { display: flex; align-items: center; justify-content: center; width: 32px; height: 44px; }
 .app-root .task-repeat.task-repeat { width: 32px; height: 36px; padding: 0; display: inline-flex; align-items: center; justify-content: center; font-size: 16px; line-height: 1; opacity: .6; }

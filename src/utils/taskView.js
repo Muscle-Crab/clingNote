@@ -39,7 +39,9 @@ export function viewTasks(tasks, prefs) {
   const { sort, filter } = normalizePrefs(prefs);
   let items = (Array.isArray(tasks) ? tasks : []).map((task, index) => ({ task, index }));
   if (filter !== 'all') items = items.filter(({ task }) => task?.completed || statusOf(task) === filter);
-  if (sort === 'manual') return items;
+  // Manual order = the user's drag order (task.sortOrder, written by a drag; array position as fallback). Stored array positions never
+  // move on a drag, so reordering also works during the locked 8-hour day (Firestore rules freeze slot identity by position).
+  if (sort === 'manual') return pinRunning(items.sort((a, b) => manualOrd(a) - manualOrd(b) || a.index - b.index));
   const cmp = {
     start: (a, b) => {
       const x = toMinutes(a.task?.startTime), y = toMinutes(b.task?.startTime);
@@ -52,8 +54,14 @@ export function viewTasks(tasks, prefs) {
     status: (a, b) => rank(STATUS_RANK, statusOf(a.task), 4) - rank(STATUS_RANK, statusOf(b.task), 4),
   }[sort];
   // stable: ties keep manual order
-  return items.sort((a, b) => cmp(a, b) || a.index - b.index);
+  return pinRunning(items.sort((a, b) => cmp(a, b) || a.index - b.index));
 }
+// A task with a running (active, incl. paused) timer is always listed first, whatever the sort; several keep their relative order.
+const manualOrd = (i) => (Number.isFinite(Number(i.task?.sortOrder)) && i.task?.sortOrder !== null && i.task?.sortOrder !== '' ? Number(i.task.sortOrder) : i.index);
+// Drag result -> sortOrder per task: orderedKeys is the new visual order; returns a NEW array in the SAME positions (only sortOrder changes).
+export const applyManualOrder = (tasks, orderedKeys, keyOf) => { const pos = new Map(orderedKeys.map((k, i) => [k, i])); const n = orderedKeys.length; return (tasks || []).map((t, i) => ({ ...t, sortOrder: pos.has(keyOf(t)) ? pos.get(keyOf(t)) : n + i })); };
+export const hasRunningTimer = (t) => !!(t && t.timerActive && !t.completed);
+export const pinRunning = (items) => [...items.filter((i) => hasRunningTimer(i.task)), ...items.filter((i) => !hasRunningTimer(i.task))];
 
 // Visible = what will actually render (after Show completed).
 export const visibleCount = (items, showCompleted) => items.filter(({ task }) => !task?.completed || showCompleted).length;

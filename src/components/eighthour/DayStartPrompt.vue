@@ -12,13 +12,13 @@
           <button type="button" class="dsp-step" :disabled="idx >= HOUR_OPTIONS.length - 1" aria-label="Half an hour more" data-test="day-prompt-plus" @click="idx++">+</button>
         </div>
         <p class="dsp-sub">Ends around <b data-test="day-prompt-preview">{{ endLabel }}</b> if you start now.</p>
-        <p v-if="target.total" class="dsp-sub" data-test="day-prompt-target">Boss target: <b>{{ target.target }}</b> of {{ target.total }} pts</p>
+        <p v-if="target.total" class="dsp-sub" data-test="day-prompt-target">Boss target: <b>{{ dayPtsLabel(earned, target.target) }}</b> <span class="dsp-of">({{ target.total }} available)</span></p>
         <button type="button" class="dsp-btn dsp-btn--primary" data-test="day-prompt-next" @click="step = 'confirm'">Continue</button>
       </template>
       <template v-else>
         <h2 id="dsp-t">Are you sure?</h2>
         <p class="dsp-sub" data-test="day-prompt-confirm-text">Your day will end at <b data-test="day-prompt-end">{{ endLabel }}</b> and the app shuts down then.</p>
-        <p v-if="target.total" class="dsp-sub" data-test="day-prompt-target-confirm">You need <b>{{ target.target }}</b> of {{ target.total }} points.</p>
+        <p v-if="target.total" class="dsp-sub" data-test="day-prompt-target-confirm">You need <b>{{ dayPtsLabel(earned, target.target) }}</b> today.</p>
         <p class="dsp-fine">{{ hoursLabel(hours) }} hours, starting when you confirm. This can't be changed today.</p>
         <p v-if="error" class="dsp-err" role="alert" data-test="day-prompt-error">{{ error }}</p>
         <div class="dsp-row">
@@ -33,9 +33,9 @@
 <script setup>
 import { computed, ref, onBeforeUnmount } from 'vue';
 import { HOUR_OPTIONS, hoursLabel, clampHours, hoursMs, fmtClock } from '@/utils/eightHour';
-import { previewDayTarget } from '@/utils/dayTarget';
+import { previewDayTarget, dayPtsLabel } from '@/utils/dayTarget';
 
-const props = defineProps({ initialHours: { type: Number, default: 8 }, nowMs: { type: Function, default: () => Date.now() }, tz: { type: String, default: '' }, busy: Boolean, error: { type: String, default: '' }, tasks: { type: Array, default: () => [] }, stats: { type: Object, default: () => ({}) } });
+const props = defineProps({ initialHours: { type: Number, default: 8 }, nowMs: { type: Function, default: () => Date.now() }, tz: { type: String, default: '' }, busy: Boolean, error: { type: String, default: '' }, tasks: { type: Array, default: () => [] }, stats: { type: Object, default: () => ({}) }, earned: { type: Number, default: 0 } });
 defineEmits(['confirm']);
 const step = ref('pick');
 const hours = ref(clampHours(props.initialHours));

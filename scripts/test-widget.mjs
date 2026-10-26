@@ -32,6 +32,9 @@ t('owner widget keeps full titles of private/anonymous tasks', () => {
 });
 t('estimate falls back to typed estimateMin; missing -> 0', () => {
   const s = buildWidgetSnapshot(tasks, { now });
+  assert.equal(buildWidgetSnapshot([{ title: 'X', createdAt: 9, estimateMin: 25, minutes: 60 }], { now }).tasks[0].est, 25); // typed wins, as on the card
+  const inj = buildWidgetSnapshot([{ title: 'Y', createdAt: 9 }], { now, estimate: () => ({ minutes: 35, points: 45 }) }).tasks[0];
+  assert.equal(inj.est, 35); assert.equal(inj.pts, 45); // injected app values are written as-is
   assert.equal(s.tasks.find((r) => r.title === 'Gym').est, 45); assert.equal(s.tasks.find((r) => r.title === 'Call mom').est, 0);
 });
 t('cap + empty/garbage input', () => {

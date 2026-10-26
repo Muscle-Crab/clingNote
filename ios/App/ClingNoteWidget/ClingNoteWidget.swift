@@ -132,6 +132,12 @@ struct WidgetSnapshot: Codable {
     let ptsTotal: Int
     let ptsDone: Int
     let tasks: [WidgetTask]
+    // boss day target written by the app (locked, or projected before the day starts); optional for old payloads
+    var ptsTarget: Int? = nil
+    /// required points: the boss target, falling back to all of today's points
+    var ptsRequired: Int { (ptsTarget ?? 0) > 0 ? ptsTarget! : ptsTotal }
+    /// the one day-points label (same as the app's dayPtsLabel): earned/required
+    var ptsLabel: String { "\(ptsDone)/\(ptsRequired) pts" }
 
     static let empty = WidgetSnapshot(v: 1, date: "", total: 0, done: 0, estLeft: 0, ptsTotal: 0, ptsDone: 0, tasks: [])
     static let sample = WidgetSnapshot(v: 1, date: "", total: 6, done: 2, estLeft: 165, ptsTotal: 120, ptsDone: 35, tasks: [
@@ -349,7 +355,7 @@ struct ListView: View {
                 Spacer(minLength: 0)
                 if showBar {
                     HStack {
-                        Text("\(snap.ptsDone)/\(snap.ptsTotal) pts").font(.system(size: 11, weight: .semibold)).monospacedDigit().foregroundColor(CN.green)
+                        Text(snap.ptsLabel).font(.system(size: 11, weight: .semibold)).monospacedDigit().foregroundColor(CN.green)
                         Spacer()
                         if snap.total > maxRows { Text("+\(snap.total - maxRows) more").font(.system(size: 11)).foregroundColor(CN.text2) }
                     }

@@ -56,7 +56,7 @@
                     <p class="task-sub" :title="cat.label + ' · ' + whenText">{{ cat.label }}<template v-if="!est.minutes"> · {{ whenText }}</template></p>
 
                     <div class="task-meta-row">
-                      <span class="task-pts" title="Points for completing this task" data-test="task-pts">+10 pts</span>
+                      <span class="task-pts" title="Points for completing this task" data-test="task-pts">+{{ est.points }} pts</span>
 
                       <span v-if="task.completed && isTodayTab" class="task-status task-status--done">Complete</span>
                       <span v-else-if="task.status === 'pending'" class="task-status task-status--pending" :title="task.pendingOn ? 'Pending on ' + task.pendingOn : 'Pending'">Pending</span>
@@ -67,7 +67,7 @@
 
                     <!-- Planning chips -->
                     <div class="task-chips">
-                      <span class="chip chip--est" data-test="est-chips" :title="'Estimate: ' + est.minutes + ' min, ' + est.points + ' points' + (est.computed ? ' (estimated)' : '')">{{ fmtMin(est.minutes) }} · {{ est.points }}p</span>
+                      <span class="chip chip--est" data-test="est-chips" :title="'Estimate: ' + est.minutes + ' min' + (est.computed ? ' (estimated)' : '')">{{ fmtMin(est.minutes) }}</span>
                       <span v-if="task.priority && task.priority !== 'low'" class="chip" :class="'chip--' + task.priority">{{ task.priority }}</span>
                       <span v-if="task.status && !['todo', 'pending', 'active'].includes(task.status)" class="chip">{{ task.status }}</span>
                       <span v-if="task.scheduledFor" class="chip chip--due" :class="{ 'chip--overdue': task.scheduledFor < todayYmd }">{{ dueBadge(task, todayYmd) }}</span>

@@ -5,6 +5,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { registerPlugin } from '@capacitor/core';
 import { db, auth } from '@/firebaseConfig';
 import { buildWidgetSnapshot, widgetKeyMap, parseWidgetLink } from './widgetSnapshot';
+import { chipValues } from './taskEstimate'; // the card chip's own values: the widget shows exactly what the app shows
 import { drainQueue } from './widgetQueue';
 import { currentLock } from './eightHourLock';
 import { API_BASE } from '@/config/api';
@@ -39,7 +40,10 @@ const readPending = async () => {
   return items;
 };
 const ackStash = (keys) => { const u = auth.currentUser; if (u) writeStash(u.uid, readStash(u.uid).filter((e) => !keys.includes(ekey(e)))); };
-const rewrite = () => { if (lastTasks) write(buildWidgetSnapshot(lastTasks, { dayName: lastDay, pendingIds, lock: currentLock() })); };
+// boss day target pushed by HomeView (locked target, or the projection before the day starts)
+let dayTarget = 0;
+export const setWidgetDayTarget = (n) => { const v = Math.max(0, Math.round(Number(n) || 0)); if (v !== dayTarget) { dayTarget = v; rewrite(); } };
+const rewrite = () => { if (lastTasks) write(buildWidgetSnapshot(lastTasks, { dayName: lastDay, pendingIds, lock: currentLock(), estimate: chipValues, ptsTarget: dayTarget })); };
 
 // HomeView registers its completion path; returns an unregister function.
 export const registerWidgetCompleter = (fn) => { completer = fn; drainWidgetQueue(); return () => { if (completer === fn) completer = null; }; };
@@ -89,7 +93,7 @@ export const installWidgetSync = () => {
       const tasks = snap.exists() ? (snap.data().tasks || []) : [];
       keyMap = widgetKeyMap(tasks);
       lastTasks = tasks; lastDay = today;
-      write(buildWidgetSnapshot(tasks, { dayName: today, pendingIds, lock: currentLock() }));
+      write(buildWidgetSnapshot(tasks, { dayName: today, pendingIds, lock: currentLock(), estimate: chipValues, ptsTarget: dayTarget }));
     }, (e) => { console.warn('[widgetSync] today listener failed:', e && (e.code || e.message || e)); });
   };
   onAuthStateChanged(auth, async (u) => {
