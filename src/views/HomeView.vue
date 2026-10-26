@@ -271,7 +271,7 @@ const mutateDay = (dayName, fn) => runTransaction(db, async (tx) => {
 });
 const strictAllowed = ref(true); // false for free users once ENFORCE_PAYWALL is on
 loadUserDoc().then((d) => { strictAllowed.value = canUse(d, 'strictBoss'); }).catch(() => {});
-import { scheduleLocal, scheduleTimerDone, cancelLocal, timerKey, cancelTaskNotifications } from '@/utils/localNotify';
+import { scheduleLocal, scheduleTimerDone, cancelLocal, timerKey, cancelTaskNotifications, taskKeyOf } from '@/utils/localNotify';
 import { scheduleNotification, sendNotificationToPlayer, linkPushUser } from '@/composables/useNotifications';
 import { speak } from '@/composables/useSpeech';
 import { completionPercentage, computeTimeStats, daysLeftInYearFrom, heroTitleFor } from '@/utils/dayStats';
@@ -847,6 +847,17 @@ const onCreateTaskEvt = () => onAddClick();
 onMounted(() => { window.addEventListener('cn:create-task', onCreateTaskEvt);
   if (_proRouter.currentRoute.value.query.new === '1') { const q = { ..._proRouter.currentRoute.value.query }; delete q.new; _proRouter.replace({ query: q }); setTimeout(onAddClick, 600); } });
 onBeforeUnmount(() => window.removeEventListener('cn:create-task', onCreateTaskEvt));
+// Drill-sergeant report buttons (components/voiceover/BossBriefing.vue) -> real Home actions on today's list.
+const onSergeantAction = async (e) => {
+  const { id, taskKey } = (e && e.detail) || {};
+  if (!isViewingToday.value) { selectedDayIndex.value = todayIdx.value; await fetchSelectedDayRoutine(); }
+  const task = taskKey ? (selectedDayRoutine.value || []).find((t) => taskKeyOf(t) === taskKey) : null;
+  if (id === 'start-day') openDayPrompt();
+  else if (id === 'set-reminder' && task) openModal('calendar', realIndex(task), task.title);
+  else if (id === 'open-task' && task) openTaskDetailModal(task);
+};
+onMounted(() => window.addEventListener('cn:sergeant', onSergeantAction));
+onBeforeUnmount(() => window.removeEventListener('cn:sergeant', onSergeantAction));
 onBeforeUnmount(() => document.removeEventListener('keydown', onShortcutKey));
 
 
@@ -1103,6 +1114,8 @@ const toggleTaskCompletion = async (index) => {
 
     userCredits.value += 10;
     announceNextTask(index);
+    if (isToday(selectedDayIndex.value)) { const left = (selectedDayRoutine.value || []).filter((t, i) => i !== index && !t.completed).length;
+      window.dispatchEvent(new window.CustomEvent('cn:sergeant-ack', { detail: { left } })); }
 
     const userName = await fetchUserName(userId.value);
     if (userName) {

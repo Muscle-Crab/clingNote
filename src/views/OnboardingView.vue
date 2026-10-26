@@ -45,7 +45,7 @@
       <section v-else-if="STEPS[step] === 'strictness'" class="ob-sec">
         <p class="ob-k">Step 3</p><h1 class="ob-h">How strict should <span>the boss</span> be?</h1>
         <button v-for="s in STRICT" :key="s.id" class="ob-row" :class="{ on: a.strictness === s.id }" @click="a.strictness = s.id">
-          <span class="em">{{ s.e }}</span><span><b>{{ s.l }}</b><small>{{ s.d }}</small></span>
+          <BossSergeant v-if="s.id === 'drill'" class="em em-sgt" :size="44" :yelling="a.strictness === 'drill'" /><span v-else class="em">{{ s.e }}</span><span><b>{{ s.l }}</b><small>{{ s.d }}</small></span>
         </button>
       </section>
 
@@ -80,6 +80,7 @@ import { markReviewPending } from '@/utils/appReview';
 import { markPaywallSeenLocal } from '@/utils/entryGuard';
 import { readCachedPlan, useEightHour } from '@/composables/useEightHour';
 import { fmtWakeLabel } from '@/utils/eightHour';
+import BossSergeant from '@/components/boss/BossSergeant.vue';
 
 const STEPS = ['welcome', 'age', 'goals', 'schedule', 'strictness', 'notifications']; // index STEPS.length = paywall
 const GOALS = [

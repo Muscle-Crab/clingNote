@@ -1,7 +1,7 @@
 <template>
   <section class="boss" :class="'boss--' + tone" role="status" aria-live="polite" aria-label="Strict Boss">
     <header class="boss-head">
-      <span class="boss-icon" aria-hidden="true">{{ icon }}</span>
+      <BossSergeant class="boss-sgt" :size="40" :yelling="tone === 'alert' || tone === 'fail' || tone === 'warn'" label="Strict Boss drill sergeant" /><span class="boss-icon" aria-hidden="true">{{ icon }}</span>
       <p class="boss-title">Boss <span class="boss-chip">{{ chip }}</span></p>
       <button type="button" class="boss-btn" :aria-expanded="open ? 'true' : 'false'" :aria-label="open ? 'Collapse boss panel' : 'Expand boss panel'" @click="open = !open">{{ open ? '▾' : '▸' }}</button>
       <button type="button" class="boss-btn" aria-label="Hide boss panel for now" @click="$emit('dismiss')">✕</button>
@@ -27,6 +27,7 @@
 <script setup>
 // Inline, non-blocking Strict Boss panel: lives in the page flow above the task list (no fixed overlay).
 import { ref, computed } from 'vue';
+import BossSergeant from '@/components/boss/BossSergeant.vue';
 const props = defineProps({
   lines: { type: Array, default: () => [] }, // [{ kind, text, dismissible }]
   verdict: { type: Object, default: null }, // { v, text, date }
@@ -50,6 +51,7 @@ const chip = computed(() => ({ pass: 'Verdict', fail: 'Verdict', alert: 'Watchin
 .boss--pass { border-left-color: var(--c-success, #3DDC97); }
 .boss-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px; }
 .boss-icon { font-size: 16px; line-height: 1; }
+.boss-sgt { flex: none; margin: -6px 0; }
 .boss-title { margin: 0; flex: 1; font-weight: 700; font-size: var(--fs-md, 14px); display: flex; align-items: center; gap: 8px; }
 .boss-chip { font-size: var(--fs-xs, 11px); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--c-text-3, #8791A5); background: var(--c-surface-2, #1A1E28); padding: 2px 8px; border-radius: 999px; }
 .boss-btn { width: 28px; height: 28px; border-radius: 8px; border: 0; background: transparent; color: var(--c-text-3, #8791A5); cursor: pointer; font-size: 13px; }

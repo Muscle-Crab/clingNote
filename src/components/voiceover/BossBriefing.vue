@@ -2,10 +2,18 @@
   <div v-if="card" class="bb-wrap" data-test="boss-briefing">
     <section class="bb" role="dialog" aria-label="Boss briefing">
       <div class="bb-head">
-        <div><h2>{{ card.morning ? '☀️ Morning report' : '⏰ Boss alert' }}</h2><BrandMark inline /></div>
+        <div class="bb-who"><BossSergeant :size="64" :yelling="!(card.report && card.report.atEase) || speaking" /><div><h2>{{ card.morning ? 'Morning report' : card.report && card.report.atEase ? 'At ease' : 'Report, recruit!' }}</h2><BrandMark inline /></div></div>
         <div class="bb-r"><VoToggle @unmuted="speak" /><button class="bb-x" aria-label="Close" @click="close">✕</button></div>
       </div>
-      <p v-if="card.alert" class="bb-alert" data-test="bb-overdue">{{ card.alert }}</p>
+      <p v-if="card.alert && !card.report" class="bb-alert" data-test="bb-overdue">{{ card.alert }}</p>
+      <div v-if="card.report" class="bb-rep" data-test="bb-report">
+        <div class="bb-stats"><span v-if="card.report.stats.overdue">⏰ {{ card.report.stats.overdue }} overdue</span><span>📋 {{ card.report.stats.left }}/{{ card.report.stats.total }} left</span>
+          <span v-if="card.report.stats.target">⭐ {{ card.report.stats.earned }}/{{ card.report.stats.target }} pts</span><span>🔥 {{ card.report.stats.streak }}</span><span v-if="card.report.stats.lockLeft">🔒 {{ card.report.stats.lockLeft }} left</span></div>
+        <p v-for="(l, i) in card.report.lines" :key="i" class="bb-line" :class="'bb-line--' + l.kind">{{ l.text }}</p>
+        <div v-if="card.report.prompts.length" class="bb-acts">
+          <button v-for="p in card.report.prompts" :key="p.id" type="button" class="bb-act" :data-test="'bb-act-' + p.id" @click="act(p)">{{ p.label }}</button>
+        </div>
+      </div>
       <template v-if="card.morning">
         <svg class="bb-chart" :viewBox="`0 0 ${W} ${H}`" role="img" :aria-label="`Last 7 days: ${card.week.map(d => d.label + ' ' + d.done + ' of ' + d.planned).join(', ')}`">
           <line v-for="g in 3" :key="g" :x1="0" :x2="W" :y1="H - 18 - (g * (H - 34)) / 3" :y2="H - 18 - (g * (H - 34)) / 3" stroke="#16264A" />
@@ -26,6 +34,7 @@
       <button v-else-if="!spoke" class="bb-play" @click="speak">▶ Hear the boss</button>
     </section>
   </div>
+  <transition name="bb-ack"><div v-if="ack" class="bb-ackt" role="status" aria-live="polite" @click="ack = ''"><BossSergeant :size="40" :badge="true" /><span>{{ ack }}</span></div></transition>
 </template>
 
 <script setup>
@@ -36,7 +45,11 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '@/firebaseConfig';
 import VoToggle from './VoToggle.vue';
-import { playFlow, stopVoice, unlockVoice, voMuted as muted } from '@/composables/useVoiceover';
+import BossSergeant from '@/components/boss/BossSergeant.vue';
+import { buildReport, ackLine } from '@/utils/sergeantReport';
+import { useEightHour } from '@/composables/useEightHour';
+import { useRouter } from 'vue-router';
+import { playFlow, stopVoice, unlockVoice, speakLive, voMuted as muted, voSpeaking as speaking } from '@/composables/useVoiceover';
 import { SCRIPTS } from '@/voiceover/scripts';
 import { loadDayTasks } from '@/composables/useDayPersistence';
 import { getMode } from '@/utils/appMode';
@@ -45,7 +58,7 @@ import { overdueTasks, overdueLine, recapLine, planLine, morningDue, overdueDue,
 
 const DAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const W = 320; const H = 150; const bw = 28;
-const route = useRoute(); const card = ref(null); const spoke = ref(false); let busy = false; let max = 1;
+const route = useRoute(); const router = useRouter(); const eh = useEightHour(); const ack = ref(''); let ackT = null; const card = ref(null); const spoke = ref(false); let busy = false; let max = 1;
 const bx = (i) => 10 + i * ((W - 20) / 7) + ((W - 20) / 7 - bw) / 2;
 const bh = (v) => (v ? Math.max(3, (v / max) * (H - 40)) : 0); const by = (v) => H - 18 - bh(v);
 const SKIP = /^\/(onboarding|welcome|login|landing|m\/|paywall|privacy|terms|support)/;
@@ -71,7 +84,17 @@ async function run() {
     const overdue = mode === 'manager' ? [] : overdueTasks(todayTasks, now, ud.onboarding && ud.onboarding.deadline);
     const alert = wantOverdue ? overdueLine({ mode, overdue, people }) : '';
     if (wantOverdue) ls(kO, String(now.getTime()));
-    if (!wantMorning && !alert) return;
+    // Drill-sergeant report on open/resume (same 30-min throttle as the overdue alert).
+    let report = null;
+    if (wantOverdue && mode !== 'manager') {
+      const sd0 = await getDoc(doc(db, 'streaks', u.uid)).then((s) => (s.exists() ? s.data() : {})).catch(() => ({}));
+      const lk = eh.lock.value; const tgt = eh.data.value && eh.data.value.lock ? eh.data.value.lock : {};
+      const earned = todayTasks.filter((t) => t.completed).reduce((s, t) => s + (Number(t.points) || 0), 0);
+      report = buildReport({ tasks: todayTasks, now, nowMs: eh.nowMs(), deadline: ud.onboarding && ud.onboarding.deadline, phase: eh.phase.value,
+        lock: lk ? { startMs: lk.startMs, endMs: lk.endMs } : null, earned: Number(tgt.earned) || earned, target: Number(tgt.target) || 0, streak: Number(sd0.streak) || 0 });
+      if (!report.lines.length) report = null;
+    }
+    if (!wantMorning && !alert && !report) return;
     let morning = null;
     if (wantMorning) {
       const week = dates.map((d, i) => { const t = lists[i] || []; const done = t.filter((x) => x.completed);
@@ -91,7 +114,8 @@ async function run() {
     }
     max = morning ? max : 1;
     // One voice flow: overdue alert first, then (first time only) the app explanation MP3, then yesterday's recap + today's plan.
-    card.value = { alert, morning: !!morning, ...(morning || {}), morningSpeech: morning ? morning.speech : '', speech: [alert, morning && morning.speech].filter(Boolean).join(' ') };
+    const lead = report ? report.speech : alert;
+    card.value = { alert, report, lead, morning: !!morning, ...(morning || {}), morningSpeech: morning ? morning.speech : '', speech: [lead, morning && morning.speech].filter(Boolean).join(' ') };
     spoke.value = false; if (!muted.value) spoke.value = speak(false); // works once audio was unlocked by a tap; otherwise "Hear the boss"
   } catch (e) { console.error('briefing', e.message); } finally { busy = false; }
 }
@@ -99,19 +123,31 @@ const markIntro = () => { const u = auth.currentUser; if (u && card.value && car
 function speak(tap = true) {
   if (tap) unlockVoice(); const c = card.value; if (!c) return false;
   // Order: overdue alert (live) -> app explanation (bundled MP3, first report only) -> yesterday's recap + today's plan (live).
-  const ok = playFlow({ before: c.alert || '', key: c.introKey || '', text: c.morningSpeech || '' });
+  const ok = playFlow({ before: c.lead || '', key: c.introKey || '', text: c.morningSpeech || '' });
   if (ok) markIntro(); if (tap) spoke.value = ok; return ok;
 }
 const close = () => { stopVoice(); markIntro(); card.value = null; }; // muted users still saw the intro text on the card
+// Report buttons: Home performs the real action (start-day prompt, reminder modal, task detail).
+function act(p) {
+  close();
+  const fire = () => window.dispatchEvent(new window.CustomEvent('cn:sergeant', { detail: { id: p.id, taskKey: p.taskKey || '' } }));
+  if (route.path !== '/home') router.push('/home').then(() => setTimeout(fire, 600)); else fire();
+}
+// Small acknowledgement when a task is completed on Home.
+const onAck = (e) => {
+  const left = e && e.detail ? Number(e.detail.left) : 1; ack.value = ackLine({ left });
+  if (!muted.value && !card.value) speakLive(ack.value);
+  clearTimeout(ackT); ackT = setTimeout(() => { ack.value = ''; }, 2600);
+};
 let unsub = null; let appSub = null;
 const onVis = () => { if (!document.hidden) run(); };
 onMounted(async () => {
   unsub = onAuthStateChanged(auth, (u) => { if (u) setTimeout(run, 1500); });
-  document.addEventListener('visibilitychange', onVis);
+  document.addEventListener('visibilitychange', onVis); window.addEventListener('cn:sergeant-ack', onAck);
   try { const { Capacitor } = await import('@capacitor/core'); if (Capacitor.isNativePlatform()) { const { App } = await import('@capacitor/app'); appSub = await App.addListener('resume', () => setTimeout(run, 500)); } } catch (e) { /* web */ }
 });
 watch(() => route.path, () => setTimeout(run, 800)); // e.g. right after onboarding lands on Home -> first report (intro)
-onBeforeUnmount(() => { unsub && unsub(); document.removeEventListener('visibilitychange', onVis); appSub && appSub.remove && appSub.remove(); stopVoice(); });
+onBeforeUnmount(() => { window.removeEventListener('cn:sergeant-ack', onAck); clearTimeout(ackT); unsub && unsub(); document.removeEventListener('visibilitychange', onVis); appSub && appSub.remove && appSub.remove(); stopVoice(); });
 </script>
 
 <style scoped>
@@ -125,4 +161,14 @@ onBeforeUnmount(() => { unsub && unsub(); document.removeEventListener('visibili
 .bb-p { margin: 8px 0 0; color: #A9B4CC; font-size: 14px; } .bb-p b { color: #fff; }
 .bb-muted { margin: 10px 0 0; font-size: 13px; color: #A9B4CC; }
 .bb-play { margin-top: 12px; width: 100%; min-height: 46px; border: 0; border-radius: 14px; font-weight: 800; color: #fff; background: linear-gradient(90deg,#1E5BFF,#3C8CFF); cursor: pointer; }
+.bb-who { display: flex; align-items: center; gap: 10px; }
+.bb-rep { margin-top: 10px; } .bb-line { margin: 8px 0 0; font-size: 15px; font-weight: 700; color: #F2F5FC; letter-spacing: .01em; }
+.bb-line--overdue { color: #FFD2CA; } .bb-line--atease { color: #2BD67B; } .bb-line--streak, .bb-line--points { color: #A9B4CC; font-weight: 600; }
+.bb-acts { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.bb-act { min-height: 44px; border-radius: 14px; border: 1px solid #2A3C66; background: #10204A; color: #fff; font-weight: 800; cursor: pointer; }
+.bb-act:first-child { border: 0; background: linear-gradient(90deg,#1E5BFF,#5B9BFF); }
+.bb-ackt { position: fixed; z-index: 8999; left: 50%; transform: translateX(-50%); bottom: calc(84px + env(safe-area-inset-bottom)); display: flex; align-items: center; gap: 10px;
+  padding: 6px 14px 6px 6px; border-radius: 999px; background: #0C1630; border: 1px solid #5B9BFF; color: #fff; font-weight: 800; font-size: 14px; box-shadow: 0 10px 30px rgba(0,0,0,.45); }
+.bb-ack-enter-active, .bb-ack-leave-active { transition: opacity .2s, transform .2s; } .bb-ack-enter-from, .bb-ack-leave-to { opacity: 0; transform: translate(-50%, 10px); }
+@media (prefers-reduced-motion: reduce) { .bb-ack-enter-active, .bb-ack-leave-active { transition: none; } }
 </style>
