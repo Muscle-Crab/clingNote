@@ -1,3 +1,5 @@
+// App lock is off for this build: compiled only when CLING_APP_LOCK is defined (needs the Family Controls entitlement). See docs/APP_LOCKING_SETUP.md.
+#if CLING_APP_LOCK
 import Foundation
 import Capacitor
 import SwiftUI
@@ -124,3 +126,5 @@ struct PickerView: View {
         }
     }
 }
+
+#endif

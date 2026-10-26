@@ -3403,7 +3403,7 @@ const assistantExecutor = createAssistantExecutor({
     const p = places[place]; const r = await clingNative.addGeofence({ id: `${place}-${Date.now()}`, lat: p.lat, lng: p.lng, radius: 150, body: title, repeats: false });
     return r.error ? { error: r.error } : { ok: true }; },
   appLock: async (action) => {
-    if (!lockAvailable()) return { error: 'App lock needs the iPhone app (iOS 16+).' };
+    if (!lockAvailable()) return { error: 'App lock is not available in this version yet.' };
     if (action === 'pick_apps') { const a0 = await clingLock.requestAuthorization(); if (a0.status !== 'approved') return { error: 'Screen Time permission was not given.' }; const r = await clingLock.pickApps(); if (r.saved) { try { localStorage.setItem(LOCK_PREF, '1'); } catch (e) { /* ignore */ } } syncAppLock(); return { saved: !!r.saved, apps: r.apps || 0 }; }
     if (action === 'turn_off') { try { localStorage.removeItem(LOCK_PREF); } catch (e) { /* ignore */ } await clingLock.stopLock(); return { summary: 'App lock off' }; }
     if (action === 'emergency_unlock') { await clingLock.stopLock(); const day = localDateStr(); let pen = []; try { pen = JSON.parse(localStorage.getItem(PENALTY_KEY) || '[]'); } catch (e) { /* ignore */ }

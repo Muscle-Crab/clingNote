@@ -12,8 +12,6 @@
 	<array>
 		<string>group.app.clingnote.ios</string>
 	</array>
-	<key>com.apple.developer.family-controls</key>
-	<true/>
 	<key>com.apple.developer.associated-domains</key>
 	<array>
 		<string>applinks:clingnot.netlify.app</string>

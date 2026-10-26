@@ -85,7 +85,9 @@ class AppBridgeViewController: CAPBridgeViewController {
     override open func capacitorDidLoad() {
         bridge?.registerPluginInstance(ClingWidgetPlugin())
         bridge?.registerPluginInstance(ClingVoicePlugin())
+        #if CLING_APP_LOCK
         bridge?.registerPluginInstance(ClingLockPlugin())
+        #endif
         bridge?.registerPluginInstance(ClingNativePlugin())
     }
 }
