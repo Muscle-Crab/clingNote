@@ -281,7 +281,7 @@ import { scheduleNotification, sendNotificationToPlayer, linkPushUser } from '@/
 import { speak } from '@/composables/useSpeech';
 import { completionPercentage, computeTimeStats, daysLeftInYearFrom, heroTitleFor } from '@/utils/dayStats';
 import { shouldAutoComplete, resetSubtasks } from '@/utils/subtasks';
-import { buildScheduledEntry, buildRecurringTemplate, isTaskVisibleOn, futureOf, dueOf, countsByDate, withWeekDates, isValidDate, rescheduleEntry, templatesOf } from '@/utils/scheduling';
+import { deferredDateFor, buildScheduledEntry, buildRecurringTemplate, isTaskVisibleOn, futureOf, dueOf, countsByDate, withWeekDates, isValidDate, rescheduleEntry, templatesOf } from '@/utils/scheduling';
 import { mutateScheduled, materializeDueForToday } from '@/composables/useScheduledTasks';
 import { blankSchedule, validateSchedule, scheduleOfTask, applyTaskSchedule, deleteTaskScope, deleteEntry, editEntry } from '@/utils/schedEdit';
 import { syncScheduledNotifications } from '@/composables/useSchedNotifications';
@@ -1794,6 +1794,9 @@ const addNewTask = async () => {
     return false;
   }
 
+  // A one-time task with a future due date belongs to that date, not to today's day doc (route it through the scheduler).
+  { const fut = !newTask.value.sched?.on && newTask.value.type !== 'recurring' && !(newTask.value.selectedDays || []).length ? deferredDateFor(newTask.value.dueDate, getTodayId()) : '';
+    if (fut) newTask.value = { ...newTask.value, sched: { ...blankSchedule(fut), on: true, date: fut, time: newTask.value.startTime || '' } }; }
   limitHit.value = null;
   try {
     if (!(await dailyLimitGate((newTask.value.sched?.on && newTask.value.sched.repeat === 'never' && newTask.value.sched.date) || getTodayId()))) {
@@ -2580,9 +2583,10 @@ const confirmVoiceItems = async (items) => {
         ok = r.ok; if (!ok) error.value = r.error;
       } else {
         newTask.value = { ...blankTask(), title: it.title.trim(), startTime: it.start || '', estimateMin: it.durationMin || '',
-          ...(it.type === 'schedule' ? { sched: { ...blankSchedule(it.date), on: true, date: it.date, time: it.start || '09:00' } } : {}) };
+          ...(it.type === 'schedule' ? { sched: { ...blankSchedule(it.date), on: true, date: it.date, time: it.start || '09:00' } }
+            : deferredDateFor(it.date, getTodayId()) ? { sched: { ...blankSchedule(it.date), on: true, date: it.date, time: it.start || '' } } : {}) };
         capOverride.value = true;
-        ok = !!(await addNewTask()) && (it.type === 'schedule' || (await lastAddPersist));
+        ok = !!(await addNewTask()) && (it.type === 'schedule' || !!deferredDateFor(it.date, getTodayId()) || (await lastAddPersist));
         capOverride.value = false;
       }
       if (!ok) { voiceError.value = `${it.title}: ${error.value || 'could not be saved.'}`; break; }
@@ -3356,10 +3360,11 @@ const assistantExecutor = createAssistantExecutor({
     if (it.type === 'reminder') { const r = await saveReminder({ title: it.title, remindAt: it.remindAt }, { schedule: scheduleLocal }); return { ok: r.ok, error: r.error }; }
     newTask.value = { ...blankTask(), title: it.title, startTime: it.start || '', estimateMin: it.durationMin || '', priority: it.priority || newTask.value.priority,
       aiPoints: it.points || 0, aiComplexity: it.complexity || 0,
-      ...(it.type === 'schedule' ? { sched: { ...blankSchedule(it.date), on: true, date: it.date, time: it.start || '09:00', ...(it.repeat ? { repeat: it.repeat, days: it.days || [] } : {}) } } : {}) };
+      ...(it.type === 'schedule' ? { sched: { ...blankSchedule(it.date), on: true, date: it.date, time: it.start || '09:00', ...(it.repeat ? { repeat: it.repeat, days: it.days || [] } : {}) } }
+        : deferredDateFor(it.date, getTodayId()) ? { sched: { ...blankSchedule(it.date), on: true, date: it.date, time: it.start || '' } } : {}) };
     capOverride.value = true; agentAdd.value = true;
     try {
-      const ok = !!(await addNewTask()) && (it.type === 'schedule' || (await lastAddPersist));
+      const ok = !!(await addNewTask()) && (it.type === 'schedule' || !!deferredDateFor(it.date, getTodayId()) || (await lastAddPersist));
       const lim = limitHit.value;
       return ok ? { ok: true } : { ok: false, error: lim ? `Daily limit reached (${lim.limit}/day).` : error.value || 'not saved', limit: !!lim };
     } finally { capOverride.value = false; agentAdd.value = false; newTask.value = blankTask(); }
