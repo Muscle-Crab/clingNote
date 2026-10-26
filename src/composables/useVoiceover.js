@@ -4,6 +4,7 @@
 // after which later src swaps can play without a fresh gesture. Mute is remembered in localStorage.
 import { ref } from 'vue';
 import { SCRIPTS } from '@/voiceover/scripts';
+import { ClingVoice as _CV, nativeVoiceAvailable as _nva } from '@/utils/clingVoice';
 
 const MUTE_KEY = 'clingnote.voMuted.v1';
 const readMuted = () => { try { return localStorage.getItem(MUTE_KEY) === '1'; } catch (e) { return false; } };
@@ -15,26 +16,56 @@ const base = (typeof process !== 'undefined' && process.env && process.env.BASE_
 const el = () => { if (!audio && typeof Audio !== 'undefined') { audio = new Audio(); audio.preload = 'auto'; audio.addEventListener('ended', () => { voSpeaking.value = false; }); } return audio; };
 const synth = () => (typeof window !== 'undefined' && window.speechSynthesis) || null;
 
-// Prefer natural/neural voices (iOS "Enhanced"/"Premium", Google, Microsoft "Natural") over the compact default.
-export function bestVoice() {
-  const s = synth(); if (!s) return null;
-  const vs = s.getVoices().filter((v) => /^en[-_]US/i.test(v.lang) || /^en/i.test(v.lang));
-  const score = (v) => (/premium/i.test(v.name) ? 50 : 0) + (/enhanced/i.test(v.name) ? 40 : 0) + (/natural|neural/i.test(v.name) ? 45 : 0)
-    + (/google/i.test(v.name) ? 20 : 0) + (/^en[-_]US/i.test(v.lang) ? 10 : 0) + (/(aaron|evan|nathan|tom|alex|guy|andrew|daniel)/i.test(v.name) ? 5 : 0);
-  return vs.sort((a, b) => score(b) - score(a))[0] || null;
+// Drill-sergeant delivery: deep, forceful, clipped. Natural male voice; pitch lowered, rate a touch brisk, short pause between barked lines.
+export const SGT_PITCH = 0.78; export const SGT_RATE = 1.06; // native: multiplier of AVSpeechUtteranceDefaultSpeechRate
+export const MALE_VOICES = ['evan', 'nathan', 'aaron', 'tom', 'reed', 'alex', 'fred'];
+const FEMALE = /(samantha|ava|allison|susan|victoria|karen|moira|tessa|fiona|zoe|nicky|joelle|serena|kate|female|woman|zira|aria|jenny|libby|sonia|emma|michelle)/i;
+// Web: best male English voice (same names as iOS: Premium > Enhanced; then any male en-US; last resort any en-US).
+export function bestVoice(list) {
+  const s = synth(); const all = list || (s ? s.getVoices() : []); if (!all.length) return null;
+  const en = all.filter((v) => /^en/i.test(v.lang));
+  const nameRank = (v) => { const n = String(v.name).toLowerCase(); const i = MALE_VOICES.findIndex((m) => n.startsWith(m) || n.includes(` ${m}`) || n.includes(`(${m}`)); return i < 0 ? 0 : MALE_VOICES.length - i; };
+  const male = (v) => nameRank(v) > 0 || /\b(male|man|guy|david|mark|george|ryan|andrew|christopher|eric|brian|daniel|thomas|davis|jason|tony|roger|steffan)\b/i.test(v.name);
+  const score = (v) => (/premium/i.test(v.name) ? 300 : 0) + (/enhanced|natural|neural|online/i.test(v.name) ? 200 : 0) + nameRank(v) * 20 + (male(v) && !FEMALE.test(v.name) ? 100 : 0)
+    + (/^en[-_]US/i.test(v.lang) ? 10 : 0) - (FEMALE.test(v.name) ? 500 : 0);
+  return [...en].sort((a, b) => score(b) - score(a))[0] || null;
 }
+// Short, punchy lines: one per sentence (long sentences split at commas).
+export function barkLines(text) {
+  return String(text || '').replace(/\s+/g, ' ').split(/(?<=[.!?])\s+/).flatMap((x) => (x.length > 90 ? x.split(/,\s+/) : [x])).map((x) => x.trim()).filter(Boolean);
+}
+let nativeVoice = null; // lazy: ClingVoice plugin (iOS AVSpeechSynthesizer)
+const native = () => { if (nativeVoice === null) { try { nativeVoice = _nva() ? _CV : false; } catch (e) { nativeVoice = false; } } return nativeVoice; };
+export const voiceQuality = ref(''); // 'premium' | 'enhanced' | 'default' (iOS), '' unknown
+export async function loadVoiceInfo() { const n = native(); if (!n) return null; try { const i = await n.voiceInfo(); voiceQuality.value = i.quality || ''; return i; } catch (e) { return null; } }
 
 export function stopVoice() {
   token++; voSpeaking.value = false;
   try { const a = audio; if (a) { a.pause(); a.currentTime = 0; } } catch (e) { /* ignore */ }
   try { synth()?.cancel(); } catch (e) { /* ignore */ }
+  try { const n = native(); if (n) n.stop().catch(() => {}); } catch (e) { /* ignore */ }
 }
 
 export function speakLive(text, { onEnd } = {}) {
   if (voMuted.value || !text) return false;
+  const lines = barkLines(text); if (!lines.length) return false;
+  const n = native();
+  if (n) {
+    const my = token; voSpeaking.value = true;
+    n.speak({ lines, pitch: SGT_PITCH, rate: SGT_RATE }).then(() => { if (my === token) { voSpeaking.value = false; onEnd && onEnd(); } }).catch(() => { voSpeaking.value = false; });
+    return true;
+  }
   const s = synth(); if (!s || typeof SpeechSynthesisUtterance === 'undefined') return false;
-  try { s.cancel(); const u = new SpeechSynthesisUtterance(text); const v = bestVoice(); if (v) { u.voice = v; u.lang = v.lang; }
-    u.rate = 1.02; u.pitch = 0.95; voSpeaking.value = true; u.onend = () => { voSpeaking.value = false; onEnd && onEnd(); }; s.speak(u); return true; } catch (e) { return false; }
+  try {
+    s.cancel(); const v = bestVoice(); const my = token; voSpeaking.value = true;
+    lines.forEach((line, i) => {
+      const u = new SpeechSynthesisUtterance(line); if (v) { u.voice = v; u.lang = v.lang; }
+      u.rate = SGT_RATE; u.pitch = SGT_PITCH; u.volume = 1;
+      if (i === lines.length - 1) u.onend = () => { if (my === token) { voSpeaking.value = false; onEnd && onEnd(); } };
+      s.speak(u);
+    });
+    return true;
+  } catch (e) { return false; }
 }
 
 // Play a scripted segment (stops anything already playing). Returns false if muted / not yet unlocked.

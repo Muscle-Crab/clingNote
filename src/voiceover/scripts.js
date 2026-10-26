@@ -1,7 +1,7 @@
 // All voiceover narration lives here. Edit, then run `npm run voiceover` to regenerate public/voiceover/*.mp3 (edge-tts, no API key).
 // Voice: confident, friendly boss. Short punchy lines. Each SCRIPTS key = one bundled MP3.
 // Dynamic lines (morning report, overdue alerts) are built in liveLines.js and spoken with speechSynthesis (best available voice).
-export const VOICE = { name: 'en-US-AndrewNeural', rate: '+4%', pitch: '-2Hz' };
+export const VOICE = { name: 'en-US-GuyNeural', rate: '+8%', pitch: '-14Hz' }; // gruff drill-sergeant delivery (male, deep, brisk)
 
 export const SCRIPTS = {
   // ---- Onboarding (every user; *_manager variants when arriving via a manager link / in Manager mode) ----

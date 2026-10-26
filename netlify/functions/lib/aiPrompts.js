@@ -41,6 +41,16 @@ Return in JSON format like:
 }`;
     return { costsCredit: false, body: { model: 'gpt-4o-mini', temperature: 0.7, max_tokens: 2000, messages: [{ role: 'user', content: prompt }] } };
   }
+  if (task === 'voice-intent') {
+    // Spoken utterance -> JSON items. The client validates the result (src/utils/voiceIntent.js normalizeItems) and falls back to its local parser.
+    const text = clip(input.text, 500); const nowLocal = clip(input.now, 25); const tz = clip(input.tz, 60);
+    if (!text) throw Object.assign(new Error('Empty text'), { status: 400 });
+    const sys = `You turn one spoken sentence into planner items. The user's local time is ${nowLocal || 'unknown'} (${tz || 'local'} timezone).
+Return ONLY JSON: {"items":[{"type":"task|reminder|schedule","title":"short imperative title","date":"YYYY-MM-DD","start":"HH:MM or empty","durationMin":0,"remindAt":"YYYY-MM-DDTHH:MM or empty"}]}
+Rules: "remind me"/"don't forget" or an action at a clock time without a length = reminder (remindAt required). "schedule"/"block"/"book" or a time range or length on a day = schedule (start + durationMin). Otherwise task.
+A time already past today with no date means tomorrow. Morning 09:00, after lunch 13:00, afternoon 15:00, evening 18:00 (3h block), tonight 20:00. Split several requests into several items. Never invent items.`;
+    return { costsCredit: false, body: { model: 'gpt-4o-mini', temperature: 0, max_tokens: 600, response_format: { type: 'json_object' }, messages: [{ role: 'system', content: sys }, { role: 'user', content: text }] } };
+  }
   throw Object.assign(new Error('Unknown task'), { status: 400 });
 };
 

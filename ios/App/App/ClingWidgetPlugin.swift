@@ -84,5 +84,6 @@ public class ClingWidgetPlugin: CAPPlugin, CAPBridgedPlugin {
 class AppBridgeViewController: CAPBridgeViewController {
     override open func capacitorDidLoad() {
         bridge?.registerPluginInstance(ClingWidgetPlugin())
+        bridge?.registerPluginInstance(ClingVoicePlugin())
     }
 }

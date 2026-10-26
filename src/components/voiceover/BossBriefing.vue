@@ -32,6 +32,7 @@
       </template>
       <p v-if="muted" class="bb-muted" data-test="bb-muted-banner">🔇 Voice is off. Tap 🔊 to hear the boss.</p>
       <button v-else-if="!spoke" class="bb-play" @click="speak">▶ Hear the boss</button>
+      <p v-if="voiceTip" class="bb-p bb-tip" data-test="bb-voice-tip">🎙️ <b>Make the boss sound real:</b> on your iPhone open Settings › Accessibility › Spoken Content › Voices › English, download <b>Evan (Enhanced)</b> or <b>Nathan (Enhanced)</b>. <button type="button" class="bb-tipx" @click="dismissTip">Got it</button></p>
     </section>
   </div>
   <transition name="bb-ack"><div v-if="ack" class="bb-ackt" role="status" aria-live="polite" @click="ack = ''"><BossSergeant :size="40" :badge="true" /><span>{{ ack }}</span></div></transition>
@@ -39,7 +40,7 @@
 
 <script setup>
 import BrandMark from '@/components/brand/BrandMark.vue';
-import { ref, watch, onMounted, onBeforeUnmount } from 'vue';
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
 import { useRoute } from 'vue-router';
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
@@ -49,7 +50,13 @@ import BossSergeant from '@/components/boss/BossSergeant.vue';
 import { buildReport, ackLine } from '@/utils/sergeantReport';
 import { useEightHour } from '@/composables/useEightHour';
 import { useRouter } from 'vue-router';
-import { playFlow, stopVoice, unlockVoice, speakLive, voMuted as muted, voSpeaking as speaking } from '@/composables/useVoiceover';
+import { playFlow, stopVoice, unlockVoice, speakLive, loadVoiceInfo, voiceQuality, voMuted as muted, voSpeaking as speaking } from '@/composables/useVoiceover';
+// One-time tip: only the compact iOS voice is installed -> suggest downloading an Enhanced/Premium male voice.
+const TIP_KEY = 'clingnote.voiceTipSeen.v1';
+const tipSeen = ref((() => { try { return localStorage.getItem(TIP_KEY) === '1'; } catch (e) { return true; } })());
+const voiceTip = computed(() => !tipSeen.value && voiceQuality.value === 'default');
+const dismissTip = () => { tipSeen.value = true; try { localStorage.setItem(TIP_KEY, '1'); } catch (e) { /* ignore */ } };
+loadVoiceInfo();
 import { SCRIPTS } from '@/voiceover/scripts';
 import { loadDayTasks } from '@/composables/useDayPersistence';
 import { getMode } from '@/utils/appMode';
@@ -171,4 +178,6 @@ onBeforeUnmount(() => { window.removeEventListener('cn:sergeant-ack', onAck); cl
   padding: 6px 14px 6px 6px; border-radius: 999px; background: #0C1630; border: 1px solid #5B9BFF; color: #fff; font-weight: 800; font-size: 14px; box-shadow: 0 10px 30px rgba(0,0,0,.45); }
 .bb-ack-enter-active, .bb-ack-leave-active { transition: opacity .2s, transform .2s; } .bb-ack-enter-from, .bb-ack-leave-to { opacity: 0; transform: translate(-50%, 10px); }
 @media (prefers-reduced-motion: reduce) { .bb-ack-enter-active, .bb-ack-leave-active { transition: none; } }
+.bb-tip { font-size: 12px; opacity: .9; }
+.bb-tipx { margin-left: 6px; background: none; border: 1px solid currentColor; border-radius: 8px; color: inherit; font-size: 11px; padding: 1px 8px; }
 </style>

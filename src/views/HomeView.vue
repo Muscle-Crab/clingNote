@@ -116,7 +116,7 @@
       <ReminderModal v-if="isModalOpen" :reminder="reminder" :task-title="selectedTaskTitle" @close="closeModal" @submit="handleAddReminder" />
 
 
-      <VoiceModal v-if="voiceOpen" :transcript="liveTranscript" :supported="voiceSupported" :capability="voiceCap" :error="voiceError" :hint="voiceHint" :added="voiceAdded" @undo="undoVoiceTask" @cancel="cancelVoiceInput" />
+      <VoiceModal v-if="voiceOpen" :transcript="liveTranscript" :supported="voiceSupported" :capability="voiceCap" :error="voiceError" :hint="voiceHint" :added="voiceAdded" :items="voiceItems" :busy="voiceBusy" :source="voiceSource" @undo="undoVoiceTask" @cancel="cancelVoiceInput" @confirm="confirmVoiceItems" @relisten="relistenVoice" />
       <div v-if="!voiceOpen && voiceAdded.some((e) => e.undoUntil > nowTick)" class="voice-toasts" role="status">
         <div v-for="e in voiceAdded.filter((x) => x.undoUntil > nowTick)" :key="e.id" class="voice-toast">🎙 Added “{{ e.title }}” <button type="button" @click="undoVoiceTask(e)">Undo</button></div>
       </div>
@@ -194,7 +194,7 @@
       <ScheduledList v-if="userId" :tasks="futureScheduled" :today-str="todayStr" :error="scheduledError" :series="templatesOf(scheduledList)" @edit="editScheduledEntry"
                      @move-today="moveScheduledToToday" @update="updateScheduledDate" @delete="deleteScheduled" />
 
-      <FabButtons :show-add="false" :user-id="userId" :listening="listening" :show-voice="!voiceBlocked" @add="onAddClick" @voice="startVoiceInput" />
+      <FabButtons :show-add="false" :user-id="userId" :listening="listening" :show-voice="!voiceBlocked || nativeVoiceIn" @add="onAddClick" @voice="startVoiceInput" />
 
 
     </div>
@@ -227,7 +227,7 @@ import { buildRecap, reportDue, prevDay } from '@/utils/dailyReport';
 import { monthKey, prevMonthKey } from '@/utils/ranking';
 import { applyTaskToggle, evaluateStreak, localDateStr, dayDiff, ALLOWED_GAP_DAYS, DAILY_STREAK_MIN, capStreak, lostReason } from '@/utils/streak';
 import { askAi } from '@/composables/useAi';
-import { ensureAiConsent } from '@/composables/useAiConsent';
+import { ensureAiConsent, hasAiConsent } from '@/composables/useAiConsent';
 import { useRouter as _useRouter } from 'vue-router';
 import { requirePro, loadUserDoc, rcProActive } from '@/composables/usePro';
 import { isPro as isProUser } from '@/utils/pro';
@@ -313,6 +313,10 @@ import TransferModal from '@/components/home/TransferModal.vue';
 import VoiceModal from '@/components/home/VoiceModal.vue';
 import { ugcHidden, voiceInputBlocked, isNativeIOS } from '@/utils/platform';
 import { splitSpokenTasks, voiceCapability, UNDO_MS } from '@/utils/voiceSplit';
+import { interpretSpeech } from '@/utils/voiceInterpret';
+import { raisedPlan } from '@/utils/planRaise';
+import { saveReminder } from '@/utils/reminders';
+import { startNativeSpeech, nativeSpeechAvailable } from '@/composables/useNativeSpeech';
 import WontDoModal from '@/components/home/WontDoModal.vue';
 import WorkoutModal from '@/components/home/WorkoutModal.vue';
 import YouTubeModal from '@/components/home/YouTubeModal.vue';
@@ -1791,8 +1795,11 @@ const addNewTask = async () => {
 
   // 8-hour lock: nothing can be added to the locked day (including repeating copies); before the countdown the plan count is the cap
   // (adds ARE allowed during the locked window; they are appended so the locked slots never move. Deletes stay blocked.)
+  // Locked-in plan full (before the countdown): adding just works and raises the required count by one (no prompt, no block).
+  // Previously this refused the add with "Raise the task count in the 8-hour card first", the reported bug.
+  let planBump = null;
   if (selectedDays.some((d) => d.day === days[selectedDayIndex.value].day) && isToday(selectedDayIndex.value) && !isDayLocked(days[selectedDayIndex.value].day) && planFull()) {
-    error.value = `Your plan is ${eh.plan.value.taskCount} task${eh.plan.value.taskCount === 1 ? '' : 's'} today. Raise the task count in the 8-hour card first (only possible before the countdown starts).`; return false;
+    planBump = raisedPlan(eh.plan.value, countableIndexes(selectedDayRoutine.value || [], eh.phaseInfo.value.dayKey || '').length, 1);
   }
 
   const labels =
@@ -1870,6 +1877,7 @@ const addNewTask = async () => {
     fetchUserName(userId.value).then((n) => n && sendNotificationToPlayer(n, 'created')).catch(() => {});
     return true;
   })());
+  if (planBump) lastAddPersist.then((ok) => ok && eh.savePlan(planBump)).catch((e) => console.warn('plan raise failed', e && e.message)); // required count +1 once the task is saved
   return true;
 };
 let lastAddPersist = Promise.resolve(true);
@@ -2458,10 +2466,12 @@ let voiceAddFailed = false; // the last spoken task was refused (limit, strict b
 const liveTranscript = ref('');
 const voiceBlocked = voiceInputBlocked(); // iOS shell: WKWebView has no SpeechRecognition -> mic button hidden
 const hideUgc = ugcHidden();
-const voiceCap = typeof window !== 'undefined' && !voiceBlocked ? voiceCapability(window, navigator) : 'none';
+const nativeVoiceIn = nativeSpeechAvailable(); // iOS app: on-device SFSpeechRecognizer via the local ClingVoice plugin
+let nativeStop = null;
+const voiceCap = nativeVoiceIn ? 'native' : typeof window !== 'undefined' && !voiceBlocked ? voiceCapability(window, navigator) : 'none';
 const voiceSupported = voiceCap !== 'none';
 // Initialize SpeechRecognition only if supported (every property access stays inside this guard)
-if (voiceSupported) {
+if (voiceSupported && !nativeVoiceIn) {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   recognition = new SpeechRecognition();
   recognition.lang = (typeof navigator !== 'undefined' && navigator.language) || 'en-US';
@@ -2484,7 +2494,7 @@ if (voiceSupported) {
     // iOS Safari often ends without flagging a result final: use what we heard instead of dropping it.
     if (voiceOpen.value && !voiceError.value && pendingVoiceText.trim()) saveSpoken(pendingVoiceText);
     // Hands-free: restart after each pause until the user taps Stop (iOS ends after every utterance).
-    if (voiceOpen.value && !voiceError.value && voiceSupported) setTimeout(() => { if (voiceOpen.value && !listening.value) { try { recognition.start(); } catch (e) { /* still stopping */ } } }, 250);
+    if (voiceOpen.value && !voiceError.value && voiceSupported && !voiceItems.value.length && !voiceBusy.value) setTimeout(() => { if (voiceOpen.value && !listening.value) { try { recognition.start(); } catch (e) { /* still stopping */ } } }, 250);
   };
   recognition.onresult = (event) => {
     let interim = '';
@@ -2502,12 +2512,54 @@ if (voiceSupported) {
 // Hands-free capture: every finished phrase is split ("and then" / "next") and each part saved immediately, with a 5 s undo.
 const voiceAdded = ref([]); // [{ id, title, createdAt, dayName, undoUntil }]
 const voiceQueue = [];
-const saveSpoken = (text) => {
+// Every finished phrase (web webkitSpeechRecognition or native SFSpeechRecognizer) is interpreted into items
+// (tasks / reminders / scheduled blocks) and shown on the confirm sheet; nothing is saved until the user confirms.
+const voiceItems = ref([]); const voiceBusy = ref(false); const voiceSource = ref('');
+const saveSpoken = async (text) => {
   pendingVoiceText = '';
-  liveTranscript.value = '';
-  splitSpokenTasks(text).forEach((t) => voiceQueue.push(t));
-  drainVoiceQueue();
+  if (!voiceOpen.value || !String(text || '').trim() || voiceBusy.value || voiceItems.value.length) return;
+  liveTranscript.value = text.trim();
+  if (recognition) { try { recognition.stop(); } catch (e) { /* not started */ } }
+  voiceBusy.value = true;
+  try {
+    const u = auth.currentUser;
+    // AI only for Pro users who already allowed AI (no consent modal mid-dictation); otherwise the on-device parser.
+    const aiOk = !!(u && rcProActive(u.uid)) && await hasAiConsent();
+    const ask = aiOk ? async (task, input) => ((await ensureAiConsent()) ? askAi(task, input) : null) : null;
+    const { items, source } = await interpretSpeech(text, { ask });
+    voiceSource.value = source;
+    voiceItems.value = items.length ? items : splitSpokenTasks(text).map((title) => ({ type: 'task', title, date: getTodayId(), start: '', durationMin: 0, remindAt: '' }));
+    if (!voiceItems.value.length) voiceError.value = "Didn't catch a task. Try again.";
+  } finally { voiceBusy.value = false; }
 };
+// Confirmed items go through the normal flows: addNewTask (daily limit, strict boss, points) for tasks and scheduled blocks,
+// saveReminder (device notification, not a task, no limit) for reminders.
+const confirmVoiceItems = async (items) => {
+  if (voiceBusy.value) return; voiceBusy.value = true; voiceError.value = '';
+  const done = [];
+  try {
+    for (const it of items) {
+      if (!it.title || !String(it.title).trim()) continue;
+      let ok = false;
+      if (it.type === 'reminder') {
+        const r = await saveReminder({ title: it.title.trim(), remindAt: it.remindAt }, { schedule: scheduleLocal });
+        ok = r.ok; if (!ok) error.value = r.error;
+      } else {
+        newTask.value = { ...blankTask(), title: it.title.trim(), startTime: it.start || '', estimateMin: it.durationMin || '',
+          ...(it.type === 'schedule' ? { sched: { ...blankSchedule(it.date), on: true, date: it.date, time: it.start || '09:00' } } : {}) };
+        capOverride.value = true;
+        ok = !!(await addNewTask()) && (it.type === 'schedule' || (await lastAddPersist));
+        capOverride.value = false;
+      }
+      if (!ok) { voiceError.value = `${it.title}: ${error.value || 'could not be saved.'}`; break; }
+      done.push(it);
+      voiceAdded.value = [...voiceAdded.value, { id: `${Date.now()}-${Math.random()}`, title: `${it.type === 'reminder' ? '⏰ ' : it.type === 'schedule' ? '📅 ' : ''}${it.title}`, undoUntil: 0 }];
+    }
+    voiceItems.value = voiceItems.value.filter((x) => !done.includes(x));
+    if (!voiceItems.value.length && !voiceError.value) setTimeout(() => { if (!voiceItems.value.length) cancelVoiceInput(); }, 1200);
+  } finally { voiceBusy.value = false; }
+};
+const relistenVoice = () => { voiceItems.value = []; startVoiceInput(); };
 const drainVoiceQueue = async () => {
   if (voiceSubmitting) return;
   voiceSubmitting = true;
@@ -2552,6 +2604,8 @@ const undoVoiceTask = async (entry) => {
 };
 const cancelVoiceInput = () => {
   voiceAddFailed = false;
+  voiceOpen.value = false; voiceItems.value = [];
+  if (nativeStop) { const st = nativeStop; nativeStop = null; st(); }
   if (recognition) { try { recognition.stop(); } catch (e) { /* not started */ } }
   listening.value = false;
   voiceOpen.value = false;
@@ -2568,6 +2622,12 @@ const startVoiceInput = () => {
   liveTranscript.value = '';
   voiceError.value = '';
   pendingVoiceText = '';
+  voiceItems.value = [];
+  if (nativeVoiceIn) {
+    startNativeSpeech({ onPartial: (t) => { liveTranscript.value = t; }, onFinal: (t) => saveSpoken(t), onError: (m) => { voiceError.value = m; }, onState: (v) => { listening.value = v; } })
+      .then((stop) => { nativeStop = stop; });
+    return;
+  }
   if (!recognition) return;
   try { recognition.start(); }
   catch (e) {
