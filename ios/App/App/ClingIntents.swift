@@ -9,7 +9,7 @@ struct AddTaskIntent: AppIntent {
     static var description = IntentDescription("Add a task to today's ClingNote list.")
     static var openAppWhenRun: Bool = false
     @Parameter(title: "Task") var title: String
-    @Parameter(title: "Time", default: nil) var time: Date?
+    @Parameter(title: "Time") var time: Date?
 
     func perform() async throws -> some IntentResult & ProvidesDialog {
         let clean = title.trimmingCharacters(in: .whitespacesAndNewlines).prefix(140)
