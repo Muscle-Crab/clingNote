@@ -14,4 +14,4 @@ export const writeLock = (uid, l, s) => {
   try { ls.setItem(keyFor(uid), JSON.stringify({ uid, dayKey: l.dayKey, dayName: l.dayName, startMs: l.startMs, endMs: l.endMs, hours: l.hours, local: !!l.local, wakeTime: l.wakeTime, tz: l.tz, earned: l.earned || 0, target: l.target || 0, done: l.done || 0, taskCount: l.taskCount || 0, totalPoints: l.totalPoints || 0 })); } catch (e) { /* private mode */ }
 };
 // In-memory server state belongs to one uid too: anything fetched for another uid must not decide the shutdown.
-export const lockFor = (data, dataUid, uid) => (data && data.lock && dataUid && dataUid === uid ? data.lock : null);
+export const lockFor = (data, dataUid, uid) => (data && data.lock && (dataUid || null) === (uid || null) ? data.lock : null);

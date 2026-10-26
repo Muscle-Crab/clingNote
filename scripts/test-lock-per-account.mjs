@@ -15,4 +15,5 @@ s.setItem(c.LEGACY_KEY, JSON.stringify(lockA)); ok(c.readLock('B', s) === null &
 s.setItem(c.keyFor('B'), JSON.stringify({ ...lockA, uid: 'A' })); ok(c.readLock('B', s) === null, 'entry whose uid != key owner ignored');
 ok(c.lockFor({ lock: lockA }, 'A', 'B') === null, 'in-memory A state does not shut B');
 ok(c.lockFor({ lock: lockA }, 'A', 'A') === lockA, 'in-memory A state applies to A');
+ok(c.lockFor({ lock: lockA }, 'A', null) === null && c.lockFor({ lock: lockA }, null, 'B') === null, 'A state not used after sign-out, and unowned state not used for B');
 console.log(`lock-per-account: ${n - f} passed${f ? `, ${f} FAILED` : ''}`); process.exit(f ? 1 : 0);
