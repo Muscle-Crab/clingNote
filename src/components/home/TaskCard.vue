@@ -47,9 +47,7 @@
                       <span v-if="isRepeating" class="task-repeat-badge" data-test="repeat-badge" :title="'Repeats: ' + repeatLabel" :aria-label="'Repeats ' + repeatLabel">🔁</span>
                       <span v-if="task.anonymous === true && task.visibility !== 'private'" class="task-private task-anon" data-test="anon-label" title="Anonymous for boss: managers see it as 'Anonymous task'" aria-label="Anonymous for boss">🕶️</span>
                       <span v-if="task.visibility === 'private'" class="task-private" data-test="private-label" title="Private: only you can see this task" aria-label="Private">🔒</span>
-                      <span v-if="task.timerActive" class="task-timer-left">
-                        ⏳  {{ taskTimeLeft(task, now) }}
-                      </span>
+                      <TimerRing v-if="hasRing(task)" :task="task" />
                       <span v-if="task.youtubeURL" class="task-attachment" title="Video">🎥</span>
                       <span v-if="task.imageURL" class="task-attachment" title="Image">🖼️</span>
                       <span v-if="task.fileURL" class="task-attachment" title="File">📄</span>
@@ -228,8 +226,9 @@ import { categoryOf } from '@/utils/taskCategory';
 import { STATUSES, taskKey, estimateOf, formatClock, formatDuration as formatMinutes, toMinutes } from '@/utils/taskPlanning';
 import { subtaskProgress, subtaskPercent } from '@/utils/subtasks';
 import { chipValues, fmtMin } from '@/utils/taskEstimate';
-import { taskTimeLeft } from '@/utils/dayStats';
 import { formatShortDate, formatTime } from '@/utils/dateTime';
+import TimerRing from './TimerRing.vue';
+import { hasRing } from '@/utils/timerRing';
 import { ESTIMATE_CHIPS, LOCK_HINT, TIMER_LOCK_HINT, cleanEstimate, timerStarted } from '@/utils/taskEdit';
 import SubtaskList from '@/components/home/SubtaskList.vue';
 

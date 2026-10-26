@@ -35,7 +35,7 @@ export const buildWidgetSnapshot = (tasks, { now = new Date(), dayName = '', pen
   const list = (Array.isArray(tasks) ? tasks : []).filter((t) => t && typeof t.title === 'string' && t.title.trim());
   const rows = list.map((t, i) => ({
     id: widgetTaskId(t), title: t.title.trim().slice(0, 80), est: minutesOf(t), pts: num(t.points),
-    done: t.completed === true || pending.has(widgetTaskId(t)), time: timeOf(t), _i: i,
+    done: t.completed === true || pending.has(widgetTaskId(t)), time: timeOf(t), ...timerFields(t), _i: i,
   }));
   // Open first; open tasks with a start time by time, then the rest in list order; done last in list order.
   rows.sort((a, b) => (a.done - b.done) || (!a.done && ((!a.time - !b.time) || (a.time && b.time && a.time.localeCompare(b.time)))) || (a._i - b._i));
@@ -54,6 +54,15 @@ export const buildWidgetSnapshot = (tasks, { now = new Date(), dayName = '', pen
     tasks: rows.slice(0, WIDGET_MAX_TASKS).map(({ _i, ...r }) => r),
   };
 };
+
+// Task timer for the widget countdown ring (ms since epoch, 0 = none; Swift decodes as optional). Only a timer that is set.
+function timerFields(t) {
+  const ms = (v) => { const n = v ? new Date(v).getTime() : 0; return Number.isFinite(n) && n > 0 ? n : 0; };
+  const tE = ms(t.timerEndTime);
+  let tS = ms(t.timerStartedAt);
+  if (!tS && tE && Number(t.timerDurationMinutes) > 0) tS = tE - Number(t.timerDurationMinutes) * 60000;
+  return tE && tS && tE > tS && t.completed !== true ? { tS, tE, tP: ms(t.timerPausedAt) } : {};
+}
 
 function lockFields(lock, dayName, now) {
   const ms = now.getTime();

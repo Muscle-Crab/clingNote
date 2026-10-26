@@ -28,10 +28,14 @@ struct MatchupData {
     let remaining: String       // compact "5h20m" / "45m"
     let lockedIn: String?       // elapsed since 8-hour lock start (nil = no active lock)
     let snap: WidgetSnapshot
+    let date: Date
+    let timerTask: WidgetTask?  // first open task with a timer set (running, paused or finished)
 
     init(_ e: MatchupEntry) {
         let s = e.snapshot
         snap = s
+        date = e.date
+        timerTask = s.open.first(where: { $0.isRunning(at: e.date) }) ?? s.open.first(where: { $0.hasTimer })
         let open = s.open
         home = open.first
         away = open.dropFirst().first
@@ -79,6 +83,12 @@ struct MatchupProvider: TimelineProvider {
             if d >= midnight { break }
             entries.append(MatchupEntry(date: d, snapshot: snap, lockStart: ls, lockEnd: le))
         }
+        // Timer ring color steps (every 5% of a running timer + its end) within this window.
+        let last = entries.last?.date ?? now
+        for d in timerStepDates(snap.tasks, after: now) where d <= last && d < midnight {
+            entries.append(MatchupEntry(date: d, snapshot: snap, lockStart: ls, lockEnd: le))
+        }
+        entries.sort { $0.date < $1.date }
         let next = min(midnight, (entries.last?.date ?? now).addingTimeInterval(1))
         completion(Timeline(entries: entries, policy: .after(next)))
     }
@@ -151,7 +161,15 @@ struct MatchupMediumView: View {
                     Text("\(m.left) left").font(.system(size: 10, weight: .semibold)).monospacedDigit().foregroundColor(CN.text2)
                 }
                 HStack(alignment: .center, spacing: 8) {
-                    MatchupSide(task: m.home, fallbackTop: "", fallbackBottom: "", alignment: .leading)
+                    VStack(alignment: .leading, spacing: 3) {
+                        MatchupSide(task: m.home, fallbackTop: "", fallbackBottom: "", alignment: .leading)
+                        if let t = m.timerTask {
+                            HStack(spacing: 4) {
+                                TaskTimerRing(task: t, date: m.date, size: 14, line: 2)
+                                TaskTimerText(task: t, date: m.date).font(.system(size: 11, weight: .semibold)).lineLimit(1)
+                            }
+                        }
+                    }
                     VStack(spacing: 1) {
                         Text(m.kickoff ?? m.remaining).font(.system(size: 17, weight: .heavy)).monospacedDigit().foregroundColor(CN.text)
                         Text(m.kickoff == nil ? "left today" : "starts").font(.system(size: 9, weight: .medium)).foregroundColor(CN.text2)
@@ -174,8 +192,16 @@ struct MatchupRectangularView: View {
             if let h = m.home {
                 Text(m.away.map { "\(h.title) vs \($0.title)" } ?? "\(h.title) vs Done")
                     .font(.system(size: 14, weight: .semibold)).lineLimit(1).widgetAccentable()
-                Text("\(m.left) left · \(m.kickoff ?? m.remaining)\(m.kickoff == nil ? " today" : "")")
-                    .font(.system(size: 12)).monospacedDigit().lineLimit(1)
+                if let t = m.timerTask {
+                    HStack(spacing: 4) {
+                        TaskTimerRing(task: t, date: m.date, size: 12, line: 2)
+                        TaskTimerText(task: t, date: m.date).font(.system(size: 12, weight: .semibold)).lineLimit(1)
+                        Text("· \(m.left) left").font(.system(size: 12)).monospacedDigit().lineLimit(1)
+                    }
+                } else {
+                    Text("\(m.left) left · \(m.kickoff ?? m.remaining)\(m.kickoff == nil ? " today" : "")")
+                        .font(.system(size: 12)).monospacedDigit().lineLimit(1)
+                }
             } else {
                 Text(m.snap.total == 0 ? "No tasks today" : "All done").font(.system(size: 14, weight: .semibold)).widgetAccentable()
                 Text("\(m.snap.ptsDone) pts").font(.system(size: 12)).monospacedDigit()
@@ -189,6 +215,15 @@ struct MatchupRectangularView: View {
 struct MatchupCircularView: View {
     let m: MatchupData
     var body: some View {
+        if let t = m.timerTask {
+            ZStack {
+                TaskTimerRing(task: t, date: m.date, size: 50, line: 5)
+                TaskTimerText(task: t, date: m.date).font(.system(size: 11, weight: .bold)).multilineTextAlignment(.center)
+                    .lineLimit(1).minimumScaleFactor(0.5).frame(width: 36)
+            }
+        } else { pointsGauge }
+    }
+    var pointsGauge: some View {
         Gauge(value: Double(m.earnedPct), in: 0...100) {
             Text("pts")
         } currentValueLabel: {

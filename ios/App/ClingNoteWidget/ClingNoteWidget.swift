@@ -14,6 +14,113 @@ struct WidgetTask: Codable, Identifiable, Hashable {
     let pts: Int
     let done: Bool
     let time: String
+    // Task timer (ms since epoch, written by src/utils/widgetSnapshot.js timerFields; absent = no timer).
+    var tS: Double? = nil
+    var tE: Double? = nil
+    var tP: Double? = nil
+}
+
+// MARK: - Timer ring (same math/colors as src/utils/timerRing.js — keep ringStops identical to RING_STOPS there)
+
+let ringStops: [(f: Double, h: Double)] = [(1.0, 130), (0.6, 52), (0.3, 28), (0.1, 0)]
+let ringSat = 0.78, ringLight = 0.48
+let widgetStep = 0.05, widgetMaxSteps = 20
+
+func ringHue(_ f: Double) -> Double {
+    let x = min(1, max(0, f))
+    if x >= ringStops[0].f { return ringStops[0].h }
+    for i in 1..<ringStops.count {
+        let a = ringStops[i - 1], b = ringStops[i]
+        if x >= b.f { return b.h + (a.h - b.h) * ((x - b.f) / (a.f - b.f)) }
+    }
+    return ringStops[ringStops.count - 1].h
+}
+
+/// HSL -> Color (SwiftUI's Color(hue:) is HSB).
+func ringColor(_ f: Double) -> Color {
+    let h = ringHue(f) / 360, s = ringSat, l = ringLight
+    let q = l < 0.5 ? l * (1 + s) : l + s - l * s, p = 2 * l - q
+    func c(_ t0: Double) -> Double {
+        var t = t0; if t < 0 { t += 1 }; if t > 1 { t -= 1 }
+        if t < 1.0 / 6 { return p + (q - p) * 6 * t }
+        if t < 0.5 { return q }
+        if t < 2.0 / 3 { return p + (q - p) * (2.0 / 3 - t) * 6 }
+        return p
+    }
+    return Color(red: c(h + 1.0 / 3), green: c(h), blue: c(h - 1.0 / 3))
+}
+
+extension WidgetTask {
+    var timerStart: Date? { (tS ?? 0) > 0 ? Date(timeIntervalSince1970: tS! / 1000) : nil }
+    var timerEnd: Date? { (tE ?? 0) > 0 ? Date(timeIntervalSince1970: tE! / 1000) : nil }
+    var timerPaused: Date? { (tP ?? 0) > 0 ? Date(timeIntervalSince1970: tP! / 1000) : nil }
+    var hasTimer: Bool { !done && timerStart != nil && timerEnd != nil && timerEnd! > timerStart! }
+    /// Remaining fraction 1...0 at `date` (frozen at the pause instant while paused).
+    func ringFraction(at date: Date) -> Double {
+        guard hasTimer, let s = timerStart, let e = timerEnd else { return 0 }
+        let at = timerPaused ?? date
+        return min(1, max(0, e.timeIntervalSince(at) / e.timeIntervalSince(s)))
+    }
+    func isRunning(at date: Date) -> Bool { hasTimer && timerPaused == nil && timerEnd! > date }
+}
+
+/// Timeline dates: every 5% of each running timer's duration still ahead, plus its end (so the color steps green→red).
+func timerStepDates(_ tasks: [WidgetTask], after now: Date) -> [Date] {
+    var out: [Date] = []
+    for t in tasks where t.isRunning(at: now) {
+        let s = t.timerStart!, e = t.timerEnd!, d = e.timeIntervalSince(s)
+        var k = 1
+        while Double(k) * widgetStep < 1 - 1e-9 {
+            let at = s.addingTimeInterval(d * Double(k) * widgetStep)
+            if at > now { out.append(at) }
+            k += 1
+        }
+        out.append(e)
+    }
+    return Array(Set(out)).sorted().prefix(widgetMaxSteps * 3).map { $0 }
+}
+
+/// iPhone-timer style ring: the fill animates on its own via ProgressView(timerInterval:) (no per-second reloads);
+/// the color comes from the timeline entry date. Paused/finished: static ring.
+struct TaskTimerRing: View {
+    let task: WidgetTask
+    let date: Date
+    var size: CGFloat = 16
+    var line: CGFloat = 2.5
+    var body: some View {
+        let f = task.ringFraction(at: date)
+        let color = ringColor(f)
+        Group {
+            if #available(iOSApplicationExtension 16.0, *) {
+                if task.isRunning(at: date), let s = task.timerStart, let e = task.timerEnd {
+                    ProgressView(timerInterval: s...e, countsDown: true, label: { EmptyView() }, currentValueLabel: { EmptyView() })
+                        .progressViewStyle(.circular).tint(color)
+                } else { staticRing(f, color) }
+            } else { staticRing(f, color) }
+        }.frame(width: size, height: size)
+    }
+    func staticRing(_ f: Double, _ color: Color) -> some View {
+        ZStack {
+            Circle().stroke(f <= 0 ? ringColor(0).opacity(0.35) : CN.ring, lineWidth: line)
+            Circle().trim(from: 0, to: CGFloat(f)).stroke(color, style: StrokeStyle(lineWidth: line, lineCap: .round)).rotationEffect(.degrees(-90))
+        }
+    }
+}
+
+/// Remaining time text: ticks by itself while running, static when paused/finished.
+struct TaskTimerText: View {
+    let task: WidgetTask
+    let date: Date
+    var body: some View {
+        let color = ringColor(task.ringFraction(at: date))
+        let left = max(0, Int(((task.timerEnd ?? date).timeIntervalSince(task.timerPaused ?? date)).rounded(.up)))
+        let frozen = Text(String(format: "%d:%02d", left / 60, left % 60)).monospacedDigit().foregroundColor(color)
+        if #available(iOSApplicationExtension 16.0, *) {
+            if task.isRunning(at: date), let e = task.timerEnd {
+                Text(timerInterval: date...e, countsDown: true).monospacedDigit().foregroundColor(color)
+            } else { frozen }
+        } else { frozen }
+    }
 }
 
 struct WidgetSnapshot: Codable {
@@ -73,8 +180,11 @@ struct Provider: TimelineProvider {
     }
     func getTimeline(in context: Context, completion: @escaping (Timeline<Entry>) -> Void) {
         // The app reloads timelines on every change; refresh at midnight so the day rolls over.
-        let midnight = Calendar.current.startOfDay(for: Date().addingTimeInterval(86_400))
-        completion(Timeline(entries: [Entry(date: Date(), snapshot: .load())], policy: .after(midnight)))
+        // Running task timers add entries at every 5% of their duration (+ end) so the ring color steps green→red.
+        let now = Date(), snap = WidgetSnapshot.load()
+        let midnight = Calendar.current.startOfDay(for: now.addingTimeInterval(86_400))
+        let steps = timerStepDates(snap.tasks, after: now).filter { $0 < midnight }
+        completion(Timeline(entries: [Entry(date: now, snapshot: snap)] + steps.map { Entry(date: $0, snapshot: snap) }, policy: .after(midnight)))
     }
 }
 
@@ -145,6 +255,7 @@ struct ProgressBar: View {
 
 struct TaskRow: View {
     let task: WidgetTask
+    var date: Date = Date()
     var body: some View {
         HStack(spacing: 8) {
             CheckCircle(task: task, size: 15)
@@ -153,7 +264,10 @@ struct TaskRow: View {
                     Text(task.title).font(.system(size: 13, weight: .semibold)).foregroundColor(CN.text)
                         .strikethrough(task.done, color: CN.text2).lineLimit(1)
                     Spacer(minLength: 4)
-                    if !task.time.isEmpty { Text(task.time).font(.system(size: 11)).monospacedDigit().foregroundColor(CN.text2) }
+                    if task.hasTimer {
+                        TaskTimerRing(task: task, date: date, size: 14, line: 2)
+                        TaskTimerText(task: task, date: date).font(.system(size: 11, weight: .semibold)).frame(maxWidth: 44)
+                    } else if !task.time.isEmpty { Text(task.time).font(.system(size: 11)).monospacedDigit().foregroundColor(CN.text2) }
                     if !chipText(task).isEmpty { Chip(text: chipText(task)) }
                 }
             }
@@ -190,6 +304,7 @@ struct EmptyState: View {
 
 struct SmallView: View {
     let snap: WidgetSnapshot
+    var date: Date = Date()
     var body: some View {
         if snap.total == 0 { EmptyState() } else {
             let next = snap.open.first
@@ -208,7 +323,12 @@ struct SmallView: View {
                     if let n = next { CheckCircle(task: n, size: 18) }
                     Text(next?.title ?? "Great work today 🎉").font(.system(size: 15, weight: .semibold)).foregroundColor(CN.text).lineLimit(2)
                 }
-                if let n = next, !chipText(n).isEmpty { Chip(text: (n.time.isEmpty ? "" : n.time + " · ") + chipText(n)) }
+                if let n = next, n.hasTimer {
+                    HStack(spacing: 6) {
+                        TaskTimerRing(task: n, date: date, size: 18)
+                        TaskTimerText(task: n, date: date).font(.system(size: 13, weight: .bold))
+                    }
+                } else if let n = next, !chipText(n).isEmpty { Chip(text: (n.time.isEmpty ? "" : n.time + " · ") + chipText(n)) }
             }
             .widgetURL(next.map(taskURL) ?? URL(string: "clingnote://home"))
         }
@@ -219,12 +339,13 @@ struct ListView: View {
     let snap: WidgetSnapshot
     let maxRows: Int
     let showBar: Bool
+    var date: Date = Date()
     var body: some View {
         if snap.total == 0 { EmptyState() } else {
             VStack(alignment: .leading, spacing: showBar ? 7 : 6) {
                 Header(snap: snap)
                 if showBar { ProgressBar(progress: snap.progress) }
-                ForEach(Array(snap.tasks.prefix(maxRows))) { TaskRow(task: $0) }
+                ForEach(Array(snap.tasks.prefix(maxRows))) { TaskRow(task: $0, date: date) }
                 Spacer(minLength: 0)
                 if showBar {
                     HStack {
@@ -244,9 +365,9 @@ struct ClingNoteWidgetView: View {
     var body: some View {
         let content = Group {
             switch family {
-            case .systemSmall: SmallView(snap: entry.snapshot)
-            case .systemMedium: ListView(snap: entry.snapshot, maxRows: 4, showBar: false)
-            default: ListView(snap: entry.snapshot, maxRows: 8, showBar: true)
+            case .systemSmall: SmallView(snap: entry.snapshot, date: entry.date)
+            case .systemMedium: ListView(snap: entry.snapshot, maxRows: 4, showBar: false, date: entry.date)
+            default: ListView(snap: entry.snapshot, maxRows: 8, showBar: true, date: entry.date)
             }
         }
         if #available(iOSApplicationExtension 17.0, *) {
