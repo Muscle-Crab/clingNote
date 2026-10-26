@@ -15,8 +15,48 @@ const ensurePermission = async () => {
   return p.display === 'granted';
 };
 
+// ── Web fallback: Web Notifications API + in-tab timers (fires while a ClingNote tab is open; no-op without permission/API). ──
+const webTimers = new Map();
+const MAX_DELAY = 2147483647; // setTimeout cap (~24.8 days)
+export const nextOccurrence = (on, now = new Date()) => {
+  if (!on || !Number.isFinite(on.hour)) return null;
+  for (let i = 0; i <= 366; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + i, on.hour, on.minute || 0, 0, 0);
+    if (d <= now) continue;
+    if (on.weekday && d.getDay() + 1 !== on.weekday) continue;
+    if (on.day && d.getDate() !== on.day) continue;
+    if (on.month && d.getMonth() + 1 !== on.month) continue;
+    return d;
+  }
+  return null;
+};
+const webNotifyOk = () => typeof window !== 'undefined' && 'Notification' in window;
+const webPermission = async (ask) => {
+  if (!webNotifyOk()) return false;
+  if (ask && Notification.permission === 'default') { try { await Notification.requestPermission(); } catch (e) { return false; } }
+  return Notification.permission === 'granted';
+};
+const webCancel = (key) => { const h = webTimers.get(key); if (h) clearTimeout(h); webTimers.delete(key); };
+const ASK_TYPES = new Set(['timer', 'reminder']); // user-initiated: may show the browser prompt; background ones need prior permission
+const webSchedule = async (key, { title, body, at, on, route, type }) => {
+  webCancel(key);
+  const when = on ? nextOccurrence(on) : (at instanceof Date ? at : new Date(at));
+  if (!when || isNaN(when.getTime()) || when.getTime() <= Date.now()) return false;
+  if (!(await webPermission(ASK_TYPES.has(type || String(key).split(':')[0])))) return false;
+  const delay = when.getTime() - Date.now();
+  if (delay > MAX_DELAY) return false;
+  webTimers.set(key, setTimeout(() => {
+    webTimers.delete(key);
+    try { const n = new Notification(title, { body, tag: String(key) }); n.onclick = () => { try { window.focus(); if (route && window.location.pathname !== route) window.location.assign(route); } catch (e) { /* ignore */ } n.close(); }; } catch (e) { /* ignore */ }
+    if (on) webSchedule(key, { title, body, on, route, type });
+  }, delay));
+  return true;
+};
+export const _webTimerCount = () => webTimers.size; // tests
+
 export const scheduleLocal = async (key, { title, body, at, on, route, type }) => {
-  if (!isNativeIOS() || (!at && !on)) return false;
+  if (!at && !on) return false;
+  if (!isNativeIOS()) return webSchedule(key, { title, body, at, on, route, type });
   const when = at ? (at instanceof Date ? at : new Date(at)) : null;
   if (!on && (isNaN(when.getTime()) || when.getTime() <= Date.now())) return false;
   try {
@@ -27,7 +67,7 @@ export const scheduleLocal = async (key, { title, body, at, on, route, type }) =
     return true;
   } catch (e) { console.warn('local notification schedule failed', e); return false; }
 };
-export const cancelLocal = async (key) => { if (!isNativeIOS()) return; try { await LocalNotifications.cancel({ notifications: [{ id: notifId(key) }] }); } catch (e) { /* ignore */ } };
+export const cancelLocal = async (key) => { if (!isNativeIOS()) { webCancel(key); return; } try { await LocalNotifications.cancel({ notifications: [{ id: notifId(key) }] }); } catch (e) { /* ignore */ } };
 
 export const reminderKey = (t) => `rem:${taskKeyOf(t)}`;
 export const timerKey = (t) => `timer:${taskKeyOf(t)}`;
