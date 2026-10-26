@@ -28,6 +28,7 @@
             <button type="button" class="bg-pill" data-test="open-background-pill" aria-label="Background: animation and music" @click="showBackground = true">🎧 Background<span class="bg-pill-sub">picture · snow · rain · music</span></button>
           </div>
           <div ref="heroMenuEl" class="hero-menu">
+            <button type="button" class="hero-menu-btn hero-ask-btn" data-test="open-ask" aria-label="Ask Anything (AI assistant)" title="Ask Anything" @click="askOpen = true">✨</button>
             <button type="button" class="hero-menu-btn" :aria-label="noticeCount ? noticeCount + ' updates and day menu' : 'Day menu'" :aria-expanded="menuOpen ? 'true' : 'false'" @click="menuOpen = !menuOpen">
               <i class="fas fa-bell" aria-hidden="true"></i>
               <span v-if="noticeCount" class="hero-badge" :class="{ 'hero-badge--alert': disciplineWarning === '30m' || bossLines.some((l) => l.kind === 'evening' || l.kind === 'watching') }">{{ noticeCount }}</span>
@@ -116,7 +117,8 @@
       <ReminderModal v-if="isModalOpen" :reminder="reminder" :task-title="selectedTaskTitle" @close="closeModal" @submit="handleAddReminder" />
 
 
-      <VoiceModal v-if="voiceOpen" :transcript="liveTranscript" :supported="voiceSupported" :capability="voiceCap" :error="voiceError" :hint="voiceHint" :added="voiceAdded" :items="voiceItems" :busy="voiceBusy" :source="voiceSource" @undo="undoVoiceTask" @cancel="cancelVoiceInput" @confirm="confirmVoiceItems" @relisten="relistenVoice" />
+      <AskSheet v-if="askOpen" @close="askOpen = false" />
+      <VoiceModal v-if="voiceOpen" :transcript="liveTranscript" :supported="voiceSupported" :capability="voiceCap" :error="voiceError" :hint="voiceHint" :added="voiceAdded" :items="voiceItems" :busy="voiceBusy" :source="voiceSource" @undo="undoVoiceTask" @cancel="cancelVoiceInput" @finish="finishVoiceInput" @confirm="confirmVoiceItems" @relisten="relistenVoice" />
       <div v-if="!voiceOpen && voiceAdded.some((e) => e.undoUntil > nowTick)" class="voice-toasts" role="status">
         <div v-for="e in voiceAdded.filter((x) => x.undoUntil > nowTick)" :key="e.id" class="voice-toast">🎙 Added “{{ e.title }}” <button type="button" @click="undoVoiceTask(e)">Undo</button></div>
       </div>
@@ -289,7 +291,7 @@ import IdleState from '@/components/home/IdleState.vue';
 import WontDoList from '@/components/home/WontDoList.vue';
 import LoadSummary from '@/components/home/LoadSummary.vue';
 import TaskCard from '@/components/home/TaskCard.vue';
-import { safeEditPatch, cleanEstimate, timerStarted, TIMER_LOCK_HINT, seriesPatch } from '@/utils/taskEdit';
+import { safeEditPatch, cleanEstimate, timerStarted, retimePatch, seriesPatch } from '@/utils/taskEdit';
 import { pendingRollover, loadSeen, markSeen, rolloverNotifBody } from '@/utils/rollover';
 import TimeBlockSchedule from '@/components/home/TimeBlockSchedule.vue';
 import AddTaskModal from '@/components/home/AddTaskModal.vue';
@@ -311,6 +313,8 @@ import TimeStatsBar from '@/components/home/TimeStatsBar.vue';
 import TimerModal from '@/components/home/TimerModal.vue';
 import TransferModal from '@/components/home/TransferModal.vue';
 import VoiceModal from '@/components/home/VoiceModal.vue';
+import AskSheet from '@/components/home/AskSheet.vue';
+const askOpen = ref(false); // Ask Anything sheet (✨ next to the bell)
 import { ugcHidden, voiceInputBlocked, isNativeIOS } from '@/utils/platform';
 import { splitSpokenTasks, voiceCapability, UNDO_MS } from '@/utils/voiceSplit';
 import { interpretSpeech } from '@/utils/voiceInterpret';
@@ -839,7 +843,7 @@ const reducedMotion = typeof window !== 'undefined' && window.matchMedia ? windo
 
 // "n" opens Add task (not while typing or when any modal/overlay is open)
 const anyModalOpen = computed(() => !!(modalOpen.value || isModalOpen.value || showWorkoutModal.value || showTimerModal.value || wontDoModalOpen.value ||
-  transferModalOpen.value || youtubeModalOpen.value || taskDetailModalOpen.value || showImagePreview.value || voiceOpen.value || shutdownOpen.value || showFullScreenAnimation.value));
+  transferModalOpen.value || youtubeModalOpen.value || taskDetailModalOpen.value || showImagePreview.value || voiceOpen.value || askOpen.value || shutdownOpen.value || showFullScreenAnimation.value));
 const onShortcutKey = (e) => {
   if (!shouldHandleShortcut(e, anyModalOpen.value)) return;
   e.preventDefault();
@@ -2461,6 +2465,8 @@ const voiceOpen = ref(false); // modal visibility (independent of whether recogn
 const voiceError = ref('');
 let recognition = null;
 let pendingVoiceText = '';
+let voiceCommitted = ''; // finished phrases of the current long dictation
+let voiceFinishing = false; // Done tapped on the web flow: process the transcript on the next onend
 let voiceSubmitting = false;
 let voiceAddFailed = false; // the last spoken task was refused (limit, strict boss, save error): keep the message visible
 const liveTranscript = ref('');
@@ -2483,6 +2489,7 @@ if (voiceSupported && !nativeVoiceIn) {
     console.error("Speech recognition error:", event.error);
     listening.value = false;
     if (event.error === 'aborted') return; // we stopped it ourselves (cancel / restart): not a failure
+    if (event.error === 'no-speech' && voiceOpen.value && (voiceCommitted || pendingVoiceText)) return; // a pause mid-dictation: onend restarts
     voiceError.value = event.error === 'not-allowed' || event.error === 'service-not-allowed'
       ? 'Microphone access was blocked. Allow it in your browser settings and try again.'
       : event.error === 'no-speech' ? "Didn't catch anything. Try again."
@@ -2492,19 +2499,21 @@ if (voiceSupported && !nativeVoiceIn) {
   recognition.onend = () => {
     listening.value = false;
     // iOS Safari often ends without flagging a result final: use what we heard instead of dropping it.
-    if (voiceOpen.value && !voiceError.value && pendingVoiceText.trim()) saveSpoken(pendingVoiceText);
-    // Hands-free: restart after each pause until the user taps Stop (iOS ends after every utterance).
+    // Long dictation: commit what was heard in this segment and keep listening until the user taps Done.
+    if (pendingVoiceText.trim()) { voiceCommitted = `${voiceCommitted} ${pendingVoiceText.trim()}`.trim(); pendingVoiceText = ''; }
+    if (voiceFinishing) { voiceFinishing = false; if (voiceOpen.value && voiceCommitted.trim()) saveSpoken(voiceCommitted); else if (voiceOpen.value) voiceError.value = "Didn't catch anything. Try again."; return; }
+    // Hands-free: restart after each pause until the user taps Done (iOS ends after every utterance).
     if (voiceOpen.value && !voiceError.value && voiceSupported && !voiceItems.value.length && !voiceBusy.value) setTimeout(() => { if (voiceOpen.value && !listening.value) { try { recognition.start(); } catch (e) { /* still stopping */ } } }, 250);
   };
   recognition.onresult = (event) => {
     let interim = '';
     for (let i = event.resultIndex; i < event.results.length; ++i) {
       const r = event.results[i];
-      if (r.isFinal) saveSpoken(r[0].transcript); // a pause ends a phrase: save it right away
+      if (r.isFinal) { const f = r[0].transcript.trim(); if (f) voiceCommitted = `${voiceCommitted} ${/[.!?]$/.test(f) ? f : f + '.'}`.trim(); } // a pause ends a phrase: keep it, keep listening
       else interim += r[0].transcript;
     }
-    liveTranscript.value = interim.trim();
     pendingVoiceText = interim.trim();
+    liveTranscript.value = `${voiceCommitted} ${pendingVoiceText}`.trim();
   };
 } else {
   console.warn("Speech recognition not supported in this browser.");
@@ -2605,8 +2614,9 @@ const undoVoiceTask = async (entry) => {
 const cancelVoiceInput = () => {
   voiceAddFailed = false;
   voiceOpen.value = false; voiceItems.value = [];
-  if (nativeStop) { const st = nativeStop; nativeStop = null; st(); }
-  if (recognition) { try { recognition.stop(); } catch (e) { /* not started */ } }
+  if (nativeStop) { const st = nativeStop; nativeStop = null; (st.cancel || st)(); }
+  voiceCommitted = ''; voiceFinishing = false;
+  if (recognition) { try { recognition.abort(); } catch (e) { /* not started */ } }
   listening.value = false;
   voiceOpen.value = false;
   voiceError.value = '';
@@ -2615,8 +2625,16 @@ const cancelVoiceInput = () => {
   voiceAdded.value = voiceAdded.value.filter((e) => e.undoUntil > Date.now()); // keep live undo chips as toasts
 };
 
+// Done while listening: stop and organise the whole dictation into items for the review list.
+const finishVoiceInput = () => {
+  if (!voiceOpen.value || voiceBusy.value || voiceItems.value.length) return;
+  if (nativeStop) { const st = nativeStop; nativeStop = null; (st.finish || st)(); return; } // native onFinal -> saveSpoken
+  const all = `${voiceCommitted} ${pendingVoiceText}`.trim();
+  if (recognition && listening.value) { voiceFinishing = true; try { recognition.stop(); } catch (e) { voiceFinishing = false; } }
+  if (!voiceFinishing) { if (all) saveSpoken(all); else voiceError.value = "Didn't catch anything. Try again."; }
+};
 const startVoiceInput = () => {
-  voiceAddFailed = false;
+  voiceAddFailed = false; voiceCommitted = ''; voiceFinishing = false;
   voiceAdded.value = [];
   voiceOpen.value = true; // always show the modal, even when recognition is unavailable
   liveTranscript.value = '';
@@ -3076,10 +3094,12 @@ const editTask = async (index, task, rawPatch) => {
   if (isDayLocked(dayName) && lockedHit.length) { alert(`${lockedMessage()} (${lockedHit.join(', ')})`); return; }
   const oldKey = taskKey(task);
   if (patch.estimateMin !== undefined) {
-    if (timerStarted(task)) { alert(TIMER_LOCK_HINT); return; } // estimate is frozen once play was pressed
     patch.estimateMin = cleanEstimate(patch.estimateMin);
+    // editable during lock-in and after play: a started timer's end time moves with the new duration
+    if (timerStarted(task)) patch = { ...patch, ...retimePatch(task, patch.estimateMin) };
   }
   await patchTask(index, task, patch);
+  if (patch.timerEndTime && task.timerActive && !task.timerPausedAt) { try { scheduleTimerDone(task); } catch (e) { /* notification reschedule best-effort */ } }
   if (seriesKey.value === oldKey) {
     const sp = seriesPatch(patch);
     if (Object.keys(sp).length) await applyToSeries(oldKey, sp);
@@ -3846,7 +3866,7 @@ body.home-v2 .app-topbar { position: absolute; top: 0; left: 0; right: 0; z-inde
 .app-root .hero-sub.hero-sub { margin: 0; font-size: 16px; color: #B7C2DA; }
 .app-root .hero.hero { position: relative; }
 .app-root .hero-text { flex: 1 1 100%; min-width: 0; }
-.app-root .hero-menu.hero-menu { position: absolute; right: 0; top: 22px; }
+.app-root .hero-menu.hero-menu { position: absolute; right: 0; top: 22px; display: flex; gap: 8px; }
 .app-root .hero-menu-btn.hero-menu-btn { width: 44px; height: 44px; border-radius: 50%; font-size: 14px; color: #C9D5F0; background: rgba(12,22,48,.55); border: 1px solid rgba(90,120,190,.35); box-shadow: none; position: relative; }
 .app-root .hero-badge { position: absolute; top: -4px; right: -4px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: #2F6FFF; color: #fff; font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; border: 2px solid #070D1C; }
 .app-root .hero-badge--alert { background: #EF4444; }

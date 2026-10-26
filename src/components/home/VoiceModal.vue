@@ -8,7 +8,7 @@
         <p v-else class="voice-hint">This browser can't do speech recognition. Try Chrome, Edge or Safari, or add the task with the keyboard.</p>
       </template>
       <template v-else-if="edit.length">
-        <p class="voice-label">Confirm what you said</p>
+        <p class="voice-label">Review {{ edit.length }} item{{ edit.length === 1 ? '' : 's' }}</p>
         <p class="voice-transcript">"<span>{{ transcript }}</span>"</p>
         <ul class="vc-list" data-test="voice-confirm">
           <li v-for="(it, i) in edit" :key="i" class="vc-item">
@@ -31,7 +31,7 @@
         <p class="voice-hint">{{ source === 'ai' ? 'Interpreted by AI.' : 'Interpreted on your device.' }} Reminders don't count toward your daily task limit.</p>
         <div class="vc-actions">
           <button type="button" class="btn-secondary" @click="$emit('relisten')">🎙️ Again</button>
-          <button type="button" class="btn-primary" data-test="voice-save" :disabled="busy || !edit.length" @click="$emit('confirm', edit.map((x) => ({ ...x })))">{{ busy ? 'Saving…' : `Save ${edit.length}` }}</button>
+          <button type="button" class="btn-primary" data-test="voice-save" :disabled="busy || !edit.length" @click="$emit('confirm', edit.map((x) => ({ ...x })))">{{ busy ? 'Adding…' : edit.length > 1 ? `Add all ${edit.length}` : 'Add' }}</button>
         </div>
       </template>
       <template v-else>
@@ -42,17 +42,20 @@
           <span class="wave wave-4"></span>
           <span class="wave wave-5"></span>
         </div>
-        <p class="voice-label">{{ error ? 'Voice input stopped' : 'Listening… hands-free' }}</p>
+        <p class="voice-label">{{ error ? 'Voice input stopped' : busy ? 'Organising…' : 'Listening… take your time' }}</p>
         <p v-if="error" class="voice-error" role="alert">{{ error }}</p>
         <p v-else class="voice-transcript">"<span>{{ transcript }}</span>"</p>
         <p v-if="busy" class="voice-hint">Working it out…</p>
-        <p v-else-if="!error" class="voice-hint">Say anything — e.g. “remind me to call mom at 6 pm and block 2 hours for homework tomorrow”. Pause when done; you'll confirm before anything is saved.</p>
+        <p v-else-if="!error" class="voice-hint">Explain everything you need to do — as long as you like, pauses are fine. E.g. “First buy groceries, then call the dentist at 3, and block 2 hours for homework tomorrow.” Tap Done when finished; you'll review each item before anything is saved.</p>
         <p v-if="capability === 'partial'" class="voice-hint">On iPhone/Safari the mic restarts after each phrase; if it stops, tap the mic again.</p>
         <p v-if="hint" class="voice-hint" role="status">{{ hint }}</p>
         <ul v-if="added.length" class="voice-added">
           <li v-for="e in added" :key="e.id">✓ {{ e.title }} <button v-if="e.undoUntil" type="button" class="voice-undo" @click="$emit('undo', e)">Undo</button></li>
         </ul>
-        <button type="button" class="btn-secondary voice-close-btn" @click="$emit('cancel')">Done</button>
+        <div class="vc-actions">
+          <button type="button" class="btn-secondary" data-test="voice-cancel" @click="$emit('cancel')">Cancel</button>
+          <button type="button" class="btn-primary" data-test="voice-done" :disabled="busy || (!transcript && !error)" @click="error ? $emit('cancel') : $emit('finish')">{{ error ? 'Close' : 'Done' }}</button>
+        </div>
       </template>
       <button v-if="!supported" type="button" class="btn-secondary voice-close-btn" @click="$emit('cancel')">Close</button>
     </div>
@@ -75,7 +78,7 @@ const props = defineProps({
   hint: { type: String, default: '' },
   added: { type: Array, default: () => [] },
 });
-defineEmits(['cancel', 'undo', 'confirm', 'relisten']);
+defineEmits(['cancel', 'undo', 'confirm', 'relisten', 'finish']);
 const edit = ref([]);
 watch(() => props.items, (v) => { edit.value = (v || []).map((x) => ({ ...x })); }, { immediate: true });
 const setType = (it, t) => {
@@ -129,7 +132,7 @@ const setType = (it, t) => {
 .wave-4 { height: 20px; animation-delay: 0.3s; }
 .wave-5 { height: 12px; animation-delay: 0.4s; }
 .voice-label { font-size: 1rem; font-weight: 600; margin-bottom: 0.5rem; }
-.voice-transcript { color: var(--c-accent-text, #7fb8f5); font-size: 0.9rem; margin-bottom: 0.5rem; }
+.voice-transcript { color: var(--c-accent-text, #7fb8f5); font-size: 0.9rem; margin-bottom: 0.5rem; max-height: 9rem; overflow-y: auto; }
 .voice-error { color: var(--c-danger-text, #f87171); font-size: 0.85rem; margin-bottom: 0.75rem; }
 .voice-close-btn { margin-top: 1rem; }
 .voice-hint { font-size: 0.75rem; color: var(--c-text-3, #6b6a66); }

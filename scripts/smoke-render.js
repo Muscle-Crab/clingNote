@@ -268,8 +268,8 @@ pending.push((async () => {
 // voice -> task: transcript goes through a fresh form, failures are surfaced, interim-only results are not dropped (iOS)
 (() => {
   const hv = fs.readFileSync(path.join(src, 'views/HomeView.vue'), 'utf8');
-  assert.ok(/if \(r\.isFinal\) saveSpoken\(r\[0\]\.transcript\)/.test(hv) && /\.\.\.blankTask\(\), title/.test(hv), 'each final phrase saves via fresh blankTask (hands-free)');
-  assert.ok(/recognition\.onend = \(\) => \{[\s\S]*?saveSpoken\(pendingVoiceText\)/.test(hv), 'onend saves transcript when no final flag arrived');
+  assert.ok(/if \(r\.isFinal\) \{[\s\S]*?voiceCommitted = /.test(hv) && /\.\.\.blankTask\(\), title/.test(hv), 'final phrases accumulate (continuous dictation) and save via fresh blankTask');
+  assert.ok(/recognition\.onend = \(\) => \{[\s\S]*?voiceCommitted = [\s\S]*?if \(voiceFinishing\) \{[\s\S]*?saveSpoken\(voiceCommitted\)/.test(hv), 'onend commits interim text and saves the whole dictation on Done');
   assert.ok(/const ok = await addNewTask\(\)/.test(hv) && /if \(!ok\) \{[\s\S]*?voiceAddFailed = true;[\s\S]*?voiceError\.value = /.test(hv) && /if \(!voiceAddFailed\) voiceError\.value = ''/.test(hv), 'failed voice add is surfaced and survives a mic auto-restart, not silently dropped');
   const fn = hv.slice(hv.indexOf('const addNewTask = async'), hv.indexOf('const speakDailyReport'));
   assert.ok(!/^\s*return;\s*$/m.test(fn) && /lastAddPersist = trackWrite\(\(async/.test(fn) && /return false;/.test(fn), 'addNewTask reports success/failure (optimistic, rollback on error)');

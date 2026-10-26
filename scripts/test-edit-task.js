@@ -50,14 +50,15 @@ t('rollover shown once', () => {
 // UI wiring (static)
 const card = read('src/components/home/TaskCard.vue'); const home = read('src/views/HomeView.vue');
 t('card: pencil, title tap, long-press, chips, timer lock, lock hint', () => {
-  ['data-test="edit-btn"', 'data-test="task-title-edit"', 'onPressStart', 'data-test="timer-lock-hint"', ':disabled="estLocked"', 'data-test="est-custom"', 'data-test="lock-hint"', 'data-test="edit-title"', 'data-test="edit-series"', ':disabled="dayLocked"']
+  ['data-test="edit-btn"', 'data-test="task-title-edit"', 'onPressStart', 'data-test="timer-lock-hint"', 'data-test="est-custom"', 'data-test="lock-hint"', 'data-test="edit-title"', 'data-test="edit-series"']
     .forEach((s) => assert.ok(card.includes(s), s));
   ['timer-adjust', 'timer-set', 'timer-adj-', 'adjust-timer', 'set-remaining'].forEach((k) => assert.ok(!card.includes(k), 'removed ' + k));
-  assert.ok(card.includes('props.dayLocked || timerLocked.value'));
+  assert.ok(!card.includes(':disabled="estLocked"') && !card.includes(':disabled="dayLocked"')); // lock-in no longer freezes name/estimate
+  { const r = E.retimePatch({ timerActive: true, timerEndTime: new Date(600000).toISOString(), timerDurationMinutes: 10 }, 25, 0); assert.strictEqual(new Date(r.timerEndTime).getTime(), 600000 + 15 * 60000); assert.strictEqual(r.timerDurationMinutes, 25); }
   assert.ok(!/estimateMin: Number\(\$event\.target\.value\) \|\| 0/.test(card), 'old raw estimate input removed');
 });
 t('home: handlers wired, rollover stamped + notified', () => {
-  ['@edit="toggleExpanded(task)"', 'if (timerStarted(task)) { alert(TIMER_LOCK_HINT); return; }', 'editTask(realIndex(task)', 'rolledOverFor: getTodayId()', 'notifyRollover(picked', 'notifyRollover([task.title])', 'data-test="rollover-banner"', 'scheduleLocal(`rollover:']
+  ['@edit="toggleExpanded(task)"', 'if (timerStarted(task)) patch = { ...patch, ...retimePatch(task, patch.estimateMin) };', 'editTask(realIndex(task)', 'rolledOverFor: getTodayId()', 'notifyRollover(picked', 'notifyRollover([task.title])', 'data-test="rollover-banner"', 'scheduleLocal(`rollover:']
     .forEach((s) => assert.ok(home.includes(s), s));
   ['@adjust-timer=', '@set-remaining=', 'adjustRunningTimer'].forEach((k) => assert.ok(!home.includes(k), 'removed ' + k));
   assert.ok(!/editTask[\s\S]{0,1500}completed: true/.test(home.slice(home.indexOf('const editTask'), home.indexOf('const editTask') + 1500)));

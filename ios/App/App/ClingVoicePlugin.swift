@@ -125,7 +125,13 @@ public class ClingVoicePlugin: CAPPlugin, CAPBridgedPlugin, AVSpeechSynthesizerD
                 req.shouldReportPartialResults = true
                 if rec.supportsOnDeviceRecognition { req.requiresOnDeviceRecognition = true }
                 let input = self.audioEngine.inputNode
-                let fmt = input.outputFormat(forBus: 0)
+                input.removeTap(onBus: 0)
+                // Use the hardware input format (outputFormat can be stale after the category switch -> sampleRate assertion crash).
+                let hw = input.inputFormat(forBus: 0)
+                guard hw.sampleRate > 0, hw.channelCount > 0 else {
+                    self.teardown(); call.reject("microphone unavailable"); return
+                }
+                let fmt = AVAudioFormat(standardFormatWithSampleRate: hw.sampleRate, channels: hw.channelCount) ?? hw
                 input.installTap(onBus: 0, bufferSize: 1024, format: fmt) { buf, _ in req.append(buf) }
                 self.audioEngine.prepare(); try self.audioEngine.start()
                 self.recognizer = rec; self.request = req
@@ -151,10 +157,11 @@ public class ClingVoicePlugin: CAPPlugin, CAPBridgedPlugin, AVSpeechSynthesizerD
     }
 
     private func teardown() {
+        task?.cancel(); request?.endAudio()
         if audioEngine.isRunning { audioEngine.stop() }
         audioEngine.inputNode.removeTap(onBus: 0)
-        request?.endAudio(); task?.cancel()
+        audioEngine.reset()
         request = nil; task = nil; recognizer = nil
-        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio, options: [.duckOthers])
+        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [.mixWithOthers])
     }
 }

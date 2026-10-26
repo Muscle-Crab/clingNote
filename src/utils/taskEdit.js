@@ -12,6 +12,16 @@ export const timerRunning = (t, nowMs = Date.now()) => !!(t && t.timerActive && 
 // Once play was pressed (running, paused or finished) the estimate/timer can't change.
 export const TIMER_LOCK_HINT = 'Timer locked once started';
 export const timerStarted = (t) => !!(t && (t.timerActive || t.timerStartedAt || t.timerEndTime));
+// Changing the duration of a started timer: shift its end time by the change (never into the past while it runs).
+export const retimePatch = (t, newMin, nowMs = Date.now()) => {
+  if (!t || !t.timerEndTime || !(newMin > 0)) return {};
+  const oldMin = Number(t.timerDurationMinutes) || Number(t.estimateMin) || 0;
+  const end = new Date(t.timerEndTime).getTime();
+  if (!Number.isFinite(end) || !oldMin) return { timerDurationMinutes: newMin };
+  let next = end + (newMin - oldMin) * 60000;
+  if (t.timerActive && !t.timerPausedAt) next = Math.max(next, nowMs + 60000);
+  return { timerEndTime: new Date(next).toISOString(), timerDurationMinutes: newMin };
+};
 export const remainingMs = (t, nowMs = Date.now()) => (t && t.timerEndTime ? Math.max(0, new Date(t.timerEndTime).getTime() - nowMs) : 0);
 
 // Fields copied to the other repeating copies when "all occurrences" is chosen (never completion/timer/progress state).

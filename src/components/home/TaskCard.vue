@@ -144,16 +144,16 @@
                   <div v-if="showNotification" class="task-toast">Saved ✓</div>
                   <div v-if="transferNotification" class="task-toast task-toast--info">{{ transferNotification }}</div>
                                     <div v-if="expanded" class="task-expand edit-panel" data-test="edit-panel">
-                      <p v-if="dayLocked" class="lock-hint" data-test="lock-hint">🔒 {{ LOCK_HINT }}: name and time estimate can't change. Notes, privacy and reminder can.</p>
+                      <p v-if="dayLocked" class="lock-hint" data-test="lock-hint">🔒 Locked in: you can still edit the name, estimate and timer. Deleting and adding stay locked.</p>
                       <label class="mini-field"><span>Name</span>
-                        <input type="text" class="field-input" data-test="edit-title" :value="task.title" :disabled="dayLocked" :title="dayLocked ? LOCK_HINT : ''" maxlength="140"
+                        <input type="text" class="field-input" data-test="edit-title" :value="task.title" maxlength="140"
                                @change="$event.target.value.trim() && $emit('patch', { title: $event.target.value.trim() })" /></label>
                       <div class="mini-field"><span>Estimate (min)</span>
-                        <p v-if="timerLocked" class="lock-hint" data-test="timer-lock-hint">⏱️ {{ TIMER_LOCK_HINT }}</p>
+                        <p v-if="timerLocked" class="field-hint" data-test="timer-lock-hint">⏱️ Changing the estimate adjusts the running timer.</p>
                         <div class="est-chips" role="group" aria-label="Time estimate" data-test="est-edit">
-                          <button v-for="m in ESTIMATE_CHIPS" :key="m" type="button" class="adj-chip" :class="{ on: Number(task.estimateMin) === m }" :disabled="estLocked"
+                          <button v-for="m in ESTIMATE_CHIPS" :key="m" type="button" class="adj-chip" :class="{ on: Number(task.estimateMin) === m }"
                                   :data-test="'est-chip-' + m" @click="$emit('patch', { estimateMin: m })">{{ m }}</button>
-                          <input type="number" min="1" max="1440" step="5" class="field-input est-custom" data-test="est-custom" placeholder="Custom" :disabled="estLocked" :title="timerLocked ? TIMER_LOCK_HINT : ''"
+                          <input type="number" min="1" max="1440" step="5" class="field-input est-custom" data-test="est-custom" placeholder="Custom"
                                  :value="ESTIMATE_CHIPS.includes(Number(task.estimateMin)) ? '' : (task.estimateMin || '')" @change="cleanEstimate($event.target.value) && $emit('patch', { estimateMin: cleanEstimate($event.target.value) })" />
                         </div>
                         <small class="field-hint">{{ est.points }} points (auto from the estimate{{ estLocked ? ', locked' : '' }})</small></div>
@@ -229,7 +229,7 @@ import { chipValues, fmtMin } from '@/utils/taskEstimate';
 import { formatShortDate, formatTime } from '@/utils/dateTime';
 import TimerRing from './TimerRing.vue';
 import { hasRing } from '@/utils/timerRing';
-import { ESTIMATE_CHIPS, LOCK_HINT, TIMER_LOCK_HINT, cleanEstimate, timerStarted } from '@/utils/taskEdit';
+import { ESTIMATE_CHIPS, cleanEstimate, timerStarted } from '@/utils/taskEdit';
 import SubtaskList from '@/components/home/SubtaskList.vue';
 
 const props = defineProps({
@@ -317,7 +317,7 @@ const schedText = computed(() => scheduleLabel(props.task));
 const schedLate = computed(() => !!props.task?.scheduledFor && scheduledOverdue(props.task, new Date()));
 const est = computed(() => chipValues(props.task));
 const timerLocked = computed(() => timerStarted(props.task)); // estimate frozen once play was pressed
-const estLocked = computed(() => props.dayLocked || timerLocked.value);
+const estLocked = computed(() => false); // estimate/timer stay editable during lock-in and after play (end time is shifted)
 // Long-press (550 ms, finger kept still) on the card opens the editor.
 let pressTimer = null;
 const onPressStart = (e) => { if (e.target.closest('button, input, textarea, select, a, .task-expand, .drag-handle')) return; clearTimeout(pressTimer); pressTimer = setTimeout(() => { pressTimer = 'fired'; emit('edit'); }, 550); };

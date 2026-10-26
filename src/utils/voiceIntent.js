@@ -49,19 +49,21 @@ function parseTime(st) {
   return r || null;
 }
 
-const STOP_LEAD = /^(?:please\s+|can you\s+|could you\s+|i need to\s+|i have to\s+|i've got to\s+|i gotta\s+|i want to\s+|i should\s+|let's\s+|lets\s+|add(?:\s+a)?\s+task(?:\s+to)?\s+|add\s+|new task\s+|task(?:\s+to)?\s+|put\s+|um+\s+|uh+\s+|so\s+|okay\s+|ok\s+|also\s+|and\s+|then\s+)+/i;
+const STOP_LEAD = /^(?:please\s+|can you\s+|could you\s+|i (?:also |really |still |then )?(?:need|have|want|got) to\s+|i've got to\s+|i gotta\s+|i should\s+|i must\s+|i'?m (?:going to|gonna)\s+|i am going to\s+|i'?ll\s+|i will\s+|make sure (?:to|i)\s+|let's\s+|lets\s+|add(?:\s+a)?\s+task(?:\s+to)?\s+|add\s+|new task\s+|task(?:\s+to)?\s+|put\s+|um+\s+|uh+\s+|er+\s+|so\s+|okay\s+|ok\s+|also\s+|and\s+|then\s+|next\s+|after that\s+|like\s+|you know\s+|basically\s+|first(?:ly)?\s+|second(?:ly)?\s+|third(?:ly)?\s+|fourth\s+|finally\s+|lastly\s+|number (?:one|two|three|four|five|\d+)\s+|\d+[.)]\s*|i think\s+|i guess\s+|oh\s+|yeah\s+)+/i;
+const FILLER = /\b(?:um+|uh+|erm|er|you know|i mean|kind of|sort of|like,)\b[,]?\s*/gi;
 const cleanTitle = (s) => {
-  let t = String(s || '').replace(/\s+/g, ' ').trim();
+  let t = String(s || '').replace(FILLER, ' ').replace(/\s+/g, ' ').trim();
   for (let i = 0; i < 3; i++) t = t.replace(STOP_LEAD, '').trim();
   t = t.replace(/^(?:to|for|about|that i (?:need|have) to|that)\s+/i, '').replace(/\s+(?:at|on|for|by|from|in|the|and|to)$/i, '').replace(/\s+(?:at|on|for|by|from|in|the|and|to)$/i, '').replace(/^[\s,.;:-]+|[\s,.;:!?-]+$/g, '');
   return t ? t[0].toUpperCase() + t.slice(1) : '';
 };
 
 export function parseClause(text, now = new Date()) {
-  const st = { s: ` ${String(text || '').trim().replace(/^(?:(?:also|and|then|plus|so|okay|ok|um+|uh+),?\s+)+/i, '')} ` };
-  let kind = '';
+  const st = { s: ` ${String(text || '').trim().replace(FILLER, ' ').replace(/^(?:(?:also|and|then|plus|so|okay|ok|um+|uh+|next|after that|afterwards|first(?:ly)?|second(?:ly)?|third(?:ly)?|fourth|finally|lastly|number \w+),?:?\s+)+/i, '')} ` };
+  let kind = ''; let weak = '';
   if (take(st, /^\s*(?:please\s+)?(?:remind me(?:\s+to|\s+about|\s+that)?|set (?:a|an) reminder(?:\s+to|\s+for)?|reminder(?:\s+to)?|don'?t let me forget(?:\s+to)?|don'?t forget(?:\s+to)?)\b/i)) kind = 'reminder';
-  else if (take(st, /^\s*(?:please\s+)?(?:schedule|block(?:\s+out|\s+off)?|book|reserve|set aside|carve out|plan)\b/i)) kind = 'schedule';
+  else if (take(st, /^\s*(?:please\s+)?(?:schedule|block(?:\s+out|\s+off)?|set aside|carve out)\b/i)) kind = 'schedule';
+  else { const w = take(st, /^\s*(?:please\s+)?(book|reserve|plan)\b/i, (m) => m[1]); if (w) { kind = 'schedule'; weak = w; } }
   const date = parseDate(st, now);
   const rel = take(st, new RegExp(`\\bin\\s+${NUMW}\\s*(minutes?|mins?|hours?|hrs?)\\b`, 'i'), (m) => ({ rel: Math.round(num(m[1].replace(/ of$/, '')) * (/^h/i.test(m[2]) ? 60 : 1)) }));
   const dur = parseDuration(st);
@@ -70,6 +72,8 @@ export function parseClause(text, now = new Date()) {
   let title = st.s;
   if (kind === 'schedule' || dur) title = title.replace(/^\s*(?:time|some time)\s+/i, '');
   title = cleanTitle(title);
+  // "book flights" / "plan the trip" with no time, length or day is a plain task, not a calendar block
+  if (weak && !dur && !time && !date.explicit) { kind = ''; title = cleanTitle(`${weak} ${st.s}`); }
   let start = ''; let durationMin = dur; let d = date.d; let remindAt = '';
   if (time && time.rel != null) { const t = new Date(now.getTime() + time.rel * 60000); d = addDays(t, 0); start = hm(t.getHours(), t.getMinutes()); if (!kind) kind = 'reminder'; }
   else if (time) { start = hm(time.h, time.m); if (time.block && kind === 'schedule' && !durationMin) durationMin = time.block; }
@@ -87,12 +91,29 @@ export function parseClause(text, now = new Date()) {
 }
 const ymdEq = (a, b) => ymd(a) === ymd(b);
 
-// Split one utterance into clauses at an intent boundary ("... and remind me", "... and block", "and then", ";", ".").
-const INTENT = '(?:remind me|schedule|block|book|set a reminder|add|also|then|plus|i (?:need|have) to)';
+// Split one utterance (or a long multi-part explanation) into clauses at an intent boundary:
+// "and then", "after that", "then", "next", "also", "plus", numbered "first/second/finally", sentences, ";" and commas.
+const INTENT = "(?:remind me|schedule|block|book|set a reminder|add|also|then|next|plus|after that|i (?:also |then )?(?:need|have|want|got) to|i(?:'?m| am) (?:going to|gonna)|i (?:should|must)|don'?t (?:let me )?forget|make sure)";
+const SEQ = '(?:and then|after that|afterwards|and also|and next|then|next|also|plus|first(?:ly)?|second(?:ly)?|third(?:ly)?|fourth|finally|lastly|number (?:one|two|three|four|five|six))';
+export const MAX_ITEMS = 15;
 export function splitClauses(text) {
-  return String(text || '').replace(/\b(?:and then|after that)\b/gi, ' ; ')
-    .split(new RegExp(`\\s*(?:[;.!?]+\\s+|[;]+|,?\\s+and\\s+(?=${INTENT}\\b)|,\\s*(?=${INTENT}\\b)|\\s+(?=(?:also|plus)\\s))\\s*`, 'i'))
-    .map((s) => s.trim()).filter((s) => s.replace(/\W/g, '').length >= 2).slice(0, 8);
+  const raw = String(text || '').replace(/\s+/g, ' ')
+    .replace(new RegExp(`(?<!\\bi)(?:^|[\\s,;.])(?:and\\s+)?${SEQ}\\b(?!\\s+(?:week|month|year|time|weekend|mon|tue|wed|thu|fri|sat|sun)\\w*)[,:]?`, 'gi'), (m) => ` ; ${m.replace(/^[\s,;.]+/, '')}`)
+    .split(new RegExp(`\\s*(?:[;.!?]+\\s+|[;.!?]+$|;+|,?\\s+and\\s+(?=${INTENT}\\b)|,\\s*(?=${INTENT}\\b))\\s*`, 'i'));
+  const out = [];
+  for (let c of raw) {
+    c = c.trim(); if (!c) continue;
+    // remaining commas: split only when both sides are clauses of 2+ words (keeps "milk, eggs" lists and "at 5, for an hour")
+    const parts = c.split(/\s*,\s*/); let cur = parts[0];
+    const wc = (x) => x.split(/\s+/).filter(Boolean).length;
+    if (parts.length > 1 && parts.slice(1).every((p, i, a) => wc(p) <= (i === a.length - 1 ? 4 : 2)) && / and /i.test(parts[parts.length - 1]) && wc(parts[parts.length - 1]) <= 4) { out.push(c); continue; } // "milk, eggs and bread" list
+    for (let i = 1; i < parts.length; i++) {
+      const p = parts[i]; const words = (x) => x.replace(/^(?:and|then|also)\s+/i, '').split(/\s+/).filter(Boolean).length;
+      if (words(cur) >= 2 && words(p) >= 2 && !/^(?:at|on|for|by|in|from|around|tomorrow|today|tonight|this|next|and)\b/i.test(p) && !/^\d/.test(p)) { out.push(cur); cur = p; } else cur = `${cur}, ${p}`;
+    }
+    out.push(cur);
+  }
+  return out.map((s) => s.trim()).filter((s) => !new RegExp(`^(?:and\\s+)?${SEQ}[\\s,.]*$`, 'i').test(s)).filter((s) => cleanTitle(s.replace(FILLER, ' ')).replace(/\W/g, '').length >= 2).slice(0, MAX_ITEMS);
 }
 
 export function parseUtterance(text, now = new Date()) {
@@ -104,7 +125,7 @@ export function normalizeItems(items, now = new Date()) {
   if (!Array.isArray(items)) return [];
   const okD = (s) => /^\d{4}-\d{2}-\d{2}$/.test(String(s || ''));
   const okT = (s) => /^([01]\d|2[0-3]):[0-5]\d$/.test(String(s || ''));
-  return items.slice(0, 8).map((x) => {
+  return items.slice(0, MAX_ITEMS).map((x) => {
     const type = ['task', 'reminder', 'schedule'].includes(x && x.type) ? x.type : 'task';
     const title = String((x && x.title) || '').replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, 140);
     const date = okD(x.date) ? x.date : ymd(now);
