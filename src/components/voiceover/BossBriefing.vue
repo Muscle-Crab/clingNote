@@ -1,5 +1,5 @@
 <template>
-  <div v-if="card" class="bb-wrap" data-test="boss-briefing">
+  <div v-if="card" class="bb-wrap" data-test="boss-briefing" @click.self="close">
     <section class="bb" role="dialog" aria-label="Robot coach report">
       <div class="bb-head">
         <div class="bb-who"><RobotCoach :size="64" :talking="speaking" /><div><h2>{{ card.morning ? 'Morning report' : card.report && card.report.atEase ? 'All done' : 'Your report' }}</h2><BrandMark inline /></div></div>
@@ -26,7 +26,7 @@
         </svg>
         <div class="bb-stats"><span>🔥 {{ card.streak }}/5 streak</span><span>✅ {{ card.weekDone }}/{{ card.weekPlanned }} this week</span><span>⭐ {{ card.weekPoints }} pts</span></div>
         <p v-if="card.introText" class="bb-p bb-intro" data-test="bb-intro"><b>New here?</b> {{ card.introText }}</p>
-        <p class="bb-p" data-test="bb-recap"><b>Yesterday:</b> {{ card.recap.replace(/^First, (how )?yesterday( went)?\.\s*/, '') }}</p>
+        <p class="bb-p" data-test="bb-recap"><b>Yesterday:</b> {{ String(card.recap || '').replace(/^First, (how )?yesterday( went)?\.\s*/, '') }}</p>
         <p v-if="card.todayList.length" class="bb-p"><b>Today:</b> {{ card.todayList.join(' · ') }}</p>
         <p v-if="card.team" class="bb-p"><b>Team:</b> {{ card.team }}</p>
       </template>
@@ -151,10 +151,10 @@ onBeforeUnmount(() => { window.removeEventListener('cn:sergeant-ack', onAck); cl
 </script>
 
 <style scoped>
-.bb-wrap { position: fixed; inset: 0; z-index: 9000; display: flex; align-items: flex-end; justify-content: center; background: rgba(3,6,14,.6); padding: 12px 12px calc(12px + env(safe-area-inset-bottom)); }
-.bb { width: 100%; max-width: 460px; max-height: 86vh; overflow-y: auto; background: #070D1C; border: 1px solid #2A3C66; border-radius: 22px; padding: 16px; color: #F2F5FC; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
+.bb-wrap { position: fixed; inset: 0; z-index: 9000; display: flex; align-items: flex-end; justify-content: center; background: rgba(3,6,14,.6); padding: max(12px, env(safe-area-inset-top)) 12px calc(12px + env(safe-area-inset-bottom)); }
+.bb { width: 100%; max-width: 460px; max-height: calc(80vh - env(safe-area-inset-top) - env(safe-area-inset-bottom)); /* leave backdrop visible: tap outside closes */ overflow-y: auto; background: #070D1C; border: 1px solid #2A3C66; border-radius: 22px; padding: 16px; color: #F2F5FC; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
 .bb-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; } .bb-head h2 { margin: 0; font-size: 18px; font-weight: 800; }
-.bb-r { display: flex; gap: 6px; align-items: center; } .bb-x { background: none; border: 0; color: #7180A0; font-size: 16px; cursor: pointer; width: 30px; height: 30px; }
+.bb-r { display: flex; gap: 6px; align-items: center; } .bb-x { background: #10204A; border: 0; border-radius: 999px; color: #C9D3EA; font-size: 18px; cursor: pointer; width: 44px; height: 44px; flex: 0 0 44px; touch-action: manipulation; } /* 44pt tap target */
 .bb-alert { margin: 12px 0 4px; padding: 10px 12px; border-radius: 12px; background: rgba(255,90,70,.12); border: 1px solid rgba(255,90,70,.4); color: #FFD2CA; font-weight: 600; }
 .bb-chart { width: 100%; height: auto; margin: 10px 0 4px; background: linear-gradient(180deg, #0B1630, #070D1C); border-radius: 14px; }
 .bb-stats { display: flex; flex-wrap: wrap; gap: 8px; font-size: 13px; color: #A9B4CC; } .bb-stats span { background: #10204A; padding: 4px 10px; border-radius: 999px; }
