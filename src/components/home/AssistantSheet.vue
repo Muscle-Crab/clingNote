@@ -2,7 +2,7 @@
   <div class="ask-sheet" role="dialog" aria-modal="true" aria-label="ClingNote assistant" data-test="assistant-sheet" @keydown.esc="$emit('close')">
     <header class="ask-head">
       <button type="button" class="ask-x" aria-label="Close" @click="$emit('close')">✕</button>
-      <h2 class="ask-title">🤖 Assistant <small class="asst-ai">AI · Google Gemini</small></h2>
+      <h2 class="ask-title"><RobotAvatar class="ask-avatar" :live="listening" /> Assistant <small class="asst-ai">AI · Google Gemini</small></h2>
       <button type="button" class="ask-x" data-test="assistant-speak-toggle" :aria-pressed="speak ? 'true' : 'false'" :aria-label="speak ? 'Spoken replies on' : 'Spoken replies off'" @click="setSpeak(!speak)">
         <i :class="speak ? 'fas fa-volume-up' : 'fas fa-volume-mute'"></i>
       </button>
@@ -40,6 +40,7 @@
 // Tools are validated in utils/assistantTools.js and run by the `executor` prop (HomeView, same paths as the UI). Delete / complete / start day /
 // Community posts wait for an explicit tap or spoken "yes". Replies are spoken through the existing boss voice stack (useVoiceover.speakLive).
 import { ref, nextTick, onBeforeUnmount, onMounted } from 'vue';
+import RobotAvatar from './RobotAvatar.vue';
 import { askAi } from '@/composables/useAi';
 import { speakLive, stopVoice, unlockVoice } from '@/composables/useVoiceover';
 import { startNativeSpeech, nativeSpeechAvailable } from '@/composables/useNativeSpeech';
@@ -112,6 +113,7 @@ scroll();
 .ask-sheet { position: fixed; inset: 0; z-index: 210; display: flex; flex-direction: column; background: var(--c-surface, #18181b); color: var(--c-text, #eee);
   padding: calc(env(safe-area-inset-top, 0px) + .5rem) .75rem calc(env(safe-area-inset-bottom, 0px) + .75rem); overscroll-behavior: contain; }
 .ask-head { display: flex; align-items: center; gap: .25rem; padding-bottom: .5rem; border-bottom: 1px solid var(--c-border, #2a2a2e); }
+.ask-avatar { width: 28px; height: 28px; vertical-align: middle; margin-right: .25rem; }
 .ask-title { flex: 1; margin: 0; font-size: 1.05rem; text-align: center; }
 .asst-ai { display: block; font-size: .7rem; font-weight: 400; color: var(--c-text-3, #888); }
 .ask-x, .ask-clear { background: none; border: none; color: var(--c-text-2, #aaa); font-size: .95rem; cursor: pointer; padding: .4rem .5rem; min-width: 44px; min-height: 44px; }

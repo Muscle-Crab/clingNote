@@ -18,7 +18,7 @@ require.extensions['.vue'] = (mod, filename) => {
   const out = compileScript(descriptor, { id: 'smoke', inlineTemplate: true });
   mod._compile(toCjs(out.content, filename), filename);
 };
-for (const ext of ['.svg', '.png', '.jpg', '.mp3', '.css']) require.extensions[ext] = (mod, filename) => { mod.exports = filename; }; // assets: stub
+for (const ext of ['.svg', '.png', '.webp', '.jpg', '.mp3', '.css']) require.extensions[ext] = (mod, filename) => { mod.exports = filename; }; // assets: stub
 const origJs = require.extensions['.js'];
 require.extensions['.js'] = (mod, filename) => {
   if (filename.startsWith(src)) mod._compile(toCjs(fs.readFileSync(filename, 'utf8'), filename), filename);

@@ -15,12 +15,13 @@
     <button type="button" class="fab fab-voice fab-assistant" :class="{ 'fab-voice--listening': assistantLive }" data-test="assistant-bubble"
         title="Assistant (hold to talk)" aria-label="Assistant. Tap to open, press and hold to talk"
         @pointerdown="hold" @pointerup="release" @pointerleave="release" @pointercancel="release" @contextmenu.prevent @click="onClick">
-      <i class="fas fa-robot fab-icon" aria-hidden="true"></i>
+      <RobotAvatar class="fab-robot" :live="assistantLive" />
     </button>
   </div>
 </template>
 
 <script setup>
+import RobotAvatar from './RobotAvatar.vue';
 // Bottom-left floating assistant button (replaces the old standalone mic FAB). Tap = open; long-press = open listening.
 defineProps({
   userId: { type: String, default: null },
@@ -48,5 +49,7 @@ const onClick = () => { if (longed) { longed = false; return; } emit('assistant'
 .fab-pulse { position: absolute; inset: -2px; border-radius: 14px; background: rgba(61, 220, 151, .25); animation: ping 1s cubic-bezier(0, 0, .2, 1) infinite; }
 @keyframes ping { 75% { transform: scale(1.3); opacity: 0; } }
 .fab-assistant { touch-action: manipulation; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
-.fab-assistant .fab-icon { font-size: 22px; line-height: 1; display: inline-flex; align-items: center; justify-content: center; }
+.fab-assistant { padding: 3px; overflow: visible; }
+.fab-robot { width: 46px; height: 46px; }
+.fab-assistant.fab-voice--listening { box-shadow: 0 0 0 2px #4aa8ff, 0 0 14px 2px rgba(74, 168, 255, .65); }
 </style>
