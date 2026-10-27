@@ -11,7 +11,7 @@ import { SCRIPTS } from '@/voiceover/scripts';
 import { PHRASE_KEYS, phraseKey, liveChunks, MAX_LIVE_CHARS } from '@/voiceover/phrases';
 import { fnUrl } from '@/config/api';
 
-const MUTE_KEY = 'clingnote.voMuted.v1';
+const MUTE_KEY = 'clingnote.voMuted.v1'; // also read by utils/notifSound.js (VOICE_MUTE_KEY) for notification sounds
 const readMuted = () => { try { return localStorage.getItem(MUTE_KEY) === '1'; } catch (e) { return false; } };
 export const voMuted = ref(readMuted());
 export const voUnlocked = ref(false);

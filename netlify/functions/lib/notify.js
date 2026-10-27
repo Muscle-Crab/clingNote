@@ -4,10 +4,14 @@
 const MAX_LEN = { title: 80, message: 300 };
 const clip = (s, n) => String(s || '').replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, n);
 
+// Custom iOS sound (bundled robot-coach clip, see src/utils/notifSound.js). Only our own bundled file names pass.
+const IOS_SOUNDS = new Set(['cn_task.caf', 'cn_morning.caf', 'cn_evening.caf']);
+const iosSound = (s) => (IOS_SOUNDS.has(s) ? s : undefined);
+
 const authHeader = (key) => (String(key).startsWith('os_v2_') ? `Key ${key}` : `Basic ${key}`);
 
 // Build the OneSignal payload. kind 'self' targets ONLY the caller (external_id = Firebase uid; the client calls OneSignal.login(uid)).
-const buildPayload = ({ appId, uid, kind = 'self', title, message, sendAfter, url }, { allowBroadcast = false } = {}) => {
+const buildPayload = ({ appId, uid, kind = 'self', title, message, sendAfter, url, sound }, { allowBroadcast = false } = {}) => {
   if (!appId) throw Object.assign(new Error('Server not configured'), { status: 500 });
   const body = { app_id: appId, headings: { en: clip(title, MAX_LEN.title) || 'ClingNote' }, contents: { en: clip(message, MAX_LEN.message) } };
   if (!body.contents.en) throw Object.assign(new Error('Empty message'), { status: 400 });
@@ -26,6 +30,7 @@ const buildPayload = ({ appId, uid, kind = 'self', title, message, sendAfter, ur
     if (t.getTime() > Date.now()) body.send_after = t.toISOString();
   }
   if (url && /^https:\/\/clingnot\.netlify\.app\//.test(url)) body.url = url;
+  if (iosSound(sound)) body.ios_sound = sound; // OneSignal -> APNs aps.sound
   return body;
 };
 
@@ -50,4 +55,4 @@ const sendOneSignal = async (payload, key = process.env.ONESIGNAL_REST_API_KEY, 
   return { id: data.id || null };
 };
 
-module.exports = { buildPayload, verifyUser, sendOneSignal, authHeader, getAdmin, clip };
+module.exports = { iosSound, IOS_SOUNDS, buildPayload, verifyUser, sendOneSignal, authHeader, getAdmin, clip };

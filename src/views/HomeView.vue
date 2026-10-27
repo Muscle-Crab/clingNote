@@ -1732,6 +1732,14 @@ const resyncNotifications = () => {
     await syncScheduledNotifications({ list: scheduledList.value, todayTasks, todayStr: getTodayId() });
   }, 600);
 };
+// Notification sound follows the robot-voice toggle (utils/notifSound.js): re-plan pending scheduled alerts so they pick up
+// the new sound, and mirror it to userSettings/{uid}.notifVoice so server pushes (daily-report / manager-pal) match.
+watch([voMuted, userId], ([m, u], prev) => {
+  if (!u) return;
+  const mark = `${u}:${m ? 0 : 1}`;
+  try { if (localStorage.getItem('cn.notifVoiceSynced') !== mark) setDoc(doc(db, 'userSettings', u), { notifVoice: !m }, { merge: true }).then(() => { try { localStorage.setItem('cn.notifVoiceSynced', mark); } catch (e) { /* */ } }).catch(() => {}); } catch (e) { /* storage off */ }
+  if (prev && prev[1] === u && prev[0] !== m) resyncNotifications();
+}, { immediate: true });
 
 // Editor: move an existing one-time task from today's list to a future date.
 const scheduleExistingTask = async (index, task, { date, time }) => {

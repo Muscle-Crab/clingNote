@@ -23,6 +23,7 @@
 //       palInvites/{CODE} {uid,name,expiresAt}  pals/{pairId} {members:[a,b], names:{}, createdAt}
 const { getAdmin } = require('./lib/firebaseAdmin');
 const { verifyUser, buildPayload, sendOneSignal } = require('./lib/notify');
+const { notifSound } = require('../../src/utils/notifSound.js');
 const { withCors } = require('./lib/cors');
 const M = require('./lib/managerPal');
 const core = require('./lib/eightHourCore');
@@ -66,8 +67,10 @@ const bumpWrites = async (db, mref, now) => {
     tx.set(mref, { writes: { hour, n: n + 1 } }, { merge: true });
   });
 };
+// Recipient's robot-voice setting (userSettings/{uid}.notifVoice, mirrored by HomeView); missing/unreadable -> voice on.
+const voiceOn = async (deps, uid) => { try { const db = deps.db || getAdmin().firestore(); const d = await db.doc(`userSettings/${uid}`).get(); return !(d.exists && d.data().notifVoice === false); } catch (e) { return true; } };
 const push = async (deps, uid, title, message, url = 'https://clingnot.netlify.app/pals') => {
-  try { const p = buildPayload({ appId: process.env.ONESIGNAL_APP_ID, uid, kind: 'self', title, message, url }); await (deps.sendPush || sendOneSignal)(p); } catch (e) { /* push is best-effort */ }
+  try { const sound = notifSound('mgr', '', { muted: !(await voiceOn(deps, uid)) }); const p = buildPayload({ appId: process.env.ONESIGNAL_APP_ID, uid, kind: 'self', title, message, url, sound }); await (deps.sendPush || sendOneSignal)(p); } catch (e) { /* push is best-effort */ }
 };
 
 // Award eligibility from data the manager may see: today's PUBLIC tasks all done, or today's 8-hour goal met (eightHour doc, server-only).

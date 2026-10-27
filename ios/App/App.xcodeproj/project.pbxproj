@@ -7,6 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A1B2C3D4E5F60718293A4D02 /* cn_task.caf in Resources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4D01 /* cn_task.caf */; };
+		A1B2C3D4E5F60718293A4D12 /* cn_morning.caf in Resources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4D11 /* cn_morning.caf */; };
+		A1B2C3D4E5F60718293A4D22 /* cn_evening.caf in Resources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4D21 /* cn_evening.caf */; };
 		C1A0E1000000000000000017 /* FocusLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A0E1000000000000000006 /* FocusLiveActivity.swift */; };
 		C1A0E1000000000000000016 /* FocusActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A0E1000000000000000005 /* FocusActivityAttributes.swift */; };
 		C1A0E1000000000000000015 /* FocusActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A0E1000000000000000005 /* FocusActivityAttributes.swift */; };
@@ -36,6 +39,9 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		A1B2C3D4E5F60718293A4D01 /* cn_task.caf */ = {isa = PBXFileReference; lastKnownFileType = audio.caf; path = cn_task.caf; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718293A4D11 /* cn_morning.caf */ = {isa = PBXFileReference; lastKnownFileType = audio.caf; path = cn_morning.caf; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718293A4D21 /* cn_evening.caf */ = {isa = PBXFileReference; lastKnownFileType = audio.caf; path = cn_evening.caf; sourceTree = "<group>"; };
 		C1A0E1000000000000000006 /* FocusLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = FocusLiveActivity.swift; path = FocusLiveActivity.swift; sourceTree = "<group>"; };
 		C1A0E1000000000000000005 /* FocusActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = FocusActivityAttributes.swift; path = ../Shared/FocusActivityAttributes.swift; sourceTree = "<group>"; };
 		C1A0E1000000000000000004 /* LockShared.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = LockShared.swift; path = ../Shared/LockShared.swift; sourceTree = "<group>"; };
@@ -152,6 +158,9 @@
 				A1B2C3D4E5F60718293A4C01 /* GoogleService-Info.plist */,
 				2FAD9762203C412B000D30F8 /* config.xml */,
 				50B271D01FEDC1A000F3C39B /* public */,
+				A1B2C3D4E5F60718293A4D01 /* cn_task.caf */,
+				A1B2C3D4E5F60718293A4D11 /* cn_morning.caf */,
+				A1B2C3D4E5F60718293A4D21 /* cn_evening.caf */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -266,6 +275,9 @@
 				50379B232058CBB4000EE86E /* capacitor.config.json in Resources */,
 				504EC30D1FED79650016851F /* Main.storyboard in Resources */,
 				2FAD9763203C412B000D30F8 /* config.xml in Resources */,
+				A1B2C3D4E5F60718293A4D02 /* cn_task.caf in Resources */,
+				A1B2C3D4E5F60718293A4D12 /* cn_morning.caf in Resources */,
+				A1B2C3D4E5F60718293A4D22 /* cn_evening.caf in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
