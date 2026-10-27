@@ -20,11 +20,13 @@ const WEEK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   await db.doc(`weeklyRoutines/${uid}_${today}`).set({ tasks });
   const br = await chromium.launch({ executablePath: process.env.CHROME });
   const p = await newPage(br, 'easy');
-  const errs = []; p.on('pageerror', (e) => errs.push(e.message));
+  const errs = []; p.on('pageerror', (e) => /SDK already initialized/.test(e.message) || errs.push(e.message)); // known dev-server SDK noise, ignored by the other e2e suites too
   await emailLogin(p, email); await sleep(3500);
   for (let i = 0; i < 3; i++) { const b = p.locator('.drama button'); if (await b.count()) { await b.first().click().catch(() => {}); await sleep(600); } }
   const clearOverlays = async () => { for (let i = 0; i < 4; i++) { const b = p.locator('.bb-x, .dsp-skip, .drama button'); if (await b.count()) { await b.first().click({ timeout: 3000 }).catch(() => {}); await sleep(700); } } };
-  await clearOverlays(); await p.screenshot({ path: SHOTS + 'easy_0_home.png' });
+  await clearOverlays();
+  const sd = p.locator('button', { hasText: 'Start Day' }); if (await sd.count()) { await sd.first().click({ timeout: 5000 }).catch(() => {}); await sleep(2500); await clearOverlays(); }
+  await p.screenshot({ path: SHOTS + 'easy_0_home.png' });
 
   // Feature 2: 13 tasks (2 completed under the Done toggle) -> no "hidden" note; duplicate-key cards both render
   const more = p.locator('[data-test=more-hidden]');
@@ -55,6 +57,7 @@ const WEEK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
   // Feature 4: templates — save, apply skips duplicates
   await p.click('[data-test=templates-open]'); await sleep(800);
+  ok('template header count matches what is saved', (await p.innerText('.dts-h')).includes('(12 tasks)'));
   await p.fill('[data-test=tpl-name]', 'ZZTEST Workday'); await p.click('[data-test=tpl-times]'); await p.click('[data-test=tpl-save]'); await sleep(2000);
   ok('template saved note', (await p.innerText('[data-test=tpl-note]')).includes('ZZTEST Workday'));
   const st = (await db.doc(`userSettings/${uid}`).get()).data() || {};
@@ -67,7 +70,6 @@ const WEEK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   ok('apply summary says already on today', /already on today/.test(toast), JSON.stringify(toast));
 
   // Feature 1: widget "+" deep link target opens the add sheet even when Home is already open
-  await p.evaluate(() => window.history.pushState({}, '', '/home?new=1'));
   await p.goto(p.url().replace(/\/home.*$/, '/home?new=1'), { waitUntil: 'load' }); await sleep(5000);
   ok('/home?new=1 opens Add task sheet', await p.locator('#nt-name').isVisible().catch(() => false));
   await p.screenshot({ path: SHOTS + 'easy_4_new_sheet.png' });

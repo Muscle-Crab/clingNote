@@ -60,7 +60,7 @@
 
         <EightHourCard v-if="lockInToday || eh.lock.value" :tasks="ehTasks" :start-error="ehStartError" @retry="syncAfterAuth" @start="openDayPrompt" />
         <PlanDaySheet v-if="planOpen" :tasks="dayTasks" :busy="planBusy" :error="planError" @previewed="onPlanPreviewed" @confirm="onPlanConfirm" @close="planOpen = false" />
-        <DayTemplatesSheet v-if="tplOpen" :templates="dayTemplates" :task-count="dayTasks.length" :busy="tplBusy" :error="tplError" :note="tplNote" @apply="applyDayTemplate" @save="saveDayTemplate" @remove="removeDayTemplate" @close="tplOpen = false" />
+        <DayTemplatesSheet v-if="tplOpen" :templates="dayTemplates" :task-count="templateItemCount" :busy="tplBusy" :error="tplError" :note="tplNote" @apply="applyDayTemplate" @save="saveDayTemplate" @remove="removeDayTemplate" @close="tplOpen = false" />
         <DayStartPrompt v-if="dayPromptOpen" :initial-hours="eh.hoursPref.value" :now-ms="eh.nowMs" :tz="eh.plan.value?.tz || ''" :busy="ehBusy" :error="ehStartError" :tasks="todayTasksForTarget" :stats="eh.stats.value" :earned="pointsAccumulated || 0" @confirm="confirmDayStart" @skip="skipLockIn" />
 
         <ProgressBar :percentage="calculateCompletionPercentage()" :milestones="milestones" :done="completedTaskCount || 0" :total="dayTasks.length"
@@ -890,6 +890,8 @@ const onPlanConfirm = async (p) => {
   planOpen.value = false; showNoteToast(saved ? `Day planned: ${saved} start time${saved === 1 ? '' : 's'} set` : 'Day planned: times already matched');
 };
 // ---- Day templates ----
+// What "Save template" would actually store (dupes/won't-do dropped), so the header count matches the saved count.
+const templateItemCount = computed(() => { const r = makeTemplate('x', dayTasks.value); return r.ok ? r.template.items.length : 0; });
 const { templates: dayTemplates, load: loadDayTemplates, save: storeDayTemplate, remove: dropDayTemplate } = useDayTemplates();
 const tplOpen = ref(false); const tplBusy = ref(false); const tplError = ref(''); const tplNote = ref('');
 const openTemplates = async () => { if (!isViewingToday.value) { selectedDayIndex.value = todayIdx.value; await fetchSelectedDayRoutine(); } tplError.value = ''; tplNote.value = ''; tplOpen.value = true; loadDayTemplates(userId.value); };

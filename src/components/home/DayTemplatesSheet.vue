@@ -1,5 +1,6 @@
 <template>
   <!-- Day templates: save today's tasks under a name; Apply adds them to today (tasks already on today are skipped). -->
+  <Teleport to="body">
   <div class="dsp" role="dialog" aria-modal="true" aria-labelledby="dts-t" data-test="day-templates" @click.self="$emit('close')">
     <div class="dsp-card">
       <h2 id="dts-t">Day templates</h2>
@@ -23,6 +24,7 @@
       <button type="button" class="dsp-btn dsp-skip" data-test="tpl-close" @click="$emit('close')">Close</button>
     </div>
   </div>
+  </Teleport>
 </template>
 
 <script setup>
@@ -33,8 +35,8 @@ const name = ref(''); const withTimes = ref(false); const confirmDel = ref('');
 </script>
 
 <style scoped>
-.dsp { position: fixed; inset: 0; z-index: 9400; display: grid; place-items: center; padding: 16px; background: rgba(4,8,18,.82); backdrop-filter: blur(4px); }
-.dsp-card { width: min(380px, 100%); max-height: calc(100vh - 32px); overflow-y: auto; background: var(--c-surface, #16181c); border: 1px solid var(--c-border, #2a2a2e); border-radius: 18px; padding: 20px; color: var(--c-text, #e6e6e6); text-align: center; }
+.dsp { /* teleported to <body>, outside .app-shell: carry the navy theme tokens */ --c-surface: #0C1630; --c-surface-2: #12203F; --c-border: #1A2846; --c-text: #F2F5FC; --c-text-2: #A9B4CC; --c-text-3: #7180A0; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; position: fixed; inset: 0; z-index: 9400; padding-top: max(16px, env(safe-area-inset-top)) !important; display: grid; place-items: center; padding: 16px; background: rgba(4,8,18,.82); backdrop-filter: blur(4px); }
+.dsp-card { width: min(380px, 100%); max-height: calc(100dvh - 32px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); overflow-y: auto; background: var(--c-surface, #16181c); border: 1px solid var(--c-border, #2a2a2e); border-radius: 18px; padding: 20px; color: var(--c-text, #e6e6e6); text-align: center; }
 .dsp-card h2 { font-size: 1.15rem; margin: 0 0 12px; }
 .dsp-sub { margin: 4px 0 12px; color: var(--c-text-2, #b0b0b0); } .dsp-fine { font-size: .8rem; color: var(--c-text-3, #9aa3b5); margin: 8px 0 0; }
 .dsp-err { color: #e05a5a; font-size: .85rem; margin: 8px 0 0; }

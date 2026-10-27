@@ -1,6 +1,7 @@
 <template>
   <!-- Plan my day: 1) the user picks a start time AND a number of hours (both required, nothing pre-filled)
        2) the robot lays today's open tasks into that window and shows a preview 3) nothing is saved until Confirm. -->
+  <Teleport to="body">
   <div class="dsp" role="dialog" aria-modal="true" aria-labelledby="pds-t" data-test="plan-day" @click.self="$emit('close')">
     <div class="dsp-card">
       <div class="pds-head"><span class="pds-bot"><RobotAvatar :live="step === 'preview'" /></span>
@@ -39,6 +40,7 @@
       </template>
     </div>
   </div>
+  </Teleport>
 </template>
 
 <script setup>
@@ -61,8 +63,8 @@ const layout = () => {
 </script>
 
 <style scoped>
-.dsp { position: fixed; inset: 0; z-index: 9400; display: grid; place-items: center; padding: 16px; background: rgba(4,8,18,.82); backdrop-filter: blur(4px); }
-.dsp-card { width: min(380px, 100%); max-height: calc(100vh - 32px); overflow-y: auto; background: var(--c-surface, #16181c); border: 1px solid var(--c-border, #2a2a2e); border-radius: 18px; padding: 20px; color: var(--c-text, #e6e6e6); text-align: center; }
+.dsp { /* teleported to <body>, outside .app-shell: carry the navy theme tokens */ --c-surface: #0C1630; --c-surface-2: #12203F; --c-border: #1A2846; --c-text: #F2F5FC; --c-text-2: #A9B4CC; --c-text-3: #7180A0; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; position: fixed; inset: 0; z-index: 9400; padding-top: max(16px, env(safe-area-inset-top)) !important; display: grid; place-items: center; padding: 16px; background: rgba(4,8,18,.82); backdrop-filter: blur(4px); }
+.dsp-card { width: min(380px, 100%); max-height: calc(100dvh - 32px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); overflow-y: auto; background: var(--c-surface, #16181c); border: 1px solid var(--c-border, #2a2a2e); border-radius: 18px; padding: 20px; color: var(--c-text, #e6e6e6); text-align: center; }
 .dsp-card h2 { font-size: 1.15rem; margin: 0; }
 .pds-head { display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 10px; }
 .pds-bot { width: 40px; height: 40px; flex: none; }
