@@ -87,6 +87,10 @@ t('pill state: countdown + target running, "Starts X" before, hidden with no pla
   assert.strictEqual(chrome.pillState({ phase: 'before', startsLabel: '7:00 AM', hasPlan: true }).main, 'Starts 7:00 AM');
   assert.strictEqual(chrome.pillState({ phase: 'before', hasPlan: false }), null);
   assert.strictEqual(chrome.pillState({ shut: true, untilLabel: '7:00 AM' }).kind, 'shut');
+  assert.strictEqual(chrome.pillState({ phase: 'ready', hasPlan: true, wrapped: true }).main, 'Day wrapped');
+  assert.strictEqual(chrome.pillState({ phase: 'ready', hasPlan: true, allDone: true }).main, 'All done');
+  assert.strictEqual(chrome.pillState({ phase: 'ready', hasPlan: true, lockInOn: false }), null);
+  assert.strictEqual(chrome.pillState({ running: true, countdown: '01:00:00', earned: 0, target: 60, hasPlan: true, allDone: true }).kind, 'running');
   for (const r of ['home', 'upcoming', 'rankings', 'discipline', 'pals', 'addiction', 'manager-home', 'manager-person']) assert(chrome.PILL_ROUTES.includes(r), r);
   for (const r of ['Login', 'onboarding', 'welcome', 'paywall', 'subs', 'Profile', 'support']) { assert(!chrome.PILL_ROUTES.includes(r)); assert(!chrome.SHUT_ROUTES.includes(r)); }
   assert(!chrome.SHUT_ROUTES.includes('manager-person'), 'managers keep their read-only team view');

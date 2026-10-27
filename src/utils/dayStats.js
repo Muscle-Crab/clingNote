@@ -1,5 +1,6 @@
 // Pure day-level calculations (no component state): pass in what they need.
 export const formatElapsed = (ms) => {
+  ms = Number.isFinite(Number(ms)) ? Math.max(0, Number(ms)) : 0;
   const minutes = Math.floor(ms / 60000);
   const hrs = Math.floor(minutes / 60);
   const mins = minutes % 60;
@@ -44,14 +45,19 @@ export const computeTimeStats = (daySession, routine, wontDoCount) => {
     };
   }
 
-  const totalMs = end - start;
+  const totalMs = isNaN(end) ? 0 : Math.max(0, end - start);
 
-  const productiveMs = routine.reduce((sum, task) => {
-    if (task.completed && task.timerStartedAt && task.timerStoppedAt) {
-      return sum + (new Date(task.timerStoppedAt) - new Date(task.timerStartedAt));
-    }
-    return sum;
+  // Focused = timer intervals of completed tasks, clipped to today's session window. A recurring task can carry a
+  // timerStartedAt from an earlier week (the old-week reset used to keep it), so an unclipped stop-start reached
+  // thousands of hours. Each interval is clipped to [start, end] and the total can never exceed the session length.
+  const ms = (t) => { const d = toD(t); const v = d && d.getTime ? d.getTime() : NaN; return Number.isFinite(v) ? v : NaN; };
+  const s0 = start.getTime(), e0 = end.getTime();
+  const productiveRaw = routine.reduce((sum, task) => {
+    if (!task || !task.completed || !task.timerStartedAt || !task.timerStoppedAt) return sum;
+    const a = Math.max(ms(task.timerStartedAt), s0), b = Math.min(ms(task.timerStoppedAt), e0);
+    return Number.isFinite(a) && Number.isFinite(b) && b > a ? sum + (b - a) : sum;
   }, 0);
+  const productiveMs = Math.max(0, Math.min(productiveRaw, Math.max(0, totalMs)));
   const gapMs = Math.max(0, totalMs - productiveMs);
 
   return {

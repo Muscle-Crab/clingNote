@@ -99,7 +99,7 @@
 
               <!-- Video Tutorial -->
               <div v-if="demoVideo" class="w-full mb-6 rounded-lg shadow-lg">
-                <video
+                <video disablepictureinpicture playsinline
                     :src="demoVideo"
                     controls
                     autoplay
@@ -163,7 +163,7 @@
               </a>
               <div v-if="post.mediaUrl" class="flex justify-center">
                 <template v-if="isVideoUrl(post.mediaUrl)">
-                  <video class="max-w-full max-h-80 rounded-lg object-contain" autoplay muted controls playsinline>
+                  <video class="max-w-full max-h-80 rounded-lg object-contain" autoplay muted controls playsinline disablepictureinpicture>
                     <source :src="post.mediaUrl" type="video/mp4">
                     Your browser does not support the video tag.
                   </video>
@@ -344,7 +344,7 @@
                 </button>
               </div>
               <div v-else-if="mediaType === 'video' && videoUrl" class="relative">
-                <video :src="videoUrl" controls class="w-32 h-32 rounded-lg"></video>
+                <video :src="videoUrl" controls playsinline disablepictureinpicture class="w-32 h-32 rounded-lg"></video>
                 <!-- Close Button -->
                 <button
                     @click="removeVideo"

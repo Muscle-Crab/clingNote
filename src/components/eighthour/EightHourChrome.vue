@@ -38,6 +38,9 @@ import { pillState, SHUT_ROUTES, PILL_ROUTES, SEEN_KEY } from '@/utils/eightHour
 import { speak } from '@/composables/useSpeech';
 import { hoursLabel, WARN_MINUTES } from '@/utils/eightHour';
 import { scheduleLocal } from '@/utils/localNotify';
+import { homeDayFor } from '@/utils/homeDay';
+import { lockIn } from '@/utils/lockIn';
+import { getTodayId } from '@/utils/dateTime';
 
 const route = useRoute(); const router = useRouter();
 const eh = useEightHour();
@@ -48,8 +51,8 @@ const profileLink = computed(() => (uid.value ? `/profile/${uid.value}` : '/logi
 
 const pill = computed(() => {
   if (!uid.value || !PILL_ROUTES.includes(route.name) || route.meta.bare) return null;
-  const l = eh.lock.value;
-  return pillState({ phase: eh.phase.value, running: eh.running.value, countdown: eh.countdown.value, startsLabel: eh.startsLabel.value, hasPlan: !!eh.plan.value,
+  const l = eh.lock.value; const hd = homeDayFor(getTodayId());
+  return pillState({ wrapped: hd.wrapped, allDone: hd.allDone, lockInOn: lockIn.value.enabled, phase: eh.phase.value, running: eh.running.value, countdown: eh.countdown.value, startsLabel: eh.startsLabel.value, hasPlan: !!eh.plan.value,
     shut: !!eh.shutdown.value, untilLabel: eh.shutdown.value?.untilLabel, earned: l ? l.earned || 0 : 0, target: l ? l.target || 0 : 0,
     hours: eh.dayHours.value,
     pace: l && eh.running.value ? paceOf({ earned: l.earned || 0, target: l.target || 0, startMs: l.startMs, endMs: l.endMs, nowMs: eh.nowMs() }) : null });
@@ -100,6 +103,7 @@ watch(() => eh.lock.value && eh.running.value && `${eh.lock.value.dayKey}|${eh.l
 .ehp--run .ehp-dot { background: #3cb46e; animation: ehp-pulse 1.6s infinite; }
 .ehp--risk { border-color: rgba(224,90,90,.7); } .ehp--risk .ehp-dot { background: #e05a5a; }
 .ehp--shut .ehp-dot, .ehp--before .ehp-dot { background: #8791a5; }
+.ehp--done { border-color: rgba(60,180,110,.55); } .ehp--done .ehp-dot { background: #3cb46e; }
 .ehp-sub { font-weight: 600; opacity: .7; overflow: hidden; text-overflow: ellipsis; }
 @keyframes ehp-pulse { 50% { opacity: .35; } }
 .ehs { position: fixed; inset: 0; z-index: 9500; display: grid; place-items: center; padding: calc(env(safe-area-inset-top) + 16px) 16px calc(env(safe-area-inset-bottom) + 16px);

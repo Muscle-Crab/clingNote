@@ -1,6 +1,7 @@
 <template>
-  <div ref="scrollContainer" class="app-root" :class="[{ 'is-dragging': isDraggingTask, 'reorder-active': isDraggingTask || reorderSettling }, appTheme ? 'theme-' + appTheme : '']">
+  <div ref="scrollContainer" class="app-root" :class="[{ 'has-bg-anim': bgPrefs.anim !== 'none', 'is-dragging': isDraggingTask, 'reorder-active': isDraggingTask || reorderSettling }, appTheme ? 'theme-' + appTheme : '']">
     <BackgroundLayer :anim="bgPrefs.anim" :force-motion="bgPrefs.forceMotion" />
+    <div class="safe-top-scrim" aria-hidden="true"></div>
     <BackgroundPanel :open="showBackground" @close="showBackground = false" />
 
     <!-- Loading Screen -->
@@ -181,7 +182,7 @@
             </div>
           </div>
 
-          <IdleState v-if="dayTasks.length > 0 && dayTasks.every(task => task.completed) && !showCompleted" />
+          <IdleState v-if="dayTasks.length > 0 && dayTasks.every(task => task.completed) && !showCompleted" :wrapped="!!daySession.ended" :count="dayTasks.length" />
 
 
           <WontDoList v-if="wontDoTasks.length > 0 && !selectedDayRoutine?.every(task => task.completed)" :tasks="wontDoTasks" @undo="undoWontDo" />
@@ -303,6 +304,7 @@ import ImagePreview from '@/components/home/ImagePreview.vue';
 import ProgressBar from '@/components/home/ProgressBar.vue';
 import EightHourCard from '@/components/home/EightHourCard.vue';
 import { lockIn, loadLockIn, skipLockInToday } from '@/utils/lockIn';
+import { homeDay } from '@/utils/homeDay';
 import DayStartPrompt from '@/components/eighthour/DayStartPrompt.vue';
 import { useEightHour, syncAfterAuth, setDayLengthHours, loadDayLengthHours, promptSeenFor, markPromptSeen } from '@/composables/useEightHour';
 import { countableIndexes } from '@/utils/eightHour';
@@ -970,7 +972,7 @@ const fetchSelectedDayRoutine = async () => {
         if (seq !== fetchSeq) return; // stale: no reset write for a day that is no longer selected
         const now = new Date();
         const resetStale = (list) => list.map((t) => (isStaleCompletion(t, dayIdx, now)
-          ? resetSubtasks({ ...t, completed: false, completedAt: null, timerActive: false, timerStoppedAt: null })
+          ? resetSubtasks({ ...t, completed: false, completedAt: null, timerActive: false, timerStartedAt: null, timerEndTime: null, timerStoppedAt: null })
           : t));
         // A rejected write (e.g. shut 8-hour window, offline) must never hide the day's tasks: show the server copy as-is.
         try { tasks = await mutateDay(selectedDay.day, resetStale); } catch (e) { console.warn('old-week reset skipped:', e && (e.code || e.message)); }
@@ -3437,6 +3439,11 @@ const assistantExecutor = createAssistantExecutor({
   },
 });
 watch(userId, (u) => { if (u) loadDayLengthHours().catch(() => {}); }, { immediate: true });
+// Share today's done/wrapped state with the status pill (EightHourChrome), so it never says "Ready to start" after the day is over.
+watch(() => [isViewingToday.value, !!daySession.value.ended, dayTasks.value.length, completedTaskCount.value], ([today, ended, n, done]) => {
+  if (!today) return;
+  homeDay.value = { dayKey: getTodayId(), wrapped: ended, allDone: n > 0 && done >= n };
+}, { immediate: true });
 watch(userId, (u) => { if (u) loadLockIn(true).then(maybeShowDayPrompt).catch(() => {}); }, { immediate: true });
 // "Skip lock-in today" (start-day prompt): this date only, stored on users/{uid}.lockInSkipDate; the day still starts normally.
 const skipLockIn = async () => {
@@ -4159,6 +4166,15 @@ body.home-v2 .app-topbar { position: absolute; top: 0; left: 0; right: 0; z-inde
 .app-root .fab-group.fab-group { left: 0; right: 0; padding-left: max(16px, calc((100vw - 560px) / 2 + 16px)); padding-right: max(16px, calc((100vw - 560px) / 2 + 16px)); padding-top: var(--sp-4, 16px); padding-bottom: calc(12px + env(safe-area-inset-bottom)); gap: 12px; justify-content: center; align-items: center; pointer-events: none; }
 .app-root .fab-group.fab-group > * { pointer-events: auto; }
 .app-root .content-wrap.content-wrap { padding-bottom: calc(150px + env(safe-area-inset-bottom)); }
+/* In the tab shell, .app-shell--tabs already pads for the tab bar + floating buttons: no second 150px gap under Scheduled. */
+.app-shell--tabs .app-root .content-wrap.content-wrap { padding-bottom: 12px; }
+/* Animated background sits behind the content (z -1): the page/shell backgrounds go transparent so the same #070D1C html background shows through. */
+/* !important beats index.html's inline launch-flash <body style=background>; html keeps #070D1C underneath. */
+body:has(.app-root.has-bg-anim), body:has(.app-root.has-bg-anim) #app { background: transparent !important; }
+.app-shell.app-shell--home:has(.app-root.has-bg-anim), .app-root.has-bg-anim.has-bg-anim { background: transparent; }
+/* Status-bar scrim: scrolled content (e.g. the streak line) never shows under the notch / Dynamic Island. */
+.app-root .safe-top-scrim { position: fixed; top: 0; left: 0; right: 0; height: env(safe-area-inset-top, 0px); z-index: 59; pointer-events: none;
+  background: linear-gradient(180deg, #070D1C 0%, #070D1C 78%, rgba(7,13,28,.0) 100%); }
 
 /* ══ Compact task cards v2: title + actions on row 1, category · estimate · points on row 2, extras on one truncated line ══ */
 .app-root .task-card.task-card.task-card { min-height: 0; padding: 6px 6px 6px 4px; gap: 6px; }

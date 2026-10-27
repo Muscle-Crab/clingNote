@@ -1,5 +1,6 @@
 import Foundation
 import Capacitor
+import WebKit
 import WidgetKit
 
 /// Local Capacitor plugin: the web layer hands over the widget snapshot JSON (src/utils/widgetSnapshot.js);
@@ -82,6 +83,14 @@ public class ClingWidgetPlugin: CAPPlugin, CAPBridgedPlugin {
 
 /// Bridge view controller that registers the app's local (non-npm) plugins.
 class AppBridgeViewController: CAPBridgeViewController {
+    // No Picture-in-Picture from embedded videos (YouTube task links, Room posts): a stashed PiP window shows as a grey
+    // tab on the screen edge that sits over the Create tasks button.
+    override open func webViewConfiguration(for instanceConfiguration: InstanceConfiguration) -> WKWebViewConfiguration {
+        let config = super.webViewConfiguration(for: instanceConfiguration)
+        config.allowsPictureInPictureMediaPlayback = false
+        return config
+    }
+
     override open func capacitorDidLoad() {
         bridge?.registerPluginInstance(ClingWidgetPlugin())
         bridge?.registerPluginInstance(ClingVoicePlugin())

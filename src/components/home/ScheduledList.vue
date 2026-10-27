@@ -1,9 +1,10 @@
 <template>
-  <section class="sched">
+  <section class="sched" :class="{ 'sched--empty': !count && !error }">
     <button type="button" class="sched-toggle" :aria-expanded="open ? 'true' : 'false'" @click="open = !open">
       <i class="fas fa-calendar-alt sched-ico"></i>
       <span class="sched-label">Scheduled</span>
       <span class="sched-count">{{ count }}</span>
+      <span v-if="!count && !error && !open" class="sched-hint" data-test="sched-empty-hint">Nothing scheduled</span>
       <i class="fas sched-chev" :class="open ? 'fa-chevron-down' : 'fa-chevron-right'"></i>
     </button>
     <div v-if="open" class="sched-body">
@@ -91,6 +92,9 @@ const toggleMenu = (t) => {
 .sched-label { flex: 0 0 auto; font-weight: 500; }
 .sched-count { font-family: 'JetBrains Mono', monospace; font-size: var(--fs-xs); font-weight: 700; background: var(--c-accent-soft); color: var(--c-accent-text); padding: 1px 8px; border-radius: var(--r-pill); }
 .sched-chev { margin-left: auto; font-size: var(--fs-sm); }
+.sched-hint { margin-left: auto; font-size: var(--fs-xs); color: var(--c-text-3); }
+.sched-hint + .sched-chev { margin-left: 6px; }
+.sched--empty .sched-toggle { min-height: 40px; }
 .sched-body { padding: var(--sp-1) 0 var(--sp-2); }
 .sched-empty { margin: 0; padding: var(--sp-2) var(--sp-1); font-size: var(--fs-sm); color: var(--c-text-3); }
 .sched-date { margin: var(--sp-3) 0 var(--sp-1); font-size: var(--fs-xs); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--c-text-3); }

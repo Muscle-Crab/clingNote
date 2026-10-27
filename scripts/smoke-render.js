@@ -57,7 +57,7 @@ const cases = [
   ['VoiceModal', { error: 'Microphone access was blocked.' }, ['Microphone access was blocked.', 'role="alert"'], ['Speak your task']],
   ['LoadSummary', { load: { minutes: 90, count: 2, unestimated: 1, level: 'full', hint: 'Full day' }, expanded: false }, ['1h 30m', 'Full day']],
   ['TimeBlockSchedule', { schedule: { blocks: [{ task, start: 540, end: 570, conflict: true }], unscheduled: [] } }, ['9:00 AM', 'overlaps another']],
-  ['IdleState', {}, ['Idle time']],
+  ['IdleState', { count: 10 }, ['All done', '10/10', 'Rest well']], ['IdleState', { wrapped: true, count: 3 }, ['Day wrapped', '3/3']],
   ['WontDoList', { tasks: [{ title: 'Skip me', wontDoReason: 'busy' }] }, ['Skip me', 'busy']],
   ['FabButtons', { userId: 'u1', listening: true }, ['fab-add']],
   ['SubtaskList', { task }, ['Outline', '(1/2)']],
