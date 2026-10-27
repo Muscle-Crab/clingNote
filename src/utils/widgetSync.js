@@ -120,9 +120,12 @@ export const installWidgetSync = () => {
 };
 
 // Widget tap: clingnote://task/<id> -> /home?task=<id>. Returns true if handled.
+let lastLink = { url: '', at: 0 }; // cold start: getLaunchUrl and appUrlOpen can both report the same tap
 export const handleWidgetUrl = (url, router) => {
   const path = parseWidgetLink(url);
   if (!path) return false;
+  const now = Date.now(); if (lastLink.url === url && now - lastLink.at < 3000) return true;
+  lastLink = { url, at: now };
   router.push(path).catch(() => {});
   return true;
 };

@@ -10,7 +10,7 @@
       <div class="eh-line"><b class="eh-title">⏱ Set your day</b><button class="eh-btn eh-btn--primary" :disabled="busy || !wake" @click="save" data-test="eh-save">Lock in</button></div>
       <div class="eh-ctrl">
         <label class="eh-mini">Wake <input type="time" v-model="wake" data-test="eh-wake" /></label>
-        <span class="eh-mini">Tasks <span class="eh-stepper"><button type="button" :disabled="count <= 1" @click="count--" aria-label="Fewer tasks">−</button><strong data-test="eh-count">{{ count }}</strong><button type="button" :disabled="count >= max" @click="count++" aria-label="More tasks">+</button></span></span>
+        <span class="eh-mini">Planned <span class="eh-stepper"><button type="button" :disabled="count <= 1" @click="count--" aria-label="Fewer tasks">−</button><strong data-test="eh-count">{{ count }}</strong><button type="button" :disabled="count >= max" @click="count++" aria-label="More tasks">+</button></span></span>
       </div>
       <p v-if="msg" class="eh-err" role="alert">{{ msg }}</p>
     </template>
@@ -24,15 +24,15 @@
         <span v-else class="eh-badge">Not started</span>
       </div>
       <p class="eh-muted" v-if="phase === 'ready' && needMore <= 0" data-test="eh-all-added">All {{ plan.taskCount }} task{{ plan.taskCount === 1 ? '' : 's' }} added.</p>
-      <p class="eh-muted" v-else-if="phase === 'ready'" data-test="eh-needs-tasks">Add {{ needMore }} more task{{ needMore === 1 ? '' : 's' }} to start the countdown ({{ taskTotal }}/{{ plan.taskCount }}).</p>
-      <p class="eh-muted" v-else>Add {{ plan.taskCount }} task{{ plan.taskCount === 1 ? '' : 's' }} ({{ taskTotal }}/{{ plan.taskCount }}). After your wake time you'll pick today's hours and confirm.</p>
+      <p class="eh-muted" v-else-if="phase === 'ready'" data-test="eh-needs-tasks">You planned {{ plan.taskCount }}, your list has {{ taskTotal }}. Add {{ needMore }} more task{{ needMore === 1 ? '' : 's' }} to start the countdown<template v-if="taskTotal > 0">, or <button type="button" class="eh-link" :disabled="busy" data-test="eh-match" @click="count = Math.min(max, taskTotal); save()">plan {{ taskTotal }} instead</button></template>.</p>
+      <p class="eh-muted" v-else data-test="eh-planned-vs-list">Planned {{ plan.taskCount }} task{{ plan.taskCount === 1 ? '' : 's' }} · {{ taskTotal }} on your list. After your wake time you'll pick today's hours and confirm.</p>
       <div class="eh-ctrl">
         <label class="eh-mini" v-if="phase === 'before'">Wake <input type="time" v-model="wake" data-test="eh-wake" /></label>
         <button v-if="phase === 'before' && wake !== plan.wakeTime" class="eh-btn" :disabled="busy" @click="save">Save</button>
-        <span class="eh-mini">Tasks <span class="eh-stepper"><button type="button" :disabled="busy || count <= 1" @click="count--; save()" aria-label="Fewer tasks">−</button><strong data-test="eh-count">{{ count }}</strong><button type="button" :disabled="busy || count >= max" @click="count++; save()" aria-label="More tasks">+</button></span></span>
+        <span class="eh-mini">Planned <span class="eh-stepper"><button type="button" :disabled="busy || count <= 1" @click="count--; save()" aria-label="Fewer tasks">−</button><strong data-test="eh-count">{{ count }}</strong><button type="button" :disabled="busy || count >= max" @click="count++; save()" aria-label="More tasks">+</button></span></span>
         <span class="eh-fine">Locked once started</span>
       </div>
-      <p v-if="taskTotal > plan.taskCount" class="eh-err" data-test="eh-over" role="alert">You have {{ taskTotal }} tasks but planned {{ plan.taskCount }}. Raise the count to {{ taskTotal }} to start.</p>
+      <p v-if="taskTotal > plan.taskCount" class="eh-err" data-test="eh-over" role="alert">Your list has {{ taskTotal }} tasks but you planned {{ plan.taskCount }}. <button type="button" class="eh-link" :disabled="busy" data-test="eh-match-over" @click="count = Math.min(max, taskTotal); save()">Plan {{ taskTotal }}</button> to start.</p>
       <p v-if="startError" class="eh-err" role="alert">{{ startError }}</p>
       <p v-if="msg" class="eh-err" role="alert">{{ msg }}</p>
     </template>
@@ -164,4 +164,6 @@ const save = async () => {
 .eh-badges { display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 6px; margin: 6px 0; }
 .eh-bdg { display: flex; flex-direction: column; align-items: center; font-size: 20px; text-align: center; } .eh-bdg small { font-size: 9px; opacity: .75; line-height: 1.2; }
 .eh-log { margin: 4px 0 0; padding: 0; list-style: none; opacity: .75; max-height: 120px; overflow: auto; }
+.eh-link { background: none; border: 0; padding: 0; color: inherit; font: inherit; font-weight: 700; text-decoration: underline; cursor: pointer; }
+.eh-link:disabled { opacity: .5; }
 </style>

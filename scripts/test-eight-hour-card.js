@@ -16,9 +16,10 @@ let n = 0; const ok = (c, m) => { assert.ok(c, m); n++; };
   let html = await render(at('2026-10-23T10:00:00Z'), { ...base, plan: null }); // none
   ok(/Set your day/.test(html) && /data-test="eh-save"/.test(html), 'no plan => setup form');
   html = await render(at('2026-10-23T09:00:00Z'), base, [T('a')]); // 05:00 local, before wake
-  ok(/Starts 7:00 AM/.test(html) && /Ends 3:00 PM/.test(html) && /1\/3 added|1\/3\)/.test(html), 'before wake: start + end label and task count');
+  ok(/Starts 7:00 AM/.test(html) && /Ends 3:00 PM/.test(html) && /Planned 3 tasks · 1 on your list/.test(html), 'before wake: start + end label and planned vs list count');
   html = await render(at('2026-10-23T11:30:00Z'), base, [T('a')]); // 07:30 ready
   ok(/data-test="eh-needs-tasks"/.test(html) && /Add 2 more tasks/.test(html), 'ready but tasks missing => countdown waits');
+  ok(/You planned 3, your list has 1/.test(html) && /data-test="eh-match"/.test(html) && /plan 1 instead/.test(html), 'planned vs actual spelled out, one tap to match the plan to the list');
   ok(!/type="time"/.test(html), 'wake time frozen once the wake time has passed');
   html = await render(at('2026-10-23T11:30:00Z'), base, [T('a'), T('b'), T('c')]);
   ok(/data-test="eh-start"/.test(html), 'ready with all tasks => start button (auto-start also fires)');
