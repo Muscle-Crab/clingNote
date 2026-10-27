@@ -50,7 +50,7 @@ export const settleDeadlines = async (uid, settings, now = new Date(), onBeforeK
   for (const d of missed) {
     await addMonthlyAdjust(uid, d, `missed:${d}`, MISSED_DEADLINE_PENALTY);
     log = pushLog(log, logEntry('missed-deadline', d, `${MISSED_DEADLINE_PENALTY} pts`));
-    if (st.bossDate === d && st.bossClearedDate !== d) log = pushLog(log, logEntry('boss-failed', d, st.bossTitle || 'Boss'));
+    if (st.bossDate === d && st.bossClearedDate !== d) log = pushLog(log, logEntry('boss-failed', d, st.bossTitle || 'Evening challenge'));
   }
   if (missed.length) {
     const saved = onBeforeKill ? await onBeforeKill(streakDoc, missed) : false;
@@ -78,7 +78,7 @@ export const tryFreeze = async (uid, streakDoc, missedDates, freezes) => {
 export const clearLossPending = (uid) => patchDisciplineState(uid, { lossPending: null });
 
 // Boss: one task per day. Clearing it gives +BOSS_BONUS (idempotent per day); un-clearing removes it.
-export const setBossForDay = (uid, date, title) => patchDisciplineState(uid, { bossDate: date, bossTitle: title || 'Boss', bossClearedDate: null });
+export const setBossForDay = (uid, date, title) => patchDisciplineState(uid, { bossDate: date, bossTitle: title || 'Evening challenge', bossClearedDate: null });
 export const setBossCleared = async (uid, date, cleared) => {
   await patchDisciplineState(uid, { bossClearedDate: cleared ? date : null });
   await addMonthlyAdjust(uid, date, `boss:${date}`, cleared ? BOSS_BONUS : null);

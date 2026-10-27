@@ -73,8 +73,8 @@
       <DramaOverlay v-if="lossScreen" variant="lost" title="Streak lost" button="I'll do better"
                     :subtitle="lossScreen.reason ? `${lossScreen.lostStreak ? lossScreen.lostStreak + '/5 streak gone. ' : ''}${lossScreen.reason} Complete 5 tasks a day to keep it.` : `You missed your deadline. ${lossScreen.lostStreak ? lossScreen.lostStreak + '-day streak gone. ' : ''}${lossScreen.penalty} pts.`" @close="dismissLoss" />
 
-      <DramaOverlay v-if="bossVictory" variant="victory" title="Boss defeated" button="Claim victory"
-                    :subtitle="`${bossVictory.title} is down. +${BOSS_BONUS} pts — your day can count now.`" @close="bossVictory = null" />
+      <DramaOverlay v-if="bossVictory" variant="victory" title="Challenge cleared" button="Claim victory"
+                    :subtitle="`${bossVictory.title} is done. +${BOSS_BONUS} pts — your day can count now.`" @close="bossVictory = null" />
 
       <DramaOverlay v-if="levelUp" variant="levelup" :title="`Level ${levelUp.level}`" button="Let's go"
                     :subtitle="`${levelUp.xp} XP · ${levelUp.toNext} XP to level ${levelUp.level + 1}`" @close="levelUp = null" />
@@ -874,7 +874,7 @@ onMounted(() => { window.addEventListener('cn:create-task', onCreateTaskEvt);
   { const ask = parseAsk(_proRouter.currentRoute.value.query); if (ask.open) { const q = { ..._proRouter.currentRoute.value.query }; delete q.ask; _proRouter.replace({ query: q }); setTimeout(() => openAssistant(ask.listen), 400); } }
   if (_proRouter.currentRoute.value.query.new === '1') { const q = { ..._proRouter.currentRoute.value.query }; delete q.new; _proRouter.replace({ query: q }); setTimeout(onAddClick, 600); } });
 onBeforeUnmount(() => window.removeEventListener('cn:create-task', onCreateTaskEvt));
-// Drill-sergeant report buttons (components/voiceover/BossBriefing.vue) -> real Home actions on today's list.
+// Robot coach report buttons (components/voiceover/BossBriefing.vue) -> real Home actions on today's list.
 const onSergeantAction = async (e) => {
   const { id, taskKey } = (e && e.detail) || {};
   if (!isViewingToday.value) { selectedDayIndex.value = todayIdx.value; await fetchSelectedDayRoutine(); }
@@ -1354,7 +1354,7 @@ const checkAllTasksCompleted = async () => {
   if (allCompleted) {
     // 🎉 Show completion animation
     showFullScreenAnimation.value = true;
-    speak("Congratulations! You are free to do whatever you want");
+    speak("That's everything! Great work. The rest of the day is yours.");
     fetchSelectedDayRoutine();
     await saveDailyPerformance();
 
@@ -1475,7 +1475,7 @@ const runStrictBoss = (now, today) => {
   if (!idleNudge.value && !anyModalOpen.value && isIdle(lastActive.value, now.getTime(), open)) {
     idleNudge.value = bossLine('idle', { open, idle: IDLE_MINUTES }, String(now.getHours()));
     lastActive.value = now.getTime(); // next nudge after another idle stretch
-    try { if (typeof Notification !== 'undefined' && Notification.permission === 'granted' && document.hidden) { const bn = new Notification('Boss: focus check', { body: idleNudge.value }); bn.onclick = () => { try { window.focus(); } catch (e) { /* */ } bn.close(); }; } } catch (e) { /* optional */ }
+    try { if (typeof Notification !== 'undefined' && Notification.permission === 'granted' && document.hidden) { const bn = new Notification('Your robot: focus check', { body: idleNudge.value }); bn.onclick = () => { try { window.focus(); } catch (e) { /* */ } bn.close(); }; } } catch (e) { /* optional */ }
   }
   if (bossMsg.value?.phase === 'verdict' && discState.value.lastVerdictDate !== today && !verdictSeen(today) && !verdictScreen.value) {
     const v = dayVerdict({ done, min, total: (selectedDayRoutine.value || []).filter((t) => t.status !== 'pending').length });
@@ -1971,9 +1971,9 @@ const speakDailyReport = async () => {
 
   const todayTotal = selectedDayRoutine.value.length;
 
-  const message = `Yesterday, you completed ${yesterdayCompleted} of ${yesterdayTotal} tasks.
-    Today you have ${todayTotal} task${todayTotal === 1 ? '' : 's'}.
-    ${streakGained ? '🔥 Great job on earning a streak!' : '🌱 No streak gained, but today is a new chance!'}`;
+  const message = `Yesterday, you finished ${yesterdayCompleted} of ${yesterdayTotal} tasks.
+    Today you've got ${todayTotal} task${todayTotal === 1 ? '' : 's'}.
+    ${streakGained ? 'Great job, you earned a streak!' : "No streak yesterday, but today's a fresh chance."}`;
 
   speak(message);
 };
@@ -2842,7 +2842,7 @@ const toggleTaskImportance = async (index) => {
   task.important = !task.important;
 
   // Voice feedback
-  const voiceMessage = task.important ? 'Marked as important' : 'No longer marked as important';
+  const voiceMessage = task.important ? "Got it. That one's important." : "Okay, it's not marked important anymore.";
   speak(voiceMessage);
 
   // Update local array

@@ -94,8 +94,8 @@
                 <textarea v-model="newTask.notes" class="field-textarea" placeholder="Extra details..."></textarea>
               </div>
               <div class="field-group anon-row" data-test="anon-toggle">
-                <div class="anon-text"><span class="field-label">🔒 Anonymous for boss</span><small>Your manager sees the time, status &amp; points, not the name or notes</small></div>
-                <button type="button" role="switch" class="anon-switch" :class="{ on: newTask.anonymous }" :aria-checked="newTask.anonymous ? 'true' : 'false'" aria-label="Anonymous for boss" @click="newTask.anonymous = !newTask.anonymous"><span></span></button>
+                <div class="anon-text"><span class="field-label">🔒 Hide name from manager</span><small>Your manager sees the time, status &amp; points, not the name or notes</small></div>
+                <button type="button" role="switch" class="anon-switch" :class="{ on: newTask.anonymous }" :aria-checked="newTask.anonymous ? 'true' : 'false'" aria-label="Hide name from manager" @click="newTask.anonymous = !newTask.anonymous"><span></span></button>
               </div>
             </div>
           </transition>

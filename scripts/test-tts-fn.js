@@ -1,0 +1,35 @@
+// tts Netlify function (mocked ElevenLabs + Firestore): auth, limits, caching, no key leak, voice parity with the app.
+const path = require('path'); const fs = require('fs'); const assert = require('assert');
+const fn = require(path.join(__dirname, '../netlify/functions/tts.js'));
+const V = require(path.join(__dirname, '../netlify/functions/lib/voice.js'));
+let n = 0; const ok = (c, m) => { assert(c, m); n++; console.log('ok -', m); };
+const mkDb = () => { const docs = new Map(); const doc = (p) => ({ p, get: async () => ({ exists: docs.has(p), data: () => docs.get(p) }), set: async (v) => { docs.set(p, { ...(docs.get(p) || {}), ...v }); } });
+  return { docs, doc, runTransaction: async (f) => f({ get: (d) => d.get(), set: (d, v) => { docs.set(d.p, { ...(docs.get(d.p) || {}), ...v }); } }) }; };
+const KEY = 'sk_test_secret_value';
+(async () => {
+  const calls = []; const fetch = async (url, o) => { calls.push({ url, o }); return { ok: true, status: 200, arrayBuffer: async () => Buffer.from('ID3fakeaudio') }; };
+  const base = { env: { ELEVENLABS_API_KEY: KEY }, verify: async (t) => { if (t !== 'good') throw Object.assign(new Error('bad'), { status: 401 }); return { uid: 'u1' }; }, fetch };
+  const ev = (text, tok = 'good') => ({ httpMethod: 'POST', headers: { authorization: `Bearer ${tok}` }, body: JSON.stringify({ text }) });
+  let db = mkDb();
+  let r = await fn.rawHandler(ev('Hi'), {}, { ...base, db, verify: async () => { throw Object.assign(new Error('Unauthorized'), { status: 401 }); } });
+  ok(r.statusCode === 401 && !calls.length, 'unauthenticated -> 401, provider not called');
+  r = await fn.rawHandler({ httpMethod: 'GET', headers: {} }, {}, { ...base, db }); ok(r.statusCode === 405, 'GET -> 405');
+  r = await fn.rawHandler(ev('x'.repeat(401)), {}, { ...base, db }); ok(r.statusCode === 413, 'too long -> 413');
+  r = await fn.rawHandler(ev("Nice. You're **halfway** there."), {}, { ...base, db });
+  ok(r.statusCode === 200 && r.headers['Content-Type'] === 'audio/mpeg' && r.isBase64Encoded && Buffer.from(r.body, 'base64').toString() === 'ID3fakeaudio', 'miss -> audio/mpeg from provider');
+  const b = JSON.parse(calls[0].o.body);
+  ok(calls[0].url.includes(V.VOICE_ID) && b.model_id === 'eleven_turbo_v2_5' && b.text === "Nice. You're halfway there.", 'voice + turbo model + markdown stripped');
+  ok(calls[0].o.headers['xi-api-key'] === KEY && !JSON.stringify(r).includes(KEY), 'key sent only to provider, never in the response');
+  r = await fn.rawHandler(ev("Nice. You're **halfway** there."), {}, { ...base, db }); ok(r.headers['X-TTS-Cache'] === 'mem' && calls.length === 1, 'repeat -> memory cache');
+  fn._mem.clear(); r = await fn.rawHandler(ev("Nice. You're halfway there."), {}, { ...base, db }); ok(r.headers['X-TTS-Cache'] === 'store' && calls.length === 1, 'cold instance -> Firestore cache');
+  fn._mem.clear(); db = mkDb(); const capEnv = { ...base.env, TTS_DAILY_CHARS: '20' };
+  r = await fn.rawHandler(ev('Twelve chars'), {}, { ...base, db, env: capEnv }); ok(r.statusCode === 200, 'within daily budget');
+  r = await fn.rawHandler(ev('Another twelve'), {}, { ...base, db, env: capEnv }); ok(r.statusCode === 429, 'daily budget exceeded -> 429');
+  fn._mem.clear(); r = await fn.rawHandler(ev('No key here'), {}, { ...base, db: mkDb(), env: {} }); ok(r.statusCode === 503, 'no ELEVENLABS_API_KEY -> 503 (app falls back to MP3s)');
+  const bad = async () => ({ ok: false, status: 401, arrayBuffer: async () => Buffer.from('') });
+  fn._mem.clear(); r = await fn.rawHandler(ev('Provider fails'), {}, { ...base, db: mkDb(), fetch: bad }); ok(r.statusCode === 502 && !r.body.includes(KEY), 'provider error -> 502, no key echoed');
+  const app = fs.readFileSync(path.join(__dirname, '../src/voiceover/scripts.js'), 'utf8');
+  ok(app.includes(`voiceId: '${V.VOICE_ID}'`), 'app VOICE.voiceId matches the server voice');
+  const toml = fs.readFileSync(path.join(__dirname, '../netlify.toml'), 'utf8'); ok(toml.includes('[functions."tts"]'), 'netlify.toml has the tts function');
+  console.log(`tts fn: ${n} passed`);
+})().catch((e) => { console.error(e); process.exit(1); });

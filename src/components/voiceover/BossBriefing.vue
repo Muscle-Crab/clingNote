@@ -1,8 +1,8 @@
 <template>
   <div v-if="card" class="bb-wrap" data-test="boss-briefing">
-    <section class="bb" role="dialog" aria-label="Boss briefing">
+    <section class="bb" role="dialog" aria-label="Robot coach report">
       <div class="bb-head">
-        <div class="bb-who"><BossSergeant :size="64" :yelling="!(card.report && card.report.atEase) || speaking" /><div><h2>{{ card.morning ? 'Morning report' : card.report && card.report.atEase ? 'At ease' : 'Report, recruit!' }}</h2><BrandMark inline /></div></div>
+        <div class="bb-who"><RobotCoach :size="64" :talking="speaking" /><div><h2>{{ card.morning ? 'Morning report' : card.report && card.report.atEase ? 'All done' : 'Your report' }}</h2><BrandMark inline /></div></div>
         <div class="bb-r"><VoToggle @unmuted="speak" /><button class="bb-x" aria-label="Close" @click="close">✕</button></div>
       </div>
       <p v-if="card.alert && !card.report" class="bb-alert" data-test="bb-overdue">{{ card.alert }}</p>
@@ -30,33 +30,26 @@
         <p v-if="card.todayList.length" class="bb-p"><b>Today:</b> {{ card.todayList.join(' · ') }}</p>
         <p v-if="card.team" class="bb-p"><b>Team:</b> {{ card.team }}</p>
       </template>
-      <p v-if="muted" class="bb-muted" data-test="bb-muted-banner">🔇 Voice is off. Tap 🔊 to hear the boss.</p>
-      <button v-else-if="!spoke" class="bb-play" @click="speak">▶ Hear the boss</button>
-      <p v-if="voiceTip" class="bb-p bb-tip" data-test="bb-voice-tip">🎙️ <b>Make the boss sound real:</b> on your iPhone open Settings › Accessibility › Spoken Content › Voices › English, download <b>Evan (Enhanced)</b> or <b>Nathan (Enhanced)</b>. <button type="button" class="bb-tipx" @click="dismissTip">Got it</button></p>
+      <p v-if="muted" class="bb-muted" data-test="bb-muted-banner">🔇 Voice is off. Tap 🔊 to hear your robot.</p>
+      <button v-else-if="!spoke" class="bb-play" @click="speak">▶ Hear your robot</button>
     </section>
   </div>
-  <transition name="bb-ack"><div v-if="ack" class="bb-ackt" role="status" aria-live="polite" @click="ack = ''"><BossSergeant :size="40" :badge="true" /><span>{{ ack }}</span></div></transition>
+  <transition name="bb-ack"><div v-if="ack" class="bb-ackt" role="status" aria-live="polite" @click="ack = ''"><RobotCoach :size="40" :badge="true" /><span>{{ ack }}</span></div></transition>
 </template>
 
 <script setup>
 import BrandMark from '@/components/brand/BrandMark.vue';
-import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
+import { ref, watch, onMounted, onBeforeUnmount } from 'vue';
 import { useRoute } from 'vue-router';
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '@/firebaseConfig';
 import VoToggle from './VoToggle.vue';
-import BossSergeant from '@/components/boss/BossSergeant.vue';
+import RobotCoach from '@/components/robot/RobotCoach.vue';
 import { buildReport, ackLine } from '@/utils/sergeantReport';
 import { useEightHour } from '@/composables/useEightHour';
 import { useRouter } from 'vue-router';
-import { playFlow, stopVoice, unlockVoice, speakLive, loadVoiceInfo, voiceQuality, voMuted as muted, voSpeaking as speaking } from '@/composables/useVoiceover';
-// One-time tip: only the compact iOS voice is installed -> suggest downloading an Enhanced/Premium male voice.
-const TIP_KEY = 'clingnote.voiceTipSeen.v1';
-const tipSeen = ref((() => { try { return localStorage.getItem(TIP_KEY) === '1'; } catch (e) { return true; } })());
-const voiceTip = computed(() => !tipSeen.value && voiceQuality.value === 'default');
-const dismissTip = () => { tipSeen.value = true; try { localStorage.setItem(TIP_KEY, '1'); } catch (e) { /* ignore */ } };
-loadVoiceInfo();
+import { playFlow, stopVoice, unlockVoice, speakLive, voMuted as muted, voSpeaking as speaking } from '@/composables/useVoiceover';
 import { SCRIPTS } from '@/voiceover/scripts';
 import { loadDayTasks } from '@/composables/useDayPersistence';
 import { getMode } from '@/utils/appMode';
@@ -91,7 +84,7 @@ async function run() {
     const overdue = mode === 'manager' ? [] : overdueTasks(todayTasks, now, ud.onboarding && ud.onboarding.deadline);
     const alert = wantOverdue ? overdueLine({ mode, overdue, people }) : '';
     if (wantOverdue) ls(kO, String(now.getTime()));
-    // Drill-sergeant report on open/resume (same 30-min throttle as the overdue alert).
+    // Robot coach report on open/resume (same 30-min throttle as the overdue alert).
     let report = null;
     if (wantOverdue && mode !== 'manager') {
       const sd0 = await getDoc(doc(db, 'streaks', u.uid)).then((s) => (s.exists() ? s.data() : {})).catch(() => ({}));
@@ -123,7 +116,7 @@ async function run() {
     // One voice flow: overdue alert first, then (first time only) the app explanation MP3, then yesterday's recap + today's plan.
     const lead = report ? report.speech : alert;
     card.value = { alert, report, lead, morning: !!morning, ...(morning || {}), morningSpeech: morning ? morning.speech : '', speech: [lead, morning && morning.speech].filter(Boolean).join(' ') };
-    spoke.value = false; if (!muted.value) spoke.value = speak(false); // works once audio was unlocked by a tap; otherwise "Hear the boss"
+    spoke.value = false; if (!muted.value) spoke.value = speak(false); // works once audio was unlocked by a tap; otherwise "Hear your robot"
   } catch (e) { console.error('briefing', e.message); } finally { busy = false; }
 }
 const markIntro = () => { const u = auth.currentUser; if (u && card.value && card.value.introKey) ls(`clingnote.introHeard.${u.uid}`, '1'); };
@@ -178,6 +171,4 @@ onBeforeUnmount(() => { window.removeEventListener('cn:sergeant-ack', onAck); cl
   padding: 6px 14px 6px 6px; border-radius: 999px; background: #0C1630; border: 1px solid #5B9BFF; color: #fff; font-weight: 800; font-size: 14px; box-shadow: 0 10px 30px rgba(0,0,0,.45); }
 .bb-ack-enter-active, .bb-ack-leave-active { transition: opacity .2s, transform .2s; } .bb-ack-enter-from, .bb-ack-leave-to { opacity: 0; transform: translate(-50%, 10px); }
 @media (prefers-reduced-motion: reduce) { .bb-ack-enter-active, .bb-ack-leave-active { transition: none; } }
-.bb-tip { font-size: 12px; opacity: .9; }
-.bb-tipx { margin-left: 6px; background: none; border: 1px solid currentColor; border-radius: 8px; color: inherit; font-size: 11px; padding: 1px 8px; }
 </style>

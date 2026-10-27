@@ -68,5 +68,5 @@ export const TIPS = [
   { t: 'Read your why', d: 'Re-read the reason you started. Remind yourself what tomorrow-you wants.' },
   { t: 'Sleep and routine', d: 'Regular sleep and a wind-down routine cut the tired, late-night urges.' },
 ];
-export const RELAPSE_MESSAGE = 'One slip is not the end of your progress. Your clean days still count. Note what triggered it, adjust your plan, and start again today. No shame, just data.';
+export const RELAPSE_MESSAGE = "One slip isn't the end of your progress. Your clean days still count. Note what triggered it, adjust your plan, and start again today. No shame. Just data.";
 export const randomTip = (rand = Math.random) => TIPS[Math.floor(rand() * TIPS.length) % TIPS.length];

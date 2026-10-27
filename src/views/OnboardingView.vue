@@ -11,7 +11,7 @@
       <section v-if="STEPS[step] === 'welcome'" class="ob-sec">
         <div class="ob-art"></div>
         <p class="ob-k">Welcome</p>
-        <h1 class="ob-h">Hey {{ firstName }}, meet your <span>accountability boss.</span></h1>
+        <h1 class="ob-h">Hey {{ firstName }}, meet your <span>robot coach.</span></h1>
         <p class="ob-p">ClingNote clings to your to‑dos until they're done. A few quick questions and we'll set it up around you.</p>
         <div class="ob-asb"><AppStoreButton small /></div>
       </section>
@@ -23,7 +23,7 @@
           <input type="number" inputmode="numeric" min="1" max="100" v-model.number="a.age" placeholder="—" aria-label="Your age" data-test="ob-age-input" />
           <button type="button" class="ob-step" aria-label="Older" @click="bumpAge(1)">+</button>
         </div>
-        <p v-if="ageState === 'under'" class="ob-warn" data-test="ob-age-under">Sorry, ClingNote is for people 13 and older. Come back when you're 13 — the boss will be waiting. 👋</p>
+        <p v-if="ageState === 'under'" class="ob-warn" data-test="ob-age-under">Sorry, ClingNote is for people 13 and older. Come back when you're 13 — your robot will be waiting. 👋</p>
         <p v-else-if="ageState === 'invalid'" class="ob-warn">Enter an age between 13 and 100.</p>
       </section>
 
@@ -43,17 +43,17 @@
       </section>
 
       <section v-else-if="STEPS[step] === 'strictness'" class="ob-sec">
-        <p class="ob-k">Step 3</p><h1 class="ob-h">How strict should <span>the boss</span> be?</h1>
+        <p class="ob-k">Step 3</p><h1 class="ob-h">How strict should <span>your robot</span> be?</h1>
         <button v-for="s in STRICT" :key="s.id" class="ob-row" :class="{ on: a.strictness === s.id }" @click="a.strictness = s.id">
-          <BossSergeant v-if="s.id === 'drill'" class="em em-sgt" :size="44" :yelling="a.strictness === 'drill'" /><span v-else class="em">{{ s.e }}</span><span><b>{{ s.l }}</b><small>{{ s.d }}</small></span>
+          <RobotCoach v-if="s.id === 'drill'" class="em em-sgt" :size="44" :talking="a.strictness === 'drill'" /><span v-else class="em">{{ s.e }}</span><span><b>{{ s.l }}</b><small>{{ s.d }}</small></span>
         </button>
       </section>
 
       <section v-else-if="STEPS[step] === 'notifications'" class="ob-sec">
         <div class="ob-bell">🔔</div>
-        <p class="ob-k">Step 4</p><h1 class="ob-h">Let the boss <span>reach you</span></h1>
-        <p class="ob-p">Notifications are how ClingNote keeps you honest: start‑of‑day prompts, deadline warnings and boss check‑ins. No spam.</p>
-        <div class="ob-note"><b>⏰ 9:00 PM · ClingNote</b><span>2 tasks left before your deadline. Boss is watching 👀</span></div>
+        <p class="ob-k">Step 4</p><h1 class="ob-h">Let your robot <span>reach you</span></h1>
+        <p class="ob-p">Notifications are how ClingNote keeps you honest: start‑of‑day prompts, deadline warnings and robot check‑ins. No spam.</p>
+        <div class="ob-note"><b>⏰ 9:00 PM · ClingNote</b><span>2 tasks left before your deadline. Let's finish strong 💪</span></div>
       </section>
 
       <section v-else-if="STEPS[step] === 'applock'" class="ob-sec" data-test="ob-applock">
@@ -90,7 +90,7 @@ import { markReviewPending } from '@/utils/appReview';
 import { markPaywallSeenLocal } from '@/utils/entryGuard';
 import { readCachedPlan, useEightHour } from '@/composables/useEightHour';
 import { fmtWakeLabel } from '@/utils/eightHour';
-import BossSergeant from '@/components/boss/BossSergeant.vue';
+import RobotCoach from '@/components/robot/RobotCoach.vue';
 
 const STEPS = ['welcome', 'age', 'goals', 'schedule', 'strictness', 'notifications', ...(lockAvailable() ? ['applock'] : [])]; // index STEPS.length = paywall
 const GOALS = [
@@ -101,7 +101,7 @@ const GOALS = [
 const STRICT = [
   { id: 'chill', e: '🙂', l: 'Chill', d: 'Gentle reminders, no pressure.' },
   { id: 'firm', e: '😤', l: 'Firm', d: 'Deadline warnings and daily reports.' },
-  { id: 'drill', e: '🔥', l: 'Drill sergeant', d: 'Strict boss mode — no excuses, breaks must be earned.' },
+  { id: 'drill', e: '🔥', l: 'Strict', d: 'Strict Coach mode — no excuses, breaks must be earned.' },
 ];
 const route = useRoute(); const router = useRouter();
 const step = ref(Math.min(Number(route.query.step) || 0, STEPS.length));

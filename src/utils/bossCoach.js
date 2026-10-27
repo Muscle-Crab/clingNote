@@ -1,8 +1,8 @@
-// Boss coaching (pure): completion/streak reactions, focus-timer check-ins, overbooked-day warning, evening wrap-up rollover.
+// Robot coach (pure): completion/streak reactions, focus-timer check-ins, overbooked-day warning, evening wrap-up rollover.
 const pick = (list, seed = 0) => list[Math.abs(Math.round(seed)) % list.length];
-const CHEER = ['Good. {t} is done. Next.', 'That is how it is done. {t}, crushed.', 'Outstanding. {t} is off the board.', 'Nice work, soldier. Keep moving.'];
-const STREAK = ['Streak secured. Do not get comfortable.', 'Daily streak hit. That is discipline.'];
-const ROAST = ['You broke the streak. Yesterday is gone. Today you earn it back.', 'Streak lost. Excuses are not points. Get to work.'];
+export const CHEER = ["Nice. {t} is done. What's next?", "That's how it's done. {t}, finished.", "Great job. {t} is off the list.", "Nice work. Keep that momentum going."];
+export const STREAK = ["Streak secured for today. Proud of you. Let's keep it going.", "You hit your daily streak. That's real discipline."];
+export const ROAST = ["Your streak reset yesterday. That's okay. Today we start a new one.", "The streak's gone, but today's a fresh start. Let's earn it back."];
 export const reactionLine = ({ kind = 'done', title = '', seed = 0 } = {}) => {
   const list = kind === 'streak' ? STREAK : kind === 'missed' ? ROAST : CHEER;
   return pick(list, seed).replace('{t}', String(title).slice(0, 60) || 'That one');
@@ -19,8 +19,8 @@ export const checkinMarks = (totalMin) => {
   return [...new Set(out)].sort((a, b) => b - a);
 };
 export const checkinLine = (minLeft, title = '') => (minLeft <= 0
-  ? `Time. ${title ? `${title}: ` : ''}is it done? Mark it or go again.`
-  : minLeft === 5 ? `Five minutes left${title ? ` on ${title}` : ''}. Finish strong.` : `Halfway${title ? ` on ${title}` : ''}. ${minLeft} minutes left. Eyes on the work.`);
+  ? `Time's up${title ? ` on ${title}` : ''}. Is it done? Mark it off, or go another round.`
+  : minLeft === 5 ? `Five minutes left${title ? ` on ${title}` : ''}. Let's finish strong.` : `You're halfway${title ? ` through ${title}` : ''}. ${minLeft} minutes to go. Stay with it.`);
 export const dueMark = (marks, msLeft, spoken = new Set()) => marks.find((m) => !spoken.has(m) && msLeft <= m * 60000 && msLeft > (m - 1) * 60000 - 30000);
 
 // Overbooked: open tasks' estimates vs minutes left in the day (lock end, or midnight).
@@ -30,7 +30,7 @@ export const overbooked = (tasks = [], minutesLeft = 0) => {
   const left = Math.max(0, Math.round(minutesLeft));
   const over = need > left && open.length > 0;
   const h = (m) => (m >= 60 ? `${Math.round((m / 60) * 10) / 10} hours` : `${m} minutes`);
-  return { over, needMin: need, leftMin: left, count: open.length, line: over ? `You are overbooked. ${open.length} tasks need ${h(need)} and you have ${h(left)}. Cut, move or shorten something.` : '' };
+  return { over, needMin: need, leftMin: left, count: open.length, line: over ? `Heads up, you're overbooked. ${open.length} tasks need about ${h(need)}, and you've got ${h(left)}. Let's move or trim something.` : '' };
 };
 
 // Evening wrap-up: today's unfinished, non-pending tasks to roll to tomorrow.

@@ -116,7 +116,7 @@ export const describeCall = (name, args = {}) => {
     case 'create_tasks': return `Add these ${(args.items || []).length} tasks?\n\n${(args.items || []).map((it, i) => `${i + 1}. ${it.title}${it.start ? ` at ${it.start}` : ''}${it.date ? ` (${it.date})` : ''}${it.points ? ` · ${it.points} pts` : ''}`).join('\n')}\n\nSay yes, or tell me what to change.`;
     case 'roll_unfinished': return 'Move all of today\'s unfinished tasks to tomorrow?';
     case 'auto_schedule': return `Put today's open tasks into your free time${args.writeCalendar ? ' and add them to your calendar' : ''}?`;
-    case 'app_lock': return `Emergency unlock your blocked apps? It costs points and the boss will remember.`;
+    case 'app_lock': return `Emergency unlock your blocked apps? It costs points, and your robot will remember.`;
     case 'post_to_community': return `Post to ClingNote Community:\n\n${args.text}${args.includeStats ? '\n\n(+ today\'s progress card)' : ''}`;
     default: return name;
   }

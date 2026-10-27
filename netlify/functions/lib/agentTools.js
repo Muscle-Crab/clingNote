@@ -25,11 +25,11 @@ const DECLARATIONS = [
   fn('delete_task', 'Delete a task. The user must confirm in the app before it runs.', { ref: TASK_REF }, ['ref']),
   fn('complete_task', 'Mark a task done ONLY when the user clearly says they finished it. The user must confirm in the app.', { ref: TASK_REF }, ['ref']),
   fn('start_timer', 'Start a focus timer on a task.', { ref: TASK_REF, minutes: S('INTEGER') }, ['ref']),
-  fn('set_boss_checkin', 'Turn boss check-ins on/off for a task.', { ref: TASK_REF, on: S('BOOLEAN') }, ['ref', 'on']),
+  fn('set_boss_checkin', 'Turn robot check-ins (focus-timer voice check-ins) on/off for a task.', { ref: TASK_REF, on: S('BOOLEAN') }, ['ref', 'on']),
   fn('start_day', 'Start the lock-in countdown for today with the hours the USER chose (ask if they did not say). The user must confirm.', { hours: S('NUMBER', { description: '3..12, half hours' }) }, ['hours']),
   fn('set_day_hours', 'Change the user\'s preferred hours for the day (same single "hours today" setting). Only when the user explicitly asks.', { hours: S('NUMBER') }, ['hours']),
   fn('set_setting', 'Toggle an app setting.', { setting: S('STRING', { enum: ['sounds', 'boss_voice', 'spoken_replies'] }), on: S('BOOLEAN') }, ['setting', 'on']),
-  fn('get_overview', 'Read the latest tasks, points, boss target, streak, lock state, upcoming schedule and limits.'),
+  fn('get_overview', 'Read the latest tasks, points, daily target, streak, lock state, upcoming schedule and limits.'),
   fn('get_stats', 'Streak, best streak, this week\'s planned/done tasks, completion rate and points per day (for "how did I do", "what\'s my streak").'),
   fn('find_tasks', 'Search this week\'s tasks and the upcoming schedule by words and/or weekday ("what did I plan for Friday", "find the dentist task").', { query: S('STRING'), day: S('STRING', { description: 'weekday name, optional' }) }),
   fn('suggest_next', 'Pick the best task to do next from due times, points and time left today.'),
@@ -47,7 +47,7 @@ const DECLARATIONS = [
 ];
 const TOOL_NAMES = new Set(DECLARATIONS.map((d) => d.name));
 
-const SYSTEM = `You are the ClingNote assistant: a sharp, friendly, slightly tough-love productivity boss inside the ClingNote planner app. You talk with the user by voice or text across many turns.
+const SYSTEM = `You are the ClingNote assistant: the friendly robot coach inside the ClingNote planner app: warm, encouraging and firm about getting things done (never harsh, never a drill sergeant). Talk naturally: contractions, short sentences. You talk with the user by voice or text across many turns.
 - Understand natural, rambling speech. Turn plans and errands into tasks with create_tasks (one item per distinct action, short imperative titles, never invent items).
 - Every task gets dynamic points from difficulty, effort/duration and type (never a flat 10). If the user says a number of points, use it.
 - Use tools to act; use get_overview when you need fresh data. Refer to tasks only by the refs in the context.

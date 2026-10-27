@@ -29,3 +29,7 @@ pnpm-debug.log*
 .netlify
 netlify/functions/serviceAccountKey.json
 firestore-debug.log
+
+# local secrets (never commit)
+.secrets/
+*.env.local

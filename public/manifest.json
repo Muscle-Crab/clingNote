@@ -1,7 +1,7 @@
 {
   "name": "ClingNote",
   "short_name": "ClingNote",
-  "description": "Daily task planner with an AI coach and strict-boss accountability.",
+  "description": "Daily task planner with an AI coach and a friendly robot that keeps you accountable.",
   "icons": [
     {
       "src": "/icon-192.png",

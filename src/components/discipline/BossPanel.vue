@@ -1,10 +1,10 @@
 <template>
-  <section class="boss" :class="'boss--' + tone" role="status" aria-live="polite" aria-label="Strict Boss">
+  <section class="boss" :class="'boss--' + tone" role="status" aria-live="polite" aria-label="Strict Coach">
     <header class="boss-head">
-      <BossSergeant class="boss-sgt" :size="40" :yelling="tone === 'alert' || tone === 'fail' || tone === 'warn'" label="Strict Boss drill sergeant" /><span class="boss-icon" aria-hidden="true">{{ icon }}</span>
-      <p class="boss-title">Boss <span class="boss-chip">{{ chip }}</span></p>
-      <button type="button" class="boss-btn" :aria-expanded="open ? 'true' : 'false'" :aria-label="open ? 'Collapse boss panel' : 'Expand boss panel'" @click="open = !open">{{ open ? '▾' : '▸' }}</button>
-      <button type="button" class="boss-btn" aria-label="Hide boss panel for now" @click="$emit('dismiss')">✕</button>
+      <RobotCoach class="boss-sgt" :size="40" :talking="tone === 'alert' || tone === 'fail' || tone === 'warn'" label="Your robot coach" /><span class="boss-icon" aria-hidden="true">{{ icon }}</span>
+      <p class="boss-title">Your robot <span class="boss-chip">{{ chip }}</span></p>
+      <button type="button" class="boss-btn" :aria-expanded="open ? 'true' : 'false'" :aria-label="open ? 'Collapse robot coach panel' : 'Expand robot coach panel'" @click="open = !open">{{ open ? '▾' : '▸' }}</button>
+      <button type="button" class="boss-btn" aria-label="Hide robot coach panel for now" @click="$emit('dismiss')">✕</button>
     </header>
     <p v-if="!open && (verdict || lines.length)" class="boss-peek" @click="open = true">{{ verdict ? (verdict.v.passed ? 'PASSED' : 'FAILED') + ' · grade ' + verdict.v.grade : lines[0].text }}</p>
     <div v-show="open" class="boss-body">
@@ -14,7 +14,7 @@
           <p class="boss-verdict-title">{{ verdict.v.passed ? 'PASSED' : 'FAILED' }} · {{ verdict.v.done }}/{{ verdict.v.min }} tasks</p>
           <p class="boss-line">{{ verdict.text }}</p>
         </div>
-        <button type="button" class="boss-ack" @click="$emit('ack-verdict')">{{ verdict.v.passed ? 'Understood' : 'Tomorrow I deliver' }}</button>
+        <button type="button" class="boss-ack" @click="$emit('ack-verdict')">{{ verdict.v.passed ? 'Thanks!' : "I'll get it tomorrow" }}</button>
       </div>
       <p v-for="(l, i) in lines" :key="i" class="boss-line" :class="'boss-line--' + l.kind">
         <span v-if="lines.length > 1" aria-hidden="true">{{ ICONS[l.kind] || "🗣️" }}</span> {{ l.text }}
@@ -27,7 +27,7 @@
 <script setup>
 // Inline, non-blocking Strict Boss panel: lives in the page flow above the task list (no fixed overlay).
 import { ref, computed } from 'vue';
-import BossSergeant from '@/components/boss/BossSergeant.vue';
+import RobotCoach from '@/components/robot/RobotCoach.vue';
 const props = defineProps({
   lines: { type: Array, default: () => [] }, // [{ kind, text, dismissible }]
   verdict: { type: Object, default: null }, // { v, text, date }

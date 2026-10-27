@@ -18,7 +18,7 @@ export const TOUR_SLIDES = [
   { id: 'day', img: day, title: 'Your hours. Locked.', text: 'Each morning, choose 3 to 12 hours and confirm. Tasks, points and target are fixed once it starts.' },
   { id: 'tasks', img: tasks, title: 'Tasks with points', text: 'Plan up to 5 a day. Each task is worth points based on how big it is.' },
   { id: 'timer', img: timer, title: 'Focus timers', text: 'Start a timer on any task and stay on it.' },
-  { id: 'boss', img: boss, title: 'The boss is watching', text: 'Orders in the morning. A verdict at your deadline.' },
+  { id: 'boss', img: boss, title: 'Your robot coach', text: 'A plan in the morning. A verdict at your deadline.' },
   { id: 'shutdown', img: shutdown, title: 'Shutdown ritual', text: 'Close the day on purpose. Carry over what is left.' },
   { id: 'goal', img: goal, title: 'Hit the target', text: 'Reach the points goal before the clock runs out. Keep the streak alive.' },
   { id: 'rankings', img: rankings, title: 'Monthly Rankings', text: 'Earn points, climb the tiers, see where you stand.' },

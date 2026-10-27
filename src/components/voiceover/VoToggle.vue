@@ -1,6 +1,6 @@
 <template>
   <button type="button" class="vo-t" :class="{ off: muted, live: speaking && !muted }" data-test="vo-toggle"
-    :aria-label="muted ? 'Unmute boss voice' : 'Mute boss voice'" :aria-pressed="!muted" @click.stop="toggle">
+    :aria-label="muted ? 'Unmute robot voice' : 'Mute robot voice'" :aria-pressed="!muted" @click.stop="toggle">
     <span aria-hidden="true">{{ muted ? '🔇' : '🔊' }}</span><small>{{ muted ? 'Voice off' : 'Voice on' }}</small>
   </button>
 </template>

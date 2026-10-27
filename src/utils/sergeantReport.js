@@ -1,4 +1,4 @@
-// Drill-sergeant "report" the user gets on app open/resume and short acknowledgements on completion.
+// Robot coach "report" the user gets on app open/resume and short acknowledgements on completion.
 // Pure (no Vue/Firebase) so it is unit-tested in scripts/test-sergeant.mjs.
 import { overdueTasks } from './briefing.js';
 // Same identity as localNotify.taskKeyOf (kept inline so this stays importable from node tests).
@@ -18,22 +18,23 @@ export function nextUp(tasks = []) {
   return timed[0] || open[0] || null;
 }
 
-const L = {
-  overdue1: ['{t} is overdue, recruit! Move it!', 'Overdue: {t}. I did not hear an excuse. Good. Go!', '{t} was due already. Fix it. Now!'],
-  overdueN: ['{n} tasks overdue! Unacceptable! Start with {t}!', 'I count {n} overdue. Hit {t} first. Double time!'],
-  next: ['Next up: {t}. Eyes front.', 'Your next target: {t}. Lock on.', '{t} is next. No dawdling.'],
-  pointsBehind: ['{e} of {g} points. You are behind. Earn it!', 'Points {e} out of {g}. That gap will not close itself!'],
-  pointsMet: ['Target hit: {e} of {g} points. Do not get comfortable.', '{e} points, target {g}. Mission met. Keep the pressure on.'],
-  streak: ['Streak: {s} days. Do not break the chain.', '{s}-day streak. Protect it, soldier.'],
-  streak0: ['No streak yet. Today we start one.'],
-  locked: ['Locked in for {el}. {left} left on the clock.', 'You are {el} into the day. {left} remaining. Make it count.'],
-  notStarted: ['Your day has not started. Confirm the lock and get to work!', 'Clock is not running, recruit. Start your day!'],
-  ended: ['Day is over. Rest up and report at dawn.'],
-  noTasks: ['Your list is empty. A soldier without orders is a tourist. Add tasks!'],
-  atEase: ['All tasks squared away. At ease, soldier.', 'Outstanding. Nothing left. At ease.', 'Clean sweep. At ease. Dismissed.'],
-  ack: ['Good. Next!', 'Outstanding!', 'That is how it is done!', 'Check. Keep moving!', 'Hooah! One down.', 'Squared away. Next target!'],
-  ackLast: ['That was the last one. At ease, soldier!', 'Mission complete. At ease!'],
+export const REPORT_LINES = {
+  overdue1: ["{t} is overdue. Let's knock it out now.", "Heads up, {t} slipped past its time. Can you take it on right now?", "{t} was due already. Let's get it done before anything else."],
+  overdueN: ["You've got {n} overdue. Start with {t}, and we'll go from there.", "{n} tasks are overdue. Let's clear {t} first."],
+  next: ["Next up is {t}.", "Let's do {t} next.", "{t} is next. You've got this."],
+  pointsBehind: ["You're at {e} of {g} points. A little behind, but you can close it.", "{e} out of {g} points so far. Let's keep chipping away."],
+  pointsMet: ["You hit your target. {e} of {g} points. Nice.", "{e} points, and your target was {g}. Great work. Keep it going."],
+  streak: ["You're on a {s}-day streak. Let's keep it alive.", "{s} days in a row. Don't break it now."],
+  streak0: ["No streak yet. Today's a good day to start one."],
+  locked: ["You're {el} in, with {left} to go. Make it count.", "{el} down, {left} left. Stay with it."],
+  notStarted: ["Your day hasn't started yet. Tap start when you're ready to go.", "The clock isn't running yet. Let's start your day."],
+  ended: ["That's a wrap for today. Get some rest, and I'll see you tomorrow."],
+  noTasks: ["Your list is empty. Add a few tasks, and let's get moving."],
+  atEase: ["Everything's done. Nice work today.", "That's all of them. Take a breather, you earned it.", "Clean sweep. I'm proud of you."],
+  ack: ["Nice. On to the next one.", "Done. Great job.", "That's how it's done.", "Checked off. Keep going.", "One down. Nice.", "Good work. What's next?"],
+  ackLast: ["That was the last one. Great job today.", "All done. You crushed it today."],
 };
+const L = REPORT_LINES;
 const fill = (s, v) => s.replace(/\{(\w+)\}/g, (_, k) => (v[k] != null ? v[k] : ''));
 
 /**

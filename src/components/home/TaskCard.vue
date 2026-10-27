@@ -45,7 +45,7 @@
                         {{ task.title }}
                       </span>
                       <span v-if="isRepeating" class="task-repeat-badge" data-test="repeat-badge" :title="'Repeats: ' + repeatLabel" :aria-label="'Repeats ' + repeatLabel">🔁</span>
-                      <span v-if="task.anonymous === true && task.visibility !== 'private'" class="task-private task-anon" data-test="anon-label" title="Anonymous for boss: managers see it as 'Anonymous task'" aria-label="Anonymous for boss">🕶️</span>
+                      <span v-if="task.anonymous === true && task.visibility !== 'private'" class="task-private task-anon" data-test="anon-label" title="Name hidden from manager: managers see it as 'Anonymous task'" aria-label="Name hidden from manager">🕶️</span>
                       <span v-if="task.visibility === 'private'" class="task-private" data-test="private-label" title="Private: only you can see this task" aria-label="Private">🔒</span>
                       <TimerRing v-if="hasRing(task)" :task="task" />
                       <span v-if="task.youtubeURL" class="task-attachment" title="Video">🎥</span>
@@ -79,8 +79,8 @@
                       <span class="chip chip--subtasks" :class="{ 'chip--subtasks-done': subtaskProgress(task).done === subtaskProgress(task).total }" title="Subtasks done">☑ {{ subtaskProgress(task).done }}/{{ subtaskProgress(task).total }}</span>
                       <span v-if="!task.boss" class="sub-bar" role="progressbar" :aria-valuenow="subtaskPercent(task)" aria-valuemin="0" aria-valuemax="100" :aria-label="'Subtasks ' + subtaskPercent(task) + '% done'"><span class="sub-bar-fill" :style="{ width: subtaskPercent(task) + '%' }"></span></span>
                     </div>
-                    <div v-if="task.boss && isTodayTab" class="boss-bar" :title="'Boss HP ' + bossHp(task) + '%'">
-                      <span class="boss-label">👹 BOSS</span>
+                    <div v-if="task.boss && isTodayTab" class="boss-bar" :title="'Challenge HP ' + bossHp(task) + '%'">
+                      <span class="boss-label">🎯 CHALLENGE</span>
                       <div class="boss-hp" role="progressbar" :aria-valuenow="bossHp(task)" aria-valuemin="0" aria-valuemax="100"><div class="boss-hp-fill" :style="{ width: bossHp(task) + '%' }"></div></div>
                       <span class="boss-hp-num">{{ bossHp(task) }} HP</span>
                     </div>
@@ -175,8 +175,8 @@
                             <button type="button" :class="{ on: task.visibility !== 'private' }" :aria-pressed="task.visibility !== 'private' ? 'true' : 'false'" title="Your managers and pals can see this task" @click="$emit('patch', { visibility: 'public' })">Public</button>
                             <button type="button" :class="{ on: task.visibility === 'private' }" :aria-pressed="task.visibility === 'private' ? 'true' : 'false'" title="Only you can see this task" @click="$emit('patch', { visibility: 'private' })">Private</button>
                           </div></div>
-                        <div class="mini-field"><span>Anonymous for boss</span>
-                          <div class="vis-toggle" role="group" aria-label="Anonymous for boss" data-test="anon-edit-toggle">
+                        <div class="mini-field"><span>Hide name from manager</span>
+                          <div class="vis-toggle" role="group" aria-label="Hide name from manager" data-test="anon-edit-toggle">
                             <button type="button" :class="{ on: task.anonymous !== true }" :aria-pressed="task.anonymous !== true ? 'true' : 'false'" title="Managers see the task name" @click="$emit('patch', { anonymous: false })">Named</button>
                             <button type="button" :class="{ on: task.anonymous === true }" :aria-pressed="task.anonymous === true ? 'true' : 'false'" title="Managers see 'Anonymous task' (time, status and points stay visible)" @click="$emit('patch', { anonymous: true })">🔒 Anonymous</button>
                           </div></div>
@@ -194,7 +194,7 @@
                           <input type="text" class="field-input" :value="task.nextAction || ''" @change="$emit('patch', { nextAction: $event.target.value.trim() })" /></label>
                       </div>
                       <button type="button" class="cal-btn" @click="addToCalendar">📅 Add to calendar</button>
-                      <button v-if="isTodayTab && !task.completed" type="button" class="boss-btn" @click="$emit('set-boss')">{{ task.boss ? '✖ Remove boss' : '👹 Make this the evening boss' }}</button>
+                      <button v-if="isTodayTab && !task.completed" type="button" class="boss-btn" @click="$emit('set-boss')">{{ task.boss ? '✖ Remove challenge' : '🎯 Make this the evening challenge' }}</button>
                       <label class="mini-field"><span>Note</span>
                         <textarea class="field-textarea" rows="2" :value="task.notes || ''" placeholder="Quick note…" @change="$emit('patch', { notes: $event.target.value })"></textarea></label>
                       <div v-if="task.type === 'one-time' && isTodayTab && !task.completed" class="mini-field sched-field"><span>Schedule for later</span>

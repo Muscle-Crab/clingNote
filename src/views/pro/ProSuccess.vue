@@ -20,12 +20,12 @@
       </div>
     </div>
 
-    <p class="ps-p" v-if="state === 'confirmed'">Strict Boss, AI coach and your private calendar feed are unlocked. Go crush today.</p>
+    <p class="ps-p" v-if="state === 'confirmed'">Strict Coach mode, the AI coach and your private calendar feed are unlocked. Go crush today.</p>
     <p class="ps-p" v-else-if="state === 'pending'">Hang tight — we're confirming your payment with Stripe. This usually takes a few seconds.</p>
     <p class="ps-p" v-else>Your payment went through, but confirmation is taking longer than usual. Pro will switch on automatically within a minute or two — no need to pay again.</p>
 
     <ul class="ps-perks" v-if="state === 'confirmed'">
-      <li>🔥 Strict Boss mode</li><li>🤖 AI workout &amp; meal coach</li><li>📆 Calendar feed</li>
+      <li>🔥 Strict Coach mode</li><li>🤖 AI workout &amp; meal coach</li><li>📆 Calendar feed</li>
     </ul>
 
     <button class="ps-cta" data-test="go-home" @click="goHome">Go to Home</button>

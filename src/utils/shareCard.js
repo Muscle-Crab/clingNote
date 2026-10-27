@@ -2,11 +2,11 @@
 export const LOG_LABELS = {
   'missed-deadline': '⏰ Missed deadline',
   'gate-open-locked': '📱 Opened app while locked',
-  'boss-failed': '👹 Boss not cleared',
+  'boss-failed': '🎯 Evening challenge not cleared',
   'freeze-used': '🧊 Streak freeze used',
   'skipped': '🚫 Skipped (reason given)',
   'deferred': '↪️ Deferred (reason given)',
-  'boss-watching': '👁️ Carried twice — boss watching',
+  'boss-watching': '👁️ Carried twice — your robot is watching',
   'verdict-failed': '❌ Daily verdict: FAILED',
 };
 

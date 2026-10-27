@@ -20,7 +20,7 @@
         </div>
         <div class="ph-bar"><i style="width:40%"></i></div>
         <div v-for="(t,i) in demo" :key="i" class="ph-card" :class="{done:t.d, boss:t.b}">
-          <span class="ck">{{ t.d ? '✓' : '' }}</span><span class="tt">{{ t.t }}</span><span v-if="t.b" class="bb">BOSS</span>
+          <span class="ck">{{ t.d ? '✓' : '' }}</span><span class="tt">{{ t.t }}</span><span v-if="t.b" class="bb">🎯 GOAL</span>
         </div>
         <div class="ph-fab">+</div>
       </div>
@@ -93,11 +93,11 @@ const openLink = (url) => openExternal(url);
 const route = useRoute();
 const FEATURES = [
   { t: 'AI coach', d: 'Personalised workout and meal suggestions.' },
-  { t: 'Strict Boss mode', d: 'An accountability mode that calls out procrastination.' },
+  { t: 'Strict Coach mode', d: 'Your robot gets firmer: morning plan, check-ins, and a verdict at your deadline.' },
   { t: 'Calendar feed', d: 'See your daily plan in any calendar app.' },
   { t: 'Community', d: 'Posts, leaderboards and matchups with other ClingNote users.' },
 ];
-const FEAT = { aiCoach: 'The AI coach', strictBoss: 'Strict Boss mode', calendarFeed: 'The calendar feed', community: 'Community' };
+const FEAT = { aiCoach: 'The AI coach', strictBoss: 'Strict Coach mode', calendarFeed: 'The calendar feed', community: 'Community' };
 const sel = ref(DEFAULT_PLAN); const busy = ref(false);
 const msg = ref(route.query.checkout === 'cancel' ? 'Checkout canceled — no charge was made.' : route.query.feature === 'taskLimit' ? (PRO_RAISES_LIMIT ? `You've reached the free limit of ${TASK_LIMITS.free} tasks today. Pro lets you add ${TASK_LIMITS.pro} per day.` : `You've reached today's limit of ${TASK_LIMITS.free} tasks. Pro adds the AI coach, Strict Boss and more.`) : FEAT[route.query.feature] ? `🔒 ${FEAT[route.query.feature]} is a Pro feature.` : '');
 const plan = computed(() => planById(sel.value));

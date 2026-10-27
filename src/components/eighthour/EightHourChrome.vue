@@ -62,7 +62,7 @@ const shutVisible = computed(() => !!(uid.value && shut.value && SHUT_ROUTES.inc
 const goCard = () => { router.push({ name: 'home' }).then(() => setTimeout(() => document.querySelector('[data-test="eight-hour-card"]')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 250)).catch(() => {}); };
 const signOutNow = async () => { try { await signOut(auth); } finally { router.push('/login'); } };
 
-// One transient celebration (day result or manager award), shown once per event, with a boss voice line.
+// One transient celebration (day result or manager award), shown once per event, with a robot voice line.
 const readSeen = () => { try { return JSON.parse(localStorage.getItem(SEEN_KEY) || '{}'); } catch (e) { return {}; } };
 const cele = ref(null);
 watch(() => [uid.value, eh.stats.value, eh.st.data?.offline], () => {

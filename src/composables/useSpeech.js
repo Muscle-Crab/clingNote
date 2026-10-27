@@ -1,5 +1,5 @@
-// Single voice channel: every ad-hoc spoken line goes through the boss voice (useVoiceover.speakLive), never a raw
-// default (female) speechSynthesis utterance. Skipped while another line is playing so two voices never overlap.
+// Single voice channel: every ad-hoc spoken line goes through the robot voice (useVoiceover.speakLive: bundled MP3 or the
+// ElevenLabs tts function). No device TTS. Skipped while another line is playing so two lines never overlap.
 import { speakLive, voSpeaking } from '@/composables/useVoiceover';
 let last = ''; let lastAt = 0;
 export const speak = (text) => {

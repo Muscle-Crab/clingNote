@@ -1,10 +1,15 @@
-// Boss voiceover: bundled neural-TTS MP3s (public/voiceover/<key>.mp3, scripts in src/voiceover/scripts.js),
-// speechSynthesis fallback (offline / missing file) and for dynamic lines (morning report, overdue alerts).
+// The ONE robot voice. Every spoken line in ClingNote goes through this file (useSpeech.speak is a thin wrapper).
+//  - Scripted segments: bundled MP3s (public/voiceover/<key>.mp3, scripts in src/voiceover/scripts.js).
+//  - Static lines (src/voiceover/phrases.js): bundled MP3s (public/voiceover/p/<hash>.mp3), instant + offline.
+//  - Anything else (reports, check-ins, assistant replies): the `tts` Netlify function (ElevenLabs, same voice), cached.
+//  - If the live voice is unavailable (offline, no key, limit): the matching pre-recorded MP3 if there is one, else silence.
+//    There is deliberately NO device TTS / speechSynthesis fallback (that was the robotic default voice).
 // iOS WKWebView needs a user gesture before audio: unlock() on the first tap primes ONE shared <audio> element,
-// after which later src swaps can play without a fresh gesture. Mute is remembered in localStorage.
+// after which later src swaps can play without a fresh gesture. Mute is remembered in localStorage ("Robot voice" setting).
 import { ref } from 'vue';
 import { SCRIPTS } from '@/voiceover/scripts';
-import { ClingVoice as _CV, nativeVoiceAvailable as _nva } from '@/utils/clingVoice';
+import { PHRASE_KEYS, phraseKey, liveChunks, MAX_LIVE_CHARS } from '@/voiceover/phrases';
+import { fnUrl } from '@/config/api';
 
 const MUTE_KEY = 'clingnote.voMuted.v1';
 const readMuted = () => { try { return localStorage.getItem(MUTE_KEY) === '1'; } catch (e) { return false; } };
@@ -14,84 +19,76 @@ export const voSpeaking = ref(false);
 let audio = null; let token = 0;
 const base = (typeof process !== 'undefined' && process.env && process.env.BASE_URL) || '/';
 const el = () => { if (!audio && typeof Audio !== 'undefined') { audio = new Audio(); audio.preload = 'auto'; audio.addEventListener('ended', () => { voSpeaking.value = false; }); } return audio; };
-const synth = () => (typeof window !== 'undefined' && window.speechSynthesis) || null;
 
-// Drill-sergeant delivery: deep, forceful, clipped. Natural male voice; pitch lowered, rate a touch brisk, short pause between barked lines.
-export const SGT_PITCH = 0.78; export const SGT_RATE = 1.06; // native: multiplier of AVSpeechUtteranceDefaultSpeechRate
-export const MALE_VOICES = ['evan', 'nathan', 'aaron', 'tom', 'reed', 'alex', 'fred'];
-const FEMALE = /(samantha|ava|allison|susan|victoria|karen|moira|tessa|fiona|zoe|nicky|joelle|serena|kate|female|woman|zira|aria|jenny|libby|sonia|emma|michelle)/i;
-// Web: best male English voice (same names as iOS: Premium > Enhanced; then any male en-US; last resort any en-US).
-export function bestVoice(list) {
-  const s = synth(); const all = list || (s ? s.getVoices() : []); if (!all.length) return null;
-  const en = all.filter((v) => /^en/i.test(v.lang));
-  const nameRank = (v) => { const n = String(v.name).toLowerCase(); const i = MALE_VOICES.findIndex((m) => n.startsWith(m) || n.includes(` ${m}`) || n.includes(`(${m}`)); return i < 0 ? 0 : MALE_VOICES.length - i; };
-  const male = (v) => nameRank(v) > 0 || /\b(male|man|guy|david|mark|george|ryan|andrew|christopher|eric|brian|daniel|thomas|davis|jason|tony|roger|steffan)\b/i.test(v.name);
-  const score = (v) => (/premium/i.test(v.name) ? 300 : 0) + (/enhanced|natural|neural|online/i.test(v.name) ? 200 : 0) + nameRank(v) * 20 + (male(v) && !FEMALE.test(v.name) ? 100 : 0)
-    + (/^en[-_]US/i.test(v.lang) ? 10 : 0) - (FEMALE.test(v.name) ? 500 : 0);
-  return [...en].sort((a, b) => score(b) - score(a))[0] || null;
+
+export { liveChunks, MAX_LIVE_CHARS };
+export const bundledSrc = (text) => { const k = phraseKey(text); return PHRASE_KEYS.has(k) ? `${base}voiceover/p/${k}.mp3` : ''; };
+
+const urls = new Map(); // text -> object URL (session cache; the server also caches)
+let getToken = async () => { try { const { auth } = await import('@/firebaseConfig'); return auth.currentUser ? await auth.currentUser.getIdToken() : ''; } catch (e) { return ''; } };
+export const _setTokenGetter = (f) => { getToken = f; }; // tests
+async function liveUrl(text) {
+  if (urls.has(text)) return urls.get(text);
+  if (typeof fetch === 'undefined' || typeof URL === 'undefined' || !URL.createObjectURL) return '';
+  const tok = await getToken(); if (!tok) return '';
+  const r = await fetch(fnUrl('tts'), { method: 'POST', headers: { Authorization: `Bearer ${tok}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
+  if (!r.ok || !/audio/.test(r.headers.get('content-type') || '')) return '';
+  const url = URL.createObjectURL(await r.blob()); urls.set(text, url);
+  if (urls.size > 40) { const [k, v] = urls.entries().next().value; urls.delete(k); try { URL.revokeObjectURL(v); } catch (e) { /* ignore */ } }
+  return url;
 }
-// Short, punchy lines: one per sentence (long sentences split at commas).
-export function barkLines(text) {
-  return String(text || '').replace(/\s+/g, ' ').split(/(?<=[.!?])\s+/).flatMap((x) => (x.length > 90 ? x.split(/,\s+/) : [x])).map((x) => x.trim()).filter(Boolean);
+
+// Play one source on the shared element; onFail fires at most once and never after playback really started.
+function playSrc(src, my, { onEnd, onFail }) {
+  const a = el(); if (!a || my !== token) { onFail(); return; }
+  let started = false; let failed = false;
+  const fail = () => { if (failed || started || my !== token) return; failed = true; onFail(); };
+  a.onplaying = () => { started = true; };
+  a.onended = () => { if (my === token && onEnd) onEnd(); };
+  a.onerror = fail;
+  a.src = src; voSpeaking.value = true;
+  try { const p = a.play(); if (p && p.catch) p.catch(fail); } catch (e) { fail(); }
 }
-let nativeVoice = null; // lazy: ClingVoice plugin (iOS AVSpeechSynthesizer)
-const native = () => { if (nativeVoice === null) { try { nativeVoice = _nva() ? _CV : false; } catch (e) { nativeVoice = false; } } return nativeVoice; };
-export const voiceQuality = ref(''); // 'premium' | 'enhanced' | 'default' (iOS), '' unknown
-export async function loadVoiceInfo() { const n = native(); if (!n) return null; try { const i = await n.voiceInfo(); voiceQuality.value = i.quality || ''; return i; } catch (e) { return null; } }
 
 export function stopVoice() {
   token++; voSpeaking.value = false;
   try { const a = audio; if (a) { a.pause(); a.currentTime = 0; } } catch (e) { /* ignore */ }
-  try { synth()?.cancel(); } catch (e) { /* ignore */ }
-  try { const n = native(); if (n) n.stop().catch(() => {}); } catch (e) { /* ignore */ }
 }
 
-export function speakLive(text, { onEnd } = {}) {
-  if (voMuted.value || !text) return false;
-  const lines = barkLines(text); if (!lines.length) return false;
-  const n = native();
-  if (n) {
-    try { synth()?.cancel(); } catch (e) { /* ignore */ }
-    try { const a = audio; if (a) a.pause(); } catch (e) { /* ignore */ }
-    const my = token; voSpeaking.value = true;
-    n.speak({ lines, pitch: SGT_PITCH, rate: SGT_RATE }).then(() => { if (my === token) { voSpeaking.value = false; onEnd && onEnd(); } }).catch(() => { voSpeaking.value = false; });
-    return true;
-  }
-  const s = synth(); if (!s || typeof SpeechSynthesisUtterance === 'undefined') return false;
-  try {
-    s.cancel(); try { const a = audio; if (a) a.pause(); } catch (e) { /* ignore */ } const v = bestVoice(); const my = token; voSpeaking.value = true;
-    lines.forEach((line, i) => {
-      const u = new SpeechSynthesisUtterance(line); if (v) { u.voice = v; u.lang = v.lang; }
-      u.rate = SGT_RATE; u.pitch = SGT_PITCH; u.volume = 1;
-      if (i === lines.length - 1) u.onend = () => { if (my === token) { voSpeaking.value = false; onEnd && onEnd(); } };
-      s.speak(u);
-    });
-    return true;
-  } catch (e) { return false; }
+// Speak one chunk: bundled MP3 for a known static line, else the live voice, else fallbackKey's MP3, else silence.
+function speakChunk(t, my, next, fallbackKey) {
+  const fallback = () => { if (my !== token) return; if (fallbackKey && SCRIPTS[fallbackKey]) playSrc(`${base}voiceover/${fallbackKey}.mp3`, my, { onEnd: next, onFail: next }); else next(); };
+  const live = () => liveUrl(t).then((u) => { if (my !== token) return; if (u) playSrc(u, my, { onEnd: next, onFail: fallback }); else fallback(); }, fallback);
+  const local = bundledSrc(t);
+  if (local) playSrc(local, my, { onEnd: next, onFail: live }); else live();
+}
+
+// Speak any line in the robot voice. Returns false only when muted / empty. onEnd runs when it finishes OR when no
+// voice was available (so chained flows keep going); never after stopVoice(). fallbackKey: a SCRIPTS MP3 to play instead.
+export function speakLive(text, { onEnd, fallbackKey } = {}) {
+  const parts = liveChunks(text);
+  if (voMuted.value || !parts.length) return false;
+  stopVoice(); const my = token; voSpeaking.value = true;
+  const step = (i) => { if (my !== token) return; if (i >= parts.length) { voSpeaking.value = false; if (onEnd) onEnd(); return; } speakChunk(parts[i], my, () => step(i + 1), fallbackKey); };
+  step(0);
+  return true;
 }
 
 // Play a scripted segment (stops anything already playing). Returns false if muted / not yet unlocked.
 export function playVoice(key, { onEnd } = {}) {
   stopVoice(); if (voMuted.value || !voUnlocked.value || !SCRIPTS[key]) return false;
-  const my = token; const a = el();
-  let fell = false; let started = false; // fallback at most once, and never after the MP3 actually started playing
-  const fallback = () => { if (fell || started || my !== token) return; fell = true; voSpeaking.value = false; speakLive(SCRIPTS[key], { onEnd }); };
-  a.onplaying = () => { started = true; };
-  if (!a) return speakLive(SCRIPTS[key], { onEnd });
-  a.src = `${base}voiceover/${key}.mp3`; voSpeaking.value = true;
-  a.onended = () => { if (my === token && onEnd) onEnd(); };
-  a.play().catch(fallback);
-  a.onerror = fallback;
+  const my = token;
+  playSrc(`${base}voiceover/${key}.mp3`, my, { onEnd, onFail: () => { if (my === token) speakLive(SCRIPTS[key], { onEnd }); } });
   return true;
 }
 
-// One voice flow: a scripted MP3 segment (natural neural voice), then dynamic text via speechSynthesis.
+// One voice flow: optional live line, then a scripted MP3 segment, then a dynamic live line.
 // stopVoice() (close / mute / new flow) cancels the rest of the sequence.
 export function playFlow({ before = '', key = '', text = '' }) {
   if (voMuted.value) return false;
-  if (before) { const my = token; return speakLive(before, { onEnd: () => { if (my === token) playFlow({ key, text }); } }); }
-  if (key && SCRIPTS[key] && voUnlocked.value) { const my = token + 1; return playVoice(key, { onEnd: () => { if (my === token && text) speakLive(text); } }); }
-  return speakLive(key && SCRIPTS[key] ? `${SCRIPTS[key]} ${text}` : text);
+  if (before) return speakLive(before, { onEnd: () => playFlow({ key, text }) }); // onEnd never fires after a stop
+  if (key && SCRIPTS[key] && voUnlocked.value) return playVoice(key, { onEnd: () => { if (text) speakLive(text); } });
+  return text ? speakLive(text) : false;
 }
 
 // Call from inside a tap handler. Primes the shared element (silent) so later swaps can autoplay on iOS.
@@ -99,7 +96,6 @@ export function unlockVoice() {
   if (voUnlocked.value) return; voUnlocked.value = true;
   const a = el(); if (a) { try { a.muted = true; a.src = `${base}voiceover/ob_age.mp3`; const p = a.play(); const done = () => { a.pause(); a.muted = false; };
     p && p.then ? p.then(done, done) : done(); } catch (e) { a.muted = false; } }
-  try { const s = synth(); if (s) s.getVoices(); } catch (e) { /* ignore */ }
 }
 
 export function setVoMuted(m) { voMuted.value = !!m; try { localStorage.setItem(MUTE_KEY, m ? '1' : '0'); } catch (e) { /* ignore */ } if (m) stopVoice(); }

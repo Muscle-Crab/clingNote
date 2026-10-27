@@ -36,16 +36,16 @@ export const pendingCelebration = (stats, seen = {}) => {
   const a = (stats.awards || [])[0];
   if (a && a.at && String(a.at) !== String(seen.award || '')) {
     const b = a.badge ? badgeLabel(a.badge) : null;
-    return { key: 'award', id: String(a.at), title: 'Your manager sent you a bonus', lines: [a.bonus ? `+${a.bonus} coins` : '', b ? `${b.icon} ${b.name}` : '', a.note ? `“${a.note}”` : '', a.from ? `from ${a.from}` : ''].filter(Boolean), voice: 'Your manager sent you a bonus' };
+    return { key: 'award', id: String(a.at), title: 'Your manager sent you a bonus', lines: [a.bonus ? `+${a.bonus} coins` : '', b ? `${b.icon} ${b.name}` : '', a.note ? `“${a.note}”` : '', a.from ? `from ${a.from}` : ''].filter(Boolean), voice: 'Nice! Your manager just sent you a bonus.' };
   }
   if (stats.lastDay && stats.lastDay !== seen.day) {
     if (stats.lastResult === 'met' && stats.lastReward) {
       const r = stats.lastReward; const b = r.badge ? badgeLabel(r.badge) : null;
-      return { key: 'day', id: stats.lastDay, title: 'Goal met. Well done.', lines: [`+${r.xp} XP · +${r.coins} coins`, r.shield ? '🛡️ Streak shield earned' : '', b ? `${b.icon} ${b.name} badge` : '', `🔥 ${stats.streak} day streak`].filter(Boolean), voice: `Goal met. ${stats.streak} day streak. Keep it going.` };
+      return { key: 'day', id: stats.lastDay, title: 'Goal met. Well done.', lines: [`+${r.xp} XP · +${r.coins} coins`, r.shield ? '🛡️ Streak shield earned' : '', b ? `${b.icon} ${b.name} badge` : '', `🔥 ${stats.streak} day streak`].filter(Boolean), voice: `You hit your goal. That's a ${stats.streak} day streak. Let's keep it going.` };
     }
     if (stats.lastResult === 'missed' && stats.lastPenalty) {
       const p = stats.lastPenalty;
-      return { key: 'day', id: stats.lastDay, miss: true, title: 'Goal missed.', lines: [p.shieldUsed ? '🛡️ A shield saved your streak' : 'Streak lost', p.coins ? `-${p.coins} coins` : '', 'Target goes up until you hit it'].filter(Boolean), voice: p.shieldUsed ? 'Goal missed. Your shield saved the streak. No more excuses.' : 'Goal missed. Streak lost. Tomorrow you hit the target.' };
+      return { key: 'day', id: stats.lastDay, miss: true, title: 'Goal missed.', lines: [p.shieldUsed ? '🛡️ A shield saved your streak' : 'Streak lost', p.coins ? `-${p.coins} coins` : '', 'Target goes up until you hit it'].filter(Boolean), voice: p.shieldUsed ? "You missed the goal, but your shield saved the streak. Let's make tomorrow count." : "You missed the goal, and the streak reset. That's okay. Tomorrow we hit it." };
     }
   }
   return null;

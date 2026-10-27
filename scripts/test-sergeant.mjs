@@ -20,11 +20,11 @@ t('running lock shows elapsed/left, no start prompt', () => {
   assert.ok(!r.prompts.some((p) => p.id === 'start-day')); assert.ok(!r.prompts.some((p) => p.id === 'set-reminder')); // next already has a reminder
   assert.equal(r.stats.lockLeft, '6h30m');
 });
-t('all done -> at ease, no prompts', () => { const r = buildReport({ tasks: [T('A', { completed: true })], now, nowMs, phase: 'running', lock: { startMs: nowMs - 1, endMs: nowMs + 1e6 }, earned: 10, target: 10, streak: 3 }); assert.equal(r.atEase, true); assert.equal(r.prompts.length, 0); assert.match(r.lines[0].text, /At ease/i); });
+t('all done -> at ease, no prompts', () => { const r = buildReport({ tasks: [T('A', { completed: true })], now, nowMs, phase: 'running', lock: { startMs: nowMs - 1, endMs: nowMs + 1e6 }, earned: 10, target: 10, streak: 3 }); assert.equal(r.atEase, true); assert.equal(r.prompts.length, 0); assert.match(r.lines[0].text, /done|all of them|sweep/i); });
 t('empty list', () => { const r = buildReport({ tasks: [], now, nowMs, phase: 'ready' }); assert.equal(r.lines[0].kind, 'empty'); assert.equal(r.atEase, false); assert.ok(!r.prompts.some((p) => p.id === 'start-day')); });
 t('ended day: no start / reminder prompts', () => { const r = buildReport({ tasks: [T('A')], now, nowMs, phase: 'ended' }); assert.equal(r.prompts.length, 0); });
 t('varied lines by seed', () => { const s = new Set([0, 1, 2].map((seed) => buildReport({ tasks: [T('A')], now, nowMs, phase: 'ready', seed }).lines[0].text)); assert.ok(s.size > 1); });
-t('ack', () => { assert.match(ackLine({ left: 0, seed: 1 }), /At ease/); assert.ok(ackLine({ left: 3, seed: 2 }).length > 0); });
+t('ack', () => { assert.match(ackLine({ left: 0, seed: 1 }), /last one|All done/); assert.ok(ackLine({ left: 3, seed: 2 }).length > 0); });
 t('throttle', () => { assert.equal(reportDue(nowMs, null), true); assert.equal(reportDue(nowMs, nowMs - 10 * 60e3), false); assert.equal(reportDue(nowMs, nowMs - 31 * 60e3), true); });
 t('taskKeyOf fallback', () => assert.equal(taskKeyOf({ title: 'x', createdAt: { seconds: 5 } }), '5|x'));
 console.log(`sergeant report: ${n} tests passed`);

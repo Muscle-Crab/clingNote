@@ -7,7 +7,7 @@ let router = null; let ready = false; let pending = null;
 const go = () => { if (!router || !ready || !pending) return; const r = pending; pending = null; if (router.currentRoute.value.fullPath !== r) router.push(r).catch(() => {}); };
 export const handleNotificationTap = (n) => { pending = resolveNotificationRoute(n); go(); return pending; };
 
-// Foreground only (iOS fires localNotificationReceived only while the app is open): task pings are spoken by the sergeant voice.
+// Foreground only (iOS fires localNotificationReceived only while the app is open): task pings are spoken by the robot voice (useSpeech -> speakLive).
 export const SPOKEN_TYPES = new Set(['time', 'sched', 'rem']);
 export const foregroundLine = (n) => { const x = (n && n.extra) || {}; return SPOKEN_TYPES.has(x.type) ? String(n.body || n.title || '').trim() : ''; };
 export const installNotificationTaps = ({ router: r, authReady, oneSignal, localNotifications, speak }) => {

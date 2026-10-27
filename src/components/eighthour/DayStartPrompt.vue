@@ -12,7 +12,7 @@
           <button type="button" class="dsp-step" :disabled="idx >= HOUR_OPTIONS.length - 1" aria-label="Half an hour more" data-test="day-prompt-plus" @click="idx++">+</button>
         </div>
         <p class="dsp-sub">Ends around <b data-test="day-prompt-preview">{{ endLabel }}</b> if you start now.</p>
-        <p v-if="target.total" class="dsp-sub" data-test="day-prompt-target">Boss target: <b>{{ dayPtsLabel(earned, target.target) }}</b> <span class="dsp-of">({{ target.total }} available)</span></p>
+        <p v-if="target.total" class="dsp-sub" data-test="day-prompt-target">Today's target: <b>{{ dayPtsLabel(earned, target.target) }}</b> <span class="dsp-of">({{ target.total }} available)</span></p>
         <button type="button" class="dsp-btn dsp-btn--primary" data-test="day-prompt-next" @click="step = 'confirm'">Continue</button>
         <button type="button" class="dsp-btn dsp-skip" data-test="day-prompt-skip-pick" @click="$emit('skip')">Skip lock-in today</button>
       </template>

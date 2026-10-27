@@ -20,7 +20,7 @@ export function overdueLine({ mode = 'user', overdue = [], people = [] }) {
   }
   if (!overdue.length) return '';
   const top = overdue.slice(0, 2).map((t) => t.title);
-  return `Hey. You've got ${plural(overdue.length, 'overdue task')}. ${list(top)}${overdue.length > 2 ? ', and more' : ''}. Knock it out now.`;
+  return `Hey. You've got ${plural(overdue.length, 'overdue task')}. ${list(top)}${overdue.length > 2 ? ', and more' : ''}. Let's knock ${overdue.length === 1 ? 'it' : 'them'} out now.`;
 }
 
 const FULLDAY = { Sun: 'Sunday', Mon: 'Monday', Tue: 'Tuesday', Wed: 'Wednesday', Thu: 'Thursday', Fri: 'Friday', Sat: 'Saturday' };
@@ -32,12 +32,12 @@ const spokenTime = (s) => { const m = toMin(s); if (m == null) return ''; const 
 export function recapLine({ week = [] }) {
   const past = week.filter((d) => !d.today); const y = past[past.length - 1];
   const plan = past.reduce((s, d) => s + d.planned, 0); const tot = past.reduce((s, d) => s + d.done, 0);
-  if (!plan) return 'First, yesterday. There is no history yet, so this is a fresh start. Today sets the bar.';
+  if (!plan) return "First, yesterday. There's no history yet, so this is a fresh start. Today sets the bar.";
   const out = ['First, how yesterday went.'];
   if (!y || !y.planned) out.push('Yesterday you had nothing planned.');
   else if (y.done >= y.planned) out.push(`You finished all ${y.planned} of ${y.planned}. Clean sweep. Nice work.`);
-  else if (!y.done) out.push(`You finished none of your ${y.planned} tasks. That one's gone. We fix it today.`);
-  else out.push(`You finished ${y.done} of ${y.planned}. ${y.planned - y.done} slipped.`);
+  else if (!y.done) out.push(`You finished none of your ${y.planned} tasks. That's okay. We'll fix it today.`);
+  else out.push(`You finished ${y.done} of ${y.planned}. ${y.planned - y.done} slipped, so let's pick those up.`);
   if (past.length >= 2) {
     out.push(`On the chart, the last ${past.length} days: ${tot} of ${plan} done.`);
     const best = past.reduce((b, d) => (d.done > b.done ? d : b), past[0]);
@@ -45,7 +45,7 @@ export function recapLine({ week = [] }) {
     const misses = past.filter((d) => d.planned && d.done < d.planned).length;
     if (misses) out.push(`You came up short on ${plural(misses, 'day')}.`);
     const half = Math.floor(past.length / 2); const a = past.slice(0, half).reduce((s, d) => s + d.done, 0) / (half || 1); const b = past.slice(half).reduce((s, d) => s + d.done, 0) / ((past.length - half) || 1);
-    out.push(b > a + 0.5 ? 'Trend is up.' : b < a - 0.5 ? 'Trend is down. Time to tighten up.' : 'Holding steady.');
+    out.push(b > a + 0.5 ? "Trend's up. Nice." : b < a - 0.5 ? "Trend's down. Let's tighten things up." : 'Holding steady.');
   }
   return out.join(' ');
 }
@@ -58,7 +58,7 @@ export function planLine({ streak = 0, streakMin = 5, todayTasks = [], deadline 
     out.push(`You've got ${plural(open.length, 'task')} open: ${list(open.slice(0, 3).map((t) => t.title))}${open.length > 3 ? `, and ${open.length - 3} more` : ''}.`);
     const timed = open.filter((t) => toMin(t.reminder && t.reminder.time) != null).sort((x, y) => toMin(x.reminder.time) - toMin(y.reminder.time));
     if (timed.length) out.push(`First timed task: ${timed[0].title} at ${spokenTime(timed[0].reminder.time)}.`);
-  } else out.push('Nothing on today yet. Add your tasks, at least five.');
+  } else out.push("Nothing's on today yet. Add your tasks, at least five.");
   if (deadline && spokenTime(deadline)) out.push(`Everything's due by ${spokenTime(deadline)}.`);
   const need = Math.max(0, streakMin - doneToday);
   out.push(need === 0 ? `You've already hit ${streakMin} today. Streak's safe.` : streak > 0 ? `Your streak is ${streak}. Finish ${need} more today to keep it.` : `Finish ${need} today to start a streak.`);

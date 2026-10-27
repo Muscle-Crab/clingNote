@@ -6,7 +6,7 @@
       <p class="mi-k">Manager mode · {{ i + 1 }}/{{ SLIDES.length }}</p>
       <h2 class="mi-h">{{ SLIDES[i].title }}</h2>
       <p class="mi-p">{{ SLIDES[i].text }}</p>
-      <p v-if="!voUnlocked && !muted" class="mi-hint">Tap anywhere to hear the boss 🔊</p>
+      <p v-if="!voUnlocked && !muted" class="mi-hint">Tap anywhere to hear your robot 🔊</p>
       <div class="mi-foot">
         <button class="mi-skip" @click="done">Skip</button>
         <button class="mi-cta" data-test="mi-next" @click="next">{{ i === SLIDES.length - 1 ? 'Got it' : 'Next' }}</button>

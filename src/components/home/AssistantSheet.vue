@@ -38,7 +38,7 @@
 <script setup>
 // ClingNote conversational assistant (voice + text, multi-turn, takes actions). Server: netlify/functions/ai.js task 'agent' (Gemini function calling).
 // Tools are validated in utils/assistantTools.js and run by the `executor` prop (HomeView, same paths as the UI). Delete / complete / start day /
-// Community posts wait for an explicit tap or spoken "yes". Replies are spoken through the existing boss voice stack (useVoiceover.speakLive).
+// Community posts wait for an explicit tap or spoken "yes". Replies are spoken through the one robot voice (useVoiceover.speakLive).
 import { ref, nextTick, onBeforeUnmount, onMounted } from 'vue';
 import RobotAvatar from './RobotAvatar.vue';
 import { askAi } from '@/composables/useAi';
@@ -62,7 +62,7 @@ const setSpeak = (v) => { speak.value = v; if (!v) stopVoice(); saveAssistant();
 const say = (t) => { if (speak.value) { unlockVoice(); stopVoice(); speakLive(ttsText(t)); } };
 const decide = (yes) => { const p = pending.value; if (!p) return; pending.value = null; push('action', yes ? `✔ ${p.summary.split('\n')[0]}` : '✖ Cancelled'); p.resolve(!!yes); };
 const confirm = (c) => new Promise((resolve) => { pending.value = { ...c, resolve }; emit('state', { pending: true }); scroll(); say(c.name === 'post_to_community' ? 'Here is the draft post. Post it?' : `${c.summary} Say yes or no.`); });
-const LABEL = { create_tasks: '➕ Added', edit_task: '✏️ Edited', reschedule_task: '📅 Moved', delete_task: '🗑 Deleted', complete_task: '✅ Done', start_timer: '⏱ Timer started', set_boss_checkin: '👔 Boss check-in', start_day: '🔒 Day started', set_day_hours: '⏳ Hours set', set_setting: '⚙️ Setting', navigate: '🧭 Opened', post_to_community: '📣 Posted' };
+const LABEL = { create_tasks: '➕ Added', edit_task: '✏️ Edited', reschedule_task: '📅 Moved', delete_task: '🗑 Deleted', complete_task: '✅ Done', start_timer: '⏱ Timer started', set_boss_checkin: '🤖 Robot check-in', start_day: '🔒 Day started', set_day_hours: '⏳ Hours set', set_setting: '⚙️ Setting', navigate: '🧭 Opened', post_to_community: '📣 Posted' };
 const onEvent = (e) => { if (e.type === 'ran' && LABEL[e.name] && !(e.response && e.response.error)) push('action', `${LABEL[e.name]}${e.response && e.response.summary ? `: ${e.response.summary}` : ''}`); };
 const call = (input) => askAi('agent', input);
 

@@ -25,7 +25,7 @@
             <i :class="soundEnabled ? 'fas fa-volume-up' : 'fas fa-volume-mute'" aria-hidden="true"></i> Sounds: {{ soundEnabled ? 'On' : 'Off' }}
           </button>
           <button type="button" class="sort-toggle" data-test="menu-boss-voice" :aria-pressed="bossVoiceOn ? 'true' : 'false'" @click="$emit('toggle-boss-voice')">
-            <i :class="bossVoiceOn ? 'fas fa-microphone' : 'fas fa-microphone-slash'" aria-hidden="true"></i> Boss voice: {{ bossVoiceOn ? 'On' : 'Off' }}
+            <i :class="bossVoiceOn ? 'fas fa-microphone' : 'fas fa-microphone-slash'" aria-hidden="true"></i> Robot voice: {{ bossVoiceOn ? 'On' : 'Off' }}
           </button>
           <button v-if="!isDefaultPrefs(prefs)" class="sort-reset" @click="$emit('update:prefs', { sort: 'manual', filter: 'all' })">Reset</button>
         </div>

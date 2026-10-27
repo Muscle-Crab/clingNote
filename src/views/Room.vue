@@ -103,6 +103,7 @@
                     :src="demoVideo"
                     controls
                     autoplay
+                    muted
                     class="w-full h-full object-cover"
                 ></video>
               </div>

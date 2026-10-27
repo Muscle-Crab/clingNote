@@ -8,8 +8,8 @@
     <section class="disc-card">
       <label class="disc-row"><input type="checkbox" :checked="settings.enabled" @change="update({ enabled: $event.target.checked })" /> <strong>Discipline Mode</strong></label>
       <p class="muted">Finish {{ DAILY_STREAK_MIN }} tasks (not pending) by your deadline every day. Miss it: {{ MISSED_DEADLINE_PENALTY }} pts, streak dies, tier can drop.</p>
-      <label class="disc-row"><input type="checkbox" :checked="settings.strict && strictAllowed" :disabled="!settings.enabled" @change="toggleStrict($event)" /> <strong>Strict Boss</strong> <span v-if="!strictAllowed" class="pro-tag" data-test="pro-lock">🔒 PRO</span></label>
-      <p class="muted">The boss gives orders in the morning, calls you out at midday if fewer than 2 are done, warns you in the evening and gives a PASSED/FAILED verdict after the deadline. To skip or defer a task you have to say why. Each task gets one carry-over; after that it's overdue and blocks new non-urgent tasks. You get nudged after {{ IDLE_MINUTES }} min idle. Defaults: on, {{ DAILY_STREAK_MIN }} tasks, 9 PM.</p>
+      <label class="disc-row"><input type="checkbox" :checked="settings.strict && strictAllowed" :disabled="!settings.enabled" @change="toggleStrict($event)" /> <strong>Strict Coach</strong> <span v-if="!strictAllowed" class="pro-tag" data-test="pro-lock">🔒 PRO</span></label>
+      <p class="muted">Your robot sets the plan in the morning, checks in at midday if fewer than 2 are done, warns you in the evening and gives a PASSED/FAILED verdict after the deadline. To skip or defer a task you have to say why. Each task gets one carry-over; after that it's overdue and blocks new non-urgent tasks. You get nudged after {{ IDLE_MINUTES }} min idle. Defaults: on, {{ DAILY_STREAK_MIN }} tasks, 9 PM.</p>
       <p v-if="dstate.lastVerdict" class="muted">Last verdict ({{ dstate.lastVerdict.date }}): <strong>{{ dstate.lastVerdict.passed ? 'PASSED' : 'FAILED' }}</strong>, grade {{ dstate.lastVerdict.grade }}</p>
       <label class="disc-row">Daily deadline <input type="time" :value="settings.deadline" @change="update({ deadline: $event.target.value })" /></label>
       <button v-if="canNotify" type="button" class="disc-btn" @click="askNotify">🔔 Enable deadline notifications</button>
@@ -22,8 +22,8 @@
     </section>
 
     <section class="disc-card">
-      <h2 class="disc-h">👹 Evening boss</h2>
-      <p class="muted">Open a task on today's list and tap “Make this the evening boss”. Subtasks drain its HP. With Discipline Mode on, your day won't count toward the streak until the boss is cleared. Clearing it: +{{ BOSS_BONUS }} pts.</p>
+      <h2 class="disc-h">🎯 Evening challenge</h2>
+      <p class="muted">Open a task on today's list and tap “Make this the evening challenge”. Subtasks drain its HP. With Discipline Mode on, your day won't count toward the streak until the challenge is cleared. Clearing it: +{{ BOSS_BONUS }} pts.</p>
     </section>
     <section class="disc-card">
       <h2 class="disc-h">☕ Earned breaks</h2>
@@ -48,7 +48,7 @@
     </section>
     <section class="disc-card">
       <h2 class="disc-h">🐌 Procrastination log</h2>
-      <p class="muted">{{ (dstate.log || []).length }} entries: missed deadlines, app opens while locked, boss failures.</p>
+      <p class="muted">{{ (dstate.log || []).length }} entries: missed deadlines, app opens while locked, missed evening challenges.</p>
       <router-link to="/discipline/log" class="disc-btn">View log</router-link>
     </section>
 
