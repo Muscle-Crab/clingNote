@@ -122,6 +122,11 @@ const actions = {
     const ph = phaseOf(doc, ctx.now);
     if (ph.phase === 'running') return view(doc, ctx.now); // already started (second device / retry)
     if (ph.phase !== 'ready') throw fail(409, ph.phase === 'before' ? 'Your wake time has not arrived yet.' : ph.phase === 'ended' ? 'Today\'s day is already over.' : 'Pick a wake time first.', { code: ph.phase });
+    { // lock-in is opt-in (users/{uid}.lockInEnabled === true) and can be skipped for one date (lockInSkipDate === dayKey)
+      const u = await ctx.db.doc(`users/${ctx.uid}`).get(); const ud = u.exists ? u.data() : {};
+      if (ud.lockInEnabled !== true) throw fail(403, 'Lock-in is off. Turn it on in Settings to use the countdown lock.', { code: 'lock-in-off' });
+      if (ud.lockInSkipDate && ud.lockInSkipDate === ph.dayKey) throw fail(403, 'Lock-in is skipped for today.', { code: 'lock-in-skipped' });
+    }
     const hours = core.clampHours(body.hours);
     ph.startMs = ctx.now; ph.endMs = ctx.now + core.hoursMs(hours); // confirm-time start: end = confirm + hours
     const dayName = core.dayNameIn(doc.plan.tz, ph.startMs);

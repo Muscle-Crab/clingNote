@@ -14,6 +14,7 @@
         <p class="dsp-sub">Ends around <b data-test="day-prompt-preview">{{ endLabel }}</b> if you start now.</p>
         <p v-if="target.total" class="dsp-sub" data-test="day-prompt-target">Boss target: <b>{{ dayPtsLabel(earned, target.target) }}</b> <span class="dsp-of">({{ target.total }} available)</span></p>
         <button type="button" class="dsp-btn dsp-btn--primary" data-test="day-prompt-next" @click="step = 'confirm'">Continue</button>
+        <button type="button" class="dsp-btn dsp-skip" data-test="day-prompt-skip-pick" @click="$emit('skip')">Skip lock-in today</button>
       </template>
       <template v-else>
         <h2 id="dsp-t">Are you sure?</h2>
@@ -24,6 +25,7 @@
         <div class="dsp-row">
           <button type="button" class="dsp-btn" :disabled="busy" data-test="day-prompt-change" @click="step = 'pick'">Change</button>
           <button type="button" class="dsp-btn dsp-btn--primary" :disabled="busy" data-test="day-prompt-confirm" @click="$emit('confirm', hours)">{{ busy ? 'Starting…' : 'Confirm' }}</button>
+          <button type="button" class="dsp-btn dsp-skip" :disabled="busy" data-test="day-prompt-skip" @click="$emit('skip')">Skip lock-in today</button>
         </div>
       </template>
     </div>
@@ -36,7 +38,7 @@ import { HOUR_OPTIONS, hoursLabel, clampHours, hoursMs, fmtClock } from '@/utils
 import { previewDayTarget, dayPtsLabel } from '@/utils/dayTarget';
 
 const props = defineProps({ initialHours: { type: Number, default: 8 }, nowMs: { type: Function, default: () => Date.now() }, tz: { type: String, default: '' }, busy: Boolean, error: { type: String, default: '' }, tasks: { type: Array, default: () => [] }, stats: { type: Object, default: () => ({}) }, earned: { type: Number, default: 0 } });
-defineEmits(['confirm']);
+defineEmits(['confirm', 'skip']);
 const step = ref('pick');
 const hours = ref(clampHours(props.initialHours));
 const idx = computed({ get: () => Math.max(0, HOUR_OPTIONS.indexOf(hours.value)), set: (i) => { hours.value = HOUR_OPTIONS[Math.min(HOUR_OPTIONS.length - 1, Math.max(0, i))]; } });
@@ -57,4 +59,5 @@ const endLabel = computed(() => { void tick.value; const tz = props.tz || Intl.D
 .dsp-row { display: flex; gap: 10px; } .dsp-row .dsp-btn { flex: 1; }
 .dsp-btn { min-height: 44px; padding: 0 16px; border-radius: 12px; border: 1px solid var(--c-border, #2a2a2e); background: var(--c-surface-2, #22252a); color: inherit; font-weight: 700; width: 100%; }
 .dsp-btn--primary { background: #378ADD; border-color: #378ADD; color: #fff; }
+.dsp-skip { flex-basis: 100%; background: transparent; border: 0; text-decoration: underline; opacity: .8; }
 </style>

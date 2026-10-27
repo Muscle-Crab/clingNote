@@ -82,7 +82,11 @@
 
           <h2 class="pf-section">Preferences</h2>
           <section class="pf-card pf-card--flush pf-push"><PushSettings /></section>
-          <section v-if="isOwn" class="pf-card pf-card--flush" data-test="day-length-setting">
+          <section v-if="isOwn" class="pf-card pf-card--flush" data-test="lock-in-setting">
+            <label class="pf-row"><span class="pf-ico" aria-hidden="true">🔒</span><span class="pf-row-title">Lock-in<small class="pf-dl-sub">8-hour lock: a timed day that shuts the app at the end. Off by default; you can skip it on any day.</small></span>
+              <input type="checkbox" role="switch" class="pf-switch" data-test="lock-in-toggle" :checked="lockIn.enabled" :disabled="!lockIn.loaded" @change="onLockInToggle($event.target.checked)" /></label>
+          </section>
+          <section v-if="isOwn && lockIn.enabled" class="pf-card pf-card--flush" data-test="day-length-setting">
             <div class="pf-row"><span class="pf-ico" aria-hidden="true">⏱</span><span class="pf-row-title">Day length<small class="pf-dl-sub">Preselected each morning · 3 to 12 h</small></span>
               <span class="pf-dl"><button type="button" class="pf-dl-btn" :disabled="dayLen <= DAY_HOURS.min" aria-label="Half an hour less" data-test="day-length-minus" @click="bumpDayLen(-0.5)">−</button><b data-test="day-length-value">{{ hoursLabel(dayLen) }} h</b><button type="button" class="pf-dl-btn" :disabled="dayLen >= DAY_HOURS.max" aria-label="Half an hour more" data-test="day-length-plus" @click="bumpDayLen(0.5)">+</button></span>
             </div>
@@ -110,6 +114,9 @@
 </template>
 
 <script setup>
+import { lockIn, loadLockIn, setLockInEnabled } from '@/utils/lockIn';
+loadLockIn(true).catch(() => {});
+const onLockInToggle = async (on) => { const u = auth.currentUser; if (!u) return; try { await setLockInEnabled(u.uid, on); } catch (e) { console.warn('lock-in toggle:', e); loadLockIn(true).catch(() => {}); } };
 import PushSettings from '@/components/PushSettings.vue';
 import DeleteAccount from '@/components/DeleteAccount.vue';
 import { syncPublicProfile } from '@/composables/usePublicProfile';
@@ -349,6 +356,7 @@ onMounted(() => { loadDayLengthHours().then((v) => { dayLen.value = v; }).catch(
 .pf-pill-ok { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 999px; font-size: 13px; color: var(--c-success); background: var(--c-success-soft); border: 1px solid rgba(61,220,151,.35); }
 .pf-pill-ok i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
 .pf-upgrade { display: block; margin: 4px 0 12px; min-height: 48px; line-height: 48px; text-align: center; border-radius: 14px; font-weight: 800; color: #fff; background: linear-gradient(90deg, #f59e0b, #ea580c); box-shadow: 0 6px 18px rgba(234,88,12,.3); }
+.pf-switch { width: 22px; height: 22px; margin-left: auto; accent-color: #4aa8ff; flex: none; }
 .pf-row { display: flex; align-items: center; gap: 14px; width: 100%; min-height: 56px; padding: 8px 0; background: none; border: 0; color: var(--c-text); cursor: pointer; text-decoration: none; }
 .pf-row--divided { border-top: 1px solid var(--c-border); }
 .pf-row--auto { font-size: 16px; font-weight: 600; }

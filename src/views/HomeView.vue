@@ -57,8 +57,8 @@
 
         <DayTabs :days="tabDays" :selected-index="selectedDayIndex" :scheduled-counts="scheduledCounts" @select="handleDayTabClick" />
 
-        <EightHourCard :tasks="ehTasks" :start-error="ehStartError" @retry="syncAfterAuth" @start="openDayPrompt" />
-        <DayStartPrompt v-if="dayPromptOpen" :initial-hours="eh.hoursPref.value" :now-ms="eh.nowMs" :tz="eh.plan.value?.tz || ''" :busy="ehBusy" :error="ehStartError" :tasks="todayTasksForTarget" :stats="eh.stats.value" :earned="pointsAccumulated || 0" @confirm="confirmDayStart" />
+        <EightHourCard v-if="lockInToday || eh.lock.value" :tasks="ehTasks" :start-error="ehStartError" @retry="syncAfterAuth" @start="openDayPrompt" />
+        <DayStartPrompt v-if="dayPromptOpen" :initial-hours="eh.hoursPref.value" :now-ms="eh.nowMs" :tz="eh.plan.value?.tz || ''" :busy="ehBusy" :error="ehStartError" :tasks="todayTasksForTarget" :stats="eh.stats.value" :earned="pointsAccumulated || 0" @confirm="confirmDayStart" @skip="skipLockIn" />
 
         <ProgressBar :percentage="calculateCompletionPercentage()" :milestones="milestones" :done="completedTaskCount || 0" :total="dayTasks.length"
                      :streak="streak" :streak-status="streakStatus" :streak-progress="streakProgress" :streak-min="DAILY_STREAK_MIN" :points="pointsAccumulated || 0" :target="isViewingToday ? dayRequiredPts : 0" />
@@ -302,6 +302,7 @@ import DayTabs from '@/components/home/DayTabs.vue';
 import ImagePreview from '@/components/home/ImagePreview.vue';
 import ProgressBar from '@/components/home/ProgressBar.vue';
 import EightHourCard from '@/components/home/EightHourCard.vue';
+import { lockIn, loadLockIn, skipLockInToday } from '@/utils/lockIn';
 import DayStartPrompt from '@/components/eighthour/DayStartPrompt.vue';
 import { useEightHour, syncAfterAuth, setDayLengthHours, loadDayLengthHours, promptSeenFor, markPromptSeen } from '@/composables/useEightHour';
 import { countableIndexes } from '@/utils/eightHour';
@@ -3244,15 +3245,17 @@ const ensureLegacyDayStarted = async () => {
 // (end = confirm time + hours, frozen for the day). Nothing starts by itself any more.
 const dayPromptOpen = ref(false);
 const ehBusy = ref(false);
-const openDayPrompt = () => { if (eh.phase.value === 'ready' && !eh.lock.value && isToday(selectedDayIndex.value)) { ehStartError.value = ''; dayPromptOpen.value = true; } };
+const lockInToday = computed(() => lockIn.value.enabled && lockIn.value.skipDate !== (eh.phaseInfo.value.dayKey || ''));
+const openDayPrompt = () => { if (lockInToday.value && eh.phase.value === 'ready' && !eh.lock.value && isToday(selectedDayIndex.value)) { ehStartError.value = ''; dayPromptOpen.value = true; } };
 const maybeShowDayPrompt = () => {
-  if (!userId.value || eh.phase.value !== 'ready' || eh.lock.value || dayPromptOpen.value || !isToday(selectedDayIndex.value)) return;
+  if (!userId.value || !lockInToday.value || eh.phase.value !== 'ready' || eh.lock.value || dayPromptOpen.value || !isToday(selectedDayIndex.value)) return;
   const dk = eh.phaseInfo.value.dayKey || '';
   if (!dk || promptSeenFor() === dk) return; // once per day; the card's Start button reopens it
   markPromptSeen(dk); openDayPrompt();
 };
 const confirmDayStart = async (hours) => {
   if (ehStarting) return;
+  if (!lockInToday.value) { ehStartError.value = lockIn.value.enabled ? 'Lock-in is skipped for today.' : 'Lock-in is off. Turn it on in Settings (Profile > Preferences).'; return; }
   ehStarting = true; ehBusy.value = true; ehStartError.value = '';
   try {
     await setDayLengthHours(hours); // remembered as next morning's preselection (users/{uid}.dayLengthHours + localStorage)
@@ -3434,7 +3437,14 @@ const assistantExecutor = createAssistantExecutor({
   },
 });
 watch(userId, (u) => { if (u) loadDayLengthHours().catch(() => {}); }, { immediate: true });
-watch([() => eh.phase.value, () => eh.phaseInfo.value.dayKey, userId, selectedDayIndex], maybeShowDayPrompt, { immediate: true });
+watch(userId, (u) => { if (u) loadLockIn(true).then(maybeShowDayPrompt).catch(() => {}); }, { immediate: true });
+// "Skip lock-in today" (start-day prompt): this date only, stored on users/{uid}.lockInSkipDate; the day still starts normally.
+const skipLockIn = async () => {
+  const dk = eh.phaseInfo.value.dayKey || ''; if (!userId.value || !dk) return;
+  dayPromptOpen.value = false;
+  try { await skipLockInToday(userId.value, dk); await ensureLegacyDayStarted(); } catch (e) { console.warn('skip lock-in:', e); }
+};
+watch([() => eh.phase.value, () => eh.phaseInfo.value.dayKey, userId, selectedDayIndex, () => lockInToday.value], maybeShowDayPrompt, { immediate: true });
 </script>
 
 

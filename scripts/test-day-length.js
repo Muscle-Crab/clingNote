@@ -33,7 +33,7 @@ eq(core.shutUntilMs({ dayKey: '2026-10-23', endMs: 1000, hours: 6 }), 1000 + 18 
 class Ts { constructor(ms) { this.ms = ms; } toMillis() { return this.ms; } }
 const plain = (o) => o && typeof o === 'object' && Object.getPrototypeOf(o) === Object.prototype;
 const merge = (a, b) => { const o = { ...a }; for (const k of Object.keys(b)) o[k] = plain(b[k]) && plain(o[k]) ? merge(o[k], b[k]) : b[k]; return o; };
-const mkDb = () => { const store = {}; const ref = (path) => ({ path, get: async () => ({ exists: path in store, data: () => store[path] }), set: async (d, opt) => { store[path] = opt && opt.merge && store[path] ? merge(store[path], d) : d; } });
+const mkDb = () => { const store = { 'users/u1': { lockInEnabled: true } }; const ref = (path) => ({ path, get: async () => ({ exists: path in store, data: () => store[path] }), set: async (d, opt) => { store[path] = opt && opt.merge && store[path] ? merge(store[path], d) : d; } });
   return { store, doc: ref, runTransaction: async (fn) => fn({ get: (r) => r.get(), set: (r, d, o) => r.set(d, o) }) }; };
 const verify = async () => ({ uid: 'u1' });
 const call = (db, body, clock) => handler({ httpMethod: 'POST', headers: { authorization: 'Bearer x' }, body: JSON.stringify(body) }, {}, { verify, db, now: () => clock, ts: (ms) => new Ts(ms), serverTime: () => new Ts(clock), apiKey: undefined }).then((r) => ({ code: r.statusCode, body: JSON.parse(r.body) }));

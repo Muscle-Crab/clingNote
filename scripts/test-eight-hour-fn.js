@@ -8,7 +8,7 @@ const TZ = 'America/New_York'; const at = (iso) => Date.parse(iso);
 class Ts { constructor(ms) { this.ms = ms; } toMillis() { return this.ms; } }
 const plain = (o) => o && typeof o === 'object' && Object.getPrototypeOf(o) === Object.prototype;
 const merge = (a, b) => { const o = { ...a }; for (const k of Object.keys(b)) o[k] = plain(b[k]) && plain(o[k]) ? merge(o[k], b[k]) : b[k]; return o; };
-const mkDb = (seed = {}) => {
+const mkDb = (seed0 = {}) => { const seed = { 'users/u1': { lockInEnabled: true }, 'users/u2': { lockInEnabled: true }, ...seed0 }; // lock-in opted in unless a test says otherwise
   const store = { ...seed };
   const ref = (path) => ({ path, get: async () => ({ exists: path in store, data: () => store[path] }), set: async (d, opt) => { store[path] = opt && opt.merge && store[path] ? merge(store[path], d) : d; } });
   return { store, doc: ref, runTransaction: async (fn) => fn({ get: (r) => r.get(), set: (r, d, o) => r.set(d, o) }) };
@@ -100,7 +100,7 @@ const call = async (db, body, extra = {}) => { const r = await handler(ev(body),
   clock = r.body.lock.endMs + 5;
   r = await call(db, { action: 'state' }); eq([r.body.stats.streak, r.body.stats.targetLevel, r.body.stats.bumped, r.body.stats.lastResult], [0, 3, true, 'missed']); ok(/harder/i.test(r.body.stats.notice));
   // 'updatedAt' written after the window must not let late completions count
-  db = mkDb({ 'eightHour/u1': { plan: { wakeTime: '07:00', tz: TZ, taskCount: 1 }, lock: { dayKey: '2026-10-25', dayName: 'Sun', tz: TZ, startMs: at('2026-10-25T12:00:00Z'), endMs: at('2026-10-25T20:00:00Z'), indexes: [0], points: [50], totalPoints: 50, target: 45, earned: 0, settled: false }, stats: {} },
+  db = mkDb({ 'users/u1': { lockInEnabled: true }, 'eightHour/u1': { plan: { wakeTime: '07:00', tz: TZ, taskCount: 1 }, lock: { dayKey: '2026-10-25', dayName: 'Sun', tz: TZ, startMs: at('2026-10-25T12:00:00Z'), endMs: at('2026-10-25T20:00:00Z'), indexes: [0], points: [50], totalPoints: 50, target: 45, earned: 0, settled: false }, stats: {} },
     'weeklyRoutines/u1_Sun': { tasks: [T('Late', { completed: true })], updatedAt: new Ts(at('2026-10-25T20:30:00Z')) } });
   clock = at('2026-10-25T21:00:00Z'); r = await call(db, { action: 'state' }); eq([r.body.lock.earned, r.body.stats.lastResult], [0, 'missed'], 'writes after the end are not counted');
   db.store['weeklyRoutines/u1_Sun'].updatedAt = new Ts(at('2026-10-25T19:00:00Z'));
@@ -108,14 +108,14 @@ const call = async (db, body, extra = {}) => { const r = await handler(ev(body),
   r = await call(db, { action: 'state' }); eq([r.body.lock.earned, r.body.stats.lastResult], [50, 'met'], 'in-window writes are counted even if progress was never called');
 
   // task count must equal the plan
-  db = mkDb({ 'eightHour/u1': { plan: { wakeTime: '07:00', tz: TZ, taskCount: 3 } }, 'weeklyRoutines/u1_Fri': { tasks: [T('One task'), T('Two tasks')] } });
+  db = mkDb({ 'users/u1': { lockInEnabled: true }, 'eightHour/u1': { plan: { wakeTime: '07:00', tz: TZ, taskCount: 3 } }, 'weeklyRoutines/u1_Fri': { tasks: [T('One task'), T('Two tasks')] } });
   clock = at('2026-10-23T12:00:00Z'); r = await call(db, { action: 'start' }); eq([r.code, r.body.code], [409, 'count-mismatch']);
   // too many tasks / users are isolated
-  db = mkDb({ 'eightHour/u1': { plan: { wakeTime: '07:00', tz: TZ, taskCount: 50 } }, 'weeklyRoutines/u1_Fri': { tasks: Array.from({ length: 51 }, (_, n) => T('t'.repeat(n + 1))) } });
+  db = mkDb({ 'users/u1': { lockInEnabled: true }, 'eightHour/u1': { plan: { wakeTime: '07:00', tz: TZ, taskCount: 50 } }, 'weeklyRoutines/u1_Fri': { tasks: Array.from({ length: 51 }, (_, n) => T('t'.repeat(n + 1))) } });
   clock = at('2026-10-23T12:00:00Z'); r = await call(db, { action: 'start' }); eq([r.code, r.body.code], [409, 'too-many']);
 
   // ── AI path (REQUIRES SERVER AI): mocked; heuristic otherwise ──
-  const seed = () => mkDb({ 'eightHour/u1': { plan: { wakeTime: '07:00', tz: TZ, taskCount: 2 } }, 'users/u1': { aiConsent: true }, 'weeklyRoutines/u1_Fri': { tasks: [T('Alpha task'), T('Beta')] } });
+  const seed = () => mkDb({ 'eightHour/u1': { plan: { wakeTime: '07:00', tz: TZ, taskCount: 2 } }, 'users/u1': { lockInEnabled: true, aiConsent: true }, 'weeklyRoutines/u1_Fri': { tasks: [T('Alpha task'), T('Beta')] } });
   const mkFetch = (content, okRes = true) => { const calls = []; const f = async (url, o) => { calls.push({ url, o }); return { ok: okRes, json: async () => ({ choices: [{ message: { content } }] }) }; }; f.calls = calls; return f; };
   clock = at('2026-10-23T12:00:00Z');
   let f = mkFetch(JSON.stringify({ tasks: [{ n: 0, complexity: 5, minutes: 120 }, { n: 1, complexity: 99, minutes: -4 }], targetRatio: 1 }));
@@ -130,8 +130,13 @@ const call = async (db, body, extra = {}) => { const r = await handler(ev(body),
   ok(r.body.lock.target >= core.dailyTarget(r.body.lock.points.map((p) => ({ points: p })), {}).target, 'ratio floor (hours-aware target is never easier)');
   // no key / no consent / AI error / garbage => heuristic, still 200, no call when not allowed
   f = mkFetch('{}'); db = seed(); r = await call(db, { action: 'start' }, { fetch: f, apiKey: undefined }); eq([r.code, r.body.lock.estimateSource, f.calls.length], [200, 'heuristic', 0]);
-  f = mkFetch('{}'); db = seed(); db.store['users/u1'] = { aiConsent: false }; r = await call(db, { action: 'start' }, { fetch: f, apiKey: 'k' }); eq([r.body.lock.estimateSource, f.calls.length], ['heuristic', 0], 'no consent => nothing sent');
+  f = mkFetch('{}'); db = seed(); db.store['users/u1'] = { lockInEnabled: true, aiConsent: false }; r = await call(db, { action: 'start' }, { fetch: f, apiKey: 'k' }); eq([r.body.lock.estimateSource, f.calls.length], ['heuristic', 0], 'no consent => nothing sent');
   f = mkFetch('{}', false); db = seed(); r = await call(db, { action: 'start' }, { fetch: f, apiKey: 'k' }); eq([r.code, r.body.lock.estimateSource], [200, 'heuristic'], 'AI failure falls back');
   f = mkFetch('not json'); db = seed(); r = await call(db, { action: 'start' }, { fetch: f, apiKey: 'k' }); eq([r.code, r.body.lock.estimateSource], [200, 'heuristic'], 'garbage falls back');
+  // lock-in is opt-in: off (missing/false) => 403 + no lock written; skipped for today => 403; skip for another date => starts
+  db = seed(); db.store['users/u1'] = {}; r = await call(db, { action: 'start' }); eq([r.code, r.body.code, !!db.store['eightHour/u1'].lock], [403, 'lock-in-off', false], 'default off');
+  db = seed(); db.store['users/u1'] = { lockInEnabled: false }; r = await call(db, { action: 'start' }); eq([r.code, r.body.code], [403, 'lock-in-off']);
+  db = seed(); db.store['users/u1'] = { lockInEnabled: true, lockInSkipDate: '2026-10-23' }; r = await call(db, { action: 'start' }); eq([r.code, r.body.code, !!db.store['eightHour/u1'].lock], [403, 'lock-in-skipped', false], 'skip today');
+  db = seed(); db.store['users/u1'] = { lockInEnabled: true, lockInSkipDate: '2026-10-22' }; r = await call(db, { action: 'start' }); eq(r.code, 200, 'yesterday\'s skip does not carry over');
   console.log(`eight-hour function: ${pass} checks passed`);
 })().catch((e) => { console.error(e); process.exit(1); });
