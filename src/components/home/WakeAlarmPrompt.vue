@@ -1,19 +1,19 @@
 <template>
-  <section v-if="visible" class="wa-card" data-test="wake-alarm-prompt" role="region" aria-label="Wake-up alarm">
-    <template v-if="!answeredYes || editing">
-      <div class="wa-head"><span class="wa-ico" aria-hidden="true">⏰</span><div><h3 class="wa-h">Want a wake-up alarm?</h3><p class="wa-sub">{{ dayLabel }} · {{ wake.alarmKit ? 'rings even on silent' : 'keep the ringer on to hear it' }}</p></div></div>
-      <div class="wa-row">
-        <input v-model="time" type="time" class="wa-time" aria-label="Alarm time" data-test="wake-prompt-time-input" />
-        <button type="button" class="wa-yes" :disabled="busy || !time" data-test="wake-prompt-set" @click="yes">Set alarm</button>
-        <button type="button" class="wa-no" :disabled="busy" data-test="wake-prompt-skip" @click="no">Not today</button>
-      </div>
-      <p v-if="error" class="wa-err" role="alert">{{ error }}</p>
-    </template>
-    <template v-else>
-      <div class="wa-head"><span class="wa-ico" aria-hidden="true">⏰</span><div><h3 class="wa-h" data-test="wake-prompt-done">Alarm set for {{ fmt12(scheduledTime) }}</h3>
-        <p class="wa-sub">{{ dayLabel }}<template v-if="fallback"> · as notifications: keep the ringer on to hear it</template></p></div></div>
-      <div class="wa-row"><button type="button" class="wa-no" :disabled="busy" @click="edit">Change</button><button type="button" class="wa-no" :disabled="busy" data-test="wake-prompt-cancel" @click="cancel">Cancel alarm</button></div>
-    </template>
+  <!-- one compact row (no card): the daily wake-up question, or the alarm that is set -->
+  <section v-if="visible" class="wa" data-test="wake-alarm-prompt" role="region" aria-label="Wake-up alarm">
+    <div v-if="!answeredYes || editing" class="wa-row">
+      <span class="wa-ico" aria-hidden="true">⏰</span>
+      <span class="wa-t" :title="wake.alarmKit ? 'Rings even on silent' : 'Keep the ringer on to hear it'"><b>Alarm</b> {{ shortDay }}?</span>
+      <input v-model="time" type="time" class="wa-time" aria-label="Alarm time" data-test="wake-prompt-time-input" />
+      <button type="button" class="wa-yes" :disabled="busy || !time" data-test="wake-prompt-set" @click="yes">Set</button>
+      <button type="button" class="wa-x" :disabled="busy" data-test="wake-prompt-skip" aria-label="Not today" title="Not today" @click="no">✕</button>
+    </div>
+    <div v-else class="wa-row">
+      <span class="wa-ico" aria-hidden="true">⏰</span>
+      <button type="button" class="wa-t wa-link" :disabled="busy" aria-label="Change alarm time" @click="edit"><b data-test="wake-prompt-done">Alarm {{ fmt12(scheduledTime) }}</b> {{ shortDay }}<template v-if="fallback"> · ringer on</template></button>
+      <button type="button" class="wa-x" :disabled="busy" data-test="wake-prompt-cancel" aria-label="Cancel alarm" title="Cancel alarm" @click="cancel">✕</button>
+    </div>
+    <p v-if="error" class="wa-err" role="alert">{{ error }}</p>
   </section>
 </template>
 
@@ -40,6 +40,7 @@ const dayLabel = computed(() => {
   return q.value.alarmAt.toLocaleDateString(undefined, { weekday: 'long' });
 });
 
+const shortDay = computed(() => (dayLabel.value === 'Tomorrow morning' ? 'tomorrow' : dayLabel.value === 'This morning' ? 'today' : dayLabel.value ? `on ${dayLabel.value}` : ''));
 const time = ref(wake.value.time); const editing = ref(false); const busy = ref(false); const error = ref('');
 watch(() => wake.value.time, (t) => { if (!editing.value) time.value = t; });
 const yes = async () => {
@@ -53,16 +54,15 @@ const cancel = async () => { busy.value = true; try { await cancelWakeAlarm(); }
 </script>
 
 <style scoped>
-.wa-card { margin: 10px 0; padding: 14px 16px; border-radius: 16px; background: var(--c-surface, #17191d); border: 1px solid var(--c-border, #2a2a2e); color: var(--c-text, #fff); }
-.wa-head { display: flex; gap: 12px; align-items: center; }
-.wa-ico { font-size: 26px; }
-.wa-h { margin: 0; font-size: 16px; font-weight: 700; }
-.wa-sub { margin: 2px 0 0; font-size: 13px; color: var(--c-text-3, #9aa3b5); }
-.wa-row { display: flex; gap: 8px; align-items: center; margin-top: 12px; flex-wrap: wrap; }
-.wa-time { min-height: 44px; padding: 0 10px; border-radius: 12px; border: 1px solid var(--c-border, #2a2a2e); background: var(--c-surface-2, #22252a); color: inherit; font-size: 16px; }
-.wa-yes, .wa-no { min-height: 44px; padding: 0 16px; border-radius: 12px; font-weight: 700; font-size: 15px; border: 1px solid transparent; cursor: pointer; }
-.wa-yes { background: #4aa8ff; color: #06121f; }
-.wa-no { background: transparent; border-color: var(--c-border, #2a2a2e); color: inherit; }
-.wa-yes:disabled, .wa-no:disabled { opacity: .5; }
-.wa-err { margin: 8px 0 0; font-size: 13px; color: #ff8a8a; }
+.wa { margin: 0 0 6px; }
+.wa-row { display: flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 2px; font-size: .82rem; color: var(--c-text-2, #a1a09b); }
+.wa-ico { font-size: .95rem; }
+.wa-t { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wa-t b { color: var(--c-text, #ecebe8); font-weight: 700; }
+.wa-link { background: none; border: 0; padding: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; min-height: 40px; }
+.wa-time { width: 120px; flex: 0 0 auto; height: 32px; padding: 0 4px; border-radius: 10px; border: 1px solid var(--c-border, #2a2a2e); background: none; color: var(--c-text, #ecebe8); font: inherit; font-size: .82rem; }
+.wa-yes { flex: 0 0 auto; height: 32px; padding: 0 12px; border-radius: 10px; border: 0; background: var(--c-accent, #4aa8ff); color: #fff; font: inherit; font-size: .82rem; font-weight: 700; cursor: pointer; }
+.wa-x { width: 32px; height: 40px; flex: 0 0 auto; border: 0; background: none; color: var(--c-text-3, #6b6a66); font-size: .9rem; cursor: pointer; }
+.wa-yes:disabled, .wa-x:disabled, .wa-link:disabled { opacity: .5; }
+.wa-err { margin: 2px 0 0; font-size: .78rem; color: var(--c-danger, #ff8a8a); }
 </style>

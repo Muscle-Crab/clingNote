@@ -72,9 +72,10 @@ t('Settings: Wake-up alarm toggle in Profile > Preferences, iOS-only on web', ()
   assert.match(p, /data-test="wake-alarm-toggle"[^>]*:checked="wakeOk && wake\.enabled"[^>]*:disabled="!wakeOk/); assert.match(p, /iOS app only/);
   assert.match(p, /data-test="wake-alarm-time"/); assert.match(p, /data-test="wake-prompt-time"/);
 });
-t('Home: in-app "Want a wake-up alarm?" card with an editable prefilled time', () => {
+t('Home: in-app wake-up alarm question as ONE compact row (no card) with an editable prefilled time', () => {
   const c = rd('src/components/home/WakeAlarmPrompt.vue');
-  assert.match(c, /Want a wake-up alarm\?/); assert.match(c, /type="time"/); assert.match(c, />Set alarm</); assert.match(c, />Not today</);
+  assert.match(c, /<b>Alarm<\/b> \{\{ shortDay \}\}\?/); assert.match(c, /Wake-up alarm/); assert.match(c, /type="time"/); assert.match(c, />Set</); assert.match(c, /aria-label="Not today"/);
+  assert.doesNotMatch(c, /border-radius: 16px|wa-card/, 'no new card/box on Home');
   assert.match(rd('src/views/HomeView.vue'), /<WakeAlarmPrompt v-if="isViewingToday" \/>/);
 });
 t('onboarding: optional iOS step after schedule, before the paywall, exact copy, saves enabled + time', () => {
