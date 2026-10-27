@@ -16,6 +16,10 @@
 		C1A0E1000000000000000014 /* LockShared.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A0E1000000000000000004 /* LockShared.swift */; };
 		C1A0E1000000000000000013 /* ClingIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A0E1000000000000000003 /* ClingIntents.swift */; };
 		C1A0E1000000000000000012 /* ClingNativePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A0E1000000000000000002 /* ClingNativePlugin.swift */; };
+		C1A0E2000000000000000011 /* ClingAlarmPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A0E2000000000000000001 /* ClingAlarmPlugin.swift */; };
+		C1A0E2000000000000000012 /* WakeAlarmMetadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A0E2000000000000000002 /* WakeAlarmMetadata.swift */; };
+		C1A0E2000000000000000013 /* WakeAlarmMetadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A0E2000000000000000002 /* WakeAlarmMetadata.swift */; };
+		C1A0E2000000000000000014 /* WakeAlarmLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A0E2000000000000000003 /* WakeAlarmLiveActivity.swift */; };
 		C1A0E1000000000000000011 /* ClingLockPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A0E1000000000000000001 /* ClingLockPlugin.swift */; };
 		A1B2C3D4E5F60718293A4C02 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4C01 /* GoogleService-Info.plist */; };
 		A1B2C3D4E5F60718293A4B02 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B01 /* PrivacyInfo.xcprivacy */; };
@@ -47,6 +51,9 @@
 		C1A0E1000000000000000004 /* LockShared.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = LockShared.swift; path = ../Shared/LockShared.swift; sourceTree = "<group>"; };
 		C1A0E1000000000000000003 /* ClingIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ClingIntents.swift; path = ClingIntents.swift; sourceTree = "<group>"; };
 		C1A0E1000000000000000002 /* ClingNativePlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ClingNativePlugin.swift; path = ClingNativePlugin.swift; sourceTree = "<group>"; };
+		C1A0E2000000000000000001 /* ClingAlarmPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ClingAlarmPlugin.swift; path = ClingAlarmPlugin.swift; sourceTree = "<group>"; };
+		C1A0E2000000000000000002 /* WakeAlarmMetadata.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = WakeAlarmMetadata.swift; path = ../Shared/WakeAlarmMetadata.swift; sourceTree = "<group>"; };
+		C1A0E2000000000000000003 /* WakeAlarmLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = WakeAlarmLiveActivity.swift; path = WakeAlarmLiveActivity.swift; sourceTree = "<group>"; };
 		C1A0E1000000000000000001 /* ClingLockPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ClingLockPlugin.swift; path = ClingLockPlugin.swift; sourceTree = "<group>"; };
 		A1B2C3D4E5F60718293A4C01 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
 		A1B2C3D4E5F60718293A4B01 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
@@ -147,6 +154,8 @@
 				C1A0E1000000000000000004 /* LockShared.swift */,
 				C1A0E1000000000000000003 /* ClingIntents.swift */,
 				C1A0E1000000000000000002 /* ClingNativePlugin.swift */,
+				C1A0E2000000000000000001 /* ClingAlarmPlugin.swift */,
+				C1A0E2000000000000000002 /* WakeAlarmMetadata.swift */,
 				C1A0E1000000000000000001 /* ClingLockPlugin.swift */,
 				50379B222058CBB4000EE86E /* capacitor.config.json */,
 				504EC3071FED79650016851F /* AppDelegate.swift */,
@@ -172,6 +181,7 @@
 				C1A0E0000000000000000018 /* CompleteTaskIntent.swift */,
 				C1A0E000000000000000001A /* MatchupWidget.swift */,
 				C1A0E1000000000000000006 /* FocusLiveActivity.swift */,
+				C1A0E2000000000000000003 /* WakeAlarmLiveActivity.swift */,
 				C1A0E0000000000000000005 /* Info.plist */,
 				C1A0E0000000000000000006 /* ClingNoteWidget.entitlements */,
 			);
@@ -303,6 +313,8 @@
 				C1A0E1000000000000000014 /* LockShared.swift in Sources */,
 				C1A0E1000000000000000013 /* ClingIntents.swift in Sources */,
 				C1A0E1000000000000000012 /* ClingNativePlugin.swift in Sources */,
+				C1A0E2000000000000000011 /* ClingAlarmPlugin.swift in Sources */,
+				C1A0E2000000000000000012 /* WakeAlarmMetadata.swift in Sources */,
 				C1A0E1000000000000000011 /* ClingLockPlugin.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -316,6 +328,8 @@
 				C1A0E000000000000000001B /* MatchupWidget.swift in Sources */,
 				C1A0E1000000000000000017 /* FocusLiveActivity.swift in Sources */,
 				C1A0E1000000000000000016 /* FocusActivityAttributes.swift in Sources */,
+				C1A0E2000000000000000014 /* WakeAlarmLiveActivity.swift in Sources */,
+				C1A0E2000000000000000013 /* WakeAlarmMetadata.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

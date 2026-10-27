@@ -86,6 +86,19 @@
             <label class="pf-row"><span class="pf-ico" aria-hidden="true">🔒</span><span class="pf-row-title">Lock-in<small class="pf-dl-sub">8-hour lock: a timed day that shuts the app at the end. Off by default; you can skip it on any day.</small></span>
               <input type="checkbox" role="switch" class="pf-switch" data-test="lock-in-toggle" :checked="lockIn.enabled" :disabled="!lockIn.loaded" @change="onLockInToggle($event.target.checked)" /></label>
           </section>
+          <section v-if="isOwn" class="pf-card pf-card--flush" data-test="wake-alarm-setting">
+            <label class="pf-row"><span class="pf-ico" aria-hidden="true">⏰</span><span class="pf-row-title">Wake-up alarm<small class="pf-dl-sub" data-test="wake-alarm-sub">{{ wakeOk ? 'ClingNote asks you each day if you want an alarm, then rings at your time, even on silent (iOS 26+). Off by default.' : 'iOS app only: install ClingNote on your iPhone to use it.' }}</small></span>
+              <input type="checkbox" role="switch" class="pf-switch" data-test="wake-alarm-toggle" :checked="wakeOk && wake.enabled" :disabled="!wakeOk || !wake.loaded || wakeBusy" @change="onWakeToggle($event.target.checked)" /></label>
+            <template v-if="wakeOk && wake.enabled">
+              <label class="pf-row pf-row--divided"><span class="pf-ico" aria-hidden="true">🔔</span><span class="pf-row-title">Alarm time<small class="pf-dl-sub">Prefilled each time you're asked</small></span>
+                <input type="time" class="pf-time" data-test="wake-alarm-time" :value="wake.time" @change="setWakeTime($event.target.value)" /></label>
+              <label class="pf-row pf-row--divided"><span class="pf-ico" aria-hidden="true">💬</span><span class="pf-row-title">Ask me at<small class="pf-dl-sub">{{ wakePromptHint }}</small></span>
+                <input type="time" class="pf-time" data-test="wake-prompt-time" :value="wake.promptTime" @change="setWakePromptTime($event.target.value)" /></label>
+              <div class="pf-row pf-row--divided pf-row--auto"><span class="pf-ico" aria-hidden="true">📅</span><span class="pf-row-title">Alarm days
+                <span class="pf-days" role="group" aria-label="Alarm days"><button v-for="d in WEEKDAYS" :key="d.n" type="button" class="pf-day" :class="{ 'pf-day--on': wake.days.includes(d.n) }" :aria-pressed="wake.days.includes(d.n)" :aria-label="d.full" @click="toggleWakeDay(d.n)">{{ d.s }}</button></span></span></div>
+              <p v-if="!wake.alarmKit" class="pf-wa-note" data-test="wake-alarm-fallback-note">On this iPhone the alarm rings as notifications, which follow the silent switch. Update to iOS 26 and allow Alarms for ClingNote to ring on silent.</p>
+            </template>
+          </section>
           <section v-if="isOwn && lockIn.enabled" class="pf-card pf-card--flush" data-test="day-length-setting">
             <div class="pf-row"><span class="pf-ico" aria-hidden="true">⏱</span><span class="pf-row-title">Day length<small class="pf-dl-sub">Preselected each morning · 3 to 12 h</small></span>
               <span class="pf-dl"><button type="button" class="pf-dl-btn" :disabled="dayLen <= DAY_HOURS.min" aria-label="Half an hour less" data-test="day-length-minus" @click="bumpDayLen(-0.5)">−</button><b data-test="day-length-value">{{ hoursLabel(dayLen) }} h</b><button type="button" class="pf-dl-btn" :disabled="dayLen >= DAY_HOURS.max" aria-label="Half an hour more" data-test="day-length-plus" @click="bumpDayLen(0.5)">+</button></span>
@@ -116,6 +129,14 @@
 <script setup>
 import { lockIn, loadLockIn, setLockInEnabled } from '@/utils/lockIn';
 loadLockIn(true).catch(() => {});
+import { wake, wakeSupported, loadWake, setWakeEnabled, setWakeTime, setWakePromptTime, setWakeDays } from '@/composables/useWakeAlarm';
+import { toMin } from '@/utils/wakeAlarm';
+const wakeOk = wakeSupported(); const wakeBusy = ref(false);
+const WEEKDAYS = [['S', 'Sunday'], ['M', 'Monday'], ['T', 'Tuesday'], ['W', 'Wednesday'], ['T', 'Thursday'], ['F', 'Friday'], ['S', 'Saturday']].map(([s, full], n) => ({ n, s, full }));
+if (wakeOk && auth.currentUser) loadWake(auth.currentUser.uid, true).catch(() => {});
+const onWakeToggle = async (on) => { wakeBusy.value = true; try { await setWakeEnabled(on); } catch (e) { console.warn('wake alarm toggle:', e); } wakeBusy.value = false; };
+const toggleWakeDay = (n) => { const d = wake.value.days; const next = d.includes(n) ? d.filter((x) => x !== n) : [...d, n]; if (next.length) setWakeDays(next).catch(() => {}); };
+const wakePromptHint = computed(() => (toMin(wake.value.promptTime) < toMin(wake.value.time) ? "Morning: asks about that morning's alarm" : 'Evening: asks about the next morning'));
 const onLockInToggle = async (on) => { const u = auth.currentUser; if (!u) return; try { await setLockInEnabled(u.uid, on); } catch (e) { console.warn('lock-in toggle:', e); loadLockIn(true).catch(() => {}); } };
 import PushSettings from '@/components/PushSettings.vue';
 import DeleteAccount from '@/components/DeleteAccount.vue';
@@ -356,6 +377,11 @@ onMounted(() => { loadDayLengthHours().then((v) => { dayLen.value = v; }).catch(
 .pf-pill-ok { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 999px; font-size: 13px; color: var(--c-success); background: var(--c-success-soft); border: 1px solid rgba(61,220,151,.35); }
 .pf-pill-ok i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
 .pf-upgrade { display: block; margin: 4px 0 12px; min-height: 48px; line-height: 48px; text-align: center; border-radius: 14px; font-weight: 800; color: #fff; background: linear-gradient(90deg, #f59e0b, #ea580c); box-shadow: 0 6px 18px rgba(234,88,12,.3); }
+.pf-time { min-height: 40px; margin-left: auto; padding: 0 8px; border-radius: 10px; border: 1px solid var(--c-border, #2a2a2e); background: var(--c-surface-2, #22252a); color: var(--c-text); font-size: 15px; flex: none; }
+.pf-days { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.pf-day { width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--c-border, #2a2a2e); background: transparent; color: var(--c-text); font-weight: 700; font-size: 13px; }
+.pf-day--on { background: #4aa8ff; border-color: #4aa8ff; color: #06121f; }
+.pf-wa-note { margin: 0 0 12px; font-size: 12px; color: var(--c-text-3, #9aa3b5); }
 .pf-switch { width: 22px; height: 22px; margin-left: auto; accent-color: #4aa8ff; flex: none; }
 .pf-row { display: flex; align-items: center; gap: 14px; width: 100%; min-height: 56px; padding: 8px 0; background: none; border: 0; color: var(--c-text); cursor: pointer; text-decoration: none; }
 .pf-row--divided { border-top: 1px solid var(--c-border); }

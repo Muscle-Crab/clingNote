@@ -58,6 +58,7 @@
 
         <DayTabs :days="tabDays" :selected-index="selectedDayIndex" :scheduled-counts="scheduledCounts" @select="handleDayTabClick" />
 
+        <WakeAlarmPrompt v-if="isViewingToday" />
         <EightHourCard v-if="lockInToday || eh.lock.value" :tasks="ehTasks" :start-error="ehStartError" @retry="syncAfterAuth" @start="openDayPrompt" />
         <DayStartPrompt v-if="dayPromptOpen" :initial-hours="eh.hoursPref.value" :now-ms="eh.nowMs" :tz="eh.plan.value?.tz || ''" :busy="ehBusy" :error="ehStartError" :tasks="todayTasksForTarget" :stats="eh.stats.value" :earned="pointsAccumulated || 0" @confirm="confirmDayStart" @skip="skipLockIn" />
 
@@ -303,6 +304,7 @@ import DayTabs from '@/components/home/DayTabs.vue';
 import ImagePreview from '@/components/home/ImagePreview.vue';
 import ProgressBar from '@/components/home/ProgressBar.vue';
 import EightHourCard from '@/components/home/EightHourCard.vue';
+import WakeAlarmPrompt from '@/components/home/WakeAlarmPrompt.vue';
 import { lockIn, loadLockIn, skipLockInToday } from '@/utils/lockIn';
 import { homeDay } from '@/utils/homeDay';
 import DayStartPrompt from '@/components/eighthour/DayStartPrompt.vue';

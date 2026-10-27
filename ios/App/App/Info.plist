@@ -12,6 +12,8 @@
 	<string>ClingNote uses your location only for reminders you set for a place, like "when I get to the store".</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>ClingNote uses your location only for reminders you set for a place, like "when I get to the store", even when the app is closed.</string>
+	<key>NSAlarmKitUsageDescription</key>
+	<string>ClingNote rings your wake-up alarm at the time you choose, even when your iPhone is on silent or in a Focus.</string>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>

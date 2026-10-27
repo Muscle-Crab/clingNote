@@ -68,9 +68,11 @@ if (isNativeIOS()) {
 // Notification taps (native OneSignal push + local notifications) -> the right screen, also on cold start (queued until router + auth ready).
 if (isNative()) {
   const authReady = new Promise((res) => { const off = onAuthStateChanged(auth, () => { off(); res(); }); setTimeout(res, 4000); });
+  // Wake-up alarm (iOS): per-account load on auth changes + the notification buttons ('Set alarm' / 'Not today' / Snooze / Stop).
+  const wakeMod = import('./composables/useWakeAlarm').then((w) => { w.installWakeAlarm({ onAuth: (cb) => onAuthStateChanged(auth, cb) }); return w; });
   Promise.all([import('./utils/notifTap'), import('@capacitor/local-notifications'), import('./utils/nativePush')]).then(([t, ln, np]) => {
     np.initNativePush();
-    t.installNotificationTaps({ router, authReady, oneSignal: window.plugins?.OneSignal, localNotifications: ln.LocalNotifications, speak: (line) => import('@/composables/useVoiceover').then((v) => v.speakLive(line)).catch(() => {}) });
+    t.installNotificationTaps({ router, authReady, oneSignal: window.plugins?.OneSignal, localNotifications: ln.LocalNotifications, speak: (line) => import('@/composables/useVoiceover').then((v) => v.speakLive(line)).catch(() => {}), onAction: (a) => wakeMod.then((w) => w.onWakeNotificationAction(a)).catch(() => {}) });
   }).catch(() => {});
 }
 
