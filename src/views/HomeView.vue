@@ -1137,7 +1137,6 @@ const toggleTaskCompletion = async (index) => {
     cancelTaskNotifications(task);
 
     userCredits.value += 10;
-    announceNextTask(index);
     if (isToday(selectedDayIndex.value)) { const left = (selectedDayRoutine.value || []).filter((t, i) => i !== index && !t.completed).length;
       window.dispatchEvent(new window.CustomEvent('cn:sergeant-ack', { detail: { left } })); }
 
@@ -1342,14 +1341,6 @@ const handleDayTabClick = async (index) => {
   }
 };
 
-const announceNextTask = (completedIndex) => {
-  const nextTask = selectedDayRoutine.value.find((task, index) => !task.completed && index !== completedIndex);
-  if (nextTask) {
-    speak(`Your next task is: ${nextTask.title}.`);
-  } else {
-    speak("Congratulations! All tasks are complete.");
-  }
-};
 
 const showFullScreenAnimation = ref(false);
 

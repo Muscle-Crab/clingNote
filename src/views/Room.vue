@@ -393,6 +393,7 @@
 </template>
 
 <script setup>
+import { speak as speakOne } from '@/composables/useSpeech';
 import { sendBroadcast } from '@/composables/useNotifications';
 import { isNativeIOS } from '@/utils/platform';
 const isIOSApp = isNativeIOS(); // the 'Add to Home Screen' steps are web-only
@@ -761,14 +762,7 @@ const addComment = async (post) => {
   }
 };
 
-const speakText = (username, message) => {
-  if ('speechSynthesis' in window) {
-    const utterance = new SpeechSynthesisUtterance(`${username} says: ${message}`);
-    window.speechSynthesis.speak(utterance);
-  } else {
-    console.warn('Text-to-speech not supported in this browser.');
-  }
-};
+const speakText = (username, message) => { speakOne(`${username} says: ${message}`); };
 
 const getParticipantAvatar = (userId) => {
   const user = users.value.find(user => user.id === userId);

@@ -95,8 +95,9 @@ const FEATURES = [
   { t: 'AI coach', d: 'Personalised workout and meal suggestions.' },
   { t: 'Strict Boss mode', d: 'An accountability mode that calls out procrastination.' },
   { t: 'Calendar feed', d: 'See your daily plan in any calendar app.' },
+  { t: 'Community', d: 'Posts, leaderboards and matchups with other ClingNote users.' },
 ];
-const FEAT = { aiCoach: 'The AI coach', strictBoss: 'Strict Boss mode', calendarFeed: 'The calendar feed' };
+const FEAT = { aiCoach: 'The AI coach', strictBoss: 'Strict Boss mode', calendarFeed: 'The calendar feed', community: 'Community' };
 const sel = ref(DEFAULT_PLAN); const busy = ref(false);
 const msg = ref(route.query.checkout === 'cancel' ? 'Checkout canceled — no charge was made.' : route.query.feature === 'taskLimit' ? (PRO_RAISES_LIMIT ? `You've reached the free limit of ${TASK_LIMITS.free} tasks today. Pro lets you add ${TASK_LIMITS.pro} per day.` : `You've reached today's limit of ${TASK_LIMITS.free} tasks. Pro adds the AI coach, Strict Boss and more.`) : FEAT[route.query.feature] ? `🔒 ${FEAT[route.query.feature]} is a Pro feature.` : '');
 const plan = computed(() => planById(sel.value));

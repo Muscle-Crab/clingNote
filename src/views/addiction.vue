@@ -168,6 +168,7 @@
 </template>
 
 <script setup>
+import { speak as speakOne } from '@/composables/useSpeech'
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { auth, db } from '@/firebaseConfig'
 import { onAuthStateChanged } from 'firebase/auth'
@@ -224,7 +225,7 @@ async function save(patch) {
 }
 const saveFields = (patch) => save(patch)
 
-function speak(text) { try { if (window.speechSynthesis) window.speechSynthesis.speak(new SpeechSynthesisUtterance(text)) } catch (_) { /* no speech */ } }
+function speak(text) { try { speakOne(text) } catch (_) { /* no speech */ } }
 
 async function markDay(status) {
   const d = markDate.value

@@ -51,13 +51,15 @@ export function speakLive(text, { onEnd } = {}) {
   const lines = barkLines(text); if (!lines.length) return false;
   const n = native();
   if (n) {
+    try { synth()?.cancel(); } catch (e) { /* ignore */ }
+    try { const a = audio; if (a) a.pause(); } catch (e) { /* ignore */ }
     const my = token; voSpeaking.value = true;
     n.speak({ lines, pitch: SGT_PITCH, rate: SGT_RATE }).then(() => { if (my === token) { voSpeaking.value = false; onEnd && onEnd(); } }).catch(() => { voSpeaking.value = false; });
     return true;
   }
   const s = synth(); if (!s || typeof SpeechSynthesisUtterance === 'undefined') return false;
   try {
-    s.cancel(); const v = bestVoice(); const my = token; voSpeaking.value = true;
+    s.cancel(); try { const a = audio; if (a) a.pause(); } catch (e) { /* ignore */ } const v = bestVoice(); const my = token; voSpeaking.value = true;
     lines.forEach((line, i) => {
       const u = new SpeechSynthesisUtterance(line); if (v) { u.voice = v; u.lang = v.lang; }
       u.rate = SGT_RATE; u.pitch = SGT_PITCH; u.volume = 1;
@@ -72,7 +74,9 @@ export function speakLive(text, { onEnd } = {}) {
 export function playVoice(key, { onEnd } = {}) {
   stopVoice(); if (voMuted.value || !voUnlocked.value || !SCRIPTS[key]) return false;
   const my = token; const a = el();
-  const fallback = () => { if (my === token) speakLive(SCRIPTS[key], { onEnd }); };
+  let fell = false; let started = false; // fallback at most once, and never after the MP3 actually started playing
+  const fallback = () => { if (fell || started || my !== token) return; fell = true; voSpeaking.value = false; speakLive(SCRIPTS[key], { onEnd }); };
+  a.onplaying = () => { started = true; };
   if (!a) return speakLive(SCRIPTS[key], { onEnd });
   a.src = `${base}voiceover/${key}.mp3`; voSpeaking.value = true;
   a.onended = () => { if (my === token && onEnd) onEnd(); };

@@ -8,7 +8,7 @@ import Addiction from "@/views/addiction.vue";
 import sub from "@/views/Subs.vue";
 import { ugcHidden, isNativeIOS, isNative } from '@/utils/platform';
 import { decideEntry, hasSeenTutorial, hasSeenPaywallLocal, ENTRY_PATHS } from '@/utils/entryGuard';
-import { isPro } from '@/utils/pro';
+import { isPro, canUse } from '@/utils/pro';
 import { withRcPro, rcProActive, loadUserDoc } from '@/composables/usePro';
 import { db } from '../firebaseConfig';
 import { doc, getDoc } from 'firebase/firestore';
@@ -56,13 +56,13 @@ const routes = [
     path: '/rankings',
     name: 'rankings',
     component: () => import('../views/RankingsView.vue'),
-    meta: { requiresAuth: true }
+    meta: { requiresAuth: true, proFeature: 'community' }
   },
   {
     path: '/community',
     name: 'community',
     component: () => import('../views/CommunityView.vue'),
-    meta: { requiresAuth: true }
+    meta: { requiresAuth: true, proFeature: 'community' }
   },
   {
     path: '/discipline',
@@ -161,13 +161,15 @@ const routes = [
     path: '/fdfd',
     name: 'Discussion',
     component: () => import('@/views/Discussion.vue'),
-    props: true
+    props: true,
+    meta: { proFeature: 'community' }
   },
   {
     path: '/chat',
     name: 'RoomInterior',
     component: Room,
-    props: true
+    props: true,
+    meta: { proFeature: 'community' }
   },
   {
     path: '/login',
@@ -260,6 +262,10 @@ router.beforeEach(async (to, from, next) => {
       return next(`/manage/${r.ownerUid}`);
     } catch (e) { /* link revoked/invalid: just continue into the app */ }
   }
+
+  // Pro-only areas (utils/pro.js PRO_FEATURES): non-Pro users land on the paywall for that feature.
+  const proFeature = (to.matched.find((r) => r.meta && r.meta.proFeature) || {}).meta?.proFeature;
+  if (proFeature && currentUser) { try { const d = await loadUserDoc(); if (d && !canUse(d, proFeature)) return next({ path: '/paywall', query: { feature: proFeature, from: to.fullPath } }); } catch (e) { /* read failure: don't block */ } }
 
   // Pro users (server flag or, on iOS, RevenueCat's entitlement) never see the upgrade screen.
   if (to.path === '/paywall' && currentUser) { try { if (isPro(await loadUserDoc())) return next(to.query.from && String(to.query.from).startsWith('/') && to.query.from !== '/paywall' ? String(to.query.from) : '/home'); } catch (e) { /* show the paywall */ } }
