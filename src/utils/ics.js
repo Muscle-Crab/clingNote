@@ -47,6 +47,7 @@ export const feedEvents = (scheduled = [], dayLists = {}) => {
   const seen = new Set();
   for (const e of scheduled || []) {
     if (!e?.title) continue;
+    if (e.recurrence?.freq === 'afterCompletion') { if (!e.stopped && e.nextDate) ev.push({ uid: `tpl-${e.id}-${e.nextDate}`, title: e.title, date: e.nextDate, time: e.scheduledTime, minutes: e.estimateMin, notes: e.notes }); continue; } // next due only (date moves on completion)
     if (e.recurrence && !e.stopped) { ev.push({ uid: `tpl-${e.id}`, title: e.title, date: e.startDate, time: e.scheduledTime, minutes: e.estimateMin, notes: e.notes, rrule: rruleFor(e.recurrence) }); continue; }
     if (e.templateId || e.recurrence) continue; // instances are covered by the template's RRULE
     if (e.done) continue;

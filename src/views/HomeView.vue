@@ -131,16 +131,14 @@
       <!-- ─── Task List ─── -->
       <section v-if="canViewSelectedDayTasks"
                class="task-section">
-        <div v-if="isViewingToday && userId" class="day-tools" data-test="day-tools">
-          <button type="button" class="day-tools__btn" :disabled="!dayTasks.length" data-test="plan-day-open" @click="openPlanDay"><span class="day-tools__bot"><RobotAvatar /></span> Plan my day</button>
-          <button type="button" class="day-tools__btn" data-test="templates-open" @click="openTemplates"><i class="fas fa-clone" aria-hidden="true"></i> Templates</button>
-        </div>
-        <EmptyState v-if="dayTasks.length === 0" :show-add="true" @add="onAddClick" />
+        <EmptyState v-if="dayTasks.length === 0" :show-add="true" :show-templates="isViewingToday && !!userId" @add="onAddClick" @templates="openTemplates" />
 
 
         <div v-else class="task-list-wrap">
           <TaskListHeader :label="isViewingToday ? 'Today' : FULL_DAY_NAMES[selectedDayIndex]" :is-today="isViewingToday" :completed="completedTaskCount" :total="dayTasks.length"
-                          :sound-enabled="soundEnabled" :boss-voice-on="!voMuted" :assistant-live="askOpen" :show-completed="showCompleted" v-model:prefs="viewPrefs" @toggle-sound="toggleSound" @toggle-boss-voice="setVoMuted(!voMuted)" @open-assistant="openAssistant" @toggle-completed="showCompleted = !showCompleted" />
+                          :sound-enabled="soundEnabled" :boss-voice-on="!voMuted" :assistant-live="askOpen" :show-completed="showCompleted" v-model:prefs="viewPrefs" @toggle-sound="toggleSound" @toggle-boss-voice="setVoMuted(!voMuted)" @open-assistant="openAssistant" @toggle-completed="showCompleted = !showCompleted"
+                          :day-tools="isViewingToday && !!userId" @plan-day="openPlanDay" @templates="openTemplates" />
+          <RoutineStrip v-if="isViewingToday && routineItems.length" :items="routineItems" :week="routineWeekStats" @toggle="toggleRoutineTask" />
 
 
 
@@ -166,6 +164,7 @@
                   @toggle-label="toggleLabelHighlight" @open-reminder="openModal('calendar', realIndex(task), task.title)" @transfer="openTransferModal(realIndex(task))"
                   @video="openYouTubeModal(realIndex(task))" @upload="handleUpload($event, realIndex(task))" @timer="openTaskTimerModal(realIndex(task))"
                   @wont-do="openWontDoModal(realIndex(task))" @delete="deleteTask(realIndex(task))" @schedule="scheduleExistingTask(realIndex(task), task, $event)" @set-repeat="setTaskRepeat(task, $event)" :repeat-info="repeatStateOf(task)" @toggle-repeat="toggleTaskRepeat(task)"
+                  :can-skip="isViewingToday && !selectedDayLocked && canSkipToday(task, scheduledList)" @skip-today="skipTaskToday(task)"
               />
             </template>
           </div>
@@ -218,7 +217,6 @@
 import { addSubtask, subtasksOf } from '@/utils/subtasks';
 import { parseAsk } from '@/utils/assistantFab';
 import PlanDaySheet from '@/components/home/PlanDaySheet.vue';
-import RobotAvatar from '@/components/home/RobotAvatar.vue';
 import DayTemplatesSheet from '@/components/home/DayTemplatesSheet.vue';
 import { useDayTemplates } from '@/composables/useDayTemplates';
 import { planChanges } from '@/utils/dayPlan';
@@ -311,6 +309,8 @@ import ScheduledList from '@/components/home/ScheduledList.vue';
 import EmptyState from '@/components/home/EmptyState.vue';
 import StartDayPrompt from '@/components/home/StartDayPrompt.vue';
 import TaskListHeader from '@/components/home/TaskListHeader.vue';
+import RoutineStrip from '@/components/home/RoutineStrip.vue';
+import { markRoutineDone, skipRoutineToday, canSkipToday, routineToday, routineWeek } from '@/utils/routine';
 import FabButtons from '@/components/home/FabButtons.vue';
 import IdleState from '@/components/home/IdleState.vue';
 import WontDoList from '@/components/home/WontDoList.vue';
@@ -1271,6 +1271,9 @@ const toggleTaskCompletion = async (index) => {
     console.error("Error updating task completion:", error);
   }
 
+  if (task.templateId && userId.value) { // routine completion log (doneOn) + repeat-after-completion next date
+    try { scheduledList.value = await mutateScheduled(userId.value, (l) => markRoutineDone(l, task, getTodayId(), task.completed)); } catch (e) { console.warn('routine log', e); }
+  }
   if (lockedToggle) eh.reportProgress(); // server recounts earned points from the day doc (server clock)
   checkAllTasksCompleted();
   await saveDailyPerformance();
@@ -1747,7 +1750,7 @@ const submitScheduledTask = async () => {
   };
   Object.assign(fields, estimateFor(fields)); // scheduled / recurring copies carry the estimate too
   const entry = sc.repeat !== 'never'
-    ? buildRecurringTemplate({ ...fields, scheduledTime: sc.time }, sc.date, { freq: sc.repeat, days: sc.days, dayOfMonth: sc.dayOfMonth, until: sc.until })
+    ? buildRecurringTemplate({ ...fields, scheduledTime: sc.time, remindAt: sc.remindAt || '' }, sc.date, { freq: sc.repeat, days: sc.days, dayOfMonth: sc.dayOfMonth, until: sc.until, everyDays: sc.everyDays })
     : buildScheduledEntry(fields, sc.date, sc.time);
   if (!entry) { error.value = 'Could not schedule this task.'; return false; }
   try {
@@ -1814,6 +1817,30 @@ const showRepeatToast = (text, { undo = null, error = false } = {}) => {
   clearTimeout(repeatToastTimer);
   repeatToast.value = { text, undo, error, id: Date.now() };
   repeatToastTimer = setTimeout(() => { repeatToast.value = null; }, error ? 6000 : 5000);
+};
+// ── Routine: compact checklist row + weekly dots (utils/routine.js); Skip today (⋯ menu / edit chips) ──
+const routineItems = computed(() => routineToday(scheduledList.value, isViewingToday.value ? selectedDayRoutine.value : [], todayStr.value));
+const routineWeekStats = computed(() => routineWeek(scheduledList.value, todayStr.value));
+const toggleRoutineTask = (task) => { const i = realIndex(task); if (i >= 0) toggleTaskCompletion(i); };
+const skipTaskToday = async (task) => {
+  if (!userId.value || !task || blockIfLocked() || blockIfShut()) return;
+  const today = getTodayId(); const dayName = days[selectedDayIndex.value].day;
+  const before = scheduledList.value.filter((e) => e.id === task.templateId || e.templateId === task.templateId).map((e) => ({ ...e }));
+  try {
+    scheduledList.value = await mutateScheduled(userId.value, (l) => skipRoutineToday(l, task, today));
+    await mutateDay(dayName, (tasks) => tasks.filter((t) => !sameTask(t, task)));
+    selectedDayRoutine.value = selectedDayRoutine.value.filter((t) => !sameTask(t, task));
+    cancelTaskNotifications(task); resyncNotifications();
+  } catch (e) { console.error('skip today', e); showRepeatToast('Could not skip — try again.', { error: true }); return; }
+  showRepeatToast('Skipped today · series continues', { undo: async () => {
+    try {
+      const ids = new Set(before.map((e) => e.id));
+      scheduledList.value = await mutateScheduled(userId.value, (l) => [...l.filter((e) => !ids.has(e.id) && e.templateId !== task.templateId), ...before]);
+      await mutateDay(dayName, (tasks) => (tasks.some((t) => sameTask(t, task)) ? tasks : [...tasks, task]));
+      if (!selectedDayRoutine.value.some((t) => sameTask(t, task))) selectedDayRoutine.value = [...selectedDayRoutine.value, task];
+      resyncNotifications();
+    } catch (e) { console.error('undo skip', e); showRepeatToast('Could not undo.', { error: true }); }
+  } });
 };
 const repeatStateOf = (t) => {
   const st = repeatState(t, scheduledList.value, todayStr.value);
@@ -4114,10 +4141,6 @@ a.hero-menu-item { display: block; text-decoration: none; color: inherit; }
 .app-root.theme-ocean { --c-primary: #0284c7; --c-primary-soft: #e0f2fe; --c-success: #0d9488; }
 .repeat-toast { position: fixed; left: 50%; bottom: 140px; transform: translateX(-50%); z-index: 9001; background: #111827; color: #fff; padding: 9px 14px; border-radius: 10px; font-size: .9rem; box-shadow: 0 4px 12px rgba(0,0,0,.25); max-width: 90vw; }
 .repeat-toast--err { background: #b91c1c; }
-.day-tools { display: flex; gap: 8px; margin: 0 0 10px; }
-.day-tools__btn { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 40px; padding: 0 12px; border-radius: 12px; border: 1px solid var(--c-border, #2a2a2e); background: var(--c-surface-2, #22252a); color: inherit; font-weight: 700; font-size: .9rem; }
-.day-tools__btn:disabled { opacity: .5; }
-.day-tools__bot { width: 22px; height: 22px; display: inline-block; }
 .more-hidden { display: block; width: 100%; margin: 8px 0 4px; min-height: 40px; padding: 8px 12px; border-radius: 12px; border: 1px dashed var(--c-border, #2a2a2e); background: transparent; color: var(--c-text-2, #b0b0b0); font-weight: 600; font-size: .9rem; text-align: center; }
 .more-hidden__why { font-weight: 400; opacity: .8; }
 .repeat-toast button { margin-left: 10px; color: #fbbf24; font-weight: 700; background: none; border: none; min-height: 32px; }

@@ -1,7 +1,8 @@
 // Scheduling v2: which reminders should be pending right now. iOS allows 64 pending local notifications per app;
 // scheduled tasks get at most SCHED_BUDGET of them (nearest first), the rest is left for manual reminders and timers.
 // One-shot `at` triggers per occurrence (not repeating triggers) so end dates, skips and edits are exact.
-import { isValidDate, isValidTime, isTemplate, isMaterialized, occurrencesBetween, addDaysStr, instanceId, fmtTime } from './scheduling.js';
+import { isValidDate, isValidTime, isTemplate, isMaterialized, occurrencesBetween, addDaysStr, instanceId, fmtTime, isAfterCompletion } from './scheduling.js';
+export const routineKey = (tplId, date) => `routine:${instanceId(tplId, date)}`;
 
 export const IOS_PENDING_LIMIT = 64;
 export const SCHED_BUDGET = 48;
@@ -20,9 +21,12 @@ export const planNotifications = ({ list = [], todayTasks = [], todayStr, now = 
     out.set(id, { key: schedKey(id), at: when, title: 'Task Reminder', body: `${title || 'Task'} at ${fmtTime(time)}` });
   };
   const seen = new Set();
+  // Per-series daily reminder time (tpl.remindAt) replaces the series' time-based ping; one 'routine:' ping per repeat day (sound: cn_task).
+  const remindOf = new Map((list || []).filter((e) => isTemplate(e) && isValidTime(e.remindAt)).map((e) => [e.id, e]));
   (todayTasks || []).forEach((t) => {
     if (!t?.scheduledFor || !t.scheduledId) return;
     seen.add(t.scheduledId);
+    if (t.templateId && remindOf.has(t.templateId)) return;
     if (!t.completed && t.status !== 'wontdo') add(t.scheduledId, t.scheduledFor, t.time, t.title);
   });
   // timed day tasks (today only; completed / won't-do / deleted / time cleared drop out of the plan -> cancelled by diffPlan)
@@ -35,10 +39,21 @@ export const planNotifications = ({ list = [], todayTasks = [], todayStr, now = 
   const items = list || [];
   const ids = new Set(items.map((e) => e?.id));
   items.forEach((e) => {
-    if (!e || isTemplate(e) || seen.has(e.id) || isMaterialized(e)) return;
+    if (!e || isTemplate(e) || seen.has(e.id) || isMaterialized(e) || (e.templateId && remindOf.has(e.templateId))) return;
     add(e.id, e.scheduledDate, e.scheduledTime, e.title);
   });
-  items.filter((e) => isTemplate(e) && !e.stopped && isValidTime(e.scheduledTime)).forEach((tpl) => {
+  remindOf.forEach((tpl) => {
+    if (tpl.stopped) return;
+    const done = new Set(tpl.doneOn || []);
+    const dates = isAfterCompletion(tpl) ? (tpl.nextDate ? [tpl.nextDate < todayStr ? todayStr : tpl.nextDate] : []) : occurrencesBetween(tpl, todayStr, addDaysStr(todayStr, horizonDays), 120);
+    dates.forEach((d) => {
+      if (done.has(d) || !isValidDate(d)) return; // finished (or, after-completion, finished today) -> no ping
+      const when = at(d, tpl.remindAt); const k = routineKey(tpl.id, d);
+      if (when.getTime() <= now.getTime() || out.has(k)) return;
+      out.set(k, { key: k, at: when, title: 'Routine', body: `${tpl.title || 'Routine task'} · tap to check it off`, kind: 'routine' });
+    });
+  });
+  items.filter((e) => isTemplate(e) && !e.stopped && isValidTime(e.scheduledTime) && !remindOf.has(e.id)).forEach((tpl) => {
     const gen = new Set(tpl.generated || []);
     occurrencesBetween(tpl, todayStr, addDaysStr(todayStr, horizonDays), 120).forEach((d) => {
       const id = instanceId(tpl.id, d);

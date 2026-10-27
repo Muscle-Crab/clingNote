@@ -138,7 +138,8 @@
                       <button @click="fileInput && fileInput.click()" class="action-btn" title="Attach file" aria-label="Attach file">📎</button>
                       <input type="file" ref="fileInput" accept="image/*,.pdf,.doc,.docx,.txt" @change="$emit('upload', $event)" class="hidden-input" />
   <!--                    <button @click="showTimerModal = true" class="action-btn" title="Timer">⏱️</button>-->
-                                            <button @click="$emit('wont-do')" class="action-btn action-btn--warn" title="Won't do" aria-label="Mark as won't do">🚫</button>
+                      <button v-if="canSkip" type="button" @click="$emit('skip-today'); moreOpen = false" class="action-btn" data-test="skip-today" title="Skip today (no streak penalty; the series continues)" aria-label="Skip today">⏭️</button>
+                      <button @click="$emit('wont-do')" class="action-btn action-btn--warn" title="Won't do" aria-label="Mark as won't do">🚫</button>
                       <button @click="$emit('delete')" class="action-btn action-btn--danger" title="Delete" aria-label="Delete task">🗑️</button>
                     </div>
                   </div>
@@ -164,6 +165,7 @@
                         <button type="button" class="adj-chip" :class="{ on: task.important }" data-test="edit-important" @click="$emit('toggle-important')">{{ task.important ? '★ Important' : '☆ Mark important' }}</button>
                         <button type="button" class="adj-chip" data-test="edit-reminder" @click="$emit('open-reminder')">⏰ {{ task.reminder?.date ? 'Change reminder' : 'Add reminder' }}</button>
                         <button type="button" class="adj-chip" data-test="edit-repeat" @click="repeatOpen = !repeatOpen">🔁 {{ repeatOnAny ? repeatText : 'Repeat' }}</button>
+                        <button v-if="canSkip" type="button" class="adj-chip" data-test="edit-skip-today" @click="$emit('skip-today')">⏭ Skip today</button>
                         <button type="button" class="adj-chip" @click="$emit('open-detail')">⤢ Full view</button>
                       </div>
                       <label v-if="isRepeating" class="series-opt" data-test="edit-series"><input type="checkbox" :checked="allOccurrences" @change="$emit('series', $event.target.checked)" />
@@ -236,6 +238,7 @@ import { ESTIMATE_CHIPS, cleanEstimate, timerStarted } from '@/utils/taskEdit';
 import SubtaskList from '@/components/home/SubtaskList.vue';
 
 const props = defineProps({
+  canSkip: Boolean, // routine occurrence today: "Skip today" in the ⋯ menu / edit chips
   repeatInfo: { type: Object, default: null }, // { on, label, pending } from HomeView; null = read-only badge
   upNext: { type: Boolean, default: false }, // first open task on today's list: highlighted row
   dragDisabled: { type: Boolean, default: false },
@@ -251,7 +254,7 @@ const props = defineProps({
   highlight: { type: Boolean, default: false }, // just rolled over (tapped from the rollover banner)
   allOccurrences: { type: Boolean, default: false },
 });
-const emit = defineEmits(['set-repeat', 'set-boss', 'toggle-expand', 'toggle-complete', 'open-detail', 'toggle-important', 'patch', 'subtask-patch',
+const emit = defineEmits(['skip-today', 'set-repeat', 'set-boss', 'toggle-expand', 'toggle-complete', 'open-detail', 'toggle-important', 'patch', 'subtask-patch',
   'toggle-label', 'open-reminder', 'transfer', 'video', 'upload', 'timer', 'wont-do', 'delete', 'schedule', 'toggle-repeat']);
 // 🔁 one-tap toggle (HomeView passes repeatInfo = { on, label, pending } covering both repeat models)
 const repeatPop = ref(false);

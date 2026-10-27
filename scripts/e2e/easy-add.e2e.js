@@ -36,6 +36,8 @@ const WEEK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   await p.screenshot({ path: SHOTS + 'easy_1_list.png' });
 
   // Feature 3: Plan my day — nothing preselected, preview, save only on Confirm
+  ok('no extra Plan/Templates button row on Home', await p.locator('[data-test=day-tools]').count() === 0);
+  await p.click('.sort-btn'); await sleep(300); await p.screenshot({ path: SHOTS + 'easy_0_header_menu.png' });
   await p.click('[data-test=plan-day-open]'); await sleep(600);
   ok('start empty', (await p.inputValue('[data-test=plan-start]')) === '');
   ok('hours empty', (await p.inputValue('[data-test=plan-hours]')) === '');
@@ -56,6 +58,7 @@ const WEEK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   ok('completed tasks untouched', after.filter((t) => t.completed).every((t) => !t.startTime));
 
   // Feature 4: templates — save, apply skips duplicates
+  await p.click('.sort-btn'); await sleep(300);
   await p.click('[data-test=templates-open]'); await sleep(800);
   ok('template header count matches what is saved', (await p.innerText('.dts-h')).includes('(12 tasks)'));
   await p.fill('[data-test=tpl-name]', 'ZZTEST Workday'); await p.click('[data-test=tpl-times]'); await p.click('[data-test=tpl-save]'); await sleep(2000);

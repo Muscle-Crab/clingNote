@@ -33,7 +33,7 @@
     </section>
 
     <section v-if="templates.length" class="up-card">
-      <h2 class="up-h">🔁 Repeating</h2>
+      <h2 class="up-h">🔁 Repeating <span v-if="week.total" class="up-wk" data-test="routine-week" role="img" :aria-label="week.label" :title="week.label"><span v-for="d in week.days" :key="d.date" class="up-dot" :class="'up-dot--' + d.state"></span> {{ week.done }}/{{ week.total }} this week</span></h2>
       <div v-for="t in templates" :key="t.id" class="up-row">
         <div class="up-main">
           <strong>{{ t.title }}</strong>
@@ -48,8 +48,9 @@
         <div v-if="editing === t.id" class="up-edit">
           <input v-model="draft[t.id].title" class="up-input" aria-label="Title" />
           <select v-model="draft[t.id].freq" class="up-input" aria-label="Repeat">
-            <option value="weekly">Weekly</option><option value="daily">Daily</option><option value="monthly">Monthly</option>
+            <option value="weekly">Weekly</option><option value="daily">Daily</option><option value="monthly">Monthly</option><option value="afterCompletion">Days after done</option>
           </select>
+          <input v-if="draft[t.id].freq === 'afterCompletion'" v-model.number="draft[t.id].everyDays" type="number" min="1" max="365" class="up-input" aria-label="Days after I finish" />
           <span v-if="draft[t.id].freq === 'weekly'" class="up-wd">
             <label v-for="(w, i) in WEEKDAYS" :key="w"><input type="checkbox" :value="i" v-model="draft[t.id].days" /> {{ w }}</label>
           </span>
@@ -81,6 +82,8 @@ import { ref, computed, onMounted } from 'vue';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '@/firebaseConfig';
 import { localDateStr } from '@/utils/streak';
+import { routineWeek } from '@/utils/routine';
+import { clampEveryDays } from '@/utils/scheduling';
 import { futureOf, groupByDate, formatScheduledDate, isTemplate, describeRecurrence, nextOccurrences, sundayOf, addDaysStr, visibleFrom, removeScheduled, rescheduleEntry, WEEKDAYS, isValidDate } from '@/utils/scheduling';
 import { loadScheduled, mutateScheduled } from '@/composables/useScheduledTasks';
 import { loadDayTasks } from '@/composables/useDayPersistence';
@@ -109,6 +112,7 @@ const weekDays = computed(() => Object.keys(agenda.value).map((date) => ({ date,
 // Upcoming = one-off entries (and generated recurring instances) due after the current week.
 const groups = computed(() => groupByDate(futureOf(list.value, today)));
 const templates = computed(() => list.value.filter(isTemplate));
+const week = computed(() => routineWeek(list.value, today));
 
 const run = async (fn) => { try { list.value = await mutateScheduled(uid.value, fn); error.value = ''; } catch (e) { console.error(e); error.value = 'Could not save (permissions?).'; } };
 const remove = (id) => { if (confirm('Delete this scheduled task?')) run((l) => removeScheduled(l, id)); };
@@ -120,8 +124,9 @@ const saveTemplate = (t) => {
   if (d.freq === 'weekly') r.days = [...new Set(d.days.map(Number))].sort();
   if (d.freq === 'weekly' && !r.days.length) { error.value = 'Pick at least one weekday.'; return; }
   if (d.freq === 'monthly') r.dayOfMonth = Math.min(31, Math.max(1, Number(d.dayOfMonth) || 1));
+  if (d.freq === 'afterCompletion') r.everyDays = clampEveryDays(d.everyDays);
   // Already-generated instances keep their own state; changes apply to future occurrences.
-  run((l) => l.map((x) => (x.id === t.id ? { ...x, title: d.title.trim() || x.title, recurrence: r, stopped: false } : x)));
+  run((l) => l.map((x) => (x.id === t.id ? { ...x, title: d.title.trim() || x.title, recurrence: r, stopped: false, ...(d.freq === 'afterCompletion' && !x.nextDate ? { nextDate: today } : {}) } : x)));
   editing.value = null;
 };
 
@@ -131,7 +136,7 @@ onMounted(() => onAuthStateChanged(auth, async (u) => {
   try {
     list.value = await loadScheduled(uid.value);
     try { const ls = await Promise.all(WEEKDAYS.map((n) => loadDayTasks(uid.value, n))); dayLists.value = Object.fromEntries(WEEKDAYS.map((n, i) => [n, ls[i]])); } catch (e) { console.error(e); }
-    draft.value = Object.fromEntries(list.value.filter(isTemplate).map((t) => [t.id, { title: t.title, freq: t.recurrence.freq, days: [...(t.recurrence.days || [])], dayOfMonth: t.recurrence.dayOfMonth || 1 }]));
+    draft.value = Object.fromEntries(list.value.filter(isTemplate).map((t) => [t.id, { title: t.title, freq: t.recurrence.freq, days: [...(t.recurrence.days || [])], dayOfMonth: t.recurrence.dayOfMonth || 1, everyDays: t.recurrence.everyDays || 3 }]));
   } catch (e) { console.error(e); error.value = 'Scheduled tasks could not be loaded.'; }
   loading.value = false;
 }));
@@ -144,6 +149,12 @@ onMounted(() => onAuthStateChanged(auth, async (u) => {
 .up-back { color: var(--c-text-3, #64748b); text-decoration: none; }
 .up-card { margin-top: 12px; padding: 14px; border-radius: 12px; background: var(--c-surface, #fff); box-shadow: 0 1px 3px rgba(0,0,0,.08); }
 .up-h { font-size: 1.05rem; font-weight: 700; margin: 0 0 8px; }
+.up-wk { float: right; display: inline-flex; align-items: center; gap: 3px; font-size: .75rem; font-weight: 500; color: var(--c-text-3, #64748b); }
+.up-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--c-border, #2a2a2e); }
+.up-dot--done { background: var(--c-success, #3fb950); }
+.up-dot--part { background: var(--c-warning, #d29922); }
+.up-dot--miss { background: transparent; box-shadow: inset 0 0 0 1px var(--c-text-3, #64748b); }
+.up-dot--open, .up-dot--future { background: transparent; box-shadow: inset 0 0 0 1px var(--c-accent-text, #5B9BFF); }
 .up-date { font-size: .95rem; font-weight: 700; margin: 10px 0 4px; }
 .up-row { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px; padding: 8px 0; border-bottom: 1px solid var(--c-border, #e2e8f0); }
 .up-main { display: flex; flex-direction: column; }
