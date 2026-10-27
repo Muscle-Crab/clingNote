@@ -133,6 +133,8 @@ const addDays = (s, n) => { const [y, m, d] = s.split('-').map(Number); return y
   const uw = p.locator('[data-test=routine-week]');
   ok('Upcoming shows the weekly routine dots inline in the Repeating header', await uw.count() === 1 && /This week: \d+ of \d+/.test(await uw.getAttribute('aria-label')));
   await p.screenshot({ path: SHOTS + 'routine_upcoming_after.png', fullPage: true });
+  const plantsRow = await p.locator('li, .tpl-row, div', { hasText: 'ZZTEST Water plants' }).filter({ hasText: 'Next:' }).last().innerText();
+  ok('Upcoming shows the after-completion next date', /Next: (Fri|Oct 30|Fri, Oct 30)/.test(plantsRow) && !/Next: —/.test(plantsRow), plantsRow.replace(/\s+/g, ' ').slice(0, 120));
   await designShots('after');
   ok('no page errors', errs.length === 0, errs.join(' | '));
   await br.close();

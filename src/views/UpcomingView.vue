@@ -38,7 +38,7 @@
         <div class="up-main">
           <strong>{{ t.title }}</strong>
           <span class="muted">{{ describeRecurrence(t.recurrence) }}{{ t.stopped ? ' · stopped' : '' }}</span>
-          <span v-if="!t.stopped" class="muted">Next: {{ nextOccurrences(t, weekEnd, 3).map((d) => formatScheduledDate(d, today)).join(' · ') || '—' }}</span>
+          <span v-if="!t.stopped" class="muted">Next: {{ nextLabel(t) }}</span>
         </div>
         <div class="up-actions">
           <button type="button" class="up-btn" @click="editing = editing === t.id ? null : t.id">Edit</button>
@@ -84,7 +84,7 @@ import { auth } from '@/firebaseConfig';
 import { localDateStr } from '@/utils/streak';
 import { routineWeek } from '@/utils/routine';
 import { clampEveryDays } from '@/utils/scheduling';
-import { futureOf, groupByDate, formatScheduledDate, isTemplate, describeRecurrence, nextOccurrences, sundayOf, addDaysStr, visibleFrom, removeScheduled, rescheduleEntry, WEEKDAYS, isValidDate } from '@/utils/scheduling';
+import { isAfterCompletion, futureOf, groupByDate, formatScheduledDate, isTemplate, describeRecurrence, nextOccurrences, sundayOf, addDaysStr, visibleFrom, removeScheduled, rescheduleEntry, WEEKDAYS, isValidDate } from '@/utils/scheduling';
 import { loadScheduled, mutateScheduled } from '@/composables/useScheduledTasks';
 import { loadDayTasks } from '@/composables/useDayPersistence';
 import { agendaForRange, datedFutureOnly, weekStartOf, dowOf } from '@/utils/agenda';
@@ -100,6 +100,11 @@ const draft = ref({});
 const today = localDateStr();
 const weekEnd = sundayOf(today);
 const weekEndLabel = formatScheduledDate(weekEnd, today);
+// calendar series: next dates after this week (this week is shown above); after-completion: its single pending date
+const nextLabel = (t) => {
+  if (isAfterCompletion(t)) return isValidDate(t.nextDate) ? formatScheduledDate(t.nextDate < today ? today : t.nextDate, today) : '—';
+  return nextOccurrences(t, weekEnd, 3).map((d) => formatScheduledDate(d, today)).join(' · ') || '—';
+};
 
 // Native calendar: tasks by date (scheduled, recurring occurrences, this week's lists) for the selected week.
 const weekStart = computed(() => addDaysStr(weekStartOf(today), weekOffset.value * 7));
