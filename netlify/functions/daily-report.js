@@ -4,7 +4,8 @@
 const { getAdmin, sendOneSignal } = require('./lib/notify');
 const { buildRecap, localParts, reportDue, prevDay } = require('../../src/utils/dailyReport.js');
 
-const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+// The app stores day docs as weeklyRoutines/{uid}_{Sun..Sat} (Intl weekday 'short'); the old full names never existed, so every recap read 0 tasks.
+const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const weekdayName = (ds) => DAY_NAMES[new Date(`${ds}T12:00:00Z`).getUTCDay()];
 
 exports.runReports = async ({ db, now = new Date(), send }) => {
