@@ -22,7 +22,7 @@
 
     <h2 class="text-xl font-semibold mb-2 text-gray-800 dark:text-gray-200">4. AI Features</h2>
     <p class="mb-4 text-gray-600 dark:text-gray-400">
-      AI features are powered by OpenAI. Text you submit to them is sent to OpenAI to produce a response. AI output can be inaccurate and is not professional advice.
+      AI features are powered by OpenAI and Google Gemini. Text you submit to them is sent to these providers to produce a response. AI output can be inaccurate and is not professional advice.
     </p>
 
     <h2 class="text-xl font-semibold mb-2 text-gray-800 dark:text-gray-200">5. Termination</h2>

@@ -16,6 +16,14 @@ t('fraction: full at start, half midway, 0 at/after end, 1 before start', () => 
   assert.equal(ringFraction(task, S + 99 * M), 0);
   assert.equal(ringFraction(task, S - M), 1);
 });
+t('ring: stale finished timers are hidden (Check email: inactive, ended months ago)', () => {
+  const ended = { title: 'Check email', timerActive: false, timerEndTime: '2026-08-04T11:52:59.097Z', timerDurationMinutes: 25 };
+  assert.equal(hasRing(ended, S), false);
+  assert.equal(hasRing({ ...task, timerActive: false }, S + 11 * M), false); // stopped and over
+  assert.equal(hasRing(task, S + 11 * M), true); // just finished, still active: red 0:00 stays
+  assert.equal(hasRing(task, S + 10 * M + 13 * 3600000), false); // active flag left on for >12h
+  assert.equal(hasRing({ ...task, timerActive: false, timerPausedAt: new Date(S + 2 * M).toISOString() }, S + 99 * M), true); // paused keeps its ring
+});
 t('fraction: paused stays frozen at the pause instant', () => {
   const p = { ...task, timerPausedAt: new Date(S + 2 * M).toISOString() };
   assert.equal(ringFraction(p, S + 7 * M), 0.8);
@@ -25,10 +33,10 @@ t('fraction: start derived from duration; no timer -> no ring', () => {
   assert.equal(ringFraction({ timerEndTime: new Date(S + 4 * M).toISOString(), timerDurationMinutes: 8 }, S), 0.5);
   assert.equal(hasRing({ title: 'x' }), false);
   assert.equal(hasRing({ timerEndTime: 'junk', timerStartedAt: 'junk' }), false);
-  assert.equal(hasRing(task), true);
+  assert.equal(hasRing(task, S), true);
   assert.equal(ringFraction({}, S), 0);
   const legacy = { timerActive: true, timerEndTime: new Date(S + M).toISOString() };
-  assert.equal(hasRing(legacy), true); assert.equal(ringFraction(legacy, S), 1); assert.equal(ringFraction(legacy, S + 2 * M), 0);
+  assert.equal(hasRing(legacy, S), true); assert.equal(ringFraction(legacy, S), 1); assert.equal(ringFraction(legacy, S + 2 * M), 0);
 });
 t('dash: full circle offset 0, empty offset = circumference', () => {
   const a = ringDash(1, 10), b = ringDash(0, 10), c = ringDash(0.25, 10);

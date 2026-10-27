@@ -6,7 +6,9 @@ const { runAgentTurn, trimContents, MAX_STEPS } = load('utils/assistantLoop.js')
 const { createAssistantExecutor } = load('utils/assistantExecutor.js');
 let pass = 0; const ok = (c, m) => { assert.ok(c, m); pass++; };
 const tasks = [{ id: 'a', title: 'Write report', estimateMin: 90, points: 60 }, { id: 'b', title: 'Call mom', completed: true }];
-const snapOf = (limitRemaining = 5) => { const b = T.buildContext({ tasks }); return { refs: b.refs, context: b.context, tasksByKey: new Map(tasks.map((t) => [T.taskKeyOf(t), t])), today: '2026-10-26', limitRemaining }; };
+// create_tasks defaults dates to the device's local today (normalizeItems), so this case must not hard-code a calendar day.
+const LOCAL_TODAY = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })();
+const snapOf = (limitRemaining = 5) => { const b = T.buildContext({ tasks }); return { refs: b.refs, context: b.context, tasksByKey: new Map(tasks.map((t) => [T.taskKeyOf(t), t])), today: LOCAL_TODAY, limitRemaining }; };
 (async () => {
   // context refs
   const s = snapOf();
@@ -21,6 +23,8 @@ const snapOf = (limitRemaining = 5) => { const b = T.buildContext({ tasks }); re
   v = T.validateCall('create_tasks', { items: [{ title: 'a' }, { title: 'b' }, { title: 'c' }] }, snapOf(2));
   ok(!v.ok && v.limit && /only 2 more/.test(v.error), 'over the daily limit -> refused with remaining count');
   ok(T.validateCall('create_tasks', { items: [{ title: 'x' }] }, snapOf(1)).ok, 'within limit ok');
+  { const sn = snapOf(0); const fut = T.validateCall('create_tasks', { items: [{ title: 'dentist', date: '2099-11-16' }] }, sn); const now_ = T.validateCall('create_tasks', { items: [{ title: 'x' }] }, sn);
+    ok(fut.ok && !now_.ok && now_.limit, "future-dated task is not refused by today's limit (its own day is checked on save)"); }
   ok(!T.validateCall('create_tasks', { items: [] }, s).ok, 'no items refused');
   // edit: voice override of points
   v = T.validateCall('edit_task', { ref: 't1', points: 80 }, s);
@@ -28,8 +32,8 @@ const snapOf = (limitRemaining = 5) => { const b = T.buildContext({ tasks }); re
   ok(!T.validateCall('edit_task', { ref: 't9', title: 'x' }, s).ok, 'unknown ref refused');
   ok(!T.validateCall('edit_task', { ref: 't1' }, s).ok, 'empty patch refused');
   // reschedule
-  ok(!T.validateCall('reschedule_task', { ref: 't1', date: '2026-10-01' }, s).ok, 'past date refused');
-  v = T.validateCall('reschedule_task', { ref: 't1', date: '2026-10-26', time: '15:00' }, s);
+  ok(!T.validateCall('reschedule_task', { ref: 't1', date: '2000-01-01' }, s).ok, 'past date refused');
+  v = T.validateCall('reschedule_task', { ref: 't1', date: LOCAL_TODAY, time: '15:00' }, s);
   ok(v.ok && v.args.date === '' && v.args.time === '15:00', 'today -> time move only');
   ok(!T.validateCall('complete_task', { ref: 't2' }, s).ok, 'already done refused');
   // hours: user's own setting, clamped
@@ -96,12 +100,12 @@ const snapOf = (limitRemaining = 5) => { const b = T.buildContext({ tasks }); re
   ok((await ex.run('suggest_next', {})).next === 'Store', 'suggest_next');
   out = await ex.run('snooze_task', { task: tasks[0], minutes: 30 }); ok(out.ok && log.some((l) => l[0] === 'snooze' && l[2] === 30), 'snooze_task');
   await ex.run('add_subtasks', { task: tasks[0], items: ['a', 'b'] }); ok(log.some((l) => l[0] === 'subs' && l[2].length === 2), 'add_subtasks');
-  const ctx2 = { refs: { t1: T.taskKeyOf(tasks[0]) }, tasksByKey: new Map([[T.taskKeyOf(tasks[0]), tasks[0]]]), today: '2026-10-26' };
+  const ctx2 = { refs: { t1: T.taskKeyOf(tasks[0]) }, tasksByKey: new Map([[T.taskKeyOf(tasks[0]), tasks[0]]]), today: LOCAL_TODAY };
   ok(!T.validateCall('snooze_task', { ref: 't1', minutes: 0 }, ctx2).ok && T.validateCall('snooze_task', { ref: 't1', minutes: 30 }, ctx2).ok, 'snooze validation');
   ok(T.validateCall('add_subtasks', { ref: 't1', items: [' x ', '', 'y'] }, ctx2).args.items.join() === 'x,y', 'subtasks validation');
   ok(!T.validateCall('find_tasks', {}, ctx2).ok && T.READ_TOOLS.has('find_tasks') && !T.CONFIRM_TOOLS.has('snooze_task'), 'find/read tools');
   const rec = T.validateCall('create_tasks', { items: [{ title: 'Run', start: '07:00', repeat: 'weekdays', points: 20 }] }, ctx2);
-  ok(rec.ok && rec.args.items[0].type === 'schedule' && rec.args.items[0].repeat === 'weekly' && rec.args.items[0].days.join() === '1,2,3,4,5' && rec.args.items[0].date === '2026-10-26', 'recurring create');
+  ok(rec.ok && rec.args.items[0].type === 'schedule' && rec.args.items[0].repeat === 'weekly' && rec.args.items[0].days.join() === '1,2,3,4,5' && rec.args.items[0].date === LOCAL_TODAY, 'recurring create');
   ok(!T.needsConfirm('create_tasks', { items: [{}, {}] }) && T.needsConfirm('create_tasks', { items: [{}, {}, {}] }) && T.needsConfirm('roll_unfinished') && T.needsConfirm('auto_schedule')
     && !T.needsConfirm('app_lock', { action: 'status' }) && T.needsConfirm('app_lock', { action: 'emergency_unlock' }), 'brain dump / rollover / emergency unlock need confirm');
   ok(/3\. C/.test(T.describeCall('create_tasks', { items: [{ title: 'A' }, { title: 'B', start: '18:00' }, { title: 'C' }] })), 'brain dump review lists every item');

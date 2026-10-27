@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore';
+import { initializeFirestore, connectFirestoreEmulator } from 'firebase/firestore';
 import { getAnalytics } from "firebase/analytics";
 import { getAuth, connectAuthEmulator, initializeAuth, indexedDBLocalPersistence, inMemoryPersistence } from 'firebase/auth';
 import { isNative } from '@/utils/platform';
@@ -21,7 +21,8 @@ const EMU = process.env.VUE_APP_FIREBASE_EMULATORS === '1';
 if (EMU) firebaseConfig.projectId = 'demo-clingnote';
 const app = initializeApp(firebaseConfig);
 if (!isNative() && !EMU) { try { getAnalytics(app); } catch (e) { /* analytics is optional */ } } // not in the iOS shell: keeps the App Privacy label minimal
-const db = getFirestore(app);
+// ignoreUndefinedProperties: a stray `undefined` field (e.g. legacy tasks without `status`) is dropped instead of failing the whole write.
+const db = initializeFirestore(app, { ignoreUndefinedProperties: true });
 // Native shell (capacitor://localhost): the default getAuth() adds the web popup/redirect resolver, which tries to load Google's gapi script and stalls auth init (blank first screen).
 // Native uses the Apple/email credential flows only, so initialise Auth without the resolver.
 const auth = isNative() ? initializeAuth(app, { persistence: [indexedDBLocalPersistence, inMemoryPersistence] }) : getAuth(app);

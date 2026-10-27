@@ -52,7 +52,10 @@ const rawHandler = async (event, ctx, deps = {}) => {
       method: 'POST', headers: { 'xi-api-key': apiKey, 'Content-Type': 'application/json', Accept: 'audio/mpeg' },
       body: JSON.stringify({ text, model_id: model, voice_settings: V.SETTINGS }),
     });
-    if (!r.ok) return json(502, { error: `Voice provider ${r.status}` }); // status only: never echo headers/key
+    if (!r.ok) { // refund the budget: a provider failure must not eat the user's daily voice chars
+      await db.runTransaction(async (tx) => { const s = await tx.get(usage); const used = (s.exists && Number(s.data().chars)) || 0; tx.set(usage, { chars: Math.max(0, used - text.length), updatedAt: new Date() }, { merge: true }); }).catch(() => {});
+      return json(502, { error: `Voice provider ${r.status}` }); // status only: never echo headers/key
+    }
     const b64 = Buffer.from(await r.arrayBuffer()).toString('base64');
     remember(key, b64);
     if (b64.length < 900000) await db.doc(`ttsCache/${key}`).set({ b64, text, voiceId, model, at: new Date() }).catch(() => {});

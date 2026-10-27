@@ -28,6 +28,7 @@ const KEY = 'sk_test_secret_value';
   fn._mem.clear(); r = await fn.rawHandler(ev('No key here'), {}, { ...base, db: mkDb(), env: {} }); ok(r.statusCode === 503, 'no ELEVENLABS_API_KEY -> 503 (app falls back to MP3s)');
   const bad = async () => ({ ok: false, status: 401, arrayBuffer: async () => Buffer.from('') });
   fn._mem.clear(); r = await fn.rawHandler(ev('Provider fails'), {}, { ...base, db: mkDb(), fetch: bad }); ok(r.statusCode === 502 && !r.body.includes(KEY), 'provider error -> 502, no key echoed');
+  { const d2 = mkDb(); fn._mem.clear(); await fn.rawHandler(ev('Provider fails'), {}, { ...base, db: d2, fetch: bad }); const u = [...d2.docs.entries()].find(([k]) => k.startsWith('ttsUsage/')); ok(u && u[1].chars === 0, 'provider error refunds the daily voice budget'); }
   const app = fs.readFileSync(path.join(__dirname, '../src/voiceover/scripts.js'), 'utf8');
   ok(app.includes(`voiceId: '${V.VOICE_ID}'`), 'app VOICE.voiceId matches the server voice');
   const toml = fs.readFileSync(path.join(__dirname, '../netlify.toml'), 'utf8'); ok(toml.includes('[functions."tts"]'), 'netlify.toml has the tts function');

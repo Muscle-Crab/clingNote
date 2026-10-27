@@ -1,6 +1,6 @@
 <template>
   <!-- Persistent 8-hour countdown pill (centered in the top bar, below the notch / safe area), the hard-stop overlay and one transient celebration. -->
-  <button v-if="pill" type="button" class="ehp" :class="'ehp--' + pill.kind" data-test="eh-pill" :aria-label="pill.aria" @click="goCard">
+  <button v-if="pill" type="button" class="ehp" :class="['ehp--' + pill.kind, { 'ehp--tucked': tucked }]" :aria-hidden="tucked ? 'true' : null" :tabindex="tucked ? -1 : null" data-test="eh-pill" :aria-label="pill.aria" @click="goCard">
     <span class="ehp-dot" aria-hidden="true"></span><span class="ehp-main" role="timer">{{ pill.main }}</span><span v-if="pill.sub" class="ehp-sub">{{ pill.sub }}</span>
   </button>
 
@@ -28,7 +28,7 @@
 </template>
 
 <script setup>
-import { computed, ref, watch, onMounted } from 'vue';
+import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { auth } from '@/firebaseConfig';
@@ -47,6 +47,19 @@ const eh = useEightHour();
 const uid = ref(null);
 // Shared useEightHour state: at most one 'state' fetch here, and only if nothing else has loaded it yet.
 onMounted(() => { try { onAuthStateChanged(auth, (u) => { uid.value = u ? u.uid : null; if (u && !eh.st.loaded && !eh.st.loading) eh.refresh().catch(() => {}); }); } catch (e) { /* ignore */ } });
+// The pill floats over page content (fixed, top center). Once the page scrolls, it would sit on top of card titles
+// ("Starts 7:00 AM" over "Clean"): tuck it away while scrolled down, bring it back on scroll up or near the top.
+const tucked = ref(false); let lastY = 0;
+const onAnyScroll = (e) => {
+  const el = e.target === document || e.target === window ? document.scrollingElement || document.documentElement : e.target;
+  const y = Math.max(0, el?.scrollTop || 0);
+  if (el && el.scrollHeight - el.clientHeight < 80) return; // tiny inner scrollers (chips, pickers) don't count
+  if (y < 24) tucked.value = false; else if (y > lastY + 4) tucked.value = true; else if (y < lastY - 12) tucked.value = false;
+  lastY = y;
+};
+onMounted(() => document.addEventListener('scroll', onAnyScroll, { capture: true, passive: true }));
+onBeforeUnmount(() => document.removeEventListener('scroll', onAnyScroll, { capture: true }));
+watch(() => route.fullPath, () => { tucked.value = false; lastY = 0; });
 const profileLink = computed(() => (uid.value ? `/profile/${uid.value}` : '/login'));
 
 const pill = computed(() => {
@@ -99,6 +112,8 @@ watch(() => eh.lock.value && eh.running.value && `${eh.lock.value.dayKey}|${eh.l
 .ehp { position: fixed; top: calc(env(safe-area-inset-top) + 14px); left: 50%; transform: translateX(-50%); z-index: 60; height: 28px; max-width: 46vw;
   display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; border-radius: 999px; border: 1px solid rgba(55,138,221,.45); background: rgba(10,18,38,.92);
   color: #e6e9ef; font: 700 12px/1 system-ui, -apple-system, sans-serif; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; cursor: pointer; }
+.ehp { transition: opacity .18s ease, transform .18s ease; }
+.ehp--tucked { opacity: 0; transform: translate(-50%, -140%); pointer-events: none; }
 .ehp-dot { width: 7px; height: 7px; border-radius: 50%; background: #378ADD; flex: none; }
 .ehp--run .ehp-dot { background: #3cb46e; animation: ehp-pulse 1.6s infinite; }
 .ehp--risk { border-color: rgba(224,90,90,.7); } .ehp--risk .ehp-dot { background: #e05a5a; }
@@ -118,5 +133,5 @@ watch(() => eh.lock.value && eh.running.value && `${eh.lock.value.dayKey}|${eh.l
 .ehc--miss { background: linear-gradient(135deg, #3b1f1f, #301212); border-color: rgba(224,90,90,.5); color: #f6e6e6; }
 .ehc b { font-size: 15px; } .ehc span { font-size: 13px; } .ehc small { opacity: .55; font-size: 11px; margin-top: 2px; }
 .ehc-enter-active, .ehc-leave-active { transition: opacity .25s, transform .25s; } .ehc-enter-from, .ehc-leave-to { opacity: 0; transform: translate(-50%, -8px); }
-@media (prefers-reduced-motion: reduce) { .ehp--run .ehp-dot { animation: none; } .ehc-enter-active, .ehc-leave-active { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .ehp { transition: none; } .ehp--run .ehp-dot { animation: none; } .ehc-enter-active, .ehc-leave-active { transition: none; } }
 </style>

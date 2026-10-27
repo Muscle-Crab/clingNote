@@ -28,7 +28,7 @@
           <button @click="$emit('remove-attachment', 'fileURL')" class="detail-remove">✕</button>
         </div>
 
-        <div v-if="task.reminder?.date && task.reminder?.time" class="detail-row">
+        <div v-if="showReminder(task.reminder)" class="detail-row">
           <span class="detail-row-icon">📅</span>
           <span>{{ formatShortDate(task.reminder.date) }} at {{ formatTime(task.reminder.time) }}</span>
         </div>
@@ -75,7 +75,7 @@
 
 <script setup>
 import { ref, computed, watch } from 'vue';
-import { formatShortDate, formatTime, extractYouTubeID } from '@/utils/dateTime';
+import { formatShortDate, formatTime, extractYouTubeID, showReminder } from '@/utils/dateTime';
 import { scheduleLabel } from '@/utils/scheduling';
 import SchedulePicker from './SchedulePicker.vue';
 

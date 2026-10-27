@@ -20,7 +20,7 @@
     <ul class="list-disc pl-6 mb-4">
       <li>To create and manage your account and provide the features you use.</li>
       <li>To send reminders and updates via push notifications, if you allow notifications.</li>
-      <li>To provide AI features you choose to use (see OpenAI below).</li>
+      <li>To provide AI features you choose to use (see OpenAI and Google Gemini below).</li>
       <li>To validate Pro purchases and unlock Pro features.</li>
       <li>To keep the service working and secure, and to improve it.</li>
     </ul>
@@ -36,6 +36,7 @@
       <li><strong>RevenueCat:</strong> we use RevenueCat to validate and manage in-app purchases. RevenueCat receives purchase information (such as product, transaction and subscription status) and your ClingNote user ID, but not your name or email address. See <a href="https://www.revenuecat.com/privacy" class="text-blue-600 hover:underline" target="_blank" rel="noopener">RevenueCat's privacy policy</a>.</li>
       <li><strong>Stripe (website):</strong> on the website, payments are processed by Stripe; we do not store your card details.</li>
       <li><strong>OpenAI (AI features):</strong> when you use AI features such as the AI coach, AI workouts or routine suggestions, the text you provide (for example your task titles, prompts, or a meal photo you submit in Meal Plan) is sent to OpenAI to generate a response. We ask for your permission before the first time anything is sent. It is used only to provide the feature to you. Do not include sensitive personal information in AI prompts.</li>
+      <li><strong>Google Gemini (assistant and Ask):</strong> when you use the in-app assistant or Ask, the text you type or say and the task details needed for that request are sent to Google's Gemini API to generate a response. The same one-time permission applies. See <a href="https://policies.google.com/privacy" class="text-blue-600 hover:underline" target="_blank" rel="noopener">Google's privacy policy</a>.</li>
     </ul>
 
     <h2 class="text-xl font-semibold mt-5 mb-2">4. Analytics and Tracking</h2>

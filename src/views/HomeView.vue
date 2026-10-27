@@ -119,6 +119,7 @@
 
       <AssistantSheet v-if="askOpen" :executor="assistantExecutor" :listen-on-open="assistantListen" @close="askOpen = false" />
       <VoiceModal v-if="voiceOpen" :transcript="liveTranscript" :supported="voiceSupported" :capability="voiceCap" :error="voiceError" :hint="voiceHint" :added="voiceAdded" :items="voiceItems" :busy="voiceBusy" :source="voiceSource" @undo="undoVoiceTask" @cancel="cancelVoiceInput" @finish="finishVoiceInput" @confirm="confirmVoiceItems" @relisten="relistenVoice" />
+      <div v-if="repeatToast" :key="repeatToast.id" class="repeat-toast" :class="{ 'repeat-toast--err': repeatToast.error }" :role="repeatToast.error ? 'alert' : 'status'" data-test="repeat-toast">🔁 {{ repeatToast.text }} <button v-if="repeatToast.undo" type="button" data-test="repeat-undo" @click="() => { const u = repeatToast.undo; repeatToast = null; u(); }">Undo</button></div>
       <div v-if="!voiceOpen && voiceAdded.some((e) => e.undoUntil > nowTick)" class="voice-toasts" role="status">
         <div v-for="e in voiceAdded.filter((x) => x.undoUntil > nowTick)" :key="e.id" class="voice-toast">🎙 Added “{{ e.title }}” <button type="button" @click="undoVoiceTask(e)">Undo</button></div>
       </div>
@@ -157,7 +158,7 @@
                   @patch="editTask(realIndex(task), task, $event)" @subtask-patch="onSubtaskPatch(realIndex(task), task, $event)"
                   @toggle-label="toggleLabelHighlight" @open-reminder="openModal('calendar', realIndex(task), task.title)" @transfer="openTransferModal(realIndex(task))"
                   @video="openYouTubeModal(realIndex(task))" @upload="handleUpload($event, realIndex(task))" @timer="openTaskTimerModal(realIndex(task))"
-                  @wont-do="openWontDoModal(realIndex(task))" @delete="deleteTask(realIndex(task))" @schedule="scheduleExistingTask(realIndex(task), task, $event)" @set-repeat="setTaskRepeat(task, $event)"
+                  @wont-do="openWontDoModal(realIndex(task))" @delete="deleteTask(realIndex(task))" @schedule="scheduleExistingTask(realIndex(task), task, $event)" @set-repeat="setTaskRepeat(task, $event)" :repeat-info="repeatStateOf(task)" @toggle-repeat="toggleTaskRepeat(task)"
               />
             </template>
           </div>
@@ -178,7 +179,7 @@
                   @patch="editTask(realIndex(task), task, $event)" @subtask-patch="onSubtaskPatch(realIndex(task), task, $event)"
                   @toggle-label="toggleLabelHighlight" @open-reminder="openModal('calendar', realIndex(task), task.title)" @transfer="openTransferModal(realIndex(task))"
                   @video="openYouTubeModal(realIndex(task))" @upload="handleUpload($event, realIndex(task))" @timer="openTaskTimerModal(realIndex(task))"
-                  @wont-do="openWontDoModal(realIndex(task))" @delete="deleteTask(realIndex(task))" @schedule="scheduleExistingTask(realIndex(task), task, $event)" @set-repeat="setTaskRepeat(task, $event)" />
+                  @wont-do="openWontDoModal(realIndex(task))" @delete="deleteTask(realIndex(task))" @schedule="scheduleExistingTask(realIndex(task), task, $event)" @set-repeat="setTaskRepeat(task, $event)" :repeat-info="repeatStateOf(task)" @toggle-repeat="toggleTaskRepeat(task)" />
             </div>
           </div>
 
@@ -285,6 +286,9 @@ import { deferredDateFor, buildScheduledEntry, buildRecurringTemplate, isTaskVis
 import { mutateScheduled, materializeDueForToday } from '@/composables/useScheduledTasks';
 import { blankSchedule, validateSchedule, scheduleOfTask, applyTaskSchedule, deleteTaskScope, deleteEntry, editEntry } from '@/utils/schedEdit';
 import { syncScheduledNotifications } from '@/composables/useSchedNotifications';
+import { repeatState, patternOf, onSchedule, offSchedule, toastFor, legacyRepeating, legacyPattern } from '@/utils/repeatToggle';
+import { dropUndefined } from '@/utils/firestoreSafe';
+import { lightHaptic } from '@/composables/useTaskMotion';
 import ScheduledList from '@/components/home/ScheduledList.vue';
 import EmptyState from '@/components/home/EmptyState.vue';
 import StartDayPrompt from '@/components/home/StartDayPrompt.vue';
@@ -1693,26 +1697,82 @@ const submitScheduledTask = async () => {
 // Task details: Schedule switch / Repeat for an existing task (scope 'this' | 'future' for occurrences of a series).
 const schedEditError = ref('');
 const selectedDayDate = computed(() => tabDays.value[selectedDayIndex.value]?.date || getTodayId());
-const detailSchedule = computed(() => scheduleOfTask(taskDetail.value, scheduledList.value, selectedDayDate.value));
+// Legacy repeating tasks (per-day copies) have no template: show their days in the picker so the sheet and the 🔁 icon agree.
+const detailSchedule = computed(() => {
+  const t = taskDetail.value;
+  if (t && !t.templateId && legacyRepeating(t)) { const p = legacyPattern(t); return { on: true, date: selectedDayDate.value, time: /^\d\d:\d\d$/.test(t.time || '') ? t.time : '', repeat: p.repeat, days: p.days, dayOfMonth: '', until: '' }; }
+  return scheduleOfTask(t, scheduledList.value, selectedDayDate.value);
+});
+// Shared by the details sheet and the card's 🔁 toggle. Throws on failure (callers roll back / report).
+// A legacy repeating task (per-day copies, repeatDays) is first reduced to today's copy so the two models never both apply.
+const applyScheduleToTask = async (task, sched, scope, extra = null) => {
+  const key = taskKey(task);
+  const dayName = days[selectedDayIndex.value].day;
+  if (legacyRepeating(task) && !task.templateId) await setTaskRepeat(task, [], { quiet: true, lastRepeat: legacyPattern(task) });
+  let res = null;
+  scheduledList.value = await mutateScheduled(userId.value, (l) => { res = applyTaskSchedule({ list: l, task, sched, scope, dayDate: selectedDayDate.value }); return res.error ? l : res.list; });
+  if (res.error) return res;
+  if (res.task && extra) res.task = { ...res.task, ...extra };
+  const ref_ = doc(db, 'weeklyRoutines', `${userId.value}_${dayName}`);
+  const cur = (await getDoc(ref_)).data()?.tasks || [];
+  const next = res.task ? cur.map((t) => (taskKey(t) === key ? res.task : t)) : cur.filter((t) => taskKey(t) !== key);
+  await updateDoc(ref_, { tasks: next, updatedAt: serverTimestamp() });
+  selectedDayRoutine.value = next;
+  cancelTaskNotifications(task);
+  await afterMaterialize();
+  resyncNotifications();
+  return res;
+};
 const saveTaskSchedule = async ({ sched, scope }) => {
   schedEditError.value = '';
-  if (blockIfLocked() || !userId.value) return;
-  const task = taskDetail.value; const key = taskKey(task);
-  const dayName = days[selectedDayIndex.value].day;
-  let res = null;
+  if (blockIfLocked() || blockIfShut() || !userId.value) return;
   try {
-    scheduledList.value = await mutateScheduled(userId.value, (l) => { res = applyTaskSchedule({ list: l, task, sched, scope, dayDate: selectedDayDate.value }); return res.error ? l : res.list; });
+    const res = await applyScheduleToTask(taskDetail.value, sched, scope);
     if (res.error) { schedEditError.value = res.error; return; }
-    const ref_ = doc(db, 'weeklyRoutines', `${userId.value}_${dayName}`);
-    const cur = (await getDoc(ref_)).data()?.tasks || [];
-    const next = res.task ? cur.map((t) => (taskKey(t) === key ? res.task : t)) : cur.filter((t) => taskKey(t) !== key);
-    await updateDoc(ref_, { tasks: next, updatedAt: serverTimestamp() });
-    selectedDayRoutine.value = next;
-    cancelTaskNotifications(task);
     if (res.task) taskDetail.value = res.task; else closeTaskDetailModal();
-    await afterMaterialize();
-    resyncNotifications();
   } catch (e) { console.error('schedule edit', e); schedEditError.value = 'Could not save the schedule.'; }
+};
+
+// ── 🔁 one-tap repeat toggle on task cards (utils/repeatToggle.js) ──
+// Optimistic: the icon flips at once (repeatPending), then the write; failure rolls the icon back and shows a toast.
+const repeatPending = reactive({});
+const repeatToast = ref(null); let repeatToastTimer = null;
+const showRepeatToast = (text, { undo = null, error = false } = {}) => {
+  clearTimeout(repeatToastTimer);
+  repeatToast.value = { text, undo, error, id: Date.now() };
+  repeatToastTimer = setTimeout(() => { repeatToast.value = null; }, error ? 6000 : 5000);
+};
+const repeatStateOf = (t) => {
+  const st = repeatState(t, scheduledList.value, todayStr.value);
+  const k = t && taskKey(t);
+  return k && k in repeatPending ? { ...st, on: repeatPending[k], pending: true } : st;
+};
+const findTaskByKey = (k) => (selectedDayRoutine.value || []).find((t) => taskKey(t) === k);
+const toggleTaskRepeat = async (task, { fromUndo = false } = {}) => {
+  if (!userId.value || !task) return;
+  if (blockIfLocked() || blockIfShut()) return;
+  const key = taskKey(task);
+  if (key in repeatPending) return; // one change at a time per task
+  const st = repeatState(task, scheduledList.value, todayStr.value);
+  const dayDate = selectedDayDate.value;
+  lightHaptic();
+  repeatPending[key] = !st.on;
+  try {
+    if (st.on) {
+      const last = patternOf(task, scheduledList.value, todayStr.value);
+      if (st.model === 'legacy') await setTaskRepeat(task, [], { quiet: true, lastRepeat: last });
+      else { const res = await applyScheduleToTask(task, offSchedule(dayDate), 'future', last ? { lastRepeat: last } : null); if (res.error) throw new Error(res.error); }
+      if (!fromUndo) showRepeatToast('Repeat off · today’s task stays', { undo: () => { const t = findTaskByKey(key); if (t) toggleTaskRepeat(t, { fromUndo: true }); } });
+    } else {
+      const sched = onSchedule(task, dayDate);
+      const res = await applyScheduleToTask(task, sched, 'future');
+      if (res.error) throw new Error(res.error);
+      if (!fromUndo) showRepeatToast(toastFor(true, sched), { undo: () => { const t = findTaskByKey(key) || (selectedDayRoutine.value || []).find((x) => x.title === task.title && x.templateId); if (t) toggleTaskRepeat(t, { fromUndo: true }); } });
+    }
+  } catch (e) {
+    console.error('repeat toggle', e);
+    showRepeatToast(isLockError(e) ? e.message : 'Couldn’t change the repeat. Check your connection and try again.', { error: true });
+  } finally { delete repeatPending[key]; }
 };
 const editScheduledEntry = async ({ id, fields, sched, scope }) => {
   if (!userId.value) return;
@@ -1917,16 +1977,24 @@ let lastAddPersist = Promise.resolve(true);
 
 // Repeat control on task cards: keep one copy of the task (same createdAt+title) on every chosen weekday.
 // Copies keep the original createdAt, so making a task recurring never counts as a new task toward the daily limit.
-const setTaskRepeat = async (task, dayNames) => {
+const setTaskRepeat = async (task, dayNames, { quiet = false, lastRepeat = null } = {}) => {
   if (!userId.value || !task) return;
-  if (days.some((d) => isDayLocked(d.day))) { alert(lockedMessage()); return; } // a repeat edit rewrites copies on every weekday, including the locked one
+  if (days.some((d) => isDayLocked(d.day))) { if (quiet) throw Object.assign(new Error(lockedMessage()), { code: 'locked' }); alert(lockedMessage()); return; }
+  if (isShutdown()) { if (quiet) throw Object.assign(new Error(shutMessage()), { code: 'locked' }); alert(shutMessage()); return; } // a repeat edit rewrites copies on every weekday, including the locked one
+  // v2 occurrence (templateId): the legacy day popover must not add per-day copies on top of the series; edit the template instead
+  if (task.templateId && !quiet) {
+    const names = (dayNames || []).filter((d) => d !== days[selectedDayIndex.value].day);
+    const sched = names.length ? { ...onSchedule({ ...task, lastRepeat: dayNames.length >= 7 ? { repeat: 'daily' } : { repeat: 'weekly', days: dayNames.map((d) => days.findIndex((x) => x.day === d)) } }, selectedDayDate.value) } : offSchedule(selectedDayDate.value);
+    try { const res = await applyScheduleToTask(task, sched, 'future'); if (res.error) throw new Error(res.error); } catch (err) { console.error('repeat', err); showRepeatToast('Couldn’t change the repeat. Check your connection and try again.', { error: true }); }
+    return; // handled via v2
+  }
   const viewDay = days[selectedDayIndex.value].day;
   const want = new Set(dayNames && dayNames.length ? dayNames : [viewDay]);
   want.add(viewDay); // the card being edited stays where it is
   const recurring = want.size > 1;
   const key = taskKey(task);
-  const prev = { type: task.type, repeatDays: task.repeatDays };
-  const patch = { type: recurring ? 'recurring' : (task.type === 'recurring' ? 'one-time' : task.type || 'one-time'), repeatDays: recurring ? [...want] : [] };
+  const prev = { type: task.type, repeatDays: task.repeatDays, lastRepeat: task.lastRepeat };
+  const patch = { type: recurring ? 'recurring' : (task.type === 'recurring' ? 'one-time' : task.type || 'one-time'), repeatDays: recurring ? [...want] : [], ...(!recurring && (lastRepeat || legacyRepeating(task)) ? { lastRepeat: lastRepeat || legacyPattern(task) } : {}) };
   Object.assign(task, patch);
   selectedDayRoutine.value = [...selectedDayRoutine.value];
   try {
@@ -1944,13 +2012,15 @@ const setTaskRepeat = async (task, dayNames) => {
         else {
           const af = i !== selectedDayIndex.value ? activeFromForDay(i) : '';
           const { timerActive, timerEnd, timerStart, boss, ...base } = task;
-          next = [...l, { ...base, ...patch, completed: false, completedAt: null, status: base.status === 'done' ? 'todo' : base.status, activeFrom: af }];
+          next = [...l, { ...base, ...patch, completed: false, completedAt: null, status: !base.status || base.status === 'done' ? 'todo' : base.status, activeFrom: af || '' }];
         }
-        tx.set(refs[i], { tasks: next, updatedAt: serverTimestamp() }, { merge: true });
+        // legacy tasks carry no `status` (and UI copies can hold undefined fields): Firestore rejects undefined values client-side
+        tx.set(refs[i], { tasks: next.map(dropUndefined), updatedAt: serverTimestamp() }, { merge: true });
       });
     }));
   } catch (e) {
     console.error('repeat', e); Object.assign(task, prev); selectedDayRoutine.value = [...selectedDayRoutine.value];
+    if (quiet) throw e;
     alert('Could not update the repeat setting. Please try again.');
   }
 };
@@ -3946,6 +4016,9 @@ a.hero-menu-item { display: block; text-decoration: none; color: inherit; }
 @keyframes discPulse { 50% { opacity: .65; } }
 .app-root.theme-ember { --c-primary: #ea580c; --c-primary-soft: #ffedd5; --c-warn: #dc2626; }
 .app-root.theme-ocean { --c-primary: #0284c7; --c-primary-soft: #e0f2fe; --c-success: #0d9488; }
+.repeat-toast { position: fixed; left: 50%; bottom: 140px; transform: translateX(-50%); z-index: 9001; background: #111827; color: #fff; padding: 9px 14px; border-radius: 10px; font-size: .9rem; box-shadow: 0 4px 12px rgba(0,0,0,.25); max-width: 90vw; }
+.repeat-toast--err { background: #b91c1c; }
+.repeat-toast button { margin-left: 10px; color: #fbbf24; font-weight: 700; background: none; border: none; min-height: 32px; }
 .voice-toasts { position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%); z-index: 9000; display: flex; flex-direction: column; gap: 6px; }
 .voice-toast { background: #111827; color: #fff; padding: 8px 12px; border-radius: 10px; font-size: .9rem; box-shadow: 0 4px 12px rgba(0,0,0,.25); }
 .voice-toast button { margin-left: 10px; color: #fbbf24; font-weight: 700; background: none; border: none; }

@@ -22,7 +22,15 @@ export const timerTimes = (t) => {
 };
 // Ring shown only when a timer is set / was started.
 // Legacy timers without a start (or duration) still show: full ring + time left until the end.
-export const hasRing = (t) => { const { start, end } = timerTimes(t); return !!(t && end && (start ? end > start : t.timerActive)); };
+// A finished timer stays visible (red 0:00) only while it is still marked active and for at most STALE_RING_MS after it ended;
+// an inactive, unpaused timer whose end has passed (e.g. a months-old timerEndTime left on a recurring task) shows no ring.
+export const STALE_RING_MS = 12 * 3600 * 1000;
+export const hasRing = (t, nowMs = Date.now()) => {
+  const { start, end, paused } = timerTimes(t);
+  if (!(t && end && (start ? end > start : t.timerActive))) return false;
+  if (!paused && end <= nowMs && (!t.timerActive || nowMs - end > STALE_RING_MS)) return false;
+  return true;
+};
 
 // Remaining fraction 1..0 (1 = just started). Paused: frozen at the pause instant.
 export const ringFraction = (t, nowMs = Date.now()) => {

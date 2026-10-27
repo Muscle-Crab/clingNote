@@ -46,7 +46,7 @@ t('guards: every task mutation refused while shut (add/edit/complete/timers), al
 t('HomeView/useScheduledTasks/useEightHour wiring for the hard stop', () => {
   const h = read('src/views/HomeView.vue'); const c = (h.match(/if \(blockIfShut\(\)\) return/g) || []).length; assert(c >= 10, 'blockIfShut in task actions: ' + c);
   assert(/assertNotShut\(\)/.test(read('src/composables/useScheduledTasks.js')));
-  const u = read('src/composables/useEightHour.js'); assert(/LAST_LOCK_KEY/.test(u) && /shutdown/.test(u), 'cached lock keeps the stop across reloads');
+  const u = read('src/composables/useEightHour.js'); assert(/from '@\/utils\/ehLockCache'/.test(u) && /readLock\(/.test(u) && /shutdown/.test(u), 'cached lock keeps the stop across reloads (per-account cache since f4079de)');
   const fn = read('netlify/functions/eight-hour-day.js'); assert(/shutUntil: ctx\.ts\(core\.shutUntilMs/.test(fn) && /core\.isShut\(/.test(fn));
 });
 t('rules: shut day blocks weeklyRoutines writes (server time)', () => {
@@ -78,7 +78,7 @@ t('pressure: one alert, priority risk > behind > boss; nothing offline', () => {
 });
 t('celebrations: manager award first (voice line), then day result, each once', () => {
   const stats = { lastDay: 'd1', lastResult: 'met', streak: 3, lastReward: { xp: 20, coins: 8, shield: true, badge: 'streak-3' }, awards: [{ at: 111, bonus: 25, badge: 'mvp', note: 'nice', from: 'Sam' }] };
-  const a = pr.pendingCelebration(stats, {}); assert.strictEqual(a.key, 'award'); assert.strictEqual(a.voice, 'Your manager sent you a bonus'); assert(a.lines.some((l) => /MVP/.test(l)));
+  const a = pr.pendingCelebration(stats, {}); assert.strictEqual(a.key, 'award'); assert.strictEqual(a.voice, 'Nice! Your manager just sent you a bonus.'); assert(a.lines.some((l) => /MVP/.test(l)));
   const d = pr.pendingCelebration(stats, { award: '111' }); assert.strictEqual(d.key, 'day'); assert(d.lines.some((l) => /Streak shield/.test(l)));
   assert.strictEqual(pr.pendingCelebration(stats, { award: '111', day: 'd1' }), null);
 });
@@ -90,7 +90,7 @@ t('pill state: countdown + target running, "Starts X" before, hidden with no pla
   assert.strictEqual(chrome.pillState({ phase: 'ready', hasPlan: true, wrapped: true }).main, 'Day wrapped');
   assert.strictEqual(chrome.pillState({ phase: 'ready', hasPlan: true, allDone: true }).main, 'All done');
   assert.strictEqual(chrome.pillState({ phase: 'ready', hasPlan: true, lockInOn: false }), null);
-  assert.strictEqual(chrome.pillState({ running: true, countdown: '01:00:00', earned: 0, target: 60, hasPlan: true, allDone: true }).kind, 'running');
+  assert.strictEqual(chrome.pillState({ running: true, countdown: '01:00:00', earned: 0, target: 60, hasPlan: true, allDone: true }).kind, 'run'); // .ehp--run
   for (const r of ['home', 'upcoming', 'rankings', 'discipline', 'pals', 'addiction', 'manager-home', 'manager-person']) assert(chrome.PILL_ROUTES.includes(r), r);
   for (const r of ['Login', 'onboarding', 'welcome', 'paywall', 'subs', 'Profile', 'support']) { assert(!chrome.PILL_ROUTES.includes(r)); assert(!chrome.SHUT_ROUTES.includes(r)); }
   assert(!chrome.SHUT_ROUTES.includes('manager-person'), 'managers keep their read-only team view');

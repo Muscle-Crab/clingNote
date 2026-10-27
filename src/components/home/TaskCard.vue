@@ -44,7 +44,10 @@
                       >
                         {{ task.title }}
                       </span>
-                      <span v-if="isRepeating" class="task-repeat-badge" data-test="repeat-badge" :title="'Repeats: ' + repeatLabel" :aria-label="'Repeats ' + repeatLabel">🔁</span>
+                      <button v-if="repeatInfo && !task.completed" type="button" class="task-repeat-toggle" :class="{ 'is-on': repeatInfo.on, 'is-pending': repeatInfo.pending, 'is-pop': repeatPop }" data-test="repeat-toggle"
+                          :aria-pressed="repeatInfo.on ? 'true' : 'false'" :aria-label="repeatInfo.on ? `Repeat on (${repeatInfo.label}). Tap to stop repeating` : 'Repeat off. Tap to repeat daily'"
+                          :title="repeatInfo.on ? repeatInfo.label : 'Tap to repeat'" @click.stop="onRepeatTap"><span class="task-repeat-glyph" aria-hidden="true">🔁</span></button>
+                      <span v-else-if="isRepeating" class="task-repeat-badge" data-test="repeat-badge" :title="'Repeats: ' + repeatLabel" :aria-label="'Repeats ' + repeatLabel">🔁</span>
                       <span v-if="task.anonymous === true && task.visibility !== 'private'" class="task-private task-anon" data-test="anon-label" title="Name hidden from manager: managers see it as 'Anonymous task'" aria-label="Name hidden from manager">🕶️</span>
                       <span v-if="task.visibility === 'private'" class="task-private" data-test="private-label" title="Private: only you can see this task" aria-label="Private">🔒</span>
                       <TimerRing v-if="hasRing(task)" :task="task" />
@@ -86,7 +89,7 @@
                     </div>
                     <!-- Secondary info: one truncated line of icons -->
                     <div v-if="hasExtras" class="task-extras" data-test="task-extras" :title="extrasTitle">
-                      <span v-if="task.reminder?.date && task.reminder?.time" class="task-reminder">⏰ {{ formatShortDate(task.reminder.date) }} {{ formatTime(task.reminder.time) }}</span>
+                      <span v-if="reminderVisible" class="task-reminder">⏰ {{ formatShortDate(task.reminder.date) }} {{ formatTime(task.reminder.time) }}</span>
                       <span v-if="task.carriedFrom" class="task-rolled" data-test="rolled-tag" title="Moved from yesterday">↪︎</span>
                       <span v-if="task.status === 'pending' && task.pendingOn" class="task-next task-pending-on">⏳ {{ task.pendingOn }}</span>
                       <span v-if="task.nextAction" class="task-next">→ {{ task.nextAction }}</span>
@@ -128,7 +131,7 @@
 
                     <div v-show="moreOpen" class="task-actions" @click.stop>
                       <button @click="$emit('toggle-expand'); moreOpen = false" class="action-btn" title="Details" aria-label="Show details">📝</button>
-                      <button type="button" @click="repeatOpen = !repeatOpen; moreOpen = false" class="action-btn" data-test="repeat-btn" :class="{ 'action-btn--on': isRepeating }" :title="isRepeating ? 'Repeats: ' + repeatLabel : 'Make recurring'" aria-label="Repeat settings">🔁</button>
+                      <button type="button" @click="repeatOpen = !repeatOpen; moreOpen = false" class="action-btn" data-test="repeat-btn" :class="{ 'action-btn--on': repeatOnAny }" :title="repeatOnAny ? repeatText : 'Make recurring'" aria-label="Repeat settings">🔁</button>
                       <button @click="$emit('open-reminder')" class="action-btn" title="Reminder" aria-label="Add reminder">📅</button>
                       <button @click="$emit('transfer')" class="action-btn" title="Transfer" aria-label="Transfer to another day">🔄</button>
                       <button @click="$emit('video')" class="action-btn" title="Video" aria-label="Attach video">🎥</button>
@@ -160,7 +163,7 @@
                       <div class="edit-row">
                         <button type="button" class="adj-chip" :class="{ on: task.important }" data-test="edit-important" @click="$emit('toggle-important')">{{ task.important ? '★ Important' : '☆ Mark important' }}</button>
                         <button type="button" class="adj-chip" data-test="edit-reminder" @click="$emit('open-reminder')">⏰ {{ task.reminder?.date ? 'Change reminder' : 'Add reminder' }}</button>
-                        <button type="button" class="adj-chip" data-test="edit-repeat" @click="repeatOpen = !repeatOpen">🔁 {{ isRepeating ? 'Repeats ' + repeatLabel : 'Repeat' }}</button>
+                        <button type="button" class="adj-chip" data-test="edit-repeat" @click="repeatOpen = !repeatOpen">🔁 {{ repeatOnAny ? repeatText : 'Repeat' }}</button>
                         <button type="button" class="adj-chip" @click="$emit('open-detail')">⤢ Full view</button>
                       </div>
                       <label v-if="isRepeating" class="series-opt" data-test="edit-series"><input type="checkbox" :checked="allOccurrences" @change="$emit('series', $event.target.checked)" />
@@ -226,13 +229,14 @@ import { categoryOf } from '@/utils/taskCategory';
 import { STATUSES, taskKey, estimateOf, formatClock, formatDuration as formatMinutes, toMinutes } from '@/utils/taskPlanning';
 import { subtaskProgress, subtaskPercent } from '@/utils/subtasks';
 import { chipValues, fmtMin } from '@/utils/taskEstimate';
-import { formatShortDate, formatTime } from '@/utils/dateTime';
+import { formatShortDate, formatTime, showReminder } from '@/utils/dateTime';
 import TimerRing from './TimerRing.vue';
 import { hasRing } from '@/utils/timerRing';
 import { ESTIMATE_CHIPS, cleanEstimate, timerStarted } from '@/utils/taskEdit';
 import SubtaskList from '@/components/home/SubtaskList.vue';
 
 const props = defineProps({
+  repeatInfo: { type: Object, default: null }, // { on, label, pending } from HomeView; null = read-only badge
   upNext: { type: Boolean, default: false }, // first open task on today's list: highlighted row
   dragDisabled: { type: Boolean, default: false },
   task: { type: Object, required: true },
@@ -248,7 +252,10 @@ const props = defineProps({
   allOccurrences: { type: Boolean, default: false },
 });
 const emit = defineEmits(['set-repeat', 'set-boss', 'toggle-expand', 'toggle-complete', 'open-detail', 'toggle-important', 'patch', 'subtask-patch',
-  'toggle-label', 'open-reminder', 'transfer', 'video', 'upload', 'timer', 'wont-do', 'delete', 'schedule']);
+  'toggle-label', 'open-reminder', 'transfer', 'video', 'upload', 'timer', 'wont-do', 'delete', 'schedule', 'toggle-repeat']);
+// 🔁 one-tap toggle (HomeView passes repeatInfo = { on, label, pending } covering both repeat models)
+const repeatPop = ref(false);
+const onRepeatTap = () => { repeatPop.value = true; setTimeout(() => { repeatPop.value = false; }, 260); emit('toggle-repeat'); };
 const ALL = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']; // same keys as data.json days[].day
 const WEEKDAYS = ALL.slice(1, 6);
 const repeatOpen = ref(false);
@@ -258,6 +265,12 @@ const repeatLabel = computed(() => {
   if (r.length === 7) return 'daily';
   if (r.length === 5 && WEEKDAYS.every((d) => r.includes(d))) return 'weekdays';
   return r.length ? ALL.filter((d) => r.includes(d)).map((d) => d.slice(0, 3)).join(' ') : 'weekly';
+});
+// Both repeat models (legacy repeatDays + v2 templates via repeatInfo) so the menu/edit chips agree with the 🔁 toggle.
+const repeatOnAny = computed(() => (props.repeatInfo ? !!props.repeatInfo.on : isRepeating.value));
+const repeatText = computed(() => {
+  const l = props.repeatInfo && props.repeatInfo.on ? props.repeatInfo.label : `Repeats ${repeatLabel.value}`;
+  return /^repeats\b/i.test(l) ? l : `Repeats: ${l}`;
 });
 const customDays = ref([...(props.task.repeatDays || [])]);
 const pickRepeat = (list) => { repeatOpen.value = false; emit('set-repeat', [...list]); };
@@ -311,7 +324,9 @@ const onCardTap = (event) => {
   }
   emit('toggle-expand');
 };
-const hasExtras = computed(() => { const t = props.task; return !!((t.reminder?.date && t.reminder?.time) || t.carriedFrom || (t.status === 'pending' && t.pendingOn) || t.nextAction || labelList.value.length || (t.notes && !props.expanded)); });
+// past one-off reminders are hidden (display only; nothing is written)
+const reminderVisible = computed(() => showReminder(props.task.reminder, new Date(props.now || Date.now())));
+const hasExtras = computed(() => { const t = props.task; return !!(reminderVisible.value || t.carriedFrom || (t.status === 'pending' && t.pendingOn) || t.nextAction || labelList.value.length || (t.notes && !props.expanded)); });
 const extrasTitle = computed(() => [props.task.nextAction, props.task.notes].filter(Boolean).join(' · '));
 const schedText = computed(() => scheduleLabel(props.task));
 const schedLate = computed(() => !!props.task?.scheduledFor && scheduledOverdue(props.task, new Date()));
@@ -499,6 +514,16 @@ const onPressEnd = () => { if (pressTimer !== 'fired') clearTimeout(pressTimer);
 .repeat-days { display: flex; flex-wrap: wrap; gap: 4px; font-size: 12px; }
 .repeat-days label { display: flex; align-items: center; gap: 2px; }
 .chip--sched { font-size: 11px; white-space: nowrap; }
+.task-repeat-toggle { /* 44pt hit area without growing the title row */ width: 44px; height: 44px; margin: -12px -10px -12px -6px; padding: 0; flex: 0 0 auto;
+  display: inline-flex; align-items: center; justify-content: center; background: none; border: none; cursor: pointer; -webkit-tap-highlight-color: transparent; vertical-align: middle; }
+.task-repeat-glyph { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 999px; font-size: 12px;
+  border: 1.5px dashed rgba(100, 116, 139, .55); filter: grayscale(1); opacity: .4; transition: opacity .15s, filter .15s, background .15s, border-color .15s, transform .15s; }
+.task-repeat-toggle.is-on .task-repeat-glyph { opacity: 1; filter: none; border: 1.5px solid #6366f1; background: rgba(99, 102, 241, .14); }
+.task-repeat-toggle:active .task-repeat-glyph, .task-repeat-toggle.is-pop .task-repeat-glyph { transform: scale(1.25); }
+.task-repeat-toggle.is-pending .task-repeat-glyph { animation: repeat-pulse .8s ease-in-out infinite alternate; }
+.task-repeat-toggle:focus-visible { outline: 2px solid #6366f1; outline-offset: -6px; border-radius: 12px; }
+@keyframes repeat-pulse { from { opacity: .55; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .task-repeat-glyph { transition: none; } .task-repeat-toggle.is-pending .task-repeat-glyph { animation: none; } }
 .task-repeat-badge { font-size: 11px; opacity: .8; margin-left: 6px; white-space: nowrap; }
 
 /* ── Completion animation (≈560ms, transform/opacity only) ── */

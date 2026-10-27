@@ -5,8 +5,8 @@ import { reactive } from 'vue';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '@/firebaseConfig';
 
-export const AI_CONSENT_VERSION = 1;
-export const AI_CONSENT_DECLINED_MESSAGE = 'AI features are turned off because you did not allow sharing your text and photos with OpenAI. Nothing was sent. You can allow it any time by trying again.';
+export const AI_CONSENT_VERSION = 2; // v2: discloses Google Gemini (assistant / Ask) alongside OpenAI, so earlier v1 consents are asked again once
+export const AI_CONSENT_DECLINED_MESSAGE = 'AI features are turned off because you did not allow sharing your text and photos with our AI providers (OpenAI and Google Gemini). Nothing was sent. You can allow it any time by trying again.';
 const lsKey = (uid) => `clingnote.aiConsent.v${AI_CONSENT_VERSION}.${uid}`;
 
 // Shared modal state, rendered once by <AiConsentModal/> in App.vue.

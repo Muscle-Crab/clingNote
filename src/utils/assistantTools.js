@@ -53,7 +53,9 @@ export const validateCall = (name, args = {}, { refs = {}, tasksByKey = new Map(
       const items = normalizeItems(raw).map((it, i) => ({ ...it, ...pointsForItem({ ...raw[i], ...it }), priority: raw[i] && raw[i].priority === 'high' ? 'high' : '' }))
         .map((it, i) => { const rep = raw[i] && repeatFields(raw[i].repeat, raw[i].days); return rep ? { ...it, type: 'schedule', date: it.date || today, start: it.start || '09:00', repeat: rep.repeat, days: rep.days.length ? rep.days : undefined } : it; });
       if (!items.length) return { ok: false, error: 'No valid items.' };
-      const counted = items.filter((x) => x.type !== 'reminder').length;
+      // Only items landing today count against today's remaining; a future-dated one-off is checked against its own day when it is saved
+      // (HomeView addNewTask -> dailyLimitGate(sched.date)), same as the Add sheet. Recurring items start today, so they count.
+      const counted = items.filter((x) => x.type !== 'reminder' && !(today && x.date && x.date > today && !x.repeat)).length;
       if (limitRemaining != null && counted > limitRemaining) return { ok: false, error: `Daily limit: only ${Math.max(0, limitRemaining)} more task(s) today (5/day on free and Pro).`, limit: true };
       return { ok: true, args: { items } };
     }

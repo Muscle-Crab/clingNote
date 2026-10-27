@@ -38,7 +38,7 @@ const step = async (name, fn) => { try { const v = await fn(); const ok = v !== 
   });
   const p = await ctx.newPage();
   p.on('pageerror', (e) => /SDK already initialized/.test(e.message) || errs.push(`${p.url()} :: ${e.message}`));
-  const dismiss = async () => { for (let i = 0; i < 4; i++) { const b = p.locator('.drama button, button:has-text("Not now"), button:has-text("Maybe later"), button:has-text("Skip")'); if (await b.count()) { await b.first().click({ timeout: 1500 }).catch(() => {}); await sleep(400); } } };
+  const dismiss = async () => { for (let i = 0; i < 4; i++) { const b = p.locator('.drama button, .mr-x, .bb-x, button:has-text("Not now"), button:has-text("Maybe later"), button:has-text("Skip")'); if (await b.count()) { await b.first().click({ timeout: 1500 }).catch(() => {}); await sleep(400); } } };
   await step('sign-in on web build', async () => { await emailLogin(p, 'zztest-web@example.com'); await sleep(3500); return !p.url().includes('/login'); });
   await dismiss();
   await p.getByText('Start Your Day', { exact: false }).last().click().catch(() => {}); await sleep(1000); await p.locator('button:has-text("Start")').last().click().catch(() => {}); await sleep(2500); await dismiss(); 
@@ -47,11 +47,12 @@ const step = async (name, fn) => { try { const v = await fn(); const ok = v !== 
   await step('overbooked-day warning shows', async () => { await p.click('[data-test=eh-save]', { timeout: 5000 }).catch(() => {}); await sleep(3500); return /overbook|too much|won't fit|hours of work|more than/i.test(await p.locator('body').innerText()); });
   await step('timed-task alert scheduled via Web Notifications (no crash)', async () => true);
   await step('focus timer starts + ring renders', async () => { await p.locator('.task-play:visible').first().click({ timeout: 8000 }); await sleep(2000); await dismiss(); return (await p.locator('[data-test=timer-ring]').count()) > 0; });
-  await step('repeat picker opens (repeats)', async () => { const b = p.locator('[data-test=repeat-btn]').first(); if (!(await b.count())) { await p.locator('[data-test=edit-btn]').first().click().catch(() => {}); await sleep(600); } const c = p.locator('[data-test=repeat-btn]').first(); if (!(await c.count())) return false; await c.click(); await sleep(400); const ok = (await p.locator('[data-test=repeat-pop]').count()) > 0; await p.keyboard.press('Escape'); return ok; });
+  await step('repeat picker opens (repeats)', async () => { const b = p.locator('[data-test=repeat-btn]').first(); if (!(await b.count())) { await p.locator('[data-test=edit-btn]').first().click().catch(() => {}); await sleep(600); } const c = p.locator('[data-test=repeat-btn]').first(); if (!(await c.count())) return false; if (!(await c.isVisible())) { await p.locator('.task-more').first().click(); await sleep(400); } await c.click(); await sleep(400); const ok = (await p.locator('[data-test=repeat-pop]').count()) > 0; await p.keyboard.press('Escape'); return ok; });
   await p.keyboard.press('Escape').catch(() => {}); await dismiss();
   await step('assistant opens + creates Nov 16 task into scheduler (not today)', async () => {
     await p.locator('[data-test=assistant-bubble]:visible, [data-test=assistant-fab]:visible').first().click({ timeout: 8000 }); await p.waitForSelector('[data-test=assistant-input]', { timeout: 6000 });
-    await p.fill('[data-test=assistant-input]', 'add dentist on nov 16'); await p.click('[data-test=assistant-send]'); await sleep(2500);
+    await p.fill('[data-test=assistant-input]', 'add dentist on nov 16'); await p.click('[data-test=assistant-send]'); await sleep(1500);
+    if (await p.locator('[data-test=ai-consent-allow]').count()) { await p.click('[data-test=ai-consent-allow]'); } await sleep(2500); // one-time AI data-sharing consent
     if (await p.locator('[data-test=assistant-yes]').count()) { await p.click('[data-test=assistant-yes]'); await sleep(3000); }
     const u = (await db.doc(`users/${uid}`).get()).data() || {}; const sched = (u.scheduledTasks && u.scheduledTasks.tasks) || [];
     const today = (await db.doc(`weeklyRoutines/${uid}_${WEEK[now.getDay()]}`).get()).data().tasks || [];
