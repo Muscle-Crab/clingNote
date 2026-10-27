@@ -4,6 +4,8 @@ import core from '../../netlify/functions/lib/eightHourCore.js';
 export const WINDOW_MS = core.WINDOW_MS;
 export const WINDOW_MIN = core.WINDOW_MIN;
 export const MAX_TASKS_PER_DAY = core.MAX_TASKS_PER_DAY;
+export const MIN_TASKS_PER_HOUR = core.MIN_TASKS_PER_HOUR;
+export const taskRange = core.taskRange;
 export const LOCK_IDENTITY_SLOTS = core.LOCK_IDENTITY_SLOTS;
 export const WEEKDAYS = core.WEEKDAYS;
 export const WAKE_PICKER_PRESELECT = core.WAKE_PICKER_PRESELECT;

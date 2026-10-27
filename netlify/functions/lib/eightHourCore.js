@@ -14,6 +14,12 @@ const WINDOW_MS = hoursMs(DAY_HOURS.default);
 const WINDOW_MIN = DAY_HOURS.default * 60;
 const WARN_MINUTES = [15, 5];                    // in-app warnings before the day shuts down; the local notification goes out at 5
 const MAX_TASKS_PER_DAY = 50;                   // 8-hour plan size safety max (NOT the 5/day creation limit in config/pricing.js TASK_LIMITS: repeating tasks can put more than 5 on a day, and a plan capped at 5 made the card unstartable with its + disabled)
+// Locked-in task range for the hours the user chooses (replaces the old exact "Planned N" count):
+//  - minimum: 1 task per 2 hours, rounded up (3h -> 2, 8h -> 4, 12h -> 6). There was no hours->tasks rule in the code; half a task per hour
+//    (not 1/hour) keeps a default 8h day startable under the 5/day creation limit in src/config/pricing.js TASK_LIMITS.
+//  - maximum (overload cap): MAX_TASKS_PER_DAY (50), the same plan-size safety max the server already validated. Start needs min <= count <= max.
+const MIN_TASKS_PER_HOUR = 0.5;
+const taskRange = (hours) => { const h = clampHours(hours); return { hours: h, min: Math.min(MAX_TASKS_PER_DAY, Math.max(1, Math.ceil(h * MIN_TASKS_PER_HOUR))), max: MAX_TASKS_PER_DAY }; };
 const LOCK_IDENTITY_SLOTS = 50;                 // Firestore rules cannot loop; they compare the first 50 slots (= task cap) of a day doc (see firestore.rules)
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const WAKE_PICKER_PRESELECT = '07:00';          // UI convenience ONLY (pre-selected picker value). There is no stored/default wake time: the user must pick one.
@@ -205,7 +211,7 @@ const rewardFor = (streak) => (streak >= 30 ? '🏔️ Peak Performer' : streak 
 
 module.exports = {
   DAY_HOURS, clampHours, hoursMs, hoursLabel, WARN_MINUTES, warningDue,
-  WINDOW_MS, WINDOW_MIN, MAX_TASKS_PER_DAY, LOCK_IDENTITY_SLOTS, WEEKDAYS, WAKE_PICKER_PRESELECT, START_MODE, TARGET_LEVELS, LOCKED_FIELDS,
+  WINDOW_MS, WINDOW_MIN, MAX_TASKS_PER_DAY, MIN_TASKS_PER_HOUR, taskRange, LOCK_IDENTITY_SLOTS, WEEKDAYS, WAKE_PICKER_PRESELECT, START_MODE, TARGET_LEVELS, LOCKED_FIELDS,
   clamp, round5, parseWake, fmtWake, validTz, partsIn, dayKeyIn, dayNameIn, wakeInstant, evaluatePhase,
   countdownParts, fmtCountdown, fmtClock, fmtWakeLabel,
   complexityFromMinutes, complexityFromText, pointsFor, estimateTask, levelRatio, dailyTarget,

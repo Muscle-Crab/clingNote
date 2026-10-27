@@ -83,4 +83,19 @@ t('TaskCard shows TimerRing only for tasks with a timer', () => {
   const ring = fs.readFileSync('src/components/home/TimerRing.vue', 'utf8');
   assert.match(ring, /prefers-reduced-motion/); assert.match(ring, /stroke-dashoffset/);
 });
+
+// Bug 2026-10-27: unstarted repeating tasks (Fri doc) carried months-old timer fields -> red 0:00 rings.
+{
+  const N = Date.parse('2026-10-27T18:00:00Z');
+  const old = { title: 'Wash', type: 'recurring', timerActive: false, timerStartedAt: '2026-08-07T20:15:32.172Z', timerEndTime: '2026-08-07T21:16:32.172Z', timerDurationMinutes: 61, timerStoppedAt: '2026-08-07T20:41:31.754Z' };
+  assert.equal(hasRing(old, N), false);
+  assert.equal(hasRing({ ...old, timerStoppedAt: undefined }, N), false);
+  assert.equal(hasRing({ ...old, timerEndTime: new Date(N + 3600000).toISOString(), timerStoppedAt: undefined }, N), false); // future end but never started now (inactive)
+  assert.equal(hasRing({ ...old, completed: true, timerActive: true, timerEndTime: new Date(N - 60000).toISOString() }, N), false); // completed: no ring
+  assert.equal(hasRing({ title: 'Workout', type: 'recurring', estimateMin: 60, timerDurationMinutes: 60 }, N), false); // estimate only
+  assert.equal(hasRing({ ...old, timerPausedAt: '2026-08-07T20:30:00Z' }, N), false); // stopped after the pause
+  const run = { title: 'Wash', timerActive: true, timerStartedAt: new Date(N - 25 * 60000).toISOString(), timerEndTime: new Date(N).toISOString(), timerStoppedAt: '2026-08-07T20:41:31.754Z' };
+  assert.equal(hasRing(run, N + 60000), true); // really started and just finished: red 0:00 shows
+  assert.equal(hasRing(run, N - 60000), true);
+}
 console.log(`timer ring: ${n} passed`);

@@ -41,7 +41,7 @@ const call = (db, body, clock) => handler({ httpMethod: 'POST', headers: { autho
   for (const [sent, want] of [[6, 6], [2, 3], [20, 12], [6.3, 6.5], [undefined, 8]]) {
     const db = mkDb();
     await call(db, { action: 'plan', wakeTime: '07:00', taskCount: 1, tz: TZ }, now);
-    db.store['weeklyRoutines/u1_Fri'] = { tasks: [{ title: 'ZZTEST a', completed: false, createdAt: 'x', type: 'one-time' }] };
+    db.store['weeklyRoutines/u1_Fri'] = { tasks: Array.from({ length: 6 }, (_, i) => ({ title: `ZZTEST ${i}`, completed: false, createdAt: `x${i}`, type: 'one-time' })) }; // 6 = the 12h minimum (taskRange)
     const r = await call(db, { action: 'start', hours: sent }, now);
     eq([r.code, r.body.phase, r.body.lock.hours, r.body.lock.startMs, r.body.lock.endMs], [200, 'running', want, now, now + want * H], `start hours=${sent}`);
     // confirmed hours are frozen: a second start with other hours is a no-op

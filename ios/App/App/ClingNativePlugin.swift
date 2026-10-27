@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 import Capacitor
 import EventKit
 import CoreLocation
@@ -23,12 +24,33 @@ public class ClingNativePlugin: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDe
         CAPPluginMethod(name: "startFocusActivity", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "endFocusActivity", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "takeIntents", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "takeTimerIntents", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "calSyncEnsure", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "calSyncList", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "calSyncUpsert", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "calSyncRemove", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setPageZoom", returnType: CAPPluginReturnPromise),
     ]
     /// Siri/Shortcuts tasks queued by AddTaskIntent; returned once and cleared.
     @objc func takeIntents(_ call: CAPPluginCall) {
         let d = UserDefaults(suiteName: "group.app.clingnote.ios")
         let q = (d?.array(forKey: "intent.pending") as? [[String: Any]]) ?? []
         d?.removeObject(forKey: "intent.pending"); call.resolve(["items": q])
+    }
+    /// Siri "Start timer" requests queued by StartTimerIntent ([{taskId, ts}]); returned once and cleared.
+    @objc func takeTimerIntents(_ call: CAPPluginCall) {
+        let d = UserDefaults(suiteName: "group.app.clingnote.ios")
+        let q = (d?.array(forKey: "intent.timer") as? [[String: Any]]) ?? []
+        d?.removeObject(forKey: "intent.timer"); call.resolve(["items": q])
+    }
+    /// Text size (Settings → Appearance): WKWebView.pageZoom reflows the page like Safari's aA menu (vh units stay correct,
+    /// unlike CSS zoom). Clamped 0.9...1.35 so layouts hold.
+    @objc func setPageZoom(_ call: CAPPluginCall) {
+        let z = min(max(call.getDouble("zoom") ?? 1, 0.9), 1.35)
+        DispatchQueue.main.async {
+            if #available(iOS 14.0, *) { self.bridge?.webView?.pageZoom = CGFloat(z) }
+            call.resolve(["zoom": z])
+        }
     }
     private let store = EKEventStore()
     private lazy var loc: CLLocationManager = { let m = CLLocationManager(); m.delegate = self; return m }()
@@ -54,6 +76,53 @@ public class ClingNativePlugin: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDe
         ev.startDate = Date(timeIntervalSince1970: s / 1000); ev.endDate = Date(timeIntervalSince1970: e / 1000)
         ev.calendar = store.defaultCalendarForNewEvents
         do { try store.save(ev, span: .thisEvent); call.resolve(["id": ev.eventIdentifier ?? ""]) } catch { call.reject("\(error)") }
+    }
+
+    // MARK: two-way calendar sync (JS: src/composables/useCalendarSync.js, logic: src/utils/calendarSync.js)
+    // One dedicated "ClingNote" calendar; the app only lists / edits events in it. Events carry url clingnote://task/<key>.
+    private func syncCalendar(_ id: String?) -> EKCalendar? {
+        if let id = id, !id.isEmpty, let c = store.calendar(withIdentifier: id) { return c }
+        return store.calendars(for: .event).first { $0.title == "ClingNote" && $0.allowsContentModifications }
+    }
+    @objc func calSyncEnsure(_ call: CAPPluginCall) {
+        if let c = syncCalendar(call.getString("calendarId")) { call.resolve(["calendarId": c.calendarIdentifier]); return }
+        let c = EKCalendar(for: .event, eventStore: store); c.title = "ClingNote"
+        c.cgColor = UIColor(red: 0.36, green: 0.55, blue: 1.0, alpha: 1).cgColor
+        // iCloud if present, else the local source (Settings may hide "On My iPhone" when iCloud calendars are on)
+        let sources = store.sources
+        c.source = store.defaultCalendarForNewEvents?.source
+            ?? sources.first { $0.sourceType == .calDAV && $0.title.lowercased().contains("icloud") }
+            ?? sources.first { $0.sourceType == .local }
+        guard c.source != nil else { call.reject("no calendar source"); return }
+        do { try store.saveCalendar(c, commit: true); call.resolve(["calendarId": c.calendarIdentifier]) } catch { call.reject("\(error)") }
+    }
+    @objc func calSyncList(_ call: CAPPluginCall) {
+        guard let c = syncCalendar(call.getString("calendarId")) else { call.reject("calendar missing"); return }
+        let from = Date(timeIntervalSince1970: (call.getDouble("fromMs") ?? 0) / 1000)
+        let to = Date(timeIntervalSince1970: (call.getDouble("toMs") ?? 0) / 1000)
+        let evs = store.events(matching: store.predicateForEvents(withStart: from, end: to, calendars: [c]))
+            .filter { !$0.isAllDay }
+            .map { e -> [String: Any] in [
+                "id": e.calendarItemIdentifier, "title": e.title ?? "", "notes": e.notes ?? "", "url": e.url?.absoluteString ?? "",
+                "startMs": e.startDate.timeIntervalSince1970 * 1000, "endMs": e.endDate.timeIntervalSince1970 * 1000,
+            ] }
+        call.resolve(["events": evs])
+    }
+    @objc func calSyncUpsert(_ call: CAPPluginCall) {
+        guard let c = syncCalendar(call.getString("calendarId")), let title = call.getString("title"),
+              let s = call.getDouble("startMs"), let e = call.getDouble("endMs") else { call.reject("calendar/title/startMs/endMs"); return }
+        let id = call.getString("id") ?? ""
+        let ev = (id.isEmpty ? nil : store.calendarItem(withIdentifier: id) as? EKEvent) ?? EKEvent(eventStore: store)
+        ev.calendar = c; ev.title = title
+        ev.startDate = Date(timeIntervalSince1970: s / 1000); ev.endDate = Date(timeIntervalSince1970: e / 1000)
+        if let n = call.getString("notes"), !n.isEmpty { ev.notes = n }
+        if let u = call.getString("url"), let url = URL(string: u) { ev.url = url }
+        do { try store.save(ev, span: .thisEvent, commit: true); call.resolve(["id": ev.calendarItemIdentifier]) } catch { call.reject("\(error)") }
+    }
+    @objc func calSyncRemove(_ call: CAPPluginCall) {
+        guard let id = call.getString("id") else { call.reject("id"); return }
+        guard let ev = store.calendarItem(withIdentifier: id) as? EKEvent else { call.resolve(); return } // already gone
+        do { try store.remove(ev, span: .thisEvent, commit: true); call.resolve() } catch { call.reject("\(error)") }
     }
 
     // MARK: location

@@ -5,12 +5,12 @@
     <div v-else-if="view === 'error'" class="eh-line"><p class="eh-muted">Couldn't reach your {{ hl }}-hour day<span v-if="eh.st.error"> ({{ eh.st.error }})</span>.</p><button class="eh-btn" @click="$emit('retry')">Retry</button></div>
 
     <p v-if="view !== 'error' && view !== 'loading' && eh.st.data && eh.st.data.offline" class="eh-muted" data-test="eh-offline">Offline mode: the countdown lock starts once the server is reachable. <button class="eh-btn" @click="$emit('retry')">Retry</button></p>
-    <!-- no plan yet: one compact row (wake time + task count), then it is locked when the day starts -->
+    <!-- no plan yet: one compact row (wake time + the min/max task range for the chosen hours), then it is locked when the day starts -->
     <template v-else-if="view === 'setup'">
       <div class="eh-line"><b class="eh-title">⏱ Set your day</b><button class="eh-btn eh-btn--primary" :disabled="busy || !wake" @click="save" data-test="eh-save">Lock in</button></div>
       <div class="eh-ctrl">
         <label class="eh-mini">Wake <input type="time" v-model="wake" data-test="eh-wake" /></label>
-        <span class="eh-mini">Planned <span class="eh-stepper"><button type="button" :disabled="count <= 1" @click="count--" aria-label="Fewer tasks">−</button><strong data-test="eh-count">{{ count }}</strong><button type="button" :disabled="count >= max" @click="count++" aria-label="More tasks">+</button></span></span>
+        <span class="eh-fine" data-test="eh-range">{{ rangeLine }}</span>
       </div>
       <p v-if="msg" class="eh-err" role="alert">{{ msg }}</p>
     </template>
@@ -20,19 +20,17 @@
       <p v-if="stats.warning && !(eh.st.data && eh.st.data.offline)" class="eh-note eh-alert--boss" data-test="eh-alert">⚠️ {{ stats.warning }}</p>
       <div class="eh-line">
         <p class="eh-big" data-test="eh-starts">{{ phase === 'before' ? 'Starts ' + fmtWake : 'Ready' }}<small> · Ends {{ ends }}</small></p>
-        <button v-if="phase === 'ready' && taskTotal === plan.taskCount && taskTotal > 0" class="eh-btn eh-btn--primary" data-test="eh-start" @click="$emit('start')">Start</button>
+        <button v-if="phase === 'ready' && inRange" class="eh-btn eh-btn--primary" data-test="eh-start" @click="$emit('start')">Start</button>
         <span v-else class="eh-badge">Not started</span>
       </div>
-      <p class="eh-muted" v-if="phase === 'ready' && needMore <= 0" data-test="eh-all-added">All {{ plan.taskCount }} task{{ plan.taskCount === 1 ? '' : 's' }} added.</p>
-      <p class="eh-muted" v-else-if="phase === 'ready'" data-test="eh-needs-tasks">You planned {{ plan.taskCount }}, your list has {{ taskTotal }}. Add {{ needMore }} more task{{ needMore === 1 ? '' : 's' }} to start the countdown<template v-if="taskTotal > 0">, or <button type="button" class="eh-link" :disabled="busy" data-test="eh-match" @click="count = Math.min(max, taskTotal); save()">plan {{ taskTotal }} instead</button></template>.</p>
-      <p class="eh-muted" v-else data-test="eh-planned-vs-list">Planned {{ plan.taskCount }} task{{ plan.taskCount === 1 ? '' : 's' }} · {{ taskTotal }} on your list. After your wake time you'll pick today's hours and confirm.</p>
-      <div class="eh-ctrl">
-        <label class="eh-mini" v-if="phase === 'before'">Wake <input type="time" v-model="wake" data-test="eh-wake" /></label>
-        <button v-if="phase === 'before' && wake !== plan.wakeTime" class="eh-btn" :disabled="busy" @click="save">Save</button>
-        <span class="eh-mini">Planned <span class="eh-stepper"><button type="button" :disabled="busy || count <= 1" @click="count--; save()" aria-label="Fewer tasks">−</button><strong data-test="eh-count">{{ count }}</strong><button type="button" :disabled="busy || count >= max" @click="count++; save()" aria-label="More tasks">+</button></span></span>
+      <!-- ONE compact line: the min/max range for the chosen hours + what is on the list (no stepper, no "plan N instead") -->
+      <p class="eh-muted" data-test="eh-range">{{ rangeLine }} · {{ taskTotal }} on your list.<template v-if="needMore > 0"> Add {{ needMore }} more to start.</template><template v-else-if="phase === 'before'"> After your wake time you'll pick today's hours and confirm.</template></p>
+      <div class="eh-ctrl" v-if="phase === 'before'">
+        <label class="eh-mini">Wake <input type="time" v-model="wake" data-test="eh-wake" /></label>
+        <button v-if="wake !== plan.wakeTime" class="eh-btn" :disabled="busy" @click="save">Save</button>
         <span class="eh-fine">Locked once started</span>
       </div>
-      <p v-if="taskTotal > plan.taskCount" class="eh-err" data-test="eh-over" role="alert">Your list has {{ taskTotal }} tasks but you planned {{ plan.taskCount }}. <button type="button" class="eh-link" :disabled="busy" data-test="eh-match-over" @click="count = Math.min(max, taskTotal); save()">Plan {{ taskTotal }}</button> to start.</p>
+      <p v-if="overBy > 0" class="eh-err" data-test="eh-over" role="alert">Over the max of {{ range.max }} tasks. Remove {{ overBy }} to start.</p>
       <p v-if="startError" class="eh-err" role="alert">{{ startError }}</p>
       <p v-if="msg" class="eh-err" role="alert">{{ msg }}</p>
     </template>
@@ -81,7 +79,7 @@
 import { ref, computed, watch } from 'vue';
 import { useEightHour } from '@/composables/useEightHour';
 import { paceOf, topAlert, badgeLabel, levelOf } from '@/utils/pressure';
-import { MAX_TASKS_PER_DAY, progressOf, countableIndexes, fmtWakeLabel, hoursLabel } from '@/utils/eightHour';
+import { progressOf, countableIndexes, fmtWakeLabel, hoursLabel, taskRange } from '@/utils/eightHour';
 
 // tasks = today's stored task array (all of it; hidden recurring copies are excluded by progressOf/countable logic)
 const props = defineProps({ tasks: { type: Array, default: () => [] }, startError: { type: String, default: '' } });
@@ -89,10 +87,9 @@ defineEmits(['retry', 'start']);
 const eh = useEightHour();
 const { phase, plan, lock, stats, reward, countdown } = eh;
 const starts = computed(() => eh.startsLabel.value);
-const max = MAX_TASKS_PER_DAY;
-const wake = ref('07:00'); const count = ref(3); const msg = ref('');
+const wake = ref('07:00'); const msg = ref('');
 const busy = computed(() => eh.st.busy);
-watch(plan, (p) => { if (p) { wake.value = p.wakeTime; count.value = p.taskCount; } }, { immediate: true });
+watch(plan, (p) => { if (p) wake.value = p.wakeTime; }, { immediate: true });
 
 const view = computed(() => {
   if (!eh.st.loaded) return eh.st.error ? 'error' : 'loading';
@@ -106,7 +103,12 @@ const hl = computed(() => hoursLabel(eh.dayHours.value));
 const fmtWake = computed(() => (plan.value ? fmtWakeLabel(plan.value.wakeTime) : ''));
 const dayKey = computed(() => eh.phaseInfo.value.dayKey || '');
 const taskTotal = computed(() => countableIndexes(props.tasks || [], dayKey.value).length);
-const needMore = computed(() => Math.max(0, (plan.value?.taskCount || 0) - taskTotal.value));
+// Min/max tasks for the chosen hours (eightHourCore.taskRange): Start needs min <= list <= max; adding past max is blocked in HomeView.
+const range = computed(() => taskRange(eh.dayHours.value));
+const rangeLine = computed(() => `Min ${range.value.min} · max ${range.value.max} tasks for ${hl.value} hours`);
+const needMore = computed(() => Math.max(0, range.value.min - taskTotal.value));
+const overBy = computed(() => Math.max(0, taskTotal.value - range.value.max));
+const inRange = computed(() => needMore.value === 0 && overBy.value === 0);
 const progress = computed(() => (lock.value ? progressOf({ dayKey: lock.value.dayKey, points: lock.value.points }, props.tasks) : { earned: 0, done: 0, total: 0 }));
 const pct = computed(() => (lock.value && lock.value.target > 0 ? Math.min(100, Math.round((progress.value.earned / lock.value.target) * 100)) : 0));
 const pace = computed(() => (lock.value ? paceOf({ earned: progress.value.earned, target: lock.value.target || 0, startMs: lock.value.startMs, endMs: lock.value.endMs, nowMs: (countdown.value, eh.nowMs()) }) : { timePct: 0, pointsPct: 0, expected: 0, behindBy: 0, leftMs: 0 }));
@@ -121,7 +123,9 @@ const met = computed(() => (lock.value ? progress.value.earned >= lock.value.tar
 
 const save = async () => {
   msg.value = '';
-  try { await eh.savePlan({ wakeTime: wake.value, taskCount: count.value }); } catch (e) { msg.value = e.status === 423 ? `Locked: your ${hl.value}-hour day is running.` : (e.message || 'Could not save'); }
+  // plan.taskCount is internal now (the server still wants 1..MAX); store the list size clamped into the range.
+  const taskCount = Math.min(range.value.max, Math.max(range.value.min, taskTotal.value));
+  try { await eh.savePlan({ wakeTime: wake.value, taskCount }); } catch (e) { msg.value = e.status === 423 ? `Locked: your ${hl.value}-hour day is running.` : (e.message || 'Could not save'); }
 };
 </script>
 
@@ -148,10 +152,6 @@ const save = async () => {
 .eh-ctrl { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 2px 0 2px; }
 .eh-mini { display: inline-flex; align-items: center; gap: 6px; font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--c-text-3, #9aa3b5); }
 .eh-mini input[type=time] { background: var(--c-bg, #0f1113); color: var(--c-text, #e6e6e6); border: 1px solid var(--c-border, #2a2a2e); border-radius: 8px; padding: 3px 6px; font-size: 16px; max-width: 100%; }
-.eh-stepper { display: inline-flex; align-items: center; gap: 6px; }
-.eh-stepper button { touch-action: manipulation; width: 24px; height: 24px; border-radius: 50%; border: 1px solid var(--c-border, #2a2a2e); background: var(--c-surface-2, #22252a); color: inherit; font-size: .9rem; line-height: 1; cursor: pointer; padding: 0; }
-.eh-stepper button:disabled { opacity: .4; cursor: not-allowed; }
-.eh-stepper strong { font-size: .9rem; min-width: 1ch; color: var(--c-text, #e6e6e6); text-transform: none; }
 .eh-btn { font-family: inherit; font-size: .75rem; font-weight: 700; min-height: 44px; min-width: 44px; border-radius: 999px; border: 1px solid var(--c-border, #2a2a2e); background: var(--c-surface-2, #22252a); color: inherit; padding: 4px 12px; cursor: pointer; }
 .eh-btn--primary { background: var(--c-accent, #378ADD); color: var(--c-on-accent, #fff); border-color: transparent; }
 .eh-btn:disabled { opacity: .5; cursor: not-allowed; }

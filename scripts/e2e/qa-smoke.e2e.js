@@ -35,11 +35,9 @@ const fn = (body, headers) => handler({ httpMethod: 'POST', headers, body }, {},
   }
   for (let i = 0; i < 3; i++) { const b = p.locator('.dsp-skip, .drama button'); if (await b.count()) { await b.first().click({ timeout: 3000 }).catch(() => {}); await sleep(600); } }
   await sleep(2000); await p.screenshot({ path: SHOTS + 'qa_home_plan.png', fullPage: true });
-  const pv = p.locator('[data-test=eh-planned-vs-list], [data-test=eh-needs-tasks]');
-  ok('count card shows planned vs list', await pv.count() > 0 && /6.*7|7.*6/.test(await pv.first().innerText()), await pv.count() ? await pv.first().innerText() : 'missing');
-  const plus = p.locator('[data-test=eight-hour-card] button[aria-label="More tasks"]');
-  if (await plus.count()) ok('+ enabled above 5 (max 50)', await plus.first().isEnabled());
-  else console.log('note: no editable stepper in this phase (plan already saved)');
+  const pv = p.locator('[data-test=eight-hour-card] [data-test=eh-range]');
+  ok('card shows the min/max range for the hours + list size', await pv.count() > 0 && /Min \d+ · max \d+ tasks for [\d.]+ hours/.test(await pv.first().innerText()), await pv.count() ? await pv.first().innerText() : 'missing');
+  ok('no Planned stepper on the card', await p.locator('[data-test=eight-hour-card] button[aria-label="More tasks"], [data-test=eight-hour-card] [data-test=eh-match]').count() === 0);
   const st = p.locator('[data-test=eh-starts]');
   if (await st.count()) {
     const sb = await st.boundingBox(); let hit = 0;

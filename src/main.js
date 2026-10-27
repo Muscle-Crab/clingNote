@@ -3,6 +3,8 @@ import App from './App.vue'
 import router from './router'
 import store from './store'
 import './assets/ui.css'
+import './assets/theme-light.css'
+import { initAppearance } from './composables/useAppearance'
 
 import OneSignalVue from '@onesignal/onesignal-vue3'
 import { isNative, isNativeIOS } from './utils/platform'
@@ -17,6 +19,7 @@ import { interceptBlankLinks } from './utils/openExternal'
 try { const bp = loadPrefs(); applyBackgroundImage(bp.image, loadCustomImage()); } catch (e) { /* cosmetic only */ }
 
 interceptBlankLinks(); // iOS shell: target=_blank links open in the in-app browser
+try { initAppearance(); } catch (e) { /* cosmetic only */ } // theme (system/light/dark) + text size, before first render
 
 const app = createApp(App);
 

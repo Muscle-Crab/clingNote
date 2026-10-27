@@ -65,7 +65,7 @@
         <DayStartPrompt v-if="dayPromptOpen" :initial-hours="eh.hoursPref.value" :now-ms="eh.nowMs" :tz="eh.plan.value?.tz || ''" :busy="ehBusy" :error="ehStartError" :tasks="todayTasksForTarget" :stats="eh.stats.value" :earned="pointsAccumulated || 0" @confirm="confirmDayStart" @skip="skipLockIn" />
 
         <ProgressBar :percentage="calculateCompletionPercentage()" :milestones="milestones" :done="completedTaskCount || 0" :total="dayTasks.length"
-                     :streak="streak" :streak-status="streakStatus" :streak-progress="streakProgress" :streak-min="DAILY_STREAK_MIN" :points="pointsAccumulated || 0" :target="isViewingToday ? dayRequiredPts : 0" />
+                     :streak="streak" :streak-status="streakStatus" :streak-progress="streakProgress" :streak-min="DAILY_STREAK_MIN" :freezes="streakFreezes" :points="pointsAccumulated || 0" :target="isViewingToday ? dayRequiredPts : 0" />
 
       </section>
       <ShutdownPrompt class="home-notice" :suggest="false" :open="shutdownOpen" :done="shutdownDone" :open-tasks="shutdownOpenTasks"
@@ -248,7 +248,8 @@ import BackgroundPanel from '@/components/background/BackgroundPanel.vue';
 import { useBackground } from '@/composables/useBackground';
 import { buildRecap, reportDue, prevDay } from '@/utils/dailyReport';
 import { monthKey, prevMonthKey } from '@/utils/ranking';
-import { applyTaskToggle, evaluateStreak, localDateStr, dayDiff, ALLOWED_GAP_DAYS, DAILY_STREAK_MIN, capStreak, lostReason } from '@/utils/streak';
+import { applyTaskToggle, evaluateStreak, localDateStr, dayDiff, ALLOWED_GAP_DAYS, DAILY_STREAK_MIN, capStreak, lostReason, applyFreezes } from '@/utils/streak';
+import { pickTimerIntent } from '@/utils/siriIntents';
 import { askAi } from '@/composables/useAi';
 import { ensureAiConsent, hasAiConsent } from '@/composables/useAiConsent';
 import { useRouter as _useRouter } from 'vue-router';
@@ -331,7 +332,7 @@ import { lockIn, loadLockIn, skipLockInToday } from '@/utils/lockIn';
 import { homeDay } from '@/utils/homeDay';
 import DayStartPrompt from '@/components/eighthour/DayStartPrompt.vue';
 import { useEightHour, syncAfterAuth, setDayLengthHours, loadDayLengthHours, promptSeenFor, markPromptSeen } from '@/composables/useEightHour';
-import { countableIndexes } from '@/utils/eightHour';
+import { countableIndexes, taskRange, hoursLabel } from '@/utils/eightHour';
 import { estimateFor, chipValues } from '@/utils/taskEstimate';
 import { patchTouchesLocked } from '@/utils/eightHourLock';
 import { isDayLocked, isLockError, assertTasksChangeAllowed, lockedMessage, isShutdown, shutMessage } from '@/utils/eightHourLock';
@@ -360,7 +361,7 @@ const agentAdd = ref(false); // true while the assistant adds tasks: over-limit 
 import { ugcHidden, voiceInputBlocked, isNativeIOS } from '@/utils/platform';
 import { splitSpokenTasks, voiceCapability, UNDO_MS } from '@/utils/voiceSplit';
 import { interpretSpeech } from '@/utils/voiceInterpret';
-import { raisedPlan } from '@/utils/planRaise';
+import { capBlockMessage } from '@/utils/taskCap';
 import { saveReminder } from '@/utils/reminders';
 import { startNativeSpeech, nativeSpeechAvailable } from '@/composables/useNativeSpeech';
 import WontDoModal from '@/components/home/WontDoModal.vue';
@@ -423,11 +424,13 @@ const blockIfLocked = (dayIdx = selectedDayIndex.value) => {
 // 8-hour hard stop: once today's started day has ended, every task action is refused until the next wake time (data layer also guards).
 const blockIfShut = () => { if (!isShutdown()) return false; alert(shutMessage()); return true; };
 const lockMessage = (e) => { if (isLockError(e)) { alert(e.message); return true; } return false; };
-// the planned task count (set before the countdown) limits what today's list may hold until the countdown starts
-const planFull = () => {
+// Locked-in day (planned, countdown not started): today's list may grow past the minimum up to the overload cap for the chosen hours.
+// Returns the block message when adding one more would pass the cap, otherwise null. Adding never changes plan.taskCount.
+const planOverCap = () => {
   const plan = eh.plan.value; const ph = eh.phase.value;
-  if (!plan || (ph !== 'before' && ph !== 'ready')) return false;
-  return countableIndexes(selectedDayRoutine.value || [], eh.phaseInfo.value.dayKey || '').length >= plan.taskCount;
+  if (!plan || (ph !== 'before' && ph !== 'ready')) return null;
+  const countNow = countableIndexes(selectedDayRoutine.value || [], eh.phaseInfo.value.dayKey || '').length;
+  return capBlockMessage(countNow, 1, taskRange(eh.dayHours.value), hoursLabel(eh.dayHours.value));
 };
 
 const saveSelectedDayTasks = async () => {
@@ -1620,7 +1623,7 @@ onBeforeUnmount(() => { if (disciplineTimer) clearInterval(disciplineTimer); });
 const applyStreakState = (st) => {
   const ev = evaluateStreak(st, localDateStr(), streakGap());
   streak.value = ev.streak; bestStreak.value = ev.bestStreak; lastCompletionDate.value = ev.lastCompletionDate;
-  streakStatus.value = ev.status; streakProgress.value = ev.progress;
+  streakStatus.value = ev.status; streakProgress.value = ev.progress; streakFreezes.value = ev.freezeBank || 0;
   try { localStorage.setItem(`streakCache_${userId.value}`, JSON.stringify(st)); } catch (e) { /* cache only */ }
 };
 // Called when a task on today's tab is (un)completed; counts distinct non-pending tasks toward DAILY_STREAK_MIN.
@@ -1989,11 +1992,11 @@ const addNewTask = async () => {
 
   // 8-hour lock: nothing can be added to the locked day (including repeating copies); before the countdown the plan count is the cap
   // (adds ARE allowed during the locked window; they are appended so the locked slots never move. Deletes stay blocked.)
-  // Locked-in plan full (before the countdown): adding just works and raises the required count by one (no prompt, no block).
-  // Previously this refused the add with "Raise the task count in the 8-hour card first", the reported bug.
-  let planBump = null;
-  if (selectedDays.some((d) => d.day === days[selectedDayIndex.value].day) && isToday(selectedDayIndex.value) && !isDayLocked(days[selectedDayIndex.value].day) && planFull()) {
-    planBump = raisedPlan(eh.plan.value, countableIndexes(selectedDayRoutine.value || [], eh.phaseInfo.value.dayKey || '').length, 1);
+  // Locked-in plan (before the countdown): adding past the minimum just works, up to the overload cap for the chosen hours.
+  // Past the cap the add is refused with a short message. The plan count is NOT bumped (Start needs min <= count <= max, not an exact match).
+  if (selectedDays.some((d) => d.day === days[selectedDayIndex.value].day) && isToday(selectedDayIndex.value) && !isDayLocked(days[selectedDayIndex.value].day)) {
+    const capMsg = planOverCap();
+    if (capMsg) { error.value = capMsg; return false; }
   }
 
   const labels =
@@ -2072,7 +2075,6 @@ const addNewTask = async () => {
     fetchUserName(userId.value).then((n) => n && sendNotificationToPlayer(n, 'created')).catch(() => {});
     return true;
   })());
-  if (planBump) lastAddPersist.then((ok) => ok && eh.savePlan(planBump)).catch((e) => console.warn('plan raise failed', e && e.message)); // required count +1 once the task is saved
   return true;
 };
 let lastAddPersist = Promise.resolve(true);
@@ -2348,6 +2350,7 @@ const lastCompletionDate = ref(null);
 const bestStreak = ref(0);
 const streakProgress = ref(0); // distinct non-pending tasks completed today
 const streakStatus = ref('none'); // none | done | at-risk | broken
+const streakFreezes = ref(0); // held freeze days (auto-cover a missed day)
 const userSettingsStreakGap = ref(ALLOWED_GAP_DAYS); // allowed days between counted days (1 = no skips)
 const unlockedBadges = ref([]);
 const motivationalMessage = ref('');
@@ -2396,10 +2399,20 @@ const checkStreakOnCompletion = async () => {
     const streakDocRef = doc(db, 'streaks', userId.value);
     const snap = await getDoc(streakDocRef);
     if (!snap.exists()) { streakStatus.value = 'none'; return; }
-    const data = snap.data();
+    let data = snap.data();
     unlockedBadges.value = data.unlockedBadges || [];
     let ev = evaluateStreak(data, localDateStr(), streakGap());
-    // Earned streak freeze (7-day milestone) covers exactly one missed day.
+    // Held freeze days (1 per 7 counted days in a row, max 2) auto-cover missed days so the streak holds.
+    if (ev.status === 'broken' && data.streak) {
+      const fz = applyFreezes(data, localDateStr(), streakGap());
+      if (fz.used) {
+        const { lastCompletionDate: lc, counted, freezeBank, frozenDates } = fz.state;
+        await setDoc(streakDocRef, { lastCompletionDate: lc, counted, freezeBank, frozenDates, updatedAt: serverTimestamp() }, { merge: true });
+        data = { ...data, lastCompletionDate: lc, counted, freezeBank, frozenDates };
+        ev = evaluateStreak(data, localDateStr(), streakGap());
+      }
+    }
+    // Legacy: earned streak freeze (7-day milestone) covers exactly one missed day.
     if (ev.status === 'broken' && data.streak && data.lastCompletionDate && dayDiff(data.lastCompletionDate, localDateStr()) === streakGap() + 1) {
       const y = new Date(); y.setDate(y.getDate() - 1);
       if (await tryFreeze(userId.value, data, [localDateStr(y)], rewardsFor(data.bestStreak || 0).freezes)) {
@@ -3442,11 +3455,14 @@ const confirmDayStart = async (hours) => {
   try {
     await setDayLengthHours(hours); // remembered as next morning's preselection (users/{uid}.dayLengthHours + localStorage)
     await lastAddPersist; // the server counts what is stored: wait for any pending add
+    // Compat with a server that still requires plan.taskCount === list size: sync it to what is stored first (allowed in the ready phase).
+    { const plan = eh.plan.value; const n = countableIndexes(selectedDayRoutine.value || [], eh.phaseInfo.value.dayKey || '').length; const r = taskRange(hours);
+      if (plan && n >= 1 && n <= r.max && plan.taskCount !== n) await eh.savePlan({ wakeTime: plan.wakeTime, taskCount: n }).catch((e) => console.warn('plan sync:', e && e.message)); }
     await eh.startNow(hours);
     dayPromptOpen.value = false;
     await ensureLegacyDayStarted().catch((e) => console.warn('day session:', e));
     await fetchSelectedDayRoutine();
-  } catch (e) { ehStartError.value = e.code === 'no-tasks' ? 'Add at least one task first, then confirm.' : (e.message || 'Could not start the countdown'); }
+  } catch (e) { { const r = taskRange(hours); ehStartError.value = (e.code === 'no-tasks' || e.code === 'too-few') ? `Add at least ${r.min} task${r.min === 1 ? '' : 's'} for ${hoursLabel(r.hours)} hours, then confirm.` : e.code === 'too-many' ? `At most ${r.max} tasks for ${hoursLabel(r.hours)} hours. Remove some, then confirm.` : (e.message || 'Could not start the countdown'); } }
   finally { ehStarting = false; ehBusy.value = false; }
 };
 
@@ -3522,6 +3538,24 @@ watch(userId, (u) => { if (u) setTimeout(drainIntents, 1500); });
 const onIntentVisible = () => { if (!document.hidden) { drainIntents(); syncAppLock(); } };
 onMounted(() => { setTimeout(drainIntents, 1500); document.addEventListener('visibilitychange', onIntentVisible); });
 onBeforeUnmount(() => document.removeEventListener('visibilitychange', onIntentVisible));
+// ---- Siri "Start a timer in ClingNote" (ClingIntents.StartTimerIntent queues {taskId, minutes, ts}; latest fresh request wins) ----
+let timerDraining = false;
+const drainTimerIntents = async () => {
+  if (!nativeAvailable() || timerDraining || !userId.value || todayIdx.value < 0) return; timerDraining = true;
+  try {
+    const r = await clingNative.takeTimerIntents(); if (!(r.items || []).length) return;
+    if (!isViewingToday.value) { selectedDayIndex.value = todayIdx.value; await fetchSelectedDayRoutine(); }
+    const pick = pickTimerIntent(r.items, selectedDayRoutine.value);
+    if (!pick) return;
+    if (pick.error) { showNoteToast(`Siri timer: ${pick.error}`, { error: true }); return; }
+    selectedTimerTaskIndex.value = pick.index; selectedTimerHours.value = Math.floor(pick.minutes / 60); selectedTimerMinutes.value = pick.minutes % 60;
+    if ((await startTimer()) !== false) showNoteToast(`Timer started: ${pick.minutes} min for “${pick.title}”`);
+  } catch (e) { console.warn('siri timer', e && e.message); } finally { timerDraining = false; }
+};
+const onTimerIntentVisible = () => { if (!document.hidden) setTimeout(drainTimerIntents, 800); };
+watch(userId, (u) => { if (u) setTimeout(drainTimerIntents, 2000); });
+onMounted(() => { setTimeout(drainTimerIntents, 2000); document.addEventListener('visibilitychange', onTimerIntentVisible); });
+onBeforeUnmount(() => document.removeEventListener('visibilitychange', onTimerIntentVisible));
 watch(dayRequiredPts, (n) => { if (isViewingToday.value && isNativeIOS()) import('@/utils/widgetSync').then((m) => m.setWidgetDayTarget(n)).catch(() => {}); }, { immediate: true });
 const openAssistant = (listen = false) => {
   if (userId.value) loadAssistant(userId.value);

@@ -23,4 +23,13 @@ export const clingNative = {
   startFocusActivity: safe('ClingNative', Native, (p, title, endsAtMs) => p.startFocusActivity({ title, endsAtMs }), { started: false }),
   endFocusActivity: safe('ClingNative', Native, (p) => p.endFocusActivity(), {}),
   takeIntents: safe('ClingNative', Native, (p) => p.takeIntents(), { items: [] }),
+  // Two-way calendar sync (utils/calendarSync.js): one dedicated "ClingNote" calendar; events carry url clingnote://task/<key>.
+  calSyncEnsure: safe('ClingNative', Native, (p, calendarId = '') => p.calSyncEnsure({ calendarId }), { calendarId: '' }),
+  calSyncList: safe('ClingNative', Native, (p, calendarId, fromMs, toMs) => p.calSyncList({ calendarId, fromMs, toMs }), { events: [] }),
+  calSyncUpsert: safe('ClingNative', Native, (p, ev) => p.calSyncUpsert(ev), { id: '' }),
+  calSyncRemove: safe('ClingNative', Native, (p, id) => p.calSyncRemove({ id }), {}),
+  // Siri "Start timer" queue (ClingIntents.StartTimerIntent), drained once like takeIntents.
+  takeTimerIntents: safe('ClingNative', Native, (p) => p.takeTimerIntents(), { items: [] }),
+  // Text size: WKWebView.pageZoom (whole-page zoom with reflow, like Safari's aA menu).
+  setPageZoom: safe('ClingNative', Native, (p, zoom) => p.setPageZoom({ zoom }), {}),
 };
