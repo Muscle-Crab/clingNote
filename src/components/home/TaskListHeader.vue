@@ -30,14 +30,12 @@
           <button v-if="!isDefaultPrefs(prefs)" class="sort-reset" @click="$emit('update:prefs', { sort: 'manual', filter: 'all' })">Reset</button>
         </div>
       </div>
-      <AssistantBubble :live="assistantLive" @open="$emit('open-assistant', $event)" />
     </div>
   </div>
 </template>
 
 <script setup>
 import { ref, watch, onBeforeUnmount } from 'vue';
-import AssistantBubble from './AssistantBubble.vue';
 import { SORT_OPTIONS, FILTER_OPTIONS, DEFAULT_PREFS, isDefaultPrefs, canReorder } from '@/utils/taskView';
 const open = ref(false);
 const sortWrap = ref(null);

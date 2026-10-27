@@ -28,7 +28,6 @@
             <button type="button" class="bg-pill" data-test="open-background-pill" aria-label="Background: animation and music" @click="showBackground = true">🎧 Background<span class="bg-pill-sub">picture · snow · rain · music</span></button>
           </div>
           <div ref="heroMenuEl" class="hero-menu">
-            <button type="button" class="hero-menu-btn hero-ask-btn" data-test="open-ask" aria-label="Assistant (AI)" title="Assistant" @click="openAssistant(false)">✨</button>
             <button type="button" class="hero-menu-btn" :aria-label="noticeCount ? noticeCount + ' updates and day menu' : 'Day menu'" :aria-expanded="menuOpen ? 'true' : 'false'" @click="menuOpen = !menuOpen">
               <i class="fas fa-bell" aria-hidden="true"></i>
               <span v-if="noticeCount" class="hero-badge" :class="{ 'hero-badge--alert': disciplineWarning === '30m' || bossLines.some((l) => l.kind === 'evening' || l.kind === 'watching') }">{{ noticeCount }}</span>
@@ -196,7 +195,7 @@
       <ScheduledList v-if="userId" :tasks="futureScheduled" :today-str="todayStr" :error="scheduledError" :series="templatesOf(scheduledList)" @edit="editScheduledEntry"
                      @move-today="moveScheduledToToday" @update="updateScheduledDate" @delete="deleteScheduled" />
 
-      <FabButtons :show-add="false" :user-id="userId" :listening="listening" :show-voice="!voiceBlocked || nativeVoiceIn" @add="onAddClick" @voice="startVoiceInput" />
+      <FabButtons :show-add="false" :user-id="userId" :assistant-live="askOpen" @add="onAddClick" @assistant="openAssistant" />
 
 
     </div>
@@ -2547,6 +2546,7 @@ if (voiceSupported && !nativeVoiceIn) {
   console.warn("Speech recognition not supported in this browser.");
 }
 // Hands-free capture: every finished phrase is split ("and then" / "next") and each part saved immediately, with a 5 s undo.
+const ASSIST_UNDO_MS = 20000;
 const voiceAdded = ref([]); // [{ id, title, createdAt, dayName, undoUntil }]
 const voiceQueue = [];
 // Every finished phrase (web webkitSpeechRecognition or native SFSpeechRecognizer) is interpreted into items
@@ -3366,6 +3366,12 @@ const assistantExecutor = createAssistantExecutor({
     try {
       const ok = !!(await addNewTask()) && (it.type === 'schedule' || !!deferredDateFor(it.date, getTodayId()) || (await lastAddPersist));
       const lim = limitHit.value;
+      if (ok && it.type !== 'schedule' && !deferredDateFor(it.date, getTodayId())) { // same Undo chip the old mic gave (kept longer: the sheet may still be open)
+        const saved = [...(selectedDayRoutine.value || [])].filter((x) => x.title === it.title).sort((x, y) => String(y.createdAt).localeCompare(String(x.createdAt)))[0];
+        const entry = { id: `${Date.now()}-${Math.random()}`, title: it.title, createdAt: saved?.createdAt, dayName: days[selectedDayIndex.value]?.day, undoUntil: Date.now() + ASSIST_UNDO_MS };
+        voiceAdded.value = [...voiceAdded.value, entry];
+        setTimeout(() => { voiceAdded.value = voiceAdded.value.map((e) => (e.id === entry.id ? { ...e, undoUntil: 0 } : e)); }, ASSIST_UNDO_MS);
+      }
       return ok ? { ok: true } : { ok: false, error: lim ? `Daily limit reached (${lim.limit}/day).` : error.value || 'not saved', limit: !!lim };
     } finally { capOverride.value = false; agentAdd.value = false; newTask.value = blankTask(); }
   },
