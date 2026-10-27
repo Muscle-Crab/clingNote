@@ -12,6 +12,8 @@
 	<array>
 		<string>group.app.clingnote.ios</string>
 	</array>
+	<key>com.apple.developer.usernotifications.time-sensitive</key>
+	<true/>
 	<key>com.apple.developer.associated-domains</key>
 	<array>
 		<string>applinks:clingnot.netlify.app</string>

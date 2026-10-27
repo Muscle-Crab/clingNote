@@ -44,7 +44,7 @@ const routes = [
   {
     path: '/paywall',
     name: 'paywall',
-    redirect: (to) => ({ path: '/onboarding', query: { ...to.query, step: 6 } }) // 6 = STEPS.length in OnboardingView = the plans (paywall) panel
+    redirect: (to) => ({ path: '/onboarding', query: { ...to.query, step: 'paywall' } }) // 'paywall' = STEPS.length in OnboardingView (the plans panel), whatever optional steps (alarm, app lock) exist
   },
   {
     path: '/pro/success',

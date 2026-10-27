@@ -98,5 +98,6 @@ class AppBridgeViewController: CAPBridgeViewController {
         bridge?.registerPluginInstance(ClingLockPlugin())
         #endif
         bridge?.registerPluginInstance(ClingNativePlugin())
+        bridge?.registerPluginInstance(ClingAlarmPlugin())
     }
 }

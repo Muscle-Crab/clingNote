@@ -307,5 +307,6 @@ struct ClingNoteWidgets: WidgetBundle {
         QuickAddWidget()
         MatchupWidget()
         if #available(iOS 16.1, *) { FocusLiveActivity() }
+        if #available(iOS 26.0, *) { WakeAlarmLiveActivity() } // AlarmKit wake-up alarm snooze countdown
     }
 }

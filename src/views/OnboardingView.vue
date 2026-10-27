@@ -28,22 +28,30 @@
       </section>
 
       <section v-else-if="STEPS[step] === 'goals'" class="ob-sec">
-        <p class="ob-k">Step 1</p><h1 class="ob-h">What do you want to <span>nail?</span></h1><p class="ob-p">Pick all that apply.</p>
+        <p class="ob-k">Step {{ stepNo('goals') }}</p><h1 class="ob-h">What do you want to <span>nail?</span></h1><p class="ob-p">Pick all that apply.</p>
         <div class="ob-grid">
           <button v-for="g in GOALS" :key="g.id" class="ob-opt" :class="{ on: a.goals.includes(g.id) }" @click="toggle(g.id)"><span class="em">{{ g.e }}</span>{{ g.l }}</button>
         </div>
       </section>
 
       <section v-else-if="STEPS[step] === 'schedule'" class="ob-sec">
-        <p class="ob-k">Step 2</p><h1 class="ob-h">Your daily <span>rhythm</span></h1><p class="ob-p">We'll nudge you to start your day and wrap it up on time.</p>
+        <p class="ob-k">Step {{ stepNo('schedule') }}</p><h1 class="ob-h">Your daily <span>rhythm</span></h1><p class="ob-p">We'll nudge you to start your day and wrap it up on time.</p>
         <div class="ob-field" data-test="ob-wake-locked"><span>☀️ Your day can start from</span><b>{{ wakeLabel }}</b></div>
         <p class="ob-p ob-small">You picked this before signing up. Each morning you pick 3 to 12 hours and confirm. Once confirmed, those hours are locked.</p>
         <label class="ob-field"><span>🎯 Tasks done by</span><input type="time" v-model="a.deadline" /></label>
         <label class="ob-field"><span>🌙 Bedtime</span><input type="time" v-model="a.bedTime" /></label>
       </section>
 
+      <section v-else-if="STEPS[step] === 'alarm'" class="ob-sec" data-test="ob-alarm">
+        <div class="ob-bell">⏰</div>
+        <p class="ob-k">Step {{ stepNo('alarm') }}</p><h1 class="ob-h">Want a <span>wake-up alarm?</span></h1>
+        <p class="ob-p">ClingNote can ask you each day if you want an alarm, and ring at your time even on silent.</p>
+        <label class="ob-field"><span>⏰ Alarm time</span><input type="time" v-model="alarmTime" data-test="ob-alarm-time" /></label>
+        <p class="ob-p ob-small">You can change this anytime in Settings.</p>
+      </section>
+
       <section v-else-if="STEPS[step] === 'strictness'" class="ob-sec">
-        <p class="ob-k">Step 3</p><h1 class="ob-h">How strict should <span>your robot</span> be?</h1>
+        <p class="ob-k">Step {{ stepNo('strictness') }}</p><h1 class="ob-h">How strict should <span>your robot</span> be?</h1>
         <button v-for="s in STRICT" :key="s.id" class="ob-row" :class="{ on: a.strictness === s.id }" @click="a.strictness = s.id">
           <RobotCoach v-if="s.id === 'drill'" class="em em-sgt" :size="44" :talking="a.strictness === 'drill'" /><span v-else class="em">{{ s.e }}</span><span><b>{{ s.l }}</b><small>{{ s.d }}</small></span>
         </button>
@@ -51,20 +59,21 @@
 
       <section v-else-if="STEPS[step] === 'notifications'" class="ob-sec">
         <div class="ob-bell">🔔</div>
-        <p class="ob-k">Step 4</p><h1 class="ob-h">Let your robot <span>reach you</span></h1>
+        <p class="ob-k">Step {{ stepNo('notifications') }}</p><h1 class="ob-h">Let your robot <span>reach you</span></h1>
         <p class="ob-p">Notifications are how ClingNote keeps you honest: start‑of‑day prompts, deadline warnings and robot check‑ins. No spam.</p>
         <div class="ob-note"><b>⏰ 9:00 PM · ClingNote</b><span>2 tasks left before your deadline. Let's finish strong 💪</span></div>
       </section>
 
       <section v-else-if="STEPS[step] === 'applock'" class="ob-sec" data-test="ob-applock">
         <div class="ob-bell">🔒</div>
-        <p class="ob-k">Step 5</p><h1 class="ob-h">Lock your <span>distractions</span></h1>
+        <p class="ob-k">Step {{ stepNo('applock') }}</p><h1 class="ob-h">Lock your <span>distractions</span></h1>
         <p class="ob-p">Pick apps to block while you're locked in. They unlock when your tasks or points goal are done, or when your hours end. Optional, and you can change it later.</p>
         <p v-if="a.appLock" class="ob-p">{{ a.appLock }}</p>
       </section>
 
       <div class="ob-foot">
-        <button class="ob-cta" :disabled="(STEPS[step] === 'goals' && !a.goals.length) || (STEPS[step] === 'age' && ageState !== 'ok')" @click="next">{{ ctaLabel }}</button>
+        <button class="ob-cta" :disabled="(STEPS[step] === 'goals' && !a.goals.length) || (STEPS[step] === 'age' && ageState !== 'ok') || (STEPS[step] === 'alarm' && (alarmBusy || !alarmTime))" @click="next">{{ ctaLabel }}</button>
+        <button v-if="STEPS[step] === 'alarm'" class="ob-later" data-test="ob-alarm-later" @click="a.wakeAlarm = 'later'; go(step + 1)">Not now</button>
         <button v-if="STEPS[step] === 'applock'" class="ob-later" @click="a.appLock = 'later'; go(step + 1)">Not now</button>
         <button v-if="STEPS[step] === 'notifications'" class="ob-later" @click="a.notifications = 'later'; go(step + 1)">Not now</button>
       </div>
@@ -89,10 +98,15 @@ import PaywallPanel from '@/components/paywall/PaywallPanel.vue';
 import { markReviewPending } from '@/utils/appReview';
 import { markPaywallSeenLocal } from '@/utils/entryGuard';
 import { readCachedPlan, useEightHour } from '@/composables/useEightHour';
+import { requestWakePermissions, loadWake } from '@/composables/useWakeAlarm';
+import { defaultAlarmTime, DEFAULT_ALARM_TIME } from '@/utils/wakeAlarm';
+import { clearProCache } from '@/composables/usePro';
 import { fmtWakeLabel } from '@/utils/eightHour';
 import RobotCoach from '@/components/robot/RobotCoach.vue';
 
-const STEPS = ['welcome', 'age', 'goals', 'schedule', 'strictness', 'notifications', ...(lockAvailable() ? ['applock'] : [])]; // index STEPS.length = paywall
+// 'alarm' (iOS app only): optional wake-up alarm opt-in right after the day-start step. index STEPS.length = paywall
+const STEPS = ['welcome', 'age', 'goals', 'schedule', ...(isNativeIOS() ? ['alarm'] : []), 'strictness', 'notifications', ...(lockAvailable() ? ['applock'] : [])];
+const stepNo = (id) => STEPS.indexOf(id) - 1; // "Step N" counter: welcome + age are not numbered
 const GOALS = [
   { id: 'work', e: '💼', l: 'Crush work tasks' }, { id: 'fitness', e: '💪', l: 'Work out consistently' },
   { id: 'study', e: '📚', l: 'Study & learn' }, { id: 'habits', e: '🚭', l: 'Break bad habits' },
@@ -104,9 +118,11 @@ const STRICT = [
   { id: 'drill', e: '🔥', l: 'Strict', d: 'Strict Coach mode — no excuses, breaks must be earned.' },
 ];
 const route = useRoute(); const router = useRouter();
-const step = ref(Math.min(Number(route.query.step) || 0, STEPS.length));
+const step = ref(route.query.step === 'paywall' ? STEPS.length : Math.min(Number(route.query.step) || 0, STEPS.length));
 const name = ref('');
-const a = reactive({ goals: [], wakeTime: '07:00', deadline: '21:00', bedTime: '23:00', strictness: 'firm', notifications: 'unknown', age: null });
+const a = reactive({ goals: [], wakeTime: '07:00', deadline: '21:00', bedTime: '23:00', strictness: 'firm', notifications: 'unknown', age: null, wakeAlarm: 'unknown' });
+// Wake-up alarm step: default 7:00 AM, or the chosen day start minus 30 min when known. Saved as users/{uid}.wakeAlarmEnabled + wakeAlarmTime.
+const alarmTime = ref(DEFAULT_ALARM_TIME); const alarmBusy = ref(false);
 const ageState = computed(() => { const n = Number(a.age); if (!a.age && a.age !== 0) return 'empty'; if (!Number.isInteger(n) || n < 1 || n > 100) return 'invalid'; return n < 13 ? 'under' : 'ok'; });
 const bumpAge = (d) => { const n = Number(a.age) || 18; a.age = Math.max(1, Math.min(100, n + d)); };
 // Voiceover: each screen plays its own segment as you advance (previous one stops). Manager-link arrivals get the manager welcome.
@@ -121,12 +137,12 @@ const wakeLabel = computed(() => fmtWakeLabel(eh.plan.value?.wakeTime || a.wakeT
 // The paywall counts as "seen" the moment it is shown (local flag + users/{uid}.paywallSeenAt) so existing users get it at most once; Subs/Profile can still open it.
 watch(step, (n) => { if (n === STEPS.length) { const u = auth.currentUser; if (u) { markPaywallSeenLocal(u.uid); saveUserFields(u.uid, { paywallSeenAt: new Date() }).catch(() => {}); } } }, { immediate: true });
 const firstName = computed(() => (name.value || 'there').split(' ')[0]);
-const ctaLabel = computed(() => ({ welcome: "Let's go", notifications: 'Turn on notifications', applock: 'Choose apps to block' }[STEPS[step.value]] || 'Continue'));
+const ctaLabel = computed(() => ({ welcome: "Let's go", alarm: 'Yes, turn it on', notifications: 'Turn on notifications', applock: 'Choose apps to block' }[STEPS[step.value]] || 'Continue'));
 const toggle = (id) => { const i = a.goals.indexOf(id); i < 0 ? a.goals.push(id) : a.goals.splice(i, 1); };
 
 onMounted(async () => {
   const u = auth.currentUser; if (!u) return;
-  const cp = readCachedPlan(); if (cp) a.wakeTime = cp.wakeTime; // the wake time is picked in the pre-signup tutorial (and locked into the 8-hour day), not here
+  const cp = readCachedPlan(); if (cp) a.wakeTime = cp.wakeTime; alarmTime.value = defaultAlarmTime((cp && cp.wakeTime) || eh.plan.value?.wakeTime); // the wake time is picked in the pre-signup tutorial (and locked into the 8-hour day), not here
   try { const d = await ensureUserDoc(u); name.value = d.name || u.displayName || '';
     if (d.age) a.age = d.age;
     if (d.onboarding) Object.assign(a, d.onboarding, cp ? { wakeTime: cp.wakeTime } : {}); } catch (e) { console.error('onboarding load', e.message); }
@@ -144,6 +160,12 @@ async function next() {
         a.notifications = ok ? 'granted' : (await getNativePushState()).status === 'denied' ? 'denied' : 'default';
       } else if ('Notification' in window) a.notifications = await Notification.requestPermission();
     } catch (e) { a.notifications = 'error'; }
+  }
+  if (STEPS[step.value] === 'alarm') { // "Yes, turn it on": enable + save the time, and ask for Alarms (AlarmKit) + notification permission now
+    const u = auth.currentUser; alarmBusy.value = true;
+    if (u) { await saveUserFields(u.uid, { wakeAlarmEnabled: true, wakeAlarmTime: alarmTime.value }).catch(() => {}); clearProCache(); }
+    a.wakeAlarm = 'on'; await requestWakePermissions().catch(() => {}); if (u) loadWake(u.uid, true).catch(() => {});
+    alarmBusy.value = false;
   }
   if (STEPS[step.value] === 'applock') {
     const auth0 = await clingLock.requestAuthorization();
