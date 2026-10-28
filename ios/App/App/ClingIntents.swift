@@ -5,12 +5,13 @@ import WidgetKit
 #endif
 
 /// Siri / Shortcuts / Action Button: "Add a task in ClingNote". Queues the task in the App Group ("intent.pending");
-/// the app drains it on open/foreground through its normal add path (limits, points). NEEDS ON-DEVICE TESTING.
+/// openAppWhenRun: iOS brings the app forward right after perform(), so the queue is drained (appStateChange -> intentDrain.js)
+/// and the task is saved through the normal add path (limits, points) at once. NEEDS ON-DEVICE TESTING.
 @available(iOS 16.0, *)
 struct AddTaskIntent: AppIntent {
     static var title: LocalizedStringResource = "Add task"
     static var description = IntentDescription("Add a task to today's ClingNote list.")
-    static var openAppWhenRun: Bool = false
+    static var openAppWhenRun: Bool = true
     @Parameter(title: "Task") var title: String
     @Parameter(title: "Time") var time: Date?
 
@@ -21,7 +22,7 @@ struct AddTaskIntent: AppIntent {
         var item: [String: Any] = ["title": String(clean), "ts": Date().timeIntervalSince1970 * 1000]
         if let t = time { let c = Calendar.current.dateComponents([.hour, .minute], from: t); item["start"] = String(format: "%02d:%02d", c.hour ?? 0, c.minute ?? 0) }
         q.append(item); d.set(Array(q.suffix(20)), forKey: "intent.pending")
-        return .result(dialog: "Added \(String(clean)). Open ClingNote to lock it in.")
+        return .result(dialog: "Adding \(String(clean)) to ClingNote.")
     }
 }
 

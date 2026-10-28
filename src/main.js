@@ -87,6 +87,10 @@ import('@capacitor/core').then(async ({ Capacitor }) => {
   if (widget) { widget.installWidgetSync(); widget.installWidgetFocus(router); }
   // Cold start from a widget tap (e.g. clingnote://add): appUrlOpen can fire before this listener exists, so read the launch URL once.
   if (widget) CapApp.getLaunchUrl().then((r) => { if (r && r.url) widget.handleWidgetUrl(r.url, router); }).catch(() => {});
+  // Siri "Add task": drain on launch / sign-in / every foreground from ANY route (central, single-flight; see native/intentDrain.js).
+  if (Capacitor.getPlatform() === 'ios') Promise.all([import('./native/intentDrain'), import('./native/clingNative')]).then(([d, n]) => d.installIntentDrain({
+    CapApp, router, store: localStorage, take: n.clingNative.takeIntents, signedIn: () => !!auth.currentUser,
+    onSignedIn: (cb) => onAuthStateChanged(auth, (u) => { if (u) cb(); }) })).catch(() => {});
   CapApp.addListener('appUrlOpen', ({ url }) => {
     if (widget && widget.handleWidgetUrl(url, router)) return; // home-screen widget tap: clingnote://task/<id>
     try { const u = new URL(url); const path = (u.protocol.startsWith('http') ? '' : (u.host ? '/' + u.host : '')) + u.pathname + u.search; if (/^\/(pal|pals|m)\b/.test(path)) router.push(path); } catch (e) { /* ignore */ }

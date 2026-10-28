@@ -223,7 +223,8 @@ import { useDayTemplates } from '@/composables/useDayTemplates';
 import { planChanges } from '@/utils/dayPlan';
 import { makeTemplate, applyTemplate, applySummary } from '@/utils/dayTemplates';
 import { listCoverage, uniqueRenderKeys } from '@/utils/listCoverage';
-import { mergeIntents, intentCreateArgs, intentOutcome, bumpTries as bumpIntentTries, outOfTries as intentOutOfTries, readBuffer as readIntentBuffer, writeBuffer as writeIntentBuffer } from '@/utils/intentQueue';
+import { registerIntentHandler, runIntentDrain } from '@/native/intentDrain';
+import { intentCreateArgs, intentOutcome, bumpTries as bumpIntentTries, outOfTries as intentOutOfTries, readBuffer as readIntentBuffer, writeBuffer as writeIntentBuffer } from '@/utils/intentQueue';
 import { weekStats, searchTasks, suggestNext, snoozeTo } from '@/utils/assistantExtras';
 import { ref, onMounted, onBeforeUnmount, computed, watch, reactive, nextTick } from 'vue';
 import { useSounds } from '@/composables/useSounds';
@@ -3529,12 +3530,10 @@ watch(() => [eh.running.value, pointsAccumulated.value, dayRequiredPts.value, st
 // ---- Siri / Shortcuts / Action Button "Add task" queue ----
 // Native takeIntents() clears the App Group queue, so items are copied into a local buffer first and only removed once saved
 // (or dropped for good, e.g. daily limit). Nothing runs until the user and today's list are loaded; tasks always land on today.
-let draining = false;
-const drainIntents = async () => {
-  if (!nativeAvailable() || draining) return; draining = true;
-  try {
-    let buf = readIntentBuffer(localStorage);
-    try { const r = await clingNative.takeIntents(); buf = mergeIntents(buf, r.items || []); writeIntentBuffer(localStorage, buf); } catch (e) { console.warn('takeIntents', e && e.message); }
+// Pull + save run through the central single-flight drain (src/native/intentDrain.js); this is only the saver.
+const saveBufferedIntents = async () => {
+  {
+    const buf = readIntentBuffer(localStorage);
     if (!buf.length || !userId.value || todayIdx.value < 0 || !days[todayIdx.value]) return; // retried on the next mount / foreground / login
     if (!isViewingToday.value) { selectedDayIndex.value = todayIdx.value; await fetchSelectedDayRoutine(); }
     const keep = []; const added = []; const dropped = [];
@@ -3550,12 +3549,16 @@ const drainIntents = async () => {
     writeIntentBuffer(localStorage, keep);
     if (dropped.length) showNoteToast(`Siri task not added: ${dropped[0]}`, { error: true });
     else if (added.length) showNoteToast(added.length === 1 ? `Added from Siri: “${added[0]}”` : `Added ${added.length} tasks from Siri`);
-  } finally { draining = false; }
+  }
 };
+const drainIntents = () => (nativeAvailable() ? runIntentDrain({ take: clingNative.takeIntents, store: localStorage }, 'home') : null);
+const unregIntents = registerIntentHandler(saveBufferedIntents);
+// today's list finishing loading is a trigger too (cold launch straight from Siri)
+watch(() => !!(userId.value && todayIdx.value >= 0 && days[todayIdx.value]), (ready) => { if (ready) setTimeout(drainIntents, 800); });
 watch(userId, (u) => { if (u) setTimeout(drainIntents, 1500); });
 const onIntentVisible = () => { if (!document.hidden) { drainIntents(); syncAppLock(); } };
 onMounted(() => { setTimeout(drainIntents, 1500); document.addEventListener('visibilitychange', onIntentVisible); });
-onBeforeUnmount(() => document.removeEventListener('visibilitychange', onIntentVisible));
+onBeforeUnmount(() => { document.removeEventListener('visibilitychange', onIntentVisible); unregIntents(); });
 // ---- Siri "Start a timer in ClingNote" (ClingIntents.StartTimerIntent queues {taskId, minutes, ts}; latest fresh request wins) ----
 let timerDraining = false;
 const drainTimerIntents = async () => {
