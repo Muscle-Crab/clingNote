@@ -105,5 +105,9 @@ await t('parseIcs: timed, UTC, all-day, folded lines, escapes, junk', () => {
   assert.strictEqual(r.events[0].notes, 'line1\nline2');
   assert.strictEqual(C.parseIcs('hello').ok, false);
 });
+await t('in-app rename keeps the link key (no duplicate event)', async () => {
+  const a = { title: 'Old name', createdAt: '2026-10-22T10:00:00.000Z', startTime: '14:00' };
+  assert.strictEqual(C.keyOfDayTask(a), C.keyOfDayTask({ ...a, title: 'New name' }));
+});
 console.log(`\n${n} calendar-sync tests passed`);
 })().catch((e) => { console.error(e); process.exit(1); });

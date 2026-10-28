@@ -18,7 +18,8 @@ export const localMs = (date, time) => { const [y, m, d] = date.split('-').map(N
 export const msToLocal = (ms) => { const d = new Date(ms); return { date: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`, time: `${pad(d.getHours())}:${pad(d.getMinutes())}` }; };
 export const sigOf = (ev) => `${String(ev.title || '').trim()}|${Math.round(Number(ev.startMs) / MIN)}|${Math.round(Number(ev.endMs) / MIN)}`;
 const minutesOf = (t) => { const n = Math.round(Number(t.estimateMin) || Number(t.minutes) || 0); return n >= 5 && n <= 24 * 60 ? n : DEFAULT_MINUTES; };
-export const keyOfDayTask = (t) => (t.scheduledId ? `s-${t.scheduledId}` : `t-${widgetTaskId(t)}`);
+// Title is left out of the hash when the task has a createdAt, so an in-app rename keeps the same link (updates the event instead of a duplicate).
+export const keyOfDayTask = (t) => (t.scheduledId ? `s-${t.scheduledId}` : `t-${t.id || !t.createdAt ? widgetTaskId(t) : widgetTaskId({ createdAt: t.createdAt, title: '' })}`);
 export const keyFromUrl = (url) => (typeof url === 'string' && url.startsWith(EVENT_URL_PREFIX) ? url.slice(EVENT_URL_PREFIX.length) : '');
 
 export const syncWindow = (nowMs) => ({ fromMs: nowMs - SYNC_WINDOW_DAYS.back * 86400000, toMs: nowMs + SYNC_WINDOW_DAYS.ahead * 86400000 });

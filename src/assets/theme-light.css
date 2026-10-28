@@ -72,3 +72,19 @@ html[data-theme="light"] .app-root .foot-freeze { color: #0369A1 !important; bac
 html[data-theme="light"] .sub-hero-art { background: linear-gradient(180deg, rgba(7,13,28,.3), rgba(7,13,28,.45) 60%, rgba(243,245,250,.0) 80%, #F3F5FA), var(--hero-img, url('./hero-forest.jpg')) 72% 30% / cover no-repeat !important; }
 html[data-theme="light"] .sub-hero-title { color: #fff !important; }
 html[data-theme="light"] .sub-hero-back { color: #E2E8F5 !important; }
+/* Robot coach morning report sheet (components/voiceover/BossBriefing.vue) */
+html[data-theme="light"] .bb-wrap { background: rgba(15,23,42,.35) !important; }
+html[data-theme="light"] .bb { background: #FFFFFF !important; border-color: var(--c-border, #DCE2EE) !important; color: #0F172A !important; box-shadow: 0 16px 40px rgba(15,23,42,.18) !important; }
+html[data-theme="light"] .bb-head h2, html[data-theme="light"] .bb-p b { color: #0F172A !important; }
+html[data-theme="light"] .bb-line { color: #0F172A !important; }
+html[data-theme="light"] .bb-line--overdue { color: #B91C1C !important; }
+html[data-theme="light"] .bb-line--atease { color: #0F9F62 !important; }
+html[data-theme="light"] .bb-line--streak, html[data-theme="light"] .bb-line--points, html[data-theme="light"] .bb-p, html[data-theme="light"] .bb-muted, html[data-theme="light"] .bb-stats { color: #475569 !important; }
+html[data-theme="light"] .bb-stats span, html[data-theme="light"] .bb-x { background: #EEF2F9 !important; color: #0F172A !important; }
+html[data-theme="light"] .bb-act:not(:first-child) { background: #FFFFFF !important; border-color: #C5CEE0 !important; color: #1D4ED8 !important; }
+html[data-theme="light"] .bb-alert { background: #FDE8E8 !important; border-color: #F3B1B1 !important; color: #B91C1C !important; }
+html[data-theme="light"] .bb-chart { background: linear-gradient(180deg, #EEF2F9, #FFFFFF) !important; }
+html[data-theme="light"] .bb-chart line { stroke: #DCE2EE; }
+html[data-theme="light"] .bb-chart rect[fill="none"] { stroke: #C5CEE0; }
+html[data-theme="light"] .bb-chart text { fill: #475569; }
+html[data-theme="light"] .bb .vo-t { background: #EEF2F9 !important; color: #0F172A !important; }

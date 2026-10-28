@@ -373,7 +373,7 @@ import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'fire
 import data from '@/data.json';
 import { useSmoothReorder } from "@/composables/useSmoothReorder";
 import {db} from '@/firebaseConfig'; // Assuming you have imported the Firebase setup file and exported the db instance
-import { doc, setDoc, serverTimestamp, getDoc, updateDoc, getFirestore, runTransaction} from 'firebase/firestore';
+import { doc, setDoc, serverTimestamp, getDoc, updateDoc, getFirestore, runTransaction, onSnapshot } from 'firebase/firestore';
 const modalOpen = ref(false);
 import { deleteObject } from "firebase/storage";
 import { widgetTaskId } from '@/utils/widgetSnapshot';
@@ -1738,6 +1738,24 @@ const afterMaterialize = async () => {
   if (added && selectedDayIndex.value === new Date().getDay()) await fetchSelectedDayRoutine();
 };
 watch(selectedDayIndex, () => { if (userId.value && dueOf(scheduledList.value, getTodayId()).length) afterMaterialize(); });
+// Live cross-device sync: another device's change to the selected day shows here without a reload.
+// Only server-confirmed snapshots are applied (never our own pending writes); stale-week resets stay with fetchSelectedDayRoutine.
+let dayUnsub = null;
+const watchSelectedDay = () => {
+  if (dayUnsub) { dayUnsub(); dayUnsub = null; }
+  if (!userId.value || selectedDayIndex.value === -1) return;
+  const idx = selectedDayIndex.value; const dayName = days[idx]?.day; if (!dayName) return;
+  dayUnsub = onSnapshot(doc(db, 'weeklyRoutines', `${userId.value}_${dayName}`), (snap) => {
+    if (snap.metadata.hasPendingWrites || snap.metadata.fromCache || idx !== selectedDayIndex.value || !snap.exists()) return;
+    const tasks = snap.data().tasks || [];
+    if (tasks.some((t) => isStaleCompletion(t, idx))) return;
+    if (JSON.stringify(tasks) !== JSON.stringify(selectedDayRoutine.value || [])) selectedDayRoutine.value = tasks;
+  }, () => {});
+};
+watch([userId, selectedDayIndex], watchSelectedDay);
+onMounted(watchSelectedDay);
+onBeforeUnmount(() => { if (dayUnsub) dayUnsub(); dayUnsub = null; });
+
 const onVisible = () => { if (document.visibilityState === 'visible' && userId.value && getTodayId() !== todayStr.value) { afterMaterialize(); checkStreakOnCompletion(); } };
 onMounted(() => document.addEventListener('visibilitychange', onVisible));
 onBeforeUnmount(() => document.removeEventListener('visibilitychange', onVisible));
@@ -2115,7 +2133,7 @@ const setTaskRepeat = async (task, dayNames, { quiet = false, lastRepeat = null 
         else if (has) next = l.map((t) => (taskKey(t) === key ? { ...t, ...patch } : t));
         else {
           const af = i !== selectedDayIndex.value ? activeFromForDay(i) : '';
-          const { timerActive, timerEnd, timerStart, boss, ...base } = task;
+          const { timerActive, timerEnd, timerStart, timerStartedAt, timerEndTime, timerStoppedAt, timerDuration, timerRemaining, timerPausedAt, timerLockedMin, boss, ...base } = task; // a copy never inherits a running/stopped timer
           next = [...l, { ...base, ...patch, completed: false, completedAt: null, status: !base.status || base.status === 'done' ? 'todo' : base.status, activeFrom: af || '' }];
         }
         // legacy tasks carry no `status` (and UI copies can hold undefined fields): Firestore rejects undefined values client-side

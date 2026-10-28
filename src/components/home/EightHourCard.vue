@@ -140,6 +140,10 @@ const save = async () => {
 .eh-clock { font-size: 1.75rem; line-height: 1; font-weight: 800; font-variant-numeric: tabular-nums; margin: 0; letter-spacing: .01em; }
 .eh-meta { margin-left: auto; display: flex; flex-direction: column; align-items: flex-end; gap: 1px; font-size: .68rem; line-height: 1.25; color: var(--c-text-3, #9aa3b5); white-space: nowrap; }
 .eh-meta--end { flex-direction: row; gap: 10px; }
+/* large text: the meta column may shrink and wrap between items instead of being clipped by .eh's overflow-x: hidden */
+.eh-meta { min-width: 0; flex-shrink: 1; white-space: normal; text-align: right; } .eh-meta [data-test=eh-points], .eh-meta [data-test=eh-ends] { white-space: nowrap; }
+.eh-meta--end { flex-wrap: wrap; justify-content: flex-end; column-gap: 10px; }
+.eh-clock { flex-shrink: 0; }
 .eh-badge { font-size: .65rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--c-surface-2, #22252a); color: var(--c-text-2, #b0b0b0); text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; }
 .eh-badge--ok { background: rgba(60,180,110,.18); color: #3cb46e; }
 .eh-badge--miss { background: rgba(224,90,90,.18); color: #e05a5a; }
