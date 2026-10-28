@@ -97,8 +97,13 @@ import('@capacitor/core').then(async ({ Capacitor }) => {
   });
 }).catch(() => {});
 
-// iOS WKWebView: block pinch (gesturestart) and double-tap zoom.
-if (typeof document !== 'undefined' && /iPhone|iPad|iPod/.test(navigator.userAgent || '')) {
+// iOS app (WKWebView) only: no pinch / double-tap zoom. The website must stay zoomable (it used to ship user-scalable=no + these
+// listeners to every iPhone browser, which disabled pinch-zoom on clingnote.app). Native also gets the locked viewport here.
+if (typeof document !== 'undefined' && isNative()) {
+  document.documentElement.classList.add('cn-native');
+  const vp = document.querySelector('meta[name=viewport]'); if (vp) vp.setAttribute('content', 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover');
+}
+if (typeof document !== 'undefined' && isNative() && /iPhone|iPad|iPod/.test(navigator.userAgent || '')) {
   const stop = (e) => e.preventDefault();
   ['gesturestart', 'gesturechange', 'gestureend'].forEach((t) => document.addEventListener(t, stop, { passive: false }));
   document.addEventListener('dblclick', stop, { passive: false });
