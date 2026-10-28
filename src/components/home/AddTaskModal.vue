@@ -17,25 +17,9 @@
             <input type="datetime-local" v-model="newTask.reminder.datetime" class="field-input" />
           </div>
           <div class="field-group">
-            <label class="field-label" for="nt-sched-date">Schedule for later</label>
-            <div class="field-grid">
-              <input id="nt-sched-date" type="date" v-model="newTask.scheduleDate" :min="tomorrow" class="field-input" aria-label="Schedule date" />
-              <input type="time" v-model="newTask.scheduleTime" class="field-input" :disabled="!newTask.scheduleDate" aria-label="Schedule time (optional)" />
-            </div>
-            <div v-if="newTask.scheduleDate" class="field-grid">
-              <select v-model="newTask.scheduleRepeat" class="field-select" aria-label="Repeat scheduled task">
-                <option value="">Doesn't repeat</option>
-                <option value="weekly">Weekly on…</option>
-                <option value="daily">Every day</option>
-                <option value="monthly">Monthly (same day)</option>
-              </select>
-            </div>
-            <div v-if="newTask.scheduleDate && newTask.scheduleRepeat === 'weekly'" class="sched-weekdays" role="group" aria-label="Repeat on weekdays">
-              <label v-for="(w, i) in WEEKDAYS" :key="w" class="sched-wd"><input type="checkbox" :value="i" v-model="newTask.scheduleDays" /> {{ w }}</label>
-            </div>
-            <p v-if="newTask.scheduleDate" class="field-hint">Hidden everywhere until the week of {{ newTask.scheduleDate }}; shows from that Monday with a due badge.<template v-if="newTask.scheduleRepeat"> Each occurrence is its own task.</template></p>
+            <SchedulePicker v-if="newTask.sched" v-model="newTask.sched" :min-date="today" />
           </div>
-          <div class="field-group">
+          <div v-if="!newTask.sched?.on" class="field-group">
             <label class="field-label" for="nt-repeat">Repeat</label>
             <select id="nt-repeat" v-model="repeatMode" class="field-select">
               <option value="daily">Daily</option>
@@ -69,10 +53,6 @@
             <div class="field-group">
               <label class="field-label" for="nt-start">Start time</label>
               <input id="nt-start" type="time" v-model="newTask.startTime" class="field-input" />
-            </div>
-            <div class="field-group">
-              <label class="field-label" for="nt-est">Estimate (min)</label>
-              <input id="nt-est" type="number" min="0" step="5" v-model="newTask.estimateMin" class="field-input" placeholder="e.g. 30" />
             </div>
           </div>
           <div class="field-group">
@@ -113,6 +93,10 @@
                 <label class="field-label">Note</label>
                 <textarea v-model="newTask.notes" class="field-textarea" placeholder="Extra details..."></textarea>
               </div>
+              <div class="field-group anon-row" data-test="anon-toggle">
+                <div class="anon-text"><span class="field-label">🔒 Hide name from manager</span><small>Your manager sees the time, status &amp; points, not the name or notes</small></div>
+                <button type="button" role="switch" class="anon-switch" :class="{ on: newTask.anonymous }" :aria-checked="newTask.anonymous ? 'true' : 'false'" aria-label="Hide name from manager" @click="newTask.anonymous = !newTask.anonymous"><span></span></button>
+              </div>
             </div>
           </transition>
 
@@ -121,7 +105,7 @@
             <strong>You've hit today's limit of {{ limitHit.limit }} tasks.</strong>
             <template v-if="limitHit.pro"> That's the Pro maximum for one day. Finish or move something first.</template>
             <template v-else> Free accounts get {{ limitHit.limit }} tasks per day.<template v-if="proRaises"> Pro raises it to {{ proLimit }}.</template>
-              <button type="button" class="btn-secondary cap-override" data-test="limit-upgrade" @click="$emit('upgrade')">Upgrade to Pro</button>
+              <button v-if="!rcPro()" type="button" class="btn-secondary cap-override" data-test="limit-upgrade" @click="$emit('upgrade')">Upgrade to Pro</button>
             </template>
           </div>
         </div>
@@ -135,11 +119,14 @@
 </template>
 
 <script setup>
+import SchedulePicker from './SchedulePicker.vue';
 import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { ACTIVE_CAP, STATUSES } from '@/utils/taskPlanning';
-import { WEEKDAYS } from '@/utils/scheduling';
 import { getOrdinalSuffix } from '@/utils/dateTime';
 import { TASK_LIMITS, PRO_RAISES_LIMIT } from '@/config/pricing';
+import { rcProActive } from '@/composables/usePro';
+import { auth } from '@/firebaseConfig';
+const rcPro = () => rcProActive(auth.currentUser?.uid); // iOS: RevenueCat says Pro -> never show an upgrade prompt
 
 // newTask is the reactive form object owned by HomeView; the form edits it in place via v-model.
 defineProps({
@@ -154,7 +141,7 @@ const proLimit = TASK_LIMITS.pro;
 const proRaises = PRO_RAISES_LIMIT;
 const repeatMode = defineModel('repeatMode');
 const showAdvanced = defineModel('showAdvanced');
-const tomorrow = (() => { const d = new Date(); d.setDate(d.getDate() + 1); return d.toLocaleDateString('en-CA'); })();
+const today = new Date().toLocaleDateString('en-CA');
 defineEmits(['close', 'submit', 'add-anyway', 'upgrade']);
 const titleInput = ref(null);
 onMounted(() => nextTick(() => titleInput.value && titleInput.value.focus()));
@@ -327,6 +314,13 @@ onBeforeUnmount(() => {
   .nt-sheet { width: 100%; max-width: 100%; max-height: min(92%, 100dvh); border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
   .nt-sheet .field-input, .nt-sheet .field-select, .nt-sheet .field-textarea { font-size: 16px; } /* no iOS focus-zoom (which shifts the page) */
 }
+.anon-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.anon-text { display: flex; flex-direction: column; gap: 2px; }
+.anon-text small { font-size: 11px; color: var(--c-text-2, #A9B4CC); }
+.anon-switch { flex: none; width: 44px; height: 26px; border-radius: 999px; border: 1px solid var(--c-border, #2A3C66); background: rgba(255,255,255,.06); position: relative; padding: 0; cursor: pointer; transition: background .15s; }
+.anon-switch span { position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; border-radius: 50%; background: #cfd8cf; transition: transform .15s; }
+.anon-switch.on { background: #2f7a4f; border-color: #3c9a64; }
+.anon-switch.on span { transform: translateX(18px); background: #fff; }
 </style>
 
 <style>

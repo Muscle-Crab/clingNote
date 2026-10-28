@@ -18,7 +18,7 @@ require.extensions['.vue'] = (mod, filename) => {
   const out = compileScript(descriptor, { id: 'smoke', inlineTemplate: true });
   mod._compile(toCjs(out.content, filename), filename);
 };
-for (const ext of ['.svg', '.png', '.jpg', '.mp3', '.css']) require.extensions[ext] = (mod, filename) => { mod.exports = filename; }; // assets: stub
+for (const ext of ['.svg', '.png', '.webp', '.jpg', '.mp3', '.css']) require.extensions[ext] = (mod, filename) => { mod.exports = filename; }; // assets: stub
 const origJs = require.extensions['.js'];
 require.extensions['.js'] = (mod, filename) => {
   if (filename.startsWith(src)) mod._compile(toCjs(fs.readFileSync(filename, 'utf8'), filename), filename);
@@ -39,6 +39,7 @@ const milestones = [{ percent: 0, position: 0, icon: 'a' }, { percent: 50, posit
 const cases = [
   ['DayTabs', { days, selectedIndex: 0 }, ['Sun']],
   ['ProgressBar', { percentage: 40, milestones }, ['40%']],
+  ['ProgressBar', { percentage: 40, milestones, streak: 4, freezes: 2 }, ['🧊2', '4/5']],
   ['StreakHeader', { streak: 4, motivationalMessage: 'Go', pointsAccumulated: 10, totalPoints: 30, daySession: { started: true, ended: false, startedAtText: '9:00 AM' } }, ['4', '20 pts']],
   ['TimeStatsBar', { stats: { totalDayTime: '1h', productiveTime: '2m', gapTime: '3m', completedTasks: 2, missedTasks: 1 } }, ['1h']],
   ['ShutdownPrompt', { suggest: true, open: true, done: [task], openTasks: [{ ...task, completed: false }], carry: { 'x': true } }, ['Shutdown', 'Write report', 'shutdown-cancel', 'Cancel']],
@@ -47,7 +48,7 @@ const cases = [
   ['TimerModal', { hours: 0, minutes: 5 }, ['Set Timer']],
   ['WontDoModal', { reason: '' }, ['Won']],
   ['TransferModal', { day: null, days, selectedDayIndex: 0 }, ['Mon', 'Oct 12']],
-  ['AddTaskModal', { newTask: { title: '', status: 'in-progress', priority: 'low', selectedDays: [], reminder: {}, position: 0, labels: '', notes: '' }, repeatMode: 'weekly', showAdvanced: true, days, selectedDayRoutine: [task], error: 'oops', capWarning: true }, ['New task', 'role="dialog"', 'aria-modal="true"', 'e.g. 30', 'oops', 'Status', 'In progress', 'Waiting']],
+  ['AddTaskModal', { newTask: { title: '', status: 'in-progress', priority: 'low', selectedDays: [], reminder: {}, position: 0, labels: '', notes: '' }, repeatMode: 'weekly', showAdvanced: true, days, selectedDayRoutine: [task], error: 'oops', capWarning: true }, ['New task', 'role="dialog"', 'aria-modal="true"', 'oops', 'Status', 'In progress', 'Waiting']],
   ['YouTubeModal', { url: '' }, ['Attach video']],
   ['TaskDetailModal', { task, activeLabels: ['Work'] }, ['Write report', 'embed/abcdefghijk']],
   ['ImagePreview', { src: 'x.png' }, ['x.png']],
@@ -57,12 +58,12 @@ const cases = [
   ['VoiceModal', { error: 'Microphone access was blocked.' }, ['Microphone access was blocked.', 'role="alert"'], ['Speak your task']],
   ['LoadSummary', { load: { minutes: 90, count: 2, unestimated: 1, level: 'full', hint: 'Full day' }, expanded: false }, ['1h 30m', 'Full day']],
   ['TimeBlockSchedule', { schedule: { blocks: [{ task, start: 540, end: 570, conflict: true }], unscheduled: [] } }, ['9:00 AM', 'overlaps another']],
-  ['IdleState', {}, ['Idle time']],
+  ['IdleState', { count: 10 }, ['All done', '10/10', 'Rest well']], ['IdleState', { wrapped: true, count: 3 }, ['Day wrapped', '3/3']],
   ['WontDoList', { tasks: [{ title: 'Skip me', wontDoReason: 'busy' }] }, ['Skip me', 'busy']],
   ['FabButtons', { userId: 'u1', listening: true }, ['fab-add']],
   ['SubtaskList', { task }, ['Outline', '(1/2)']],
-  ['TaskCard', { task, index: 0, isTodayTab: true, expanded: true, activeLabels: [], now: Date.now(), showNotification: true, transferNotification: 'moved' }, ['Write report', '1/2', 'Outline', 'task-expand', '00:01:', 'moved', 'Saved', 'Add a subtask', 'Auto-complete task', 'Next action', 'Estimate (min)', 'chip--subtasks', 'Delete', 'task-chevron', 'aria-label="Show details"', 'aria-expanded="true"', 'task-chevron--open', 'aria-label="Delete task"', 'aria-label="Add reminder"', 'aria-label="Transfer to another day"', 'aria-label="Attach video"', 'aria-label="Attach file"', 'aria-label="Mark as won', 'aria-pressed="true"']],
-  ['TaskListHeader', { completed: 1, total: 3, soundEnabled: true, showCompleted: false }, ['1/3', 'Sounds on', 'aria-pressed="true"', 'aria-label="Sounds"']],
+  ['TaskCard', { task, index: 0, isTodayTab: true, expanded: true, activeLabels: [], now: Date.now(), showNotification: true, transferNotification: 'moved' }, ['Write report', '1/2', 'Outline', 'task-expand', 'data-test="timer-ring"', 'moved', 'Saved', 'Add a subtask', 'Auto-complete task', 'Next action', 'Estimate (min)', 'chip--subtasks', 'Delete', 'task-chevron', 'aria-label="Show details"', 'aria-expanded="true"', 'task-chevron--open', 'aria-label="Delete task"', 'aria-label="Add reminder"', 'aria-label="Transfer to another day"', 'aria-label="Attach video"', 'aria-label="Attach file"', 'aria-label="Mark as won', 'aria-pressed="true"']],
+  ['TaskListHeader', { completed: 1, total: 3, soundEnabled: true, showCompleted: false }, ['1/3'], ['Sounds on']], // sounds + boss voice moved into the sort menu
   ['EmptyState', {}, ['Nothing here yet'], ['Add task']],
   ['EmptyState', { showAdd: true }, ['Nothing here yet', 'empty-add', 'Add task']],
   ['TaskListHeader', { completed: 0, total: 1, prefs: { sort: 'priority', filter: 'waiting' } }, ['aria-label="Sort and filter"', 'sort-btn--active']],
@@ -70,6 +71,9 @@ const cases = [
   ['TaskListHeader', { label: 'Monday', isToday: false, completed: 0, total: 2 }, ['Monday', '0/2'], ['Sort and filter', 'Show completed', 'Sounds']],
   ['DayTabs', { days: [{ day: 'Sat', date: '2026-10-17' }], selectedIndex: 0, scheduledCounts: { '2026-10-17': 2 } }, ['day-tab-dot', '2 scheduled', '>17<']],
   ['TaskCard', { task: { ...task, type: 'one-time' }, index: 0, isTodayTab: true, expanded: true, activeLabels: [], now: 0 }, ['Schedule for later', 'Schedule date']],
+  // points shown once, in the badge, with the task's real points (no flat +10, no '· Np' after the time chip)
+  ['TaskCard', { task: { title: 'House cleaning', createdAt: 't', estimateMin: 90, points: 60, pointsSource: 'ai' }, index: 0, isTodayTab: true, expanded: false, activeLabels: [], now: 0 }, ['+60 pts', '1h 30m</span>'], ['+10 pts', '· 60p']],
+  ['TaskCard', { task: { title: 'Check email', createdAt: 'u', estimateMin: 5 }, index: 0, isTodayTab: true, expanded: false, activeLabels: [], now: 0 }, ['data-test="task-pts"', '5m</span>'], ['+10 pts']],
   ['TaskCard', { task: { ...task, type: 'recurring' }, index: 0, isTodayTab: true, expanded: true, activeLabels: [], now: 0 }, ['task-expand'], ['Schedule for later']],
   ['StartDayPrompt', {}, ['Start Day']],
   // collapsed card with subtasks: n/m chip stays visible, editor + subtask input are not rendered
@@ -240,7 +244,7 @@ pending.push((async () => {
   assert.strictEqual(ds.completionPercentage(r, 0, 0, 0), 57, 'Sunday works too');
   assert.strictEqual(ds.completionPercentage(r, undefined, 2, 2), 57, 'missing wont-do count');
   assert.strictEqual(ds.completionPercentage([{ completed: true }, null], 0, 1, 1), 50, 'null entries tolerated');
-  assert.strictEqual(ds.daysLeftInYearFrom(new Date(2026, 9, 18, 0, 3)), 75);
+  assert.strictEqual(ds.daysLeftInYearFrom(new Date(2026, 9, 18, 0, 3)), 74);
   assert.strictEqual(ds.daysLeftInYearFrom(new Date(2026, 9, 18, 0, 3)) - 1, ds.daysLeftInYearFrom(new Date(2026, 9, 19, 0, 3)), 'rolls over by one at midnight');
   assert.strictEqual(ds.heroTitleFor(0, 0), 'Make today count.');
   assert.strictEqual(ds.heroTitleFor(6, 0), 'Plan your Saturday'); assert.strictEqual(ds.heroTitleFor(1, 3), 'Looking back at Monday');
@@ -268,8 +272,8 @@ pending.push((async () => {
 // voice -> task: transcript goes through a fresh form, failures are surfaced, interim-only results are not dropped (iOS)
 (() => {
   const hv = fs.readFileSync(path.join(src, 'views/HomeView.vue'), 'utf8');
-  assert.ok(/if \(r\.isFinal\) saveSpoken\(r\[0\]\.transcript\)/.test(hv) && /\.\.\.blankTask\(\), title/.test(hv), 'each final phrase saves via fresh blankTask (hands-free)');
-  assert.ok(/recognition\.onend = \(\) => \{[\s\S]*?saveSpoken\(pendingVoiceText\)/.test(hv), 'onend saves transcript when no final flag arrived');
+  assert.ok(/if \(r\.isFinal\) \{[\s\S]*?voiceCommitted = /.test(hv) && /\.\.\.blankTask\(\), title/.test(hv), 'final phrases accumulate (continuous dictation) and save via fresh blankTask');
+  assert.ok(/recognition\.onend = \(\) => \{[\s\S]*?voiceCommitted = [\s\S]*?if \(voiceFinishing\) \{[\s\S]*?saveSpoken\(voiceCommitted\)/.test(hv), 'onend commits interim text and saves the whole dictation on Done');
   assert.ok(/const ok = await addNewTask\(\)/.test(hv) && /if \(!ok\) \{[\s\S]*?voiceAddFailed = true;[\s\S]*?voiceError\.value = /.test(hv) && /if \(!voiceAddFailed\) voiceError\.value = ''/.test(hv), 'failed voice add is surfaced and survives a mic auto-restart, not silently dropped');
   const fn = hv.slice(hv.indexOf('const addNewTask = async'), hv.indexOf('const speakDailyReport'));
   assert.ok(!/^\s*return;\s*$/m.test(fn) && /lastAddPersist = trackWrite\(\(async/.test(fn) && /return false;/.test(fn), 'addNewTask reports success/failure (optimistic, rollback on error)');
@@ -313,6 +317,15 @@ pending.push((async () => {
   assert.strictEqual(c([]), '');
   console.log('ok   schedule overlap flags');
 })();
+pending.push((async () => {
+  const PF = require(path.join(src, 'components/ui/PasswordField.vue')).default;
+  const html = await renderToString(createSSRApp(PF, { modelValue: 'secret', id: 'pw', required: true }));
+  assert.ok(/type="password"/.test(html) && !/type="text"/.test(html), 'password hidden by default');
+  assert.ok(/aria-label="Show password"/.test(html) && /data-test="password-toggle"/.test(html) && /aria-pressed="false"/.test(html), 'accessible Show password toggle');
+  assert.ok(/type="button"/.test(html), 'toggle never submits the form');
+  assert.ok(/width: 44px; height: 44px/.test(fs.readFileSync(path.join(src, 'components/ui/PasswordField.vue'), 'utf8')), '44px tap target');
+  console.log('ok   PasswordField');
+})().catch((e) => { console.log('FAIL PasswordField:', e.message); process.exitCode = 1; failedAsync = true; }));
 (async () => {
   let failed = 0;
   const warn = console.warn; const warnings = [];

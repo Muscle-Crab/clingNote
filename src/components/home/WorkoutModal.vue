@@ -34,6 +34,9 @@
           <input type="number" v-model="preferences.duration" class="field-input" />
         </div>
       </div>
+      <p class="field-label" style="padding: 0 var(--sp-5, 20px); font-size: 12px; opacity: .8;" data-test="workout-disclaimer">
+        AI-generated suggestions for general fitness, not medical advice. Check with a doctor before starting a new exercise program and stop if something hurts.
+      </p>
       <div class="modal-footer">
         <button @click="$emit('close')" class="btn-secondary">Cancel</button>
         <button @click="$emit('generate')" class="btn-primary">Generate 💪</button>

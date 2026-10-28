@@ -1,0 +1,71 @@
+# Builds the Capacitor iOS app on a GitHub macOS runner and uploads it to TestFlight (sandbox IAP testing + App Review build).
+# Manual only (workflow_dispatch). Needs repo secrets: ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8_BASE64 (App Store Connect API key, role >= App Manager),
+# and VUE_APP_REVENUECAT_IOS_KEY (RevenueCat public "appl_" SDK key). Nothing here runs until the App Store Connect app record exists.
+name: ios-testflight
+on:
+  workflow_dispatch: {}
+  push: { branches: [feat/ios-capacitor] }  # temporary: lets the run start from this branch before the workflow exists on main; remove before merging
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 45
+    # Pin Xcode: App Store Connect only accepts builds made with the current major SDK (Xcode 26 / iOS 26 SDK); the macos-15 default is Xcode 16.4.
+    # Xcode_26.3 is installed on the macos-15 image; bump this path deliberately when the image/App Store minimum changes.
+    env: { DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer }
+    steps:
+      - uses: actions/checkout@v4
+      - name: Show pinned Xcode
+        run: xcodebuild -version && xcrun --sdk iphoneos --show-sdk-version
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run check
+      - name: Build web assets
+        env: { VUE_APP_REVENUECAT_IOS_KEY: "${{ secrets.VUE_APP_REVENUECAT_IOS_KEY }}" }
+        run: npm run build:ios
+      - run: npx cap sync ios
+      - name: Patch generated OneSignal plugin for SwiftPM
+        run: python3 scripts/ios-patch-onesignal.py
+      - name: Write App Store Connect API key
+        run: |
+          mkdir -p ~/private_keys
+          echo "${{ secrets.ASC_KEY_P8_BASE64 }}" | base64 --decode > ~/private_keys/AuthKey_${{ secrets.ASC_KEY_ID }}.p8
+      - name: Archive
+        working-directory: ios/App
+        run: |
+          # Unsigned archive: the team has no registered devices, so Xcode cannot make a development profile. The export step below signs with cloud-managed distribution signing.
+          xcodebuild -project App.xcodeproj -scheme App -configuration Release -destination 'generic/platform=iOS' \
+            -archivePath $RUNNER_TEMP/App.xcarchive CURRENT_PROJECT_VERSION=${{ github.run_number }} \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" archive
+      - name: Embed entitlements in the unsigned archive
+        working-directory: ios/App
+        run: |
+          # An unsigned archive carries no entitlements, so the exported app lost Sign in with Apple + Push (Apple error 1000). Ad-hoc sign with App.entitlements so export re-signs WITH them.
+          APP="$RUNNER_TEMP/App.xcarchive/Products/Applications/App.app"
+          # Inside-out: the home-screen widget extension first (App Group entitlement), then the app.
+          WIDGET="$APP/PlugIns/ClingNoteWidget.appex"
+          if [ -d "$WIDGET" ]; then
+            codesign --force --sign - --entitlements ClingNoteWidget/ClingNoteWidget.entitlements "$WIDGET"
+            echo "Widget:"; codesign -d --entitlements :- "$WIDGET" 2>&1 | head -20
+          fi
+          echo "Before:"; codesign -d --entitlements :- "$APP" 2>&1 | head -20 || true
+          codesign --force --sign - --entitlements App/App.entitlements "$APP"
+          echo "After:"; codesign -d --entitlements :- "$APP" 2>&1 | head -20
+      - name: Export + upload to TestFlight
+        working-directory: ios/App
+        run: |
+          cat > $RUNNER_TEMP/ExportOptions.plist <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>upload</string>
+            <key>teamID</key><string>R856C5DK22</string>
+            <key>signingStyle</key><string>automatic</string>
+          </dict></plist>
+          PLIST
+          xcodebuild -exportArchive -archivePath $RUNNER_TEMP/App.xcarchive -exportOptionsPlist $RUNNER_TEMP/ExportOptions.plist \
+            -allowProvisioningUpdates -authenticationKeyPath ~/private_keys/AuthKey_${{ secrets.ASC_KEY_ID }}.p8 \
+            -authenticationKeyID ${{ secrets.ASC_KEY_ID }} -authenticationKeyIssuerID ${{ secrets.ASC_ISSUER_ID }}
+      - if: always()
+        run: rm -rf ~/private_keys

@@ -36,10 +36,31 @@ Goal: ${clip(p.goal, 40) || 'General Fitness'}, Duration: ${int(p.duration, 5, 1
 Limit to a maximum of ${int(p.maxPerDay, 1, 10, 3)} workouts per day.
 Return in JSON format like:
 {
-  "Mon": [{ "title": "...", "youtubeURL": "...", "type": "recurring", "completed": false }],
+  "Mon": [{ "title": "...", "type": "recurring", "completed": false }],
   ...
 }`;
     return { costsCredit: false, body: { model: 'gpt-4o-mini', temperature: 0.7, max_tokens: 2000, messages: [{ role: 'user', content: prompt }] } };
+  }
+  if (task === 'voice-intent') {
+    // Spoken utterance -> JSON items. The client validates the result (src/utils/voiceIntent.js normalizeItems) and falls back to its local parser.
+    const text = clip(input.text, 4000); const nowLocal = clip(input.now, 25); const tz = clip(input.tz, 60);
+    if (!text) throw Object.assign(new Error('Empty text'), { status: 400 });
+    const sys = `You turn a spoken explanation (one sentence or a long, rambling multi-part dictation) into separate planner items. The user's local time is ${nowLocal || 'unknown'} (${tz || 'local'} timezone).
+Return ONLY JSON: {"items":[{"type":"task|reminder|schedule","title":"short imperative title","date":"YYYY-MM-DD","start":"HH:MM or empty","durationMin":0,"remindAt":"YYYY-MM-DDTHH:MM or empty"}]}
+Rules: "remind me"/"don't forget" or an action at a clock time without a length = reminder (remindAt required). "schedule"/"block"/"book" or a time range or length on a day = schedule (start + durationMin). Otherwise task.
+A time already past today with no date means tomorrow. Morning 09:00, after lunch 13:00, afternoon 15:00, evening 18:00 (3h block), tonight 20:00. Split the explanation into one item per distinct thing to do (cues: "and then", "after that", "also", "next", "first/second/finally", new sentences). Keep lists of things inside one action together ("buy milk, eggs and bread" = 1 item).
+Titles: short, capitalised, imperative, no filler ("um", "I need to", "so basically"). Give each item its own time/length/date only if the user said one for it. At most 15 items. Never invent items.`;
+    return { costsCredit: false, body: { model: 'gpt-4o-mini', temperature: 0, max_tokens: 1500, response_format: { type: 'json_object' }, messages: [{ role: 'system', content: sys }, { role: 'user', content: text }] } };
+  }
+  if (task === 'ask') {
+    // "Ask Anything": general Q&A with a short in-session history (client keeps the conversation; nothing stored server-side).
+    const { ASK_LIMITS } = require('./askConfig');
+    const q = String(input.question ?? '').replace(/[\u0000-\u0008\u000b-\u001f]/g, ' ').trim().slice(0, ASK_LIMITS.MAX_QUESTION);
+    if (!q) throw Object.assign(new Error('Empty question'), { status: 400 });
+    const hist = (Array.isArray(input.history) ? input.history : []).filter((m) => m && (m.role === 'user' || m.role === 'assistant') && String(m.content || '').trim())
+      .slice(-ASK_LIMITS.HISTORY_TURNS).map((m) => ({ role: m.role, content: String(m.content).replace(/[\u0000-\u0008\u000b-\u001f]/g, ' ').slice(0, ASK_LIMITS.MAX_TURN) }));
+    const sys = `You are ClingNote's friendly assistant inside a productivity and to-do app. Answer any question helpfully, accurately and concisely (usually under 150 words, plain text, short paragraphs or simple "-" lists, no markdown tables). If you're not sure, say so. For medical, legal or financial questions give general information and suggest a professional. Don't claim to have done things in the app.`;
+    return { costsCredit: false, ask: true, body: { model: 'gpt-4o-mini', temperature: 0.6, max_tokens: 700, messages: [{ role: 'system', content: sys }, ...hist, { role: 'user', content: q }] } };
   }
   throw Object.assign(new Error('Unknown task'), { status: 400 });
 };

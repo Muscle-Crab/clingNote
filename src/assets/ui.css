@@ -9,10 +9,12 @@
   --c-success: #3DDC97; --c-success-soft: #10261D; --c-warn: #F5B83D; --c-warn-soft: #2B2209; --c-warn-text: #F5C75F;
   --c-danger: #F87171; --c-danger-soft: #2E1517;
   --font: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  min-height: 100vh; background: var(--c-bg); color: var(--c-text); font-family: var(--font); -webkit-font-smoothing: antialiased;
+  min-height: 100vh; min-height: 100dvh; background: var(--c-bg); color: var(--c-text); font-family: var(--font); -webkit-font-smoothing: antialiased;
   padding-bottom: env(safe-area-inset-bottom);
 }
-html, body { background: #070D1C; }
+html, body, #app { background: #070D1C; }
+html { min-height: 100%; }
+body, #app { min-height: 100vh; min-height: 100dvh; margin: 0; }
 /* Top bar floats over each page's forest header */
 .app-shell .app-topbar { position: absolute; top: 0; left: 0; right: 0; z-index: 60; background: transparent; border-bottom: 0; pointer-events: none; }
 .app-shell .app-topbar-inner > *, .app-shell .app-topbar aside { pointer-events: auto; }
@@ -88,3 +90,15 @@ html, body { background: #070D1C; }
 .app-shell:not(.app-shell--home) .bg-white\/70, .app-shell:not(.app-shell--home) .bg-white\/80, .app-shell:not(.app-shell--home) .bg-white\/90 { background-color: rgba(12,22,48,.85); border: 1px solid var(--c-border-strong); }
 .app-shell:not(.app-shell--home) .text-white\/70 { color: var(--c-text-2); }
 .app-shell:not(.app-shell--home) .bg-blue-50 { background-color: var(--c-accent-soft); }
+
+/* iOS Safari zooms the page when a focused field is under 16px. Keep every form field >= 16px on phones/tablets
+   (beats scoped component sizes on purpose). Pinch-zoom stays enabled (no maximum-scale / user-scalable=no). */
+@media (max-width: 1024px), (pointer: coarse) {
+  input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]), textarea, select, [contenteditable="true"] { font-size: max(16px, 1em) !important; }
+}
+
+/* iOS: lock horizontal pan + zoom app-wide; vertical scroll stays. */
+html, body, #app { max-width: 100%; overflow-x: hidden; overscroll-behavior-x: none; }
+html, body { touch-action: pan-y; }
+button, [role="button"], a { touch-action: manipulation; }
+input, select, textarea { font-size: max(16px, 1em); }

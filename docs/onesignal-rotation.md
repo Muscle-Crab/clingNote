@@ -6,7 +6,7 @@ also in this repo's **git history** (and the public GitHub repo, if pushed). Rem
 old key safe. With it anyone can send push notifications to all your users. **Rotate it regardless.**
 
 ## 1. Rotate the key in OneSignal
-1. Sign in at https://dashboard.onesignal.com and open the ClingNot app.
+1. Sign in at https://dashboard.onesignal.com and open the ClingNote app.
 2. **Settings → Keys & IDs**.
 3. Under **REST API Key**, create a new key (or click **Rotate / Regenerate**) and copy it somewhere safe (it's shown once for v2 keys).
 4. **Delete / revoke the old key** so the leaked one stops working.

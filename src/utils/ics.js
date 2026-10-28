@@ -27,8 +27,8 @@ export const eventLines = (ev, now = new Date()) => {
   return L;
 };
 
-export const buildCalendar = (events, name = 'ClingNot tasks', now = new Date()) => [
-  'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//ClingNot//Tasks//EN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
+export const buildCalendar = (events, name = 'ClingNote tasks', now = new Date()) => [
+  'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//ClingNote//Tasks//EN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
   `X-WR-CALNAME:${escapeText(name)}`, 'REFRESH-INTERVAL;VALUE=DURATION:PT1H', 'X-PUBLISHED-TTL:PT1H',
   ...events.flatMap((e) => eventLines(e, now)), 'END:VCALENDAR',
 ].map(foldLine).join('\r\n') + '\r\n';
@@ -47,6 +47,7 @@ export const feedEvents = (scheduled = [], dayLists = {}) => {
   const seen = new Set();
   for (const e of scheduled || []) {
     if (!e?.title) continue;
+    if (e.recurrence?.freq === 'afterCompletion') { if (!e.stopped && e.nextDate) ev.push({ uid: `tpl-${e.id}-${e.nextDate}`, title: e.title, date: e.nextDate, time: e.scheduledTime, minutes: e.estimateMin, notes: e.notes }); continue; } // next due only (date moves on completion)
     if (e.recurrence && !e.stopped) { ev.push({ uid: `tpl-${e.id}`, title: e.title, date: e.startDate, time: e.scheduledTime, minutes: e.estimateMin, notes: e.notes, rrule: rruleFor(e.recurrence) }); continue; }
     if (e.templateId || e.recurrence) continue; // instances are covered by the template's RRULE
     if (e.done) continue;
@@ -68,16 +69,35 @@ export const feedEvents = (scheduled = [], dayLists = {}) => {
 export const taskIcs = (task, fallbackDate, now = new Date()) => buildCalendar([{
   uid: `one-${String(task.createdAt || now.getTime())}`.replace(/[^\w-]/g, ''), title: task.title,
   date: task.scheduledFor || task.scheduledDate || task.dueDate || fallbackDate, time: task.startTime || task.scheduledTime || '', minutes: task.estimateMin, notes: task.notes,
-}], 'ClingNot task', now);
+}], 'ClingNote task', now);
 
 export const isValidToken = (t) => typeof t === 'string' && /^[a-f0-9]{48}$/.test(t);
 
-// Browser only: "Add to calendar" for one task (downloads an .ics the OS opens in Calendar).
-export const downloadTaskIcs = (task, today) => {
-  const blob = new Blob([taskIcs(task, today)], { type: 'text/calendar' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `${String(task.title || 'task').replace(/[^\w -]/g, '').slice(0, 40) || 'task'}.ics`;
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+const icsName = (task) => `${String(task.title || 'task').replace(/[^\w -]/g, '').slice(0, 40) || 'task'}.ics`;
+const plainSummary = (task, today) => [task.title, task.scheduledFor || task.scheduledDate || task.dueDate || today, task.startTime || task.scheduledTime || ''].filter(Boolean).join(' · ');
+
+// Browser only: "Add to calendar" for one task. Resolves to 'downloaded' | 'shared' | 'copied' | 'cancelled' | 'failed'.
+// Web: downloads an .ics the OS opens in Calendar. iOS app (WKWebView, `opts.native`): blob/<a download> does nothing there, so share the file
+// through the share sheet (Add to Calendar / Save to Files); if file sharing is unavailable, copy a plain-text summary instead.
+// `opts.env` lets tests inject { navigator, document, URL, File }.
+export const downloadTaskIcs = async (task, today, opts = {}) => {
+  const env = opts.env || { navigator: typeof navigator !== 'undefined' ? navigator : undefined, document: typeof document !== 'undefined' ? document : undefined, URL: typeof URL !== 'undefined' ? URL : undefined, File: typeof File !== 'undefined' ? File : undefined };
+  const text = taskIcs(task, today); const name = icsName(task);
+  if (opts.native) {
+    const nav = env.navigator;
+    try {
+      if (nav && nav.share && env.File) {
+        const file = new env.File([text], name, { type: 'text/calendar' });
+        if (!nav.canShare || nav.canShare({ files: [file] })) { await nav.share({ files: [file], title: task.title || 'ClingNote task' }); return 'shared'; }
+      }
+    } catch (e) { if (e && e.name === 'AbortError') return 'cancelled'; /* share failed: fall through to copy */ }
+    try { await nav.clipboard.writeText(plainSummary(task, today)); return 'copied'; } catch (e) { return 'failed'; }
+  }
+  const blob = new Blob([text], { type: 'text/calendar' });
+  const a = env.document.createElement('a');
+  a.href = env.URL.createObjectURL(blob);
+  a.download = name;
+  env.document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => env.URL.revokeObjectURL(a.href), 5000);
+  return 'downloaded';
 };

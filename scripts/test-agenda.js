@@ -31,5 +31,15 @@ t('completed instance shows done on its day (from the list task)', () => {
   assert.equal(a3['2026-10-19'].find((x) => x.title === 'weekly gym').done, true);
 });
 t('week helpers', () => { assert.equal(A.weekStartOf('2026-10-22'), '2026-10-18'); assert.equal(A.dowOf('2026-10-22'), 4); });
+t('upcoming: only dated tasks after today; no undated routine tasks, no repeats', () => {
+  const dl = { Thu: [{ title: 'undated thu', createdAt: 1 }], Fri: [{ title: 'undated fri', createdAt: 2 }, { title: 'due sat', createdAt: 3, dueDate: '2026-10-24' }], Wed: [{ title: 'daily rep', repeatDays: [0, 1, 2, 3, 4, 5, 6] }] };
+  const sc = [S.buildScheduledEntry({ title: 'dentist' }, '2026-10-23', '', 'd1'), S.buildScheduledEntry({ title: 'old' }, '2026-10-21', '', 'o1')];
+  const u = A.datedFutureOnly(A.agendaForRange({ scheduled: sc, dayLists: dl, today: '2026-10-22', from: '2026-10-18', to: '2026-10-24' }), '2026-10-22');
+  const all = Object.values(u).flat().map((x) => x.title).sort();
+  assert.deepEqual(all, ['dentist', 'due sat']);
+  assert.ok(u['2026-10-22'].length === 0 && u['2026-10-21'].length === 0, 'today and past empty');
+  const v = require('fs').readFileSync(require('path').join(__dirname, '../src/views/UpcomingView.vue'), 'utf8');
+  assert.ok(/const agenda = computed\(\(\) => datedFutureOnly\(agendaForRange\(/.test(v), 'UpcomingView applies the filter');
+});
 console.log(`${n} passed`);
 })().catch((e) => { console.error(e); process.exit(1); });

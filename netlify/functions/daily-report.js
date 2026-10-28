@@ -2,9 +2,11 @@
 // 8 AM+ in their saved time zone and not yet sent for that local date: build yesterday's recap and push it to
 // their own devices (OneSignal external_id = uid). No email: the project has no email service configured.
 const { getAdmin, sendOneSignal } = require('./lib/notify');
+const { notifSound } = require('../../src/utils/notifSound.js');
 const { buildRecap, localParts, reportDue, prevDay } = require('../../src/utils/dailyReport.js');
 
-const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+// The app stores day docs as weeklyRoutines/{uid}_{Sun..Sat} (Intl weekday 'short'); the old full names never existed, so every recap read 0 tasks.
+const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const weekdayName = (ds) => DAY_NAMES[new Date(`${ds}T12:00:00Z`).getUTCDay()];
 
 exports.runReports = async ({ db, now = new Date(), send }) => {
@@ -22,8 +24,9 @@ exports.runReports = async ({ db, now = new Date(), send }) => {
       db.doc(`weeklyRoutines/${uid}_${weekdayName(parts.date)}`).get(),
     ]);
     const recap = buildRecap({ today: parts.date, streakDoc: streakDoc.exists ? streakDoc.data() : {}, yesterdayTasks: yDoc.exists ? yDoc.data().tasks : [], todayTasks: tDoc.exists ? tDoc.data().tasks : [], now });
+    const snd = notifSound('morning', '', { muted: docSnap.data().notifVoice === false }); // robot voice off -> iOS default
     try {
-      await send({ app_id: process.env.ONESIGNAL_APP_ID, include_aliases: { external_id: [uid] }, target_channel: 'push', headings: { en: recap.title }, contents: { en: recap.text.slice(0, 300) }, url: 'https://clingnot.netlify.app/home' });
+      await send({ app_id: process.env.ONESIGNAL_APP_ID, include_aliases: { external_id: [uid] }, target_channel: 'push', headings: { en: recap.title }, contents: { en: recap.text.slice(0, 300) }, url: 'https://clingnot.netlify.app/home', ...(snd ? { ios_sound: snd } : {}) });
       await docSnap.ref.set({ morningReport: { lastSent: parts.date } }, { merge: true });
       results.push({ uid, sent: true });
     } catch (e) { results.push({ uid, sent: false }); }

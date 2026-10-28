@@ -1,6 +1,6 @@
 <template>
-  <div class="fab-group">
-    <router-link
+  <div class="fab-group" :class="{ 'fab-group--voice-only': !showAdd }">
+    <router-link v-if="showAdd"
         :to="userId ? '#' : '/login'"
         @click.native.prevent="userId && $emit('add')"
         class="fab fab-add"
@@ -12,21 +12,27 @@
       <span>Add Task</span>
     </router-link>
 
-    <button @click="$emit('voice')" class="fab fab-voice" :class="{ 'fab-voice--listening': listening }" title="Voice input">
-      <span v-if="listening" class="fab-pulse"></span>
-      <svg xmlns="http://www.w3.org/2000/svg" class="fab-icon" viewBox="0 0 24 24" fill="currentColor">
-        <path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2Z"/>
-      </svg>
+    <button type="button" class="fab fab-voice fab-assistant" :class="{ 'fab-voice--listening': assistantLive }" data-test="assistant-bubble"
+        title="Assistant (hold to talk)" aria-label="Assistant. Tap to open, press and hold to talk"
+        @pointerdown="hold" @pointerup="release" @pointerleave="release" @pointercancel="release" @contextmenu.prevent @click="onClick">
+      <RobotAvatar class="fab-robot" :live="assistantLive" />
     </button>
   </div>
 </template>
 
 <script setup>
+import RobotAvatar from './RobotAvatar.vue';
+// Bottom-left floating assistant button (replaces the old standalone mic FAB). Tap = open; long-press = open listening.
 defineProps({
   userId: { type: String, default: null },
-  listening: { type: Boolean, default: false },
+  assistantLive: { type: Boolean, default: false },
+  showAdd: { type: Boolean, default: true },
 });
-defineEmits(['add', 'voice']);
+const emit = defineEmits(['add', 'assistant']);
+let t = null; let longed = false;
+const hold = () => { longed = false; clearTimeout(t); t = setTimeout(() => { longed = true; emit('assistant', true); }, 550); };
+const release = (e) => { clearTimeout(t); if (longed && e) e.preventDefault(); };
+const onClick = () => { if (longed) { longed = false; return; } emit('assistant', false); };
 </script>
 
 <style scoped>
@@ -42,4 +48,8 @@ defineEmits(['add', 'voice']);
 .fab-icon { width: 22px; height: 22px; z-index: 1; position: relative; }
 .fab-pulse { position: absolute; inset: -2px; border-radius: 14px; background: rgba(61, 220, 151, .25); animation: ping 1s cubic-bezier(0, 0, .2, 1) infinite; }
 @keyframes ping { 75% { transform: scale(1.3); opacity: 0; } }
+.fab-assistant { touch-action: manipulation; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.fab-assistant { padding: 3px; overflow: visible; }
+.fab-robot { width: 46px; height: 46px; }
+.fab-assistant.fab-voice--listening { box-shadow: 0 0 0 2px #4aa8ff, 0 0 14px 2px rgba(74, 168, 255, .65); }
 </style>

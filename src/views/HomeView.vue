@@ -1,6 +1,7 @@
 <template>
-  <div ref="scrollContainer" class="app-root" :class="[{ 'is-dragging': isDraggingTask, 'reorder-active': isDraggingTask || reorderSettling }, appTheme ? 'theme-' + appTheme : '']">
+  <div ref="scrollContainer" class="app-root" :class="[{ 'has-bg-anim': bgPrefs.anim !== 'none', 'is-dragging': isDraggingTask, 'reorder-active': isDraggingTask || reorderSettling }, appTheme ? 'theme-' + appTheme : '']">
     <BackgroundLayer :anim="bgPrefs.anim" :force-motion="bgPrefs.forceMotion" />
+    <div class="safe-top-scrim" aria-hidden="true"></div>
     <BackgroundPanel :open="showBackground" @close="showBackground = false" />
 
     <!-- Loading Screen -->
@@ -25,7 +26,7 @@
             <p class="hero-date">{{ currentDate }}</p>
             <h1 class="hero-title">{{ heroTitleParts.lead }}<span class="hero-accent">{{ heroTitleParts.accent }}</span></h1>
             <p class="hero-sub">{{ daysLeftInYear }} days left this year</p>
-            <button type="button" class="bg-pill" data-test="open-background-pill" aria-label="Background: animation and music" @click="showBackground = true">🎧 Background<span class="bg-pill-sub">snow · rain · fire · music</span></button>
+            <button type="button" class="bg-pill" data-test="open-background-pill" aria-label="Background: animation and music" @click="showBackground = true">🎧 Background<span class="bg-pill-sub">picture · snow · rain · music</span></button>
           </div>
           <div ref="heroMenuEl" class="hero-menu">
             <button type="button" class="hero-menu-btn" :aria-label="noticeCount ? noticeCount + ' updates and day menu' : 'Day menu'" :aria-expanded="menuOpen ? 'true' : 'false'" @click="menuOpen = !menuOpen">
@@ -46,7 +47,7 @@
               <button type="button" class="hero-menu-item" @click="openShutdown">🌙 Shutdown day</button>
               <button v-if="daySession.started && !daySession.ended" type="button" class="hero-menu-item" @click="endDay">■ End day<span v-if="daySession.startedAtText" class="hero-menu-meta"> · started {{ daySession.startedAtText }}</span></button>
               <router-link to="/upcoming" class="hero-menu-item">📅 Upcoming</router-link>
-              <router-link to="/rankings" class="hero-menu-item">🏆 Rankings</router-link>
+              <router-link v-if="!hideUgc" to="/rankings" class="hero-menu-item">🏆 Rankings</router-link>
               <router-link to="/discipline" class="hero-menu-item">⚔️ Discipline Mode</router-link>
               <button type="button" class="hero-menu-item" data-test="open-background" @click="showBackground = true">🎧 Background</button>
               <button type="button" class="hero-menu-item" @click="showSchedule = !showSchedule">🗓 {{ showSchedule ? 'Hide' : 'Show' }} schedule</button>
@@ -57,8 +58,14 @@
 
         <DayTabs :days="tabDays" :selected-index="selectedDayIndex" :scheduled-counts="scheduledCounts" @select="handleDayTabClick" />
 
+        <WakeAlarmPrompt v-if="isViewingToday" />
+        <EightHourCard v-if="lockInToday || eh.lock.value" :tasks="ehTasks" :start-error="ehStartError" @retry="syncAfterAuth" @start="openDayPrompt" />
+        <PlanDaySheet v-if="planOpen" :tasks="dayTasks" :busy="planBusy" :error="planError" @previewed="onPlanPreviewed" @confirm="onPlanConfirm" @close="planOpen = false" />
+        <DayTemplatesSheet v-if="tplOpen" :templates="dayTemplates" :task-count="templateItemCount" :busy="tplBusy" :error="tplError" :note="tplNote" @apply="applyDayTemplate" @save="saveDayTemplate" @remove="removeDayTemplate" @close="tplOpen = false" />
+        <DayStartPrompt v-if="dayPromptOpen" :initial-hours="eh.hoursPref.value" :now-ms="eh.nowMs" :tz="eh.plan.value?.tz || ''" :busy="ehBusy" :error="ehStartError" :tasks="todayTasksForTarget" :stats="eh.stats.value" :earned="pointsAccumulated || 0" @confirm="confirmDayStart" @skip="skipLockIn" />
+
         <ProgressBar :percentage="calculateCompletionPercentage()" :milestones="milestones" :done="completedTaskCount || 0" :total="dayTasks.length"
-                     :streak="streak" :streak-status="streakStatus" :streak-progress="streakProgress" :streak-min="DAILY_STREAK_MIN" :points="pointsAccumulated || 0" />
+                     :streak="streak" :streak-status="streakStatus" :streak-progress="streakProgress" :streak-min="DAILY_STREAK_MIN" :freezes="streakFreezes" :points="pointsAccumulated || 0" :target="isViewingToday ? dayRequiredPts : 0" />
 
       </section>
       <ShutdownPrompt class="home-notice" :suggest="false" :open="shutdownOpen" :done="shutdownDone" :open-tasks="shutdownOpenTasks"
@@ -69,8 +76,8 @@
       <DramaOverlay v-if="lossScreen" variant="lost" title="Streak lost" button="I'll do better"
                     :subtitle="lossScreen.reason ? `${lossScreen.lostStreak ? lossScreen.lostStreak + '/5 streak gone. ' : ''}${lossScreen.reason} Complete 5 tasks a day to keep it.` : `You missed your deadline. ${lossScreen.lostStreak ? lossScreen.lostStreak + '-day streak gone. ' : ''}${lossScreen.penalty} pts.`" @close="dismissLoss" />
 
-      <DramaOverlay v-if="bossVictory" variant="victory" title="Boss defeated" button="Claim victory"
-                    :subtitle="`${bossVictory.title} is down. +${BOSS_BONUS} pts — your day can count now.`" @close="bossVictory = null" />
+      <DramaOverlay v-if="bossVictory" variant="victory" title="Challenge cleared" button="Claim victory"
+                    :subtitle="`${bossVictory.title} is done. +${BOSS_BONUS} pts — your day can count now.`" @close="bossVictory = null" />
 
       <DramaOverlay v-if="levelUp" variant="levelup" :title="`Level ${levelUp.level}`" button="Let's go"
                     :subtitle="`${levelUp.xp} XP · ${levelUp.toNext} XP to level ${levelUp.level + 1}`" @close="levelUp = null" />
@@ -103,7 +110,8 @@
 
       <TaskDetailModal v-if="taskDetailModalOpen" :task="taskDetail" :active-labels="activeLabels"
                        @close="closeTaskDetailModal" @preview="showImagePreview = true"
-                       @remove-attachment="removeTaskAttachment" @toggle-label="toggleLabelHighlight" />
+                       @remove-attachment="removeTaskAttachment" @toggle-label="toggleLabelHighlight"
+                       :schedule="detailSchedule" :day-date="selectedDayDate" :sched-error="schedEditError" @save-schedule="saveTaskSchedule" />
 
 
       <ImagePreview v-if="showImagePreview" :src="taskDetail.imageURL" @close="showImagePreview = false" />
@@ -112,7 +120,10 @@
       <ReminderModal v-if="isModalOpen" :reminder="reminder" :task-title="selectedTaskTitle" @close="closeModal" @submit="handleAddReminder" />
 
 
-      <VoiceModal v-if="voiceOpen" :transcript="liveTranscript" :supported="voiceSupported" :capability="voiceCap" :error="voiceError" :hint="voiceHint" :added="voiceAdded" @undo="undoVoiceTask" @cancel="cancelVoiceInput" />
+      <AssistantSheet v-if="askOpen" :executor="assistantExecutor" :listen-on-open="assistantListen" @close="askOpen = false" />
+      <VoiceModal v-if="voiceOpen" :transcript="liveTranscript" :supported="voiceSupported" :capability="voiceCap" :error="voiceError" :hint="voiceHint" :added="voiceAdded" :items="voiceItems" :busy="voiceBusy" :source="voiceSource" @undo="undoVoiceTask" @cancel="cancelVoiceInput" @finish="finishVoiceInput" @confirm="confirmVoiceItems" @relisten="relistenVoice" />
+      <div v-if="repeatToast" :key="repeatToast.id" class="repeat-toast" :class="{ 'repeat-toast--err': repeatToast.error }" :role="repeatToast.error ? 'alert' : 'status'" data-test="repeat-toast">🔁 {{ repeatToast.text }} <button v-if="repeatToast.undo" type="button" data-test="repeat-undo" @click="() => { const u = repeatToast.undo; repeatToast = null; u(); }">Undo</button></div>
+      <div v-if="noteToast" :key="'n' + noteToast.id" class="repeat-toast" :class="{ 'repeat-toast--err': noteToast.error }" :role="noteToast.error ? 'alert' : 'status'" data-test="note-toast">{{ noteToast.text }}</div>
       <div v-if="!voiceOpen && voiceAdded.some((e) => e.undoUntil > nowTick)" class="voice-toasts" role="status">
         <div v-for="e in voiceAdded.filter((x) => x.undoUntil > nowTick)" :key="e.id" class="voice-toast">🎙 Added “{{ e.title }}” <button type="button" @click="undoVoiceTask(e)">Undo</button></div>
       </div>
@@ -121,12 +132,14 @@
       <!-- ─── Task List ─── -->
       <section v-if="canViewSelectedDayTasks"
                class="task-section">
-        <EmptyState v-if="dayTasks.length === 0" :show-add="true" @add="onAddClick" />
+        <EmptyState v-if="dayTasks.length === 0" :show-add="true" :show-templates="isViewingToday && !!userId" @add="onAddClick" @templates="openTemplates" />
 
 
         <div v-else class="task-list-wrap">
           <TaskListHeader :label="isViewingToday ? 'Today' : FULL_DAY_NAMES[selectedDayIndex]" :is-today="isViewingToday" :completed="completedTaskCount" :total="dayTasks.length"
-                          :sound-enabled="soundEnabled" :show-completed="showCompleted" v-model:prefs="viewPrefs" @toggle-sound="toggleSound" @toggle-completed="showCompleted = !showCompleted" />
+                          :sound-enabled="soundEnabled" :boss-voice-on="!voMuted" :assistant-live="askOpen" :show-completed="showCompleted" v-model:prefs="viewPrefs" @toggle-sound="toggleSound" @toggle-boss-voice="setVoMuted(!voMuted)" @open-assistant="openAssistant" @toggle-completed="showCompleted = !showCompleted"
+                          :day-tools="isViewingToday && !!userId" @plan-day="openPlanDay" @templates="openTemplates" />
+          <RoutineStrip v-if="isViewingToday && routineItems.length" :items="routineItems" :week="routineWeekStats" @toggle="toggleRoutineTask" />
 
 
 
@@ -135,43 +148,31 @@
 
           <p v-if="viewPrefs.filter !== 'all' && isViewingToday && visibleTaskCount === 0" class="filter-empty">No tasks match this filter.</p>
 
-          <draggable
-              handle=".drag-handle"
-              :item-key="taskKey"
-              :prevent-on-filter="false"
-              :force-fallback="true"
-              :fallback-tolerance="3"
-              :touch-start-threshold="3"
-              :scroll-sensitivity="90"
-              :scroll-speed="14"
-              easing="cubic-bezier(.2, .8, .2, 1)"
-              :animation="reducedMotion ? 0 : 220"
-              :disabled="!reorderable"
-              :model-value="displayTasks"
-              @update:model-value="onReorder"
-              tag="div"
-              class="tasks-list space-y-2"
-              ghost-class="task-ghost"
-              chosen-class="task-chosen"
-              drag-class="task-dragging"
-              fallback-class="sortable-fallback-card"
-              @start="onDragStart()"
-              @end="isDraggingTask = false; settleReorder(); playSound('dragEnd'); handleDragEnd()"
-          >
-            <template #item="{ element: task, index }">
+          <div v-if="rollover && isViewingToday" class="rollover-banner" data-test="rollover-banner" role="status">
+            <button type="button" class="rollover-banner__body" @click="highlightRollover">🌅 {{ rollover.message }}</button>
+            <button type="button" class="rollover-banner__x" aria-label="Dismiss" data-test="rollover-dismiss" @click="dismissRollover">×</button>
+          </div>
+          <div ref="taskListEl" class="tasks-list space-y-2" :class="{ 'reorder-off': !reorderable }" @pointerdown="onListPointerDown">
+            <template v-for="task in displayTasks" :key="rkey(task)">
               <TaskCard
-                  v-if="!task.completed || !isViewingToday"
+                  v-if="!task.completed || !isViewingToday" :data-reorder-key="taskKey(task)"
                   :task="task" :up-next="isViewingToday && !task.completed && taskKey(task) === upNextKey" :drag-disabled="!reorderable" :index="realIndex(task)" :is-today-tab="isViewingToday" :expanded="expandedKey === taskKey(task)"
                   :active-labels="activeLabels" :now="nowTick" :show-notification="showNotification" :transfer-notification="transferNotification"
                   @toggle-expand="toggleExpanded(task)" @toggle-complete="toggleTaskCompletion(realIndex(task))" @open-detail="openTaskDetailModal(task)"
-                  @set-boss="setBoss(realIndex(task), task)" @toggle-important="toggleTaskImportance(realIndex(task))" @patch="patchTask(realIndex(task), task, $event)" @subtask-patch="onSubtaskPatch(realIndex(task), task, $event)"
+                  @set-boss="setBoss(realIndex(task), task)" @toggle-important="toggleTaskImportance(realIndex(task))" :day-locked="selectedDayLocked" :highlight="rolledKeys.includes(taskKey(task))" :all-occurrences="seriesKey === taskKey(task)"
+                  @edit="toggleExpanded(task)" @series="seriesKey = $event ? taskKey(task) : null"
+                  @patch="editTask(realIndex(task), task, $event)" @subtask-patch="onSubtaskPatch(realIndex(task), task, $event)"
                   @toggle-label="toggleLabelHighlight" @open-reminder="openModal('calendar', realIndex(task), task.title)" @transfer="openTransferModal(realIndex(task))"
                   @video="openYouTubeModal(realIndex(task))" @upload="handleUpload($event, realIndex(task))" @timer="openTaskTimerModal(realIndex(task))"
-                  @wont-do="openWontDoModal(realIndex(task))" @delete="deleteTask(realIndex(task))" @schedule="scheduleExistingTask(realIndex(task), task, $event)" @set-repeat="setTaskRepeat(task, $event)"
+                  @wont-do="openWontDoModal(realIndex(task))" @delete="deleteTask(realIndex(task))" @schedule="scheduleExistingTask(realIndex(task), task, $event)" @set-repeat="setTaskRepeat(task, $event)" :repeat-info="repeatStateOf(task)" @toggle-repeat="toggleTaskRepeat(task)"
+                  :can-skip="isViewingToday && !selectedDayLocked && canSkipToday(task, scheduledList)" @skip-today="skipTaskToday(task)"
               />
             </template>
-          </draggable>
+          </div>
 
+          <button v-if="coverage.hidden > 0" type="button" class="more-hidden" data-test="more-hidden" :aria-label="`${coverage.label}${coverage.why ? ` (${coverage.why})` : ''}`" @click="revealHidden">
+            {{ coverage.label }}<span v-if="coverage.why" class="more-hidden__why"> · {{ coverage.why }}</span>
+          </button>
           <div v-if="isViewingToday && completedTaskCount > 0" class="done-section">
             <button type="button" class="done-toggle" :aria-expanded="showCompleted ? 'true' : 'false'" @click="showCompleted = !showCompleted">
               <i class="fas" :class="showCompleted ? 'fa-chevron-down' : 'fa-chevron-right'" aria-hidden="true"></i>
@@ -179,18 +180,20 @@
               <i class="fas done-eye" :class="showCompleted ? 'fa-eye' : 'fa-eye-slash'" aria-hidden="true"></i>
             </button>
             <div v-if="showCompleted" class="tasks-list tasks-list--done">
-              <TaskCard v-for="task in displayTasks.filter((t) => t.completed)" :key="taskKey(task)"
+              <TaskCard v-for="task in displayTasks.filter((t) => t.completed)" :key="rkey(task)"
                   :task="task" :drag-disabled="true" :index="realIndex(task)" :is-today-tab="true" :expanded="expandedKey === taskKey(task)"
                   :active-labels="activeLabels" :now="nowTick"
                   @toggle-expand="toggleExpanded(task)" @toggle-complete="toggleTaskCompletion(realIndex(task))" @open-detail="openTaskDetailModal(task)"
-                  @set-boss="setBoss(realIndex(task), task)" @toggle-important="toggleTaskImportance(realIndex(task))" @patch="patchTask(realIndex(task), task, $event)" @subtask-patch="onSubtaskPatch(realIndex(task), task, $event)"
+                  @set-boss="setBoss(realIndex(task), task)" @toggle-important="toggleTaskImportance(realIndex(task))" :day-locked="selectedDayLocked" :highlight="rolledKeys.includes(taskKey(task))" :all-occurrences="seriesKey === taskKey(task)"
+                  @edit="toggleExpanded(task)" @series="seriesKey = $event ? taskKey(task) : null"
+                  @patch="editTask(realIndex(task), task, $event)" @subtask-patch="onSubtaskPatch(realIndex(task), task, $event)"
                   @toggle-label="toggleLabelHighlight" @open-reminder="openModal('calendar', realIndex(task), task.title)" @transfer="openTransferModal(realIndex(task))"
                   @video="openYouTubeModal(realIndex(task))" @upload="handleUpload($event, realIndex(task))" @timer="openTaskTimerModal(realIndex(task))"
-                  @wont-do="openWontDoModal(realIndex(task))" @delete="deleteTask(realIndex(task))" @schedule="scheduleExistingTask(realIndex(task), task, $event)" @set-repeat="setTaskRepeat(task, $event)" />
+                  @wont-do="openWontDoModal(realIndex(task))" @delete="deleteTask(realIndex(task))" @schedule="scheduleExistingTask(realIndex(task), task, $event)" @set-repeat="setTaskRepeat(task, $event)" :repeat-info="repeatStateOf(task)" @toggle-repeat="toggleTaskRepeat(task)" />
             </div>
           </div>
 
-          <IdleState v-if="dayTasks.length > 0 && dayTasks.every(task => task.completed) && !showCompleted" />
+          <IdleState v-if="dayTasks.length > 0 && dayTasks.every(task => task.completed) && !showCompleted" :wrapped="!!daySession.ended" :count="dayTasks.length" />
 
 
           <WontDoList v-if="wontDoTasks.length > 0 && !selectedDayRoutine?.every(task => task.completed)" :tasks="wontDoTasks" @undo="undoWontDo" />
@@ -201,10 +204,10 @@
 
       <TimeStatsBar v-if="isViewingToday" :stats="timeStats" :ended="!!daySession.ended" :suggest="suggestShutdown && !shutdownDismissed" @wrap-up="openShutdown" />
 
-      <ScheduledList v-if="userId" :tasks="futureScheduled" :today-str="todayStr" :error="scheduledError"
+      <ScheduledList v-if="userId" :tasks="futureScheduled" :today-str="todayStr" :error="scheduledError" :series="templatesOf(scheduledList)" @edit="editScheduledEntry"
                      @move-today="moveScheduledToToday" @update="updateScheduledDate" @delete="deleteScheduled" />
 
-      <FabButtons :user-id="userId" :listening="listening" @add="onAddClick" @voice="startVoiceInput" />
+      <FabButtons :show-add="false" :user-id="userId" :assistant-live="askOpen" @add="onAddClick" @assistant="openAssistant" />
 
 
     </div>
@@ -212,14 +215,25 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount, computed, watch, reactive } from 'vue';
+import { addSubtask, subtasksOf } from '@/utils/subtasks';
+import { parseAsk } from '@/utils/assistantFab';
+import PlanDaySheet from '@/components/home/PlanDaySheet.vue';
+import DayTemplatesSheet from '@/components/home/DayTemplatesSheet.vue';
+import { useDayTemplates } from '@/composables/useDayTemplates';
+import { planChanges } from '@/utils/dayPlan';
+import { makeTemplate, applyTemplate, applySummary } from '@/utils/dayTemplates';
+import { listCoverage, uniqueRenderKeys } from '@/utils/listCoverage';
+import { mergeIntents, intentCreateArgs, intentOutcome, bumpTries as bumpIntentTries, outOfTries as intentOutOfTries, readBuffer as readIntentBuffer, writeBuffer as writeIntentBuffer } from '@/utils/intentQueue';
+import { weekStats, searchTasks, suggestNext, snoozeTo } from '@/utils/assistantExtras';
+import { ref, onMounted, onBeforeUnmount, computed, watch, reactive, nextTick } from 'vue';
 import { useSounds } from '@/composables/useSounds';
 import { patchStoredTask, loadDayTasks, carryTasksToDay } from '@/composables/useDayPersistence';
 import { activeFromForDay, isHiddenOnDate, seriesDays, withoutSeries } from '@/utils/repeat';
 import { useTaskViewPrefs } from '@/composables/useTaskViewPrefs';
-import { viewTasks, canReorder, normalizePrefs, visibleCount, shouldHandleShortcut } from '@/utils/taskView';
+import { viewTasks, canReorder, applyManualOrder, normalizePrefs, visibleCount, shouldHandleShortcut } from '@/utils/taskView';
 import { ACTIVE_CAP, taskKey, activeCount, loadSummary, buildSchedule } from '@/utils/taskPlanning';
-import { getTodayId, formatSessionTime, getCurrentDate, formatTime, getTodayDate, isToday } from '@/utils/dateTime';
+import { localYMD, isStaleCompletion } from '@/utils/localDate';
+import { getTodayId, formatSessionTime, getCurrentDate, formatTime, isToday } from '@/utils/dateTime';
 import { badges } from '@/utils/gamification';
 import { recordMonthlyToggle, awardFinishedMonth } from '@/composables/useMonthlyStats';
 import { loadDisciplineSettings, settleDeadlines, clearLossPending, loadDisciplineState, setBossForDay, setBossCleared, tryFreeze, logDiscipline, patchDisciplineState } from '@/composables/useDiscipline';
@@ -234,17 +248,20 @@ import BackgroundPanel from '@/components/background/BackgroundPanel.vue';
 import { useBackground } from '@/composables/useBackground';
 import { buildRecap, reportDue, prevDay } from '@/utils/dailyReport';
 import { monthKey, prevMonthKey } from '@/utils/ranking';
-import { applyTaskToggle, evaluateStreak, localDateStr, dayDiff, ALLOWED_GAP_DAYS, DAILY_STREAK_MIN, capStreak, lostReason } from '@/utils/streak';
+import { applyTaskToggle, evaluateStreak, localDateStr, dayDiff, ALLOWED_GAP_DAYS, DAILY_STREAK_MIN, capStreak, lostReason, applyFreezes } from '@/utils/streak';
+import { pickTimerIntent } from '@/utils/siriIntents';
 import { askAi } from '@/composables/useAi';
+import { ensureAiConsent, hasAiConsent } from '@/composables/useAiConsent';
 import { useRouter as _useRouter } from 'vue-router';
-import { requirePro, loadUserDoc } from '@/composables/usePro';
+import { requirePro, loadUserDoc, rcProActive } from '@/composables/usePro';
 import { isPro as isProUser } from '@/utils/pro';
 import { checkDailyLimit } from '@/utils/taskLimits';
+import { defaultTransferDay, transferFits, MAX_TASKS_PER_DAY } from '@/utils/transfer';
 import { canUse } from '@/utils/pro';
 const _proRouter = _useRouter();
-// Daily task limit (config/pricing.js TASK_LIMITS): free 5/day, Pro 5/day
+// Daily task limit (config/pricing.js TASK_LIMITS): safety max 50/day, free and Pro alike
 const limitHit = ref(null); // { limit, count, pro, day } when the last add was blocked
-const goUpgradeForLimit = () => { modalOpen.value = false; _proRouter.push({ path: '/paywall', query: { feature: 'taskLimit', from: '/home' } }); };
+const goUpgradeForLimit = () => { if (rcProActive(auth.currentUser?.uid)) return; modalOpen.value = false; _proRouter.push({ path: '/paywall', query: { feature: 'taskLimit', from: '/home' } }); };
 // Limit data is prefetched when the add modal opens so Save does not wait on 8 Firestore reads.
 let gateCache = null; // { at, pro, lists, extra: [] }
 const pendingAdds = new Map(); // taskKey -> task added in this session (a refetch started before the write landed would miss it; counting dedupes by key)
@@ -278,27 +295,47 @@ const mutateDay = (dayName, fn) => runTransaction(db, async (tx) => {
 });
 const strictAllowed = ref(true); // false for free users once ENFORCE_PAYWALL is on
 loadUserDoc().then((d) => { strictAllowed.value = canUse(d, 'strictBoss'); }).catch(() => {});
+import { scheduleLocal, scheduleTimerDone, cancelLocal, timerKey, cancelTaskNotifications, taskKeyOf } from '@/utils/localNotify';
 import { scheduleNotification, sendNotificationToPlayer, linkPushUser } from '@/composables/useNotifications';
 import { speak } from '@/composables/useSpeech';
 import { completionPercentage, computeTimeStats, daysLeftInYearFrom, heroTitleFor } from '@/utils/dayStats';
 import { shouldAutoComplete, resetSubtasks } from '@/utils/subtasks';
-import { buildScheduledEntry, buildRecurringTemplate, isTaskVisibleOn, futureOf, dueOf, countsByDate, withWeekDates, isValidDate, removeScheduled, rescheduleEntry } from '@/utils/scheduling';
+import { deferredDateFor, buildScheduledEntry, buildRecurringTemplate, isTaskVisibleOn, futureOf, dueOf, countsByDate, withWeekDates, isValidDate, rescheduleEntry, templatesOf } from '@/utils/scheduling';
 import { mutateScheduled, materializeDueForToday } from '@/composables/useScheduledTasks';
+import { blankSchedule, validateSchedule, scheduleOfTask, applyTaskSchedule, deleteTaskScope, deleteEntry, editEntry } from '@/utils/schedEdit';
+import { syncScheduledNotifications } from '@/composables/useSchedNotifications';
+import { repeatState, patternOf, onSchedule, offSchedule, toastFor, legacyRepeating, legacyPattern } from '@/utils/repeatToggle';
+import { dropUndefined } from '@/utils/firestoreSafe';
+import { lightHaptic } from '@/composables/useTaskMotion';
 import ScheduledList from '@/components/home/ScheduledList.vue';
 import EmptyState from '@/components/home/EmptyState.vue';
 import StartDayPrompt from '@/components/home/StartDayPrompt.vue';
 import TaskListHeader from '@/components/home/TaskListHeader.vue';
+import RoutineStrip from '@/components/home/RoutineStrip.vue';
+import { markRoutineDone, skipRoutineToday, canSkipToday, routineToday, routineWeek } from '@/utils/routine';
 import FabButtons from '@/components/home/FabButtons.vue';
 import IdleState from '@/components/home/IdleState.vue';
 import WontDoList from '@/components/home/WontDoList.vue';
 import LoadSummary from '@/components/home/LoadSummary.vue';
 import TaskCard from '@/components/home/TaskCard.vue';
+import { safeEditPatch, cleanEstimate, timerStarted, retimePatch, seriesPatch } from '@/utils/taskEdit';
+import { pendingRollover, loadSeen, markSeen, rolloverNotifBody } from '@/utils/rollover';
 import TimeBlockSchedule from '@/components/home/TimeBlockSchedule.vue';
 import AddTaskModal from '@/components/home/AddTaskModal.vue';
 import CelebrationOverlay from '@/components/home/CelebrationOverlay.vue';
 import DayTabs from '@/components/home/DayTabs.vue';
 import ImagePreview from '@/components/home/ImagePreview.vue';
 import ProgressBar from '@/components/home/ProgressBar.vue';
+import EightHourCard from '@/components/home/EightHourCard.vue';
+import WakeAlarmPrompt from '@/components/home/WakeAlarmPrompt.vue';
+import { lockIn, loadLockIn, skipLockInToday } from '@/utils/lockIn';
+import { homeDay } from '@/utils/homeDay';
+import DayStartPrompt from '@/components/eighthour/DayStartPrompt.vue';
+import { useEightHour, syncAfterAuth, setDayLengthHours, loadDayLengthHours, promptSeenFor, markPromptSeen } from '@/composables/useEightHour';
+import { countableIndexes, taskRange, hoursLabel } from '@/utils/eightHour';
+import { estimateFor, chipValues } from '@/utils/taskEstimate';
+import { patchTouchesLocked } from '@/utils/eightHourLock';
+import { isDayLocked, isLockError, assertTasksChangeAllowed, lockedMessage, isShutdown, shutMessage } from '@/utils/eightHourLock';
 import ReminderModal from '@/components/home/ReminderModal.vue';
 import ShutdownPrompt from '@/components/home/ShutdownPrompt.vue';
 import TaskDetailModal from '@/components/home/TaskDetailModal.vue';
@@ -306,7 +343,27 @@ import TimeStatsBar from '@/components/home/TimeStatsBar.vue';
 import TimerModal from '@/components/home/TimerModal.vue';
 import TransferModal from '@/components/home/TransferModal.vue';
 import VoiceModal from '@/components/home/VoiceModal.vue';
+import AssistantSheet from '@/components/home/AssistantSheet.vue';
+import { createAssistantExecutor } from '@/utils/assistantExecutor';
+import { validateCall } from '@/utils/assistantTools';
+import { clampPoints as _clampPts, clampComplexity as _clampCx } from '@/utils/assistantTools';
+import { loadAssistant, assistantSession, saveAssistant } from '@/utils/assistantSession';
+import { voMuted, setVoMuted, speakLive } from '@/composables/useVoiceover';
+import { reactionLine, shouldRoast, checkinMarks, checkinLine, dueMark, overbooked, rollCandidates, tomorrowStr } from '@/utils/bossCoach';
+import { loadHabits, saveHabits, addHabit, logHabit, habitSummary } from '@/utils/habits';
+import { autoSchedule } from '@/utils/autoSchedule';
+import { clingLock, clingNative, lockAvailable, nativeAvailable } from '@/native/clingNative';
+import { LOCK_PREF, PENALTY_KEY, EMERGENCY_PENALTY, shouldShield, busyToDay } from '@/utils/appLock';
+import { previewDayTarget, requiredPoints } from '@/utils/dayTarget';
+const askOpen = ref(false); // Assistant sheet (✨ next to the bell, and the bubble in the task list header)
+const assistantListen = ref(false);
+const agentAdd = ref(false); // true while the assistant adds tasks: over-limit returns an error to the model instead of opening the paywall
+import { ugcHidden, voiceInputBlocked, isNativeIOS } from '@/utils/platform';
 import { splitSpokenTasks, voiceCapability, UNDO_MS } from '@/utils/voiceSplit';
+import { interpretSpeech } from '@/utils/voiceInterpret';
+import { capBlockMessage } from '@/utils/taskCap';
+import { saveReminder } from '@/utils/reminders';
+import { startNativeSpeech, nativeSpeechAvailable } from '@/composables/useNativeSpeech';
 import WontDoModal from '@/components/home/WontDoModal.vue';
 import WorkoutModal from '@/components/home/WorkoutModal.vue';
 import YouTubeModal from '@/components/home/YouTubeModal.vue';
@@ -314,11 +371,12 @@ import { auth } from '@/firebaseConfig'; // Assuming you have Firebase authentic
 import { onAuthStateChanged } from 'firebase/auth';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import data from '@/data.json';
-import draggable from "vuedraggable";
+import { useSmoothReorder } from "@/composables/useSmoothReorder";
 import {db} from '@/firebaseConfig'; // Assuming you have imported the Firebase setup file and exported the db instance
-import { doc, setDoc, serverTimestamp, getDoc, updateDoc, deleteDoc, getFirestore, runTransaction} from 'firebase/firestore';
+import { doc, setDoc, serverTimestamp, getDoc, updateDoc, getFirestore, runTransaction, onSnapshot } from 'firebase/firestore';
 const modalOpen = ref(false);
 import { deleteObject } from "firebase/storage";
+import { widgetTaskId } from '@/utils/widgetSnapshot';
 
 const currentTime = ref([]);
 const showAdvanced = ref(false)
@@ -331,6 +389,8 @@ const selectedTransferDay = ref(null);
 
 const openTransferModal = (index) => {
   selectedTransferTaskIndex.value = index;
+  // preselect a real target (the <select> otherwise looks like it shows Monday while its value is null, so Transfer did nothing)
+  selectedTransferDay.value = defaultTransferDay(selectedDayIndex.value, days.length);
   transferModalOpen.value = true;
 };
 const selectedTimerHours = ref(0);
@@ -341,17 +401,44 @@ const nowTick = ref(Date.now());
 
 let timerInterval = null;
 
-const openTaskTimerModal = (index) => {
+// Play = start the countdown immediately from the task's estimate (typed override > stored/auto estimate). No picker step.
+const openTaskTimerModal = async (index) => {
+  const t = selectedDayRoutine.value[index]; if (!t) return;
+  const mins = chipValues(t).minutes || 25;
   selectedTimerTaskIndex.value = index;
+  selectedTimerHours.value = Math.floor(mins / 60);
+  selectedTimerMinutes.value = mins % 60;
+  await startTimer();
+};
 
-  selectedTimerHours.value = 0;
-  selectedTimerMinutes.value = 5;
-
-  showTimerModal.value = true;
+// ── 8-hour day: strict lock (UI guards; the data layer and Firestore rules enforce the same) ──
+const eh = useEightHour();
+const lockedDayName = computed(() => (eh.running.value && eh.lock.value ? eh.lock.value.dayName : ''));
+const selectedDayLocked = computed(() => !!lockedDayName.value && days[selectedDayIndex.value]?.day === lockedDayName.value);
+// true (after telling the user) when the given weekday tab is the locked day; every list-changing action calls this first
+const blockIfLocked = (dayIdx = selectedDayIndex.value) => {
+  if (dayIdx === -1 || !days[dayIdx] || !isDayLocked(days[dayIdx].day)) return false;
+  alert(lockedMessage());
+  return true;
+};
+// 8-hour hard stop: once today's started day has ended, every task action is refused until the next wake time (data layer also guards).
+const blockIfShut = () => { if (!isShutdown()) return false; alert(shutMessage()); return true; };
+const lockMessage = (e) => { if (isLockError(e)) { alert(e.message); return true; } return false; };
+// Locked-in day (planned, countdown not started): today's list may grow past the minimum up to the overload cap for the chosen hours.
+// Returns the block message when adding one more would pass the cap, otherwise null. Adding never changes plan.taskCount.
+const planOverCap = () => {
+  const plan = eh.plan.value; const ph = eh.phase.value;
+  if (!plan || (ph !== 'before' && ph !== 'ready')) return null;
+  const countNow = countableIndexes(selectedDayRoutine.value || [], eh.phaseInfo.value.dayKey || '').length;
+  return capBlockMessage(countNow, 1, taskRange(eh.dayHours.value), hoursLabel(eh.dayHours.value));
 };
 
 const saveSelectedDayTasks = async () => {
   if (!userId.value || selectedDayIndex.value === -1) return;
+  if (selectedDayLocked.value) { // whole-array write on a locked day: only allowed if every locked field of every slot is unchanged
+    const old = await loadDayTasks(userId.value, days[selectedDayIndex.value].day);
+    assertTasksChangeAllowed(days[selectedDayIndex.value].day, old, selectedDayRoutine.value);
+  }
 
   const selectedDayDocRef = doc(
       db,
@@ -381,7 +468,14 @@ const startCountdownWatcher = () => {
           task.timerEndTime &&
           new Date(task.timerEndTime).getTime() <= Date.now()
       ) {
-        await autoTransferTaskToTomorrow(i);
+        // 8-hour lock: a locked day can never lose a task, so an expired timer only stops in place (no carry to tomorrow).
+        // Before: the carry spliced the task and saveSelectedDayTasks threw a LockError inside this interval -> "Unhandled:" overlay.
+        if (selectedDayLocked.value || isShutdown()) {
+          selectedDayRoutine.value[i] = { ...task, timerActive: false, timerStartedAt: null, timerEndTime: null };
+          await saveSelectedDayTasks().catch((e) => console.warn('timer stop not saved:', e));
+        } else {
+          await autoTransferTaskToTomorrow(i).catch((e) => { console.warn('auto-carry failed:', e); fetchSelectedDayRoutine(); });
+        }
       }
     }
   }, 1000);
@@ -391,6 +485,7 @@ onMounted(() => {
 });
 const autoTransferTaskToTomorrow = async (index) => {
   const task = {
+    rolledOverFor: getTodayId(), // rollover stamp: tomorrow shows a one-time "moved from yesterday" notice
     ...selectedDayRoutine.value[index],
     timerActive: false,
     timerStartedAt: null,
@@ -440,6 +535,7 @@ const autoTransferTaskToTomorrow = async (index) => {
   );
 
   transferNotification.value = `⏰ "${task.title}" moved to tomorrow (+1 urgency)`;
+  notifyRollover([task.title]);
 
   setTimeout(() => {
     transferNotification.value = null;
@@ -623,6 +719,7 @@ const endDay = async () => {
 
 
 const transferTask = async () => {
+  if (blockIfShut()) return false;
   if (!userId.value || selectedTransferTaskIndex.value === null || selectedTransferDay.value === null) {
     console.warn("Invalid task or day selection");
     return;
@@ -636,65 +733,48 @@ const transferTask = async () => {
     return;
   }
 
+  if (blockIfLocked(currentDayIndex) || blockIfLocked(targetDayIndex)) { closeTransferModal(); return; }
   const currentDay = days[currentDayIndex].day;
   const targetDay = days[targetDayIndex].day;
-
-  const currentDayDocRef = doc(db, 'weeklyRoutines', `${userId.value}_${currentDay}`);
-  const targetDayDocRef = doc(db, 'weeklyRoutines', `${userId.value}_${targetDay}`);
+  const picked = (selectedDayRoutine.value || [])[selectedTransferTaskIndex.value];
+  if (!picked) { closeTransferModal(); return; }
+  const key = taskKey(picked);
 
   try {
-    const currentDayDocSnapshot = await getDoc(currentDayDocRef);
-    const targetDayDocSnapshot = await getDoc(targetDayDocRef);
+    // daily cap on the target day (same 50/day limit as adding a task)
+    const tSnap = await getDoc(doc(db, 'weeklyRoutines', `${userId.value}_${targetDay}`));
+    const targetLen = tSnap.exists() ? (tSnap.data().tasks || []).length : 0;
+    if (!transferFits(targetLen)) { alert(`${targetDay} already has ${targetLen} tasks (limit ${MAX_TASKS_PER_DAY}).`); return; }
 
-    let currentTasks = currentDayDocSnapshot.exists() ? currentDayDocSnapshot.data().tasks : [];
-    let targetTasks = targetDayDocSnapshot.exists() ? targetDayDocSnapshot.data().tasks : [];
-
-    // Remove the task from the current day and add it to the selected day
-    const [rawTask] = currentTasks.splice(selectedTransferTaskIndex.value, 1);
-    if (!rawTask) return;
+    // remove by identity (not by a list index that may have shifted), then append to the target day; both in transactions
+    let rawTask = null;
+    const currentTasks = await trackWrite(mutateDay(currentDay, (cur) => {
+      const i = cur.findIndex((t) => taskKey(t) === key);
+      rawTask = i === -1 ? null : cur[i];
+      return i === -1 ? cur : [...cur.slice(0, i), ...cur.slice(i + 1)];
+    }));
+    if (!rawTask) { closeTransferModal(); return; }
     const task = strictOn.value ? carryTask(rawTask) : rawTask;
     if (strictOn.value) {
       logStrict('deferred', `${task.title} → ${targetDay}: ${deferReason.value.trim()}`);
       if (task.bossWatching && !rawTask.bossWatching) logStrict('boss-watching', task.title);
       deferReason.value = '';
     }
+    await trackWrite(mutateDay(targetDay, (cur) => [...cur, task]));
 
-    targetTasks.push(task);
-
-    // Update Firestore
-    await updateDoc(currentDayDocRef, {
-      tasks: currentTasks,
-      updatedAt: serverTimestamp()
-    });
-
-    await setDoc(targetDayDocRef, {
-      tasks: targetTasks,
-      updatedAt: serverTimestamp()
-    });
-
-    // Update UI
-    selectedDayRoutine.value = currentTasks;
-    if (selectedDayIndex.value === targetDayIndex) {
-      selectedDayRoutine.value = targetTasks;
-    }
-
-    console.log(`Task "${task.title}" moved to ${targetDay}`);
-
-    // **Show Transfer Notification**
+    if (selectedDayIndex.value === currentDayIndex) selectedDayRoutine.value = currentTasks;
     transferNotification.value = `Task "${task.title}" moved to ${targetDay}`;
-    setTimeout(() => {
-      transferNotification.value = null;
-    }, 3000); // Auto-hide after 3 seconds
-
-    // Close modal
+    setTimeout(() => { transferNotification.value = null; }, 3000);
     closeTransferModal();
   } catch (error) {
     console.error('Error transferring task:', error);
+    if (!lockMessage(error)) alert("Couldn't move the task. Check your connection and try again.");
   }
 };
 const resetTasksToIncomplete = async (dayIndex = selectedDayIndex.value, isCurrent = () => true) => {
   if (!userId.value || dayIndex === -1) return;
 
+  if (isDayLocked(days[dayIndex]?.day)) return; // 8-hour lock: never wipe the locked day's progress
   const selectedDay = days[dayIndex];
   const selectedDayDocRef = doc(db, 'weeklyRoutines', `${userId.value}_${selectedDay.day}`);
 
@@ -800,21 +880,91 @@ const dayTasks = computed(() => selectedDayRoutine.value.filter((t) => !isHidden
 const hasHiddenCopies = computed(() => dayTasks.value.length !== selectedDayRoutine.value.length);
 const viewItems = computed(() => viewTasks(selectedDayRoutine.value, effectivePrefs.value).filter((i) => !isHiddenOnDate(i.task, viewTabDate.value)));
 const displayTasks = computed(() => viewItems.value.map((i) => i.task));
+// ---- Plan my day (user picks start + hours; preview; saved only on Confirm) ----
+const planOpen = ref(false); const planBusy = ref(false); const planError = ref('');
+const openPlanDay = async () => { if (!isViewingToday.value) { selectedDayIndex.value = todayIdx.value; await fetchSelectedDayRoutine(); } planError.value = ''; planOpen.value = true; };
+const onPlanPreviewed = (p) => { if (voMuted.value || document.hidden) return;
+  speakLive(p.unplaced.length ? `Here's your plan. ${p.unplaced.length} task${p.unplaced.length === 1 ? " doesn't" : "s don't"} fit. Add hours or confirm.` : `Here's your plan, ${p.start} to ${p.end}. Confirm and I'll set the times.`); };
+const onPlanConfirm = async (p) => {
+  planBusy.value = true; planError.value = ''; let saved = 0; let failed = 0;
+  for (const c of planChanges(p)) {
+    try { const live = (selectedDayRoutine.value || []).find((t) => taskKey(t) === taskKey(c.task)) || c.task; await editTask(agentIdx(live), live, { startTime: c.startTime }); saved++; } catch (e) { console.error('plan day', e && e.message); failed++; }
+  }
+  planBusy.value = false;
+  if (failed) { planError.value = `${failed} start time${failed === 1 ? '' : 's'} could not be saved. ${saved ? `${saved} saved.` : ''}`; return; }
+  planOpen.value = false; showNoteToast(saved ? `Day planned: ${saved} start time${saved === 1 ? '' : 's'} set` : 'Day planned: times already matched');
+};
+// ---- Day templates ----
+// What "Save template" would actually store (dupes/won't-do dropped), so the header count matches the saved count.
+const templateItemCount = computed(() => { const r = makeTemplate('x', dayTasks.value); return r.ok ? r.template.items.length : 0; });
+const { templates: dayTemplates, load: loadDayTemplates, save: storeDayTemplate, remove: dropDayTemplate } = useDayTemplates();
+const tplOpen = ref(false); const tplBusy = ref(false); const tplError = ref(''); const tplNote = ref('');
+const openTemplates = async () => { if (!isViewingToday.value) { selectedDayIndex.value = todayIdx.value; await fetchSelectedDayRoutine(); } tplError.value = ''; tplNote.value = ''; tplOpen.value = true; loadDayTemplates(userId.value); };
+const saveDayTemplate = async ({ name, withTimes }) => {
+  const r = makeTemplate(name, dayTasks.value, { withTimes }); if (!r.ok) { tplError.value = r.error; return; }
+  tplBusy.value = true; tplError.value = '';
+  try { await storeDayTemplate(userId.value, r.template); tplNote.value = `Saved “${r.template.name}” (${r.template.items.length} tasks).`; } catch (e) { tplError.value = 'Saved on this phone only (could not sync).'; console.warn('template save', e && e.code); }
+  tplBusy.value = false;
+};
+const removeDayTemplate = async (t) => { try { await dropDayTemplate(userId.value, t.id); tplNote.value = `Deleted “${t.name}”.`; } catch (e) { tplError.value = 'Could not sync the delete.'; } };
+const applyDayTemplate = async (tpl) => {
+  if (!isViewingToday.value) { selectedDayIndex.value = todayIdx.value; await fetchSelectedDayRoutine(); }
+  tplBusy.value = true; tplError.value = ''; tplNote.value = '';
+  const { toAdd, skipped } = applyTemplate(tpl, selectedDayRoutine.value); let added = 0; let blocked = 0; let failed = 0;
+  for (let i = 0; i < toAdd.length; i++) {
+    const it = toAdd[i];
+    try { const snap = await assistantExecutor.snapshot(); const v = validateCall('create_tasks', { items: [it] }, snap);
+      if (!v.ok) { if (v.limit) { blocked = toAdd.length - i; break; } failed++; continue; }
+      const r = await assistantExecutor.run('create_tasks', v.args);
+      if (r.ok) added++; else if (/limit/i.test(String(r.failed?.[0]?.error || ''))) { blocked = toAdd.length - i; break; } else failed++;
+    } catch (e) { console.error('apply template', e && e.message); failed++; }
+  }
+  tplBusy.value = false;
+  const msg = applySummary({ added, skipped: skipped.length, blocked }) + (failed ? ` · ${failed} failed` : '');
+  if (failed || blocked) tplError.value = msg; else { tplOpen.value = false; showNoteToast(msg); }
+};
+// Unique v-for keys: two tasks with the same createdAt|title used to share a key, and Vue's keyed patch could drop a card.
+const renderKeyMap = computed(() => { const keys = uniqueRenderKeys(displayTasks.value, taskKey); return new Map(displayTasks.value.map((t, i) => [t, keys[i]])); });
+const rkey = (t) => renderKeyMap.value.get(t) || taskKey(t);
+// A saved status filter can hide tasks with no other trace on screen: say how many and clear the filter on tap.
+const coverage = computed(() => listCoverage({ dayTasks: dayTasks.value, displayTasks: displayTasks.value, isToday: isViewingToday.value, showCompleted: showCompleted.value }));
+const revealHidden = () => { if (normalizePrefs(viewPrefs.value).filter !== 'all') viewPrefs.value = { ...normalizePrefs(viewPrefs.value), filter: 'all' }; };
 const visibleTaskCount = computed(() => visibleCount(viewItems.value, showCompleted.value));
-const reorderable = computed(() => canReorder(effectivePrefs.value) && !hasHiddenCopies.value);
+const reorderable = computed(() => canReorder(effectivePrefs.value) && !hasHiddenCopies.value); // locked day too: a drag only writes sortOrder (slot positions never move)
 const realIndex = (task) => (selectedDayRoutine.value || []).indexOf(task);
-const onReorder = (list) => { if (reorderable.value && Array.isArray(list)) selectedDayRoutine.value = list; };
+const onReorder = (list) => { if (reorderable.value && Array.isArray(list)) selectedDayRoutine.value = applyManualOrder(selectedDayRoutine.value, list.map(taskKey), taskKey); };
 const reducedMotion = typeof window !== 'undefined' && window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)').matches : false;
 
 // "n" opens Add task (not while typing or when any modal/overlay is open)
 const anyModalOpen = computed(() => !!(modalOpen.value || isModalOpen.value || showWorkoutModal.value || showTimerModal.value || wontDoModalOpen.value ||
-  transferModalOpen.value || youtubeModalOpen.value || taskDetailModalOpen.value || showImagePreview.value || voiceOpen.value || shutdownOpen.value || showFullScreenAnimation.value));
+  transferModalOpen.value || youtubeModalOpen.value || taskDetailModalOpen.value || showImagePreview.value || voiceOpen.value || askOpen.value || shutdownOpen.value || showFullScreenAnimation.value));
 const onShortcutKey = (e) => {
   if (!shouldHandleShortcut(e, anyModalOpen.value)) return;
   e.preventDefault();
   openModal('task');
 };
 onMounted(() => document.addEventListener('keydown', onShortcutKey));
+// Global "Create task" FAB (App.vue): same flow as the old Add Task bar, incl. free/Pro limits.
+const onCreateTaskEvt = () => onAddClick();
+// ?ask / ?new=1 (global FAB, widget "+" / Quick add widget deep links): handled on mount AND while Home is already open.
+const handleHomeQuery = (delay = 0) => {
+  const cur = _proRouter.currentRoute.value; if (cur.path !== '/home') return;
+  { const ask = parseAsk(cur.query); if (ask.open) { const q = { ...cur.query }; delete q.ask; _proRouter.replace({ query: q }); setTimeout(() => openAssistant(ask.listen), 400 + delay); return; } }
+  if (cur.query.new === '1') { const q = { ...cur.query }; delete q.new; _proRouter.replace({ query: q }); setTimeout(onAddClick, 600 + delay); } };
+watch(() => [_proRouter.currentRoute.value.query.new, _proRouter.currentRoute.value.query.ask], ([n, a]) => { if (n === '1' || a) handleHomeQuery(); });
+onMounted(() => { window.addEventListener('cn:create-task', onCreateTaskEvt); handleHomeQuery(); });
+onBeforeUnmount(() => window.removeEventListener('cn:create-task', onCreateTaskEvt));
+// Robot coach report buttons (components/voiceover/BossBriefing.vue) -> real Home actions on today's list.
+const onSergeantAction = async (e) => {
+  const { id, taskKey } = (e && e.detail) || {};
+  if (!isViewingToday.value) { selectedDayIndex.value = todayIdx.value; await fetchSelectedDayRoutine(); }
+  const task = taskKey ? (selectedDayRoutine.value || []).find((t) => taskKeyOf(t) === taskKey) : null;
+  if (id === 'start-day') openDayPrompt();
+  else if (id === 'set-reminder' && task) openModal('calendar', realIndex(task), task.title);
+  else if (id === 'open-task' && task) openTaskDetailModal(task);
+};
+onMounted(() => window.addEventListener('cn:sergeant', onSergeantAction));
+onBeforeUnmount(() => window.removeEventListener('cn:sergeant', onSergeantAction));
 onBeforeUnmount(() => document.removeEventListener('keydown', onShortcutKey));
 
 
@@ -828,9 +978,9 @@ const closeModal = () => {
 const selectedDayIndex = ref(-1);
 // Fresh Add-task form. Repeat defaults to "Just once" (one-time); Daily/Weekly are opt-in.
 const blankTask = () => ({
-  title: '', time: '', priority: 'low', labels: [], notes: '', selectedDays: [], position: 0, type: 'one-time',
+  title: '', anonymous: false, time: '', priority: 'low', labels: [], notes: '', selectedDays: [], position: 0, type: 'one-time',
   dueDate: '', startTime: '', estimateMin: '', nextAction: '', status: 'todo', pendingOn: '',
-  scheduleDate: '', scheduleTime: '', scheduleRepeat: '', scheduleDays: [],
+  sched: blankSchedule(),
   reminder: { datetime: '', repeat: '' },
 });
 const newTask = ref(blankTask());
@@ -894,20 +1044,18 @@ const fetchSelectedDayRoutine = async () => {
     if (selectedDayDocSnapshot.exists()) {
       let tasks = selectedDayDocSnapshot.data().tasks || [];
 
-      const isPastDay = new Date(selectedDay.date) < new Date(getTodayDate());
-
-      // If it's a past day, reset all tasks to incomplete
-      if (isPastDay) {
-        tasks = tasks.map(task => resetSubtasks({
-          ...task,
-          completed: false
-        }));
-
-        if (seq !== fetchSeq) return; // stale: no daily-reset write for a day that is no longer selected
-        await updateDoc(selectedDayDocRef, {
-          tasks: tasks,
-          updatedAt: serverTimestamp()
-        });
+      // Old-week reset: a task completed before this weekday's most recent (local) occurrence is left over from a
+      // previous week -> incomplete again. Completions from the current occurrence (e.g. today) are never touched.
+      // (The old check compared data.json's empty `date` with a UTC getTodayDate(), so it never ran.)
+      const dayIdx = selectedDayIndex.value;
+      if (!isDayLocked(selectedDay.day) && tasks.some((t) => isStaleCompletion(t, dayIdx))) { // (8-hour locked day is never reset)
+        if (seq !== fetchSeq) return; // stale: no reset write for a day that is no longer selected
+        const now = new Date();
+        const resetStale = (list) => list.map((t) => (isStaleCompletion(t, dayIdx, now)
+          ? resetSubtasks({ ...t, completed: false, completedAt: null, timerActive: false, timerStartedAt: null, timerEndTime: null, timerStoppedAt: null })
+          : t));
+        // A rejected write (e.g. shut 8-hour window, offline) must never hide the day's tasks: show the server copy as-is.
+        try { tasks = await mutateDay(selectedDay.day, resetStale); } catch (e) { console.warn('old-week reset skipped:', e && (e.code || e.message)); }
         if (seq !== fetchSeq) return;
       }
 
@@ -926,6 +1074,7 @@ const showTimerModal = ref(false);
 const selectedTimerDuration = ref(5); // default to 5 minutes
 
 const startTimer = async () => {
+  if (blockIfShut()) return false;
   if (selectedTimerTaskIndex.value === null) return;
 
   const totalMinutes =
@@ -952,6 +1101,7 @@ const startTimer = async () => {
   selectedDayRoutine.value[selectedTimerTaskIndex.value] = task;
 
   await saveSelectedDayTasks();
+  scheduleTimerDone(task); // iOS: on-device notification at end time (JS timers stop when backgrounded)
 
   showTimerModal.value = false;
   selectedTimerTaskIndex.value = null;
@@ -1003,9 +1153,11 @@ const sortedSelectedDayRoutine = computed(() => {
   });
 });
 
-const deleteTask = async (index) => {
+const deleteTask = async (index, { skipConfirm = false } = {}) => { // skipConfirm: the assistant already showed its own confirm card
+  if (blockIfShut()) return false;
+  if (blockIfLocked()) return false;
   gateCache = null; gatePrefetch = null; pendingAdds.clear(); // a deleted task frees its slot under the daily limit (next check refetches)
-  const confirmed = confirm("Are you sure you want to delete this task?");
+  const confirmed = skipConfirm || confirm("Are you sure you want to delete this task?");
   if (!confirmed) return;
   const dayName = days[selectedDayIndex.value].day;
   const selectedDayDocRef = doc(db, 'weeklyRoutines', `${userId.value}_${dayName}`);
@@ -1019,9 +1171,13 @@ const deleteTask = async (index) => {
       await Promise.all(days.map(async (d) => { if (d.day !== dayName) byDay[d.day] = await loadDayTasks(userId.value, d.day); }));
       alsoDays = seriesDays(byDay, target, dayName);
     }
-    const removeAll = alsoDays.length > 0 &&
+    const removeAll = !skipConfirm && alsoDays.length > 0 &&
       confirm(`This task repeats on ${alsoDays.length} other day${alsoDays.length > 1 ? 's' : ''} (${alsoDays.join(', ')}).\n\nOK = delete it from all days\nCancel = delete only from this day`);
 
+    let seriesScope = 'this';
+    if (target?.templateId && !skipConfirm) seriesScope = confirm('This task repeats.\n\nOK = delete this and all future occurrences\nCancel = delete only this one') ? 'future' : 'this';
+    if (target?.scheduledId) scheduledList.value = await mutateScheduled(userId.value, (l) => deleteTaskScope(l, target, seriesScope, tabDays.value[selectedDayIndex.value]?.date || getTodayId()));
+    if (target) cancelTaskNotifications(target);
     selectedDayRoutine.value.splice(index, 1);
     await updateDoc(selectedDayDocRef, {
       tasks: selectedDayRoutine.value,
@@ -1046,7 +1202,10 @@ const topIncompleteTaskIndex = computed(() => {
 
 const { soundEnabled, playSound, toggleSound, markUserCompletion, watchMilestones } = useSounds();
 
+// Stable task identity for transactional updates (id when both have one, else createdAt|title).
+const sameTask = (a, b) => !!a && !!b && ((a.id && b.id) ? a.id === b.id : taskKey(a) === taskKey(b));
 const toggleTaskCompletion = async (index) => {
+  if (blockIfShut()) return false;
   const task = { ...selectedDayRoutine.value[index] }; // Create a copy of the task to avoid direct mutation
   task.completed = !task.completed; // Toggle the completed state
   startSpinning(index);
@@ -1058,9 +1217,11 @@ const toggleTaskCompletion = async (index) => {
     task.completedAt = completedNow;
     task.timerActive = false;
     task.timerStoppedAt = completedNow;
+    cancelTaskNotifications(task);
 
     userCredits.value += 10;
-    announceNextTask(index);
+    if (isToday(selectedDayIndex.value)) { const left = (selectedDayRoutine.value || []).filter((t, i) => i !== index && !t.completed).length;
+      window.dispatchEvent(new window.CustomEvent('cn:sergeant-ack', { detail: { left } })); }
 
     const userName = await fetchUserName(userId.value);
     if (userName) {
@@ -1070,13 +1231,15 @@ const toggleTaskCompletion = async (index) => {
     task.completedAt = null;
     task.timerStoppedAt = null;
     task.timerActive = false;
+    cancelLocal(timerKey(task));
     userCredits.value -= 10;
   }
 
   if (isToday(selectedDayIndex.value)) onBossToggle(task).finally(() => updateStreakOnCompletion(task)); // both directions; pending ignored
 
-  // Remove one-time tasks from the UI immediately
-  if (task.type === "one-time") {
+  // Remove one-time tasks from the UI immediately (a locked day keeps every task: completed ones stay in place)
+  const lockedToggle = selectedDayLocked.value;
+  if (task.type === "one-time" && !lockedToggle) {
     selectedDayRoutine.value.splice(index, 1);
   } else {
     selectedDayRoutine.value.splice(index, 1, task); // Update recurring tasks
@@ -1085,40 +1248,69 @@ const toggleTaskCompletion = async (index) => {
   const selectedDayDocRef = doc(db, 'weeklyRoutines', `${userId.value}_${days[selectedDayIndex.value].day}`);
 
   try {
-    const selectedDayDocSnapshot = await getDoc(selectedDayDocRef);
+    // Transaction + match by task identity (id, else createdAt|title) — never by array index, which shifts under concurrent edits.
+    await runTransaction(db, async (tx) => {
+      const snap = await tx.get(selectedDayDocRef);
+      if (!snap.exists()) return;
+      let tasks = [...(snap.data().tasks || [])];
+      const at = tasks.findIndex((t) => sameTask(t, task));
+      if (at < 0) return; // deleted/moved meanwhile: nothing to update
 
-    if (selectedDayDocSnapshot.exists()) {
-      let tasks = selectedDayDocSnapshot.data().tasks || [];
-
-      if (task.type === "one-time") {
-        // Remove the one-time task completely
-        tasks = tasks.filter((_, i) => i !== index);
+      if (lockedToggle) {
+        // 8-hour lock: update in place; the array never shrinks and no locked field changes
+        tasks[at] = { ...tasks[at], completed: task.completed, completedAt: task.completedAt, timerActive: false, timerStoppedAt: task.timerStoppedAt };
+      } else if (task.type === "one-time" && task.completed) {
+        tasks.splice(at, 1); // Remove the one-time task completely
       } else {
-        tasks[index] = task; // Otherwise, update the task
+        tasks[at] = { ...tasks[at], ...task };
       }
 
-      if (tasks.length > 0) {
-        // Update Firestore with remaining tasks
-        await updateDoc(selectedDayDocRef, {
-          tasks: tasks,
-          updatedAt: serverTimestamp(),
-        });
+      if (tasks.length > 0 || lockedToggle) {
+        tx.update(selectedDayDocRef, { tasks, updatedAt: serverTimestamp() });
       } else {
-        // If no tasks remain, delete the entire document
-        await deleteDoc(selectedDayDocRef);
+        tx.delete(selectedDayDocRef); // the only task was this one-time task
       }
-
-      console.log("Task completion updated successfully");
-    }
+    });
+    console.log("Task completion updated successfully");
   } catch (error) {
     console.error("Error updating task completion:", error);
   }
 
+  if (task.templateId && userId.value) { // routine completion log (doneOn) + repeat-after-completion next date
+    try { scheduledList.value = await mutateScheduled(userId.value, (l) => markRoutineDone(l, task, getTodayId(), task.completed)); } catch (e) { console.warn('routine log', e); }
+  }
+  if (lockedToggle) eh.reportProgress(); // server recounts earned points from the day doc (server clock)
   checkAllTasksCompleted();
   await saveDailyPerformance();
-  selectedDayRoutine.value = selectedDayRoutine.value.filter(task => !task.completed || showCompleted);
-  showCompleted.value = false;
+  // Completed tasks stay in the routine (the Done section renders them); the Done section keeps whatever state the user chose.
+  // (Previously `filter(... || showCompleted)` was missing .value and then forced showCompleted=false, collapsing Done on every tap.)
 };
+
+// iOS widget "complete" taps: drained through the SAME toggleTaskCompletion path (points, streak, boss, report, one-time removal).
+// mode 'effects': the widget-complete function already stored completed=true; flip the local copy back once so the app's path runs exactly once.
+const widgetComplete = async (taskId, mode) => {
+  if (!userId.value || !isToday(selectedDayIndex.value)) return false; // only today's tab; retried on next open/foreground
+  const i = selectedDayRoutine.value.findIndex((t) => t && widgetTaskId(t) === taskId);
+  if (i < 0) return false;
+  const t = selectedDayRoutine.value[i];
+  if (t.completed && mode !== 'effects') return true; // idempotent
+  if (mode === 'effects') { const { widgetEffectsPending, ...rest } = t; selectedDayRoutine.value.splice(i, 1, { ...rest, completed: false }); }
+  return (await toggleTaskCompletion(i)) !== false;
+};
+// Widget tap made before midnight, drained after: mark the task done on the day it was made (that day's doc), instead of dropping it.
+// Points/streak for that past day are not re-run (the streak day has already closed). Locked day / missing task: acked as no-op.
+widgetComplete.prior = async (taskId, dayName) => {
+  if (!userId.value || !dayName || isDayLocked(dayName)) return !!userId.value;
+  const at = new Date().toISOString();
+  await mutateDay(dayName, (tasks) => tasks.map((t) => (t && !t.completed && widgetTaskId(t) === taskId ? { ...t, completed: true, completedAt: at, timerActive: false, widgetEffectsPending: false } : t)));
+  return true;
+};
+widgetComplete.tasks = () => (isToday(selectedDayIndex.value) ? selectedDayRoutine.value : []);
+let offWidget = null;
+// One-time App Store rating prompt, ~2s after landing here right after onboarding + sign-up (armed by OnboardingView.finish). No-op on web.
+onMounted(() => { const u = auth.currentUser; if (u) import('@/utils/appReview').then((m) => m.maybeRequestReview(u.uid, { stillOnHome: () => _proRouter.currentRoute.value.path === '/home' })).catch(() => {}); });
+onMounted(() => { if (isNativeIOS()) import('@/utils/widgetSync').then((m) => { offWidget = m.registerWidgetCompleter(widgetComplete); }).catch(() => {}); });
+onBeforeUnmount(() => { if (offWidget) offWidget(); });
 
 const wontDoModalOpen = ref(false);
 const wontDoReason = ref("");
@@ -1131,7 +1323,9 @@ const openWontDoModal = (index) => {
   wontDoModalOpen.value = true;
 };
 const markTaskAsWontDo = async () => {
+  if (blockIfShut()) return false;
   if (selectedWontDoTaskIndex.value === null) return;
+  if (blockIfLocked()) { wontDoModalOpen.value = false; return; } // no skipping on a locked day
   if (strictOn.value && !validReason(wontDoReason.value)) return; // "why didn't you?" is mandatory in strict mode
   if (strictOn.value) logStrict('skipped', `${selectedDayRoutine.value[selectedWontDoTaskIndex.value]?.title}: ${wontDoReason.value.trim()}`);
 
@@ -1165,6 +1359,8 @@ const markTaskAsWontDo = async () => {
 };
 
 const undoWontDo = async (index) => {
+  if (blockIfShut()) return false;
+  if (blockIfLocked()) return;
   const task = wontDoTasks.value.splice(index, 1)[0];
   selectedDayRoutine.value.push(task);
 
@@ -1181,6 +1377,7 @@ const undoWontDo = async (index) => {
 
 
 const handleDragEnd = async () => {
+  // no lock guard: a drag only changes task.sortOrder, positions (locked slot identity) are untouched, so the lock rules allow it
   if (selectedDayIndex.value === -1 || !userId.value) {
     console.error('No selected day or user is not logged in');
     return;
@@ -1230,14 +1427,6 @@ const handleDayTabClick = async (index) => {
   }
 };
 
-const announceNextTask = (completedIndex) => {
-  const nextTask = selectedDayRoutine.value.find((task, index) => !task.completed && index !== completedIndex);
-  if (nextTask) {
-    speak(`Your next task is: ${nextTask.title}.`);
-  } else {
-    speak("Congratulations! All tasks are complete.");
-  }
-};
 
 const showFullScreenAnimation = ref(false);
 
@@ -1248,31 +1437,21 @@ const checkAllTasksCompleted = async () => {
   if (allCompleted) {
     // 🎉 Show completion animation
     showFullScreenAnimation.value = true;
-    speak("Congratulations! You are free to do whatever you want");
+    speak("That's everything! Great work. The rest of the day is yours.");
     fetchSelectedDayRoutine();
     await saveDailyPerformance();
 
-    // 🗑 Remove one-time tasks & reset recurring tasks
-    selectedDayRoutine.value = selectedDayRoutine.value.filter(task => {
-      if (task.type === "one-time") {
-        return false; // Remove from array (will also be removed from Firestore)
-      }
-    });
+    // 🗑 Remove completed one-time tasks only; recurring/routine tasks are always kept.
+    // (The old filter callback returned undefined for every non-one-time task, so the whole routine was dropped and the doc deleted.)
+    if (selectedDayLocked.value) return; // 8-hour lock: the day's array never shrinks
+    const isDoneOneTime = (t) => t && t.type === 'one-time' && t.completed;
+    selectedDayRoutine.value = selectedDayRoutine.value.filter((t) => !isDoneOneTime(t));
 
-    // 🔄 Update Firestore
+    // 🔄 Update Firestore (transaction on the server copy: never overwrite with a stale local list, never delete the doc)
     try {
-      const selectedDayDocRef = doc(db, 'weeklyRoutines', `${userId.value}_${days[selectedDayIndex.value].day}`);
-
-      if (selectedDayRoutine.value.length > 0) {
-        await updateDoc(selectedDayDocRef, {
-          tasks: selectedDayRoutine.value,
-          updatedAt: serverTimestamp()
-        });
-        console.log("✅ One-time tasks removed, recurring tasks reset.");
-      } else {
-        await deleteDoc(selectedDayDocRef); // Remove document if no tasks remain
-        console.log("🗑 All tasks removed. Firestore document deleted.");
-      }
+      const dayName = days[selectedDayIndex.value].day;
+      await mutateDay(dayName, (tasks) => tasks.filter((t) => !isDoneOneTime(t)));
+      console.log("✅ Completed one-time tasks removed; recurring tasks kept.");
 
     } catch (error) {
       console.error("❌ Error updating Firestore:", error);
@@ -1300,7 +1479,7 @@ const streakGateNow = () => {
   });
 };
 // One boss per day (today's tab only). Patches the flag on today's tasks.
-const setBoss = async (index, task) => {
+const setBoss = async (index, task) => { // (boss is not a locked field: allowed on a locked day)
   if (!isToday(selectedDayIndex.value) || !userId.value) return;
   const makeBoss = !task.boss;
   for (let i = 0; i < selectedDayRoutine.value.length; i++) {
@@ -1333,7 +1512,7 @@ const runDiscipline = async () => {
     try {
       if (!localStorage.getItem(k)) {
         localStorage.setItem(k, '1');
-        if (typeof Notification !== 'undefined' && Notification.permission === 'granted') new Notification('ClingNot deadline', { body: `${w === '30m' ? '30 min' : '2 hours'} left: ${streakProgress.value}/${DAILY_STREAK_MIN} tasks done` });
+        if (typeof Notification !== 'undefined' && Notification.permission === 'granted') { const wn = new Notification('ClingNote deadline', { body: `${w === '30m' ? '30 min' : '2 hours'} left: ${streakProgress.value}/${DAILY_STREAK_MIN} tasks done` }); wn.onclick = () => { try { window.focus(); } catch (e) { /* */ } wn.close(); }; }
       }
     } catch (e) { /* notifications optional */ }
   }
@@ -1379,7 +1558,7 @@ const runStrictBoss = (now, today) => {
   if (!idleNudge.value && !anyModalOpen.value && isIdle(lastActive.value, now.getTime(), open)) {
     idleNudge.value = bossLine('idle', { open, idle: IDLE_MINUTES }, String(now.getHours()));
     lastActive.value = now.getTime(); // next nudge after another idle stretch
-    try { if (typeof Notification !== 'undefined' && Notification.permission === 'granted' && document.hidden) new Notification('Boss: focus check', { body: idleNudge.value }); } catch (e) { /* optional */ }
+    try { if (typeof Notification !== 'undefined' && Notification.permission === 'granted' && document.hidden) { const bn = new Notification('Your robot: focus check', { body: idleNudge.value }); bn.onclick = () => { try { window.focus(); } catch (e) { /* */ } bn.close(); }; } } catch (e) { /* optional */ }
   }
   if (bossMsg.value?.phase === 'verdict' && discState.value.lastVerdictDate !== today && !verdictSeen(today) && !verdictScreen.value) {
     const v = dayVerdict({ done, min, total: (selectedDayRoutine.value || []).filter((t) => t.status !== 'pending').length });
@@ -1444,7 +1623,7 @@ onBeforeUnmount(() => { if (disciplineTimer) clearInterval(disciplineTimer); });
 const applyStreakState = (st) => {
   const ev = evaluateStreak(st, localDateStr(), streakGap());
   streak.value = ev.streak; bestStreak.value = ev.bestStreak; lastCompletionDate.value = ev.lastCompletionDate;
-  streakStatus.value = ev.status; streakProgress.value = ev.progress;
+  streakStatus.value = ev.status; streakProgress.value = ev.progress; streakFreezes.value = ev.freezeBank || 0;
   try { localStorage.setItem(`streakCache_${userId.value}`, JSON.stringify(st)); } catch (e) { /* cache only */ }
 };
 // Called when a task on today's tab is (un)completed; counts distinct non-pending tasks toward DAILY_STREAK_MIN.
@@ -1453,11 +1632,23 @@ const updateStreakOnCompletion = async (task) => {
   if (!isTaskVisibleOn(task, localDateStr())) return; // scheduled task before its week: never counts (central visibility check)
   const streakDocRef = doc(db, 'streaks', userId.value);
   try {
-    const snap = await getDoc(streakDocRef);
-    const prev = snap.exists() ? snap.data() : null;
-    const next = applyTaskToggle(prev, localDateStr(), { key: taskKey(task), completed: !!task.completed, pending: task.status === 'pending', gate: streakGateNow() && !!daySession.value.started }, streakGap());
-    await setDoc(streakDocRef, { ...next, updatedAt: serverTimestamp() }, { merge: true });
+    // Transaction: two quick toggles (or two devices) can no longer read the same doc and overwrite each other's update.
+    const toggle = { key: taskKey(task), completed: !!task.completed, pending: task.status === 'pending', gate: streakGateNow() && !!daySession.value.started };
+    const today = localDateStr(), gap = streakGap();
+    const next = await runTransaction(db, async (tx) => {
+      const snap = await tx.get(streakDocRef);
+      const n = applyTaskToggle(snap.exists() ? snap.data() : null, today, toggle, gap);
+      tx.set(streakDocRef, { ...n, updatedAt: serverTimestamp() }, { merge: true });
+      return n;
+    });
+    const prevStreak = streak.value, prevProg = streakProgress.value;
     applyStreakState(next);
+    // streak music (respects the Sounds toggle inside playSound): fanfare when the streak is hit / goes up, else a rising step 1→5
+    if (task.completed) {
+      if (streak.value > prevStreak || (prevProg < DAILY_STREAK_MIN && streakProgress.value >= DAILY_STREAK_MIN)) playSound('streakHit');
+      else if (streakProgress.value > prevProg && streakProgress.value <= DAILY_STREAK_MIN) playSound('streakStep', { step: streakProgress.value, of: DAILY_STREAK_MIN });
+    }
+    if (task.completed) bossReact(streak.value > prevStreak || (prevProg < DAILY_STREAK_MIN && streakProgress.value >= DAILY_STREAK_MIN) ? 'streak' : 'done', task.title);
     recordMonthlyToggle(userId.value, localDateStr(), { key: taskKey(task), completed: !!task.completed, pending: task.status === 'pending' }, next.bestStreak)
       .then(() => loadDisciplineState(userId.value)).then((st) => { discState.value = st; checkProgression(st); })
       .catch((e) => console.error('Monthly stats update failed:', e));
@@ -1547,39 +1738,195 @@ const afterMaterialize = async () => {
   if (added && selectedDayIndex.value === new Date().getDay()) await fetchSelectedDayRoutine();
 };
 watch(selectedDayIndex, () => { if (userId.value && dueOf(scheduledList.value, getTodayId()).length) afterMaterialize(); });
+// Live cross-device sync: another device's change to the selected day shows here without a reload.
+// Only server-confirmed snapshots are applied (never our own pending writes); stale-week resets stay with fetchSelectedDayRoutine.
+let dayUnsub = null;
+const watchSelectedDay = () => {
+  if (dayUnsub) { dayUnsub(); dayUnsub = null; }
+  if (!userId.value || selectedDayIndex.value === -1) return;
+  const idx = selectedDayIndex.value; const dayName = days[idx]?.day; if (!dayName) return;
+  dayUnsub = onSnapshot(doc(db, 'weeklyRoutines', `${userId.value}_${dayName}`), (snap) => {
+    if (snap.metadata.hasPendingWrites || snap.metadata.fromCache || idx !== selectedDayIndex.value || !snap.exists()) return;
+    const tasks = snap.data().tasks || [];
+    if (tasks.some((t) => isStaleCompletion(t, idx))) return;
+    if (JSON.stringify(tasks) !== JSON.stringify(selectedDayRoutine.value || [])) selectedDayRoutine.value = tasks;
+  }, () => {});
+};
+watch([userId, selectedDayIndex], watchSelectedDay);
+onMounted(watchSelectedDay);
+onBeforeUnmount(() => { if (dayUnsub) dayUnsub(); dayUnsub = null; });
+
 const onVisible = () => { if (document.visibilityState === 'visible' && userId.value && getTodayId() !== todayStr.value) { afterMaterialize(); checkStreakOnCompletion(); } };
 onMounted(() => document.addEventListener('visibilitychange', onVisible));
 onBeforeUnmount(() => document.removeEventListener('visibilitychange', onVisible));
 
 const submitScheduledTask = async () => {
-  const nt = newTask.value;
-  const repeating = !!nt.scheduleRepeat;
-  if (!isValidDate(nt.scheduleDate) || (repeating ? nt.scheduleDate < getTodayId() : nt.scheduleDate <= getTodayId())) { error.value = 'Pick a date after today, or clear “Schedule for later”.'; return; }
+  if (blockIfShut()) return false;
+  const nt = newTask.value; const sc = nt.sched;
+  const bad = validateSchedule(sc, getTodayId());
+  if (bad) { error.value = bad; return false; }
   const labels = typeof nt.labels === 'string' ? nt.labels.split(',').map(l => l.trim()).filter(Boolean) : (nt.labels || []);
   const fields = {
-    title: nt.title, important: false, time: '', priority: nt.priority, labels, notes: nt.notes, userId: userId.value,
+    title: nt.title, important: false, visibility: 'public', anonymous: !!nt.anonymous, time: '', priority: nt.priority, labels, notes: nt.notes, userId: userId.value,
     status: nt.status || 'todo', pendingOn: nt.status === 'pending' ? (nt.pendingOn || '').trim() : '', dueDate: nt.dueDate || '', startTime: nt.startTime || '',
     estimateMin: Number(nt.estimateMin) || 0, nextAction: (nt.nextAction || '').trim(),
   };
-  const entry = repeating
-    ? buildRecurringTemplate({ ...fields, scheduledTime: nt.scheduleTime }, nt.scheduleDate, { freq: nt.scheduleRepeat, days: nt.scheduleDays })
-    : buildScheduledEntry(fields, nt.scheduleDate, nt.scheduleTime);
-  if (!entry) { error.value = 'Could not schedule this task.'; return; }
+  Object.assign(fields, estimateFor(fields)); // scheduled / recurring copies carry the estimate too
+  const entry = sc.repeat !== 'never'
+    ? buildRecurringTemplate({ ...fields, scheduledTime: sc.time, remindAt: sc.remindAt || '' }, sc.date, { freq: sc.repeat, days: sc.days, dayOfMonth: sc.dayOfMonth, until: sc.until, everyDays: sc.everyDays })
+    : buildScheduledEntry(fields, sc.date, sc.time);
+  if (!entry) { error.value = 'Could not schedule this task.'; return false; }
   try {
     scheduledList.value = await mutateScheduled(userId.value, (l) => [...l, entry]);
-    afterMaterialize(); // a date in the current week (or a recurring occurrence) shows up right away
+    await afterMaterialize(); // today's date (or today's occurrence) shows up right away
     newTask.value = blankTask();
     capWarning.value = false; capOverride.value = false;
     closeModal();
     error.value = '';
+    return true;
   } catch (e) {
     console.error('Error scheduling task:', e);
     error.value = 'Could not save the scheduled task (permissions?). Nothing was changed.';
+    return false;
   }
 };
 
+// Task details: Schedule switch / Repeat for an existing task (scope 'this' | 'future' for occurrences of a series).
+const schedEditError = ref('');
+const selectedDayDate = computed(() => tabDays.value[selectedDayIndex.value]?.date || getTodayId());
+// Legacy repeating tasks (per-day copies) have no template: show their days in the picker so the sheet and the 🔁 icon agree.
+const detailSchedule = computed(() => {
+  const t = taskDetail.value;
+  if (t && !t.templateId && legacyRepeating(t)) { const p = legacyPattern(t); return { on: true, date: selectedDayDate.value, time: /^\d\d:\d\d$/.test(t.time || '') ? t.time : '', repeat: p.repeat, days: p.days, dayOfMonth: '', until: '' }; }
+  return scheduleOfTask(t, scheduledList.value, selectedDayDate.value);
+});
+// Shared by the details sheet and the card's 🔁 toggle. Throws on failure (callers roll back / report).
+// A legacy repeating task (per-day copies, repeatDays) is first reduced to today's copy so the two models never both apply.
+const applyScheduleToTask = async (task, sched, scope, extra = null) => {
+  const key = taskKey(task);
+  const dayName = days[selectedDayIndex.value].day;
+  if (legacyRepeating(task) && !task.templateId) await setTaskRepeat(task, [], { quiet: true, lastRepeat: legacyPattern(task) });
+  let res = null;
+  scheduledList.value = await mutateScheduled(userId.value, (l) => { res = applyTaskSchedule({ list: l, task, sched, scope, dayDate: selectedDayDate.value }); return res.error ? l : res.list; });
+  if (res.error) return res;
+  if (res.task && extra) res.task = { ...res.task, ...extra };
+  const ref_ = doc(db, 'weeklyRoutines', `${userId.value}_${dayName}`);
+  const cur = (await getDoc(ref_)).data()?.tasks || [];
+  const next = res.task ? cur.map((t) => (taskKey(t) === key ? res.task : t)) : cur.filter((t) => taskKey(t) !== key);
+  await updateDoc(ref_, { tasks: next, updatedAt: serverTimestamp() });
+  selectedDayRoutine.value = next;
+  cancelTaskNotifications(task);
+  await afterMaterialize();
+  resyncNotifications();
+  return res;
+};
+const saveTaskSchedule = async ({ sched, scope }) => {
+  schedEditError.value = '';
+  if (blockIfLocked() || blockIfShut() || !userId.value) return;
+  try {
+    const res = await applyScheduleToTask(taskDetail.value, sched, scope);
+    if (res.error) { schedEditError.value = res.error; return; }
+    if (res.task) taskDetail.value = res.task; else closeTaskDetailModal();
+  } catch (e) { console.error('schedule edit', e); schedEditError.value = 'Could not save the schedule.'; }
+};
+
+// ── 🔁 one-tap repeat toggle on task cards (utils/repeatToggle.js) ──
+// Optimistic: the icon flips at once (repeatPending), then the write; failure rolls the icon back and shows a toast.
+const repeatPending = reactive({});
+const repeatToast = ref(null); let repeatToastTimer = null;
+const noteToast = ref(null); let noteToastTimer = null; // generic one-line toast (Siri adds, templates, day plan)
+const showNoteToast = (text, { error = false } = {}) => { clearTimeout(noteToastTimer); noteToast.value = { text, error, id: Date.now() }; noteToastTimer = setTimeout(() => { noteToast.value = null; }, error ? 6000 : 4000); };
+const showRepeatToast = (text, { undo = null, error = false } = {}) => {
+  clearTimeout(repeatToastTimer);
+  repeatToast.value = { text, undo, error, id: Date.now() };
+  repeatToastTimer = setTimeout(() => { repeatToast.value = null; }, error ? 6000 : 5000);
+};
+// ── Routine: compact checklist row + weekly dots (utils/routine.js); Skip today (⋯ menu / edit chips) ──
+const routineItems = computed(() => routineToday(scheduledList.value, isViewingToday.value ? selectedDayRoutine.value : [], todayStr.value));
+const routineWeekStats = computed(() => routineWeek(scheduledList.value, todayStr.value));
+const toggleRoutineTask = (task) => { const i = realIndex(task); if (i >= 0) toggleTaskCompletion(i); };
+const skipTaskToday = async (task) => {
+  if (!userId.value || !task || blockIfLocked() || blockIfShut()) return;
+  const today = getTodayId(); const dayName = days[selectedDayIndex.value].day;
+  const before = scheduledList.value.filter((e) => e.id === task.templateId || e.templateId === task.templateId).map((e) => ({ ...e }));
+  try {
+    scheduledList.value = await mutateScheduled(userId.value, (l) => skipRoutineToday(l, task, today));
+    await mutateDay(dayName, (tasks) => tasks.filter((t) => !sameTask(t, task)));
+    selectedDayRoutine.value = selectedDayRoutine.value.filter((t) => !sameTask(t, task));
+    cancelTaskNotifications(task); resyncNotifications();
+  } catch (e) { console.error('skip today', e); showRepeatToast('Could not skip — try again.', { error: true }); return; }
+  showRepeatToast('Skipped today · series continues', { undo: async () => {
+    try {
+      const ids = new Set(before.map((e) => e.id));
+      scheduledList.value = await mutateScheduled(userId.value, (l) => [...l.filter((e) => !ids.has(e.id) && e.templateId !== task.templateId), ...before]);
+      await mutateDay(dayName, (tasks) => (tasks.some((t) => sameTask(t, task)) ? tasks : [...tasks, task]));
+      if (!selectedDayRoutine.value.some((t) => sameTask(t, task))) selectedDayRoutine.value = [...selectedDayRoutine.value, task];
+      resyncNotifications();
+    } catch (e) { console.error('undo skip', e); showRepeatToast('Could not undo.', { error: true }); }
+  } });
+};
+const repeatStateOf = (t) => {
+  const st = repeatState(t, scheduledList.value, todayStr.value);
+  const k = t && taskKey(t);
+  return k && k in repeatPending ? { ...st, on: repeatPending[k], pending: true } : st;
+};
+const findTaskByKey = (k) => (selectedDayRoutine.value || []).find((t) => taskKey(t) === k);
+const toggleTaskRepeat = async (task, { fromUndo = false } = {}) => {
+  if (!userId.value || !task) return;
+  if (blockIfLocked() || blockIfShut()) return;
+  const key = taskKey(task);
+  if (key in repeatPending) return; // one change at a time per task
+  const st = repeatState(task, scheduledList.value, todayStr.value);
+  const dayDate = selectedDayDate.value;
+  lightHaptic();
+  repeatPending[key] = !st.on;
+  try {
+    if (st.on) {
+      const last = patternOf(task, scheduledList.value, todayStr.value);
+      if (st.model === 'legacy') await setTaskRepeat(task, [], { quiet: true, lastRepeat: last });
+      else { const res = await applyScheduleToTask(task, offSchedule(dayDate), 'future', last ? { lastRepeat: last } : null); if (res.error) throw new Error(res.error); }
+      if (!fromUndo) showRepeatToast('Repeat off · today’s task stays', { undo: () => { const t = findTaskByKey(key); if (t) toggleTaskRepeat(t, { fromUndo: true }); } });
+    } else {
+      const sched = onSchedule(task, dayDate);
+      const res = await applyScheduleToTask(task, sched, 'future');
+      if (res.error) throw new Error(res.error);
+      if (!fromUndo) showRepeatToast(toastFor(true, sched), { undo: () => { const t = findTaskByKey(key) || (selectedDayRoutine.value || []).find((x) => x.title === task.title && x.templateId); if (t) toggleTaskRepeat(t, { fromUndo: true }); } });
+    }
+  } catch (e) {
+    console.error('repeat toggle', e);
+    showRepeatToast(isLockError(e) ? e.message : 'Couldn’t change the repeat. Check your connection and try again.', { error: true });
+  } finally { delete repeatPending[key]; }
+};
+const editScheduledEntry = async ({ id, fields, sched, scope }) => {
+  if (!userId.value) return;
+  const bad = validateSchedule(sched, sched.repeat === 'never' ? getTodayId() : null); if (bad) { scheduledError.value = bad; return; }
+  try { scheduledList.value = await mutateScheduled(userId.value, (l) => editEntry(l, id, fields || {}, sched, scope, getTodayId())); await afterMaterialize(); resyncNotifications(); }
+  catch (e) { console.error(e); scheduledError.value = 'Could not update the scheduled task.'; }
+};
+
+// Reminders for scheduled/recurring tasks: rebuilt from scratch after any change (capped, see utils/schedNotify.js).
+let notifTimer = null;
+const resyncNotifications = () => {
+  clearTimeout(notifTimer);
+  notifTimer = setTimeout(async () => {
+    if (!userId.value) return;
+    const todayName = days[new Date().getDay()]?.day;
+    const todayTasks = selectedDayIndex.value === new Date().getDay() ? selectedDayRoutine.value : await loadDayTasks(userId.value, todayName).catch(() => []);
+    await syncScheduledNotifications({ list: scheduledList.value, todayTasks, todayStr: getTodayId() });
+  }, 600);
+};
+// Notification sound follows the robot-voice toggle (utils/notifSound.js): re-plan pending scheduled alerts so they pick up
+// the new sound, and mirror it to userSettings/{uid}.notifVoice so server pushes (daily-report / manager-pal) match.
+watch([voMuted, userId], ([m, u], prev) => {
+  if (!u) return;
+  const mark = `${u}:${m ? 0 : 1}`;
+  try { if (localStorage.getItem('cn.notifVoiceSynced') !== mark) setDoc(doc(db, 'userSettings', u), { notifVoice: !m }, { merge: true }).then(() => { try { localStorage.setItem('cn.notifVoiceSynced', mark); } catch (e) { /* */ } }).catch(() => {}); } catch (e) { /* storage off */ }
+  if (prev && prev[1] === u && prev[0] !== m) resyncNotifications();
+}, { immediate: true });
+
 // Editor: move an existing one-time task from today's list to a future date.
 const scheduleExistingTask = async (index, task, { date, time }) => {
+  if (blockIfLocked()) return;
   if (!userId.value || !isValidDate(date) || date <= getTodayId()) { alert('Pick a date after today.'); return; }
   const entry = buildScheduledEntry({ ...task, userId: userId.value }, date, time);
   if (!entry) return;
@@ -1610,12 +1957,17 @@ const updateScheduledDate = async ({ id, date, time }) => {
   catch (e) { console.error(e); scheduledError.value = 'Could not update the date.'; }
 };
 const deleteScheduled = async (id) => {
-  if (!userId.value || !confirm('Delete this scheduled task?')) return;
-  try { scheduledList.value = await mutateScheduled(userId.value, (l) => removeScheduled(l, id)); }
+  if (!userId.value) return;
+  const e = scheduledList.value.find((x) => x.id === id);
+  let scope = 'this';
+  if (e?.templateId) { if (!confirm('Delete this repeating task?')) return; scope = confirm('OK = this and all future occurrences\nCancel = only this one') ? 'future' : 'this'; }
+  else if (!confirm(e?.recurrence ? 'Delete this whole repeating series?' : 'Delete this scheduled task?')) return;
+  try { scheduledList.value = await mutateScheduled(userId.value, (l) => deleteEntry(l, id, scope)); }
   catch (e) { console.error(e); scheduledError.value = 'Could not delete the task.'; }
 };
 
 const addNewTask = async () => {
+  if (blockIfShut()) return false;
   if (!userId.value) {
     error.value = 'You must be logged in to add a task';
     return false;
@@ -1626,18 +1978,21 @@ const addNewTask = async () => {
     return false;
   }
 
+  // A one-time task with a future due date belongs to that date, not to today's day doc (route it through the scheduler).
+  { const fut = !newTask.value.sched?.on && newTask.value.type !== 'recurring' && !(newTask.value.selectedDays || []).length ? deferredDateFor(newTask.value.dueDate, getTodayId()) : '';
+    if (fut) newTask.value = { ...newTask.value, sched: { ...blankSchedule(fut), on: true, date: fut, time: newTask.value.startTime || '' } }; }
   limitHit.value = null;
   try {
-    if (!(await dailyLimitGate(newTask.value.scheduleDate || getTodayId()))) {
+    if (!(await dailyLimitGate((newTask.value.sched?.on && newTask.value.sched.repeat === 'never' && newTask.value.sched.date) || getTodayId()))) {
       const l = limitHit.value;
-      if (!l.pro) { goUpgradeForLimit(); return false; } // free user over the daily limit: open the paywall instead of an error
+      if (!l.pro && !agentAdd.value) { goUpgradeForLimit(); return false; } // free user over the daily limit: open the paywall instead of an error
       error.value = l.pro ? `Daily limit reached: ${l.limit} tasks per day on Pro.` : `Daily limit reached: free accounts can add ${l.limit} tasks per day.`;
       return false;
     }
   } catch (e) { console.error('limit check', e); error.value = 'Could not check your daily task limit, try again.'; return false; }
 
   // Scheduled-for-later tasks go to their own doc and do not count toward today's cap.
-  if (newTask.value.scheduleDate) { await submitScheduledTask(); return true; }
+  if (newTask.value.sched?.on) { return await submitScheduledTask(); }
 
   if (isCapBlocked()) return false;
 
@@ -1653,6 +2008,15 @@ const addNewTask = async () => {
           ? newTask.value.selectedDays
           : [days[selectedDayIndex.value]];
 
+  // 8-hour lock: nothing can be added to the locked day (including repeating copies); before the countdown the plan count is the cap
+  // (adds ARE allowed during the locked window; they are appended so the locked slots never move. Deletes stay blocked.)
+  // Locked-in plan (before the countdown): adding past the minimum just works, up to the overload cap for the chosen hours.
+  // Past the cap the add is refused with a short message. The plan count is NOT bumped (Start needs min <= count <= max, not an exact match).
+  if (selectedDays.some((d) => d.day === days[selectedDayIndex.value].day) && isToday(selectedDayIndex.value) && !isDayLocked(days[selectedDayIndex.value].day)) {
+    const capMsg = planOverCap();
+    if (capMsg) { error.value = capMsg; return false; }
+  }
+
   const labels =
       typeof newTask.value.labels === 'string'
           ? newTask.value.labels.split(',').map(label => label.trim())
@@ -1662,6 +2026,8 @@ const addNewTask = async () => {
     title: newTask.value.title.trim(),
     completed: false,
     important: false,
+    anonymous: !!newTask.value.anonymous, // Anonymous for boss: managers/pals see it as 'Anonymous task' (name + notes hidden server-side)
+    visibility: 'public', // Public = managers & pals can see it; 'private' = only you
     time: '', // fallback in case reminder isn't set
     priority: newTask.value.priority,
     labels: labels,
@@ -1676,11 +2042,13 @@ const addNewTask = async () => {
     estimateMin: Number(newTask.value.estimateMin) || 0,
     nextAction: (newTask.value.nextAction || '').trim()
   };
+  Object.assign(task, estimateFor(task)); // heuristic complexity / minutes / points (estimateMin stays as typed; the server re-locks at countdown start)
+  { const ap = _clampPts(newTask.value.aiPoints); if (ap) { task.points = ap; task.pointsSource = 'ai'; const cx = _clampCx(newTask.value.aiComplexity); if (cx) task.complexity = cx; } } // assistant: Gemini-rated points
 
   // Parse datetime-local input if provided
   if (newTask.value.reminder?.datetime) {
     const dateObj = new Date(newTask.value.reminder.datetime);
-    const date = dateObj.toISOString().split('T')[0];
+    const date = localYMD(dateObj); // local date (UTC flipped 8PM+ reminders to the next day)
     const time = dateObj.toTimeString().slice(0, 5); // "HH:MM"
 
     task.time = time;
@@ -1698,10 +2066,10 @@ const addNewTask = async () => {
     const activeFrom = newTask.value.selectedDays.length > 0 && task.type === 'recurring' && dayIdx !== selectedDayIndex.value && dayIdx >= 0 ? activeFromForDay(dayIdx) : '';
     return activeFrom ? { ...task, activeFrom } : { ...task };
   };
-  const insertAt = (list, copy) => { const l = [...list]; l.splice(Number.isNaN(position) ? l.length : position, 0, copy); return l; };
+  const insertAt = (list, copy, dayName) => { const l = [...list]; l.splice(Number.isNaN(position) || isDayLocked(dayName) ? l.length : position, 0, copy); return l; }; // locked day: append only
   const viewDay = days[selectedDayIndex.value].day;
   const key = taskKey(task);
-  if (selectedDays.some((d) => d.day === viewDay)) selectedDayRoutine.value = insertAt(selectedDayRoutine.value || [], copyFor({ day: viewDay }));
+  if (selectedDays.some((d) => d.day === viewDay)) selectedDayRoutine.value = insertAt(selectedDayRoutine.value || [], copyFor({ day: viewDay }), viewDay);
   if (gateCache) gateCache.extra.push(task);
   pendingAdds.set(key, task);
   const hadReminder = !!task.reminder;
@@ -1711,7 +2079,7 @@ const addNewTask = async () => {
   error.value = '';
   lastAddPersist = trackWrite((async () => {
     try {
-      await Promise.all(selectedDays.map((d) => mutateDay(d.day, (l) => (l.some((t) => taskKey(t) === key) ? l : insertAt(l, copyFor(d))))));
+      await Promise.all(selectedDays.map((d) => mutateDay(d.day, (l) => (l.some((t) => taskKey(t) === key) ? l : insertAt(l, copyFor(d), d.day)))));
     } catch (e) {
       console.error('Error adding task:', e);
       selectedDayRoutine.value = (selectedDayRoutine.value || []).filter((t) => taskKey(t) !== key);
@@ -1731,15 +2099,24 @@ let lastAddPersist = Promise.resolve(true);
 
 // Repeat control on task cards: keep one copy of the task (same createdAt+title) on every chosen weekday.
 // Copies keep the original createdAt, so making a task recurring never counts as a new task toward the daily limit.
-const setTaskRepeat = async (task, dayNames) => {
+const setTaskRepeat = async (task, dayNames, { quiet = false, lastRepeat = null } = {}) => {
   if (!userId.value || !task) return;
+  if (days.some((d) => isDayLocked(d.day))) { if (quiet) throw Object.assign(new Error(lockedMessage()), { code: 'locked' }); alert(lockedMessage()); return; }
+  if (isShutdown()) { if (quiet) throw Object.assign(new Error(shutMessage()), { code: 'locked' }); alert(shutMessage()); return; } // a repeat edit rewrites copies on every weekday, including the locked one
+  // v2 occurrence (templateId): the legacy day popover must not add per-day copies on top of the series; edit the template instead
+  if (task.templateId && !quiet) {
+    const names = (dayNames || []).filter((d) => d !== days[selectedDayIndex.value].day);
+    const sched = names.length ? { ...onSchedule({ ...task, lastRepeat: dayNames.length >= 7 ? { repeat: 'daily' } : { repeat: 'weekly', days: dayNames.map((d) => days.findIndex((x) => x.day === d)) } }, selectedDayDate.value) } : offSchedule(selectedDayDate.value);
+    try { const res = await applyScheduleToTask(task, sched, 'future'); if (res.error) throw new Error(res.error); } catch (err) { console.error('repeat', err); showRepeatToast('Couldn’t change the repeat. Check your connection and try again.', { error: true }); }
+    return; // handled via v2
+  }
   const viewDay = days[selectedDayIndex.value].day;
   const want = new Set(dayNames && dayNames.length ? dayNames : [viewDay]);
   want.add(viewDay); // the card being edited stays where it is
   const recurring = want.size > 1;
   const key = taskKey(task);
-  const prev = { type: task.type, repeatDays: task.repeatDays };
-  const patch = { type: recurring ? 'recurring' : (task.type === 'recurring' ? 'one-time' : task.type || 'one-time'), repeatDays: recurring ? [...want] : [] };
+  const prev = { type: task.type, repeatDays: task.repeatDays, lastRepeat: task.lastRepeat };
+  const patch = { type: recurring ? 'recurring' : (task.type === 'recurring' ? 'one-time' : task.type || 'one-time'), repeatDays: recurring ? [...want] : [], ...(!recurring && (lastRepeat || legacyRepeating(task)) ? { lastRepeat: lastRepeat || legacyPattern(task) } : {}) };
   Object.assign(task, patch);
   selectedDayRoutine.value = [...selectedDayRoutine.value];
   try {
@@ -1756,14 +2133,16 @@ const setTaskRepeat = async (task, dayNames) => {
         else if (has) next = l.map((t) => (taskKey(t) === key ? { ...t, ...patch } : t));
         else {
           const af = i !== selectedDayIndex.value ? activeFromForDay(i) : '';
-          const { timerActive, timerEnd, timerStart, boss, ...base } = task;
-          next = [...l, { ...base, ...patch, completed: false, completedAt: null, status: base.status === 'done' ? 'todo' : base.status, activeFrom: af }];
+          const { timerActive, timerEnd, timerStart, timerStartedAt, timerEndTime, timerStoppedAt, timerDuration, timerRemaining, timerPausedAt, timerLockedMin, boss, ...base } = task; // a copy never inherits a running/stopped timer
+          next = [...l, { ...base, ...patch, completed: false, completedAt: null, status: !base.status || base.status === 'done' ? 'todo' : base.status, activeFrom: af || '' }];
         }
-        tx.set(refs[i], { tasks: next, updatedAt: serverTimestamp() }, { merge: true });
+        // legacy tasks carry no `status` (and UI copies can hold undefined fields): Firestore rejects undefined values client-side
+        tx.set(refs[i], { tasks: next.map(dropUndefined), updatedAt: serverTimestamp() }, { merge: true });
       });
     }));
   } catch (e) {
     console.error('repeat', e); Object.assign(task, prev); selectedDayRoutine.value = [...selectedDayRoutine.value];
+    if (quiet) throw e;
     alert('Could not update the repeat setting. Please try again.');
   }
 };
@@ -1774,7 +2153,7 @@ const speakDailyReport = async () => {
   const today = new Date();
   const yesterday = new Date(today);
   yesterday.setDate(yesterday.getDate() - 1);
-  const yesterdayStr = yesterday.toISOString().split('T')[0];
+  const yesterdayStr = localYMD(yesterday);
 
   const docRef = doc(db, 'dailyReports', `${userId.value}_${yesterdayStr}`);
   const snapshot = await getDoc(docRef);
@@ -1792,9 +2171,9 @@ const speakDailyReport = async () => {
 
   const todayTotal = selectedDayRoutine.value.length;
 
-  const message = `Yesterday, you completed ${yesterdayCompleted} of ${yesterdayTotal} tasks.
-    Today you have ${todayTotal} task${todayTotal === 1 ? '' : 's'}.
-    ${streakGained ? '🔥 Great job on earning a streak!' : '🌱 No streak gained, but today is a new chance!'}`;
+  const message = `Yesterday, you finished ${yesterdayCompleted} of ${yesterdayTotal} tasks.
+    Today you've got ${todayTotal} task${todayTotal === 1 ? '' : 's'}.
+    ${streakGained ? 'Great job, you earned a streak!' : "No streak yesterday, but today's a fresh chance."}`;
 
   speak(message);
 };
@@ -1805,14 +2184,14 @@ const speakDailyReport = async () => {
 const showDailyReportPopup = ref(false);
 const lastSpokenDate = ref(localStorage.getItem("lastSpokenDate") || null);
 onMounted(() => {
-  const todayStr = new Date().toISOString().split("T")[0];
+  const todayStr = localYMD();
 
   if (lastSpokenDate.value !== todayStr) {
     showDailyReportPopup.value = true; // show popup
   }
 });
 watch(selectedDayIndex, () => {
-  const todayStr = new Date().toISOString().split("T")[0];
+  const todayStr = localYMD();
 
   if (lastSpokenDate.value !== todayStr && isToday(selectedDayIndex.value)) {
     showDailyReportPopup.value = true;
@@ -1822,13 +2201,13 @@ watch(selectedDayIndex, () => {
 const userCredits = ref(0);
 const playDailyReport = () => {
   speakDailyReport(); // Call your existing function
-  const todayStr = new Date().toISOString().split("T")[0];
+  const todayStr = localYMD();
   localStorage.setItem("lastSpokenDate", todayStr);
   lastSpokenDate.value = todayStr;
   showDailyReportPopup.value = false;
 };
 const dismissReportPopup = () => {
-  const todayStr = new Date().toISOString().split("T")[0];
+  const todayStr = localYMD();
   localStorage.setItem("lastSpokenDate", todayStr);
   lastSpokenDate.value = todayStr;
   showDailyReportPopup.value = false;
@@ -1873,6 +2252,7 @@ const startEditingTask = (index) => {
 };
 
 const updateTask = async () => {
+  if (isShutdown()) { alert(shutMessage()); return; } // edits are allowed during the locked window; only the post-day shutdown blocks them
   if (editedTask.value.title.trim() === '') {
     error.value = 'Task name cannot be empty';
     return;
@@ -1988,6 +2368,7 @@ const lastCompletionDate = ref(null);
 const bestStreak = ref(0);
 const streakProgress = ref(0); // distinct non-pending tasks completed today
 const streakStatus = ref('none'); // none | done | at-risk | broken
+const streakFreezes = ref(0); // held freeze days (auto-cover a missed day)
 const userSettingsStreakGap = ref(ALLOWED_GAP_DAYS); // allowed days between counted days (1 = no skips)
 const unlockedBadges = ref([]);
 const motivationalMessage = ref('');
@@ -2036,10 +2417,20 @@ const checkStreakOnCompletion = async () => {
     const streakDocRef = doc(db, 'streaks', userId.value);
     const snap = await getDoc(streakDocRef);
     if (!snap.exists()) { streakStatus.value = 'none'; return; }
-    const data = snap.data();
+    let data = snap.data();
     unlockedBadges.value = data.unlockedBadges || [];
     let ev = evaluateStreak(data, localDateStr(), streakGap());
-    // Earned streak freeze (7-day milestone) covers exactly one missed day.
+    // Held freeze days (1 per 7 counted days in a row, max 2) auto-cover missed days so the streak holds.
+    if (ev.status === 'broken' && data.streak) {
+      const fz = applyFreezes(data, localDateStr(), streakGap());
+      if (fz.used) {
+        const { lastCompletionDate: lc, counted, freezeBank, frozenDates } = fz.state;
+        await setDoc(streakDocRef, { lastCompletionDate: lc, counted, freezeBank, frozenDates, updatedAt: serverTimestamp() }, { merge: true });
+        data = { ...data, lastCompletionDate: lc, counted, freezeBank, frozenDates };
+        ev = evaluateStreak(data, localDateStr(), streakGap());
+      }
+    }
+    // Legacy: earned streak freeze (7-day milestone) covers exactly one missed day.
     if (ev.status === 'broken' && data.streak && data.lastCompletionDate && dayDiff(data.lastCompletionDate, localDateStr()) === streakGap() + 1) {
       const y = new Date(); y.setDate(y.getDate() - 1);
       if (await tryFreeze(userId.value, data, [localDateStr(y)], rewardsFor(data.bestStreak || 0).freezes)) {
@@ -2066,10 +2457,10 @@ const checkTasksAndReduceStreak = async () => {
   if (!userId.value) return;
 
   const now = new Date();
-  const todayStr = now.toISOString().split('T')[0]; // Current date in YYYY-MM-DD format
+  const todayStr = localYMD(now); // Current date in YYYY-MM-DD format
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
-  const yesterdayStr = yesterday.toISOString().split('T')[0]; // Yesterday's date
+  const yesterdayStr = localYMD(yesterday); // Yesterday's date
 
   try {
     const streakDocRef = doc(db, 'streaks', userId.value);
@@ -2224,9 +2615,9 @@ const checkForBadges = async () => {
 
 
 
-const currentDayKey = new Date().toISOString().split('T')[0]; // Format: YYYY-MM-DD
+const currentDayKey = localYMD(); // Format: YYYY-MM-DD
 const pointsAccumulated = ref(0);
-const totalPoints = computed(() => selectedDayRoutine?.value?.length * 10); // Total points (10 points per task)
+const totalPoints = computed(() => (selectedDayRoutine?.value || []).reduce((n, t) => n + chipValues(t).points, 0)); // real per-task points (AI / estimate)
 
 
 
@@ -2234,7 +2625,7 @@ const totalPoints = computed(() => selectedDayRoutine?.value?.length * 10); // T
 watch(
     () => selectedDayRoutine.value,
     (tasks) => {
-      pointsAccumulated.value = tasks?.filter((task) => task.completed).length * 10;
+      pointsAccumulated.value = (tasks || []).filter((task) => task.completed).reduce((n, t) => n + chipValues(t).points, 0); // real points, same as the card
     },
     { deep: true }
 );
@@ -2248,7 +2639,13 @@ onMounted(() => {
   checkStreakOnCompletion();
 });
 const showBackground = ref(false);
-const { prefs: bgPrefs } = useBackground();
+const bgApi = useBackground();
+const bgPrefs = bgApi.prefs;
+// Returning to the app (cold start or back from the background): bring back the music the user had on.
+const resumeBgMusic = () => { try { bgApi.resumeIfWanted(); } catch (e) { /* audio is optional */ } };
+const onBgVisible = () => { if (document.visibilityState === 'visible') resumeBgMusic(); };
+onMounted(() => { resumeBgMusic(); document.addEventListener('visibilitychange', onBgVisible); });
+onBeforeUnmount(() => document.removeEventListener('visibilitychange', onBgVisible));
 const menuOpen = ref(false); // closed by default; closes on outside tap / Escape / route change
 const heroMenuEl = ref(null);
 const noticeCount = computed(() => {
@@ -2300,13 +2697,19 @@ const voiceOpen = ref(false); // modal visibility (independent of whether recogn
 const voiceError = ref('');
 let recognition = null;
 let pendingVoiceText = '';
+let voiceCommitted = ''; // finished phrases of the current long dictation
+let voiceFinishing = false; // Done tapped on the web flow: process the transcript on the next onend
 let voiceSubmitting = false;
 let voiceAddFailed = false; // the last spoken task was refused (limit, strict boss, save error): keep the message visible
 const liveTranscript = ref('');
-const voiceCap = typeof window !== 'undefined' ? voiceCapability(window, navigator) : 'none';
+const voiceBlocked = voiceInputBlocked(); // iOS shell: WKWebView has no SpeechRecognition -> mic button hidden
+const hideUgc = ugcHidden();
+const nativeVoiceIn = nativeSpeechAvailable(); // iOS app: on-device SFSpeechRecognizer via the local ClingVoice plugin
+let nativeStop = null;
+const voiceCap = nativeVoiceIn ? 'native' : typeof window !== 'undefined' && !voiceBlocked ? voiceCapability(window, navigator) : 'none';
 const voiceSupported = voiceCap !== 'none';
 // Initialize SpeechRecognition only if supported (every property access stays inside this guard)
-if (voiceSupported) {
+if (voiceSupported && !nativeVoiceIn) {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   recognition = new SpeechRecognition();
   recognition.lang = (typeof navigator !== 'undefined' && navigator.language) || 'en-US';
@@ -2318,6 +2721,7 @@ if (voiceSupported) {
     console.error("Speech recognition error:", event.error);
     listening.value = false;
     if (event.error === 'aborted') return; // we stopped it ourselves (cancel / restart): not a failure
+    if (event.error === 'no-speech' && voiceOpen.value && (voiceCommitted || pendingVoiceText)) return; // a pause mid-dictation: onend restarts
     voiceError.value = event.error === 'not-allowed' || event.error === 'service-not-allowed'
       ? 'Microphone access was blocked. Allow it in your browser settings and try again.'
       : event.error === 'no-speech' ? "Didn't catch anything. Try again."
@@ -2327,32 +2731,78 @@ if (voiceSupported) {
   recognition.onend = () => {
     listening.value = false;
     // iOS Safari often ends without flagging a result final: use what we heard instead of dropping it.
-    if (voiceOpen.value && !voiceError.value && pendingVoiceText.trim()) saveSpoken(pendingVoiceText);
-    // Hands-free: restart after each pause until the user taps Stop (iOS ends after every utterance).
-    if (voiceOpen.value && !voiceError.value && voiceSupported) setTimeout(() => { if (voiceOpen.value && !listening.value) { try { recognition.start(); } catch (e) { /* still stopping */ } } }, 250);
+    // Long dictation: commit what was heard in this segment and keep listening until the user taps Done.
+    if (pendingVoiceText.trim()) { voiceCommitted = `${voiceCommitted} ${pendingVoiceText.trim()}`.trim(); pendingVoiceText = ''; }
+    if (voiceFinishing) { voiceFinishing = false; if (voiceOpen.value && voiceCommitted.trim()) saveSpoken(voiceCommitted); else if (voiceOpen.value) voiceError.value = "Didn't catch anything. Try again."; return; }
+    // Hands-free: restart after each pause until the user taps Done (iOS ends after every utterance).
+    if (voiceOpen.value && !voiceError.value && voiceSupported && !voiceItems.value.length && !voiceBusy.value) setTimeout(() => { if (voiceOpen.value && !listening.value) { try { recognition.start(); } catch (e) { /* still stopping */ } } }, 250);
   };
   recognition.onresult = (event) => {
     let interim = '';
     for (let i = event.resultIndex; i < event.results.length; ++i) {
       const r = event.results[i];
-      if (r.isFinal) saveSpoken(r[0].transcript); // a pause ends a phrase: save it right away
+      if (r.isFinal) { const f = r[0].transcript.trim(); if (f) voiceCommitted = `${voiceCommitted} ${/[.!?]$/.test(f) ? f : f + '.'}`.trim(); } // a pause ends a phrase: keep it, keep listening
       else interim += r[0].transcript;
     }
-    liveTranscript.value = interim.trim();
     pendingVoiceText = interim.trim();
+    liveTranscript.value = `${voiceCommitted} ${pendingVoiceText}`.trim();
   };
 } else {
   console.warn("Speech recognition not supported in this browser.");
 }
 // Hands-free capture: every finished phrase is split ("and then" / "next") and each part saved immediately, with a 5 s undo.
+const ASSIST_UNDO_MS = 20000;
 const voiceAdded = ref([]); // [{ id, title, createdAt, dayName, undoUntil }]
 const voiceQueue = [];
-const saveSpoken = (text) => {
+// Every finished phrase (web webkitSpeechRecognition or native SFSpeechRecognizer) is interpreted into items
+// (tasks / reminders / scheduled blocks) and shown on the confirm sheet; nothing is saved until the user confirms.
+const voiceItems = ref([]); const voiceBusy = ref(false); const voiceSource = ref('');
+const saveSpoken = async (text) => {
   pendingVoiceText = '';
-  liveTranscript.value = '';
-  splitSpokenTasks(text).forEach((t) => voiceQueue.push(t));
-  drainVoiceQueue();
+  if (!voiceOpen.value || !String(text || '').trim() || voiceBusy.value || voiceItems.value.length) return;
+  liveTranscript.value = text.trim();
+  if (recognition) { try { recognition.stop(); } catch (e) { /* not started */ } }
+  voiceBusy.value = true;
+  try {
+    const u = auth.currentUser;
+    // AI only for Pro users who already allowed AI (no consent modal mid-dictation); otherwise the on-device parser.
+    const aiOk = !!(u && rcProActive(u.uid)) && await hasAiConsent();
+    const ask = aiOk ? async (task, input) => ((await ensureAiConsent()) ? askAi(task, input) : null) : null;
+    const { items, source } = await interpretSpeech(text, { ask });
+    voiceSource.value = source;
+    voiceItems.value = items.length ? items : splitSpokenTasks(text).map((title) => ({ type: 'task', title, date: getTodayId(), start: '', durationMin: 0, remindAt: '' }));
+    if (!voiceItems.value.length) voiceError.value = "Didn't catch a task. Try again.";
+  } finally { voiceBusy.value = false; }
 };
+// Confirmed items go through the normal flows: addNewTask (daily limit, strict boss, points) for tasks and scheduled blocks,
+// saveReminder (device notification, not a task, no limit) for reminders.
+const confirmVoiceItems = async (items) => {
+  if (voiceBusy.value) return; voiceBusy.value = true; voiceError.value = '';
+  const done = [];
+  try {
+    for (const it of items) {
+      if (!it.title || !String(it.title).trim()) continue;
+      let ok = false;
+      if (it.type === 'reminder') {
+        const r = await saveReminder({ title: it.title.trim(), remindAt: it.remindAt }, { schedule: scheduleLocal });
+        ok = r.ok; if (!ok) error.value = r.error;
+      } else {
+        newTask.value = { ...blankTask(), title: it.title.trim(), startTime: it.start || '', estimateMin: it.durationMin || '',
+          ...(it.type === 'schedule' ? { sched: { ...blankSchedule(it.date), on: true, date: it.date, time: it.start || '09:00' } }
+            : deferredDateFor(it.date, getTodayId()) ? { sched: { ...blankSchedule(it.date), on: true, date: it.date, time: it.start || '' } } : {}) };
+        capOverride.value = true;
+        ok = !!(await addNewTask()) && (it.type === 'schedule' || !!deferredDateFor(it.date, getTodayId()) || (await lastAddPersist));
+        capOverride.value = false;
+      }
+      if (!ok) { voiceError.value = `${it.title}: ${error.value || 'could not be saved.'}`; break; }
+      done.push(it);
+      voiceAdded.value = [...voiceAdded.value, { id: `${Date.now()}-${Math.random()}`, title: `${it.type === 'reminder' ? '⏰ ' : it.type === 'schedule' ? '📅 ' : ''}${it.title}`, undoUntil: 0 }];
+    }
+    voiceItems.value = voiceItems.value.filter((x) => !done.includes(x));
+    if (!voiceItems.value.length && !voiceError.value) setTimeout(() => { if (!voiceItems.value.length) cancelVoiceInput(); }, 1200);
+  } finally { voiceBusy.value = false; }
+};
+const relistenVoice = () => { voiceItems.value = []; startVoiceInput(); };
 const drainVoiceQueue = async () => {
   if (voiceSubmitting) return;
   voiceSubmitting = true;
@@ -2397,7 +2847,10 @@ const undoVoiceTask = async (entry) => {
 };
 const cancelVoiceInput = () => {
   voiceAddFailed = false;
-  if (recognition) { try { recognition.stop(); } catch (e) { /* not started */ } }
+  voiceOpen.value = false; voiceItems.value = [];
+  if (nativeStop) { const st = nativeStop; nativeStop = null; (st.cancel || st)(); }
+  voiceCommitted = ''; voiceFinishing = false;
+  if (recognition) { try { recognition.abort(); } catch (e) { /* not started */ } }
   listening.value = false;
   voiceOpen.value = false;
   voiceError.value = '';
@@ -2406,13 +2859,27 @@ const cancelVoiceInput = () => {
   voiceAdded.value = voiceAdded.value.filter((e) => e.undoUntil > Date.now()); // keep live undo chips as toasts
 };
 
+// Done while listening: stop and organise the whole dictation into items for the review list.
+const finishVoiceInput = () => {
+  if (!voiceOpen.value || voiceBusy.value || voiceItems.value.length) return;
+  if (nativeStop) { const st = nativeStop; nativeStop = null; (st.finish || st)(); return; } // native onFinal -> saveSpoken
+  const all = `${voiceCommitted} ${pendingVoiceText}`.trim();
+  if (recognition && listening.value) { voiceFinishing = true; try { recognition.stop(); } catch (e) { voiceFinishing = false; } }
+  if (!voiceFinishing) { if (all) saveSpoken(all); else voiceError.value = "Didn't catch anything. Try again."; }
+};
 const startVoiceInput = () => {
-  voiceAddFailed = false;
+  voiceAddFailed = false; voiceCommitted = ''; voiceFinishing = false;
   voiceAdded.value = [];
   voiceOpen.value = true; // always show the modal, even when recognition is unavailable
   liveTranscript.value = '';
   voiceError.value = '';
   pendingVoiceText = '';
+  voiceItems.value = [];
+  if (nativeVoiceIn) {
+    startNativeSpeech({ onPartial: (t) => { liveTranscript.value = t; }, onFinal: (t) => saveSpoken(t), onError: (m) => { voiceError.value = m; }, onState: (v) => { listening.value = v; } })
+      .then((stop) => { nativeStop = stop; });
+    return;
+  }
   if (!recognition) return;
   try { recognition.start(); }
   catch (e) {
@@ -2581,11 +3048,12 @@ const removeTaskAttachment = async (field) => {
 
 const showImagePreview = ref(false);
 const toggleTaskImportance = async (index) => {
+  if (blockIfShut()) return false;
   const task = { ...selectedDayRoutine.value[index] };
   task.important = !task.important;
 
   // Voice feedback
-  const voiceMessage = task.important ? 'Marked as important' : 'No longer marked as important';
+  const voiceMessage = task.important ? "Got it. That one's important." : "Okay, it's not marked important anymore.";
   speak(voiceMessage);
 
   // Update local array
@@ -2603,7 +3071,7 @@ const toggleTaskImportance = async (index) => {
 
 const saveDailyPerformance = async () => {
   const today = new Date();
-  const dateStr = today.toISOString().split('T')[0]; // YYYY-MM-DD
+  const dateStr = localYMD(today); // local YYYY-MM-DD
   const docRef = doc(db, 'dailyReports', `${userId.value}_${dateStr}`);
 
   const completedCount = selectedDayRoutine.value.filter(task => task.completed).length;
@@ -2690,6 +3158,7 @@ const openWorkoutModal = async () => {
 
 const generateWorkoutRoutine = async () => {
   if (!(await requirePro(_proRouter, 'aiCoach'))) { closeWorkoutModal(); return; }
+  if (!(await ensureAiConsent())) { closeWorkoutModal(); return; } // one-time OpenAI data-sharing consent (declined => nothing is sent)
   closeWorkoutModal();
   isLoading.value = true;
 
@@ -2709,7 +3178,7 @@ Goal: ${workoutPreferences.goal}, Duration: ${workoutPreferences.duration} minut
 Limit to a maximum of ${workoutPreferences.maxPerDay} workouts per day.
 Return in JSON format like:
 {
-  "Mon": [{ "title": "...", "youtubeURL": "...", "type": "recurring", "completed": false }],
+  "Mon": [{ "title": "...", "type": "recurring", "completed": false }],
   ...
 }`;
 
@@ -2731,7 +3200,7 @@ const applyGeneratedRoutine = async (generatedWeek) => {
     for (const [day, tasks] of Object.entries(generatedWeek)) {
       const docRef = doc(db, "weeklyRoutines", `${userId.value}_${day}`);
       await setDoc(docRef, {
-        tasks: tasks.map(task => ({
+        tasks: tasks.map(({ youtubeURL, ...task }) => ({ // AI-invented video links are dropped (they are fabricated / dead)
           ...task,
           createdAt: new Date().toISOString(),
           userId: userId.value,
@@ -2743,7 +3212,7 @@ const applyGeneratedRoutine = async (generatedWeek) => {
       });
     }
 
-    alert("✅ Your AI workout routine is ready!");
+    alert("✅ Your AI workout routine is ready! It is a general suggestion, not medical advice. Check with a doctor before starting a new exercise program.");
     if (selectedDayIndex.value !== -1) fetchSelectedDayRoutine();
   } catch (err) {
     console.error("Error applying AI routine:", err);
@@ -2758,6 +3227,9 @@ const canViewSelectedDayTasks = computed(() => {
     return true;
   }
 
+  // 8-hour day: the list is open while a plan is waiting for its tasks and while the window runs (no separate Start Day press needed)
+  if (eh.phase.value === 'running' || eh.phase.value === 'before' || eh.phase.value === 'ready') return true;
+
   // Today requires Start Day
   return daySession.value.started && !daySession.value.ended;
 });
@@ -2769,6 +3241,21 @@ const FULL_DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 
 const isDraggingTask = ref(false);
 const reorderSettling = ref(false); // keeps entrance animations off while the DOM settles after a drop (no replay/flash)
 let settleTimer = null;
+const taskListEl = ref(null);
+const { onPointerDown: onListPointerDown } = useSmoothReorder({
+  listRef: taskListEl,
+  enabled: () => reorderable.value,
+  onStart: () => onDragStart(),
+  onCommit: async (fromKey, toKey) => {
+    const list = [...displayTasks.value];
+    const fi = list.findIndex((t) => taskKey(t) === fromKey), ti = list.findIndex((t) => taskKey(t) === toKey);
+    if (fi < 0 || ti < 0) return;
+    const [moved] = list.splice(fi, 1); list.splice(ti, 0, moved);
+    onReorder(list);
+    await nextTick();
+  },
+  onEnd: (changed) => { isDraggingTask.value = false; settleReorder(); playSound('dragEnd'); if (changed) handleDragEnd(); },
+});
 const settleReorder = () => { reorderSettling.value = true; clearTimeout(settleTimer); settleTimer = setTimeout(() => { reorderSettling.value = false; }, 600); };
 const onDragStart = () => {
   isDraggingTask.value = true; reorderSettling.value = true;
@@ -2804,7 +3291,7 @@ const addAnyway = () => { capOverride.value = true; capWarning.value = false; ad
 watch(modalOpen, (open) => { if (!open) { capWarning.value = false; capOverride.value = false; limitHit.value = null; } });
 
 // Load summary + schedule
-const todayLoad = computed(() => loadSummary(selectedDayRoutine.value));
+const todayLoad = computed(() => loadSummary(selectedDayRoutine.value, eh.dayHours.value * 60));
 const schedule = computed(() => buildSchedule(selectedDayRoutine.value));
 const showSchedule = ref(false);
 
@@ -2814,21 +3301,85 @@ const toggleExpanded = (task) => {
   expandedKey.value = expandedKey.value === taskKey(task) ? null : taskKey(task);
 };
 const patchTask = async (index, task, patch) => {
+  if (blockIfShut()) return false;
   if (patch.status === 'pending' && !task.pendingSince) patch = { ...patch, pendingSince: new Date().toISOString() }; // wait time for the morning report
   try {
     const before = { createdAt: task.createdAt, title: task.title }; // stored identity before this edit
     const dayName = days[selectedDayIndex.value].day;
     Object.assign(task, patch);
     if (patch.estimateMin !== undefined) task.estimateMin = Number(patch.estimateMin) || 0;
-    const saved = patch.estimateMin !== undefined ? { ...patch, estimateMin: task.estimateMin } : patch;
+    let saved = patch.estimateMin !== undefined ? { ...patch, estimateMin: task.estimateMin } : patch;
+    // re-estimate when the inputs change (only possible outside a running lock: estimateMin/title are locked fields there)
+    if (['estimateMin', 'title', 'notes', 'priority'].some((k) => patch[k] !== undefined) && !isDayLocked(dayName)) { const e = estimateFor(task); Object.assign(task, e); saved = { ...saved, ...e }; }
     await patchStoredTask(userId.value, dayName, before, index, saved);
   } catch (e) {
-    console.error('Error saving task field:', e);
+    if (!lockMessage(e)) console.error('Error saving task field:', e);
+    if (isLockError(e)) fetchSelectedDayRoutine();
   }
+};
+
+// ── Edit task: estimate chips (locked once the timer starts), "all repeating days" option ──
+const seriesKey = ref(null);
+const editTask = async (index, task, rawPatch) => {
+  let patch = safeEditPatch(rawPatch); // an edit never completes a task
+  if (!Object.keys(patch).length) return;
+  const dayName = days[selectedDayIndex.value].day;
+  const lockedHit = patchTouchesLocked(patch);
+  if (isDayLocked(dayName) && lockedHit.length) { alert(`${lockedMessage()} (${lockedHit.join(', ')})`); return; }
+  const oldKey = taskKey(task);
+  if (patch.estimateMin !== undefined) {
+    patch.estimateMin = cleanEstimate(patch.estimateMin);
+    // editable during lock-in and after play: a started timer's end time moves with the new duration
+    if (timerStarted(task)) patch = { ...patch, ...retimePatch(task, patch.estimateMin) };
+  }
+  await patchTask(index, task, patch);
+  if (patch.timerEndTime && task.timerActive && !task.timerPausedAt) { try { scheduleTimerDone(task); } catch (e) { /* notification reschedule best-effort */ } }
+  if (seriesKey.value === oldKey) {
+    const sp = seriesPatch(patch);
+    if (Object.keys(sp).length) await applyToSeries(oldKey, sp);
+    if (patch.title) seriesKey.value = taskKey(task);
+  }
+};
+// Copy the editable fields to every other weekday copy of a repeating task (one transaction).
+const applyToSeries = async (key, sp) => {
+  const others = days.filter((d, i) => i !== selectedDayIndex.value);
+  if (others.some((d) => isDayLocked(d.day)) && patchTouchesLocked(sp).length) { alert(lockedMessage()); return; }
+  try {
+    await trackWrite(runTransaction(db, async (tx) => {
+      const refs = others.map((d) => doc(db, 'weeklyRoutines', `${userId.value}_${d.day}`));
+      const snaps = await Promise.all(refs.map((r) => tx.get(r)));
+      snaps.forEach((snap, i) => {
+        if (!snap.exists()) return;
+        const l = snap.data().tasks || [];
+        if (!l.some((t) => taskKey(t) === key)) return;
+        tx.update(refs[i], { tasks: l.map((t) => (taskKey(t) === key ? { ...t, ...sp } : t)), updatedAt: serverTimestamp() });
+      });
+    }));
+  } catch (e) { console.error('series edit', e); alert('Saved for this day, but the other repeating days could not be updated.'); }
+};
+
+// ── Rollover notice (in-app once per rollover + device notification when it runs) ──
+const rollover = ref(null);
+const rolledKeys = ref([]);
+const notifyRollover = (titles) => {
+  if (!titles || !titles.length) return;
+  scheduleLocal(`rollover:${getTodayId()}:${titles.join('|')}`, { title: 'Tasks moved to tomorrow', body: rolloverNotifBody(titles), at: new Date(Date.now() + 2000), route: '/home', type: 'rollover' });
+};
+watch([selectedDayRoutine, isViewingToday, userId], () => {
+  if (!isViewingToday.value || !userId.value || typeof localStorage === 'undefined') return;
+  const p = pendingRollover(selectedDayRoutine.value, loadSeen(localStorage, userId.value));
+  if (p) rollover.value = p;
+});
+const dismissRollover = () => { if (rollover.value) markSeen(localStorage, userId.value, rollover.value.ids); rollover.value = null; };
+const highlightRollover = () => {
+  rolledKeys.value = rollover.value ? rollover.value.tasks.map(taskKey) : [];
+  dismissRollover();
+  setTimeout(() => { rolledKeys.value = []; }, 8000);
 };
 
 // Subtasks: saved through the same patch path; optionally complete the parent when all are done
 const onSubtaskPatch = async (index, task, patch) => {
+  if (blockIfShut()) return false;
   await patchTask(index, task, patch);
   if (shouldAutoComplete(task)) await toggleTaskCompletion(index);
 };
@@ -2862,6 +3413,7 @@ const finishShutdown = async (carry) => {
       if (picked.length) {
         const tomorrow = days[(new Date().getDay() + 1) % days.length].day;
         await carryTasksToDay(userId.value, todayDayName(), tomorrow, strictOn.value ? picked.map(carryTask) : picked, getTodayId());
+        notifyRollover(picked.map((t) => t.title));
       }
     }
     try { await saveDailyPerformance(); } catch (e) { console.error(e); }
@@ -2875,15 +3427,293 @@ const finishShutdown = async (carry) => {
     }
     await fetchSelectedDayRoutine();
   } catch (e) {
-    console.error('Shutdown failed:', e);
+    if (!lockMessage(e)) console.error('Shutdown failed:', e);
   } finally {
     shutdownBusy.value = false;
   }
 };
+
+// ── 8-hour day: sync with the server, auto-start the locked window, keep the card's task list ──
+const ehTasksCache = ref([]);
+const ehTasks = computed(() => (isToday(selectedDayIndex.value) || selectedDayLocked.value ? selectedDayRoutine.value : ehTasksCache.value));
+// timed tasks: any add / edit / reschedule / delete / complete on today's list re-plans the on-device pings (debounced)
+watch(selectedDayRoutine, () => { if (isToday(selectedDayIndex.value)) resyncNotifications(); }, { deep: true });
+watch(selectedDayRoutine, (l) => { if (isToday(selectedDayIndex.value) || selectedDayLocked.value) ehTasksCache.value = [...(l || [])]; }, { deep: true });
+// Scheduled notifications: resync on any schedule/today-list change (declared after selectedDayRoutine to avoid TDZ).
+watch(scheduledList, resyncNotifications);
+watch(() => selectedDayRoutine.value.map((t) => `${t.scheduledId || ''}:${t.completed ? 1 : 0}:${t.time || ''}`).join(','), resyncNotifications);
+watch(userId, (u) => { if (u) syncAfterAuth(); }, { immediate: true }); // also saves the wake time picked in onboarding if the account has no plan yet
+const ehStartError = ref('');
+let ehStarting = false;
+// Legacy per-day session: opened quietly when the 8-hour window starts (so End Day / shutdown / stats keep working as before).
+const ensureLegacyDayStarted = async () => {
+  if (!userId.value || (daySession.value.started && !daySession.value.ended)) return;
+  const now = new Date();
+  await setDoc(doc(db, 'userSettings', userId.value), { daySessions: { [getTodayId()]: { started: true, ended: false, startTime: serverTimestamp(), endTime: null, updatedAt: serverTimestamp() } } }, { merge: true });
+  daySession.value = { started: true, ended: false, startTime: now, endTime: null, startedAtText: formatSessionTime(now), endedAtText: '' };
+};
+// Morning flow (replaces the old auto-start at the wake time / when the task list matched the plan):
+// on the first open of a new day (phase 'ready', no lock today) ask "How many hours will you dedicate today?" (3..12h, half hours,
+// preselected to the last choice or 8), then "Are you sure? Your day will end at H:MM". The countdown starts ONLY on Confirm
+// (end = confirm time + hours, frozen for the day). Nothing starts by itself any more.
+const dayPromptOpen = ref(false);
+const ehBusy = ref(false);
+const lockInToday = computed(() => lockIn.value.enabled && lockIn.value.skipDate !== (eh.phaseInfo.value.dayKey || ''));
+const openDayPrompt = () => { if (lockInToday.value && eh.phase.value === 'ready' && !eh.lock.value && isToday(selectedDayIndex.value)) { ehStartError.value = ''; dayPromptOpen.value = true; } };
+const maybeShowDayPrompt = () => {
+  if (!userId.value || !lockInToday.value || eh.phase.value !== 'ready' || eh.lock.value || dayPromptOpen.value || !isToday(selectedDayIndex.value)) return;
+  const dk = eh.phaseInfo.value.dayKey || '';
+  if (!dk || promptSeenFor() === dk) return; // once per day; the card's Start button reopens it
+  markPromptSeen(dk); openDayPrompt();
+};
+const confirmDayStart = async (hours) => {
+  if (ehStarting) return;
+  if (!lockInToday.value) { ehStartError.value = lockIn.value.enabled ? 'Lock-in is skipped for today.' : 'Lock-in is off. Turn it on in Settings (Profile > Preferences).'; return; }
+  ehStarting = true; ehBusy.value = true; ehStartError.value = '';
+  try {
+    await setDayLengthHours(hours); // remembered as next morning's preselection (users/{uid}.dayLengthHours + localStorage)
+    await lastAddPersist; // the server counts what is stored: wait for any pending add
+    // Compat with a server that still requires plan.taskCount === list size: sync it to what is stored first (allowed in the ready phase).
+    { const plan = eh.plan.value; const n = countableIndexes(selectedDayRoutine.value || [], eh.phaseInfo.value.dayKey || '').length; const r = taskRange(hours);
+      if (plan && n >= 1 && n <= r.max && plan.taskCount !== n) await eh.savePlan({ wakeTime: plan.wakeTime, taskCount: n }).catch((e) => console.warn('plan sync:', e && e.message)); }
+    await eh.startNow(hours);
+    dayPromptOpen.value = false;
+    await ensureLegacyDayStarted().catch((e) => console.warn('day session:', e));
+    await fetchSelectedDayRoutine();
+  } catch (e) { { const r = taskRange(hours); ehStartError.value = (e.code === 'no-tasks' || e.code === 'too-few') ? `Add at least ${r.min} task${r.min === 1 ? '' : 's'} for ${hoursLabel(r.hours)} hours, then confirm.` : e.code === 'too-many' ? `At most ${r.max} tasks for ${hoursLabel(r.hours)} hours. Remove some, then confirm.` : (e.message || 'Could not start the countdown'); } }
+  finally { ehStarting = false; ehBusy.value = false; }
+};
+
+// ── ClingNote assistant (AssistantSheet): tool calls run through the same handlers as the buttons above ──
+const todayTasksForTarget = computed(() => (isViewingToday.value ? selectedDayRoutine.value || [] : []));
+// required day points: the locked boss target while the day runs, else the projection from today's tasks + chosen hours
+const dayRequiredPts = computed(() => requiredPoints({ lock: eh.running.value ? eh.lock.value : null, tasks: todayTasksForTarget.value, hours: eh.hoursPref.value, stats: eh.stats.value }));
+
+// ---- Boss coach: spoken reactions, focus check-ins, overbooked warning, missed-streak roast (in-app only, respect the Boss voice toggle) ----
+const bossReact = (kind, title = '') => { if (voMuted.value || document.hidden) return; speakLive(reactionLine({ kind, title, seed: Date.now() })); };
+const onceToday = (k) => { const day = localDateStr(); try { if (localStorage.getItem(k) === day) return false; localStorage.setItem(k, day); } catch (e) { /* ignore */ } return true; };
+watch(streakStatus, (st) => { let last = null; try { last = localStorage.getItem('cn.boss.roast'); } catch (e) { /* ignore */ }
+  if (shouldRoast(st, localDateStr(), last) && onceToday('cn.boss.roast')) setTimeout(() => bossReact('missed'), 2500); });
+const focusSpoken = new Map(); // task key -> Set(marks)
+const focusTick = () => {
+  const t = (selectedDayRoutine.value || []).find((x) => x && x.timerActive && x.timerEndTime && !x.timerPausedAt);
+  if (!t) { if (focusLive) { focusLive = false; clingNative.endFocusActivity(); } return; }
+  const end = new Date(t.timerEndTime).getTime(); const k = `${taskKey(t)}|${end}`;
+  if (!focusLive || focusLive !== k) { focusLive = k; clingNative.startFocusActivity(t.title, end); }
+  const total = Math.max(1, Math.round((end - new Date(t.timerStartedAt || Date.now()).getTime()) / 60000));
+  const spoken = focusSpoken.get(k) || new Set(); const m = dueMark(checkinMarks(total), end - Date.now(), spoken);
+  if (m != null) { spoken.add(m); focusSpoken.set(k, spoken); if (!voMuted.value && !document.hidden) speakLive(checkinLine(m, t.title)); }
+};
+let focusLive = false; let focusIv = null;
+onMounted(() => { focusIv = setInterval(focusTick, 15000); });
+onBeforeUnmount(() => { clearInterval(focusIv); });
+watch(() => [eh.running.value, isViewingToday.value, (selectedDayRoutine.value || []).length], () => {
+  if (!eh.running.value || !isViewingToday.value) return;
+  const r = overbooked(selectedDayRoutine.value || [], Math.round(eh.remainingMs.value / 60000));
+  if (r.over && onceToday('cn.boss.overbooked')) { error.value = r.line; if (!voMuted.value && !document.hidden) speakLive(r.line); }
+});
+// ---- App lock (Screen Time shield) ----
+const lockUnlockedDay = ref((() => { try { const p = JSON.parse(localStorage.getItem(PENALTY_KEY) || '[]'); return p.length ? p[p.length - 1].day : ''; } catch (e) { return ''; } })());
+const lockEnabled = () => { try { return localStorage.getItem(LOCK_PREF) === '1'; } catch (e) { return false; } };
+let lockOn = null;
+const syncAppLock = async () => {
+  if (!lockAvailable() || !isViewingToday.value) return;
+  const st = await clingLock.status();
+  const want = shouldShield({ enabled: lockEnabled(), running: eh.running.value, endMs: eh.lock.value && eh.lock.value.endMs, selectionCount: st.selectionCount || 0,
+    earned: pointsAccumulated.value || 0, required: dayRequiredPts.value || 0, openTasks: (selectedDayRoutine.value || []).filter((t) => t && !t.completed && t.status !== 'wontdo').length,
+    unlockedToday: lockUnlockedDay.value === localDateStr() });
+  if (want && lockOn !== eh.lock.value.endMs) { lockOn = eh.lock.value.endMs; await clingLock.startLock(lockOn, 'ClingNote lock-in'); }
+  else if (!want && (lockOn || st.locked)) { lockOn = null; await clingLock.stopLock(); }
+};
+watch(() => [eh.running.value, pointsAccumulated.value, dayRequiredPts.value, streakProgress.value, lockUnlockedDay.value], () => { syncAppLock(); });
+// ---- Siri / Shortcuts / Action Button "Add task" queue ----
+// Native takeIntents() clears the App Group queue, so items are copied into a local buffer first and only removed once saved
+// (or dropped for good, e.g. daily limit). Nothing runs until the user and today's list are loaded; tasks always land on today.
+let draining = false;
+const drainIntents = async () => {
+  if (!nativeAvailable() || draining) return; draining = true;
+  try {
+    let buf = readIntentBuffer(localStorage);
+    try { const r = await clingNative.takeIntents(); buf = mergeIntents(buf, r.items || []); writeIntentBuffer(localStorage, buf); } catch (e) { console.warn('takeIntents', e && e.message); }
+    if (!buf.length || !userId.value || todayIdx.value < 0 || !days[todayIdx.value]) return; // retried on the next mount / foreground / login
+    if (!isViewingToday.value) { selectedDayIndex.value = todayIdx.value; await fetchSelectedDayRoutine(); }
+    const keep = []; const added = []; const dropped = [];
+    for (const it of buf) {
+      let outcome = 'retry';
+      try { const snap = await assistantExecutor.snapshot(); const v = validateCall('create_tasks', intentCreateArgs(it), snap);
+        const res = v.ok ? await assistantExecutor.run('create_tasks', v.args) : null; outcome = intentOutcome({ validated: v, result: res });
+        if (outcome === 'drop') dropped.push(`${it.title}: ${(v.ok ? res?.failed?.[0]?.error : v.error) || 'not saved'}`);
+      } catch (e) { console.error('siri add', e.message); outcome = intentOutcome({ error: e }); }
+      if (outcome === 'done') added.push(it.title);
+      else if (outcome === 'retry') { const n = bumpIntentTries(it); if (intentOutOfTries(n)) dropped.push(`${it.title}: could not save`); else keep.push(n); }
+    }
+    writeIntentBuffer(localStorage, keep);
+    if (dropped.length) showNoteToast(`Siri task not added: ${dropped[0]}`, { error: true });
+    else if (added.length) showNoteToast(added.length === 1 ? `Added from Siri: “${added[0]}”` : `Added ${added.length} tasks from Siri`);
+  } finally { draining = false; }
+};
+watch(userId, (u) => { if (u) setTimeout(drainIntents, 1500); });
+const onIntentVisible = () => { if (!document.hidden) { drainIntents(); syncAppLock(); } };
+onMounted(() => { setTimeout(drainIntents, 1500); document.addEventListener('visibilitychange', onIntentVisible); });
+onBeforeUnmount(() => document.removeEventListener('visibilitychange', onIntentVisible));
+// ---- Siri "Start a timer in ClingNote" (ClingIntents.StartTimerIntent queues {taskId, minutes, ts}; latest fresh request wins) ----
+let timerDraining = false;
+const drainTimerIntents = async () => {
+  if (!nativeAvailable() || timerDraining || !userId.value || todayIdx.value < 0) return; timerDraining = true;
+  try {
+    const r = await clingNative.takeTimerIntents(); if (!(r.items || []).length) return;
+    if (!isViewingToday.value) { selectedDayIndex.value = todayIdx.value; await fetchSelectedDayRoutine(); }
+    const pick = pickTimerIntent(r.items, selectedDayRoutine.value);
+    if (!pick) return;
+    if (pick.error) { showNoteToast(`Siri timer: ${pick.error}`, { error: true }); return; }
+    selectedTimerTaskIndex.value = pick.index; selectedTimerHours.value = Math.floor(pick.minutes / 60); selectedTimerMinutes.value = pick.minutes % 60;
+    if ((await startTimer()) !== false) showNoteToast(`Timer started: ${pick.minutes} min for “${pick.title}”`);
+  } catch (e) { console.warn('siri timer', e && e.message); } finally { timerDraining = false; }
+};
+const onTimerIntentVisible = () => { if (!document.hidden) setTimeout(drainTimerIntents, 800); };
+watch(userId, (u) => { if (u) setTimeout(drainTimerIntents, 2000); });
+onMounted(() => { setTimeout(drainTimerIntents, 2000); document.addEventListener('visibilitychange', onTimerIntentVisible); });
+onBeforeUnmount(() => document.removeEventListener('visibilitychange', onTimerIntentVisible));
+watch(dayRequiredPts, (n) => { if (isViewingToday.value && isNativeIOS()) import('@/utils/widgetSync').then((m) => m.setWidgetDayTarget(n)).catch(() => {}); }, { immediate: true });
+const openAssistant = (listen = false) => {
+  if (userId.value) loadAssistant(userId.value);
+  if (!isViewingToday.value && todayIdx.value >= 0) selectedDayIndex.value = todayIdx.value; // the assistant works on today's list
+  assistantListen.value = !!listen; askOpen.value = true;
+};
+// Assistant extras: read-only week snapshot (today = live list; other days one getDoc each, stale old-week completions shown as open).
+const agentWeek = async (untilToday) => {
+  const out = [];
+  for (let i = 0; i < 7; i++) {
+    if (untilToday && i > todayIdx.value) break;
+    let tasks = [];
+    if (i === todayIdx.value && isViewingToday.value) tasks = selectedDayRoutine.value;
+    else { try { const snap = await getDoc(doc(db, 'weeklyRoutines', `${userId.value}_${days[i].day}`)); tasks = snap.exists() ? (snap.data().tasks || []) : []; } catch (e) { tasks = []; } }
+    out.push({ day: days[i].day, tasks: (tasks || []).map((t) => (isStaleCompletion(t, i) ? { ...t, completed: false } : t)) });
+  }
+  return out;
+};
+const agentIdx = (task) => { const i = realIndex(task); if (i < 0) throw new Error('That task is no longer in today\'s list.'); return i; };
+const assistantExecutor = createAssistantExecutor({
+  tasks: () => todayTasksForTarget.value,
+  today: () => getTodayId(),
+  pro: () => rcProActive(auth.currentUser?.uid) || !!(gateCache && gateCache.pro),
+  limitRemaining: async () => {
+    const g = gateCache && Date.now() - gateCache.at < 60000 ? gateCache : await fetchGateData();
+    const r = checkDailyLimit(g.pro, getTodayId(), [...g.lists, g.extra, [...pendingAdds.values()]], scheduledList.value || []);
+    return Math.max(0, (Number(r.limit) || 5) - (Number(r.count) || 0));
+  },
+  stats: () => ({ streak: streak.value, points: pointsAccumulated.value, hours: eh.hoursPref.value,
+    target: eh.lock.value ? eh.lock.value.target : previewDayTarget(todayTasksForTarget.value, eh.hoursPref.value, eh.stats.value).target,
+    lock: eh.lock.value ? { endsAt: eh.endsLabel.value || '', earned: eh.lock.value.earned || 0, target: eh.lock.value.target || 0 } : null,
+    upcoming: scheduledList.value || [], settings: { sounds: !!soundEnabled.value, boss_voice: !voMuted.value, spoken_replies: !!assistantSession.speak.value }, route: '/home' }),
+  addTask: async (it) => {
+    error.value = '';
+    if (it.type === 'reminder') { const r = await saveReminder({ title: it.title, remindAt: it.remindAt }, { schedule: scheduleLocal }); return { ok: r.ok, error: r.error }; }
+    newTask.value = { ...blankTask(), title: it.title, startTime: it.start || '', estimateMin: it.durationMin || '', priority: it.priority || newTask.value.priority,
+      aiPoints: it.points || 0, aiComplexity: it.complexity || 0,
+      ...(it.type === 'schedule' ? { sched: { ...blankSchedule(it.date), on: true, date: it.date, time: it.start || '09:00', ...(it.repeat ? { repeat: it.repeat, days: it.days || [] } : {}) } }
+        : deferredDateFor(it.date, getTodayId()) ? { sched: { ...blankSchedule(it.date), on: true, date: it.date, time: it.start || '' } } : {}) };
+    capOverride.value = true; agentAdd.value = true;
+    try {
+      const ok = !!(await addNewTask()) && (it.type === 'schedule' || !!deferredDateFor(it.date, getTodayId()) || (await lastAddPersist));
+      const lim = limitHit.value;
+      if (ok && it.type !== 'schedule' && !deferredDateFor(it.date, getTodayId())) { // same Undo chip the old mic gave (kept longer: the sheet may still be open)
+        const saved = [...(selectedDayRoutine.value || [])].filter((x) => x.title === it.title).sort((x, y) => String(y.createdAt).localeCompare(String(x.createdAt)))[0];
+        const entry = { id: `${Date.now()}-${Math.random()}`, title: it.title, createdAt: saved?.createdAt, dayName: days[selectedDayIndex.value]?.day, undoUntil: Date.now() + ASSIST_UNDO_MS };
+        voiceAdded.value = [...voiceAdded.value, entry];
+        setTimeout(() => { voiceAdded.value = voiceAdded.value.map((e) => (e.id === entry.id ? { ...e, undoUntil: 0 } : e)); }, ASSIST_UNDO_MS);
+      }
+      return ok ? { ok: true } : { ok: false, error: lim ? `Daily limit reached (${lim.limit}/day).` : error.value || 'not saved', limit: !!lim };
+    } finally { capOverride.value = false; agentAdd.value = false; newTask.value = blankTask(); }
+  },
+  editTask: (task, patch) => editTask(agentIdx(task), task, patch),
+  reschedule: async (task, { date, time }) => {
+    if (date) return scheduleExistingTask(agentIdx(task), task, { date, time });
+    return editTask(agentIdx(task), task, { startTime: time });
+  },
+  weekStats: async () => ({ ...weekStats(await agentWeek(true), { streak: streak.value, bestStreak: bestStreak.value }), pointsToday: pointsAccumulated.value, pointsNeededToday: dayRequiredPts.value || 0, streakDoneToday: streakProgress.value, streakLeft: Math.max(0, DAILY_STREAK_MIN - streakProgress.value), habits: habitSummary(loadHabits(userId.value), localDateStr()) }),
+  findTasks: async ({ query, day }) => searchTasks(await agentWeek(false), scheduledList.value || [], { query, day }),
+  suggestNext: async () => suggestNext(selectedDayRoutine.value, { minutesLeft: eh.running.value ? Math.round(eh.remainingMs.value / 60000) : null }),
+  snooze: async (task, minutes) => { const t = snoozeTo(new Date(), minutes); if (t.nextDay) return { error: 'That runs past midnight: reschedule it to tomorrow instead.' }; await editTask(agentIdx(task), task, { startTime: t.time }); return t; },
+  addSubtasks: (task, items) => editTask(agentIdx(task), task, { subtasks: items.reduce((l, x) => addSubtask(l, x), subtasksOf(task)) }),
+  rollUnfinished: async () => { if (!isViewingToday.value) return { moved: 0 }; const to = tomorrowStr(); let moved = 0;
+    for (const t of rollCandidates(selectedDayRoutine.value)) { const i = agentIdx(t); if (i < 0) continue; await scheduleExistingTask(i, t, { date: to, time: t.startTime || '' }); moved++; }
+    return { moved }; },
+  autoSchedule: async ({ writeCalendar }) => {
+    const acc = await clingNative.calendarAccess(); const now = new Date(); const d1 = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime();
+    const busy = acc.granted ? busyToDay((await clingNative.busy(now.getTime(), d1)).busy, now) : [];
+    const untilMin = (() => { const [h, m] = String(disciplineSettings.value.deadline || '22:00').split(':').map(Number); return (h || 22) * 60 + (m || 0); })();
+    const r = autoSchedule(selectedDayRoutine.value.filter((t) => !t.completed && t.status !== 'wontdo'), busy, { nowMin: now.getHours() * 60 + now.getMinutes(), untilMin: Math.max(untilMin, now.getHours() * 60 + 60) });
+    for (const p of r.plan) { if (p.task.startTime === p.start) continue; await editTask(agentIdx(p.task), p.task, { startTime: p.start });
+      if (writeCalendar && acc.granted) { const [h, m] = p.start.split(':').map(Number); const [eh2, em] = p.end.split(':').map(Number); const b = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        await clingNative.addEvent({ title: p.task.title, startMs: b.getTime() + (h * 60 + m) * 60000, endMs: b.getTime() + (eh2 * 60 + em) * 60000 }); } }
+    return { ...r, calendar: acc.granted ? 'used' : 'no access (free time = whole day)' };
+  },
+  habit: async (name, a) => { const uid = userId.value; let list = loadHabits(uid);
+    if (name === 'add_habit') { list = addHabit(list, a.name); saveHabits(uid, list); return { habits: habitSummary(list) }; }
+    if (name === 'log_habit') { const r = logHabit(list, a.name, localDateStr(), a.done); if (!r.habit) return { error: `No habit called ${a.name}. Add it first?` }; saveHabits(uid, r.list); return { habit: habitSummary([r.habit], localDateStr())[0] }; }
+    return { habits: habitSummary(list, localDateStr()) }; },
+  placeReminder: async ({ title, place, saveHere }) => { const KEYP = `cn.places.${userId.value}`; let places = {}; try { places = JSON.parse(localStorage.getItem(KEYP) || '{}') || {}; } catch (e) { /* ignore */ }
+    if (saveHere || !places[place]) { const here = await clingNative.currentLocation(); if (!here || here.error || !Number.isFinite(here.lat)) return { error: nativeAvailable() ? `I couldn't get your location${here && here.error ? ` (${here.error})` : ''}. Be at ${place} and say "save this place as ${place}".` : 'Place reminders need the iPhone app.' };
+      if (!saveHere && !places[place]) return { error: `I don't know where "${place}" is yet. Are you there now? Then ask me to save this place as ${place}.` };
+      places[place] = { lat: here.lat, lng: here.lng }; try { localStorage.setItem(KEYP, JSON.stringify(places)); } catch (e) { /* ignore */ } }
+    const p = places[place]; const r = await clingNative.addGeofence({ id: `${place}-${Date.now()}`, lat: p.lat, lng: p.lng, radius: 150, body: title, repeats: false });
+    return r.error ? { error: r.error } : { ok: true }; },
+  appLock: async (action) => {
+    if (!lockAvailable()) return { error: 'App lock is not available in this version yet.' };
+    if (action === 'pick_apps') { const a0 = await clingLock.requestAuthorization(); if (a0.status !== 'approved') return { error: 'Screen Time permission was not given.' }; const r = await clingLock.pickApps(); if (r.saved) { try { localStorage.setItem(LOCK_PREF, '1'); } catch (e) { /* ignore */ } } syncAppLock(); return { saved: !!r.saved, apps: r.apps || 0 }; }
+    if (action === 'turn_off') { try { localStorage.removeItem(LOCK_PREF); } catch (e) { /* ignore */ } await clingLock.stopLock(); return { summary: 'App lock off' }; }
+    if (action === 'emergency_unlock') { await clingLock.stopLock(); const day = localDateStr(); let pen = []; try { pen = JSON.parse(localStorage.getItem(PENALTY_KEY) || '[]'); } catch (e) { /* ignore */ }
+      pen.push({ day, points: EMERGENCY_PENALTY, at: Date.now() }); try { localStorage.setItem(PENALTY_KEY, JSON.stringify(pen.slice(-60))); } catch (e) { /* ignore */ }
+      lockUnlockedDay.value = day; return { summary: `Unlocked. Penalty: ${EMERGENCY_PENALTY} extra points owed today.`, penalty: EMERGENCY_PENALTY }; }
+    return { ...(await clingLock.status()), enabled: lockEnabled() };
+  },
+  deleteTask: (task) => deleteTask(agentIdx(task), { skipConfirm: true }),
+  complete: (task) => toggleTaskCompletion(agentIdx(task)),
+  startTimer: async (task, minutes) => { selectedTimerTaskIndex.value = agentIdx(task); selectedTimerHours.value = Math.floor(minutes / 60); selectedTimerMinutes.value = minutes % 60; await startTimer(); },
+  bossCheckin: async (task, on) => { if (!!task.boss !== !!on) await setBoss(agentIdx(task), task); },
+  startDay: async (hours) => { await confirmDayStart(hours); return ehStartError.value ? { error: ehStartError.value } : { target: eh.lock.value && eh.lock.value.target }; },
+  setHours: (hours) => setDayLengthHours(hours), // the ONE "hours today" setting (also the DayStartPrompt preselection); the agent only calls it when asked
+  setSetting: (k, on) => {
+    if (k === 'sounds') { if (!!soundEnabled.value !== on) toggleSound(); }
+    else if (k === 'boss_voice') setVoMuted(!on);
+    else if (k === 'spoken_replies') { assistantSession.speak.value = on; saveAssistant(); }
+  },
+  navigate: (path) => { askOpen.value = path === '/home' ? askOpen.value : false; return _proRouter.push(path); },
+  post: async ({ text, includeStats }) => {
+    const u = auth.currentUser; if (!u) return { error: 'Not signed in.' };
+    const C = await import('@/composables/useCommunity'); const cu = await import('@/utils/community');
+    let prefs = {}; try { prefs = await C.loadPrefs(u.uid); } catch (e) { /* ignore */ }
+    const eula = Number(prefs.eulaVersion) >= cu.EULA_VERSION || localStorage.getItem(`cm.eula.${u.uid}`) === String(cu.EULA_VERSION);
+    if (!eula) return { error: 'The user must accept the Community rules first: open the Community page once.' };
+    let name = cu.displayNameOf(u.displayName); let avatar = cu.safeAvatar(u.photoURL);
+    try { const { getPublicProfile } = await import('@/composables/usePublicProfile'); const p = await getPublicProfile(u.uid); if (p) { name = cu.displayNameOf(p.name || u.displayName); avatar = cu.safeAvatar(p.avatarURL || u.photoURL); } } catch (e) { /* ignore */ }
+    const stats = includeStats ? await C.loadTodayStats(u.uid).catch(() => null) : null;
+    await C.createPost({ uid: u.uid, name, avatar }, { text, stats });
+    return { ok: true };
+  },
+});
+watch(userId, (u) => { if (u) loadDayLengthHours().catch(() => {}); }, { immediate: true });
+// Share today's done/wrapped state with the status pill (EightHourChrome), so it never says "Ready to start" after the day is over.
+watch(() => [isViewingToday.value, !!daySession.value.ended, dayTasks.value.length, completedTaskCount.value], ([today, ended, n, done]) => {
+  if (!today) return;
+  homeDay.value = { dayKey: getTodayId(), wrapped: ended, allDone: n > 0 && done >= n };
+}, { immediate: true });
+watch(userId, (u) => { if (u) loadLockIn(true).then(maybeShowDayPrompt).catch(() => {}); }, { immediate: true });
+// "Skip lock-in today" (start-day prompt): this date only, stored on users/{uid}.lockInSkipDate; the day still starts normally.
+const skipLockIn = async () => {
+  const dk = eh.phaseInfo.value.dayKey || ''; if (!userId.value || !dk) return;
+  dayPromptOpen.value = false;
+  try { await skipLockInToday(userId.value, dk); await ensureLegacyDayStarted(); } catch (e) { console.warn('skip lock-in:', e); }
+};
+watch([() => eh.phase.value, () => eh.phaseInfo.value.dayKey, userId, selectedDayIndex, () => lockInToday.value], maybeShowDayPrompt, { immediate: true });
 </script>
 
 
 <style scoped>
+.rollover-banner { display: flex; align-items: center; gap: 6px; margin: 0 0 10px; padding: 10px 12px; border-radius: 14px; background: linear-gradient(90deg,#fff7ed,#fef3c7); border: 1px solid #fcd34d; }
+.rollover-banner__body { flex: 1; text-align: left; background: none; border: 0; font-weight: 600; font-size: 13.5px; color: #92400e; cursor: pointer; }
+.rollover-banner__x { background: none; border: 0; font-size: 20px; color: #92400e; cursor: pointer; padding: 0 4px; }
 .notification-popup {
   transition: opacity 0.5s ease-in-out;
 }
@@ -3147,8 +3977,6 @@ const finishShutdown = async (carry) => {
 .task-section { }
 
 .tasks-list { display: flex; flex-direction: column; gap: 8px; }
-.task-ghost { opacity: 0.3; background: var(--c-border, #2a2a2e) !important; }
-.task-dragging { transform: rotate(1.5deg); box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
 
 /* ── Task Card ── */
 .task-title {
@@ -3365,6 +4193,11 @@ a.hero-menu-item { display: block; text-decoration: none; color: inherit; }
 @keyframes discPulse { 50% { opacity: .65; } }
 .app-root.theme-ember { --c-primary: #ea580c; --c-primary-soft: #ffedd5; --c-warn: #dc2626; }
 .app-root.theme-ocean { --c-primary: #0284c7; --c-primary-soft: #e0f2fe; --c-success: #0d9488; }
+.repeat-toast { position: fixed; left: 50%; bottom: 140px; transform: translateX(-50%); z-index: 9001; background: #111827; color: #fff; padding: 9px 14px; border-radius: 10px; font-size: .9rem; box-shadow: 0 4px 12px rgba(0,0,0,.25); max-width: 90vw; }
+.repeat-toast--err { background: #b91c1c; }
+.more-hidden { display: block; width: 100%; margin: 8px 0 4px; min-height: 40px; padding: 8px 12px; border-radius: 12px; border: 1px dashed var(--c-border, #2a2a2e); background: transparent; color: var(--c-text-2, #b0b0b0); font-weight: 600; font-size: .9rem; text-align: center; }
+.more-hidden__why { font-weight: 400; opacity: .8; }
+.repeat-toast button { margin-left: 10px; color: #fbbf24; font-weight: 700; background: none; border: none; min-height: 32px; }
 .voice-toasts { position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%); z-index: 9000; display: flex; flex-direction: column; gap: 6px; }
 .voice-toast { background: #111827; color: #fff; padding: 8px 12px; border-radius: 10px; font-size: .9rem; box-shadow: 0 4px 12px rgba(0,0,0,.25); }
 .voice-toast button { margin-left: 10px; color: #fbbf24; font-weight: 700; background: none; border: none; }
@@ -3380,7 +4213,7 @@ a.hero-menu-item { display: block; text-decoration: none; color: inherit; }
 .app-root .content-wrap.content-wrap { max-width: 560px; padding: 0 16px calc(140px + env(safe-area-inset-bottom)); }
 .app-root .calendar-section.calendar-section { position: relative; padding-top: 20px; }
 .app-root .hero-scene { position: absolute; z-index: 0; top: 0; left: -16px; right: -16px; height: 330px; pointer-events: none;
-  background: linear-gradient(180deg, rgba(7,13,28,.25), rgba(7,13,28,0) 40%, var(--c-bg) 96%), url('~@/assets/hero-forest.jpg') 72% 30% / cover no-repeat; }
+  background: linear-gradient(180deg, rgba(7,13,28,.25), rgba(7,13,28,0) 40%, var(--c-bg) 96%), var(--hero-img, url('~@/assets/hero-forest.jpg')) 72% 30% / cover no-repeat; }
 .app-root .calendar-section > :not(.hero-scene) { position: relative; z-index: 1; }
 @media (min-width: 600px) { .app-root .hero-scene { border-radius: 0 0 28px 28px; } }
 .app-root .hero.hero { padding: 4px 0 0; }
@@ -3485,7 +4318,7 @@ a.hero-menu-item { display: block; text-decoration: none; color: inherit; }
 .app-root .hero-menu-item.hero-menu-item { color: var(--c-text); background: transparent; }
 .app-root .hero-menu-item.hero-menu-item:hover { background: #1A2A52; }
 /* Room for the fixed Add Task bar + iOS home indicator so the last rows / empty state stay visible */
-.app-root .content-wrap.content-wrap { padding-bottom: calc(170px + env(safe-area-inset-bottom)); }
+.app-root .content-wrap.content-wrap { padding-bottom: calc(24px + env(safe-area-inset-bottom)); }
 .app-root .fab-group.fab-group { padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
 
 /* ══ v3: pixel-close mockup layout ══ */
@@ -3494,15 +4327,15 @@ body.home-v2 .app-topbar { position: absolute; top: 0; left: 0; right: 0; z-inde
 @media (min-width: 768px) { body.home-v2.sidebar-open .app-topbar { left: 16rem; } }
 .app-root .calendar-section.calendar-section { padding-top: calc(60px + env(safe-area-inset-top)); }
 .app-root .hero-scene.hero-scene { top: 0; height: calc(360px + env(safe-area-inset-top)); left: -16px; right: -16px;
-  background: linear-gradient(180deg, rgba(7,13,28,.15), rgba(7,13,28,0) 35%, rgba(7,13,28,.55) 75%, var(--c-bg) 98%), url('~@/assets/hero-forest.jpg') 72% 30% / cover no-repeat; }
+  background: linear-gradient(180deg, rgba(7,13,28,.15), rgba(7,13,28,0) 35%, rgba(7,13,28,.55) 75%, var(--c-bg) 98%), var(--hero-img, url('~@/assets/hero-forest.jpg')) 72% 30% / cover no-repeat; }
 .app-root .hero.hero { display: flex; align-items: flex-start; justify-content: space-between; padding: 0; }
 .app-root .hero-date.hero-date { margin: 0; font-size: 13px; letter-spacing: .16em; color: #5E9BFF; }
 .app-root .hero-title.hero-title { font-size: 36px; line-height: 42px; margin: 4px 0 2px; }
 .app-root .hero-sub.hero-sub { margin: 0; font-size: 16px; color: #B7C2DA; }
 .app-root .hero.hero { position: relative; }
 .app-root .hero-text { flex: 1 1 100%; min-width: 0; }
-.app-root .hero-menu.hero-menu { position: absolute; right: 0; top: 22px; }
-.app-root .hero-menu-btn.hero-menu-btn { width: 36px; height: 36px; border-radius: 50%; font-size: 14px; color: #C9D5F0; background: rgba(12,22,48,.55); border: 1px solid rgba(90,120,190,.35); box-shadow: none; position: relative; }
+.app-root .hero-menu.hero-menu { position: absolute; right: 0; top: 22px; display: flex; gap: 8px; }
+.app-root .hero-menu-btn.hero-menu-btn { width: 44px; height: 44px; border-radius: 50%; font-size: 14px; color: #C9D5F0; background: rgba(12,22,48,.55); border: 1px solid rgba(90,120,190,.35); box-shadow: none; position: relative; }
 .app-root .hero-badge { position: absolute; top: -4px; right: -4px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: #2F6FFF; color: #fff; font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; border: 2px solid #070D1C; }
 .app-root .hero-badge--alert { background: #EF4444; }
 .app-root .hero-menu-pop.hero-menu-pop { position: fixed; top: calc(64px + env(safe-area-inset-top)); left: 12px; right: 12px; max-width: 420px; margin-left: auto; max-height: 72vh; overflow-y: auto; padding: 10px; border-radius: 18px; }
@@ -3543,7 +4376,7 @@ body.home-v2 .app-topbar { position: absolute; top: 0; left: 0; right: 0; z-inde
 .app-root .foot-item { padding: 10px 14px; }
 .app-root .task-list-header.task-list-header { padding: 12px 0 8px; }
 .app-root .task-count-label.task-count-label { font-size: 28px; line-height: 32px; }
-.app-root .toggle-visibility.toggle-visibility { width: 40px; min-width: 40px; height: 40px; min-height: 40px; }
+.app-root .toggle-visibility.toggle-visibility { width: 44px; min-width: 44px; height: 44px; min-height: 44px; }
 .app-root .task-card.task-card.task-card { min-height: 58px; padding: 8px 8px 8px 4px; }
 .app-root .task-card--next.task-card--next.task-card--next { min-height: 72px; }
 .app-root .tasks-list.tasks-list > * + * { margin-top: 7px; }
@@ -3553,7 +4386,7 @@ body.home-v2 .app-topbar { position: absolute; top: 0; left: 0; right: 0; z-inde
 .app-root .task-upnext { font-size: 10px; }
 
 /* ══ Mobile UI fixes: task-card controls, smooth reorder, bottom bar alignment ══ */
-/* 1) Right-hand controls: one aligned row [repeat][play][more], pinned top-right; "+10" is a small badge so it never changes the row height */
+/* 1) Right-hand controls: one aligned row [repeat][play][more], pinned top-right; the points badge is small so it never changes the row height */
 .app-root .task-right.task-right.task-right { top: 8px; right: 6px; height: 44px; display: flex; align-items: center; justify-content: flex-end; gap: 2px; }
 .app-root .task-repeat-wrap { display: flex; align-items: center; justify-content: center; width: 32px; height: 44px; }
 .app-root .task-repeat.task-repeat { width: 32px; height: 36px; padding: 0; display: inline-flex; align-items: center; justify-content: center; font-size: 16px; line-height: 1; opacity: .6; }
@@ -3568,12 +4401,20 @@ body.home-v2 .app-topbar { position: absolute; top: 0; left: 0; right: 0; z-inde
   .app-root .task-more.task-more.task-more { width: 32px; }
   .app-root .task-body > .task-upnext, .app-root .task-body > .task-title-row, .app-root .task-body > .task-sub { padding-right: 118px; }
 }
-/* 2) Smooth reorder: the drag clone is the real card, the placeholder keeps its slot (no layout jump), no entrance replay on drop */
-.app-root .tasks-list > .sortable-fallback-card { animation: none !important; margin: 0 !important; z-index: 1000 !important; box-shadow: 0 14px 34px rgba(0,0,0,.55); transform-origin: 50% 50%; will-change: transform; }
-.app-root .tasks-list > .task-ghost { opacity: .35; background: var(--c-border, #2a2a2e) !important; animation: none; }
-.app-root .tasks-list > .task-chosen { cursor: grabbing; }
+/* 2) Smooth reorder (useSmoothReorder): transforms are written inline by JS; CSS only styles lift/settle.
+   No CSS transition targets transform on list items outside JS control, so nothing fights the drag loop. */
+.app-root .tasks-list > * { position: relative; }
 .app-root.reorder-active .tasks-list > * { animation: none !important; }
-.app-root .tasks-list > * { transition: opacity .15s; }
+.app-root .tasks-list.reorder-live { user-select: none; -webkit-user-select: none; }
+.app-root .tasks-list > .reorder-lift { box-shadow: 0 16px 36px rgba(0,0,0,.45), 0 0 0 1px rgba(124,156,255,.35); cursor: grabbing; }
+.app-root .tasks-list > .reorder-settle { animation: reorderSettle .5s cubic-bezier(0.22,1,0.36,1) !important; }
+@keyframes reorderSettle {
+  0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(124,156,255,.55); }
+  35% { transform: scale(1.012); box-shadow: 0 0 0 4px rgba(124,156,255,.28); }
+  65% { transform: scale(.996); }
+  100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(124,156,255,0); }
+}
+@media (prefers-reduced-motion: reduce) { .app-root .tasks-list > .reorder-settle { animation: none !important; } }
 .app-root .drag-handle { touch-action: none; }
 /* 3) Bottom area: stats bar centered in a tidy grid, fab bar aligned to the same 16px gutters, safe-area aware */
 .app-root .stats-bar.stats-bar.stats-bar { flex-wrap: wrap; gap: 8px 0; padding: 10px; }
@@ -3585,4 +4426,40 @@ body.home-v2 .app-topbar { position: absolute; top: 0; left: 0; right: 0; z-inde
 .app-root .fab-group.fab-group { left: 0; right: 0; padding-left: max(16px, calc((100vw - 560px) / 2 + 16px)); padding-right: max(16px, calc((100vw - 560px) / 2 + 16px)); padding-top: var(--sp-4, 16px); padding-bottom: calc(12px + env(safe-area-inset-bottom)); gap: 12px; justify-content: center; align-items: center; pointer-events: none; }
 .app-root .fab-group.fab-group > * { pointer-events: auto; }
 .app-root .content-wrap.content-wrap { padding-bottom: calc(150px + env(safe-area-inset-bottom)); }
+/* In the tab shell, .app-shell--tabs already pads for the tab bar + floating buttons: no second 150px gap under Scheduled. */
+.app-shell--tabs .app-root .content-wrap.content-wrap { padding-bottom: 12px; }
+/* Animated background sits behind the content (z -1): the page/shell backgrounds go transparent so the same #070D1C html background shows through. */
+/* !important beats index.html's inline launch-flash <body style=background>; html keeps #070D1C underneath. */
+body:has(.app-root.has-bg-anim), body:has(.app-root.has-bg-anim) #app { background: transparent !important; }
+.app-shell.app-shell--home:has(.app-root.has-bg-anim), .app-root.has-bg-anim.has-bg-anim { background: transparent; }
+/* Status-bar scrim: scrolled content (e.g. the streak line) never shows under the notch / Dynamic Island. */
+.app-root .safe-top-scrim { position: fixed; top: 0; left: 0; right: 0; height: env(safe-area-inset-top, 0px); z-index: 59; pointer-events: none;
+  background: linear-gradient(180deg, #070D1C 0%, #070D1C 78%, rgba(7,13,28,.0) 100%); }
+
+/* ══ Compact task cards v2: title + actions on row 1, category · estimate · points on row 2, extras on one truncated line ══ */
+.app-root .task-card.task-card.task-card { min-height: 0; padding: 6px 6px 6px 4px; gap: 6px; }
+.app-root .task-card--next.task-card--next.task-card--next { min-height: 0; }
+.app-root .task-cat.task-cat { width: 30px; height: 30px; font-size: 13px; border-radius: 9px; }
+.app-root .task-avatar.task-avatar.task-avatar { height: 44px; }
+.app-root .task-check.task-check.task-check { width: 44px; height: 44px; margin: 0 -6px; font-size: 22px; }
+.app-root .task-left.task-left.task-left { gap: 2px; }
+.app-root .task-repeat-wrap.task-repeat-wrap { width: 0; height: 0; position: absolute; right: 0; top: 44px; }
+.app-root .task-edit.task-edit { width: 44px; height: 44px; margin: 0; border: 0; background: none; color: #A78BFA; font-size: 13px; border-radius: 10px; }
+.app-root .task-edit--open.task-edit--open { background: #7c3aed; color: #fff; }
+.app-root .task-right.task-right.task-right { top: 2px; right: 2px; gap: 0; }
+.app-root .task-more.task-more.task-more { width: 44px; flex: 0 0 44px; }
+.app-root .task-body.task-body.task-body { row-gap: 2px; column-gap: 6px; }
+.app-root .task-body > .task-upnext, .app-root .task-body > .task-title-row { padding-right: 134px; }
+.app-root .task-body > .task-title-row { min-height: 22px; }
+.app-root .task-body > .task-sub.task-sub { order: 2 !important; flex: 0 0 auto; padding-right: 0; font-size: 12.5px; }
+.app-root .task-body > .task-chips.task-chips { order: 3; flex: 0 1 auto; flex-wrap: wrap; }
+.app-root .task-body > .task-meta-row.task-meta-row { order: 4; flex: 0 0 auto; }
+.app-root .task-body > .task-extras { order: 5; flex: 0 0 100%; }
+.app-root .task-pts.task-pts { padding: 1px 6px; font-size: 10.5px; }
+.app-root .task-body .chip { line-height: 16px; padding: 0 6px; font-size: 11px; }
+.app-root .task-upnext { line-height: 12px; }
+.app-root .task-title-row .task-private, .app-root .task-title-row .task-repeat-badge { border: 0; padding: 0; margin: 0; font-size: 12px; text-transform: none; }
+.app-root .importance-btn.importance-btn::before { inset: -12px -15px; }
+/* Voice button sits bottom-left above the footer tab bar; the global Create-task FAB is bottom-right. */
+.app-root .fab-group.fab-group.fab-group--voice-only { left: max(16px, calc((100vw - 540px) / 2 + 16px)); right: auto; width: auto; padding: 0; background: none; bottom: calc(var(--tabbar-h, 64px) + 14px + env(safe-area-inset-bottom)); }
 </style>

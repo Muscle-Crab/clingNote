@@ -1,8 +1,11 @@
 // Client side of push notifications. No OneSignal REST key here: sending goes through the
 // Netlify Function /.netlify/functions/send-notification, which verifies the Firebase ID token.
 import { auth } from '@/firebaseConfig';
+import { fnUrl } from '@/config/api';
+import { isNativeIOS } from '@/utils/platform';
+import { scheduleReminder, parseLocal } from '@/utils/localNotify';
 
-const ENDPOINT = '/.netlify/functions/send-notification';
+const ENDPOINT = fnUrl('send-notification');
 
 // Link this browser's OneSignal subscription to the Firebase uid so 'self' pushes reach only this user.
 export const linkPushUser = async (uid) => {
@@ -31,8 +34,15 @@ const to12h = (time24) => {
 export const scheduleNotification = async (task, reminder) => {
   if (!task || !reminder?.date || !reminder?.time) { console.error('Invalid task or reminder data'); return; }
   const formattedTime = to12h(reminder.time);
+  const message = `${task.title} at ${formattedTime}`;
+  if (isNativeIOS()) { // on-device: fires while backgrounded/locked, no server dependency
+    const ok = await scheduleReminder(task, reminder, message);
+    alert(ok ? `Reminder set for ${formattedTime}.` : 'Could not set the reminder. Check that notifications are allowed for ClingNote in Settings and that the time is in the future.');
+    return;
+  }
   try {
-    await sendPush({ title: 'Task Reminder', message: `${task.title} at ${formattedTime}`, sendAfter: new Date(`${reminder.date}T${reminder.time}:00`).toISOString() });
+    const at = parseLocal(reminder.date, reminder.time);
+    await sendPush({ title: 'Task Reminder', message, sendAfter: at ? at.toISOString() : undefined });
     alert(`Task "${task.title}" has been scheduled successfully for ${formattedTime}!`);
   } catch (error) {
     console.error('Error scheduling notification:', error);
@@ -47,8 +57,8 @@ export const sendNotificationToPlayer = async (userName, action) => {
   try { await sendPush({ title, message }); } catch (error) { console.warn('Push notification not sent:', error?.message || error); }
 };
 
-// Community features (Pickup / Room / Discussion) used to post to "All" from the browser with the REST key.
+// Community features (Room / Discussion; Pickup was removed) used to post to "All" from the browser with the REST key.
 // Now server-side and disabled unless ONESIGNAL_ALLOW_BROADCAST=true is set in Netlify.
-export const sendBroadcast = async (message, title = 'ClingNot') => {
+export const sendBroadcast = async (message, title = 'ClingNote') => {
   try { await sendPush({ kind: 'broadcast', title, message }); } catch (error) { console.warn('Broadcast not sent:', error.message); }
 };

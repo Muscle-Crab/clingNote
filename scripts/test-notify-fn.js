@@ -34,5 +34,24 @@ const { buildPayload, authHeader } = require(path.join(__dirname, '../netlify/fu
       assert.ok(!/os_v2_app_|Basic [A-Za-z0-9+/=]{30,}|Bearer [A-Za-z0-9]{40,}/.test(c), `key-like string in ${f}`);
     }
   });
+  await t('notify.getAdmin uses the shared firebaseAdmin helper (all credential env var names)', async () => {
+    const notify = require(path.join(__dirname, '../netlify/functions/lib/notify.js')); const shared = require(path.join(__dirname, '../netlify/functions/lib/firebaseAdmin.js'));
+    assert.strictEqual(notify.getAdmin, shared.getAdmin, 'one init helper');
+    const keys = ['FIREBASE_SERVICE_ACCOUNT', 'GOOGLE_APPLICATION_CREDENTIALS_BASE64', 'GOOGLE_APPLICATION_CREDENTIALS_BASE']; const saved = {}; keys.forEach((k) => { saved[k] = process.env[k]; delete process.env[k]; });
+    const fakePath = require.resolve('firebase-admin'); const savedMod = require.cache[fakePath]; const inits = [];
+    try {
+      for (const k of keys) {
+        delete require.cache[require.resolve(path.join(__dirname, '../netlify/functions/lib/firebaseAdmin.js'))];
+        require.cache[fakePath] = { id: fakePath, filename: fakePath, loaded: true, exports: { apps: [], credential: { cert: (c) => ({ cert: c }) }, initializeApp: (o) => { inits.push(o); } } };
+        const fresh = require(path.join(__dirname, '../netlify/functions/lib/firebaseAdmin.js'));
+        assert.throws(() => fresh.getAdmin(), /not configured/, 'no creds -> clear error');
+        const json = JSON.stringify({ project_id: 'p', client_email: 'e', private_key: 'k' });
+        process.env[k] = k === 'FIREBASE_SERVICE_ACCOUNT' ? json : Buffer.from(json).toString('base64');
+        delete require.cache[require.resolve(path.join(__dirname, '../netlify/functions/lib/firebaseAdmin.js'))];
+        require(path.join(__dirname, '../netlify/functions/lib/firebaseAdmin.js')).getAdmin(); delete process.env[k];
+      }
+      assert.equal(inits.length, 3, 'initialised with each of the 3 env var names');
+    } finally { keys.forEach((k) => { if (saved[k] === undefined) delete process.env[k]; else process.env[k] = saved[k]; }); if (savedMod) require.cache[fakePath] = savedMod; else delete require.cache[fakePath]; }
+  });
   console.log(`${n} passed`);
 })().catch((e) => { console.error(e); process.exit(1); });

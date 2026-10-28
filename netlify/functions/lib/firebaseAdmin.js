@@ -12,6 +12,8 @@ const getAdmin = () => {
   const a = require('firebase-admin');
   if (!a.apps.length) {
     const creds = loadCreds();
+    // Local e2e only: with the Firestore emulator env set and no creds, use the demo-* emulator project (cannot touch production).
+    if (!creds && process.env.FIRESTORE_EMULATOR_HOST && String(process.env.GCLOUD_PROJECT || '').startsWith('demo-')) { a.initializeApp({ projectId: process.env.GCLOUD_PROJECT }); admin = a; return a; }
     if (!creds) throw Object.assign(new Error('Firebase Admin credentials not configured'), { status: 500 });
     a.initializeApp({ credential: a.credential.cert(creds) });
   }

@@ -1,0 +1,25 @@
+rules_version = '2';
+// Firebase Storage rules (clingnote-463b4). Community images only; everything else denied.
+// NOTE: the live bucket rules are not in this repo. Before deploying, compare with the console rules and keep anything
+// the existing app still needs (task_images/, task_files/, uploads/, mealImages/ are listed below as signed-in read/write).
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Community photos: compressed client-side to <= 1600px JPEG. Owner writes under their uid; signed-in users read.
+    match /community/{uid}/{fileName} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && request.auth.uid == uid
+        && request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/(jpeg|png|webp)')
+        && fileName.matches('[A-Za-z0-9_.-]{1,80}');
+      allow update: if false;
+      allow delete: if request.auth != null && (request.auth.uid == uid
+        || (request.auth.token.email_verified == true && request.auth.token.email == 'ds7513635@gmail.com'));
+    }
+    // Existing app uploads (HomeView task attachments, Room chat, MealPlan): signed-in users, 10 MB.
+    match /{folder}/{fileName} {
+      allow read: if request.auth != null && folder in ['task_images', 'task_files', 'uploads', 'mealImages'];
+      allow write: if request.auth != null && folder in ['task_images', 'task_files', 'uploads', 'mealImages']
+        && (request.resource == null || request.resource.size < 10 * 1024 * 1024);
+    }
+  }
+}

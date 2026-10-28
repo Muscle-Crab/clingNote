@@ -20,13 +20,15 @@ exports.buildFeed = async (db, token) => {
   return buildCalendar(feedEvents(scheduled, dayLists));
 };
 
-exports.handler = async (event, ctx, deps = {}) => {
+const rawHandler = async (event, ctx, deps = {}) => {
   if (event.httpMethod !== 'GET' && event.httpMethod !== 'HEAD') return { statusCode: 405, body: '' };
   const token = event.queryStringParameters?.token || '';
   try {
     const ics = await exports.buildFeed(deps.db || getAdmin().firestore(), token);
     if (!ics) return { statusCode: 404, body: 'Not found' };
-    if (ics === exports.NOT_PRO) return { statusCode: 402, body: 'ClingNot Pro required' };
+    if (ics === exports.NOT_PRO) return { statusCode: 402, body: 'ClingNote Pro required' };
     return { statusCode: 200, headers: { 'Content-Type': 'text/calendar; charset=utf-8', 'Cache-Control': 'private, max-age=900', 'X-Robots-Tag': 'noindex' }, body: ics };
   } catch (e) { return { statusCode: 500, body: 'Error' }; }
 };
+const { withCors } = require('./lib/cors');
+exports.handler = withCors(rawHandler);

@@ -1,0 +1,31 @@
+{
+  "appId": "app.clingnote.ios",
+  "appName": "ClingNote",
+  "webDir": "dist",
+  "ios": {
+    "contentInset": "always",
+    "scheme": "ClingNot",
+    "backgroundColor": "#070D1C"
+  },
+  "plugins": {
+    "FirebaseAuthentication": {
+      "skipNativeAuth": true,
+      "providers": [
+        "google.com"
+      ]
+    }
+  },
+  "experimental": {
+    "ios": {
+      "spm": {
+        "packageTraits": {
+          "@capacitor-firebase/authentication": [
+            "Google"
+          ]
+        },
+        "swiftToolsVersion": "6.1"
+      }
+    }
+  },
+  "backgroundColor": "#070D1C"
+}

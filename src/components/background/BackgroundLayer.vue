@@ -3,8 +3,8 @@
 </template>
 
 <script setup>
-// Decorative animated background (snow / rain / fireplace). Drawn as a click-through overlay (fixed, pointer-events none, below modals/menus,
-// no layout impact) so it is actually visible over the page's opaque cards. Pauses while the tab is hidden; with prefers-reduced-motion it draws one still frame and never animates.
+// Decorative animated background (snow / rain / fireplace). Drawn BEHIND the content (fixed, z -1, pointer-events none; Home makes its page backgrounds transparent),
+// so particles show in the gaps but never over text or cards. Pauses while the tab is hidden; with prefers-reduced-motion it draws one still frame and never animates.
 import { ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { makeScene, stepScene, drawScene } from '@/utils/bgScenes';
 
@@ -44,5 +44,7 @@ watch(() => props.forceMotion, () => { start(); });
 </script>
 
 <style scoped>
-.bg-layer { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 60; pointer-events: none; contain: strict; }
+/* Behind the page content (negative z in the root stacking context): particles show in the gaps, never over text or cards. */
+.bg-layer { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: -1; pointer-events: none; contain: strict; }
+.bg-layer[data-anim=snow] { opacity: .8; }
 </style>

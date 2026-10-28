@@ -24,17 +24,51 @@ external_node_modules = ["firebase-admin"]
 [functions."ai"]
 external_node_modules = ["firebase-admin"]
 
+[functions."eight-hour-day"]
+external_node_modules = ["firebase-admin"]
+
 [functions."push-send"]
 external_node_modules = ["firebase-admin"]
 
 [functions."send-notification"]
 external_node_modules = ["firebase-admin"]
 
+# Robot voice (ElevenLabs). Needs ELEVENLABS_API_KEY in the Netlify env (set at deploy time; never committed).
+[functions."tts"]
+external_node_modules = ["firebase-admin"]
+
 # Explicitly allow microphone (voice input) for our own origin
+[[headers]]
+for = "/.well-known/apple-app-site-association"
+[headers.values]
+Content-Type = "application/json"
+
 [[headers]]
 for = "/*"
 [headers.values]
-Permissions-Policy = "microphone=(self), camera=()"
+Permissions-Policy = "microphone=(self), camera=(self)"
 
 [functions."create-checkout"]
 external_node_modules = ["stripe", "firebase-admin"]
+
+# Apple IAP (RevenueCat) entitlement mirror. Env: REVENUECAT_WEBHOOK_SECRET, REVENUECAT_SECRET_KEY.
+[functions."revenuecat-webhook"]
+included_files = ["netlify/functions/lib/**"]
+external_node_modules = ["firebase-admin", "@opentelemetry/api"]
+
+[functions."revenuecat-sync"]
+included_files = ["netlify/functions/lib/**"]
+external_node_modules = ["firebase-admin", "@opentelemetry/api"]
+
+# Account deletion (App Store 5.1.1(v)). Optional env for Apple token revocation: APPLE_TEAM_ID, APPLE_KEY_ID, APPLE_PRIVATE_KEY, APPLE_CLIENT_ID.
+[functions."delete-account"]
+included_files = ["netlify/functions/lib/**"]
+external_node_modules = ["firebase-admin", "stripe", "@opentelemetry/api"]
+
+# Manager & Pal (login-free manager link + pal pairing). Uses the existing Firebase admin + OneSignal env vars; no new env vars.
+[functions."manager-pal"]
+included_files = ["netlify/functions/lib/**"]
+external_node_modules = ["firebase-admin", "@opentelemetry/api"]
+
+[functions."widget-complete"]
+external_node_modules = ["firebase-admin"]

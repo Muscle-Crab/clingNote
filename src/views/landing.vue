@@ -1,7 +1,7 @@
 <template>
   <!-- Hero Section -->
-  <section class="bg-gray-900 bg-cover bg-center bg-no-repeat bg-blend-multiply" style="background-image: url('https://flowbite.s3.amazonaws.com/docs/jumbotron/conference.jpg')">
-    <div class="max-w-screen-xl px-4 py-20 mx-auto text-center">
+  <section class="bg-gray-900 bg-cover bg-center bg-no-repeat bg-blend-multiply" :style="heroStyle">
+    <div class="max-w-screen-xl px-4 pt-8 pb-14 md:py-20 mx-auto text-center">
       <h1 class="text-3xl md:text-5xl font-extrabold text-white leading-tight mb-4">
         One App for Tasks, Assignments, Workouts & Groceries
       </h1>
@@ -17,9 +17,9 @@
         </router-link>
       </div>
       <!-- Video -->
-      <div class="max-w-3xl mx-auto aspect-video rounded-xl overflow-hidden shadow-xl">
+      <div v-if="demoVideo" class="max-w-3xl mx-auto aspect-video rounded-xl overflow-hidden shadow-xl">
         <video
-            src="@/assets/video.mp4"
+            :src="demoVideo"
             autoplay
             muted
             playsinline
@@ -57,7 +57,9 @@
 
 
 <script setup>
-const features = [
+import { voiceInputBlocked } from '@/utils/platform';
+import { demoVideo, heroStyle } from '@/utils/landingMedia';
+const allFeatures = [
   {
     title: "🎙️ Voice-Controlled Task Creation",
     description: "Add tasks hands-free using voice input, live transcription, and waveform animation."
@@ -135,6 +137,7 @@ const features = [
     description: "Beautiful and responsive interface with full light/dark mode support."
   }
 ];
+const features = voiceInputBlocked() ? allFeatures.filter((f) => !/Voice/i.test(f.title)) : allFeatures; // no voice claims inside the iOS app (WKWebView has no speech recognition)
 
 </script>
 

@@ -8,8 +8,8 @@
     <section class="disc-card">
       <label class="disc-row"><input type="checkbox" :checked="settings.enabled" @change="update({ enabled: $event.target.checked })" /> <strong>Discipline Mode</strong></label>
       <p class="muted">Finish {{ DAILY_STREAK_MIN }} tasks (not pending) by your deadline every day. Miss it: {{ MISSED_DEADLINE_PENALTY }} pts, streak dies, tier can drop.</p>
-      <label class="disc-row"><input type="checkbox" :checked="settings.strict && strictAllowed" :disabled="!settings.enabled" @change="toggleStrict($event)" /> <strong>Strict Boss</strong> <span v-if="!strictAllowed" class="pro-tag" data-test="pro-lock">🔒 PRO</span></label>
-      <p class="muted">The boss gives orders in the morning, calls you out at midday if fewer than 2 are done, warns you in the evening and gives a PASSED/FAILED verdict after the deadline. To skip or defer a task you have to say why. Each task gets one carry-over; after that it's overdue and blocks new non-urgent tasks. You get nudged after {{ IDLE_MINUTES }} min idle. Defaults: on, {{ DAILY_STREAK_MIN }} tasks, 9 PM.</p>
+      <label class="disc-row"><input type="checkbox" :checked="settings.strict && strictAllowed" :disabled="!settings.enabled" @change="toggleStrict($event)" /> <strong>Strict Coach</strong> <span v-if="!strictAllowed" class="pro-tag" data-test="pro-lock">🔒 PRO</span></label>
+      <p class="muted">Your robot sets the plan in the morning, checks in at midday if fewer than 2 are done, warns you in the evening and gives a PASSED/FAILED verdict after the deadline. To skip or defer a task you have to say why. Each task gets one carry-over; after that it's overdue and blocks new non-urgent tasks. You get nudged after {{ IDLE_MINUTES }} min idle. Defaults: on, {{ DAILY_STREAK_MIN }} tasks, 9 PM.</p>
       <p v-if="dstate.lastVerdict" class="muted">Last verdict ({{ dstate.lastVerdict.date }}): <strong>{{ dstate.lastVerdict.passed ? 'PASSED' : 'FAILED' }}</strong>, grade {{ dstate.lastVerdict.grade }}</p>
       <label class="disc-row">Daily deadline <input type="time" :value="settings.deadline" @change="update({ deadline: $event.target.value })" /></label>
       <button v-if="canNotify" type="button" class="disc-btn" @click="askNotify">🔔 Enable deadline notifications</button>
@@ -22,14 +22,14 @@
     </section>
 
     <section class="disc-card">
-      <h2 class="disc-h">👹 Evening boss</h2>
-      <p class="muted">Open a task on today's list and tap “Make this the evening boss”. Subtasks drain its HP. With Discipline Mode on, your day won't count toward the streak until the boss is cleared. Clearing it: +{{ BOSS_BONUS }} pts.</p>
+      <h2 class="disc-h">🎯 Evening challenge</h2>
+      <p class="muted">Open a task on today's list and tap “Make this the evening challenge”. Subtasks drain its HP. With Discipline Mode on, your day won't count toward the streak until the challenge is cleared. Clearing it: +{{ BOSS_BONUS }} pts.</p>
     </section>
     <section class="disc-card">
       <h2 class="disc-h">☕ Earned breaks</h2>
       <p class="muted">{{ BREAK_PER_TASK }} min per completed task, +{{ BREAK_ALL_DONE }} min for hitting {{ DAILY_STREAK_MIN }}, +5 at a 7-day streak, +10 at 30 days.</p>
       <router-link to="/gate?app=tiktok" class="disc-btn">Open break gate</router-link>
-      <p class="muted">Want it in front of TikTok? See the iPhone Shortcuts setup in <code>docs/tiktok-gate.md</code>: automation “When TikTok is opened → Open URL https://clingnot.netlify.app/gate?app=tiktok”, Run Immediately.</p>
+      <p class="muted">Want it in front of TikTok? In the iPhone Shortcuts app, create an automation “When TikTok is opened → Open URL https://clingnot.netlify.app/gate?app=tiktok” and set it to Run Immediately.</p>
     </section>
     <section class="disc-card">
       <h2 class="disc-h">⭐ Level {{ lv.level }}</h2>
@@ -48,7 +48,7 @@
     </section>
     <section class="disc-card">
       <h2 class="disc-h">🐌 Procrastination log</h2>
-      <p class="muted">{{ (dstate.log || []).length }} entries: missed deadlines, app opens while locked, boss failures.</p>
+      <p class="muted">{{ (dstate.log || []).length }} entries: missed deadlines, app opens while locked, missed evening challenges.</p>
       <router-link to="/discipline/log" class="disc-btn">View log</router-link>
     </section>
 
@@ -61,7 +61,7 @@
         <div v-if="cardUrl" class="card-preview">
           <img :src="cardUrl" alt="Streak card preview" />
           <div class="disc-row">
-            <a :href="cardUrl" download="clingnot-streak.png" class="disc-btn">⬇ Download PNG</a>
+            <a v-if="!native" :href="cardUrl" download="clingnot-streak.png" class="disc-btn">⬇ Download PNG</a>
             <button v-if="canShare" type="button" class="disc-btn" @click="shareCard">Share…</button>
           </div>
         </div>
@@ -73,6 +73,7 @@
 
 <script setup>
 import { IDLE_MINUTES } from '@/utils/strictBoss';
+import { isNative } from '@/utils/platform';
 import { useRouter as _useRouter } from 'vue-router';
 import { requirePro, loadUserDoc } from '@/composables/usePro';
 import { canUse } from '@/utils/pro';
@@ -105,6 +106,14 @@ const toggleStrict = async (ev) => { const on = ev.target.checked;
   if (on && !(await requirePro(_proRouter, 'strictBoss'))) { ev.target.checked = false; return; }
   update({ strict: on }); };
 const askNotify = async () => { try { await Notification.requestPermission(); } catch (e) { /* unsupported */ } canNotify.value = false; };
+// Morning report push opt-in: userSettings/{uid}.morningReport = { enabled, timeZone } (read by the hourly daily-report function).
+const tz = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/New_York'; } catch (e) { return 'America/New_York'; } })();
+const morningPush = ref(false);
+const setMorningPush = async (on) => {
+  if (!uid.value) return;
+  morningPush.value = !!on;
+  try { await setDoc(doc(db, 'userSettings', uid.value), { morningReport: { enabled: !!on, timeZone: tz } }, { merge: true }); } catch (e) { morningPush.value = !on; console.error('Morning report save failed:', e.message); }
+};
 const dstate = ref({});
 const best = ref(0);
 const lv = computed(() => levelFor(dstate.value.xp || 0));
@@ -114,6 +123,7 @@ const shareOptIn = ref(false);
 const shareWithName = ref(false);
 const cardUrl = ref('');
 let cardBlob = null;
+const native = isNative(); // blob downloads do nothing in WKWebView; the share sheet (below) is the way to save the card there
 const canShare = typeof navigator !== 'undefined' && !!navigator.share;
 const makeCard = async () => {
   try {
@@ -134,7 +144,7 @@ const makeCard = async () => {
   } catch (e) { console.error('Share card failed:', e); }
 };
 const shareCard = async () => {
-  try { await navigator.share({ files: [new File([cardBlob], 'clingnot-streak.png', { type: 'image/png' })], title: 'My ClingNot streak' }); } catch (e) { /* cancelled */ }
+  try { await navigator.share({ files: [new File([cardBlob], 'clingnot-streak.png', { type: 'image/png' })], title: 'My ClingNote streak' }); } catch (e) { /* cancelled */ }
 };
 
 onMounted(() => onAuthStateChanged(auth, async (u) => {
@@ -155,7 +165,8 @@ onMounted(() => onAuthStateChanged(auth, async (u) => {
 .disc-head h1 { font-size: 1.4rem; font-weight: 700; margin: 0; }
 .disc-back { color: var(--c-text-3, #64748b); text-decoration: none; }
 .disc-card { margin-top: 12px; padding: 14px; border-radius: 12px; background: var(--c-surface, #fff); box-shadow: 0 1px 3px rgba(0,0,0,.08); }
-.disc-row { display: flex; gap: 8px; align-items: center; margin: 6px 0; }
+.disc-row { display: flex; gap: 8px; align-items: center; margin: 2px 0; min-height: 44px; padding: 8px 0; cursor: pointer; }
+.disc-row input[type=checkbox] { width: 20px; height: 20px; flex: 0 0 20px; }
 .disc-row input[type=time] { border: 1px solid var(--c-border, #e2e8f0); border-radius: 6px; padding: 2px 6px; }
 .disc-btn { display: inline-block; text-decoration: none;
 }

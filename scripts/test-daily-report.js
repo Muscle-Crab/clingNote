@@ -30,5 +30,14 @@ await t('scheduled function: sends once per user at 8 AM local, marks lastSent',
   const res = await mod.runReports({ db, now: new Date('2026-10-21T12:30:00Z'), send: async (p) => { sent.push(p); } });
   assert.deepEqual(res.map((r) => r.uid), ['u1']); assert.deepEqual(sent[0].include_aliases, { external_id: ['u1'] }); assert.deepEqual(sets[0], ['u1', { morningReport: { lastSent: '2026-10-21' } }]);
 });
+await t('scheduled function reads the app\'s short day docs ({uid}_Tue / {uid}_Wed)', async () => {
+  process.env.ONESIGNAL_APP_ID = 'app'; const read = []; const sent = [];
+  const db = { collection: () => ({ where: () => ({ get: async () => ({ docs: [{ id: 'u1', data: () => ({ morningReport: { enabled: true, timeZone: 'America/New_York' } }), ref: { set: async () => {} } }] }) }) }),
+    doc: (p) => { read.push(p); return { get: async () => (p === 'weeklyRoutines/u1_Tue' ? { exists: true, data: () => ({ tasks: [{ id: 'a', title: 'A', completed: true }, { id: 'b', title: 'B', completed: true }] }) } : { exists: false }) }; } };
+  const mod = require(path.join(__dirname, '../netlify/functions/daily-report.js'));
+  await mod.runReports({ db, now: new Date('2026-10-21T12:30:00Z'), send: async (p) => { sent.push(p); } });
+  assert.ok(read.includes('weeklyRoutines/u1_Tue') && read.includes('weeklyRoutines/u1_Wed'), read.join());
+  assert.equal(sent.length, 1);
+});
 console.log(`${n} passed`);
 })().catch((e) => { console.error(e); process.exit(1); });

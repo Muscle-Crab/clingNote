@@ -4,6 +4,21 @@ import { ref, watch } from 'vue';
 
 const STORAGE_KEY = 'soundEnabled';
 
+// ── Streak music: ORIGINAL, synthesized in code (Web Audio oscillators; no samples/assets, so no third-party license applies).
+// Notes as [freqHz, startSec, durSec]. Pure, so tests can check the escalation.
+const C_MAJOR = [523.25, 587.33, 659.25, 698.46, 783.99, 880.0, 987.77, 1046.5, 1174.66, 1318.51];
+// step 1..5 toward the daily streak: a short rising arpeggio that starts higher and gets one note longer each step
+export const streakStepNotes = (step, of = 5) => {
+  const s = Math.max(1, Math.min(of, Math.round(step) || 1));
+  return Array.from({ length: s + 1 }, (_, i) => [C_MAJOR[Math.min(C_MAJOR.length - 1, s - 1 + i)], i * 0.07, i === s ? 0.28 : 0.12]);
+};
+// streak hit / streak counter up: a ~2.4 s fanfare (rising run, I–IV–V–I chords, held top note)
+export const streakHitNotes = () => {
+  const run = [523.25, 659.25, 783.99, 1046.5].map((f, i) => [f, i * 0.09, 0.16]);
+  const chords = [[[523.25, 659.25, 783.99], 0.45], [[698.46, 880.0, 1046.5], 0.8], [[783.99, 987.77, 1174.66], 1.15], [[1046.5, 1318.51, 1567.98], 1.5]];
+  return [...run, ...chords.flatMap(([fs, t], ci) => fs.map((f) => [f, t, ci === 3 ? 0.9 : 0.32]))];
+};
+
 export function useSounds() {
   const soundEnabled = ref(false);
   try { soundEnabled.value = localStorage.getItem(STORAGE_KEY) === 'true'; } catch (e) { /* ignore */ }
@@ -39,7 +54,7 @@ export function useSounds() {
     osc.stop(t0 + dur + 0.05);
   };
 
-  const playSound = (kind) => {
+  const playSound = (kind, opts = {}) => {
     try {
       if (!soundEnabled.value) return;
       const c = getCtx();
@@ -50,6 +65,10 @@ export function useSounds() {
       } else if (kind === 'milestone') {
         [523.25, 659.25, 783.99, 1046.5].forEach((f, i) =>
           tone(c, { freq: f, start: i * 0.1, dur: 0.35, type: 'triangle', gain: 0.14 }));
+      } else if (kind === 'streakStep') {
+        streakStepNotes(opts.step, opts.of).forEach(([f, s, d]) => tone(c, { freq: f, start: s, dur: d, type: 'triangle', gain: 0.1 }));
+      } else if (kind === 'streakHit') {
+        streakHitNotes().forEach(([f, s, d]) => tone(c, { freq: f, start: s, dur: d, type: 'triangle', gain: 0.08 }));
       } else if (kind === 'dragStart') {
         tone(c, { freq: 300, endFreq: 600, dur: 0.09, type: 'triangle', gain: 0.05 });
       } else if (kind === 'dragEnd') {

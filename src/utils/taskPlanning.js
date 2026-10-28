@@ -40,14 +40,14 @@ export const formatDuration = (mins) => {
 };
 
 // Today's load from tasks that are not done yet.
-export const loadSummary = (tasks) => {
+export const loadSummary = (tasks, dayMin = 480) => { // dayMin: the user's day length in minutes (3..12h; 8h default)
   const open = (tasks || []).filter(isActive);
   const minutes = open.reduce((s, t) => s + estimateOf(t), 0);
   const unestimated = open.filter((t) => !estimateOf(t)).length;
   let level = 'ok';
   let hint = 'Realistic';
-  if (minutes > 480) { level = 'over'; hint = 'Overloaded — consider moving something'; }
-  else if (minutes > 360) { level = 'full'; hint = 'Full day'; }
+  if (minutes > dayMin) { level = 'over'; hint = 'Overloaded — consider moving something'; }
+  else if (minutes > dayMin * 0.75) { level = 'full'; hint = 'Full day'; }
   return { minutes, unestimated, level, hint, count: open.length };
 };
 

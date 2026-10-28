@@ -17,10 +17,63 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.token.admin == true;
     }
 
+
+    // ── Manager & Pal ──
+    function palPairId(a, b) { return a < b ? a + '_' + b : b + '_' + a; }
+    function isPalOf(uid) {
+      return isAuthenticated() && request.auth.uid != uid
+        && exists(/databases/$(database)/documents/pals/$(palPairId(request.auth.uid, uid)));
+    }
+
+    // ── 8-hour day lock helpers (see match /weeklyRoutines and /eightHour below) ──
+    function eightHourPath(uid) {
+      return /databases/$(database)/documents/eightHour/$(uid);
+    }
+    function eightHourLocked(uid, dayName) {
+      return exists(eightHourPath(uid))
+        && get(eightHourPath(uid)).data.get('lock', null) != null
+        && get(eightHourPath(uid)).data.lock.get('dayName', '') == dayName
+        && get(eightHourPath(uid)).data.lock.startAt <= request.time
+        && get(eightHourPath(uid)).data.lock.endAt > request.time;
+    }
+    // Hard stop: after a started 8-hour day ends, task docs stay read-only until the next wake time (lock.shutUntil, written by the function).
+    function eightHourShut(uid) {
+      return exists(eightHourPath(uid))
+        && get(eightHourPath(uid)).data.get('lock', null) != null
+        && get(eightHourPath(uid)).data.lock.get('shutUntil', null) != null
+        && get(eightHourPath(uid)).data.lock.endAt <= request.time
+        && get(eightHourPath(uid)).data.lock.shutUntil > request.time;
+    }
+    function lockedTaskSame(a, b) {
+      // edits allowed while locked; slot identity (createdAt) and server-set points must not change (blocks delete/reorder)
+      return a.get('createdAt', null) == b.get('createdAt', null)
+        && a.get('points', null) == b.get('points', null);
+    }
+    function lockedSlotSame(o, n, i) {
+      return i >= o.size() || lockedTaskSame(o[i], n[i]);
+    }
+    function lockedDayUnchanged() {
+      let o = resource.data.get('tasks', []);
+      let n = request.resource.data.get('tasks', []);
+      // adds allowed (append only), deletes blocked: every existing slot must be unchanged
+      return n.size() >= o.size()
+        && lockedSlotSame(o, n, 0) && lockedSlotSame(o, n, 1) && lockedSlotSame(o, n, 2) && lockedSlotSame(o, n, 3) && lockedSlotSame(o, n, 4)
+        && lockedSlotSame(o, n, 5) && lockedSlotSame(o, n, 6) && lockedSlotSame(o, n, 7) && lockedSlotSame(o, n, 8) && lockedSlotSame(o, n, 9)
+        && lockedSlotSame(o, n, 10) && lockedSlotSame(o, n, 11) && lockedSlotSame(o, n, 12) && lockedSlotSame(o, n, 13) && lockedSlotSame(o, n, 14)
+        && lockedSlotSame(o, n, 15) && lockedSlotSame(o, n, 16) && lockedSlotSame(o, n, 17) && lockedSlotSame(o, n, 18) && lockedSlotSame(o, n, 19)
+        && lockedSlotSame(o, n, 20) && lockedSlotSame(o, n, 21) && lockedSlotSame(o, n, 22) && lockedSlotSame(o, n, 23) && lockedSlotSame(o, n, 24)
+        && lockedSlotSame(o, n, 25) && lockedSlotSame(o, n, 26) && lockedSlotSame(o, n, 27) && lockedSlotSame(o, n, 28) && lockedSlotSame(o, n, 29)
+        && lockedSlotSame(o, n, 30) && lockedSlotSame(o, n, 31) && lockedSlotSame(o, n, 32) && lockedSlotSame(o, n, 33) && lockedSlotSame(o, n, 34)
+        && lockedSlotSame(o, n, 35) && lockedSlotSame(o, n, 36) && lockedSlotSame(o, n, 37) && lockedSlotSame(o, n, 38) && lockedSlotSame(o, n, 39)
+        && lockedSlotSame(o, n, 40) && lockedSlotSame(o, n, 41) && lockedSlotSame(o, n, 42) && lockedSlotSame(o, n, 43) && lockedSlotSame(o, n, 44)
+        && lockedSlotSame(o, n, 45) && lockedSlotSame(o, n, 46) && lockedSlotSame(o, n, 47) && lockedSlotSame(o, n, 48) && lockedSlotSame(o, n, 49);
+    }
+
     // Fields only the server (Stripe webhook / AI function, admin SDK) may change
     function billingKeys() {
       return ['hasPaid', 'premium', 'credits', 'subscription', 'subscriptionId', 'subscriptionStatus', 'stripeCustomerId', 'admin', 'role',
-              'proExpiresAt', 'stripeSubscriptionId', 'stripeStatus', 'stripePriceId', 'stripeSessionId', 'stripe', 'proUpdatedAt'];
+              'proExpiresAt', 'stripeSubscriptionId', 'stripeStatus', 'stripePriceId', 'stripeSessionId', 'stripe', 'proUpdatedAt',
+              'proSource', 'cancelAtPeriodEnd', 'iapProductId', 'iapStore', 'iapEnvironment'];
     }
     // isPro / plan: clients may only ever write the free defaults, and never on a doc that is currently Pro.
     function freeDefaultsOnly() {
@@ -32,17 +85,49 @@ service cloud.firestore {
         || (resource.data.get('isPro', false) != true && freeDefaultsOnly());
     }
 
+    // Post interactions by other users (comments/reactions/read markers). Firestore rules cannot loop over the comments array, so this
+    // guarantees what is checkable: a new comment must carry the caller's own userId, at most one comment is added/removed per write
+    // (no mass wipe), and reactions / readComments can only be changed under the caller's own uid key.
+    function commentsChangeOk() {
+      let oldC = resource.data.get('comments', []);
+      let newC = request.resource.data.get('comments', []);
+      return newC.size() == oldC.size()
+        || (newC.size() == oldC.size() + 1 && newC[oldC.size()].userId == request.auth.uid)
+        || newC.size() == oldC.size() - 1;
+    }
+    function ownMapKeyOnly(field) {
+      return request.resource.data.get(field, {}).diff(resource.data.get(field, {})).affectedKeys().hasOnly([request.auth.uid]);
+    }
+    // Pickup game admins: the same designated list as src/views/Pickup.vue (verified email only, so nobody can claim it by registering the address).
+    function isPickupAdmin() {
+      return isAuthenticated() && request.auth.token.email_verified == true
+        && request.auth.token.email in ['ds7513635@gmail.com', 'pablo.novoa89@gmail.com', 'lordsarfo123@gmail.com', 'ideastogether@yahoo.com', 'testing@gmail.com'];
+    }
+    function isCaptain() {
+      return isAuthenticated() && exists(/databases/$(database)/documents/captains/$(request.auth.uid));
+    }
+
     // Users collection - private to the owner. Other users' names/avatars come from /publicProfiles.
+    // Scheduled / recurring tasks (users/{uid}.scheduledTasks = { tasks: [...], updatedAt }); written only by the owner.
+    function schedOk() {
+      return !('scheduledTasks' in request.resource.data)
+        || (request.resource.data.scheduledTasks is map
+            && request.resource.data.scheduledTasks.keys().hasOnly(['tasks', 'updatedAt'])
+            && (!('tasks' in request.resource.data.scheduledTasks)
+                || (request.resource.data.scheduledTasks.tasks is list && request.resource.data.scheduledTasks.tasks.size() <= 300)));
+    }
     match /users/{userId} {
       allow read: if isOwner(userId) || isAdmin();
       // Signup may set the starter 15 credits, nothing else billing-related
       allow create: if isOwner(userId)
         && request.resource.data.keys().hasAny(billingKeys().removeAll(['credits'])) == false
         && freeDefaultsOnly()
-        && (!('credits' in request.resource.data) || request.resource.data.credits == 15);
+        && (!('credits' in request.resource.data) || request.resource.data.credits == 15)
+        && schedOk();
       allow update: if isOwner(userId)
         && !request.resource.data.diff(resource.data).affectedKeys().hasAny(billingKeys())
-        && proFieldsOk();
+        && proFieldsOk()
+        && schedOk();
       allow delete: if isOwner(userId) || isAdmin();
     }
 
@@ -63,7 +148,8 @@ service cloud.firestore {
       allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
       allow update: if isAuthenticated() && (
         (resource.data.userId == request.auth.uid && request.resource.data.userId == request.auth.uid)
-        || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['comments', 'reactions', 'readComments']));
+        || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['comments', 'reactions', 'readComments'])
+            && commentsChangeOk() && ownMapKeyOnly('reactions') && ownMapKeyOnly('readComments')));
       allow delete: if isAuthenticated() && request.auth.uid == resource.data.userId;
     }
 
@@ -86,18 +172,40 @@ service cloud.firestore {
     }
 
     // Weekly Routines - routineId format: {userId}_{dayName}
+    // While the owner's 8-hour window is running (eightHour/{uid}.lock, written only by the eight-hour-day function), today's day doc is LOCKED:
+    // adds (append only) and edits are allowed, but the first 50 slots (= MAX_TASKS_PER_DAY) keep createdAt/points (no delete / swap / reorder / re-point).
+    // Completing tasks, timers, notes and subtasks stay editable. Rules cannot loop, so slots 0..49 are compared explicitly (the app caps a day at 50 tasks; lockedSlotSame short-circuits past the real size).
     match /weeklyRoutines/{routineId} {
-      allow read, write: if isAuthenticated() && request.auth.uid == routineId.split('_')[0];
+      allow read: if isAuthenticated() && (request.auth.uid == routineId.split('_')[0]);  // pals/managers see tasks only via the manager-pal function (private tasks stripped)
+      allow create: if isAuthenticated() && request.auth.uid == routineId.split('_')[0] && !eightHourLocked(routineId.split('_')[0], routineId.split('_')[1]) && !eightHourShut(routineId.split('_')[0]);
+      allow update: if isAuthenticated() && request.auth.uid == routineId.split('_')[0]
+        && !eightHourShut(routineId.split('_')[0])
+        && (!eightHourLocked(routineId.split('_')[0], routineId.split('_')[1]) || lockedDayUnchanged());
+      allow delete: if isAuthenticated() && request.auth.uid == routineId.split('_')[0] && !eightHourLocked(routineId.split('_')[0], routineId.split('_')[1]) && !eightHourShut(routineId.split('_')[0]);
+    }
+
+    // 8-hour day state (plan, lock, stats): readable by the owner, written ONLY by the Netlify function (admin SDK bypasses rules).
+    match /eightHour/{uid} {
+      allow read: if isOwner(uid);
+      allow write: if false;
+      match /history/{dayKey} {
+        allow read: if isOwner(uid);
+        allow write: if false;
+      }
     }
 
     // Captains collection
+    // read: any signed-in user. create/delete (assign / reset captains): pickup admins. update (picks, turn): admins or the captains themselves.
     match /captains/{captainId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isAuthenticated();
+      allow create, delete: if isPickupAdmin();
+      allow update: if isPickupAdmin() || isCaptain();
     }
 
     // Game collection (incl. game/turnState)
     match /game/{gameId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isAuthenticated();
+      allow write: if isPickupAdmin() || isCaptain();
     }
 
     // Streaks - doc id is the uid
@@ -169,6 +277,201 @@ service cloud.firestore {
                     && request.resource.data.uid == request.auth.uid;
       allow delete: if isAuthenticated() && resource.data.uid == request.auth.uid;
       allow read, update: if false;
+    }
+
+    // ===== Manager & Pal (netlify/functions/manager-pal.js writes everything except pal DMs and the read flag) =====
+    // Manager link state: owner reads; only the function writes. Token itself is never stored (managerLinks is keyed by sha256(token)).
+    match /managers/{uid} {
+      allow read: if isOwner(uid);
+      allow write: if false;
+    }
+    // Signed-in manager <-> user connection. Created/removed only by the manager-pal function (admin SDK).
+    match /managerConnections/{connId} {
+      allow read: if isAuthenticated() && (request.auth.uid == resource.data.ownerUid || request.auth.uid == resource.data.managerUid);
+      allow write: if false;
+    }
+    match /managerLinks/{hash} { allow read, write: if false; }
+    // Block + Report (App Store 1.2): written only by the manager-pal function.
+    match /blocks/{blockId} { allow read: if isAuthenticated() && request.auth.uid == resource.data.blockerUid; allow write: if false; }
+    match /reports/{reportId} { allow read, write: if false; }
+    match /palInvites/{code} { allow read, write: if false; }
+    // Manager nudges + DMs (both directions). Owner reads and may only flip `read`.
+    match /users/{uid}/managerChat/{msgId} {
+      allow read: if isOwner(uid);
+      allow update: if isOwner(uid) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']) && request.resource.data.read is bool;
+      allow create, delete: if false;
+    }
+    // Pal pair: created by the function on accept; either member reads or removes it.
+    match /pals/{pairId} {
+      allow read: if isAuthenticated() && request.auth.uid in resource.data.members;
+      allow delete: if isAuthenticated() && request.auth.uid in resource.data.members;
+      allow create, update: if false;
+      match /messages/{msgId} {
+        function palMember() { return isAuthenticated() && request.auth.uid in get(/databases/$(database)/documents/pals/$(pairId)).data.members; }
+        allow read: if palMember();
+        allow create: if palMember()
+          && request.resource.data.keys().hasOnly(['from', 'text', 'createdAt'])
+          && request.resource.data.from == request.auth.uid
+          && request.resource.data.text is string && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 1000
+          && request.resource.data.createdAt == request.time;
+        allow update, delete: if false;
+      }
+    }
+
+    // ── Community (feed, comments, likes, group chat, follows, notifications, reports, blocks) ──
+    // Moderation per App Store 1.2: reports collection, per-user blocks, admin delete; the profanity filter and rate limits run client-side.
+    function cmAdmin() {
+      return isAuthenticated() && request.auth.token.email_verified == true && request.auth.token.email == 'ds7513635@gmail.com';
+    }
+    function cmProfileOk(d) {
+      return d.uid == request.auth.uid
+        && d.name is string && d.name.size() <= 40 && !d.name.matches('.*@.*')
+        && d.avatar is string && d.avatar.size() <= 2048 && (d.avatar == '' || d.avatar.matches('https://.*'));
+    }
+    function cmImagesOk(l, max) {
+      return l is list && l.size() <= max
+        && (l.size() < 1 || (l[0] is string && l[0].matches('https://firebasestorage\\.googleapis\\.com/.*') && l[0].size() <= 2048))
+        && (l.size() < 2 || (l[1] is string && l[1].matches('https://firebasestorage\\.googleapis\\.com/.*') && l[1].size() <= 2048))
+        && (l.size() < 3 || (l[2] is string && l[2].matches('https://firebasestorage\\.googleapis\\.com/.*') && l[2].size() <= 2048))
+        && (l.size() < 4 || (l[3] is string && l[3].matches('https://firebasestorage\\.googleapis\\.com/.*') && l[3].size() <= 2048));
+    }
+    function cmStatsOk(s) {
+      return s == null || (s is map && s.keys().hasOnly(['tasksDone', 'points', 'streak', 'milestone', 'icon', 'badges'])
+        && s.tasksDone is int && s.tasksDone >= 0 && s.tasksDone <= 100000
+        && s.points is int && s.points >= 0 && s.points <= 100000
+        && s.streak is int && s.streak >= 0 && s.streak <= 100000
+        && s.milestone is string && s.milestone.size() <= 30
+        && (!('icon' in s) || (s.icon is string && s.icon.size() <= 8))
+        && (!('badges' in s) || (s.badges is list && s.badges.size() <= 3)));
+    }
+    function cmBlockedBy(owner) {
+      return exists(/databases/$(database)/documents/users/$(owner)/blocks/$(request.auth.uid));
+    }
+    match /communityPosts/{postId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated()
+        && request.resource.data.keys().hasOnly(['uid', 'name', 'avatar', 'title', 'text', 'images', 'stats', 'likeCount', 'commentCount', 'createdAt'])
+        && cmProfileOk(request.resource.data)
+        && (!('title' in request.resource.data) || (request.resource.data.title is string && request.resource.data.title.size() <= 120))
+        && request.resource.data.text is string && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 2000
+        && cmImagesOk(request.resource.data.images, 4)
+        && cmStatsOk(request.resource.data.stats)
+        && request.resource.data.likeCount == 0 && request.resource.data.commentCount == 0
+        && request.resource.data.createdAt == request.time;
+      // Counters only, each paired with the like/comment doc written in the same transaction/batch.
+      allow update: if isAuthenticated() && (
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likeCount'])
+          && ((request.resource.data.likeCount == resource.data.likeCount + 1
+               && !exists(/databases/$(database)/documents/communityPosts/$(postId)/likes/$(request.auth.uid))
+               && existsAfter(/databases/$(database)/documents/communityPosts/$(postId)/likes/$(request.auth.uid)))
+           || (request.resource.data.likeCount == resource.data.likeCount - 1
+               && exists(/databases/$(database)/documents/communityPosts/$(postId)/likes/$(request.auth.uid))
+               && !existsAfter(/databases/$(database)/documents/communityPosts/$(postId)/likes/$(request.auth.uid)))))
+        || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['commentCount'])
+          && (request.resource.data.commentCount == resource.data.commentCount + 1
+              || (request.resource.data.commentCount == resource.data.commentCount - 1 && request.resource.data.commentCount >= 0))));
+      allow delete: if isOwner(resource.data.uid) || cmAdmin();
+      match /likes/{likerId} {
+        allow read: if isAuthenticated();
+        allow create: if isOwner(likerId) && request.resource.data.keys().hasOnly(['uid', 'createdAt'])
+          && request.resource.data.uid == likerId && request.resource.data.createdAt == request.time
+          && getAfter(/databases/$(database)/documents/communityPosts/$(postId)).data.likeCount == get(/databases/$(database)/documents/communityPosts/$(postId)).data.likeCount + 1;
+        allow delete: if isOwner(likerId)
+          && (!existsAfter(/databases/$(database)/documents/communityPosts/$(postId))
+              || getAfter(/databases/$(database)/documents/communityPosts/$(postId)).data.likeCount == get(/databases/$(database)/documents/communityPosts/$(postId)).data.likeCount - 1);
+        allow update: if false;
+      }
+      match /comments/{commentId} {
+        allow read: if isAuthenticated();
+        allow create: if isAuthenticated()
+          && request.resource.data.keys().hasOnly(['uid', 'name', 'avatar', 'text', 'createdAt'])
+          && cmProfileOk(request.resource.data)
+          && request.resource.data.text is string && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 500
+          && request.resource.data.createdAt == request.time
+          && getAfter(/databases/$(database)/documents/communityPosts/$(postId)).data.commentCount == get(/databases/$(database)/documents/communityPosts/$(postId)).data.commentCount + 1;
+        allow delete: if (isOwner(resource.data.uid) || cmAdmin()
+          || (isAuthenticated() && get(/databases/$(database)/documents/communityPosts/$(postId)).data.uid == request.auth.uid));
+        allow update: if false;
+      }
+    }
+    match /communityChat/{msgId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated()
+        && request.resource.data.keys().hasOnly(['uid', 'name', 'avatar', 'text', 'image', 'createdAt'])
+        && cmProfileOk(request.resource.data)
+        && request.resource.data.text is string && request.resource.data.text.size() <= 1000
+        && request.resource.data.image is string && request.resource.data.image.size() <= 2048
+        && (request.resource.data.image == '' || request.resource.data.image.matches('https://firebasestorage\\.googleapis\\.com/.*'))
+        && (request.resource.data.text.size() > 0 || request.resource.data.image.size() > 0)
+        && request.resource.data.createdAt == request.time;
+      allow update: if false;
+      allow delete: if isOwner(resource.data.uid) || cmAdmin();
+    }
+    match /follows/{followId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated()
+        && followId == request.auth.uid + '_' + request.resource.data.to
+        && request.resource.data.keys().hasOnly(['from', 'to', 'createdAt'])
+        && request.resource.data.from == request.auth.uid
+        && request.resource.data.to is string && request.resource.data.to != request.auth.uid && request.resource.data.to.size() <= 128
+        && request.resource.data.createdAt == request.time;
+      allow delete: if isOwner(resource.data.from);
+      allow update: if false;
+    }
+    match /reports/{reportId} {
+      allow create: if isAuthenticated()
+        && request.resource.data.keys().hasOnly(['reporter', 'targetType', 'targetId', 'targetUid', 'postId', 'reason', 'status', 'createdAt'])
+        && request.resource.data.reporter == request.auth.uid
+        && request.resource.data.targetType in ['post', 'comment', 'chat', 'user']
+        && request.resource.data.targetId is string && request.resource.data.targetId.size() > 0 && request.resource.data.targetId.size() <= 128
+        && request.resource.data.targetUid is string && request.resource.data.targetUid.size() <= 128
+        && request.resource.data.postId is string && request.resource.data.postId.size() <= 128
+        && request.resource.data.reason is string && request.resource.data.reason.size() <= 300
+        && request.resource.data.status == 'open'
+        && request.resource.data.createdAt == request.time;
+      // Community admin may only touch Community reports (targetType set, no manager-pal `scope`); manager-pal reports stay server-only.
+      allow read, update, delete: if cmAdmin() && ('targetType' in resource.data) && !('scope' in resource.data);
+    }
+    // Blocks + community prefs (EULA acceptance, notification toggles): private to the owner.
+    match /users/{userId}/blocks/{otherId} {
+      allow read, delete: if isOwner(userId);
+      allow create: if isOwner(userId) && otherId != userId && request.resource.data.keys().hasOnly(['createdAt']) && request.resource.data.createdAt == request.time;
+      allow update: if false;
+    }
+    // Display-safe public community profile (streak, best streak, badges). Owner-written, computed client-side.
+    match /communityProfiles/{uid} {
+      allow read: if isAuthenticated();
+      allow create, update: if isOwner(uid)
+        && request.resource.data.keys().hasOnly(['name', 'avatar', 'streak', 'bestStreak', 'badges', 'updatedAt'])
+        && request.resource.data.name is string && request.resource.data.name.size() <= 40 && !request.resource.data.name.matches('.*@.*')
+        && request.resource.data.avatar is string && request.resource.data.avatar.size() <= 2048 && (request.resource.data.avatar == '' || request.resource.data.avatar.matches('https://.*'))
+        && request.resource.data.streak is int && request.resource.data.streak >= 0 && request.resource.data.streak <= 100000
+        && request.resource.data.bestStreak is int && request.resource.data.bestStreak >= request.resource.data.streak && request.resource.data.bestStreak <= 100000
+        && request.resource.data.badges is list && request.resource.data.badges.size() <= 30;
+      allow delete: if isOwner(uid) || cmAdmin();
+    }
+    match /users/{userId}/community/prefs {
+      allow read: if isOwner(userId);
+      allow create, update: if isOwner(userId)
+        && request.resource.data.keys().hasOnly(['eulaVersion', 'eulaAcceptedAt', 'notif', 'ach', 'updatedAt'])
+        && (!('ach' in request.resource.data) || request.resource.data.ach is map)
+        && (!('eulaVersion' in request.resource.data) || request.resource.data.eulaVersion is int)
+        && (!('notif' in request.resource.data) || (request.resource.data.notif is map && request.resource.data.notif.keys().hasOnly(['follow', 'like', 'comment', 'share', 'post'])));
+      allow delete: if isOwner(userId);
+    }
+    // In-app notifications: written by the actor (never as someone else, never to self, never when the recipient blocked them).
+    match /users/{userId}/notifications/{notifId} {
+      allow read, delete: if isOwner(userId);
+      allow update: if isOwner(userId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']) && request.resource.data.read is bool;
+      allow create: if isAuthenticated() && request.auth.uid != userId && !cmBlockedBy(userId)
+        && request.resource.data.keys().hasOnly(['type', 'from', 'fromName', 'postId', 'text', 'read', 'createdAt'])
+        && request.resource.data.type in ['follow', 'like', 'comment', 'share', 'post']
+        && request.resource.data.from == request.auth.uid
+        && request.resource.data.fromName is string && request.resource.data.fromName.size() <= 40
+        && (request.resource.data.postId == null || (request.resource.data.postId is string && request.resource.data.postId.size() <= 128))
+        && request.resource.data.text is string && request.resource.data.text.size() <= 140
+        && request.resource.data.read == false
+        && request.resource.data.createdAt == request.time;
     }
 
     // Default deny all other collections
