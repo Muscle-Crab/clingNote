@@ -4471,10 +4471,14 @@ body:has(.app-root.has-bg-anim), body:has(.app-root.has-bg-anim) #app { backgrou
 .app-root .task-card.task-card.task-card { padding: 12px 6px 12px 4px; gap: 8px; border-radius: 16px; background: var(--c-surface); }
 .app-root .task-card--next.task-card--next.task-card--next { background: linear-gradient(90deg, rgba(47,111,255,.14), var(--c-surface) 55%); box-shadow: none; }
 .app-root .task-card:not(:has(.task-expand)) :is(.task-cat, .task-repeat-toggle, .task-repeat-badge, .task-private, .task-attachment, .task-extras, .task-edit, .task-chips:has(.chip--subtasks)) { display: none !important; }
-.app-root .task-card:not(:has(.task-expand)) .task-body.task-body.task-body { padding-right: 92px; }
+/* collapsed: timer + ⋯ stack in one narrow right column; only the title row yields to it, meta lines use the full width */
+.app-root .task-card:not(:has(.task-expand)) .task-body.task-body.task-body { padding-right: 46px; min-height: 52px; }
 .app-root .task-card:not(:has(.task-expand)) .task-body > :is(.task-upnext, .task-title-row, .task-sub) { padding-right: 0; }
+.app-root .task-card:not(:has(.task-expand)) .task-title.task-title.task-title { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; text-overflow: ellipsis; word-break: normal; overflow-wrap: anywhere; }
 .app-root .task-card:not(:has(.task-expand)) .importance-btn[aria-pressed="false"] { display: none; }
-.app-root .task-card:not(:has(.task-expand)) .task-right.task-right.task-right { top: 6px; right: 4px; }
+.app-root .task-card:not(:has(.task-expand)) .task-right.task-right.task-right { top: 6px; right: 4px; flex-direction: column; height: auto; gap: 0; }
+.app-root .task-card:not(:has(.task-expand)) .task-right .task-more.task-more.task-more { width: 44px; height: 26px; min-height: 26px; flex: 0 0 26px; position: relative; }
+.app-root .task-card:not(:has(.task-expand)) .task-right .task-more::after { content: ""; position: absolute; inset: -6px 0 -12px; } /* keeps a ~44px tap target */
 .app-root .task-body.task-body.task-body { row-gap: 4px; column-gap: 10px; }
 .app-root .task-title.task-title.task-title { font-size: 16px; line-height: 22px; font-weight: 600; }
 .app-root .task-upnext.task-upnext { font-size: 10.5px; line-height: 14px; margin-bottom: 1px; }
