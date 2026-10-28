@@ -111,6 +111,7 @@
       <TaskDetailModal v-if="taskDetailModalOpen" :task="taskDetail" :active-labels="activeLabels"
                        @close="closeTaskDetailModal" @preview="showImagePreview = true"
                        @remove-attachment="removeTaskAttachment" @toggle-label="toggleLabelHighlight"
+                       @upload="uploadFromDetail" @video="videoFromDetail"
                        :schedule="detailSchedule" :day-date="selectedDayDate" :sched-error="schedEditError" @save-schedule="saveTaskSchedule" />
 
 
@@ -2948,6 +2949,10 @@ const openTaskDetailModal = (task) => {
   taskDetailModalOpen.value = true;
 };
 
+// details sheet "Add video": hand over to the existing video-link modal (closes the sheet so it is not stacked under it)
+const videoFromDetail = () => { const i = realIndex(taskDetail.value); if (i < 0) return; closeTaskDetailModal(); openYouTubeModal(i); };
+// details sheet "Add photo or file": same handleUpload as the card's 📎, then show the new attachment in the open sheet
+const uploadFromDetail = async (e) => { const i = realIndex(taskDetail.value); if (i < 0) return; await handleUpload(e, i); if (taskDetailModalOpen.value && selectedDayRoutine.value[i]) taskDetail.value = selectedDayRoutine.value[i]; };
 const closeTaskDetailModal = () => {
   taskDetailModalOpen.value = false;
   taskDetail.value = {};
@@ -4460,6 +4465,33 @@ body:has(.app-root.has-bg-anim), body:has(.app-root.has-bg-anim) #app { backgrou
 .app-root .task-upnext { line-height: 12px; }
 .app-root .task-title-row .task-private, .app-root .task-title-row .task-repeat-badge { border: 0; padding: 0; margin: 0; font-size: 12px; text-transform: none; }
 .app-root .importance-btn.importance-btn::before { inset: -12px -15px; }
+/* ══ Calm task cards v3 (2026-10-28): styling only. Collapsed = check · title · time/estimate · deadline · priority · points · timer.
+   Secondary details (category tile, repeat/private badges, attachments, subtasks, notes/labels/reminder line) move to the details
+   sheet (tap the card); the inline editor (pencil in ⋯ / long-press / title tap) still shows everything. No field markup or behavior changed. ══ */
+.app-root .task-card.task-card.task-card { padding: 12px 6px 12px 4px; gap: 8px; border-radius: 16px; background: var(--c-surface); }
+.app-root .task-card--next.task-card--next.task-card--next { background: linear-gradient(90deg, rgba(47,111,255,.14), var(--c-surface) 55%); box-shadow: none; }
+.app-root .task-card:not(:has(.task-expand)) :is(.task-cat, .task-repeat-toggle, .task-repeat-badge, .task-private, .task-attachment, .task-extras, .task-edit, .task-chips:has(.chip--subtasks)) { display: none !important; }
+.app-root .task-card:not(:has(.task-expand)) .task-body.task-body.task-body { padding-right: 92px; }
+.app-root .task-card:not(:has(.task-expand)) .task-body > :is(.task-upnext, .task-title-row, .task-sub) { padding-right: 0; }
+.app-root .task-card:not(:has(.task-expand)) .importance-btn[aria-pressed="false"] { display: none; }
+.app-root .task-card:not(:has(.task-expand)) .task-right.task-right.task-right { top: 6px; right: 4px; }
+.app-root .task-body.task-body.task-body { row-gap: 4px; column-gap: 10px; }
+.app-root .task-title.task-title.task-title { font-size: 16px; line-height: 22px; font-weight: 600; }
+.app-root .task-upnext.task-upnext { font-size: 10.5px; line-height: 14px; margin-bottom: 1px; }
+/* one quiet meta line: plain text items separated by space, no pills/borders */
+.app-root .task-body > .task-sub.task-sub { font-size: 13px; color: var(--c-text-2); }
+.app-root .task-body .chip.chip { background: none; border: 0; padding: 0; line-height: 18px; font-size: 13px; font-weight: 500; color: var(--c-text-2); opacity: 1; }
+.app-root .task-body .task-chips.task-chips { column-gap: 10px; }
+.app-root .task-body .chip--high.chip--high { color: var(--c-danger-text, #f87171); font-weight: 600; }
+.app-root .task-body .chip--medium.chip--medium { color: var(--c-warn-text, #fbbf24); font-weight: 600; }
+.app-root .task-body .chip--due.chip--due { color: var(--c-accent-text, #7fb0ff); }
+.app-root .task-body .chip--overdue.chip--overdue { color: var(--c-danger-text, #f87171); font-weight: 600; }
+.app-root .task-pts.task-pts.task-pts { background: none; padding: 0; font-size: 12.5px; font-weight: 600; line-height: 18px; color: #E0B23A; }
+.app-root .task-status.task-status { font-size: 10.5px; line-height: 18px; }
+.app-root .task-card:not(:has(.task-expand)) .task-check.task-check.task-check { align-self: flex-start; margin-top: -4px; }
+.app-root .task-card:not(:has(.task-expand)) .task-left.task-left.task-left { align-self: flex-start; }
+html[data-theme="light"] .app-root .task-pts.task-pts.task-pts { color: #A87A00; }
+html[data-theme="light"] .app-root .task-body .chip--due.chip--due { color: #2754C5; }
 /* Voice button sits bottom-left above the footer tab bar; the global Create-task FAB is bottom-right. */
 .app-root .fab-group.fab-group.fab-group--voice-only { left: max(16px, calc((100vw - 540px) / 2 + 16px)); right: auto; width: auto; padding: 0; background: none; bottom: calc(var(--tabbar-h, 64px) + 14px + env(safe-area-inset-bottom)); }
 </style>

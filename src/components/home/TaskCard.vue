@@ -325,7 +325,7 @@ const onCardTap = (event) => {
     const sel = window.getSelection && window.getSelection();
     if (sel && !sel.isCollapsed && String(sel).length && event.currentTarget.contains(sel.anchorNode)) return;
   }
-  emit('toggle-expand');
+  emit('open-detail'); // tap = details sheet; pencil / long-press still open the inline editor
 };
 // past one-off reminders are hidden (display only; nothing is written)
 const reminderVisible = computed(() => showReminder(props.task.reminder, new Date(props.now || Date.now())));

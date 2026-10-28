@@ -1,12 +1,27 @@
 <template>
-  <div class="modal-backdrop">
-    <div class="modal-box">
+  <div class="modal-backdrop" @click.self="$emit('close')">
+    <div class="modal-box" role="dialog" aria-modal="true" aria-label="Task details" data-test="task-detail-sheet">
+      <div class="sheet-grab" aria-hidden="true"></div>
       <div class="modal-header">
         <h2 class="modal-title">Task details</h2>
         <button @click="$emit('close')" class="modal-close">✕</button>
       </div>
       <div class="modal-body">
         <h3 class="detail-title">{{ task.title }}</h3>
+        <!-- At-a-glance facts (read-only; editing stays in the card editor) -->
+        <p class="detail-facts" data-test="detail-facts">
+          <span v-for="(f, i) in facts" :key="i" class="detail-fact">{{ f }}</span>
+        </p>
+        <p v-if="task.nextAction" class="detail-line">→ {{ task.nextAction }}</p>
+        <p v-if="task.status === 'pending' && task.pendingOn" class="detail-line">⏳ Pending on {{ task.pendingOn }}</p>
+        <p v-if="sub.total" class="detail-line" data-test="detail-subtasks">☑ Subtasks {{ sub.done }}/{{ sub.total }}</p>
+
+        <!-- Attachments: reuses the card's existing upload (Storage task_images / task_files) and video-link flows -->
+        <div class="detail-attach" data-test="detail-attach">
+          <button type="button" class="btn-secondary" data-test="detail-attach-file" @click="fileInput && fileInput.click()">📎 Add photo or file</button>
+          <button type="button" class="btn-secondary" data-test="detail-attach-video" @click="$emit('video')">🎥 {{ task.youtubeURL ? 'Change video' : 'Add video' }}</button>
+          <input ref="fileInput" type="file" accept="image/*,.pdf,.doc,.docx,.txt" class="detail-hidden" @change="$emit('upload', $event)" />
+        </div>
 
         <div v-if="task.youtubeURL" class="detail-media">
           <iframe
@@ -78,6 +93,9 @@ import { ref, computed, watch } from 'vue';
 import { formatShortDate, formatTime, extractYouTubeID, showReminder } from '@/utils/dateTime';
 import { scheduleLabel } from '@/utils/scheduling';
 import SchedulePicker from './SchedulePicker.vue';
+import { categoryOf } from '@/utils/taskCategory';
+import { estimateOf, formatClock, formatDuration, toMinutes } from '@/utils/taskPlanning';
+import { subtaskProgress } from '@/utils/subtasks';
 
 const props = defineProps({
   task: { type: Object, default: () => ({}) },
@@ -86,17 +104,51 @@ const props = defineProps({
   dayDate: { type: String, default: '' },
   schedError: { type: String, default: '' },
 });
-const emit = defineEmits(['close', 'preview', 'remove-attachment', 'toggle-label', 'save-schedule']);
+const emit = defineEmits(['upload', 'video', 'close', 'preview', 'remove-attachment', 'toggle-label', 'save-schedule']);
 const clone = (o) => JSON.parse(JSON.stringify(o || {}));
 const original = ref(clone(props.schedule));
 const sched = ref(clone(props.schedule));
 watch(() => props.schedule, (v) => { original.value = clone(v); sched.value = clone(v); });
 const dirty = computed(() => JSON.stringify(sched.value) !== JSON.stringify(original.value));
 const label = computed(() => scheduleLabel(props.task));
+const fileInput = ref(null);
+const sub = computed(() => subtaskProgress(props.task));
+const facts = computed(() => {
+  const t = props.task || {}; const out = [categoryOf(t).label];
+  const m = estimateOf(t); if (t.startTime) out.push('🕒 ' + formatClock(toMinutes(t.startTime)) + (m ? ' – ' + formatClock(toMinutes(t.startTime) + m) : ''));
+  if (m) out.push(formatDuration(m));
+  if (t.dueDate) out.push('Due ' + t.dueDate);
+  if (t.priority && t.priority !== 'low') out.push(t.priority[0].toUpperCase() + t.priority.slice(1) + ' priority');
+  if (t.important) out.push('🔥 Important');
+  if ((t.repeatDays || []).length > 1 || t.type === 'recurring') out.push('🔁 Repeats');
+  if (t.visibility === 'private') out.push('🔒 Private'); else if (t.anonymous === true) out.push('🕶️ Hidden from manager');
+  if (t.carriedFrom) out.push('↪︎ Moved from yesterday');
+  if (t.status && t.status !== 'todo') out.push(t.status[0].toUpperCase() + t.status.slice(1));
+  return out;
+});
 const save = (scope) => emit('save-schedule', { sched: clone(sched.value), scope });
 </script>
 
 <style scoped>
+/* Bottom-sheet presentation (same feel as the assistant / plan sheets) */
+.modal-backdrop.modal-backdrop { align-items: flex-end; padding: 0; background: rgba(3,8,20,.6); }
+.modal-box.modal-box { max-width: 560px; max-height: 88vh; border-radius: 22px 22px 0 0; border-bottom: 0; padding-bottom: env(safe-area-inset-bottom); box-shadow: 0 -10px 40px rgba(0,0,0,.35); animation: sheetUp .22s ease-out; }
+@keyframes sheetUp { from { transform: translateY(24px); opacity: .6; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .modal-box.modal-box { animation: none; } }
+.sheet-grab { width: 40px; height: 5px; border-radius: 3px; background: var(--c-border-strong, #3a4a70); margin: 8px auto 0; flex-shrink: 0; }
+.modal-header.modal-header { border-bottom: 0; padding: .5rem 1.25rem 0; }
+.modal-title.modal-title { font-size: .8rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--c-text-3, #6b6a66); }
+.modal-close.modal-close { width: 44px; height: 44px; font-size: 1.05rem; }
+.modal-body.modal-body { padding: .25rem 1.25rem 1rem; }
+.modal-footer.modal-footer { border-top: 0; padding: .5rem 1.25rem 1.25rem; }
+.modal-footer .btn-primary { width: 100%; min-height: 44px; border-radius: 12px; }
+.detail-title.detail-title { font-size: 1.3rem; line-height: 1.3; margin: 0 0 .4rem; word-break: break-word; }
+.detail-facts { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 0 0 .6rem; font-size: .85rem; color: var(--c-text-2, #9a9891); }
+.detail-line { margin: 0 0 .35rem; font-size: .875rem; color: var(--c-text-2, #9a9891); }
+.detail-attach { display: flex; flex-wrap: wrap; gap: .5rem; margin: .75rem 0; }
+.detail-attach .btn-secondary { min-height: 44px; border-radius: 12px; }
+.detail-hidden { display: none; }
+
 .detail-sched { border-top: 1px solid var(--c-border, #2a2a2e); border-bottom: 1px solid var(--c-border, #2a2a2e); padding: .75rem 0; margin: .5rem 0; display: flex; flex-direction: column; gap: .5rem; }
 .detail-sched-actions { display: flex; gap: .5rem; justify-content: flex-end; }
 .detail-err { color: var(--c-danger, #f87171); font-size: .8rem; margin: 0; }
