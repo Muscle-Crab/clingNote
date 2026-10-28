@@ -13,13 +13,13 @@ const DECLARATIONS = [
     items: S('ARRAY', { items: S('OBJECT', { properties: {
       title: S('STRING'), type: S('STRING', { enum: ['task', 'reminder', 'schedule'] }), date: DATE, start: TIME,
       durationMin: S('INTEGER'), remindAt: S('STRING', { description: 'YYYY-MM-DDTHH:MM for reminders' }), points: POINTS,
-      complexity: S('INTEGER', { description: '1 (trivial) .. 5 (very hard)' }), priority: S('STRING', { enum: ['', 'high'] }),
-      repeat: S('STRING', { enum: ['', 'daily', 'weekdays', 'weekends', 'weekly', 'monthly', 'yearly'], description: 'Recurring ("every weekday at 7"): type schedule + start + repeat' }),
+      complexity: S('INTEGER', { description: '1 (trivial) .. 5 (very hard)' }), priority: S('STRING', { enum: ['normal', 'high'], description: 'Omit unless the user says it is important' }),
+      repeat: S('STRING', { enum: ['daily', 'weekdays', 'weekends', 'weekly', 'monthly', 'yearly'], description: 'Recurring ("every weekday at 7"): type schedule + start + repeat. Omit for one-off tasks' }),
       days: S('ARRAY', { items: S('INTEGER'), description: 'weekly repeat days 0=Sun..6=Sat' }),
     }, required: ['title', 'points'] }) }),
   }, ['items']),
   fn('edit_task', 'Change a task: title, duration, start time, notes, priority or points (points: re-assign when effort changes, or the user\'s spoken value).', {
-    ref: TASK_REF, title: S('STRING'), durationMin: S('INTEGER'), start: TIME, notes: S('STRING'), priority: S('STRING', { enum: ['', 'high'] }), points: POINTS, complexity: S('INTEGER'),
+    ref: TASK_REF, title: S('STRING'), durationMin: S('INTEGER'), start: TIME, notes: S('STRING'), priority: S('STRING', { enum: ['normal', 'high'], description: 'normal clears high priority; omit to keep unchanged' }), points: POINTS, complexity: S('INTEGER'),
   }, ['ref']),
   fn('reschedule_task', 'Move a task to another day (date after today) and/or change its start time.', { ref: TASK_REF, date: DATE, time: TIME }, ['ref']),
   fn('delete_task', 'Delete a task. The user must confirm in the app before it runs.', { ref: TASK_REF }, ['ref']),

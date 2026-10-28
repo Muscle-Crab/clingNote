@@ -66,7 +66,8 @@ export const validateCall = (name, args = {}, { refs = {}, tasksByKey = new Map(
       if (a.durationMin != null) { const m = Math.round(Number(a.durationMin)); if (m > 0 && m <= 600) patch.estimateMin = m; }
       if (a.start != null) { if (a.start === '' || okT(a.start)) patch.startTime = a.start; }
       if (typeof a.notes === 'string') patch.notes = a.notes.slice(0, 1000);
-      if (a.priority === 'high' || a.priority === '') patch.priority = a.priority;
+      if (a.priority === 'high') patch.priority = 'high';
+      else if (a.priority === 'normal' || a.priority === '') patch.priority = ''; // 'normal' (schema) or legacy '' clears high
       const pts = clampPoints(a.points); if (pts) { patch.points = pts; patch.pointsSource = 'ai'; }
       const cx = clampComplexity(a.complexity); if (cx) patch.complexity = cx;
       if (!Object.keys(patch).length) return { ok: false, error: 'Nothing to change.' };
