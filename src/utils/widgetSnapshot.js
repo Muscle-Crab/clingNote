@@ -91,6 +91,8 @@ export const parseWidgetLink = (raw) => {
   if (u.protocol.toLowerCase() !== WIDGET_SCHEME + ':') return null;
   const parts = [u.hostname, ...u.pathname.split('/')].filter(Boolean); // no decoding: ids are [A-Za-z0-9_-], anything encoded is rejected
   if (!parts.length || parts[0] === 'home' || parts[0] === 'today') return '/home';
+  if (parts[0] === 'add' || parts[0] === 'new') return '/home?new=1'; // widget "+" / Quick add widget: open the add-task sheet
+  if (parts[0] === 'ask') return '/home?ask=1'; // open the robot assistant
   if (parts[0] === 'task') {
     const id = parts[1] || '';
     return /^[A-Za-z0-9_-]{1,64}$/.test(id) ? `/home?task=${id}` : '/home';

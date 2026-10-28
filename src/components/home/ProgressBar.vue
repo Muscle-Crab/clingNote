@@ -25,8 +25,8 @@
       </div>
     </div>
     <div class="progress-foot">
-      <p class="foot-item foot-item--streak" :class="{ 'foot-item--risk': streakStatus === 'at-risk' }" :title="`Complete ${streakMin} tasks a day (after Start Day) to keep your streak. Today: ${streakProgress}/${streakMin}`">
-        <span class="foot-icon" aria-hidden="true">🔥</span>
+      <p class="foot-item foot-item--streak" :class="{ 'foot-item--risk': streakStatus === 'at-risk' }" :title="`Complete ${streakMin} tasks a day (after Start Day) to keep your streak. Today: ${streakProgress}/${streakMin}. Every ${FREEZE_EVERY} days in a row earns a freeze (max ${FREEZE_MAX}) that covers a missed day.`">
+        <span class="foot-icon"><span aria-hidden="true">🔥</span><span v-if="freezes > 0" class="foot-freeze" data-test="streak-freezes" :title="`${freezes} streak freeze${freezes === 1 ? '' : 's'} held: covers a missed day automatically. Earn 1 per ${FREEZE_EVERY} days in a row (max ${FREEZE_MAX}).`" :aria-label="`${freezes} streak freeze${freezes === 1 ? '' : 's'}`">🧊{{ freezes }}</span></span>
         <span class="foot-text"><span><strong data-test="streak-count">{{ Math.min(streak, STREAK_CAP) }}/{{ STREAK_CAP }}</strong>&nbsp;day streak</span><small data-test="streak-today">{{ Math.min(streakProgress, streakMin) }}/{{ streakMin }} done today to keep it</small></span>
       </p>
       <p class="foot-item foot-item--pts"><span class="coin" aria-hidden="true">★</span><strong data-test="day-pts">{{ target > 0 ? dayPtsLabel(points, target) : `${points} pts` }}</strong></p>
@@ -36,7 +36,7 @@
 
 <script setup>
 import { computed } from 'vue';
-import { STREAK_CAP } from '@/utils/streak';
+import { STREAK_CAP, FREEZE_EVERY, FREEZE_MAX } from '@/utils/streak';
 import { dayPtsLabel } from '@/utils/dayTarget';
 import stage0 from '@/assets/stages/stage-0-sprout.jpg';
 import stage1 from '@/assets/stages/stage-1-leafy.jpg';
@@ -52,6 +52,7 @@ const props = defineProps({
   streakStatus: { type: String, default: '' },
   streakProgress: { type: Number, default: 0 },
   streakMin: { type: Number, default: 5 },
+  freezes: { type: Number, default: 0 }, // held streak freeze days
   points: { type: Number, default: 0 },
   target: { type: Number, default: 0 }, // boss day target (required); shown as earned/required
 });
@@ -95,6 +96,8 @@ const current = computed(() => {
 .foot-icon { font-size: 18px; }
 .foot-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
 .foot-text small { font-size: var(--fs-xs); color: var(--c-text-3); }
+.foot-icon { position: relative; }
+.foot-freeze { position: absolute; left: 50%; top: 100%; transform: translate(-50%, 1px); padding: 0 4px; border-radius: 999px; font-size: 10px; line-height: 15px; font-weight: 700; white-space: nowrap; color: #9AD8FF; background: var(--c-surface-2, #12203F); border: 1px solid var(--c-border-strong, #2A3C66); }
 .foot-item--risk small { color: var(--c-warn); }
 .foot-item--pts strong { color: #F5C542; }
 .coin { width: 22px; height: 22px; border-radius: 50%; display: inline-grid; place-items: center; font-size: 12px; color: #7A4B00; background: radial-gradient(circle at 35% 30%, #FFE08A, #E0A21B); }

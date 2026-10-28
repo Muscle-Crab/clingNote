@@ -39,6 +39,7 @@ const milestones = [{ percent: 0, position: 0, icon: 'a' }, { percent: 50, posit
 const cases = [
   ['DayTabs', { days, selectedIndex: 0 }, ['Sun']],
   ['ProgressBar', { percentage: 40, milestones }, ['40%']],
+  ['ProgressBar', { percentage: 40, milestones, streak: 4, freezes: 2 }, ['🧊2', '4/5']],
   ['StreakHeader', { streak: 4, motivationalMessage: 'Go', pointsAccumulated: 10, totalPoints: 30, daySession: { started: true, ended: false, startedAtText: '9:00 AM' } }, ['4', '20 pts']],
   ['TimeStatsBar', { stats: { totalDayTime: '1h', productiveTime: '2m', gapTime: '3m', completedTasks: 2, missedTasks: 1 } }, ['1h']],
   ['ShutdownPrompt', { suggest: true, open: true, done: [task], openTasks: [{ ...task, completed: false }], carry: { 'x': true } }, ['Shutdown', 'Write report', 'shutdown-cancel', 'Cancel']],

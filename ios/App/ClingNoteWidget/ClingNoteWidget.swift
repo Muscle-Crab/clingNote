@@ -214,6 +214,18 @@ func fmtEst(_ m: Int) -> String {
 }
 func chipText(_ t: WidgetTask) -> String { [fmtEst(t.est), t.pts > 0 ? "\(t.pts)p" : ""].filter { !$0.isEmpty }.joined(separator: " · ") }
 func taskURL(_ t: WidgetTask) -> URL { URL(string: "clingnote://task/\(t.id)") ?? URL(string: "clingnote://home")! }
+/// Opens the app straight into the Add task sheet (src/utils/widgetSnapshot.js parseWidgetLink: clingnote://add -> /home?new=1).
+let addTaskURL = URL(string: "clingnote://add")!
+
+/// "+" in the medium/large header: a backup way to add a task without the in-app + button.
+struct AddButton: View {
+    var size: CGFloat = 20
+    var body: some View {
+        Link(destination: addTaskURL) {
+            Image(systemName: "plus.circle.fill").font(.system(size: size)).foregroundColor(CN.green)
+        }.accessibilityLabel("Add task")
+    }
+}
 
 struct Chip: View {
     let text: String
@@ -243,6 +255,7 @@ struct Header: View {
             Text("\(snap.done)/\(snap.total)").font(.system(size: 12, weight: .semibold)).monospacedDigit().foregroundColor(CN.green)
             Spacer()
             if snap.estLeft > 0 { Text("\(fmtEst(snap.estLeft)) left").font(.system(size: 11)).foregroundColor(CN.text2) }
+            AddButton()
         }
     }
 }
@@ -303,8 +316,9 @@ struct EmptyState: View {
         VStack(spacing: 4) {
             Image(systemName: "checkmark.seal.fill").font(.system(size: 22)).foregroundColor(CN.green)
             Text("No tasks today").font(.system(size: 13, weight: .semibold)).foregroundColor(CN.text)
-            Text("Tap to plan your day").font(.system(size: 11)).foregroundColor(CN.text2)
+            Text("Tap to add a task").font(.system(size: 11)).foregroundColor(CN.text2)
         }.frame(maxWidth: .infinity, maxHeight: .infinity)
+        .widgetURL(addTaskURL)
     }
 }
 
@@ -393,5 +407,67 @@ struct TodayTasksWidget: Widget {
         .configurationDisplayName("Today's tasks")
         .description("Your tasks for today with time estimates.")
         .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
+    }
+}
+
+// MARK: - Quick add widget (home screen small + Lock Screen circular): one tap opens the Add task sheet.
+struct QuickAddEntry: TimelineEntry { let date: Date }
+struct QuickAddProvider: TimelineProvider {
+    func placeholder(in context: Context) -> QuickAddEntry { QuickAddEntry(date: Date()) }
+    func getSnapshot(in context: Context, completion: @escaping (QuickAddEntry) -> Void) { completion(QuickAddEntry(date: Date())) }
+    func getTimeline(in context: Context, completion: @escaping (Timeline<QuickAddEntry>) -> Void) {
+        completion(Timeline(entries: [QuickAddEntry(date: Date())], policy: .never)) // static content
+    }
+}
+
+struct QuickAddView: View {
+    @Environment(\.widgetFamily) var family
+    var isAccessory: Bool {
+        if #available(iOSApplicationExtension 16.0, *) { return family == .accessoryCircular }
+        return false
+    }
+    @ViewBuilder var content: some View {
+        if isAccessory {
+            if #available(iOSApplicationExtension 16.0, *) {
+                ZStack {
+                    AccessoryWidgetBackground()
+                    Image(systemName: "plus").font(.system(size: 22, weight: .bold))
+                }.accessibilityLabel("Add a ClingNote task")
+            }
+        } else {
+            VStack(spacing: 10) {
+                ZStack {
+                    Circle().fill(CN.green).frame(width: 58, height: 58)
+                    Image(systemName: "plus").font(.system(size: 28, weight: .bold)).foregroundColor(.white)
+                }
+                Text("Add task").font(.system(size: 14, weight: .semibold)).foregroundColor(CN.text)
+            }.frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+    var body: some View {
+        if #available(iOSApplicationExtension 17.0, *) {
+            if isAccessory { content.containerBackground(for: .widget) { Color.clear } }
+            else { content.containerBackground(for: .widget) { CN.background } }
+        } else if isAccessory {
+            content
+        } else {
+            content.padding(16).background(CN.background)
+        }
+    }
+}
+
+// Registered in ClingNoteWidgets (MatchupWidget.swift).
+struct QuickAddWidget: Widget {
+    private var families: [WidgetFamily] {
+        if #available(iOSApplicationExtension 16.0, *) { return [.systemSmall, .accessoryCircular] }
+        return [.systemSmall]
+    }
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: "ClingNoteQuickAdd", provider: QuickAddProvider()) { _ in
+            QuickAddView().widgetURL(addTaskURL)
+        }
+        .configurationDisplayName("Quick add")
+        .description("One tap to add a task.")
+        .supportedFamilies(families)
     }
 }

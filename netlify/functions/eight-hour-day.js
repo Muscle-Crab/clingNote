@@ -134,9 +134,10 @@ const actions = {
     const dsnap = await dayRef.get();
     const stored = dsnap.exists ? (dsnap.data().tasks || []) : [];
     const rows = countable(stored, ph.dayKey);
-    if (rows.length === 0) throw fail(409, `Add your ${doc.plan.taskCount} task${doc.plan.taskCount === 1 ? '' : 's'} for today first.`, { code: 'no-tasks' });
-    if (rows.length > core.MAX_TASKS_PER_DAY) throw fail(409, `At most ${core.MAX_TASKS_PER_DAY} tasks per day.`, { code: 'too-many' });
-    if (rows.length !== doc.plan.taskCount) throw fail(409, `Your plan is ${doc.plan.taskCount} task${doc.plan.taskCount === 1 ? '' : 's'}; you have ${rows.length}. Match them before the countdown starts.`, { code: 'count-mismatch' });
+    const range = core.taskRange(hours); // min derived from the chosen hours, max = MAX_TASKS_PER_DAY (plan.taskCount is no longer an exact requirement)
+    if (rows.length === 0) throw fail(409, `Add at least ${range.min} task${range.min === 1 ? '' : 's'} for today first.`, { code: 'no-tasks' });
+    if (rows.length > range.max) throw fail(409, `At most ${range.max} tasks per day.`, { code: 'too-many' });
+    if (rows.length < range.min) throw fail(409, `Need at least ${range.min} tasks for ${core.hoursLabel(hours)} hours; you have ${rows.length}.`, { code: 'too-few' });
     const stats = { ...core.defaultStats(), ...(doc.stats || {}) };
 
     let est = rows.map(({ t }) => core.estimateTask({ title: t.title, notes: t.notes, estimateMin: t.estimateMin, priority: t.priority }));

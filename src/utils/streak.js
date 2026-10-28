@@ -19,6 +19,15 @@ export const dayDiff = (from, to) => {
   return Math.round((Date.UTC(y2, m2 - 1, d2) - Date.UTC(y1, m1 - 1, d1)) / 86400000);
 };
 
+// Freeze days: every FREEZE_EVERY counted days in a row earns one freeze (held, max FREEZE_MAX). A held freeze
+// automatically covers a missed day (up to FREEZE_MAX missed days in a row), so the streak holds instead of resetting.
+// Frozen days keep the streak alive but don't grow it or count toward the next freeze.
+export const FREEZE_EVERY = 7;
+export const FREEZE_MAX = 2;
+const FROZEN_KEEP = 30;
+const clampBank = (n) => Math.min(FREEZE_MAX, Math.max(0, Math.floor(Number(n) || 0)));
+export const addDaysLocal = (dateStr, n) => { const [y, m, d] = dateStr.split('-').map(Number); return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10); };
+
 // State: { streak, bestStreak, lastCompletionDate, dayDate, dayDone: [taskKey], prev }
 // prev = snapshot before today's increment, so un-completing below the minimum can undo it.
 const norm = (s) => ({
@@ -30,21 +39,54 @@ const norm = (s) => ({
   prev: s?.prev || null,
   counted: Array.isArray(s?.counted) ? s.counted.slice(-62) : [], // recent counted local dates
   lastDay: s?.lastDay || null, // { date, count } of the previous active day
+  freezeBank: clampBank(s?.freezeBank), // held freeze days (earned 1 per FREEZE_EVERY counted days in a row, max FREEZE_MAX)
+  freezeRun: Math.max(0, Math.floor(Number(s?.freezeRun) || 0)), // counted days in a row toward the next freeze
+  frozenDates: Array.isArray(s?.frozenDates) ? s.frozenDates.slice(-FROZEN_KEEP) : [], // missed days a freeze covered
 });
 export const COUNTED_KEEP = 62;
 const addCounted = (list, d) => [...list.filter((x) => x !== d), d].slice(-COUNTED_KEEP);
 
 export const todayCount = (state, today) => { const s = norm(state); return s.dayDate === today ? s.dayDone.length : 0; };
 
-// Mark the current day as counted (idempotent within a day).
-export const recordCompletion = (state, today, gap = ALLOWED_GAP_DAYS) => {
+// Days missed (not counted) between the last counted day and `today` that would break the streak (0 = not broken).
+export const missedDays = (state, today, gap = ALLOWED_GAP_DAYS) => {
   const s = norm(state);
-  if (s.lastCompletionDate === today) return s;
+  if (!s.lastCompletionDate || !s.streak || s.lastCompletionDate === today) return [];
+  const diff = dayDiff(s.lastCompletionDate, today);
+  if (diff <= gap) return [];
+  const out = []; for (let i = gap; i < diff && out.length < 400; i += 1) out.push(addDaysLocal(s.lastCompletionDate, i));
+  return out;
+};
+
+// Auto-cover missed days with held freezes. -> { state, used, dates }. Covers only when the bank covers every missed day.
+export const applyFreezes = (state, today, gap = ALLOWED_GAP_DAYS) => {
+  const s = norm(state);
+  const miss = missedDays(s, today, gap);
+  if (!miss.length || miss.length > s.freezeBank) return { state: s, used: 0, dates: [] };
+  let counted = s.counted; for (const d of miss) counted = addCounted(counted, d);
+  const frozenDates = [...s.frozenDates.filter((d) => !miss.includes(d)), ...miss].slice(-FROZEN_KEEP);
+  return { state: { ...s, freezeBank: s.freezeBank - miss.length, lastCompletionDate: miss[miss.length - 1], counted, frozenDates }, used: miss.length, dates: miss };
+};
+
+// Advance the freeze counter after a newly counted day (continued = the streak continued rather than restarted).
+const earnFreeze = (s, continued) => {
+  let run = continued ? s.freezeRun + 1 : 1; let bank = s.freezeBank;
+  if (run >= FREEZE_EVERY) { run = 0; bank = clampBank(bank + 1); }
+  return { freezeRun: run, freezeBank: bank };
+};
+
+// Mark the current day as counted (idempotent within a day). Held freezes auto-cover missed days first.
+export const recordCompletion = (state, today, gap = ALLOWED_GAP_DAYS) => {
+  const s0 = norm(state);
+  if (s0.lastCompletionDate === today) return s0;
+  const before = { streak: s0.streak, bestStreak: s0.bestStreak, lastCompletionDate: s0.lastCompletionDate, freezeBank: s0.freezeBank, freezeRun: s0.freezeRun, frozenDates: s0.frozenDates, counted: s0.counted };
+  const s = applyFreezes(s0, today, gap).state;
   const diff = s.lastCompletionDate ? dayDiff(s.lastCompletionDate, today) : Infinity;
-  if (diff < 0) return s; // clock went backwards; ignore
-  const streak = diff <= gap && s.streak > 0 ? capStreak(s.streak + 1) : 1;
-  return { ...s, streak, bestStreak: Math.max(s.bestStreak, streak), lastCompletionDate: today, counted: addCounted(s.counted, today),
-    prev: { streak: s.streak, bestStreak: s.bestStreak, lastCompletionDate: s.lastCompletionDate } };
+  if (diff < 0) return s0; // clock went backwards; ignore
+  const continued = diff <= gap && s.streak > 0;
+  const streak = continued ? capStreak(s.streak + 1) : 1;
+  return { ...s, streak, bestStreak: Math.max(s.bestStreak, streak), lastCompletionDate: today, counted: addCounted(s.counted, today), ...earnFreeze(s, continued),
+    prev: before };
 };
 
 // A task was (un)completed today. Pending tasks are ignored.
@@ -57,7 +99,7 @@ export const applyTaskToggle = (state, today, { key, completed, pending = false,
   const lastDay = s.dayDate && s.dayDate !== today ? { date: s.dayDate, count: s.dayDone.length } : (state?.lastDay || null); // for the morning report
   s = { ...s, dayDate: today, dayDone: [...done], prev: s.dayDate === today ? s.prev : null, lastDay };
   if (done.size >= min && gate) return recordCompletion(s, today, gap);
-  if (s.lastCompletionDate === today && s.prev) return { ...s, ...s.prev, prev: null, counted: s.counted.filter((d) => d !== today) }; // undo today
+  if (s.lastCompletionDate === today && s.prev) return norm({ ...s, ...s.prev, prev: null, counted: (s.prev.counted || s.counted).filter((d) => d !== today) }); // undo today
   return s;
 };
 

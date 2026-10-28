@@ -1,19 +1,21 @@
-// Run: node scripts/test-plan-raise.mjs — adding a task to a full locked-in plan raises the required count by 1 (regression).
-import assert from 'assert'; import fs from 'fs'; import os from 'os'; import path from 'path'; import { fileURLToPath } from 'url';
+// Run: node scripts/test-plan-raise.mjs — locked-in min/max task range (replaces the old "adding raises the plan count by 1"), plus reminders + voice.
+import assert from 'assert'; import fs from 'fs'; import os from 'os'; import path from 'path'; import { fileURLToPath } from 'url'; import { createRequire } from 'module';
 const here = path.dirname(fileURLToPath(import.meta.url)); const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pr-'));
-for (const f of ['planRaise.js', 'reminders.js']) fs.copyFileSync(path.join(here, '../src/utils', f), path.join(dir, f.replace('.js', '.mjs')));
-const P = await import(path.join(dir, 'planRaise.mjs')); const R = await import(path.join(dir, 'reminders.mjs'));
+for (const f of ['taskCap.js', 'reminders.js']) fs.copyFileSync(path.join(here, '../src/utils', f), path.join(dir, f.replace('.js', '.mjs')));
+const C = await import(path.join(dir, 'taskCap.mjs')); const R = await import(path.join(dir, 'reminders.mjs'));
+const core = createRequire(import.meta.url)('../netlify/functions/lib/eightHourCore.js');
 let n = 0; const t = async (name, fn) => { await fn(); n++; console.log('ok -', name); };
-await t('locked plan of 6 with 6 tasks: add one -> task created, requirement 7, no error', async () => {
-  const tasks = Array.from({ length: 6 }, (_, i) => ({ title: `T${i}` })); let saved = null;
-  const r = await P.addWithPlanRaise({ plan: { wakeTime: '07:00', taskCount: 6 }, countNow: tasks.length, addTask: async () => { tasks.push({ title: 'New' }); return true; }, savePlan: async (p) => { saved = p; } });
-  assert.deepStrictEqual(r, { ok: true, plan: { wakeTime: '07:00', taskCount: 7 } }); assert.equal(tasks.length, 7); assert.deepStrictEqual(saved, { wakeTime: '07:00', taskCount: 7 });
+await t('min = ceil(hours / 2): 3h->2, 8h->4, 8.5h->5, 12h->6; max = 50 (MAX_TASKS_PER_DAY)', () => {
+  for (const [h, min] of [[3, 2], [4, 2], [5, 3], [8, 4], [8.5, 5], [10, 5], [12, 6]]) { const r = core.taskRange(h); assert.equal(r.min, min, `${h}h`); assert.equal(r.max, core.MAX_TASKS_PER_DAY); assert.equal(r.max, 50); }
 });
-await t('room left in the plan: no change', () => assert.equal(P.raisedPlan({ wakeTime: '07:00', taskCount: 6 }, 4, 1), null));
-await t('3 adds in a row on a full plan of 5 -> 8', () => { let plan = { wakeTime: '07:00', taskCount: 5 }; for (let c = 5; c < 8; c++) plan = P.raisedPlan(plan, c, 1) || plan; assert.equal(plan.taskCount, 8); });
-await t('failed add never raises', async () => { let saved = 0; const r = await P.addWithPlanRaise({ plan: { wakeTime: '07:00', taskCount: 6 }, countNow: 6, addTask: async () => false, savePlan: async () => { saved++; } }); assert.equal(r.ok, false); assert.equal(saved, 0); });
-await t('raise failure does not block the task', async () => { const r = await P.addWithPlanRaise({ plan: { wakeTime: '07:00', taskCount: 1 }, countNow: 1, addTask: async () => true, savePlan: async () => { throw new Error('offline'); } }); assert.equal(r.ok, true); assert.equal(r.raiseError, 'offline'); });
-await t('capped at 50; no plan -> no raise', () => { assert.equal(P.raisedPlan({ wakeTime: '07:00', taskCount: 50 }, 50).taskCount, 50); assert.equal(P.raisedPlan(null, 9), null); });
+await t('hours are clamped like the day prompt (3..12, default 8)', () => { assert.equal(core.taskRange(1).min, 2); assert.equal(core.taskRange(99).min, 6); assert.equal(core.taskRange(undefined).hours, 8); assert.equal(core.taskRange(undefined).min, 4); });
+await t('adding up to the cap is allowed and never touches the plan count', () => {
+  const r = core.taskRange(8); for (let c = 0; c < r.max; c++) assert.equal(C.capBlockMessage(c, 1, r, '8'), null, `add #${c + 1}`);
+});
+await t('adding past the cap is blocked with a short message', () => {
+  const m = C.capBlockMessage(50, 1, core.taskRange(8), '8'); assert.equal(m, 'Max 50 tasks for 8 hours. Remove one to add another.'); assert.ok(m.length < 70);
+});
+await t('no range -> never blocks', () => assert.equal(C.capBlockMessage(99, 1, null, '8'), null));
 // Standalone reminders (voice "Reminder" items): local list + notification, never a task.
 const mem = () => { const m = {}; return { getItem: (k) => (k in m ? m[k] : null), setItem: (k, v) => { m[k] = String(v); }, m }; };
 await t('reminder saved + notification scheduled (mocked), not a task', async () => {

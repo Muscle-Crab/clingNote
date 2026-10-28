@@ -28,6 +28,12 @@ export const STALE_RING_MS = 12 * 3600 * 1000;
 export const hasRing = (t, nowMs = Date.now()) => {
   const { start, end, paused } = timerTimes(t);
   if (!(t && end && (start ? end > start : t.timerActive))) return false;
+  // Only a timer the user actually started for THIS occurrence: never on a completed task, and a timer that was
+  // stopped after it started (timerStoppedAt) is over: leftover timerStartedAt/timerEndTime on a repeating copy is no ring.
+  if (t.completed === true) return false;
+  const stopped = ms(t.timerStoppedAt);
+  if (!t.timerActive && stopped && stopped >= (paused || start || 0)) return false;
+  if (!paused && !t.timerActive) return false; // inactive and not paused: not running, never a finished red ring
   if (!paused && end <= nowMs && (!t.timerActive || nowMs - end > STALE_RING_MS)) return false;
   return true;
 };

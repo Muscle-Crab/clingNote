@@ -17,6 +17,7 @@ import { computed, onMounted } from 'vue';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '@/firebaseConfig';
 import { resumePush } from '@/composables/useFcm';
+import { syncCalendarNow, initCalendarSync } from '@/composables/useCalendarSync';
 import { useRoute } from 'vue-router';
 import navi from '@/components/nav.vue';
 import SubpageHero from '@/components/ui/SubpageHero.vue';
@@ -70,6 +71,11 @@ onMounted(() => { try { onAuthStateChanged(auth, (u) => { uid.value = u ? u.uid 
 onBeforeUnmount(() => mo && mo.disconnect());
 // Returning users who already turned push on get the foreground handler back (never prompts).
 onMounted(() => { try { onAuthStateChanged(auth, (u) => { if (u) resumePush(); }); } catch (e) { /* ignore */ } });
+// Calendar sync (Settings, off by default; iOS app only): sync on sign-in and whenever the app comes back to the foreground (throttled).
+const calSync = () => { if (uid.value && document.visibilityState === 'visible') syncCalendarNow(uid.value).catch(() => {}); };
+onMounted(() => { try { onAuthStateChanged(auth, (u) => { if (u) { initCalendarSync(u.uid); setTimeout(calSync, 1500); } }); } catch (e) { /* ignore */ }
+  document.addEventListener('visibilitychange', calSync); });
+onBeforeUnmount(() => document.removeEventListener('visibilitychange', calSync));
 </script>
 
 <style>

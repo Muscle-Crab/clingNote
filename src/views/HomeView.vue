@@ -58,11 +58,14 @@
 
         <DayTabs :days="tabDays" :selected-index="selectedDayIndex" :scheduled-counts="scheduledCounts" @select="handleDayTabClick" />
 
+        <WakeAlarmPrompt v-if="isViewingToday" />
         <EightHourCard v-if="lockInToday || eh.lock.value" :tasks="ehTasks" :start-error="ehStartError" @retry="syncAfterAuth" @start="openDayPrompt" />
+        <PlanDaySheet v-if="planOpen" :tasks="dayTasks" :busy="planBusy" :error="planError" @previewed="onPlanPreviewed" @confirm="onPlanConfirm" @close="planOpen = false" />
+        <DayTemplatesSheet v-if="tplOpen" :templates="dayTemplates" :task-count="templateItemCount" :busy="tplBusy" :error="tplError" :note="tplNote" @apply="applyDayTemplate" @save="saveDayTemplate" @remove="removeDayTemplate" @close="tplOpen = false" />
         <DayStartPrompt v-if="dayPromptOpen" :initial-hours="eh.hoursPref.value" :now-ms="eh.nowMs" :tz="eh.plan.value?.tz || ''" :busy="ehBusy" :error="ehStartError" :tasks="todayTasksForTarget" :stats="eh.stats.value" :earned="pointsAccumulated || 0" @confirm="confirmDayStart" @skip="skipLockIn" />
 
         <ProgressBar :percentage="calculateCompletionPercentage()" :milestones="milestones" :done="completedTaskCount || 0" :total="dayTasks.length"
-                     :streak="streak" :streak-status="streakStatus" :streak-progress="streakProgress" :streak-min="DAILY_STREAK_MIN" :points="pointsAccumulated || 0" :target="isViewingToday ? dayRequiredPts : 0" />
+                     :streak="streak" :streak-status="streakStatus" :streak-progress="streakProgress" :streak-min="DAILY_STREAK_MIN" :freezes="streakFreezes" :points="pointsAccumulated || 0" :target="isViewingToday ? dayRequiredPts : 0" />
 
       </section>
       <ShutdownPrompt class="home-notice" :suggest="false" :open="shutdownOpen" :done="shutdownDone" :open-tasks="shutdownOpenTasks"
@@ -120,6 +123,7 @@
       <AssistantSheet v-if="askOpen" :executor="assistantExecutor" :listen-on-open="assistantListen" @close="askOpen = false" />
       <VoiceModal v-if="voiceOpen" :transcript="liveTranscript" :supported="voiceSupported" :capability="voiceCap" :error="voiceError" :hint="voiceHint" :added="voiceAdded" :items="voiceItems" :busy="voiceBusy" :source="voiceSource" @undo="undoVoiceTask" @cancel="cancelVoiceInput" @finish="finishVoiceInput" @confirm="confirmVoiceItems" @relisten="relistenVoice" />
       <div v-if="repeatToast" :key="repeatToast.id" class="repeat-toast" :class="{ 'repeat-toast--err': repeatToast.error }" :role="repeatToast.error ? 'alert' : 'status'" data-test="repeat-toast">🔁 {{ repeatToast.text }} <button v-if="repeatToast.undo" type="button" data-test="repeat-undo" @click="() => { const u = repeatToast.undo; repeatToast = null; u(); }">Undo</button></div>
+      <div v-if="noteToast" :key="'n' + noteToast.id" class="repeat-toast" :class="{ 'repeat-toast--err': noteToast.error }" :role="noteToast.error ? 'alert' : 'status'" data-test="note-toast">{{ noteToast.text }}</div>
       <div v-if="!voiceOpen && voiceAdded.some((e) => e.undoUntil > nowTick)" class="voice-toasts" role="status">
         <div v-for="e in voiceAdded.filter((x) => x.undoUntil > nowTick)" :key="e.id" class="voice-toast">🎙 Added “{{ e.title }}” <button type="button" @click="undoVoiceTask(e)">Undo</button></div>
       </div>
@@ -128,12 +132,14 @@
       <!-- ─── Task List ─── -->
       <section v-if="canViewSelectedDayTasks"
                class="task-section">
-        <EmptyState v-if="dayTasks.length === 0" :show-add="true" @add="onAddClick" />
+        <EmptyState v-if="dayTasks.length === 0" :show-add="true" :show-templates="isViewingToday && !!userId" @add="onAddClick" @templates="openTemplates" />
 
 
         <div v-else class="task-list-wrap">
           <TaskListHeader :label="isViewingToday ? 'Today' : FULL_DAY_NAMES[selectedDayIndex]" :is-today="isViewingToday" :completed="completedTaskCount" :total="dayTasks.length"
-                          :sound-enabled="soundEnabled" :boss-voice-on="!voMuted" :assistant-live="askOpen" :show-completed="showCompleted" v-model:prefs="viewPrefs" @toggle-sound="toggleSound" @toggle-boss-voice="setVoMuted(!voMuted)" @open-assistant="openAssistant" @toggle-completed="showCompleted = !showCompleted" />
+                          :sound-enabled="soundEnabled" :boss-voice-on="!voMuted" :assistant-live="askOpen" :show-completed="showCompleted" v-model:prefs="viewPrefs" @toggle-sound="toggleSound" @toggle-boss-voice="setVoMuted(!voMuted)" @open-assistant="openAssistant" @toggle-completed="showCompleted = !showCompleted"
+                          :day-tools="isViewingToday && !!userId" @plan-day="openPlanDay" @templates="openTemplates" />
+          <RoutineStrip v-if="isViewingToday && routineItems.length" :items="routineItems" :week="routineWeekStats" @toggle="toggleRoutineTask" />
 
 
 
@@ -147,7 +153,7 @@
             <button type="button" class="rollover-banner__x" aria-label="Dismiss" data-test="rollover-dismiss" @click="dismissRollover">×</button>
           </div>
           <div ref="taskListEl" class="tasks-list space-y-2" :class="{ 'reorder-off': !reorderable }" @pointerdown="onListPointerDown">
-            <template v-for="task in displayTasks" :key="taskKey(task)">
+            <template v-for="task in displayTasks" :key="rkey(task)">
               <TaskCard
                   v-if="!task.completed || !isViewingToday" :data-reorder-key="taskKey(task)"
                   :task="task" :up-next="isViewingToday && !task.completed && taskKey(task) === upNextKey" :drag-disabled="!reorderable" :index="realIndex(task)" :is-today-tab="isViewingToday" :expanded="expandedKey === taskKey(task)"
@@ -159,10 +165,14 @@
                   @toggle-label="toggleLabelHighlight" @open-reminder="openModal('calendar', realIndex(task), task.title)" @transfer="openTransferModal(realIndex(task))"
                   @video="openYouTubeModal(realIndex(task))" @upload="handleUpload($event, realIndex(task))" @timer="openTaskTimerModal(realIndex(task))"
                   @wont-do="openWontDoModal(realIndex(task))" @delete="deleteTask(realIndex(task))" @schedule="scheduleExistingTask(realIndex(task), task, $event)" @set-repeat="setTaskRepeat(task, $event)" :repeat-info="repeatStateOf(task)" @toggle-repeat="toggleTaskRepeat(task)"
+                  :can-skip="isViewingToday && !selectedDayLocked && canSkipToday(task, scheduledList)" @skip-today="skipTaskToday(task)"
               />
             </template>
           </div>
 
+          <button v-if="coverage.hidden > 0" type="button" class="more-hidden" data-test="more-hidden" :aria-label="`${coverage.label}${coverage.why ? ` (${coverage.why})` : ''}`" @click="revealHidden">
+            {{ coverage.label }}<span v-if="coverage.why" class="more-hidden__why"> · {{ coverage.why }}</span>
+          </button>
           <div v-if="isViewingToday && completedTaskCount > 0" class="done-section">
             <button type="button" class="done-toggle" :aria-expanded="showCompleted ? 'true' : 'false'" @click="showCompleted = !showCompleted">
               <i class="fas" :class="showCompleted ? 'fa-chevron-down' : 'fa-chevron-right'" aria-hidden="true"></i>
@@ -170,7 +180,7 @@
               <i class="fas done-eye" :class="showCompleted ? 'fa-eye' : 'fa-eye-slash'" aria-hidden="true"></i>
             </button>
             <div v-if="showCompleted" class="tasks-list tasks-list--done">
-              <TaskCard v-for="task in displayTasks.filter((t) => t.completed)" :key="taskKey(task)"
+              <TaskCard v-for="task in displayTasks.filter((t) => t.completed)" :key="rkey(task)"
                   :task="task" :drag-disabled="true" :index="realIndex(task)" :is-today-tab="true" :expanded="expandedKey === taskKey(task)"
                   :active-labels="activeLabels" :now="nowTick"
                   @toggle-expand="toggleExpanded(task)" @toggle-complete="toggleTaskCompletion(realIndex(task))" @open-detail="openTaskDetailModal(task)"
@@ -207,6 +217,13 @@
 <script setup>
 import { addSubtask, subtasksOf } from '@/utils/subtasks';
 import { parseAsk } from '@/utils/assistantFab';
+import PlanDaySheet from '@/components/home/PlanDaySheet.vue';
+import DayTemplatesSheet from '@/components/home/DayTemplatesSheet.vue';
+import { useDayTemplates } from '@/composables/useDayTemplates';
+import { planChanges } from '@/utils/dayPlan';
+import { makeTemplate, applyTemplate, applySummary } from '@/utils/dayTemplates';
+import { listCoverage, uniqueRenderKeys } from '@/utils/listCoverage';
+import { mergeIntents, intentCreateArgs, intentOutcome, bumpTries as bumpIntentTries, outOfTries as intentOutOfTries, readBuffer as readIntentBuffer, writeBuffer as writeIntentBuffer } from '@/utils/intentQueue';
 import { weekStats, searchTasks, suggestNext, snoozeTo } from '@/utils/assistantExtras';
 import { ref, onMounted, onBeforeUnmount, computed, watch, reactive, nextTick } from 'vue';
 import { useSounds } from '@/composables/useSounds';
@@ -231,7 +248,8 @@ import BackgroundPanel from '@/components/background/BackgroundPanel.vue';
 import { useBackground } from '@/composables/useBackground';
 import { buildRecap, reportDue, prevDay } from '@/utils/dailyReport';
 import { monthKey, prevMonthKey } from '@/utils/ranking';
-import { applyTaskToggle, evaluateStreak, localDateStr, dayDiff, ALLOWED_GAP_DAYS, DAILY_STREAK_MIN, capStreak, lostReason } from '@/utils/streak';
+import { applyTaskToggle, evaluateStreak, localDateStr, dayDiff, ALLOWED_GAP_DAYS, DAILY_STREAK_MIN, capStreak, lostReason, applyFreezes } from '@/utils/streak';
+import { pickTimerIntent } from '@/utils/siriIntents';
 import { askAi } from '@/composables/useAi';
 import { ensureAiConsent, hasAiConsent } from '@/composables/useAiConsent';
 import { useRouter as _useRouter } from 'vue-router';
@@ -293,6 +311,8 @@ import ScheduledList from '@/components/home/ScheduledList.vue';
 import EmptyState from '@/components/home/EmptyState.vue';
 import StartDayPrompt from '@/components/home/StartDayPrompt.vue';
 import TaskListHeader from '@/components/home/TaskListHeader.vue';
+import RoutineStrip from '@/components/home/RoutineStrip.vue';
+import { markRoutineDone, skipRoutineToday, canSkipToday, routineToday, routineWeek } from '@/utils/routine';
 import FabButtons from '@/components/home/FabButtons.vue';
 import IdleState from '@/components/home/IdleState.vue';
 import WontDoList from '@/components/home/WontDoList.vue';
@@ -307,11 +327,12 @@ import DayTabs from '@/components/home/DayTabs.vue';
 import ImagePreview from '@/components/home/ImagePreview.vue';
 import ProgressBar from '@/components/home/ProgressBar.vue';
 import EightHourCard from '@/components/home/EightHourCard.vue';
+import WakeAlarmPrompt from '@/components/home/WakeAlarmPrompt.vue';
 import { lockIn, loadLockIn, skipLockInToday } from '@/utils/lockIn';
 import { homeDay } from '@/utils/homeDay';
 import DayStartPrompt from '@/components/eighthour/DayStartPrompt.vue';
 import { useEightHour, syncAfterAuth, setDayLengthHours, loadDayLengthHours, promptSeenFor, markPromptSeen } from '@/composables/useEightHour';
-import { countableIndexes } from '@/utils/eightHour';
+import { countableIndexes, taskRange, hoursLabel } from '@/utils/eightHour';
 import { estimateFor, chipValues } from '@/utils/taskEstimate';
 import { patchTouchesLocked } from '@/utils/eightHourLock';
 import { isDayLocked, isLockError, assertTasksChangeAllowed, lockedMessage, isShutdown, shutMessage } from '@/utils/eightHourLock';
@@ -340,7 +361,7 @@ const agentAdd = ref(false); // true while the assistant adds tasks: over-limit 
 import { ugcHidden, voiceInputBlocked, isNativeIOS } from '@/utils/platform';
 import { splitSpokenTasks, voiceCapability, UNDO_MS } from '@/utils/voiceSplit';
 import { interpretSpeech } from '@/utils/voiceInterpret';
-import { raisedPlan } from '@/utils/planRaise';
+import { capBlockMessage } from '@/utils/taskCap';
 import { saveReminder } from '@/utils/reminders';
 import { startNativeSpeech, nativeSpeechAvailable } from '@/composables/useNativeSpeech';
 import WontDoModal from '@/components/home/WontDoModal.vue';
@@ -352,7 +373,7 @@ import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'fire
 import data from '@/data.json';
 import { useSmoothReorder } from "@/composables/useSmoothReorder";
 import {db} from '@/firebaseConfig'; // Assuming you have imported the Firebase setup file and exported the db instance
-import { doc, setDoc, serverTimestamp, getDoc, updateDoc, getFirestore, runTransaction} from 'firebase/firestore';
+import { doc, setDoc, serverTimestamp, getDoc, updateDoc, getFirestore, runTransaction, onSnapshot } from 'firebase/firestore';
 const modalOpen = ref(false);
 import { deleteObject } from "firebase/storage";
 import { widgetTaskId } from '@/utils/widgetSnapshot';
@@ -403,11 +424,13 @@ const blockIfLocked = (dayIdx = selectedDayIndex.value) => {
 // 8-hour hard stop: once today's started day has ended, every task action is refused until the next wake time (data layer also guards).
 const blockIfShut = () => { if (!isShutdown()) return false; alert(shutMessage()); return true; };
 const lockMessage = (e) => { if (isLockError(e)) { alert(e.message); return true; } return false; };
-// the planned task count (set before the countdown) limits what today's list may hold until the countdown starts
-const planFull = () => {
+// Locked-in day (planned, countdown not started): today's list may grow past the minimum up to the overload cap for the chosen hours.
+// Returns the block message when adding one more would pass the cap, otherwise null. Adding never changes plan.taskCount.
+const planOverCap = () => {
   const plan = eh.plan.value; const ph = eh.phase.value;
-  if (!plan || (ph !== 'before' && ph !== 'ready')) return false;
-  return countableIndexes(selectedDayRoutine.value || [], eh.phaseInfo.value.dayKey || '').length >= plan.taskCount;
+  if (!plan || (ph !== 'before' && ph !== 'ready')) return null;
+  const countNow = countableIndexes(selectedDayRoutine.value || [], eh.phaseInfo.value.dayKey || '').length;
+  return capBlockMessage(countNow, 1, taskRange(eh.dayHours.value), hoursLabel(eh.dayHours.value));
 };
 
 const saveSelectedDayTasks = async () => {
@@ -857,6 +880,55 @@ const dayTasks = computed(() => selectedDayRoutine.value.filter((t) => !isHidden
 const hasHiddenCopies = computed(() => dayTasks.value.length !== selectedDayRoutine.value.length);
 const viewItems = computed(() => viewTasks(selectedDayRoutine.value, effectivePrefs.value).filter((i) => !isHiddenOnDate(i.task, viewTabDate.value)));
 const displayTasks = computed(() => viewItems.value.map((i) => i.task));
+// ---- Plan my day (user picks start + hours; preview; saved only on Confirm) ----
+const planOpen = ref(false); const planBusy = ref(false); const planError = ref('');
+const openPlanDay = async () => { if (!isViewingToday.value) { selectedDayIndex.value = todayIdx.value; await fetchSelectedDayRoutine(); } planError.value = ''; planOpen.value = true; };
+const onPlanPreviewed = (p) => { if (voMuted.value || document.hidden) return;
+  speakLive(p.unplaced.length ? `Here's your plan. ${p.unplaced.length} task${p.unplaced.length === 1 ? " doesn't" : "s don't"} fit. Add hours or confirm.` : `Here's your plan, ${p.start} to ${p.end}. Confirm and I'll set the times.`); };
+const onPlanConfirm = async (p) => {
+  planBusy.value = true; planError.value = ''; let saved = 0; let failed = 0;
+  for (const c of planChanges(p)) {
+    try { const live = (selectedDayRoutine.value || []).find((t) => taskKey(t) === taskKey(c.task)) || c.task; await editTask(agentIdx(live), live, { startTime: c.startTime }); saved++; } catch (e) { console.error('plan day', e && e.message); failed++; }
+  }
+  planBusy.value = false;
+  if (failed) { planError.value = `${failed} start time${failed === 1 ? '' : 's'} could not be saved. ${saved ? `${saved} saved.` : ''}`; return; }
+  planOpen.value = false; showNoteToast(saved ? `Day planned: ${saved} start time${saved === 1 ? '' : 's'} set` : 'Day planned: times already matched');
+};
+// ---- Day templates ----
+// What "Save template" would actually store (dupes/won't-do dropped), so the header count matches the saved count.
+const templateItemCount = computed(() => { const r = makeTemplate('x', dayTasks.value); return r.ok ? r.template.items.length : 0; });
+const { templates: dayTemplates, load: loadDayTemplates, save: storeDayTemplate, remove: dropDayTemplate } = useDayTemplates();
+const tplOpen = ref(false); const tplBusy = ref(false); const tplError = ref(''); const tplNote = ref('');
+const openTemplates = async () => { if (!isViewingToday.value) { selectedDayIndex.value = todayIdx.value; await fetchSelectedDayRoutine(); } tplError.value = ''; tplNote.value = ''; tplOpen.value = true; loadDayTemplates(userId.value); };
+const saveDayTemplate = async ({ name, withTimes }) => {
+  const r = makeTemplate(name, dayTasks.value, { withTimes }); if (!r.ok) { tplError.value = r.error; return; }
+  tplBusy.value = true; tplError.value = '';
+  try { await storeDayTemplate(userId.value, r.template); tplNote.value = `Saved “${r.template.name}” (${r.template.items.length} tasks).`; } catch (e) { tplError.value = 'Saved on this phone only (could not sync).'; console.warn('template save', e && e.code); }
+  tplBusy.value = false;
+};
+const removeDayTemplate = async (t) => { try { await dropDayTemplate(userId.value, t.id); tplNote.value = `Deleted “${t.name}”.`; } catch (e) { tplError.value = 'Could not sync the delete.'; } };
+const applyDayTemplate = async (tpl) => {
+  if (!isViewingToday.value) { selectedDayIndex.value = todayIdx.value; await fetchSelectedDayRoutine(); }
+  tplBusy.value = true; tplError.value = ''; tplNote.value = '';
+  const { toAdd, skipped } = applyTemplate(tpl, selectedDayRoutine.value); let added = 0; let blocked = 0; let failed = 0;
+  for (let i = 0; i < toAdd.length; i++) {
+    const it = toAdd[i];
+    try { const snap = await assistantExecutor.snapshot(); const v = validateCall('create_tasks', { items: [it] }, snap);
+      if (!v.ok) { if (v.limit) { blocked = toAdd.length - i; break; } failed++; continue; }
+      const r = await assistantExecutor.run('create_tasks', v.args);
+      if (r.ok) added++; else if (/limit/i.test(String(r.failed?.[0]?.error || ''))) { blocked = toAdd.length - i; break; } else failed++;
+    } catch (e) { console.error('apply template', e && e.message); failed++; }
+  }
+  tplBusy.value = false;
+  const msg = applySummary({ added, skipped: skipped.length, blocked }) + (failed ? ` · ${failed} failed` : '');
+  if (failed || blocked) tplError.value = msg; else { tplOpen.value = false; showNoteToast(msg); }
+};
+// Unique v-for keys: two tasks with the same createdAt|title used to share a key, and Vue's keyed patch could drop a card.
+const renderKeyMap = computed(() => { const keys = uniqueRenderKeys(displayTasks.value, taskKey); return new Map(displayTasks.value.map((t, i) => [t, keys[i]])); });
+const rkey = (t) => renderKeyMap.value.get(t) || taskKey(t);
+// A saved status filter can hide tasks with no other trace on screen: say how many and clear the filter on tap.
+const coverage = computed(() => listCoverage({ dayTasks: dayTasks.value, displayTasks: displayTasks.value, isToday: isViewingToday.value, showCompleted: showCompleted.value }));
+const revealHidden = () => { if (normalizePrefs(viewPrefs.value).filter !== 'all') viewPrefs.value = { ...normalizePrefs(viewPrefs.value), filter: 'all' }; };
 const visibleTaskCount = computed(() => visibleCount(viewItems.value, showCompleted.value));
 const reorderable = computed(() => canReorder(effectivePrefs.value) && !hasHiddenCopies.value); // locked day too: a drag only writes sortOrder (slot positions never move)
 const realIndex = (task) => (selectedDayRoutine.value || []).indexOf(task);
@@ -874,9 +946,13 @@ const onShortcutKey = (e) => {
 onMounted(() => document.addEventListener('keydown', onShortcutKey));
 // Global "Create task" FAB (App.vue): same flow as the old Add Task bar, incl. free/Pro limits.
 const onCreateTaskEvt = () => onAddClick();
-onMounted(() => { window.addEventListener('cn:create-task', onCreateTaskEvt);
-  { const ask = parseAsk(_proRouter.currentRoute.value.query); if (ask.open) { const q = { ..._proRouter.currentRoute.value.query }; delete q.ask; _proRouter.replace({ query: q }); setTimeout(() => openAssistant(ask.listen), 400); } }
-  if (_proRouter.currentRoute.value.query.new === '1') { const q = { ..._proRouter.currentRoute.value.query }; delete q.new; _proRouter.replace({ query: q }); setTimeout(onAddClick, 600); } });
+// ?ask / ?new=1 (global FAB, widget "+" / Quick add widget deep links): handled on mount AND while Home is already open.
+const handleHomeQuery = (delay = 0) => {
+  const cur = _proRouter.currentRoute.value; if (cur.path !== '/home') return;
+  { const ask = parseAsk(cur.query); if (ask.open) { const q = { ...cur.query }; delete q.ask; _proRouter.replace({ query: q }); setTimeout(() => openAssistant(ask.listen), 400 + delay); return; } }
+  if (cur.query.new === '1') { const q = { ...cur.query }; delete q.new; _proRouter.replace({ query: q }); setTimeout(onAddClick, 600 + delay); } };
+watch(() => [_proRouter.currentRoute.value.query.new, _proRouter.currentRoute.value.query.ask], ([n, a]) => { if (n === '1' || a) handleHomeQuery(); });
+onMounted(() => { window.addEventListener('cn:create-task', onCreateTaskEvt); handleHomeQuery(); });
 onBeforeUnmount(() => window.removeEventListener('cn:create-task', onCreateTaskEvt));
 // Robot coach report buttons (components/voiceover/BossBriefing.vue) -> real Home actions on today's list.
 const onSergeantAction = async (e) => {
@@ -1200,6 +1276,9 @@ const toggleTaskCompletion = async (index) => {
     console.error("Error updating task completion:", error);
   }
 
+  if (task.templateId && userId.value) { // routine completion log (doneOn) + repeat-after-completion next date
+    try { scheduledList.value = await mutateScheduled(userId.value, (l) => markRoutineDone(l, task, getTodayId(), task.completed)); } catch (e) { console.warn('routine log', e); }
+  }
   if (lockedToggle) eh.reportProgress(); // server recounts earned points from the day doc (server clock)
   checkAllTasksCompleted();
   await saveDailyPerformance();
@@ -1544,7 +1623,7 @@ onBeforeUnmount(() => { if (disciplineTimer) clearInterval(disciplineTimer); });
 const applyStreakState = (st) => {
   const ev = evaluateStreak(st, localDateStr(), streakGap());
   streak.value = ev.streak; bestStreak.value = ev.bestStreak; lastCompletionDate.value = ev.lastCompletionDate;
-  streakStatus.value = ev.status; streakProgress.value = ev.progress;
+  streakStatus.value = ev.status; streakProgress.value = ev.progress; streakFreezes.value = ev.freezeBank || 0;
   try { localStorage.setItem(`streakCache_${userId.value}`, JSON.stringify(st)); } catch (e) { /* cache only */ }
 };
 // Called when a task on today's tab is (un)completed; counts distinct non-pending tasks toward DAILY_STREAK_MIN.
@@ -1659,6 +1738,24 @@ const afterMaterialize = async () => {
   if (added && selectedDayIndex.value === new Date().getDay()) await fetchSelectedDayRoutine();
 };
 watch(selectedDayIndex, () => { if (userId.value && dueOf(scheduledList.value, getTodayId()).length) afterMaterialize(); });
+// Live cross-device sync: another device's change to the selected day shows here without a reload.
+// Only server-confirmed snapshots are applied (never our own pending writes); stale-week resets stay with fetchSelectedDayRoutine.
+let dayUnsub = null;
+const watchSelectedDay = () => {
+  if (dayUnsub) { dayUnsub(); dayUnsub = null; }
+  if (!userId.value || selectedDayIndex.value === -1) return;
+  const idx = selectedDayIndex.value; const dayName = days[idx]?.day; if (!dayName) return;
+  dayUnsub = onSnapshot(doc(db, 'weeklyRoutines', `${userId.value}_${dayName}`), (snap) => {
+    if (snap.metadata.hasPendingWrites || snap.metadata.fromCache || idx !== selectedDayIndex.value || !snap.exists()) return;
+    const tasks = snap.data().tasks || [];
+    if (tasks.some((t) => isStaleCompletion(t, idx))) return;
+    if (JSON.stringify(tasks) !== JSON.stringify(selectedDayRoutine.value || [])) selectedDayRoutine.value = tasks;
+  }, () => {});
+};
+watch([userId, selectedDayIndex], watchSelectedDay);
+onMounted(watchSelectedDay);
+onBeforeUnmount(() => { if (dayUnsub) dayUnsub(); dayUnsub = null; });
+
 const onVisible = () => { if (document.visibilityState === 'visible' && userId.value && getTodayId() !== todayStr.value) { afterMaterialize(); checkStreakOnCompletion(); } };
 onMounted(() => document.addEventListener('visibilitychange', onVisible));
 onBeforeUnmount(() => document.removeEventListener('visibilitychange', onVisible));
@@ -1676,7 +1773,7 @@ const submitScheduledTask = async () => {
   };
   Object.assign(fields, estimateFor(fields)); // scheduled / recurring copies carry the estimate too
   const entry = sc.repeat !== 'never'
-    ? buildRecurringTemplate({ ...fields, scheduledTime: sc.time }, sc.date, { freq: sc.repeat, days: sc.days, dayOfMonth: sc.dayOfMonth, until: sc.until })
+    ? buildRecurringTemplate({ ...fields, scheduledTime: sc.time, remindAt: sc.remindAt || '' }, sc.date, { freq: sc.repeat, days: sc.days, dayOfMonth: sc.dayOfMonth, until: sc.until, everyDays: sc.everyDays })
     : buildScheduledEntry(fields, sc.date, sc.time);
   if (!entry) { error.value = 'Could not schedule this task.'; return false; }
   try {
@@ -1737,10 +1834,36 @@ const saveTaskSchedule = async ({ sched, scope }) => {
 // Optimistic: the icon flips at once (repeatPending), then the write; failure rolls the icon back and shows a toast.
 const repeatPending = reactive({});
 const repeatToast = ref(null); let repeatToastTimer = null;
+const noteToast = ref(null); let noteToastTimer = null; // generic one-line toast (Siri adds, templates, day plan)
+const showNoteToast = (text, { error = false } = {}) => { clearTimeout(noteToastTimer); noteToast.value = { text, error, id: Date.now() }; noteToastTimer = setTimeout(() => { noteToast.value = null; }, error ? 6000 : 4000); };
 const showRepeatToast = (text, { undo = null, error = false } = {}) => {
   clearTimeout(repeatToastTimer);
   repeatToast.value = { text, undo, error, id: Date.now() };
   repeatToastTimer = setTimeout(() => { repeatToast.value = null; }, error ? 6000 : 5000);
+};
+// ── Routine: compact checklist row + weekly dots (utils/routine.js); Skip today (⋯ menu / edit chips) ──
+const routineItems = computed(() => routineToday(scheduledList.value, isViewingToday.value ? selectedDayRoutine.value : [], todayStr.value));
+const routineWeekStats = computed(() => routineWeek(scheduledList.value, todayStr.value));
+const toggleRoutineTask = (task) => { const i = realIndex(task); if (i >= 0) toggleTaskCompletion(i); };
+const skipTaskToday = async (task) => {
+  if (!userId.value || !task || blockIfLocked() || blockIfShut()) return;
+  const today = getTodayId(); const dayName = days[selectedDayIndex.value].day;
+  const before = scheduledList.value.filter((e) => e.id === task.templateId || e.templateId === task.templateId).map((e) => ({ ...e }));
+  try {
+    scheduledList.value = await mutateScheduled(userId.value, (l) => skipRoutineToday(l, task, today));
+    await mutateDay(dayName, (tasks) => tasks.filter((t) => !sameTask(t, task)));
+    selectedDayRoutine.value = selectedDayRoutine.value.filter((t) => !sameTask(t, task));
+    cancelTaskNotifications(task); resyncNotifications();
+  } catch (e) { console.error('skip today', e); showRepeatToast('Could not skip — try again.', { error: true }); return; }
+  showRepeatToast('Skipped today · series continues', { undo: async () => {
+    try {
+      const ids = new Set(before.map((e) => e.id));
+      scheduledList.value = await mutateScheduled(userId.value, (l) => [...l.filter((e) => !ids.has(e.id) && e.templateId !== task.templateId), ...before]);
+      await mutateDay(dayName, (tasks) => (tasks.some((t) => sameTask(t, task)) ? tasks : [...tasks, task]));
+      if (!selectedDayRoutine.value.some((t) => sameTask(t, task))) selectedDayRoutine.value = [...selectedDayRoutine.value, task];
+      resyncNotifications();
+    } catch (e) { console.error('undo skip', e); showRepeatToast('Could not undo.', { error: true }); }
+  } });
 };
 const repeatStateOf = (t) => {
   const st = repeatState(t, scheduledList.value, todayStr.value);
@@ -1887,11 +2010,11 @@ const addNewTask = async () => {
 
   // 8-hour lock: nothing can be added to the locked day (including repeating copies); before the countdown the plan count is the cap
   // (adds ARE allowed during the locked window; they are appended so the locked slots never move. Deletes stay blocked.)
-  // Locked-in plan full (before the countdown): adding just works and raises the required count by one (no prompt, no block).
-  // Previously this refused the add with "Raise the task count in the 8-hour card first", the reported bug.
-  let planBump = null;
-  if (selectedDays.some((d) => d.day === days[selectedDayIndex.value].day) && isToday(selectedDayIndex.value) && !isDayLocked(days[selectedDayIndex.value].day) && planFull()) {
-    planBump = raisedPlan(eh.plan.value, countableIndexes(selectedDayRoutine.value || [], eh.phaseInfo.value.dayKey || '').length, 1);
+  // Locked-in plan (before the countdown): adding past the minimum just works, up to the overload cap for the chosen hours.
+  // Past the cap the add is refused with a short message. The plan count is NOT bumped (Start needs min <= count <= max, not an exact match).
+  if (selectedDays.some((d) => d.day === days[selectedDayIndex.value].day) && isToday(selectedDayIndex.value) && !isDayLocked(days[selectedDayIndex.value].day)) {
+    const capMsg = planOverCap();
+    if (capMsg) { error.value = capMsg; return false; }
   }
 
   const labels =
@@ -1970,7 +2093,6 @@ const addNewTask = async () => {
     fetchUserName(userId.value).then((n) => n && sendNotificationToPlayer(n, 'created')).catch(() => {});
     return true;
   })());
-  if (planBump) lastAddPersist.then((ok) => ok && eh.savePlan(planBump)).catch((e) => console.warn('plan raise failed', e && e.message)); // required count +1 once the task is saved
   return true;
 };
 let lastAddPersist = Promise.resolve(true);
@@ -2011,7 +2133,7 @@ const setTaskRepeat = async (task, dayNames, { quiet = false, lastRepeat = null 
         else if (has) next = l.map((t) => (taskKey(t) === key ? { ...t, ...patch } : t));
         else {
           const af = i !== selectedDayIndex.value ? activeFromForDay(i) : '';
-          const { timerActive, timerEnd, timerStart, boss, ...base } = task;
+          const { timerActive, timerEnd, timerStart, timerStartedAt, timerEndTime, timerStoppedAt, timerDuration, timerRemaining, timerPausedAt, timerLockedMin, boss, ...base } = task; // a copy never inherits a running/stopped timer
           next = [...l, { ...base, ...patch, completed: false, completedAt: null, status: !base.status || base.status === 'done' ? 'todo' : base.status, activeFrom: af || '' }];
         }
         // legacy tasks carry no `status` (and UI copies can hold undefined fields): Firestore rejects undefined values client-side
@@ -2246,6 +2368,7 @@ const lastCompletionDate = ref(null);
 const bestStreak = ref(0);
 const streakProgress = ref(0); // distinct non-pending tasks completed today
 const streakStatus = ref('none'); // none | done | at-risk | broken
+const streakFreezes = ref(0); // held freeze days (auto-cover a missed day)
 const userSettingsStreakGap = ref(ALLOWED_GAP_DAYS); // allowed days between counted days (1 = no skips)
 const unlockedBadges = ref([]);
 const motivationalMessage = ref('');
@@ -2294,10 +2417,20 @@ const checkStreakOnCompletion = async () => {
     const streakDocRef = doc(db, 'streaks', userId.value);
     const snap = await getDoc(streakDocRef);
     if (!snap.exists()) { streakStatus.value = 'none'; return; }
-    const data = snap.data();
+    let data = snap.data();
     unlockedBadges.value = data.unlockedBadges || [];
     let ev = evaluateStreak(data, localDateStr(), streakGap());
-    // Earned streak freeze (7-day milestone) covers exactly one missed day.
+    // Held freeze days (1 per 7 counted days in a row, max 2) auto-cover missed days so the streak holds.
+    if (ev.status === 'broken' && data.streak) {
+      const fz = applyFreezes(data, localDateStr(), streakGap());
+      if (fz.used) {
+        const { lastCompletionDate: lc, counted, freezeBank, frozenDates } = fz.state;
+        await setDoc(streakDocRef, { lastCompletionDate: lc, counted, freezeBank, frozenDates, updatedAt: serverTimestamp() }, { merge: true });
+        data = { ...data, lastCompletionDate: lc, counted, freezeBank, frozenDates };
+        ev = evaluateStreak(data, localDateStr(), streakGap());
+      }
+    }
+    // Legacy: earned streak freeze (7-day milestone) covers exactly one missed day.
     if (ev.status === 'broken' && data.streak && data.lastCompletionDate && dayDiff(data.lastCompletionDate, localDateStr()) === streakGap() + 1) {
       const y = new Date(); y.setDate(y.getDate() - 1);
       if (await tryFreeze(userId.value, data, [localDateStr(y)], rewardsFor(data.bestStreak || 0).freezes)) {
@@ -3340,11 +3473,14 @@ const confirmDayStart = async (hours) => {
   try {
     await setDayLengthHours(hours); // remembered as next morning's preselection (users/{uid}.dayLengthHours + localStorage)
     await lastAddPersist; // the server counts what is stored: wait for any pending add
+    // Compat with a server that still requires plan.taskCount === list size: sync it to what is stored first (allowed in the ready phase).
+    { const plan = eh.plan.value; const n = countableIndexes(selectedDayRoutine.value || [], eh.phaseInfo.value.dayKey || '').length; const r = taskRange(hours);
+      if (plan && n >= 1 && n <= r.max && plan.taskCount !== n) await eh.savePlan({ wakeTime: plan.wakeTime, taskCount: n }).catch((e) => console.warn('plan sync:', e && e.message)); }
     await eh.startNow(hours);
     dayPromptOpen.value = false;
     await ensureLegacyDayStarted().catch((e) => console.warn('day session:', e));
     await fetchSelectedDayRoutine();
-  } catch (e) { ehStartError.value = e.code === 'no-tasks' ? 'Add at least one task first, then confirm.' : (e.message || 'Could not start the countdown'); }
+  } catch (e) { { const r = taskRange(hours); ehStartError.value = (e.code === 'no-tasks' || e.code === 'too-few') ? `Add at least ${r.min} task${r.min === 1 ? '' : 's'} for ${hoursLabel(r.hours)} hours, then confirm.` : e.code === 'too-many' ? `At most ${r.max} tasks for ${hoursLabel(r.hours)} hours. Remove some, then confirm.` : (e.message || 'Could not start the countdown'); } }
   finally { ehStarting = false; ehBusy.value = false; }
 };
 
@@ -3391,12 +3527,53 @@ const syncAppLock = async () => {
 };
 watch(() => [eh.running.value, pointsAccumulated.value, dayRequiredPts.value, streakProgress.value, lockUnlockedDay.value], () => { syncAppLock(); });
 // ---- Siri / Shortcuts / Action Button "Add task" queue ----
-const drainIntents = async () => { if (!nativeAvailable()) return; const r = await clingNative.takeIntents(); for (const it of (r.items || [])) {
-  if (!it || !it.title) continue; try { const snap = await assistantExecutor.snapshot(); const v = validateCall('create_tasks', { items: [{ title: String(it.title).slice(0, 120), ...(/^\d{2}:\d{2}$/.test(it.time || '') ? { start: it.time } : {}) }] }, snap);
-    if (v.ok) await assistantExecutor.run('create_tasks', v.args); } catch (e) { console.error('siri add', e.message); } } };
+// Native takeIntents() clears the App Group queue, so items are copied into a local buffer first and only removed once saved
+// (or dropped for good, e.g. daily limit). Nothing runs until the user and today's list are loaded; tasks always land on today.
+let draining = false;
+const drainIntents = async () => {
+  if (!nativeAvailable() || draining) return; draining = true;
+  try {
+    let buf = readIntentBuffer(localStorage);
+    try { const r = await clingNative.takeIntents(); buf = mergeIntents(buf, r.items || []); writeIntentBuffer(localStorage, buf); } catch (e) { console.warn('takeIntents', e && e.message); }
+    if (!buf.length || !userId.value || todayIdx.value < 0 || !days[todayIdx.value]) return; // retried on the next mount / foreground / login
+    if (!isViewingToday.value) { selectedDayIndex.value = todayIdx.value; await fetchSelectedDayRoutine(); }
+    const keep = []; const added = []; const dropped = [];
+    for (const it of buf) {
+      let outcome = 'retry';
+      try { const snap = await assistantExecutor.snapshot(); const v = validateCall('create_tasks', intentCreateArgs(it), snap);
+        const res = v.ok ? await assistantExecutor.run('create_tasks', v.args) : null; outcome = intentOutcome({ validated: v, result: res });
+        if (outcome === 'drop') dropped.push(`${it.title}: ${(v.ok ? res?.failed?.[0]?.error : v.error) || 'not saved'}`);
+      } catch (e) { console.error('siri add', e.message); outcome = intentOutcome({ error: e }); }
+      if (outcome === 'done') added.push(it.title);
+      else if (outcome === 'retry') { const n = bumpIntentTries(it); if (intentOutOfTries(n)) dropped.push(`${it.title}: could not save`); else keep.push(n); }
+    }
+    writeIntentBuffer(localStorage, keep);
+    if (dropped.length) showNoteToast(`Siri task not added: ${dropped[0]}`, { error: true });
+    else if (added.length) showNoteToast(added.length === 1 ? `Added from Siri: “${added[0]}”` : `Added ${added.length} tasks from Siri`);
+  } finally { draining = false; }
+};
+watch(userId, (u) => { if (u) setTimeout(drainIntents, 1500); });
 const onIntentVisible = () => { if (!document.hidden) { drainIntents(); syncAppLock(); } };
 onMounted(() => { setTimeout(drainIntents, 1500); document.addEventListener('visibilitychange', onIntentVisible); });
 onBeforeUnmount(() => document.removeEventListener('visibilitychange', onIntentVisible));
+// ---- Siri "Start a timer in ClingNote" (ClingIntents.StartTimerIntent queues {taskId, minutes, ts}; latest fresh request wins) ----
+let timerDraining = false;
+const drainTimerIntents = async () => {
+  if (!nativeAvailable() || timerDraining || !userId.value || todayIdx.value < 0) return; timerDraining = true;
+  try {
+    const r = await clingNative.takeTimerIntents(); if (!(r.items || []).length) return;
+    if (!isViewingToday.value) { selectedDayIndex.value = todayIdx.value; await fetchSelectedDayRoutine(); }
+    const pick = pickTimerIntent(r.items, selectedDayRoutine.value);
+    if (!pick) return;
+    if (pick.error) { showNoteToast(`Siri timer: ${pick.error}`, { error: true }); return; }
+    selectedTimerTaskIndex.value = pick.index; selectedTimerHours.value = Math.floor(pick.minutes / 60); selectedTimerMinutes.value = pick.minutes % 60;
+    if ((await startTimer()) !== false) showNoteToast(`Timer started: ${pick.minutes} min for “${pick.title}”`);
+  } catch (e) { console.warn('siri timer', e && e.message); } finally { timerDraining = false; }
+};
+const onTimerIntentVisible = () => { if (!document.hidden) setTimeout(drainTimerIntents, 800); };
+watch(userId, (u) => { if (u) setTimeout(drainTimerIntents, 2000); });
+onMounted(() => { setTimeout(drainTimerIntents, 2000); document.addEventListener('visibilitychange', onTimerIntentVisible); });
+onBeforeUnmount(() => document.removeEventListener('visibilitychange', onTimerIntentVisible));
 watch(dayRequiredPts, (n) => { if (isViewingToday.value && isNativeIOS()) import('@/utils/widgetSync').then((m) => m.setWidgetDayTarget(n)).catch(() => {}); }, { immediate: true });
 const openAssistant = (listen = false) => {
   if (userId.value) loadAssistant(userId.value);
@@ -4018,6 +4195,8 @@ a.hero-menu-item { display: block; text-decoration: none; color: inherit; }
 .app-root.theme-ocean { --c-primary: #0284c7; --c-primary-soft: #e0f2fe; --c-success: #0d9488; }
 .repeat-toast { position: fixed; left: 50%; bottom: 140px; transform: translateX(-50%); z-index: 9001; background: #111827; color: #fff; padding: 9px 14px; border-radius: 10px; font-size: .9rem; box-shadow: 0 4px 12px rgba(0,0,0,.25); max-width: 90vw; }
 .repeat-toast--err { background: #b91c1c; }
+.more-hidden { display: block; width: 100%; margin: 8px 0 4px; min-height: 40px; padding: 8px 12px; border-radius: 12px; border: 1px dashed var(--c-border, #2a2a2e); background: transparent; color: var(--c-text-2, #b0b0b0); font-weight: 600; font-size: .9rem; text-align: center; }
+.more-hidden__why { font-weight: 400; opacity: .8; }
 .repeat-toast button { margin-left: 10px; color: #fbbf24; font-weight: 700; background: none; border: none; min-height: 32px; }
 .voice-toasts { position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%); z-index: 9000; display: flex; flex-direction: column; gap: 6px; }
 .voice-toast { background: #111827; color: #fff; padding: 8px 12px; border-radius: 10px; font-size: .9rem; box-shadow: 0 4px 12px rgba(0,0,0,.25); }

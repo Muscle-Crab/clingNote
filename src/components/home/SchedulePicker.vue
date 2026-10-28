@@ -20,6 +20,15 @@
         <span class="sp-hint">Day of month</span>
         <input type="number" min="1" max="31" class="sp-input sp-num" v-model.number="model.dayOfMonth" :placeholder="String(dom)" aria-label="Day of month" data-test="sched-dom" />
       </div>
+      <div v-if="model.repeat === AFTER" class="sp-row">
+        <span class="sp-hint">Every</span>
+        <input type="number" min="1" max="365" class="sp-input sp-num" v-model.number="model.everyDays" placeholder="3" aria-label="Days after I finish" data-test="sched-every" />
+        <span class="sp-hint">days after I finish</span>
+      </div>
+      <div v-if="model.repeat !== 'never'" class="sp-row">
+        <span class="sp-hint">Remind</span>
+        <input type="time" class="sp-input" v-model="model.remindAt" aria-label="Daily reminder time (optional)" data-test="sched-remind" />
+      </div>
       <div v-if="model.repeat !== 'never'" class="sp-row">
         <span class="sp-hint">Ends</span>
         <input type="date" class="sp-input" v-model="model.until" :min="model.date" aria-label="End date (optional)" data-test="sched-until" />
@@ -31,21 +40,23 @@
 
 <script setup>
 import { computed } from 'vue';
-import { WEEKDAYS, describeRecurrence, fmtTime, formatScheduledDate } from '@/utils/scheduling';
+import { WEEKDAYS, describeRecurrence, fmtTime, formatScheduledDate, AFTER } from '@/utils/scheduling';
 
 const model = defineModel({ type: Object, required: true });
 const props = defineProps({ minDate: { type: String, default: '' } });
-const OPTS = [{ v: 'never', l: 'Never' }, { v: 'daily', l: 'Daily' }, { v: 'weekly', l: 'Weekly' }, { v: 'monthly', l: 'Monthly' }];
+const OPTS = [{ v: 'never', l: 'Never' }, { v: 'daily', l: 'Daily' }, { v: 'weekly', l: 'Weekly' }, { v: 'monthly', l: 'Monthly' }, { v: AFTER, l: 'After done' }];
 const dayOf = (s) => (s ? new Date(`${s}T12:00:00`) : new Date());
 const dom = computed(() => dayOf(model.value.date).getDate());
 const toggle = () => { model.value.on = !model.value.on; if (model.value.on && !model.value.date) model.value.date = props.minDate || new Date().toLocaleDateString('en-CA'); };
-const setRepeat = (v) => { model.value.repeat = v; if (v === 'weekly' && !(model.value.days || []).length) model.value.days = [dayOf(model.value.date).getDay()]; };
+const setRepeat = (v) => { model.value.repeat = v; if (v === AFTER && !(Number(model.value.everyDays) >= 1)) model.value.everyDays = 3; if (v === 'weekly' && !(model.value.days || []).length) model.value.days = [dayOf(model.value.date).getDay()]; };
 const toggleDay = (i) => { const d = new Set(model.value.days || []); d.has(i) ? d.delete(i) : d.add(i); model.value.days = [...d].sort(); };
 const summary = computed(() => {
   const m = model.value; const t = m.time ? ` at ${fmtTime(m.time)}` : '';
   if (m.repeat === 'never') return `Once on ${formatScheduledDate(m.date)}${t}. Shows on that day${m.time ? ' and reminds you' : ''}.`;
-  const r = describeRecurrence({ freq: m.repeat, days: m.days, dayOfMonth: m.dayOfMonth || dom.value });
-  return `${r}${t}, from ${formatScheduledDate(m.date)}${m.until ? ` until ${formatScheduledDate(m.until)}` : ''}. Each occurrence is its own task.`;
+  const r = describeRecurrence({ freq: m.repeat, days: m.days, dayOfMonth: m.dayOfMonth || dom.value, everyDays: m.everyDays });
+  const rem = m.remindAt ? ` Reminder ${fmtTime(m.remindAt)} each repeat day.` : '';
+  if (m.repeat === AFTER) return `${r}${t}, first on ${formatScheduledDate(m.date)}. Next one is set when you finish it.${rem}`;
+  return `${r}${t}, from ${formatScheduledDate(m.date)}${m.until ? ` until ${formatScheduledDate(m.until)}` : ''}. Each occurrence is its own task.${rem}`;
 });
 </script>
 
@@ -60,8 +71,8 @@ const summary = computed(() => {
 .sp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; }
 .sp-input { width: 100%; box-sizing: border-box; background: var(--c-surface-2, #232327); color: var(--c-text, #ededea); border: 1px solid var(--c-border, #2a2a2e); border-radius: var(--r, 3px); padding: .5rem .6rem; font: inherit; color-scheme: dark; }
 .sp-num { width: 5rem; }
-.sp-seg { display: grid; grid-template-columns: repeat(4, 1fr); border: 1px solid var(--c-border, #2a2a2e); border-radius: var(--r, 3px); overflow: hidden; }
-.sp-seg-btn { background: transparent; color: var(--c-text-2, #a1a09b); border: 0; border-right: 1px solid var(--c-border, #2a2a2e); padding: .45rem 0; font: inherit; font-size: .8rem; cursor: pointer; }
+.sp-seg { display: grid; grid-template-columns: repeat(5, 1fr); border: 1px solid var(--c-border, #2a2a2e); border-radius: var(--r, 3px); overflow: hidden; }
+.sp-seg-btn { background: transparent; color: var(--c-text-2, #a1a09b); border: 0; border-right: 1px solid var(--c-border, #2a2a2e); padding: .45rem 0; font: inherit; font-size: .74rem; white-space: nowrap; cursor: pointer; }
 .sp-seg-btn:last-child { border-right: 0; }
 .sp-seg-btn.on { background: var(--c-accent, #2F6FFF); color: #fff; font-weight: 600; }
 .sp-days { display: flex; gap: .3rem; flex-wrap: wrap; }

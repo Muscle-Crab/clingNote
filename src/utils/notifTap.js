@@ -10,7 +10,8 @@ export const handleNotificationTap = (n) => { pending = resolveNotificationRoute
 // Foreground only (iOS fires localNotificationReceived only while the app is open): task pings are spoken by the robot voice (useSpeech -> speakLive).
 export const SPOKEN_TYPES = new Set(['time', 'sched', 'rem']);
 export const foregroundLine = (n) => { const x = (n && n.extra) || {}; return SPOKEN_TYPES.has(x.type) ? String(n.body || n.title || '').trim() : ''; };
-export const installNotificationTaps = ({ router: r, authReady, oneSignal, localNotifications, speak }) => {
+// onAction(a): extra hook for local notification buttons (wake-up alarm 'Set alarm' / 'Not today' / 'Snooze' / 'Stop'); same listener so cold-start actions are not lost.
+export const installNotificationTaps = ({ router: r, authReady, oneSignal, localNotifications, speak, onAction }) => {
   router = r;
   Promise.all([r.isReady(), authReady || Promise.resolve()]).then(() => { ready = true; go(); }).catch(() => { ready = true; go(); });
   try {
@@ -20,7 +21,7 @@ export const installNotificationTaps = ({ router: r, authReady, oneSignal, local
   } catch (e) { /* plugin missing */ }
   try {
     if (localNotifications && localNotifications.addListener) {
-      localNotifications.addListener('localNotificationActionPerformed', (a) => { const x = (a && a.notification) || {}; handleNotificationTap({ extra: x.extra, title: x.title, body: x.body }); });
+      localNotifications.addListener('localNotificationActionPerformed', (a) => { const x = (a && a.notification) || {}; if (onAction) { try { onAction(a); } catch (e) { /* optional */ } } handleNotificationTap({ extra: x.extra, title: x.title, body: x.body }); });
       if (speak) localNotifications.addListener('localNotificationReceived', (n) => { const line = foregroundLine(n); if (line) { try { speak(line); } catch (e) { /* voice optional */ } } });
     }
   } catch (e) { /* plugin missing */ }

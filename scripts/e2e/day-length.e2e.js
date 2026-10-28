@@ -29,11 +29,19 @@ async function page(br, label) {
 }
 const seedDay = async (email, name) => {
   const uid = await seedUser(email, name);
+  await db.doc(`users/${uid}`).set({ lockInEnabled: true }, { merge: true }); // lock-in is opt-in since lockIn.js
   const today = WEEK[(new Date().getDay() + 6) % 7];
   await db.doc(`weeklyRoutines/${uid}_${today}`).set({ tasks: [{ title: 'ZZTEST Write report', completed: false, estimateMin: 60 }, { title: 'ZZTEST Gym', completed: false, estimateMin: 45 }] });
   const r = await api(uid, { action: 'plan', wakeTime: '00:00', taskCount: 2, tz: TZ }); // wake time already passed today
   ok(`${name}: plan saved (${r.code})`, r.code === 200);
   return uid;
+};
+// Since the robot morning report, the hours prompt opens from Start (card or report), not by itself: close the report, tap Start.
+const openPrompt = async (p) => {
+  await p.locator('[data-test=day-prompt], [data-test=boss-briefing], [data-test=eh-start]').first().waitFor({ timeout: 20000 }).catch(() => {});
+  if (await p.locator('[data-test=day-prompt]').count()) return;
+  await p.locator('[data-test=boss-briefing] .bb-x').click({ timeout: 3000 }).catch(() => {}); await sleep(500);
+  await p.locator('[data-test=eh-start]').first().click({ timeout: 10000 }).catch(() => {});
 };
 const refreshNow = (p) => p.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
 
@@ -47,7 +55,7 @@ const refreshNow = (p) => p.evaluate(() => document.dispatchEvent(new Event('vis
   const uid = await seedDay('zztest-day6@example.com', 'Dana ZZTEST');
   const p = await page(br, 'day6');
   await emailLogin(p, 'zztest-day6@example.com'); await p.evaluate(() => localStorage.removeItem('clingnote.dayPromptSeen.v1')); /* login may already have shown it once */ await p.goto(B + '/home', { waitUntil: 'load' });
-  await p.waitForSelector('[data-test=day-prompt]', { timeout: 20000 }).catch(async (e) => { await p.screenshot({ path: SHOTS + 'dbg.png' }); console.log('DBG', await p.evaluate(() => document.querySelector('[data-test=eight-hour-card]')?.innerText), p.url()); throw e; });
+  await openPrompt(p); await p.waitForSelector('[data-test=day-prompt]', { timeout: 20000 }).catch(async (e) => { await p.screenshot({ path: SHOTS + 'dbg.png' }); console.log('DBG', await p.evaluate(() => document.querySelector('[data-test=eight-hour-card]')?.innerText), p.url()); throw e; });
   ok('prompt shows on the first open of the day', /How many hours will you dedicate today\?/.test(await p.textContent('[data-test=day-prompt]')));
   ok('preselected 8h (no previous choice)', (await p.inputValue('[data-test=day-prompt-hours]')) === '8');
   const opts = await p.$$eval('[data-test=day-prompt-hours] option', (o) => o.map((x) => Number(x.value)));
@@ -110,7 +118,7 @@ const refreshNow = (p) => p.evaluate(() => document.dispatchEvent(new Event('vis
   await db.doc(`users/${uid3}`).set({ dayLengthHours: 3.5 }, { merge: true });
   const q = await page(br, 'day3');
   await emailLogin(q, 'zztest-day3@example.com'); await q.evaluate(() => localStorage.removeItem('clingnote.dayPromptSeen.v1')); await q.goto(B + '/home', { waitUntil: 'load' });
-  await q.waitForSelector('[data-test=day-prompt]', { timeout: 20000 }); await sleep(1500);
+  await openPrompt(q); await q.waitForSelector('[data-test=day-prompt]', { timeout: 20000 }); await sleep(1500);
   ok('preselected to the last choice (3.5)', (await q.inputValue('[data-test=day-prompt-hours]')) === '3.5');
   await q.click('[data-test=day-prompt-minus]'); /* 3.5 → 3, then minus is disabled */
   ok('cannot go below 3h', (await q.inputValue('[data-test=day-prompt-hours]')) === '3' && await q.isDisabled('[data-test=day-prompt-minus]'));

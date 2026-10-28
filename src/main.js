@@ -3,6 +3,8 @@ import App from './App.vue'
 import router from './router'
 import store from './store'
 import './assets/ui.css'
+import './assets/theme-light.css'
+import { initAppearance } from './composables/useAppearance'
 
 import OneSignalVue from '@onesignal/onesignal-vue3'
 import { isNative, isNativeIOS } from './utils/platform'
@@ -17,6 +19,7 @@ import { interceptBlankLinks } from './utils/openExternal'
 try { const bp = loadPrefs(); applyBackgroundImage(bp.image, loadCustomImage()); } catch (e) { /* cosmetic only */ }
 
 interceptBlankLinks(); // iOS shell: target=_blank links open in the in-app browser
+try { initAppearance(); } catch (e) { /* cosmetic only */ } // theme (system/light/dark) + text size, before first render
 
 const app = createApp(App);
 
@@ -68,9 +71,11 @@ if (isNativeIOS()) {
 // Notification taps (native OneSignal push + local notifications) -> the right screen, also on cold start (queued until router + auth ready).
 if (isNative()) {
   const authReady = new Promise((res) => { const off = onAuthStateChanged(auth, () => { off(); res(); }); setTimeout(res, 4000); });
+  // Wake-up alarm (iOS): per-account load on auth changes + the notification buttons ('Set alarm' / 'Not today' / Snooze / Stop).
+  const wakeMod = import('./composables/useWakeAlarm').then((w) => { w.installWakeAlarm({ onAuth: (cb) => onAuthStateChanged(auth, cb) }); return w; });
   Promise.all([import('./utils/notifTap'), import('@capacitor/local-notifications'), import('./utils/nativePush')]).then(([t, ln, np]) => {
     np.initNativePush();
-    t.installNotificationTaps({ router, authReady, oneSignal: window.plugins?.OneSignal, localNotifications: ln.LocalNotifications, speak: (line) => import('@/composables/useVoiceover').then((v) => v.speakLive(line)).catch(() => {}) });
+    t.installNotificationTaps({ router, authReady, oneSignal: window.plugins?.OneSignal, localNotifications: ln.LocalNotifications, speak: (line) => import('@/composables/useVoiceover').then((v) => v.speakLive(line)).catch(() => {}), onAction: (a) => wakeMod.then((w) => w.onWakeNotificationAction(a)).catch(() => {}) });
   }).catch(() => {});
 }
 
@@ -80,6 +85,8 @@ import('@capacitor/core').then(async ({ Capacitor }) => {
   const { App: CapApp } = await import('@capacitor/app');
   const widget = Capacitor.getPlatform() === 'ios' ? await import('./utils/widgetSync').catch(() => null) : null;
   if (widget) { widget.installWidgetSync(); widget.installWidgetFocus(router); }
+  // Cold start from a widget tap (e.g. clingnote://add): appUrlOpen can fire before this listener exists, so read the launch URL once.
+  if (widget) CapApp.getLaunchUrl().then((r) => { if (r && r.url) widget.handleWidgetUrl(r.url, router); }).catch(() => {});
   CapApp.addListener('appUrlOpen', ({ url }) => {
     if (widget && widget.handleWidgetUrl(url, router)) return; // home-screen widget tap: clingnote://task/<id>
     try { const u = new URL(url); const path = (u.protocol.startsWith('http') ? '' : (u.host ? '/' + u.host : '')) + u.pathname + u.search; if (/^\/(pal|pals|m)\b/.test(path)) router.push(path); } catch (e) { /* ignore */ }

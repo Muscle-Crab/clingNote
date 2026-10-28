@@ -304,7 +304,9 @@ struct MatchupWidget: Widget {
 struct ClingNoteWidgets: WidgetBundle {
     var body: some Widget {
         TodayTasksWidget()
+        QuickAddWidget()
         MatchupWidget()
         if #available(iOS 16.1, *) { FocusLiveActivity() }
+        if #available(iOS 26.0, *) { WakeAlarmLiveActivity() } // AlarmKit wake-up alarm snooze countdown
     }
 }

@@ -61,6 +61,8 @@ t('deep links', () => {
   assert.equal(parseWidgetLink('clingnote://task/'), '/home');
   assert.equal(parseWidgetLink('clingnote://task/..%2F..%2Fprofile'), '/home');
   assert.equal(parseWidgetLink('clingnote://task/a?b=<script>'), '/home?task=a');
+  assert.equal(parseWidgetLink('clingnote://add'), '/home?new=1'); assert.equal(parseWidgetLink('CLINGNOTE://new'), '/home?new=1');
+  assert.equal(parseWidgetLink('clingnote://ask'), '/home?ask=1');
   assert.equal(parseWidgetLink('clingnote://evil/x'), null);
   assert.equal(parseWidgetLink('https://clingnot.netlify.app/pal/ABC'), null);
   assert.equal(parseWidgetLink('clingnot://localhost/pals'), null);

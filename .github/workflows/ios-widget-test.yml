@@ -3,7 +3,7 @@
 name: ios-widget-test
 on:
   workflow_dispatch: {}
-  push: { branches: [feat/ios-widget] }
+  push: { branches: [feat/ios-widget, ci/sim-check-2026-10-27] }
 jobs:
   sim:
     runs-on: macos-15

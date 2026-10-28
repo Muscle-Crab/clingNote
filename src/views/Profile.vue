@@ -86,10 +86,37 @@
             <label class="pf-row"><span class="pf-ico" aria-hidden="true">🔒</span><span class="pf-row-title">Lock-in<small class="pf-dl-sub">8-hour lock: a timed day that shuts the app at the end. Off by default; you can skip it on any day.</small></span>
               <input type="checkbox" role="switch" class="pf-switch" data-test="lock-in-toggle" :checked="lockIn.enabled" :disabled="!lockIn.loaded" @change="onLockInToggle($event.target.checked)" /></label>
           </section>
+          <section v-if="isOwn" class="pf-card pf-card--flush" data-test="wake-alarm-setting">
+            <label class="pf-row"><span class="pf-ico" aria-hidden="true">⏰</span><span class="pf-row-title">Wake-up alarm<small class="pf-dl-sub" data-test="wake-alarm-sub">{{ wakeOk ? 'ClingNote asks you each day if you want an alarm, then rings at your time, even on silent (iOS 26+). Off by default.' : 'iOS app only: install ClingNote on your iPhone to use it.' }}</small></span>
+              <input type="checkbox" role="switch" class="pf-switch" data-test="wake-alarm-toggle" :checked="wakeOk && wake.enabled" :disabled="!wakeOk || !wake.loaded || wakeBusy" @change="onWakeToggle($event.target.checked)" /></label>
+            <template v-if="wakeOk && wake.enabled">
+              <label class="pf-row pf-row--divided"><span class="pf-ico" aria-hidden="true">🔔</span><span class="pf-row-title">Alarm time<small class="pf-dl-sub">Prefilled each time you're asked</small></span>
+                <input type="time" class="pf-time" data-test="wake-alarm-time" :value="wake.time" @change="setWakeTime($event.target.value)" /></label>
+              <label class="pf-row pf-row--divided"><span class="pf-ico" aria-hidden="true">💬</span><span class="pf-row-title">Ask me at<small class="pf-dl-sub">{{ wakePromptHint }}</small></span>
+                <input type="time" class="pf-time" data-test="wake-prompt-time" :value="wake.promptTime" @change="setWakePromptTime($event.target.value)" /></label>
+              <div class="pf-row pf-row--divided pf-row--auto"><span class="pf-ico" aria-hidden="true">📅</span><span class="pf-row-title">Alarm days
+                <span class="pf-days" role="group" aria-label="Alarm days"><button v-for="d in WEEKDAYS" :key="d.n" type="button" class="pf-day" :class="{ 'pf-day--on': wake.days.includes(d.n) }" :aria-pressed="wake.days.includes(d.n)" :aria-label="d.full" @click="toggleWakeDay(d.n)">{{ d.s }}</button></span></span></div>
+              <p v-if="!wake.alarmKit" class="pf-wa-note" data-test="wake-alarm-fallback-note">On this iPhone the alarm rings as notifications, which follow the silent switch. Update to iOS 26 and allow Alarms for ClingNote to ring on silent.</p>
+            </template>
+          </section>
           <section v-if="isOwn && lockIn.enabled" class="pf-card pf-card--flush" data-test="day-length-setting">
             <div class="pf-row"><span class="pf-ico" aria-hidden="true">⏱</span><span class="pf-row-title">Day length<small class="pf-dl-sub">Preselected each morning · 3 to 12 h</small></span>
               <span class="pf-dl"><button type="button" class="pf-dl-btn" :disabled="dayLen <= DAY_HOURS.min" aria-label="Half an hour less" data-test="day-length-minus" @click="bumpDayLen(-0.5)">−</button><b data-test="day-length-value">{{ hoursLabel(dayLen) }} h</b><button type="button" class="pf-dl-btn" :disabled="dayLen >= DAY_HOURS.max" aria-label="Half an hour more" data-test="day-length-plus" @click="bumpDayLen(0.5)">+</button></span>
             </div>
+          </section>
+
+          <section class="pf-card pf-card--flush" data-test="appearance-setting">
+            <div class="pf-row pf-row--stack"><span class="pf-ico" aria-hidden="true">🎨</span><span class="pf-row-title">Theme
+              <span class="pf-seg" role="radiogroup" aria-label="Theme"><button v-for="o in THEME_OPTS" :key="o.v" type="button" role="radio" class="pf-seg-btn" :class="{ 'pf-seg-btn--on': appearance.mode === o.v }" :aria-checked="appearance.mode === o.v" :data-test="'theme-' + o.v" @click="setAppearance({ mode: o.v })">{{ o.l }}</button></span></span></div>
+            <div class="pf-row pf-row--divided pf-row--stack"><span class="pf-ico" aria-hidden="true">🔠</span><span class="pf-row-title">Text size<small class="pf-dl-sub">Auto follows your device's text size</small>
+              <span class="pf-seg" role="radiogroup" aria-label="Text size"><button v-for="o in TEXT_OPTS" :key="o.v" type="button" role="radio" class="pf-seg-btn" :class="{ 'pf-seg-btn--on': appearance.text === o.v }" :aria-checked="appearance.text === o.v" :aria-label="o.a" :data-test="'text-' + o.v" @click="setAppearance({ text: o.v })">{{ o.l }}</button></span></span></div>
+          </section>
+          <section v-if="isOwn" class="pf-card pf-card--flush" data-test="calendar-sync-setting">
+            <label v-if="calNative" class="pf-row"><span class="pf-ico" aria-hidden="true">📆</span><span class="pf-row-title">Calendar sync<small class="pf-dl-sub" data-test="calendar-sync-sub">{{ calSub }}</small></span>
+              <input type="checkbox" role="switch" class="pf-switch" data-test="calendar-sync-toggle" :checked="calSyncState.enabled" :disabled="calSyncState.busy" @change="onCalToggle($event.target.checked)" /></label>
+            <div v-else class="pf-row pf-row--stack"><span class="pf-ico" aria-hidden="true">📆</span><span class="pf-row-title">Calendar<small class="pf-dl-sub" data-test="calendar-sync-sub">{{ calMsg || 'Two-way sync is in the iOS app. Here: export timed tasks as .ics, or import events.' }}</small>
+              <span class="pf-mini-btns"><button type="button" class="pf-mini" data-test="ics-export" :disabled="calBusy" @click="onIcsExport">Export .ics</button><button type="button" class="pf-mini" data-test="ics-import" :disabled="calBusy" @click="icsInput && icsInput.click()">Import .ics</button></span></span>
+              <input ref="icsInput" type="file" accept=".ics,text/calendar" class="pf-hidden-file" @change="onIcsImport" /></div>
           </section>
 
           <h2 class="pf-section">More</h2>
@@ -99,6 +126,14 @@
             <router-link to="/support" class="pf-row pf-row--divided" data-test="profile-support"><span class="pf-ico" aria-hidden="true">💬</span><span class="pf-row-title">Help &amp; support</span><span class="pf-chev" aria-hidden="true">›</span></router-link>
             <router-link to="/privacy-policy" class="pf-row pf-row--divided"><span class="pf-ico" aria-hidden="true">🔒</span><span class="pf-row-title">Privacy policy</span><span class="pf-chev" aria-hidden="true">›</span></router-link>
             <router-link to="/terms" class="pf-row pf-row--divided" data-test="profile-terms"><span class="pf-ico" aria-hidden="true">📄</span><span class="pf-row-title">Terms &amp; conditions</span><span class="pf-chev" aria-hidden="true">›</span></router-link>
+            <template v-if="isOwn">
+              <button type="button" class="pf-row pf-row--divided" data-test="task-transfer" :aria-expanded="xferOpen" @click="xferOpen = !xferOpen"><span class="pf-ico" aria-hidden="true">📦</span><span class="pf-row-title">Export / import tasks</span><span class="pf-chev" :class="{ 'pf-chev--open': xferOpen }" aria-hidden="true">›</span></button>
+              <div v-if="xferOpen" class="pf-xfer" data-test="task-transfer-panel">
+                <span class="pf-mini-btns"><button type="button" class="pf-mini" data-test="export-json" :disabled="xferBusy" @click="onExport('json')">Export JSON</button><button type="button" class="pf-mini" data-test="export-csv" :disabled="xferBusy" @click="onExport('csv')">Export CSV</button><button type="button" class="pf-mini" data-test="import-json" :disabled="xferBusy" @click="xferInput && xferInput.click()">Import JSON</button></span>
+                <input ref="xferInput" type="file" accept=".json,application/json" class="pf-hidden-file" @change="onImport" />
+                <small class="pf-dl-sub" data-test="task-transfer-msg" role="status">{{ xferMsg || 'Import adds tasks from a ClingNote JSON export. Duplicates are skipped.' }}</small>
+              </div>
+            </template>
           </section>
 
           <button type="button" class="pf-logout" data-test="profile-logout" :disabled="loggingOut" @click="logout">
@@ -116,6 +151,14 @@
 <script setup>
 import { lockIn, loadLockIn, setLockInEnabled } from '@/utils/lockIn';
 loadLockIn(true).catch(() => {});
+import { wake, wakeSupported, loadWake, setWakeEnabled, setWakeTime, setWakePromptTime, setWakeDays } from '@/composables/useWakeAlarm';
+import { toMin } from '@/utils/wakeAlarm';
+const wakeOk = wakeSupported(); const wakeBusy = ref(false);
+const WEEKDAYS = [['S', 'Sunday'], ['M', 'Monday'], ['T', 'Tuesday'], ['W', 'Wednesday'], ['T', 'Thursday'], ['F', 'Friday'], ['S', 'Saturday']].map(([s, full], n) => ({ n, s, full }));
+if (wakeOk && auth.currentUser) loadWake(auth.currentUser.uid, true).catch(() => {});
+const onWakeToggle = async (on) => { wakeBusy.value = true; try { await setWakeEnabled(on); } catch (e) { console.warn('wake alarm toggle:', e); } wakeBusy.value = false; };
+const toggleWakeDay = (n) => { const d = wake.value.days; const next = d.includes(n) ? d.filter((x) => x !== n) : [...d, n]; if (next.length) setWakeDays(next).catch(() => {}); };
+const wakePromptHint = computed(() => (toMin(wake.value.promptTime) < toMin(wake.value.time) ? "Morning: asks about that morning's alarm" : 'Evening: asks about the next morning'));
 const onLockInToggle = async (on) => { const u = auth.currentUser; if (!u) return; try { await setLockInEnabled(u.uid, on); } catch (e) { console.warn('lock-in toggle:', e); loadLockIn(true).catch(() => {}); } };
 import PushSettings from '@/components/PushSettings.vue';
 import DeleteAccount from '@/components/DeleteAccount.vue';
@@ -147,6 +190,28 @@ import { openWriteReview } from '@/utils/appReview';
 import { DAY_HOURS, hoursLabel } from '@/utils/eightHour';
 import { dayLengthHours, setDayLengthHours, loadDayLengthHours } from '@/composables/useEightHour';
 const rateApp = () => openWriteReview();
+// Appearance (F4), calendar sync / .ics (F1), task export/import (F3)
+import { appearance, setAppearance } from '@/composables/useAppearance';
+import { calSyncState, setCalendarSync, initCalendarSync, exportIcs, importIcs } from '@/composables/useCalendarSync';
+import { exportTasks, importTasks } from '@/composables/useTaskBackup';
+import { readTextFile } from '@/utils/fileSave';
+const THEME_OPTS = [{ v: 'system', l: 'System' }, { v: 'light', l: 'Light' }, { v: 'dark', l: 'Dark' }];
+const TEXT_OPTS = [{ v: 'system', l: 'Auto', a: 'System size' }, { v: 'm', l: 'A', a: 'Default' }, { v: 'l', l: 'A+', a: 'Large' }, { v: 'xl', l: 'A++', a: 'Larger' }];
+const calNative = isNativeIOS(); const calBusy = ref(false); const calMsg = ref(''); const icsInput = ref(null);
+if (auth.currentUser) initCalendarSync(auth.currentUser.uid);
+const fmtAgo = (ms) => { if (!ms) return ''; const m = Math.round((Date.now() - ms) / 60000); return m < 1 ? 'just now' : m < 60 ? `${m} min ago` : new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); };
+const calSub = computed(() => {
+  const s = calSyncState.value;
+  if (s.busy) return 'Syncing…';
+  if (s.message) return s.message;
+  return s.enabled ? `Timed tasks ↔ your "ClingNote" calendar${s.lastSyncMs ? ` · synced ${fmtAgo(s.lastSyncMs)}` : ''}` : 'Timed tasks go to a "ClingNote" calendar; edits there come back. Off by default.';
+});
+const onCalToggle = async (on) => { const u = auth.currentUser; if (!u) return; try { const r = await setCalendarSync(u.uid, on, { pro: userIsPro.value }); if (r && r.message) calSyncState.value = { ...calSyncState.value, message: r.message }; } catch (e) { calSyncState.value = { ...calSyncState.value, message: 'Calendar sync failed. Try again.' }; } };
+const onIcsExport = async () => { const u = auth.currentUser; if (!u) return; calBusy.value = true; try { const r = await exportIcs(u.uid); calMsg.value = r.result === 'failed' ? 'Could not save the file.' : `Exported ${r.count} timed task${r.count === 1 ? '' : 's'}.`; } catch (e) { calMsg.value = 'Export failed.'; } calBusy.value = false; };
+const onIcsImport = async (ev) => { const u = auth.currentUser; const f = ev.target.files && ev.target.files[0]; ev.target.value = ''; if (!u || !f) return; calBusy.value = true; try { const r = await importIcs(u.uid, await readTextFile(f), { pro: userIsPro.value }); calMsg.value = r.message; } catch (e) { calMsg.value = (e && e.message) || 'Import failed.'; } calBusy.value = false; };
+const xferOpen = ref(false); const xferBusy = ref(false); const xferMsg = ref(''); const xferInput = ref(null);
+const onExport = async (fmt) => { const u = auth.currentUser; if (!u) return; xferBusy.value = true; try { const r = await exportTasks(u.uid, fmt, { native: isNativeIOS() }); xferMsg.value = r.result === 'failed' ? 'Could not save the file.' : r.result === 'cancelled' ? '' : `Exported ${r.count} task${r.count === 1 ? '' : 's'} as ${fmt.toUpperCase()}.`; } catch (e) { xferMsg.value = 'Export failed.'; } xferBusy.value = false; };
+const onImport = async (ev) => { const u = auth.currentUser; const f = ev.target.files && ev.target.files[0]; ev.target.value = ''; if (!u || !f) return; xferBusy.value = true; try { const r = await importTasks(u.uid, await readTextFile(f), { pro: userIsPro.value }); xferMsg.value = r.message; } catch (e) { xferMsg.value = (e && e.message) || 'Import failed.'; } xferBusy.value = false; };
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { useRouter } from 'vue-router';
 import { auth, db } from '@/firebaseConfig';
@@ -356,6 +421,11 @@ onMounted(() => { loadDayLengthHours().then((v) => { dayLen.value = v; }).catch(
 .pf-pill-ok { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 999px; font-size: 13px; color: var(--c-success); background: var(--c-success-soft); border: 1px solid rgba(61,220,151,.35); }
 .pf-pill-ok i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
 .pf-upgrade { display: block; margin: 4px 0 12px; min-height: 48px; line-height: 48px; text-align: center; border-radius: 14px; font-weight: 800; color: #fff; background: linear-gradient(90deg, #f59e0b, #ea580c); box-shadow: 0 6px 18px rgba(234,88,12,.3); }
+.pf-time { min-height: 40px; margin-left: auto; padding: 0 8px; border-radius: 10px; border: 1px solid var(--c-border, #2a2a2e); background: var(--c-surface-2, #22252a); color: var(--c-text); font-size: 15px; flex: none; }
+.pf-days { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.pf-day { width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--c-border, #2a2a2e); background: transparent; color: var(--c-text); font-weight: 700; font-size: 13px; }
+.pf-day--on { background: #4aa8ff; border-color: #4aa8ff; color: #06121f; }
+.pf-wa-note { margin: 0 0 12px; font-size: 12px; color: var(--c-text-3, #9aa3b5); }
 .pf-switch { width: 22px; height: 22px; margin-left: auto; accent-color: #4aa8ff; flex: none; }
 .pf-row { display: flex; align-items: center; gap: 14px; width: 100%; min-height: 56px; padding: 8px 0; background: none; border: 0; color: var(--c-text); cursor: pointer; text-decoration: none; }
 .pf-row--divided { border-top: 1px solid var(--c-border); }
@@ -382,4 +452,15 @@ onMounted(() => { loadDayLengthHours().then((v) => { dayLen.value = v; }).catch(
 .pf-badge { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 4px; border-radius: 12px; background: rgba(255,255,255,.04); text-align: center; }
 .pf-badge span { font-size: 22px; } .pf-badge small { font-size: 10.5px; line-height: 1.2; color: var(--c-text-2, #A9B4CC); }
 .pf-badge--off { opacity: .35; filter: grayscale(1); }
+/* segmented controls + mini buttons for Appearance / Calendar / Export rows */
+.pf-seg { display: flex; margin-top: 8px; padding: 3px; gap: 3px; border-radius: 12px; background: var(--c-surface-2); border: 1px solid var(--c-border); max-width: 100%; }
+.pf-seg-btn { flex: 1 1 0; min-width: 0; min-height: 36px; padding: 0 6px; border: 0; border-radius: 9px; background: transparent; color: var(--c-text-2); font: 600 14px/1.1 var(--font); cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pf-seg-btn--on { background: var(--c-accent); color: #fff; }
+.pf-mini-btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.pf-mini { min-height: 40px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--c-border-strong); background: var(--c-surface-2); color: var(--c-text); font: 600 13px/1.1 var(--font); cursor: pointer; }
+.pf-mini:disabled { opacity: .55; }
+.pf-hidden-file { display: none; }
+.pf-row--stack { align-items: flex-start; padding: 12px 0; } .pf-row--stack .pf-row-title { min-width: 0; }
+.pf-xfer { padding: 0 0 12px 50px; }
+.pf-chev { transition: transform .15s ease; } .pf-chev--open { transform: rotate(90deg); }
 </style>

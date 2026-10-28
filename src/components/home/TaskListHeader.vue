@@ -21,6 +21,10 @@
             </select>
           </label>
           <p v-if="!canReorder(prefs)" class="sort-hint">Drag reorder is off unless sorted manually with no filter.</p>
+          <template v-if="dayTools">
+            <button type="button" class="sort-toggle" data-test="plan-day-open" @click="open = false; $emit('plan-day')"><i class="fas fa-magic" aria-hidden="true"></i> Plan my day</button>
+            <button type="button" class="sort-toggle" data-test="templates-open" @click="open = false; $emit('templates')"><i class="fas fa-clone" aria-hidden="true"></i> Day templates</button>
+          </template>
           <button type="button" class="sort-toggle" data-test="menu-sounds" :aria-pressed="soundEnabled ? 'true' : 'false'" @click="$emit('toggle-sound')">
             <i :class="soundEnabled ? 'fas fa-volume-up' : 'fas fa-volume-mute'" aria-hidden="true"></i> Sounds: {{ soundEnabled ? 'On' : 'Off' }}
           </button>
@@ -54,8 +58,9 @@ defineProps({
   total: { type: Number, default: 0 },
   soundEnabled: { type: Boolean, default: false },
   showCompleted: { type: Boolean, default: false },
+  dayTools: Boolean, // Plan my day + Day templates live in this existing menu (no extra row on Home)
 });
-defineEmits(['toggle-sound', 'toggle-boss-voice', 'open-assistant', 'toggle-completed', 'update:prefs']);
+defineEmits(['toggle-sound', 'toggle-boss-voice', 'open-assistant', 'toggle-completed', 'update:prefs', 'plan-day', 'templates']);
 </script>
 
 <style scoped>

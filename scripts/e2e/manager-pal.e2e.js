@@ -43,6 +43,8 @@ async function newPage(br, label) {
   });
   await ctx.route('**/.netlify/functions/!(manager-pal)**', (route) => route.fulfill({ status: 200, json: {} }));
   const p = await ctx.newPage(); p.on('dialog', (d) => d.accept());
+  // the robot morning briefing is a full-screen card; flows that are not about it close it whenever it appears (E2E_KEEP_BRIEFING=1 to keep it)
+  if (process.env.E2E_KEEP_BRIEFING !== '1' && p.addLocatorHandler) await p.addLocatorHandler(p.locator('[data-test=boss-briefing]'), async () => { await p.locator('[data-test=boss-briefing] .bb-x').click({ timeout: 3000 }).catch(() => {}); });
   p.on('pageerror', (e) => console.log(`[${label} pageerror]`, e.message));
   return p;
 }

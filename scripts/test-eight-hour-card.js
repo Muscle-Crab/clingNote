@@ -15,13 +15,22 @@ let n = 0; const ok = (c, m) => { assert.ok(c, m); n++; };
   const base = { plan: { wakeTime: '07:00', tz: TZ, taskCount: 3 }, stats: core.defaultStats() };
   let html = await render(at('2026-10-23T10:00:00Z'), { ...base, plan: null }); // none
   ok(/Set your day/.test(html) && /data-test="eh-save"/.test(html), 'no plan => setup form');
+  ok(/Min 4 · max 50 tasks for 8 hours/.test(html) && !/eh-stepper|eh-count|More tasks|Fewer tasks/.test(html), 'setup: one min/max line for the hours, no Planned stepper');
   html = await render(at('2026-10-23T09:00:00Z'), base, [T('a')]); // 05:00 local, before wake
-  ok(/Starts 7:00 AM/.test(html) && /Ends 3:00 PM/.test(html) && /1\/3 added|1\/3\)/.test(html), 'before wake: start + end label and task count');
+  ok(/Starts 7:00 AM/.test(html) && /Ends 3:00 PM/.test(html) && /Min 4 · max 50 tasks for 8 hours · 1 on your list/.test(html), 'before wake: start + end label and min/max vs list count');
+  ok(!/eh-stepper|eh-count|Planned \d|eh-match/.test(html), 'before wake: no stepper and no "plan N" buttons');
   html = await render(at('2026-10-23T11:30:00Z'), base, [T('a')]); // 07:30 ready
-  ok(/data-test="eh-needs-tasks"/.test(html) && /Add 2 more tasks/.test(html), 'ready but tasks missing => countdown waits');
+  ok(/Add 3 more to start/.test(html) && !/data-test="eh-start"/.test(html), 'ready but below the minimum => no Start, says how many more');
+  ok(!/data-test="eh-match|plan 1 instead|Plan 1|You planned/.test(html), 'no match-the-plan buttons');
   ok(!/type="time"/.test(html), 'wake time frozen once the wake time has passed');
-  html = await render(at('2026-10-23T11:30:00Z'), base, [T('a'), T('b'), T('c')]);
-  ok(/data-test="eh-start"/.test(html), 'ready with all tasks => start button (auto-start also fires)');
+  html = await render(at('2026-10-23T11:30:00Z'), base, [T('a'), T('b'), T('c'), T('d')]);
+  ok(/data-test="eh-start"/.test(html), 'ready with exactly the minimum => Start');
+  html = await render(at('2026-10-23T11:30:00Z'), base, Array.from({ length: 9 }, (_, i) => T('t' + i)));
+  ok(/data-test="eh-start"/.test(html) && /9 on your list/.test(html) && !/eh-over/.test(html), 'more than the minimum and more than plan.taskCount (3) => still Start, no exact match needed');
+  html = await render(at('2026-10-23T11:30:00Z'), base, Array.from({ length: 50 }, (_, i) => T('t' + i)));
+  ok(/data-test="eh-start"/.test(html), 'at the cap (50) => Start');
+  html = await render(at('2026-10-23T11:30:00Z'), base, Array.from({ length: 52 }, (_, i) => T('t' + i)));
+  ok(!/data-test="eh-start"/.test(html) && /Over the max of 50 tasks. Remove 2 to start./.test(html), 'over the cap => no Start, short message');
   const lock = { dayKey: '2026-10-23', dayName: 'Fri', tz: TZ, wakeTime: '07:00', startMs: at('2026-10-23T11:00:00Z'), endMs: at('2026-10-23T19:00:00Z'), taskCount: 3, plannedCount: 3, points: [20, 40, 30], totalPoints: 90, target: 70 };
   html = await render(at('2026-10-23T13:00:00Z'), { ...base, lock }, [T('a', true), T('b'), T('c', true)]); // 2h in
   ok(/06:00:00|05:59:5\d/.test(html), 'countdown shows 6h left');
