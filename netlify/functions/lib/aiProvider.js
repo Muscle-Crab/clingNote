@@ -41,7 +41,10 @@ const callGeminiRaw = async (reqBody, { fetch: f = fetch } = {}) => {
     method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': process.env.GEMINI_API_KEY }, body: JSON.stringify(reqBody),
   });
   const data = await r.json().catch(() => ({}));
-  if (!r.ok) throw Object.assign(new Error('AI request failed'), { status: r.status === 429 ? 429 : 502 });
+  if (!r.ok) {
+    console.error('gemini error', r.status, model, JSON.stringify(data && data.error));
+    throw Object.assign(new Error('AI request failed'), { status: r.status === 429 ? 429 : 502 });
+  }
   return { parts: data.candidates?.[0]?.content?.parts || [], finishReason: data.candidates?.[0]?.finishReason || '' };
 };
 module.exports = { callChat, pickProvider, toGemini, callGeminiRaw };

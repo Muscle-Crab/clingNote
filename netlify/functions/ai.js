@@ -87,6 +87,7 @@ const handleAgent = async (event, body, deps) => {
     const text = parts.filter((p) => typeof p.text === 'string' && !p.thought).map((p) => p.text).join('').trim();
     return json(200, { parts, toolCalls, text, pro, limit, remaining: used == null ? undefined : Math.max(0, limit - used) });
   } catch (e) {
+    console.error('agent error', e && e.status, e && e.message);
     if (fresh) await giveBackAsk(db, uid).catch(() => {});
     return json(e.status === 500 ? 500 : 502, { error: e.status === 500 ? 'Server not configured' : 'AI request failed' });
   }
