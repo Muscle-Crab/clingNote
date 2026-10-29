@@ -134,14 +134,18 @@
                       <button type="button" @click="repeatOpen = !repeatOpen; moreOpen = false" class="action-btn" data-test="repeat-btn" :class="{ 'action-btn--on': repeatOnAny }" :title="repeatOnAny ? repeatText : 'Make recurring'" aria-label="Repeat settings">🔁</button>
                       <button @click="$emit('open-reminder')" class="action-btn" title="Reminder" aria-label="Add reminder">📅</button>
                       <button @click="$emit('transfer')" class="action-btn" title="Transfer" aria-label="Transfer to another day">🔄</button>
-                      <template v-if="section"><button v-for="m in MOVE_TO.filter((x) => x.id !== section)" :key="m.id" type="button" class="action-btn" :data-test="`move-${m.id}`" :title="`Move to ${m.label}`" :aria-label="`Move to ${m.label}`" @click="$emit('move-section', m.id); moreOpen = false">{{ m.icon }}</button></template>
-                      <button @click="$emit('video')" class="action-btn" title="Video" aria-label="Attach video">🎥</button>
                       <button @click="fileInput && fileInput.click()" class="action-btn" title="Attach file" aria-label="Attach file">📎</button>
                       <input type="file" ref="fileInput" accept="image/*,.pdf,.doc,.docx,.txt" @change="$emit('upload', $event)" class="hidden-input" />
   <!--                    <button @click="showTimerModal = true" class="action-btn" title="Timer">⏱️</button>-->
                       <button v-if="canSkip" type="button" @click="$emit('skip-today'); moreOpen = false" class="action-btn" data-test="skip-today" title="Skip today (no streak penalty; the series continues)" aria-label="Skip today">⏭️</button>
                       <button @click="$emit('wont-do')" class="action-btn action-btn--warn" title="Won't do" aria-label="Mark as won't do">🚫</button>
                       <button @click="$emit('delete')" class="action-btn action-btn--danger" title="Delete" aria-label="Delete task">🗑️</button>
+                      <div v-if="section" class="move-row" role="group" aria-label="Move to section" data-test="move-row">
+                        <span class="move-row__label">Move to</span>
+                        <button v-for="m in MOVE_TO" :key="m.id" type="button" class="action-btn move-btn" :class="{ 'move-btn--current': m.id === section }" :data-test="`move-${m.id}`"
+                                :disabled="m.id === section" :aria-current="m.id === section ? 'true' : null" :title="m.id === section ? `In ${m.label}` : `Move to ${m.label}`" :aria-label="m.id === section ? `${m.label} (current section)` : `Move to ${m.label}`"
+                                @click="m.id !== section && $emit('move-section', m.id); moreOpen = false">{{ m.icon }} {{ m.label }}<span v-if="m.id === section" class="move-btn__check" aria-hidden="true"> ✓</span></button>
+                      </div>
                     </div>
                   </div>
 
@@ -445,6 +449,15 @@ const onPressEnd = () => { if (pressTimer !== 'fired') clearTimeout(pressTimer);
 .action-btn--warn:hover { background: var(--c-warn-soft); border-color: var(--c-warn-line); }
 .action-btn--danger:hover { background: var(--c-danger-soft); border-color: var(--c-danger-line); }
 .hidden-input { display: none; }
+/* Move to: a plain second line inside the existing ... menu (no extra box) */
+.task-actions { flex-wrap: wrap; }
+.app-root .task-actions.task-actions { left: auto; right: 0; width: max-content; max-width: calc(100vw - 32px); justify-content: flex-end; }
+.move-row { flex-basis: 100%; flex-wrap: nowrap; display: flex; align-items: center; gap: 2px; border-top: 1px solid var(--c-border); margin-top: 2px; padding-top: 2px; }
+.move-row__label { font-size: var(--fs-xs, .75rem); color: var(--c-text-2); margin: 0 4px; white-space: nowrap; }
+.app-root .move-btn.move-btn { width: auto; height: 32px; padding: 0 6px; font-size: .8rem; white-space: nowrap; color: var(--c-text); }
+.move-btn--current { cursor: default; opacity: .6; }
+.move-btn--current:hover { background: transparent; }
+.move-btn__check { color: var(--c-success); font-weight: 700; }
 .task-toast { position: absolute; top: var(--sp-2); right: var(--sp-2); background: var(--c-success-soft); color: var(--c-success); font-size: var(--fs-sm); font-weight: 600; padding: var(--sp-1) var(--sp-2); border-radius: var(--r); border: 1px solid var(--c-success-line); box-shadow: var(--shadow-2); }
 .task-toast--info { background: var(--c-accent-soft); color: var(--c-accent-text); border-color: var(--c-accent-line); }
 .task-timer-left { font-size: var(--fs-sm); font-weight: 700; color: var(--c-warn); }
