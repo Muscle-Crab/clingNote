@@ -60,6 +60,22 @@ out = await L.runAgentTurn({ text: 'move essay to 3pm', call: async () => seq.sh
 ok(ran5.length === 0 && out.corrected && out.reply === L.NO_TOOL_FIX, 'second toolless Done is corrected');
 seq = [{ text: 'Your streak is 4 days.' }]; out = await L.runAgentTurn({ text: 'streak?', call: async () => seq.shift(), executor: ex5, confirm: async () => true });
 ok(out.reply === 'Your streak is 4 days.', 'plain answers untouched');
-//__MORE__
+// ---- Fix 6: alarm + holiday tools, penalty in Firestore, write_calendar default false ----
+v = T.validateCall('set_alarm', { time: '6am', title: 'ZZTEST wake' }, snap); ok(v.ok && v.args.time === '06:00' && v.args.date === TODAY, 'set_alarm 6am today');
+v = T.validateCall('set_alarm', { time: 'later' }, snap); ok(!v.ok, 'set_alarm needs a time');
+ok(!T.validateCall('set_alarm', { time: '07:00', date: '2000-01-01' }, snap).ok, 'set_alarm past date rejected');
+const ex6 = createAssistantExecutor({ tasks: () => [], today: () => TODAY, pro: () => false, limitRemaining: async () => 5 });
+ok(/iPhone app/.test((await ex6.run('set_alarm', { time: '06:00', date: TODAY, title: 'x' })).error), 'web fallback message for alarms');
+let alarmArgs = null; const ex6b = createAssistantExecutor({ tasks: () => [], today: () => TODAY, pro: () => false, limitRemaining: async () => 5, setAlarm: async (a) => { alarmArgs = a; return { ok: true }; }, holiday: async (a) => ({ summary: `off ${a.from}..${a.to}`, days: 2 }) });
+ok((await ex6b.run('set_alarm', { time: '06:00', date: TMR, title: 'ZZTEST wake' })).ok && alarmArgs.date === TMR, 'set_alarm runs the native dep');
+v = T.validateCall('set_holiday', { from: TMR, to: TMR }, snap); ok(v.ok && T.needsConfirm('set_holiday', v.args) && /Take days off/.test(T.describeCall('set_holiday', v.args)), 'set_holiday validates + confirms');
+ok(!T.validateCall('set_holiday', { from: TMR, to: TODAY }, snap).ok, 'set_holiday end before start rejected');
+ok(!T.validateCall('set_holiday', { from: 'soon' }, snap).ok, 'set_holiday needs dates');
+ok((await ex6b.run('set_holiday', { from: TMR, to: TMR })).days === 2, 'set_holiday runs the holiday dep');
+ok(A.TOOL_NAMES.has('set_alarm') && A.TOOL_NAMES.has('set_holiday'), 'declarations include the new tools');
+ok(T.validateCall('auto_schedule', {}, snap).args.writeCalendar === false && T.validateCall('auto_schedule', { write_calendar: 'yes' }, snap).args.writeCalendar === false && T.validateCall('auto_schedule', { write_calendar: true }, snap).args.writeCalendar === true, 'auto_schedule write_calendar defaults false');
+const H = fs.readFileSync(path.join(__dirname, '../src/views/HomeView.vue'), 'utf8'); const eu = H.slice(H.indexOf('const emergencyUnlock = '), H.indexOf('\nconst ', H.indexOf('const emergencyUnlock = ') + 10));
+ok(/lockPenalties: arrayUnion\(/.test(eu) && /'streaks', userId\.value/.test(eu), 'emergency unlock penalty stored in Firestore');
+ok(/setAlarm: async/.test(H) && /clingAlarm\.scheduleOnce/.test(H.slice(H.indexOf('setAlarm: async'))) && /offRange\(from, to/.test(H), 'HomeView reuses clingAlarm + offRange/offDates');
 console.log(`\n${n} assistant-fix tests passed`);
 })().catch((e) => { console.error(e); process.exit(1); });

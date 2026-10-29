@@ -49,6 +49,8 @@ export function createAssistantExecutor(deps) {
       case 'add_habit': case 'log_habit': case 'get_habits': { const r = await deps.habit(name, a); return r.error ? { error: r.error } : { ok: true, ...r }; }
       case 'place_reminder': { const r = await deps.placeReminder(a); return r.error ? { error: r.error } : { ok: true, summary: `${a.title} @ ${a.place}` }; }
       case 'lock_apps': case 'unlock_apps': case 'open_app_picker': { if (!deps.lockByName) return { error: 'App lock needs the iPhone app.' }; const r = await deps.lockByName(name, a); return r.error ? { error: r.error } : { ok: true, ...r }; }
+      case 'set_alarm': { if (!deps.setAlarm) return { error: 'Alarms need the iPhone app. On the web, add a timed task instead and the app will remind you.' }; const r = await deps.setAlarm(a); return r && r.error ? { error: r.error } : { ok: true, summary: `${a.title} ${a.date && a.date !== deps.today() ? `${a.date} ` : ''}${a.time}` }; }
+      case 'set_holiday': { if (!deps.holiday) return { error: 'Holiday mode is not available here.' }; const r = await deps.holiday(a); return r && r.error ? { error: r.error } : { ok: true, ...r }; }
       case 'app_lock': { const r = await deps.appLock(a.action); return r.error ? { error: r.error } : { ok: true, ...r }; }
       default: return { error: 'Unknown tool' };
     }

@@ -356,7 +356,7 @@ import TransferModal from '@/components/home/TransferModal.vue';
 import HolidayModal from '@/components/home/HolidayModal.vue';
 import { clingAlarm, alarmPluginAvailable } from '@/native/clingAlarm';
 import { ALARM_SOUND, SNOOZE_MINUTES } from '@/utils/wakeAlarm';
-import { shouldAutoReplan, isOffDay, offLine, alarmAtFor, alarmLine, unlockAccepted, UNLOCK_WORD } from '@/utils/planPhase2';
+import { shouldAutoReplan, isOffDay, offLine, offRange, alarmAtFor, alarmLine, unlockAccepted, UNLOCK_WORD } from '@/utils/planPhase2';
 import VoiceModal from '@/components/home/VoiceModal.vue';
 import AssistantSheet from '@/components/home/AssistantSheet.vue';
 import { createAssistantExecutor } from '@/utils/assistantExecutor';
@@ -3586,6 +3586,7 @@ onMounted(() => { setTimeout(syncAppLock, 1200); });
 // Emergency unlock (assistant tool + sergeant menu): stops the shield for today and books the point penalty.
 const emergencyUnlock = async () => { await clingLock.stopLock(); hardLocked.value = false; const day = localDateStr(); let pen = []; try { pen = JSON.parse(localStorage.getItem(PENALTY_KEY) || '[]'); } catch (e) { /* ignore */ }
   pen.push({ day, points: EMERGENCY_PENALTY, at: Date.now() }); try { localStorage.setItem(PENALTY_KEY, JSON.stringify(pen.slice(-60))); } catch (e) { /* ignore */ }
+  if (userId.value) { try { await setDoc(doc(db, 'streaks', userId.value), { lockPenalties: arrayUnion({ day, points: EMERGENCY_PENALTY, at: Date.now() }) }, { merge: true }); } catch (e) { console.warn('penalty sync', e && e.message); } }
   lockUnlockedDay.value = day; return { summary: `Unlocked. Penalty: ${EMERGENCY_PENALTY} extra points owed today.`, penalty: EMERGENCY_PENALTY }; };
 // Hard lock chosen at day start: pick apps once if needed, turn the lock on, the shield runs until the day ends (shouldShield/endMs).
 const startHardLock = async () => {
@@ -3775,6 +3776,17 @@ const assistantExecutor = createAssistantExecutor({
     const p = places[place]; const r = await clingNative.addGeofence({ id: `${place}-${Date.now()}`, lat: p.lat, lng: p.lng, radius: 150, body: title, repeats: false });
     return r.error ? { error: r.error } : { ok: true }; },
   lockByName: (name, a) => lockByName(name, a),
+  setAlarm: async ({ time, date, title }) => { // same plugin as the boss alarm / wake alarm
+    if (!alarmPluginAvailable()) return { error: 'Alarms need the iPhone app. On the web, add a timed task instead and the app will remind you.' };
+    const auth = await clingAlarm.requestAuthorization().catch(() => ({})); if (auth && auth.status === 'denied') return { error: 'Alarm permission is off in Settings.' };
+    const [y, mo, d] = (date || localDateStr()).split('-').map(Number); const [hh, mm] = time.split(':').map(Number); const at = new Date(y, mo - 1, d, hh, mm);
+    if (at.getTime() <= Date.now()) return { error: 'That time has already passed.' };
+    const r = await clingAlarm.scheduleOnce({ atMs: at.getTime(), title, snoozeMinutes: SNOOZE_MINUTES, sound: ALARM_SOUND });
+    return r && r.scheduled ? { ok: true, id: r.id || null } : { error: "Alarm couldn't be set." }; },
+  holiday: async ({ from, to }) => { // phase 2 holiday range -> streaks/{uid}.offDates
+    const list = offRange(from, to, localDateStr()); if (!list.length || !userId.value) return { error: 'No days to take off.' };
+    const ref0 = doc(db, 'streaks', userId.value); await setDoc(ref0, { offDates: arrayUnion(...list) }, { merge: true });
+    const sd = await getDoc(ref0); if (sd.exists()) applyStreakState(sd.data()); return { summary: offLine(list), days: list.length }; },
   appLock: async (action) => {
     if (!lockAvailable()) return { error: 'App lock needs the iPhone app (iOS 16+).' };
     if (action === 'pick_apps') { const a0 = await clingLock.requestAuthorization(); if (a0.status !== 'approved') return { error: 'Screen Time permission was not given.' }; const r = await clingLock.pickApps(); if (r.saved) { try { localStorage.setItem(LOCK_PREF, '1'); } catch (e) { /* ignore */ } } syncAppLock(); return { saved: !!r.saved, apps: r.apps || 0 }; }

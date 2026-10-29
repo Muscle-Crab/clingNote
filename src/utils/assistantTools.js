@@ -8,7 +8,7 @@ import { validateText, LIMITS } from './community';
 import { repeatFields } from './assistantExtras';
 
 // Never run without an explicit user confirm (tap or spoken yes). A model-supplied "confirmed" flag is ignored.
-export const CONFIRM_TOOLS = new Set(['delete_task', 'complete_task', 'start_day', 'post_to_community', 'roll_unfinished', 'auto_schedule']);
+export const CONFIRM_TOOLS = new Set(['delete_task', 'complete_task', 'start_day', 'post_to_community', 'roll_unfinished', 'auto_schedule', 'set_holiday']);
 export const BRAIN_DUMP_MIN = 3; // a create_tasks call with this many items is a brain dump: review card before saving
 export const needsConfirm = (name, args = {}) => CONFIRM_TOOLS.has(name) || (name === 'create_tasks' && (args.items || []).length >= BRAIN_DUMP_MIN) || (name === 'app_lock' && args.action === 'emergency_unlock');
 export const READ_TOOLS = new Set(['get_overview', 'navigate', 'get_stats', 'find_tasks', 'suggest_next', 'get_habits']);
@@ -93,7 +93,7 @@ export const validateCall = (name, args = {}, { refs = {}, tasksByKey = new Map(
     case 'set_setting': return SETTINGS.includes(a.setting) ? { ok: true, args: { setting: a.setting, on: !!a.on } } : { ok: false, error: 'Unknown setting.' };
     case 'navigate': return PAGES[a.page] ? { ok: true, args: { path: PAGES[a.page] } } : { ok: false, error: 'Unknown page.' };
     case 'get_overview': case 'get_stats': case 'suggest_next': case 'get_habits': case 'roll_unfinished': return { ok: true, args: {} };
-    case 'auto_schedule': return { ok: true, args: { writeCalendar: !!a.write_calendar } };
+    case 'auto_schedule': return { ok: true, args: { writeCalendar: a.write_calendar === true } }; // off unless the model explicitly sets it
     case 'add_habit': case 'log_habit': { const n = String(a.name || '').replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, 60); return n ? { ok: true, args: { name: n, done: a.done !== false } } : { ok: false, error: 'Which habit?' }; }
     case 'place_reminder': {
       const title = String(a.title || '').replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, 120); const place = String(a.place || '').trim().slice(0, 40).toLowerCase();
@@ -111,6 +111,20 @@ export const validateCall = (name, args = {}, { refs = {}, tasksByKey = new Map(
       return { ok: true, args: name === 'lock_apps' ? { apps, minutes, until_unlock: !!a.until_unlock || !minutes } : { apps } };
     }
     case 'open_app_picker': return { ok: true, args: {} };
+    case 'set_alarm': { // ringing alarm (clingAlarm / AlarmKit, iOS only; the executor answers the web with a fallback message)
+      const time = toHHMM(a.time); if (!time) return { ok: false, error: 'Give the alarm time (HH:MM).' };
+      const date = a.date ? String(a.date) : today; if (date && !okD(date)) return { ok: false, error: 'Bad date.' };
+      if (date && today && date < today) return { ok: false, error: 'Date is in the past.' };
+      const title = String(a.title || 'Alarm').replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, 80) || 'Alarm';
+      return { ok: true, args: { time, date: date || '', title } };
+    }
+    case 'set_holiday': { // planned days off (streaks offDates, phase 2 holiday range): streak bridged
+      const from = String(a.from || ''); const to = String(a.to || a.from || '');
+      if (!okD(from) || !okD(to)) return { ok: false, error: 'Give from/to dates (YYYY-MM-DD).' };
+      if (to < from) return { ok: false, error: 'End date is before the start.' };
+      if (today && to < today) return { ok: false, error: 'Those days are in the past.' };
+      return { ok: true, args: { from: today && from < today ? today : from, to } };
+    }
     case 'find_tasks': { const q = String(a.query || '').slice(0, 80).trim(); const d = String(a.day || '').slice(0, 12).trim(); return q || d ? { ok: true, args: { query: q, day: d } } : { ok: false, error: 'Say what to look for.' }; }
     case 'snooze_task': { const r = needTask(); if (!r.ok) return r; const m = Math.round(Number(a.minutes)); if (!(m > 0 && m <= 1440)) return { ok: false, error: 'Minutes 1..1440.' }; return { ok: true, args: { task: r.task, minutes: m } }; }
     case 'add_subtasks': { const r = needTask(); if (!r.ok) return r; const items = (Array.isArray(a.items) ? a.items : []).map((x) => String(x || '').replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, 100)).filter(Boolean).slice(0, 12); return items.length ? { ok: true, args: { task: r.task, items } } : { ok: false, error: 'No subtasks.' }; }
@@ -134,6 +148,7 @@ export const describeCall = (name, args = {}) => {
     case 'create_tasks': return `Add these ${(args.items || []).length} tasks?\n\n${(args.items || []).map((it, i) => `${i + 1}. ${it.title}${it.start ? ` at ${it.start}` : ''}${it.date ? ` (${it.date})` : ''}${it.points ? ` · ${it.points} pts` : ''}`).join('\n')}\n\nSay yes, or tell me what to change.`;
     case 'roll_unfinished': return 'Move all of today\'s unfinished tasks to tomorrow?';
     case 'auto_schedule': return `Put today's open tasks into your free time${args.writeCalendar ? ' and add them to your calendar' : ''}?`;
+    case 'set_holiday': return `Take days off ${args.from}${args.to !== args.from ? ` to ${args.to}` : ''}? Your streak is kept.`;
     case 'app_lock': return `Emergency unlock your blocked apps? It costs points, and your robot will remember.`;
     case 'post_to_community': return `Post to ClingNote Community:\n\n${args.text}${args.includeStats ? '\n\n(+ today\'s progress card)' : ''}`;
     default: return name;
