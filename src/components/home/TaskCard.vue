@@ -22,7 +22,7 @@
                          :aria-disabled="dragDisabled ? 'true' : 'false'" :aria-label="'Task ' + (index + 1) + ', drag to reorder'">
                       <i class="fas fa-grip-vertical"></i>
                     </div>
-                    <button v-if="isTodayTab" ref="checkEl" @click="onCheck" class="task-check" :aria-label="task.completed ? 'Mark not done' : 'Mark done'" :class="{ 'task-check--done': task.completed, 'task-check--pop': completing }">
+                    <button v-if="isTodayTab" ref="checkEl" @click.stop="onCheck" class="task-check" :aria-label="task.completed ? 'Mark not done' : 'Mark done'" :class="{ 'task-check--done': task.completed, 'task-check--pop': completing }">
                       <i v-if="!completing" :class="task.completed ? 'fas fa-check-circle' : 'far fa-circle'"></i>
                       <svg v-else class="check-draw" viewBox="0 0 24 24" aria-hidden="true">
                         <circle class="check-draw__disc" cx="12" cy="12" r="10.5" />
@@ -319,7 +319,10 @@ let downPos = null;
 const onCardDown = (e) => { downPos = { x: e.clientX, y: e.clientY }; };
 const onCardTap = (event) => {
   if (pressTimer === 'fired') { pressTimer = null; return; } // bound on the whole card (blank areas, chips, next-action line, coin/right side)
-  if (event.target.closest('button, input, textarea, select, a, label, .task-title, .label-pill, .task-expand, .drag-handle')) return;
+  // composedPath, not target.closest: a handler earlier in the bubble (e.g. the check swapping its <i> for the tick SVG) can detach
+  // event.target before this runs, and closest() on a detached node misses the button -> the sheet opened on top of completing.
+  const SKIP = 'button, input, textarea, select, a, label, .task-title, .label-pill, .task-expand, .drag-handle';
+  if ((event.composedPath ? event.composedPath() : [event.target]).some((n) => n && n.matches && n !== event.currentTarget && n.matches(SKIP))) return;
   // Only a click that ends a *drag-select* inside this card is ignored; a stale selection elsewhere must not block taps.
   if (downPos && Math.hypot(event.clientX - downPos.x, event.clientY - downPos.y) > 5) {
     const sel = window.getSelection && window.getSelection();
