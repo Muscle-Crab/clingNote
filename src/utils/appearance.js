@@ -9,6 +9,7 @@ export const MODES = ['system', 'light', 'dark'];
 export const TEXT_SIZES = { system: null, m: 1, l: 1.12, xl: 1.25 };
 export const DEFAULT_APPEARANCE = Object.freeze({ mode: 'dark', text: 'system' }); // dark = today's look; light/system are opt-in
 export const ZOOM_MIN = 0.9; export const ZOOM_MAX_NATIVE = 1.35; export const ZOOM_MAX_WEB = 1.2;
+export const ZOOM_MAX_AUTO_NATIVE = 1.1; // 'system'/Auto on iOS: follow Dynamic Type only up to 1.10 (larger AX sizes overflowed Home); A/A+/A++ unaffected
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
 export const normAppearance = (v) => {
@@ -22,8 +23,10 @@ export const resolveTheme = (mode, prefersDark) => (mode === 'system' ? (prefers
 // systemPx: measured -apple-system-body size (iOS) or root font size (web); base: 17 (iOS body) or 16 (web root).
 export const systemScale = (systemPx, base) => (Number(systemPx) > 0 && Number(base) > 0 ? Number(systemPx) / Number(base) : 1);
 export const zoomFor = (text, { systemPx, base = 16, native = false } = {}) => {
-  const raw = TEXT_SIZES[text] ?? systemScale(systemPx, base);
-  const z = clamp(raw, ZOOM_MIN, native ? ZOOM_MAX_NATIVE : ZOOM_MAX_WEB);
+  const fixed = TEXT_SIZES[text];
+  const raw = fixed ?? systemScale(systemPx, base);
+  const hi = native ? (fixed == null ? ZOOM_MAX_AUTO_NATIVE : ZOOM_MAX_NATIVE) : ZOOM_MAX_WEB;
+  const z = clamp(raw, ZOOM_MIN, hi);
   return Math.round(z * 100) / 100;
 };
 

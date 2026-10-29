@@ -38,8 +38,13 @@ t('resolveTheme follows the OS only in system mode', () => {
 t('zoomFor: fixed sizes, Dynamic Type scale, clamps (web lower cap)', () => {
   assert.strictEqual(A.zoomFor('m'), 1); assert.strictEqual(A.zoomFor('l'), 1.12); assert.strictEqual(A.zoomFor('xl', { native: true }), 1.25);
   assert.strictEqual(A.zoomFor('system', { systemPx: 17, base: 17, native: true }), 1);
-  assert.strictEqual(A.zoomFor('system', { systemPx: 21, base: 17, native: true }), 1.24);
-  assert.strictEqual(A.zoomFor('system', { systemPx: 53, base: 17, native: true }), A.ZOOM_MAX_NATIVE); // AX5 accessibility size
+  assert.strictEqual(A.zoomFor('system', { systemPx: 18, base: 17, native: true }), 1.06);
+  assert.strictEqual(A.zoomFor('system', { systemPx: 21, base: 17, native: true }), 1.1); // Auto capped at 1.10 on iOS
+  assert.strictEqual(A.zoomFor('system', { systemPx: 53, base: 17, native: true }), A.ZOOM_MAX_AUTO_NATIVE); // AX5 accessibility size
+  assert.strictEqual(A.ZOOM_MAX_AUTO_NATIVE, 1.1);
+  for (const px of [undefined, 10, 17, 53]) for (const native of [true, false]) { // fixed A/A+/A++ ignore the Auto cap
+    assert.strictEqual(A.zoomFor('m', { systemPx: px, base: 17, native }), 1); assert.strictEqual(A.zoomFor('l', { systemPx: px, base: 17, native }), 1.12); assert.strictEqual(A.zoomFor('xl', { systemPx: px, base: 17, native }), native ? 1.25 : 1.2); // web cap unchanged
+  }
   assert.strictEqual(A.zoomFor('system', { systemPx: 14, base: 17, native: true }), 0.9);
   assert.strictEqual(A.zoomFor('system', { systemPx: 24, base: 16 }), A.ZOOM_MAX_WEB);
   assert.strictEqual(A.zoomFor('system', {}), 1);
@@ -57,7 +62,7 @@ t('applyAppearance web default text: no zoom set; system mode follows dark OS', 
 t('applyAppearance native: uses pageZoom (not CSS zoom) and measures Dynamic Type', () => {
   const d = fakeDoc({ applePx: 23 }); let z = null;
   const r = A.applyAppearance({ mode: 'dark', text: 'system' }, { document: d, matchMedia: mm(false), native: true, setPageZoom: (v) => { z = v; } });
-  assert.strictEqual(r.zoom, 1.35); assert.strictEqual(z, 1.35); assert.strictEqual(d.documentElement.style.zoom, '');
+  assert.strictEqual(r.zoom, 1.1); assert.strictEqual(z, 1.1); // Auto capped assert.strictEqual(d.documentElement.style.zoom, '');
 });
 t('measureSystemText: web ignores -apple-system-body (macOS reports 13px)', () => {
   const d = fakeDoc({ rootPx: 20, applePx: 13 });
