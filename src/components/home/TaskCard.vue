@@ -134,6 +134,7 @@
                       <button type="button" @click="repeatOpen = !repeatOpen; moreOpen = false" class="action-btn" data-test="repeat-btn" :class="{ 'action-btn--on': repeatOnAny }" :title="repeatOnAny ? repeatText : 'Make recurring'" aria-label="Repeat settings">🔁</button>
                       <button @click="$emit('open-reminder')" class="action-btn" title="Reminder" aria-label="Add reminder">📅</button>
                       <button @click="$emit('transfer')" class="action-btn" title="Transfer" aria-label="Transfer to another day">🔄</button>
+                      <template v-if="section"><button v-for="m in MOVE_TO.filter((x) => x.id !== section)" :key="m.id" type="button" class="action-btn" :data-test="`move-${m.id}`" :title="`Move to ${m.label}`" :aria-label="`Move to ${m.label}`" @click="$emit('move-section', m.id); moreOpen = false">{{ m.icon }}</button></template>
                       <button @click="$emit('video')" class="action-btn" title="Video" aria-label="Attach video">🎥</button>
                       <button @click="fileInput && fileInput.click()" class="action-btn" title="Attach file" aria-label="Attach file">📎</button>
                       <input type="file" ref="fileInput" accept="image/*,.pdf,.doc,.docx,.txt" @change="$emit('upload', $event)" class="hidden-input" />
@@ -253,8 +254,9 @@ const props = defineProps({
   dayLocked: { type: Boolean, default: false }, // 8-hour lock on this day: title/estimate/points frozen
   highlight: { type: Boolean, default: false }, // just rolled over (tapped from the rollover banner)
   allOccurrences: { type: Boolean, default: false },
+  section: { type: String, default: '' }, // Home section this card is shown in (enables Move to ... in the ... menu)
 });
-const emit = defineEmits(['skip-today', 'set-repeat', 'set-boss', 'toggle-expand', 'toggle-complete', 'open-detail', 'toggle-important', 'patch', 'subtask-patch',
+const emit = defineEmits(['skip-today', 'move-section', 'set-repeat', 'set-boss', 'toggle-expand', 'toggle-complete', 'open-detail', 'toggle-important', 'patch', 'subtask-patch',
   'toggle-label', 'open-reminder', 'transfer', 'video', 'upload', 'timer', 'wont-do', 'delete', 'schedule', 'toggle-repeat']);
 // 🔁 one-tap toggle (HomeView passes repeatInfo = { on, label, pending } covering both repeat models)
 const repeatPop = ref(false);
@@ -279,6 +281,7 @@ const customDays = ref([...(props.task.repeatDays || [])]);
 const pickRepeat = (list) => { repeatOpen.value = false; emit('set-repeat', [...list]); };
 
 const moreOpen = ref(false);
+const MOVE_TO = [{ id: 'morning', label: 'Morning', icon: '🌅' }, { id: 'noon', label: 'Noon', icon: '☀️' }, { id: 'afternoon', label: 'Afternoon', icon: '🌇' }];
 const cat = computed(() => categoryOf(props.task));
 // labels may be stored as an array or a comma-separated string (older tasks); never iterate a string per character
 const labelList = computed(() => { const l = props.task.labels; return (Array.isArray(l) ? l : typeof l === 'string' ? l.split(',') : []).map((x) => String(x).trim()).filter(Boolean); });

@@ -154,10 +154,10 @@
             <button type="button" class="rollover-banner__body" @click="highlightRollover">🌅 {{ rollover.message }}</button>
             <button type="button" class="rollover-banner__x" aria-label="Dismiss" data-test="rollover-dismiss" @click="dismissRollover">×</button>
           </div>
-          <div ref="taskListEl" class="tasks-list space-y-2" :class="{ 'reorder-off': !reorderable }" @pointerdown="onListPointerDown">
-            <template v-for="task in displayTasks" :key="rkey(task)">
-              <TaskCard
-                  v-if="!task.completed || !isViewingToday" :data-reorder-key="taskKey(task)"
+          <TaskSections ref="taskSectionsRef" :tasks="displayTasks.filter((t) => !t.completed || !isViewingToday)" :key-of="taskKey" :reorderable="reorderable"
+                        @drop="onSectionDrop" @drag-start="onDragStart" @drag-end="onSectionDragEnd" v-slot="{ task, section }">
+              <TaskCard :section="section" @move-section="moveTaskToSection(task, $event)"
+                  :data-reorder-key="taskKey(task)"
                   :task="task" :up-next="isViewingToday && !task.completed && taskKey(task) === upNextKey" :drag-disabled="!reorderable" :index="realIndex(task)" :is-today-tab="isViewingToday" :expanded="expandedKey === taskKey(task)"
                   :active-labels="activeLabels" :now="nowTick" :show-notification="showNotification" :transfer-notification="transferNotification"
                   @toggle-expand="toggleExpanded(task)" @toggle-complete="toggleTaskCompletion(realIndex(task))" @open-detail="openTaskDetailModal(task)"
@@ -169,8 +169,7 @@
                   @wont-do="openWontDoModal(realIndex(task))" @delete="deleteTask(realIndex(task))" @schedule="scheduleExistingTask(realIndex(task), task, $event)" @set-repeat="setTaskRepeat(task, $event)" :repeat-info="repeatStateOf(task)" @toggle-repeat="toggleTaskRepeat(task)"
                   :can-skip="isViewingToday && !selectedDayLocked && canSkipToday(task, scheduledList)" @skip-today="skipTaskToday(task)"
               />
-            </template>
-          </div>
+          </TaskSections>
 
           <button v-if="coverage.hidden > 0" type="button" class="more-hidden" data-test="more-hidden" :aria-label="`${coverage.label}${coverage.why ? ` (${coverage.why})` : ''}`" @click="revealHidden">
             {{ coverage.label }}<span v-if="coverage.why" class="more-hidden__why"> · {{ coverage.why }}</span>
@@ -246,6 +245,8 @@ import DramaOverlay from '@/components/discipline/DramaOverlay.vue';
 import BossPanel from '@/components/discipline/BossPanel.vue';
 import { bossMessage, validReason, carryTask, canAddTask, watchingBlockers, isIdle, verdict as dayVerdict, line as bossLine, IDLE_MINUTES } from '@/utils/strictBoss';
 import MorningReport from '@/components/home/MorningReport.vue';
+import TaskSections from '@/components/home/TaskSections.vue';
+import { sectionOf, sectionFromTime, sectionForCreate, isSection, mergeOrder } from '@/utils/taskSections';
 import BackgroundLayer from '@/components/background/BackgroundLayer.vue';
 import BackgroundPanel from '@/components/background/BackgroundPanel.vue';
 import { useBackground } from '@/composables/useBackground';
@@ -376,7 +377,6 @@ import { auth } from '@/firebaseConfig'; // Assuming you have Firebase authentic
 import { onAuthStateChanged } from 'firebase/auth';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import data from '@/data.json';
-import { useSmoothReorder } from "@/composables/useSmoothReorder";
 import {db} from '@/firebaseConfig'; // Assuming you have imported the Firebase setup file and exported the db instance
 import { doc, setDoc, serverTimestamp, getDoc, updateDoc, getFirestore, runTransaction, onSnapshot } from 'firebase/firestore';
 const modalOpen = ref(false);
@@ -2045,6 +2045,7 @@ const addNewTask = async () => {
     dueDate: newTask.value.dueDate || '',
     startTime: newTask.value.startTime || '',
     estimateMin: Number(newTask.value.estimateMin) || 0,
+    section: sectionForCreate({ start: newTask.value.startTime, section: newTask.value.section }), // Morning unless a time or the assistant says otherwise
     nextAction: (newTask.value.nextAction || '').trim()
   };
   Object.assign(task, estimateFor(task)); // heuristic complexity / minutes / points (estimateMin stays as typed; the server re-locks at countdown start)
@@ -3250,21 +3251,25 @@ const FULL_DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 
 const isDraggingTask = ref(false);
 const reorderSettling = ref(false); // keeps entrance animations off while the DOM settles after a drop (no replay/flash)
 let settleTimer = null;
-const taskListEl = ref(null);
-const { onPointerDown: onListPointerDown } = useSmoothReorder({
-  listRef: taskListEl,
-  enabled: () => reorderable.value,
-  onStart: () => onDragStart(),
-  onCommit: async (fromKey, toKey) => {
-    const list = [...displayTasks.value];
-    const fi = list.findIndex((t) => taskKey(t) === fromKey), ti = list.findIndex((t) => taskKey(t) === toKey);
-    if (fi < 0 || ti < 0) return;
-    const [moved] = list.splice(fi, 1); list.splice(ti, 0, moved);
-    onReorder(list);
-    await nextTick();
-  },
-  onEnd: (changed) => { isDraggingTask.value = false; settleReorder(); playSound('dragEnd'); if (changed) handleDragEnd(); },
-});
+const taskSectionsRef = ref(null);
+// Drop from TaskSections (smooth reorder over headers + cards): reorder locally, and if the card landed under another
+// section header, save its new section (persisted like any other edit).
+const onSectionDrop = async ({ key, section, order }) => {
+  const full = [...displayTasks.value];
+  const t = full.find((x) => taskKey(x) === key); if (!t) return;
+  onReorder(mergeOrder(full, order, taskKey, key));
+  await nextTick();
+  if (sectionOf(t) !== section) await moveTaskToSection(t, section);
+};
+const onSectionDragEnd = (changed) => { isDraggingTask.value = false; settleReorder(); playSound('dragEnd'); if (changed) handleDragEnd(); };
+// "Move to Morning/Noon/Afternoon" (... menu) and cross-section drops. Saved as task.section; opens the target section.
+const moveTaskToSection = async (task, section) => {
+  if (!isSection(section)) return;
+  const live = (selectedDayRoutine.value || []).find((x) => taskKey(x) === taskKey(task)) || task;
+  if (live.section === section) return;
+  taskSectionsRef.value?.expand?.(section);
+  await editTask(realIndex(live), live, { section });
+};
 const settleReorder = () => { reorderSettling.value = true; clearTimeout(settleTimer); settleTimer = setTimeout(() => { reorderSettling.value = false; }, 600); };
 const onDragStart = () => {
   isDraggingTask.value = true; reorderSettling.value = true;
@@ -3331,6 +3336,7 @@ const patchTask = async (index, task, patch) => {
 const seriesKey = ref(null);
 const editTask = async (index, task, rawPatch) => {
   let patch = safeEditPatch(rawPatch); // an edit never completes a task
+  if (patch.startTime && patch.section === undefined && sectionFromTime(patch.startTime)) patch = { ...patch, section: sectionFromTime(patch.startTime) }; // a new time moves the card to its section
   if (!Object.keys(patch).length) return;
   const dayName = days[selectedDayIndex.value].day;
   const lockedHit = patchTouchesLocked(patch);
@@ -3671,7 +3677,7 @@ const assistantExecutor = createAssistantExecutor({
   addTask: async (it) => {
     error.value = '';
     if (it.type === 'reminder') { const r = await saveReminder({ title: it.title, remindAt: it.remindAt }, { schedule: scheduleLocal }); return { ok: r.ok, error: r.error }; }
-    newTask.value = { ...blankTask(), title: it.title, startTime: it.start || '', estimateMin: it.durationMin || '', priority: it.priority || newTask.value.priority,
+    newTask.value = { ...blankTask(), title: it.title, startTime: it.start || '', estimateMin: it.durationMin || '', section: it.section || '', priority: it.priority || newTask.value.priority,
       aiPoints: it.points || 0, aiComplexity: it.complexity || 0,
       ...(it.type === 'schedule' ? { sched: { ...blankSchedule(it.date), on: true, date: it.date, time: it.start || '09:00', ...(it.repeat ? { repeat: it.repeat, days: it.days || [] } : {}) } }
         : deferredDateFor(it.date, getTodayId()) ? { sched: { ...blankSchedule(it.date), on: true, date: it.date, time: it.start || '' } } : {}) };

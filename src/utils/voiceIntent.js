@@ -136,6 +136,7 @@ export function normalizeItems(items, now = new Date()) {
     let remindAt = /^\d{4}-\d{2}-\d{2}T([01]\d|2[0-3]):[0-5]\d$/.test(String(x.remindAt || '')) ? x.remindAt : '';
     if (type === 'reminder' && !remindAt) remindAt = `${date}T${start || '09:00'}`;
     const st2 = start || (type === 'reminder' ? remindAt.slice(11) : type === 'schedule' ? '09:00' : '');
-    return { type, title, date: type === 'reminder' ? remindAt.slice(0, 10) : date, start: st2, durationMin, remindAt: type === 'reminder' ? remindAt : '' };
+    const section = ['morning', 'noon', 'afternoon'].includes(x.section) ? x.section : ''; // optional Home section; an explicit start time wins when saved
+    return { type, title, date: type === 'reminder' ? remindAt.slice(0, 10) : date, start: st2, durationMin, remindAt: type === 'reminder' ? remindAt : '', ...(section ? { section } : {}) };
   }).filter((x) => x.title);
 }

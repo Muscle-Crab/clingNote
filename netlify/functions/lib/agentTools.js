@@ -16,6 +16,7 @@ const DECLARATIONS = [
       complexity: S('INTEGER', { description: '1 (trivial) .. 5 (very hard)' }), priority: S('STRING', { enum: ['normal', 'high'], description: 'Omit unless the user says it is important' }),
       repeat: S('STRING', { enum: ['daily', 'weekdays', 'weekends', 'weekly', 'monthly', 'yearly'], description: 'Recurring ("every weekday at 7"): type schedule + start + repeat. Omit for one-off tasks' }),
       days: S('ARRAY', { items: S('INTEGER'), description: 'weekly repeat days 0=Sun..6=Sat' }),
+      section: S('STRING', { enum: ['morning', 'noon', 'afternoon'], description: 'Home list section. Omit for the default (morning). Set only with a reason, e.g. "this afternoon" or "at lunch". A start time overrides it (<12:00 morning, 12:00-14:59 noon, 15:00+ afternoon).' }),
     }, required: ['title', 'points'] }) }),
   }, ['items']),
   fn('edit_task', 'Change a task: title, duration, start time, notes, priority or points (points: re-assign when effort changes, or the user\'s spoken value).', {
