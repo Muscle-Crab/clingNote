@@ -3,4 +3,6 @@
 <plist version="1.0"><dict>
   <key>com.apple.developer.family-controls</key><true/>
   <key>com.apple.security.application-groups</key><array><string>group.app.clingnote.ios</string></array>
+	<key>com.apple.developer.usernotifications.time-sensitive</key>
+	<true/>
 </dict></plist>
