@@ -5,7 +5,7 @@
 const { getAdmin } = require('./lib/firebaseAdmin');
 const { requirePro, userIsPro } = require('./lib/requirePro');
 const { verifyUser } = require('./lib/notify');
-const { callChat, callGeminiRaw } = require('./lib/aiProvider');
+const { callChat, callAgentRaw } = require('./lib/aiProvider');
 const { ASK_LIMITS, AGENT_LIMITS } = require('./lib/askConfig');
 const agentLib = require('./lib/agentTools');
 const { buildRequest } = require('./lib/aiPrompts');
@@ -56,7 +56,7 @@ const handleAsk = async (event, body, deps) => {
   }
 };
 
-// task 'agent' (ClingNote assistant): Gemini function calling, tools executed on the client. input: { contents (Gemini turns), context, step }.
+// task 'agent' (ClingNote assistant): OpenAI tool calling if OPENAI_API_KEY is set, else Gemini function calling; tools executed on the client. input: { contents (Gemini turns), context, step }.
 // 1 quota unit per NEW user message (shared with 'ask'); tool-result round trips are free but capped (per turn + per day).
 const takeSteps = async (db, uid) => db.runTransaction(async (tx) => {
   const ref = db.doc(`aiUsage/${uid}_${dayKey()}`); const snap = await tx.get(ref);
@@ -73,7 +73,7 @@ const handleAgent = async (event, body, deps) => {
   if (step < 0 || step > AGENT_LIMITS.MAX_STEPS_PER_TURN) return json(400, { error: 'Too many steps' });
   const fresh = agentLib.isNewUserTurn(contents);
   if (!fresh && step === 0) return json(400, { error: 'Bad step' });
-  if (!process.env.GEMINI_API_KEY) return json(500, { error: 'Server not configured' });
+  if (!process.env.OPENAI_API_KEY && !process.env.GEMINI_API_KEY) return json(500, { error: 'Server not configured' });
   const db = deps.db || getAdmin().firestore();
   const pro = await userIsPro(db, uid);
   const limit = pro ? AGENT_LIMITS.PRO_PER_DAY : ASK_LIMITS.FREE_PER_DAY;
@@ -81,7 +81,7 @@ const handleAgent = async (event, body, deps) => {
   try { if (fresh) used = await takeAskQuota(db, uid, limit); else await takeSteps(db, uid); }
   catch (e) { if (e.status === 429) return json(429, { error: pro ? 'Daily limit reached' : `Free plan: ${limit} assistant messages a day. Upgrade to Pro for more.`, limit, remaining: 0, pro }); throw e; }
   try {
-    const out = await callGeminiRaw(agentLib.buildAgentRequest(contents, input.context), { fetch: deps.fetch });
+    const out = await callAgentRaw(agentLib.buildAgentRequest(contents, input.context), { fetch: deps.fetch });
     const parts = out.parts.filter((p) => p && (typeof p.text === 'string' || p.functionCall)).map((p) => (p.functionCall && !agentLib.TOOL_NAMES.has(p.functionCall.name) ? null : p)).filter(Boolean);
     const toolCalls = parts.filter((p) => p.functionCall).map((p) => ({ name: p.functionCall.name, args: p.functionCall.args || {} }));
     const text = parts.filter((p) => typeof p.text === 'string' && !p.thought).map((p) => p.text).join('').trim();
