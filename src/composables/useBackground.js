@@ -1,14 +1,23 @@
 // Shared Background state: prefs (saved per device in localStorage) + music playback. Music never starts on its own.
-import { reactive, ref } from 'vue';
+import { reactive, ref, watch } from 'vue';
 import { loadPrefs, savePrefs, sanitize, DEFAULTS, loadCustomImage, saveCustomImage, clearCustomImage, effectiveImage, TRACKS, pickNextTrack, tapAction, restoreFromBackup, KEY } from '@/utils/bgPrefs';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import { applyBackgroundImage, fileToBackgroundDataUrl } from '@/utils/bgImage';
 import { createEngine } from '@/composables/useBackgroundAudio';
+import { npStart, npStop, npPaused, npTitle, npActive } from '@/composables/useNowPlaying';
+import { voSpeaking, _setMusicHolds } from '@/composables/useVoiceover';
 
 const prefs = reactive(loadPrefs());
 const custom = ref(loadCustomImage()); // user's own picture (data URL) or ''
 const imageError = ref('');
 const playing = ref(false);
+const trackName = () => { const t = TRACKS.find((x) => x.id === prefs.track); return t ? t.label : 'Background music'; };
+// Lock-screen widget handlers: pause keeps the (paused) widget so play works from the lock screen; in-app pause clears it.
+const lockHandlers = () => ({ play: () => api.play(), pause: () => api.pause({ fromLockScreen: true }), stop: () => api.pause() });
+// The voice ducks the music, then it comes back to the saved volume. Voice never takes over Now Playing while music holds it.
+export const DUCK = 0.3;
+watch(voSpeaking, (v) => { if (engine && playing.value) engine.setVolume(v ? prefs.volume * DUCK : prefs.volume); });
+_setMusicHolds(() => { if (!npActive()) return false; npTitle(trackName()); return true; }); // after a voice line: re-assert the music widget
 const audioError = ref('');
 let engine = null;
 let resumeArmed = false;
@@ -22,7 +31,7 @@ const armRotate = () => {
   rotTimer = setTimeout(() => {
     if (!prefs.autoRotate || !playing.value || !engine) return;
     const r = pickNextTrack(TRACKS.map((t) => t.id), prefs.track, rotBag); rotBag = r.bag;
-    prefs.track = r.next; persist(); engine.crossfadeTo(r.next); armRotate();
+    prefs.track = r.next; persist(); engine.crossfadeTo(r.next); npTitle(trackName()); armRotate();
   }, prefs.rotateMins * 60000);
 };
 
@@ -39,7 +48,7 @@ const persist = () => savePrefsAll({ anim: prefs.anim, track: prefs.track, volum
 const showImage = () => applyBackgroundImage(prefs.image, custom.value);
 
 // Keep the button honest: if iOS suspends/interrupts/closes audio (call, Siri, backgrounding) show "Play" again.
-const syncReal = () => { if (playing.value && (!engine || engine.state !== 'running')) { playing.value = false; stopRotate(); } };
+const syncReal = () => { if (playing.value && (!engine || engine.state !== 'running')) { playing.value = false; stopRotate(); npPaused(trackName()); } };
 const onCtxState = (st) => { if (st !== 'running') setTimeout(syncReal, 400); };
 const armTap = () => {
   if (resumeArmed || typeof window === 'undefined') return; resumeArmed = true;
@@ -62,12 +71,13 @@ const api = {
       engine = engine || createEngine();
       if (!engine) { audioError.value = "This browser can't play audio."; return Promise.resolve(); }
       engine.onStateChange = onCtxState;
-      const p = engine.start(prefs.track, prefs.volume);
+      const p = engine.start(prefs.track, voSpeaking.value ? prefs.volume * DUCK : prefs.volume);
+      npStart(trackName(), lockHandlers());
       playing.value = true; prefs.musicOn = true; persist(); armRotate();
       return p.then(() => { if (engine && engine.state !== 'running') setTimeout(syncReal, 600); });
     } catch (e) { console.error('Background audio failed:', e); audioError.value = 'Could not start audio. Tap play again.'; playing.value = false; return Promise.resolve(); }
   },
-  async pause() { stopRotate(); playing.value = false; prefs.musicOn = false; persist(); if (engine) await engine.stop(); },
+  async pause({ fromLockScreen = false } = {}) { stopRotate(); playing.value = false; prefs.musicOn = false; persist(); if (fromLockScreen) npPaused(trackName()); else npStop(); if (engine) await engine.stop(); },
   // Returning to the app: if music was on when the user left, bring it back. iOS usually blocks audio until a tap,
   // so the UI shows "Play" (not a stale "Pause") and the very next tap anywhere restarts the same track.
   resumeIfWanted() {
@@ -77,11 +87,11 @@ const api = {
     tryNow.then((st) => { if (st === 'running') { playing.value = true; armRotate(); } else { playing.value = false; stopRotate(); armTap(); } });
   },
   toggle() { return tapAction(playing.value, engine ? engine.state : 'none') === 'pause' ? api.pause() : api.play(); },
-  setTrack(id) { Object.assign(prefs, sanitize({ ...prefs, track: id })); persist(); if (engine && playing.value) { engine.setTrack(prefs.track); armRotate(); } },
+  setTrack(id) { Object.assign(prefs, sanitize({ ...prefs, track: id })); persist(); if (engine && playing.value) { engine.setTrack(prefs.track); npTitle(trackName()); armRotate(); } },
   setAutoRotate(on) { Object.assign(prefs, sanitize({ ...prefs, autoRotate: !!on })); persist(); armRotate(); },
   setRotateMins(m) { Object.assign(prefs, sanitize({ ...prefs, rotateMins: Number(m) })); persist(); armRotate(); },
   setForceMotion(on) { Object.assign(prefs, sanitize({ ...prefs, forceMotion: !!on })); persist(); },
-  setVolume(v) { Object.assign(prefs, sanitize({ ...prefs, volume: Number(v) })); persist(); if (engine) engine.setVolume(prefs.volume); },
+  setVolume(v) { Object.assign(prefs, sanitize({ ...prefs, volume: Number(v) })); persist(); if (engine) engine.setVolume(voSpeaking.value ? prefs.volume * DUCK : prefs.volume); },
   setImage(id) { Object.assign(prefs, sanitize({ ...prefs, image: effectiveImage(id, custom.value) })); imageError.value = ''; persist(); showImage(); },
   async uploadImage(file) { // photo library / files via <input type=file>
     imageError.value = '';

@@ -46,7 +46,7 @@
 // ClingNote conversational assistant (voice + text, multi-turn, takes actions). Server: netlify/functions/ai.js task 'agent' (Gemini function calling).
 // Tools are validated in utils/assistantTools.js and run by the `executor` prop (HomeView, same paths as the UI). Delete / complete / start day /
 // Community posts wait for an explicit tap or spoken "yes". Replies are spoken through the one robot voice (useVoiceover.speakLive).
-import { ref, nextTick, onBeforeUnmount, onMounted, watch } from 'vue';
+import { ref, nextTick, onBeforeUnmount, onMounted } from 'vue';
 import RobotAvatar from './RobotAvatar.vue';
 import { askAi } from '@/composables/useAi';
 import { speakLive, stopVoice, unlockVoice } from '@/composables/useVoiceover';
@@ -55,7 +55,6 @@ import { assistantSession, saveAssistant, clearAssistant } from '@/utils/assista
 import { runAgentTurn } from '@/utils/assistantLoop';
 import { spokenConfirm, ttsText } from '@/utils/assistantTools';
 import { createIntro, INTRO_EXAMPLES } from '@/utils/assistantIntro';
-import { startMusic, stopMusic, pauseMusic, resumeMusic } from '@/composables/useFocusMusic';
 
 const props = defineProps({ executor: { type: Object, required: true }, listenOnOpen: Boolean });
 const emit = defineEmits(['close', 'state']);
@@ -71,7 +70,7 @@ const helpOpen = ref(false);
 // Spoken intro on open (respects both the sheet speaker toggle and the global voice mute inside speakLive); any user input cancels it.
 const intro = createIntro({ speak: (t) => { unlockVoice(); return speakLive(t) !== false; }, stop: stopVoice, enabled: () => !!speak.value });
 const hearIntro = () => { helpOpen.value = false; intro.cancel(); if (!speak.value) setSpeak(true); intro.start(true); };
-const setSpeak = (v) => { speak.value = v; if (!v) { intro.cancel(); stopVoice(); stopMusic(); } else startMusic(); saveAssistant(); };
+const setSpeak = (v) => { speak.value = v; if (!v) { intro.cancel(); stopVoice(); } saveAssistant(); };
 const say = (t) => { if (speak.value) { unlockVoice(); stopVoice(); speakLive(ttsText(t)); } };
 const decide = (yes) => { const p = pending.value; if (!p) return; pending.value = null; push('action', yes ? `✔ ${p.summary.split('\n')[0]}` : '✖ Cancelled'); p.resolve(!!yes); };
 const confirm = (c) => new Promise((resolve) => { pending.value = { ...c, resolve }; emit('state', { pending: true }); scroll(); say(c.name === 'post_to_community' ? 'Here is the draft post. Post it?' : `${c.summary} Say yes or no.`); });
@@ -118,9 +117,8 @@ const toggleMic = async () => {
   rec.onerror = (e) => { if (e.error !== 'aborted' && e.error !== 'no-speech') err.value = 'Voice input failed.'; };
   try { rec.start(); listening.value = true; } catch (e) { err.value = 'Could not start voice input.'; }
 };
-onMounted(() => { if (speak.value) startMusic(); if (props.listenOnOpen && micOk) toggleMic(); else intro.start(); });
-watch(listening, (v) => { if (v) pauseMusic(); else resumeMusic(); }); // keep the mic clean
-onBeforeUnmount(() => { intro.cancel(); stopMusic(); stopMic(); stopVoice(); if (pending.value) decide(false); });
+onMounted(() => { if (props.listenOnOpen && micOk) toggleMic(); else intro.start(); });
+onBeforeUnmount(() => { intro.cancel(); stopMic(); stopVoice(); if (pending.value) decide(false); });
 scroll();
 </script>
 

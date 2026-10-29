@@ -10,33 +10,33 @@ class FakeAudio { constructor() { this.attrs = {}; this.paused = true; this.load
 const handlers = {}; const session = { metadata: 'x', playbackState: 'playing', setActionHandler: (k, f) => { handlers[k] = f; } };
 globalThis.Audio = FakeAudio; Object.defineProperty(globalThis, 'navigator', { value: { mediaSession: session }, configurable: true }); globalThis.window = { MediaMetadata: class { constructor(o) { Object.assign(this, o); } } };
 globalThis.localStorage = { getItem: () => null, setItem: () => {} };
-const vo = await import('../src/composables/useVoiceover.js'); const fm = await import('../src/composables/useFocusMusic.js');
+const vo = await import('../src/composables/useVoiceover.js'); const np = await import('../src/composables/useNowPlaying.js');
 let nativeReleases = 0; vo._setNativeRelease(() => { nativeReleases++; });
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 // 1) voice ends/cancels with no music -> session cleared, element detached, native release once (debounced)
 vo.stopVoice(); assert.equal(session.metadata, null); assert.equal(session.playbackState, 'none');
 await wait(vo.RELEASE_DELAY_MS + 50); assert.equal(nativeReleases, 1, 'native Now Playing/session release after speech');
-// 2) music: widget metadata, lock-screen play/pause work
-assert.equal(fm.startMusic(), true); await wait(0);
-assert.equal(session.metadata.title, 'ClingNote'); assert.equal(session.metadata.artist, 'Focus music'); assert.equal(session.playbackState, 'playing');
-const el = fm._el(); assert.equal(el.loop, true); assert.equal(el.volume, fm.MUSIC_VOL);
-handlers.pause(); assert.equal(el.paused, true); assert.equal(session.playbackState, 'paused');
-handlers.play(); assert.equal(el.paused, false); assert.equal(session.playbackState, 'playing');
-// 3) voice while music: ducks, and finishing speech does NOT clear the music widget or deactivate natively
-vo.voSpeaking.value = true; await wait(0); assert.equal(el.volume, fm.DUCK_VOL, 'ducks under voice');
-vo.stopVoice(); await wait(0); assert.equal(el.volume, fm.MUSIC_VOL); assert.equal(session.metadata.title, 'ClingNote');
-await wait(vo.RELEASE_DELAY_MS + 50); assert.equal(nativeReleases, 1, 'no native release while music plays');
-// 4) mute stops music; stop clears Now Playing + native release
-fm.startMusic(); vo.setVoMuted(true); await wait(0); assert.equal(fm.musicOn.value, false); assert.equal(el.getAttribute('src'), null);
-assert.equal(session.metadata, null); await wait(vo.RELEASE_DELAY_MS + 50); assert.equal(nativeReleases, 2);
-assert.equal(fm.startMusic(), false, 'muted -> no music'); vo.setVoMuted(false);
+// 2) background music: widget = ClingNote / track name, lock-screen play/pause call back
+let calls = []; let holds = false; vo._setMusicHolds(() => holds);
+np.npStart('Lo-fi chill', { play: () => calls.push('play'), pause: () => calls.push('pause') }); holds = np.npActive();
+assert.equal(session.metadata.title, 'ClingNote'); assert.equal(session.metadata.artist, 'Lo-fi chill'); assert.equal(session.playbackState, 'playing');
+const anchor = np._anchor(); assert.equal(anchor.loop, true); assert(!anchor.muted, 'anchor not muted (iOS ignores muted media)'); assert(anchor.src.endsWith('audio/np-anchor.mp3'));
+handlers.pause(); handlers.play(); assert.deepEqual(calls, ['pause', 'play']);
+np.npPaused('Lo-fi chill'); assert.equal(session.playbackState, 'paused'); assert.equal(session.metadata.title, 'ClingNote', 'lock-screen pause keeps widget');
+np.npTitle('Jazzy lo-fi'); assert.equal(session.metadata.artist, 'Jazzy lo-fi');
+// 3) voice while music holds: finishing speech does NOT clear the widget or deactivate natively
+vo.stopVoice(); assert.equal(session.metadata.title, 'ClingNote');
+await wait(vo.RELEASE_DELAY_MS + 50); assert.equal(nativeReleases, 1, 'no native release while music holds Now Playing');
+// 4) stop clears everything + native release
+np.npStop(); holds = np.npActive(); assert.equal(session.metadata, null); assert.equal(session.playbackState, 'none'); assert.equal(anchor.getAttribute('src'), null);
+await wait(vo.RELEASE_DELAY_MS + 100); assert.equal(nativeReleases, 2, 'stop -> native clear');
+const bg = readFileSync('src/composables/useBackground.js', 'utf8');
+assert(/npStart\(trackName\(\), lockHandlers\(\)\)/.test(bg) && /else npStop\(\)/.test(bg) && /watch\(voSpeaking/.test(bg) && /DUCK/.test(bg), 'background music wired to Now Playing + ducking');
 // static wiring
 const sw = readFileSync('ios/App/App/ClingVoicePlugin.swift', 'utf8');
 for (const k of ['nowPlayingInfo = nil', 'endReceivingRemoteControlEvents', 'notifyOthersOnDeactivation', 'isEnabled = false', '"releaseAudio"']) assert(sw.includes(k), k);
 assert(!/releaseNowPlaying\(\)/.test(readFileSync('ios/App/App/AppDelegate.swift', 'utf8')), 'no background teardown of music');
 assert(!/AVAudio/.test(readFileSync('ios/App/App/ClingAlarmPlugin.swift', 'utf8')), 'alarm uses AlarmKit system audio, independent');
-const sh = readFileSync('src/components/home/AssistantSheet.vue', 'utf8');
-assert(/onMounted\(\(\) => \{ if \(speak\.value\) startMusic\(\)/.test(sh) && /onBeforeUnmount\(\(\) => \{[^\n]*stopMusic\(\)/.test(sh) && /if \(v\) pauseMusic\(\)/.test(sh));
 assert(readFileSync('ios/App/App/Info.plist', 'utf8').includes('<string>audio</string>'));
-console.log('ok   now playing / focus music');
+console.log('ok   now playing / background music');
 process.exit(0);
