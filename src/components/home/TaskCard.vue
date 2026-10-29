@@ -12,6 +12,7 @@
                     'task-card--menu': moreOpen,
                     'task-card--next': upNext,
                     'task-card--completing': completing,
+                    'task-card--celebrate': celebrating,
                     'task-card--rolled': highlight
                   }"
                 >
@@ -22,7 +23,7 @@
                          :aria-disabled="dragDisabled ? 'true' : 'false'" :aria-label="'Task ' + (index + 1) + ', drag to reorder'">
                       <i class="fas fa-grip-vertical"></i>
                     </div>
-                    <button v-if="isTodayTab" ref="checkEl" @click="onCheck" class="task-check" :aria-label="task.completed ? 'Mark not done' : 'Mark done'" :class="{ 'task-check--done': task.completed, 'task-check--pop': completing }">
+                    <button v-if="isTodayTab" ref="checkEl" type="button" data-test="task-check" @click.stop="onCheck" @pointerdown.stop @touchstart.stop.passive @mousedown.stop class="task-check" :aria-label="task.completed ? 'Mark not done' : 'Mark done'" :class="{ 'task-check--done': task.completed, 'task-check--pop': completing }">
                       <i v-if="!completing" :class="task.completed ? 'fas fa-check-circle' : 'far fa-circle'"></i>
                       <svg v-else class="check-draw" viewBox="0 0 24 24" aria-hidden="true">
                         <circle class="check-draw__disc" cx="12" cy="12" r="10.5" />
@@ -219,7 +220,7 @@
 </template>
 
 <script setup>
-import { burstFrom, lightHaptic, prefersReducedMotion, COMPLETE_MS } from '@/composables/useTaskMotion';
+import { burstFrom, lightHaptic, prefersReducedMotion, COMPLETE_MS, CELEBRATE_MS } from '@/composables/useTaskMotion';
 import { bossHp } from '@/utils/discipline';
 import { dueBadge, scheduleLabel, scheduledOverdue } from '@/utils/scheduling';
 import { downloadTaskIcs } from '@/utils/ics';
@@ -318,16 +319,30 @@ const schedTime = ref('');
 const tomorrow = (() => { const d = new Date(); d.setDate(d.getDate() + 1); return d.toLocaleDateString('en-CA'); })();
 const cardEl = ref(null);
 const checkEl = ref(null);
-// Completion: play the pop / tick / burst / sweep first, then tell the parent (which moves or removes the row).
+// Completion: play the pop / tick / sparkle burst / glow first, then tell the parent (which moves or removes the row).
+// The check is its own tap target: its click is stopped (and any ghost / delayed click that lands on a task card right
+// after it, e.g. when the row slides away under the finger on iOS, is swallowed) so completing never opens or expands the card.
 const completing = ref(false);
+const celebrating = ref(false); // lingering glow class; cleared after CELEBRATE_MS
+let celebrateOff = null;
+const celebrate = () => { clearTimeout(celebrateOff); celebrating.value = true; celebrateOff = setTimeout(() => { celebrating.value = false; }, CELEBRATE_MS); };
+let guardOff = null;
+const guardClick = (e) => { if (e.target.closest && e.target.closest('.task-card') && !e.target.closest('.task-check')) { e.stopPropagation(); e.preventDefault(); } };
+const unguard = () => { document.removeEventListener('click', guardClick, true); clearTimeout(guardOff); guardOff = null; };
+const guardTaps = (ms) => { unguard(); setTimeout(() => { document.addEventListener('click', guardClick, true); guardOff = setTimeout(unguard, ms); }, 0); };
 const onCheck = () => {
   if (completing.value) return;
-  if (props.task.completed || prefersReducedMotion()) { if (!props.task.completed) lightHaptic(); emit('toggle-complete'); return; }
+  clearTimeout(pressTimer); pressTimer = null;
+  const reduced = prefersReducedMotion();
+  guardTaps((reduced || props.task.completed ? 0 : COMPLETE_MS) + 450);
+  if (props.task.completed || reduced) { if (!props.task.completed) lightHaptic(); emit('toggle-complete'); return; }
   completing.value = true;
+  celebrate();
   lightHaptic();
-  burstFrom(checkEl.value);
+  burstFrom(checkEl.value, 16);
   setTimeout(() => { emit('toggle-complete'); completing.value = false; }, COMPLETE_MS);
 };
+onBeforeUnmount(() => { unguard(); clearTimeout(celebrateOff); });
 const fileInput = ref(null); // hidden <input type=file> for this card (was a string ref on HomeView)
 
 // Tap on the card body toggles the inline expansion, unless the tap hit an interactive element.
@@ -335,7 +350,8 @@ let downPos = null;
 const onCardDown = (e) => { downPos = { x: e.clientX, y: e.clientY }; };
 const onCardTap = (event) => {
   if (pressTimer === 'fired') { pressTimer = null; return; } // bound on the whole card (blank areas, chips, next-action line, coin/right side)
-  if (event.target.closest('button, input, textarea, select, a, label, .task-title, .label-pill, .task-expand, .drag-handle')) return;
+  if (completing.value) return; // a tap during the completion animation never opens details
+  if (event.target.closest('button, input, textarea, select, a, label, .task-title, .label-pill, .task-expand, .drag-handle, .task-left')) return;
   // Only a click that ends a *drag-select* inside this card is ignored; a stale selection elsewhere must not block taps.
   if (downPos && Math.hypot(event.clientX - downPos.x, event.clientY - downPos.y) > 5) {
     const sel = window.getSelection && window.getSelection();
@@ -564,13 +580,17 @@ const onPressEnd = () => { if (pressTimer !== 'fired') clearTimeout(pressTimer);
 @keyframes checkTick { to { stroke-dashoffset: 0; } }
 @keyframes checkPop { 0% { transform: scale(1); } 40% { transform: scale(1.22); } 70% { transform: scale(.94); } 100% { transform: scale(1); } }
 .task-card--completing { animation: rowGlow .56s ease-out both; }
+/* Lingering celebration: soft glow that fades over ~1s (box-shadow only, no layout change) */
+.task-card--celebrate { animation: rowGlow .56s ease-out both, celebrateGlow 1s ease-out both; }
+.task-card--celebrate .task-check { filter: drop-shadow(0 0 6px rgba(52,211,153,.55)); transition: filter .9s ease-out; }
+@keyframes celebrateGlow { 0% { box-shadow: 0 0 0 0 rgba(52,211,153,0); } 25% { box-shadow: 0 0 0 3px rgba(52,211,153,.35), 0 0 22px rgba(52,211,153,.3); } 100% { box-shadow: 0 0 0 0 rgba(52,211,153,0); } }
 .task-card--completing .task-title { position: relative; }
 .task-card--completing .task-title::after { content: ''; position: absolute; left: 0; right: 0; top: 52%; height: 2px; border-radius: 2px; background: currentColor; opacity: .7; transform: scaleX(0); transform-origin: left center; animation: strikeSweep .32s .16s cubic-bezier(.22,1,.36,1) forwards; }
 .task-card--completing .task-body { animation: rowSettle .56s ease-out both; }
 @keyframes rowGlow { 0% { box-shadow: 0 0 0 0 rgba(52,211,153,0); } 30% { box-shadow: 0 0 0 3px rgba(52,211,153,.35), 0 0 18px rgba(52,211,153,.25); } 100% { box-shadow: 0 0 0 0 rgba(52,211,153,0); } }
 @keyframes strikeSweep { to { transform: scaleX(1); } }
 @keyframes rowSettle { 0%, 45% { opacity: 1; transform: translateX(0); } 100% { opacity: .55; transform: translateX(3px); } }
-@media (prefers-reduced-motion: reduce) { .task-card--completing, .task-card--completing .task-body, .task-check--pop, .check-draw__disc, .check-draw__tick { animation: none !important; } .check-draw__tick { stroke-dashoffset: 0; } }
+@media (prefers-reduced-motion: reduce) { .task-card--celebrate, .task-card--celebrate .task-check { animation: none !important; filter: none !important; } .task-card--completing, .task-card--completing .task-body, .task-check--pop, .check-draw__disc, .check-draw__tick { animation: none !important; } .check-draw__tick { stroke-dashoffset: 0; } }
 /* ── Compact card (v2): one meta line, one truncated extras line ── */
 .task-extras { display: flex; align-items: center; gap: 6px; min-width: 0; overflow: hidden; white-space: nowrap; font-size: 12px; color: var(--c-text-2); }
 .task-extras > span { flex: 0 0 auto; }

@@ -6,6 +6,7 @@ export const prefersReducedMotion = () =>
 
 export const EASE_OUT = 'cubic-bezier(0.22, 1, 0.36, 1)';
 export const COMPLETE_MS = 560; // time the completion animation plays before the task leaves the list
+export const CELEBRATE_MS = 1000; // lingering glow / sparkle class lifetime
 
 export const lightHaptic = () => { try { Haptics.impact({ style: ImpactStyle.Light }).catch(() => {}); } catch (_) { /* web / unsupported */ } };
 
@@ -26,6 +27,7 @@ export function burstFrom(el, count = 12) {
     const size = 4 + Math.random() * 3;
     const round = i % 3 !== 0;
     p.style.cssText = `position:absolute;left:${-size / 2}px;top:${-size / 2}px;width:${size}px;height:${round ? size : size * 1.8}px;border-radius:${round ? '50%' : '2px'};background:${COLORS[i % COLORS.length]};will-change:transform,opacity;`;
+    if (i % 4 === 0) { p.textContent = '✦'; p.style.background = 'none'; p.style.color = COLORS[i % COLORS.length]; p.style.fontSize = (size + 5) + 'px'; p.style.lineHeight = '1'; p.style.width = 'auto'; p.style.height = 'auto'; }
     layer.appendChild(p);
     const dx = Math.cos(ang) * dist, dy = Math.sin(ang) * dist;
     p.animate([
@@ -35,5 +37,5 @@ export function burstFrom(el, count = 12) {
     ], { duration: 520 + Math.random() * 140, easing: EASE_OUT, fill: 'forwards' });
   }
   document.body.appendChild(layer);
-  setTimeout(() => layer.remove(), 800);
+  setTimeout(() => layer.remove(), 900);
 }
