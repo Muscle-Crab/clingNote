@@ -40,6 +40,12 @@ v = T.validateCall('place_reminder', { title: 'ZZTEST stretch', place: 'in 2 hou
 v = T.validateCall('place_reminder', { title: 'ZZTEST stretch', place: 'home' }, { ...snap, userText: 'remind me to stretch in 2 hours' }); ok(!v.ok, 'relative-time utterance rejects place_reminder');
 v = T.validateCall('place_reminder', { title: 'ZZTEST milk', place: 'store' }, { ...snap, userText: 'remind me to buy milk when I get to the store' }); ok(v.ok, 'real place reminder still works');
 ok(/never place_reminder/.test(A.SYSTEM), 'prompt: in N hours is not place_reminder');
+// ---- Fix 4: call the tool (the app confirms), never ask for duration or points ----
+ok(/CALL the tool right away/.test(A.SYSTEM) && /app_lock \(emergency_unlock\)/.test(A.SYSTEM), 'prompt: confirm tools are called, not asked');
+ok(/Never ask the user for a duration or points/.test(A.SYSTEM) && /repeat \(weekdays/.test(A.SYSTEM), 'prompt: weekday tasks + no duration/points questions');
+ok(/call app_lock/.test(A.SYSTEM), 'prompt: app_lock is called');
+v = T.validateCall('create_tasks', { items: [{ title: 'ZZTEST gym', start: '07:00', repeat: 'weekdays', points: 30 }] }, snap); ok(v.ok && v.args.items[0].repeat, 'weekday task validates without duration');
+ok(T.needsConfirm('delete_task', {}) && T.needsConfirm('app_lock', { action: 'emergency_unlock' }), 'app still confirms delete / emergency unlock');
 //__MORE__
 console.log(`\n${n} assistant-fix tests passed`);
 })().catch((e) => { console.error(e); process.exit(1); });
