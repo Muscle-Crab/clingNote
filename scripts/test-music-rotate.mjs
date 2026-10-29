@@ -3,7 +3,7 @@ import { TRACKS, pickNextTrack, sanitize, ROTATE_MINS } from '../src/utils/bgPre
 import { STYLES } from '../src/composables/useBackgroundAudio.js';
 const ids = TRACKS.map((t) => t.id);
 assert.ok(ids.length >= 11, 'new lo-fi options added');
-for (const id of ids.filter((i) => !['lofi', 'lofi-night', 'ambient', 'fireside'].includes(i))) assert.ok(STYLES[id], 'engine style for ' + id);
+for (const id of TRACKS.filter((t) => !t.src).map((t) => t.id).filter((i) => !['lofi', 'lofi-night', 'ambient', 'fireside'].includes(i))) assert.ok(STYLES[id], 'engine style for ' + id); // recorded (src) tracks use the <audio> engine
 let seed = 7; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
 let cur = 'lofi'; let bag = []; const seq = [];
 for (let i = 0; i < ids.length * 6; i++) { const r = pickNextTrack(ids, cur, bag, rnd); assert.notEqual(r.next, cur, 'no immediate repeat'); assert.ok(ids.includes(r.next)); cur = r.next; bag = r.bag; seq.push(cur); }

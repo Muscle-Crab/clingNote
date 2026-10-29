@@ -13,8 +13,23 @@ export const TRACKS = [
   { id: 'cafe-corner', label: 'Café corner', hint: 'Warm keys, coffee-shop murmur, cup clinks' },
   { id: 'sunset-tape', label: 'Sunset tape', hint: 'Golden-hour chords with tape wobble' },
   { id: 'fireside', label: 'Fireside crackle', hint: 'Soft crackling fire sounds' },
+  // Recorded CC0 (public domain) lo-fi tracks, bundled under public/music (credits: LICENSES/music-credits.md).
+  // These play through an <audio> element, so they keep going on the lock screen and show in Now Playing.
+  { id: 'oga-chill-lofi', label: 'Chill lofi', hint: 'Recorded · relaxed hip-hop groove', src: 'music/oga-chill-lofi.mp3', artist: 'omfgdude' },
+  { id: 'oga-lofi-hiphop', label: 'Lofi hip hop', hint: 'Recorded · dusty boom-bap keys', src: 'music/oga-lofi-hiphop.mp3', artist: 'omfgdude' },
+  { id: 'oga-lofi-again', label: 'Lofi again', hint: 'Recorded · short mellow loop', src: 'music/oga-lofi-again.mp3', artist: 'omfgdude' },
+  { id: 'oga-funky-jam', label: 'Funky lofi jam', hint: 'Recorded · funky low-passed jam', src: 'music/oga-funky-jam.mp3', artist: 'omfgdude' },
+  { id: 'oga-gods-notebook', label: 'Notebook theme', hint: 'Recorded · Japanese-style lofi', src: 'music/oga-gods-notebook.mp3', artist: 'pickentcode' },
+  { id: 'oga-happy-day', label: 'Happy lofi day', hint: 'Recorded · bright Rhodes chords', src: 'music/oga-happy-day.mp3', artist: 'Tarush Singhal' },
+  { id: 'oga-dimly-lit', label: 'Dimly lit', hint: 'Recorded · late-night beat', src: 'music/oga-dimly-lit.mp3', artist: 'iamoneabe' },
+  { id: 'oga-midnight-cruiser', label: 'Midnight cruiser', hint: 'Recorded · smooth night drive', src: 'music/oga-midnight-cruiser.mp3', artist: 'Zane Little Music' },
+  { id: 'oga-glo-dark', label: 'Glo in the dark', hint: 'Recorded · soft glowing keys', src: 'music/oga-glo-dark.mp3', artist: 'iamoneabe' },
+  { id: 'oga-chills', label: 'Chills', hint: 'Recorded · laid-back chillhop', src: 'music/oga-chills.mp3', artist: 'HoliznaCC0' },
 ];
 // Home / page-header picture. 'forest' = the original art (default); 'custom' = the user's own photo (stored separately, see CUSTOM_KEY).
+// Lock-screen / Control Center prev & next: step through the whole list (wraps).
+export const stepTrack = (id, dir) => { const i = TRACKS.findIndex((t) => t.id === id); const n = TRACKS.length; return TRACKS[((i < 0 ? 0 : i) + (dir < 0 ? -1 : 1) + n) % n].id; };
+export const trackInfo = (id) => TRACKS.find((t) => t.id === id) || TRACKS[0];
 export const IMAGES = [
   { id: 'forest', label: 'Forest' }, { id: 'night', label: 'Night sky' }, { id: 'ocean', label: 'Ocean dusk' },
   { id: 'sunrise', label: 'Sunrise' }, { id: 'mountains', label: 'Mountains' }, { id: 'dark', label: 'Plain dark' },

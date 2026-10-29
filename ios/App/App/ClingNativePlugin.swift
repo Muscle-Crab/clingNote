@@ -1,5 +1,6 @@
 import Foundation
 import UIKit
+import AVFoundation
 import Capacitor
 import EventKit
 import CoreLocation
@@ -30,7 +31,22 @@ public class ClingNativePlugin: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDe
         CAPPluginMethod(name: "calSyncUpsert", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "calSyncRemove", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setPageZoom", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setMusicSession", returnType: CAPPluginReturnPromise),
     ]
+    /// Background music on/off. On: non-mixing .playback so iOS keeps it playing when locked / silent switch and lists
+    /// ClingNote in Now Playing (mixable sessions never become the Now Playing app). Off: back to the launch default
+    /// (.playback + mixWithOthers) so short clips don't stop the user's other audio.
+    @objc func setMusicSession(_ call: CAPPluginCall) {
+        let on = call.getBool("active") ?? false
+        let s = AVAudioSession.sharedInstance()
+        do {
+            if on { try s.setCategory(.playback, mode: .default, options: []) }
+            else { try s.setCategory(.playback, mode: .default, options: [.mixWithOthers]) }
+            try s.setActive(true)
+            DispatchQueue.main.async { if on { UIApplication.shared.beginReceivingRemoteControlEvents() } }
+            call.resolve(["active": on])
+        } catch { call.reject("audio session: \(error.localizedDescription)") }
+    }
     /// Siri/Shortcuts tasks queued by AddTaskIntent; returned once and cleared.
     @objc func takeIntents(_ call: CAPPluginCall) {
         let d = UserDefaults(suiteName: "group.app.clingnote.ios")

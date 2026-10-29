@@ -17,3 +17,5 @@ Chord progressions used are common, non-copyrightable harmonic patterns. No attr
 | midnight-drive | Midnight drive | dark night synth | Original, generated in-app | ClingNote-owned |
 | cafe-corner | Café corner | cafe ambience | Original, generated in-app | ClingNote-owned |
 | sunset-tape | Sunset tape | warm golden-hour | Original, generated in-app | ClingNote-owned |
+
+Recorded CC0 tracks (oga-*) were added on 2026-10-28; see `LICENSES/music-credits.md`.
