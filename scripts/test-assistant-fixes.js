@@ -46,6 +46,20 @@ ok(/Never ask the user for a duration or points/.test(A.SYSTEM) && /repeat \(wee
 ok(/call app_lock/.test(A.SYSTEM), 'prompt: app_lock is called');
 v = T.validateCall('create_tasks', { items: [{ title: 'ZZTEST gym', start: '07:00', repeat: 'weekdays', points: 30 }] }, snap); ok(v.ok && v.args.items[0].repeat, 'weekday task validates without duration');
 ok(T.needsConfirm('delete_task', {}) && T.needsConfirm('app_lock', { action: 'emergency_unlock' }), 'app still confirms delete / emergency unlock');
+// ---- Fix 5: no "Done" without a tool result ----
+ok(/Never say a change is done/.test(A.SYSTEM), 'prompt: never claim a change without a tool result');
+const L = load('utils/assistantLoop.js');
+ok(L.claimsChange('Done! Moved it to 3pm.') && !L.claimsChange('Want me to move it?') && !L.claimsChange('Your streak is 4.'), 'claimsChange');
+const tk5 = { id: 'z5', title: 'ZZTEST essay' };
+const ex5 = { snapshot: async () => ({ refs: { t1: 'z5' }, tasksByKey: new Map([['z5', tk5]]), today: TODAY, limitRemaining: 5, context: {} }), run: async (nm, a) => { ran5.push([nm, a]); return { ok: true, summary: 'x' }; } };
+let ran5 = []; let seq = [{ text: 'Done, moved to 3pm for an hour.' }, { toolCalls: [{ name: 'edit_task', args: { ref: 't1', start: '3pm', durationMin: 60 } }] }, { text: 'Moved it to 15:00 for 60 min.' }];
+let out = await L.runAgentTurn({ text: 'move essay to 3pm and make it an hour', call: async () => seq.shift(), executor: ex5, confirm: async () => true });
+ok(ran5.length === 1 && ran5[0][1].patch.startTime === '15:00' && ran5[0][1].patch.estimateMin === 60 && /15:00/.test(out.reply), 'retry after a toolless Done runs the edit');
+ran5 = []; seq = [{ text: 'Done!' }, { text: 'All set, done.' }];
+out = await L.runAgentTurn({ text: 'move essay to 3pm', call: async () => seq.shift(), executor: ex5, confirm: async () => true });
+ok(ran5.length === 0 && out.corrected && out.reply === L.NO_TOOL_FIX, 'second toolless Done is corrected');
+seq = [{ text: 'Your streak is 4 days.' }]; out = await L.runAgentTurn({ text: 'streak?', call: async () => seq.shift(), executor: ex5, confirm: async () => true });
+ok(out.reply === 'Your streak is 4 days.', 'plain answers untouched');
 //__MORE__
 console.log(`\n${n} assistant-fix tests passed`);
 })().catch((e) => { console.error(e); process.exit(1); });

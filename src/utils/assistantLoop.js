@@ -3,11 +3,16 @@
 import { validateCall, needsConfirm, describeCall } from './assistantTools';
 
 export const MAX_STEPS = 5;
+// A reply that claims a change ("Done, moved it to 3pm") although no tool ran this turn is not true: nudge once, then correct it.
+const CLAIM = /\b(?:done|all set|updated|changed|moved|rescheduled|added|deleted|removed|set (?:it|that|the)|saved|scheduled|locked|unlocked|marked)\b/i;
+export const claimsChange = (text) => CLAIM.test(String(text || '')) && !/\?\s*$/.test(String(text || '').trim());
+export const NO_TOOL_NUDGE = '[app] No tool was called, so nothing changed. Call the needed tool now (for several changes, call each), or tell the user plainly it was not done.';
+export const NO_TOOL_FIX = "I haven't changed anything yet. Tell me again what to change and I'll do it.";
 // call(input) -> { parts, toolCalls, text, remaining }; executor: { snapshot() -> { refs, context, tasksByKey, today, limitRemaining }, run(name, args) -> result }
 // confirm({ name, args, summary }) -> Promise<boolean>; onEvent(e) for UI (tool ran / declined).
 export async function runAgentTurn({ text, contents = [], call, executor, confirm, onEvent = () => {} }) {
   const convo = [...contents, { role: 'user', parts: [{ text: String(text) }] }];
-  let remaining;
+  let remaining; let ranTool = false; let nudged = false;
   for (let step = 0; step <= MAX_STEPS; step++) {
     const snap = await executor.snapshot();
     const res = await call({ contents: convo, context: snap.context, step });
@@ -15,8 +20,13 @@ export async function runAgentTurn({ text, contents = [], call, executor, confir
     const parts = Array.isArray(res.parts) ? res.parts : [];
     if (parts.length) convo.push({ role: 'model', parts });
     const calls = (res.toolCalls || []).slice(0, 6);
+    if (!calls.length && !ranTool && claimsChange(res.text)) {
+      if (!nudged && step < MAX_STEPS) { nudged = true; convo.push({ role: 'user', parts: [{ text: NO_TOOL_NUDGE }] }); continue; }
+      return { reply: NO_TOOL_FIX, contents: convo, remaining, corrected: true };
+    }
     if (!calls.length || step === MAX_STEPS) return { reply: String(res.text || '').trim() || (calls.length ? 'I stopped there. Anything else?' : 'Done.'), contents: convo, remaining };
     const responses = [];
+    ranTool = true;
     for (const c of calls) {
       const v = validateCall(c.name, c.args, { ...snap, userText: text });
       let response;
