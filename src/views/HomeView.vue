@@ -342,7 +342,7 @@ import { useEightHour, syncAfterAuth, setDayLengthHours, loadDayLengthHours, pro
 import { countableIndexes, taskRange, hoursLabel } from '@/utils/eightHour';
 import { estimateFor, chipValues } from '@/utils/taskEstimate';
 import { patchTouchesLocked } from '@/utils/eightHourLock';
-import { isDayLocked, isLockError, assertTasksChangeAllowed, lockedMessage, isShutdown, shutMessage } from '@/utils/eightHourLock';
+import { isDayLocked, completionKeepsInPlace, isLockError, assertTasksChangeAllowed, lockedMessage, isShutdown, shutMessage } from '@/utils/eightHourLock';
 import ReminderModal from '@/components/home/ReminderModal.vue';
 import ShutdownPrompt from '@/components/home/ShutdownPrompt.vue';
 import TaskDetailModal from '@/components/home/TaskDetailModal.vue';
@@ -1246,7 +1246,10 @@ const toggleTaskCompletion = async (index) => {
   if (isToday(selectedDayIndex.value)) onBossToggle(task).finally(() => updateStreakOnCompletion(task)); // both directions; pending ignored
 
   // Remove one-time tasks from the UI immediately (a locked day keeps every task: completed ones stay in place)
-  const lockedToggle = selectedDayLocked.value;
+  // Locked = the UI lock state OR the lock source (server/cached lock). While the 8-hour state is still loading (cold start from a
+  // widget / Live Activity / notification action) selectedDayLocked is false; removing the task then was rejected by the rules
+  // (locked arrays never shrink) -> the card vanished from Done and an in-app completion was never stored (no points).
+  const lockedToggle = completionKeepsInPlace({ uiLocked: selectedDayLocked.value, sourceLocked: isDayLocked(days[selectedDayIndex.value]?.day) });
   if (task.type === "one-time" && !lockedToggle) {
     selectedDayRoutine.value.splice(index, 1);
   } else {
@@ -1282,6 +1285,10 @@ const toggleTaskCompletion = async (index) => {
     console.log("Task completion updated successfully");
   } catch (error) {
     console.error("Error updating task completion:", error);
+    if (task.type === "one-time" && !lockedToggle && !selectedDayRoutine.value.some((t) => sameTask(t, task))) {
+      selectedDayRoutine.value.splice(Math.min(index, selectedDayRoutine.value.length), 0, { ...task, completed: !task.completed }); // write rejected: never lose the card
+    }
+    return false;
   }
 
   if (task.templateId && userId.value) { // routine completion log (doneOn) + repeat-after-completion next date
