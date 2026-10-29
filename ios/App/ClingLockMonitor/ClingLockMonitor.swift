@@ -35,6 +35,12 @@ class ClingLockMonitor: DeviceActivityMonitor {
     /// loud (timeSensitive, default sound; default) | maximum (timeSensitive + .defaultCritical, which plays at full
     /// volume on silent only once Apple grants the Critical Alerts entitlement, else falls back to the standard sound).
     private func notifyLockEnded() {
+        // One alert per lock end. Every per-app lock is its own DeviceActivity, so locking 8 apps until the same time fired
+        // intervalDidEnd 8 times at once and each posted a new UUID-identified notification (8 identical banners, build 36).
+        // Debounce across all activities through the App Group, and use one stable identifier so iOS replaces instead of stacking.
+        let now = Date().timeIntervalSince1970
+        if !LockEndAlertGate.shouldPost(last: LockShared.defaults?.double(forKey: LockEndAlertGate.lastKey) ?? 0, now: now) { return }
+        LockShared.defaults?.set(now, forKey: LockEndAlertGate.lastKey)
         let level = LockShared.defaults?.string(forKey: LockShared.lockEndAlertKey) ?? LockShared.lockEndAlertDefault
         if level == "off" { return }
         let voice = UNNotificationSoundName(LockShared.lockEndSoundName)
@@ -49,6 +55,14 @@ class ClingLockMonitor: DeviceActivityMonitor {
         case "maximum": c.interruptionLevel = .timeSensitive; c.sound = .criticalSoundNamed(voice, withAudioVolume: 1.0)
         default: c.interruptionLevel = .timeSensitive; c.sound = UNNotificationSound(named: voice) // loud
         }
-        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "cling.lock.ended.\(UUID().uuidString)", content: c, trigger: nil))
+        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: LockEndAlertGate.identifier, content: c, trigger: nil))
     }
+}
+
+/// Pure dedupe rule for the lock-end alert (mirrored in scripts/test-lock-end-dedupe.mjs).
+enum LockEndAlertGate {
+    static let identifier = "cling.lock.ended"
+    static let lastKey = "lock.endAlert.lastAt"
+    static let window: Double = 90 // seconds: ends of several activities at the same minute collapse into one alert
+    static func shouldPost(last: Double, now: Double) -> Bool { last <= 0 || now - last >= window || now < last }
 }
