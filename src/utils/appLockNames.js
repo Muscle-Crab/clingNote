@@ -68,3 +68,6 @@ export const resumePending = (pending, labels = [], { saved = true, now = Date.n
   if (p.kind === 'onboard') { const r = resolveApps(pending.apps, labels); return r.matched.length ? { kind: 'run', labels: r.matched, stillMissing: p.missing } : { kind: 'drop', reason: 'not_picked', stillMissing: p.missing }; }
   return p;
 };
+
+// Reject with { code: 'timeout' } if p doesn't settle within ms (native pickers can hang; the guide must never stay busy).
+export const withTimeout = (p, ms) => { let t; return Promise.race([Promise.resolve(p), new Promise((_, rej) => { t = setTimeout(() => { const e = new Error('timeout'); e.code = 'timeout'; rej(e); }, ms); })]).finally(() => clearTimeout(t)); };

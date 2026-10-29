@@ -20,7 +20,7 @@
       </div>
       <div class="modal-footer">
         <template v-if="step === 'guide'">
-          <button type="button" class="btn-secondary" :disabled="busy" @click="$emit('close')">Not now</button>
+          <button type="button" class="btn-secondary" @click="$emit('close')">Not now</button>
           <button type="button" class="btn-primary" :disabled="busy" @click="$emit('pick')">{{ busy ? 'Opening…' : 'Open app list' }}</button>
         </template>
         <button v-else type="button" class="btn-primary" @click="$emit('close')">Done</button>

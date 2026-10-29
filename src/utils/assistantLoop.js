@@ -30,6 +30,8 @@ export async function runAgentTurn({ text, contents = [], call, executor, confir
       responses.push({ functionResponse: { name: c.name, response: JSON.parse(JSON.stringify(response)) } });
     }
     convo.push({ role: 'user', parts: responses });
+    const fin = responses.map((r) => r.functionResponse.response).find((r) => r && r.done === true); // tool handed the turn to UI (e.g. lock guide)
+    if (fin) return { reply: String(fin.summary || 'Done.'), contents: convo, remaining };
   }
   return { reply: 'Done.', contents: convo, remaining };
 }

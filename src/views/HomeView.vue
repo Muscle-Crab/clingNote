@@ -356,7 +356,7 @@ import { reactionLine, shouldRoast, checkinMarks, checkinLine, dueMark, overbook
 import { loadHabits, saveHabits, addHabit, logHabit, habitSummary } from '@/utils/habits';
 import { autoSchedule } from '@/utils/autoSchedule';
 import { clingLock, clingNative, lockAvailable, nativeAvailable } from '@/native/clingNative';
-import { planLock, resumePending, untilFor, fmtDuration, joinNames } from '@/utils/appLockNames';
+import { planLock, resumePending, untilFor, fmtDuration, joinNames, withTimeout } from '@/utils/appLockNames';
 import LockGuideSheet from '@/components/home/LockGuideSheet.vue';
 import { LOCK_PREF, PENALTY_KEY, EMERGENCY_PENALTY, shouldShield, busyToDay } from '@/utils/appLock';
 import { previewDayTarget, requiredPoints } from '@/utils/dayTarget';
@@ -3624,29 +3624,37 @@ const runLockPlan = async (action, plan, pending) => {
 const lockByName = async (name, a = {}) => {
   if (!lockAvailable()) return { error: 'App lock needs the ClingNote iPhone app (iOS 16+).' };
   const labels = (await refreshLockApps()).map((x) => x.label);
-  if (name === 'open_app_picker') { lockGuide.value = { ...lockGuide.value, open: true, step: 'guide', missing: [], firstTime: !labels.length, busy: false, error: '', pending: null }; return { onboarding: true, summary: 'Opened the app list guide.' }; }
+  // Guide owns the turn: close the assistant first (its sheet sat on top of the guide) and tell the loop to stop calling lock tools.
+  const guideOpen = (summary) => ({ onboarding: true, done: true, summary, note: 'Guide is open; do not call lock tools again this turn.' });
+  if (lockGuide.value.open) return guideOpen('The app list guide is already open.'); // repeat call: don't reset the guide
+  if (name === 'open_app_picker') { askOpen.value = false; lockGuide.value = { ...lockGuide.value, open: true, step: 'guide', missing: [], firstTime: !labels.length, busy: false, error: '', pending: null }; return guideOpen('Opened the app list guide.'); }
   const action = name === 'lock_apps' ? 'lock' : 'unlock';
   const plan = planLock(action, a, labels);
   if (plan.kind === 'ask') return { ask: plan.question };
-  if (plan.kind === 'onboard') { lockGuide.value = { ...lockGuide.value, open: true, step: 'guide', missing: plan.missing, firstTime: plan.firstTime, busy: false, error: '', pending: plan.pending };
-    return { onboarding: true, not_picked: plan.missing, summary: `${joinNames(plan.missing)} ${plan.missing.length > 1 ? 'need' : 'needs'} to be picked once. I opened a short guide; the lock finishes right after.` }; }
+  if (plan.kind === 'onboard') { askOpen.value = false; lockGuide.value = { ...lockGuide.value, open: true, step: 'guide', missing: plan.missing, firstTime: plan.firstTime, busy: false, error: '', pending: plan.pending };
+    return { ...guideOpen(`${joinNames(plan.missing)} ${plan.missing.length > 1 ? 'need' : 'needs'} to be picked once. I opened a short guide; the lock finishes right after.`), not_picked: plan.missing }; }
   return runLockPlan(action, plan, { ...a, apps: plan.labels });
 };
+const LOCK_PICK_TIMEOUT_MS = 60000;
 const lockGuidePick = async () => {
   const g = lockGuide.value; lockGuide.value = { ...g, busy: true, error: '' };
-  const a0 = await clingLock.requestAuthorization();
-  if (a0.status !== 'approved') { lockGuide.value = { ...lockGuide.value, busy: false, error: 'Screen Time permission is needed. Allow it when iOS asks.' }; return; }
-  const r = await clingLock.pickNamedApps(g.missing || []);
-  lockAppsCache.value = r.apps || lockAppsCache.value;
-  if (!r.saved) { lockGuide.value = { ...lockGuide.value, busy: false }; return; }
-  const next = resumePending(g.pending, lockAppsCache.value.map((x) => x.label), { saved: true });
-  let summary = `Saved ${lockAppsCache.value.length} app${lockAppsCache.value.length === 1 ? '' : 's'}. Say "lock" and a name anytime.`;
-  if (next.kind === 'run') { const res = await runLockPlan(g.pending.action, next, g.pending); summary = res.error || `${res.summary}${res.not_picked ? ` ${joinNames(res.not_picked)} wasn't picked.` : ''}`; }
-  else if (next.kind === 'drop' && next.reason === 'not_picked') summary = `${joinNames(next.stillMissing)} wasn't picked, so nothing was locked.`;
-  else if (next.kind === 'ask') summary = next.question;
-  lockGuide.value = { ...lockGuide.value, busy: false, step: 'done', summary, apps: lockAppsCache.value, pending: null };
+  try {
+    const a0 = await withTimeout(clingLock.requestAuthorization(), LOCK_PICK_TIMEOUT_MS);
+    if (a0.status !== 'approved') { lockGuide.value = { ...lockGuide.value, error: 'Screen Time permission is needed. Allow it when iOS asks.' }; return; }
+    const r = await withTimeout(clingLock.pickNamedApps(g.missing || []), LOCK_PICK_TIMEOUT_MS);
+    lockAppsCache.value = r.apps || lockAppsCache.value;
+    if (!r.saved) return;
+    const next = resumePending(g.pending, lockAppsCache.value.map((x) => x.label), { saved: true });
+    let summary = `Saved ${lockAppsCache.value.length} app${lockAppsCache.value.length === 1 ? '' : 's'}. Say "lock" and a name anytime.`;
+    if (next.kind === 'run') { const res = await runLockPlan(g.pending.action, next, g.pending); summary = res.error || `${res.summary}${res.not_picked ? ` ${joinNames(res.not_picked)} wasn't picked.` : ''}`; }
+    else if (next.kind === 'drop' && next.reason === 'not_picked') summary = `${joinNames(next.stillMissing)} wasn't picked, so nothing was locked.`;
+    else if (next.kind === 'ask') summary = next.question;
+    lockGuide.value = { ...lockGuide.value, step: 'done', summary, apps: lockAppsCache.value, pending: null };
+  } catch (e) {
+    lockGuide.value = { ...lockGuide.value, error: e && e.code === 'timeout' ? "Apple's app list didn't open. Try again." : 'Something went wrong. Try again.' };
+  } finally { lockGuide.value = { ...lockGuide.value, busy: false }; }
 };
-const lockGuideClose = () => { if (!lockGuide.value.busy) lockGuide.value = { ...lockGuide.value, open: false, pending: null }; };
+const lockGuideClose = () => { lockGuide.value = { ...lockGuide.value, open: false, pending: null }; }; // closable even while busy
 const assistantExecutor = createAssistantExecutor({
   tasks: () => todayTasksForTarget.value,
   today: () => getTodayId(),
