@@ -122,14 +122,18 @@ export function parseUtterance(text, now = new Date()) {
   return splitClauses(text).map((c) => parseClause(c, now)).filter((it) => it.title);
 }
 
+// The user's words name a day other than today ("tomorrow", "Friday", "in 3 days"): an item with no date must not silently become today.
+export const namesOtherDay = (text) => /\b(?:tomorrow|tmrw|tmr|next week|in\s+(?:\d+|a|one|two|three|four|five|six|seven)\s+days?|(?:mon|tues|wednes|thurs|fri|satur|sun)days?)\b/i.test(String(text || ''));
 // Validate / normalise items from any interpreter (AI or local) before they reach the confirm sheet.
-export function normalizeItems(items, now = new Date()) {
+export function normalizeItems(items, now = new Date(), { userText = '' } = {}) {
   if (!Array.isArray(items)) return [];
+  const strictDate = namesOtherDay(userText);
   const okD = (s) => /^\d{4}-\d{2}-\d{2}$/.test(String(s || ''));
   const okT = (s) => /^([01]\d|2[0-3]):[0-5]\d$/.test(String(s || ''));
   return items.slice(0, MAX_ITEMS).map((x) => {
     const type = ['task', 'reminder', 'schedule'].includes(x && x.type) ? x.type : 'task';
     const title = String((x && x.title) || '').replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, 140);
+    if (strictDate && !okD(x.date) && !/^\d{4}-\d{2}-\d{2}T/.test(String(x.remindAt || ''))) return { title, missingDate: true };
     const date = okD(x.date) ? x.date : ymd(now);
     const start = okT(x.start) ? x.start : '';
     const durationMin = Math.max(0, Math.min(24 * 60, Math.round(Number(x.durationMin) || 0)));

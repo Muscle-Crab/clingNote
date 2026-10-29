@@ -20,7 +20,12 @@ struct AddTaskIntent: AppIntent {
         guard !clean.isEmpty, let d = UserDefaults(suiteName: "group.app.clingnote.ios") else { return .result(dialog: "Say what the task is.") }
         var q = (d.array(forKey: "intent.pending") as? [[String: Any]]) ?? []
         var item: [String: Any] = ["title": String(clean), "ts": Date().timeIntervalSince1970 * 1000]
-        if let t = time { let c = Calendar.current.dateComponents([.hour, .minute], from: t); item["start"] = String(format: "%02d:%02d", c.hour ?? 0, c.minute ?? 0) }
+        if let t = time {
+            let c = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: t)
+            item["start"] = String(format: "%02d:%02d", c.hour ?? 0, c.minute ?? 0)
+            // keep the day too ("tomorrow at 3"): the app schedules it on that date instead of today
+            item["date"] = String(format: "%04d-%02d-%02d", c.year ?? 0, c.month ?? 0, c.day ?? 0)
+        }
         q.append(item); d.set(Array(q.suffix(20)), forKey: "intent.pending")
         return .result(dialog: "Adding \(String(clean)) to ClingNote.")
     }

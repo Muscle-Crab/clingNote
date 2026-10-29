@@ -23,7 +23,7 @@ export function createAssistantExecutor(deps) {
         const added = []; const failed = [];
         for (const it of a.items) {
           const r = await deps.addTask({ ...it, points: clampPoints(it.points), complexity: clampComplexity(it.complexity) });
-          if (r && r.ok) added.push(`${it.title}${it.points ? ` (${it.points} pts)` : ''}`); else { failed.push({ title: it.title, error: (r && r.error) || 'not saved' }); if (r && r.limit) break; }
+          if (r && r.ok) added.push(`${it.title}${it.date && it.date !== (deps.today && deps.today()) ? ` on ${it.date}` : ''}${it.start ? ` at ${it.start}` : ''}${it.points ? ` (${it.points} pts)` : ''}`); else { failed.push({ title: it.title, error: (r && r.error) || 'not saved' }); if (r && r.limit) break; }
         }
         return { ok: !failed.length, added: added.length, summary: added.join(', '), ...(failed.length ? { failed } : {}) };
       }

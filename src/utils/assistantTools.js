@@ -37,21 +37,25 @@ export const buildContext = ({ tasks = [], now = new Date(), tz = '', pro = fals
     return { ref, title: String(t.title || '').slice(0, 120), done: !!t.completed, start: t.startTime || '', minutes: Number(t.estimateMin || t.minutes) || 0, points: Number(t.points) || 0, boss: !!t.boss, timer: !!t.timerActive, priority: t.priority || '' };
   });
   const p = (n) => String(n).padStart(2, '0');
-  return { refs, context: { now: `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}T${p(now.getHours())}:${p(now.getMinutes())}`, tz, pro: !!pro,
+  const WD = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']; const tm = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  return { refs, context: { now: `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}T${p(now.getHours())}:${p(now.getMinutes())}`, weekday: WD[now.getDay()], tomorrow: `${tm.getFullYear()}-${p(tm.getMonth() + 1)}-${p(tm.getDate())}`, tz, pro: !!pro,
     limit, streak, pointsToday: points, bossTarget: target, hoursToday: hours, lock, tasks: list,
     upcoming: (upcoming || []).slice(0, 15).map((e) => ({ title: String(e.title || '').slice(0, 80), date: e.scheduledDate || e.date || '', time: e.scheduledTime || e.time || '' })), settings, route,
     ...(lockApps ? { lockApps: lockApps.slice(0, 30).map((x) => ({ name: String(x.label || '').slice(0, 40), locked: !!x.locked, ...(x.until ? { until: new Date(x.until).toISOString().slice(11, 16) } : {}) })) } : {}) } };
 };
 
 // -> { ok, args } | { ok:false, error } . refs: { t1: key }, tasksByKey: Map(key -> task)
-export const validateCall = (name, args = {}, { refs = {}, tasksByKey = new Map(), today = '', limitRemaining = null } = {}) => {
+export const validateCall = (name, args = {}, { refs = {}, tasksByKey = new Map(), today = '', limitRemaining = null, userText = '' } = {}) => {
   const a = args && typeof args === 'object' ? args : {};
   const task = () => { const k = refs[String(a.ref || '')]; return k && tasksByKey.has(k) ? tasksByKey.get(k) : null; };
   const needTask = () => { const t = task(); return t ? { ok: true, task: t } : { ok: false, error: `Unknown task ref "${a.ref}". Use get_overview.` }; };
   switch (name) {
     case 'create_tasks': {
       const raw = (Array.isArray(a.items) ? a.items : []).slice(0, MAX_CREATE);
-      const items = normalizeItems(raw).map((it, i) => ({ ...it, ...pointsForItem({ ...raw[i], ...it }), priority: raw[i] && raw[i].priority === 'high' ? 'high' : '' }))
+      const norm = normalizeItems(raw, new Date(), { userText });
+      const miss = norm.filter((x) => x.missingDate);
+      if (miss.length) return { ok: false, error: `Missing date for "${miss[0].title}": the user named another day. Set date (YYYY-MM-DD) on every item from context.now / context.tomorrow.` };
+      const items = norm.map((it, i) => ({ ...it, ...pointsForItem({ ...raw[i], ...it }), priority: raw[i] && raw[i].priority === 'high' ? 'high' : '' }))
         .map((it, i) => { const rep = raw[i] && repeatFields(raw[i].repeat, raw[i].days); return rep ? { ...it, type: 'schedule', date: it.date || today, start: it.start || '09:00', repeat: rep.repeat, days: rep.days.length ? rep.days : undefined } : it; });
       if (!items.length) return { ok: false, error: 'No valid items.' };
       // Only items landing today count against today's remaining; a future-dated one-off is checked against its own day when it is saved

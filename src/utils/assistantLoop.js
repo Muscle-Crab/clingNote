@@ -18,7 +18,7 @@ export async function runAgentTurn({ text, contents = [], call, executor, confir
     if (!calls.length || step === MAX_STEPS) return { reply: String(res.text || '').trim() || (calls.length ? 'I stopped there. Anything else?' : 'Done.'), contents: convo, remaining };
     const responses = [];
     for (const c of calls) {
-      const v = validateCall(c.name, c.args, snap);
+      const v = validateCall(c.name, c.args, { ...snap, userText: text });
       let response;
       if (!v.ok) response = { error: v.error, ...(v.limit ? { limitReached: true } : {}) };
       else if (needsConfirm(c.name, v.args) && !(await confirm({ name: c.name, args: v.args, summary: describeCall(c.name, v.args) }))) { response = c.name === 'create_tasks' ? { declined: true, note: 'Not saved. If the user said what to change, apply it and call create_tasks again with the full corrected list; otherwise drop it.' } : { declined: true, note: 'The user said no. Do not retry.' }; onEvent({ type: 'declined', name: c.name }); }

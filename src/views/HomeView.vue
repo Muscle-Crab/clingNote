@@ -3609,7 +3609,7 @@ const saveBufferedIntents = async () => {
     const keep = []; const added = []; const dropped = [];
     for (const it of buf) {
       let outcome = 'retry';
-      try { const snap = await assistantExecutor.snapshot(); const v = validateCall('create_tasks', intentCreateArgs(it), snap);
+      try { const snap = await assistantExecutor.snapshot(); const v = validateCall('create_tasks', intentCreateArgs(it, snap.today), snap);
         const res = v.ok ? await assistantExecutor.run('create_tasks', v.args) : null; outcome = intentOutcome({ validated: v, result: res });
         if (outcome === 'drop') dropped.push(`${it.title}: ${(v.ok ? res?.failed?.[0]?.error : v.error) || 'not saved'}`);
       } catch (e) { console.error('siri add', e.message); outcome = intentOutcome({ error: e }); }
