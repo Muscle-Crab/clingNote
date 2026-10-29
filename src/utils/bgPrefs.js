@@ -1,6 +1,6 @@
 // "Background" settings (animation + music), saved per device in localStorage. Default = the current static look.
 export const KEY = 'clingnot_background_v1';
-export const ANIMS = [{ id: 'none', label: 'None', icon: '🚫' }, { id: 'snow', label: 'Snow', icon: '❄️' }, { id: 'rain', label: 'Rain', icon: '🌧️' }, { id: 'fire', label: 'Fireplace', icon: '🔥' }];
+export const ANIMS = [{ id: 'none', label: 'None', icon: '🚫' }, { id: 'snow', label: 'Snow', icon: '❄️' }, { id: 'rain', label: 'Rain', icon: '🌧️' }, { id: 'fire', label: 'Fire', icon: '🔥' }];
 export const TRACKS = [
   { id: 'lofi', label: 'Lo-fi chill', hint: 'Mellow keys, soft beat, vinyl dust' },
   { id: 'lofi-night', label: 'Lo-fi night', hint: 'Slow, drum-free late-night keys' },
@@ -17,7 +17,7 @@ export const TRACKS = [
 // Home / page-header picture. 'forest' = the original art (default); 'custom' = the user's own photo (stored separately, see CUSTOM_KEY).
 export const IMAGES = [
   { id: 'forest', label: 'Forest' }, { id: 'night', label: 'Night sky' }, { id: 'ocean', label: 'Ocean dusk' },
-  { id: 'sunrise', label: 'Sunrise' }, { id: 'mountains', label: 'Mountains' }, { id: 'dark', label: 'Plain dark' },
+  { id: 'sunrise', label: 'Sunrise' }, { id: 'mountains', label: 'Mountains' }, { id: 'campfire', label: 'Campfire' }, { id: 'dark', label: 'Plain dark' },
 ];
 export const IMAGE_IDS = [...IMAGES.map((i) => i.id), 'custom'];
 export const DEFAULTS = Object.freeze({ anim: 'none', track: 'lofi', volume: 0.5, forceMotion: false, musicOn: false, image: 'forest', autoRotate: false, rotateMins: 20 });

@@ -1,6 +1,6 @@
 <template>
-  <div ref="scrollContainer" class="app-root" :class="[{ 'has-bg-anim': bgPrefs.anim !== 'none', 'is-dragging': isDraggingTask, 'reorder-active': isDraggingTask || reorderSettling }, appTheme ? 'theme-' + appTheme : '']">
-    <BackgroundLayer :anim="bgPrefs.anim" :force-motion="bgPrefs.forceMotion" />
+  <div ref="scrollContainer" class="app-root" :class="[{ 'has-bg-anim': bgAnim !== 'none', 'is-dragging': isDraggingTask, 'reorder-active': isDraggingTask || reorderSettling }, appTheme ? 'theme-' + appTheme : '']">
+    <BackgroundLayer :anim="bgAnim" :force-motion="bgPrefs.forceMotion" />
     <div class="safe-top-scrim" aria-hidden="true"></div>
     <BackgroundPanel :open="showBackground" @close="showBackground = false" />
 
@@ -20,7 +20,7 @@
 
       <!-- ─── Calendar & Progress ─── -->
       <section class="calendar-section">
-        <div class="hero-scene" aria-hidden="true"></div>
+        <div class="hero-scene" aria-hidden="true"><HeroAmbience :img="bgImg" :anim="bgAnim" :force-motion="bgPrefs.forceMotion" /></div>
         <header class="hero">
           <div class="hero-text">
             <p class="hero-date">{{ currentDate }}</p>
@@ -248,6 +248,9 @@ import MorningReport from '@/components/home/MorningReport.vue';
 import TaskSections from '@/components/home/TaskSections.vue';
 import { sectionOf, sectionFromTime, sectionForCreate, isSection, mergeOrder } from '@/utils/taskSections';
 import BackgroundLayer from '@/components/background/BackgroundLayer.vue';
+import HeroAmbience from '@/components/background/HeroAmbience.vue';
+import { effectiveAnim } from '@/utils/heroAmbience';
+import { effectiveImage } from '@/utils/bgPrefs';
 import BackgroundPanel from '@/components/background/BackgroundPanel.vue';
 import { useBackground } from '@/composables/useBackground';
 import { buildRecap, reportDue, prevDay } from '@/utils/dailyReport';
@@ -2647,6 +2650,9 @@ onMounted(() => {
 const showBackground = ref(false);
 const bgApi = useBackground();
 const bgPrefs = bgApi.prefs;
+// Weather must fit the picture (no rain/snow on sunny scenes): the saved choice is kept, but only a compatible one is shown.
+const bgImg = computed(() => effectiveImage(bgPrefs.image, bgApi.customImage.value));
+const bgAnim = computed(() => effectiveAnim(bgImg.value, bgPrefs.anim));
 // Returning to the app (cold start or back from the background): bring back the music the user had on.
 const resumeBgMusic = () => { try { bgApi.resumeIfWanted(); } catch (e) { /* audio is optional */ } };
 const onBgVisible = () => { if (document.visibilityState === 'visible') resumeBgMusic(); };
@@ -4518,6 +4524,8 @@ body.home-v2 .app-topbar { position: absolute; top: 0; left: 0; right: 0; z-inde
 .app-shell--tabs .app-root .content-wrap.content-wrap { padding-bottom: 12px; }
 /* Animated background sits behind the content (z -1): the page/shell backgrounds go transparent so the same #070D1C html background shows through. */
 /* !important beats index.html's inline launch-flash <body style=background>; html keeps #070D1C underneath. */
+/* Weather canvas (fixed, z -1) must fall over the header picture too, starting at its top edge: drop the picture just under it. Text/cards stay above (z 1). */
+.app-root.has-bg-anim .hero-scene.hero-scene { z-index: -2; }
 body:has(.app-root.has-bg-anim), body:has(.app-root.has-bg-anim) #app { background: transparent !important; }
 .app-shell.app-shell--home:has(.app-root.has-bg-anim), .app-root.has-bg-anim.has-bg-anim { background: transparent; }
 /* Status-bar scrim: scrolled content (e.g. the streak line) never shows under the notch / Dynamic Island. */
