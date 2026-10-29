@@ -3521,6 +3521,14 @@ const focusTick = () => {
 };
 let focusLive = false; let focusIv = null;
 onMounted(() => { focusIv = setInterval(focusTick, 15000); });
+// Start/end the lock-screen Live Activity the moment a timer starts/stops (any path: timer modal, card, assistant, widget), not on the
+// next 15 s poll: ActivityKit only allows Activity.request while the app is in the foreground, so a user who locks the phone right after
+// tapping Start used to get no Live Activity (build 36). Also re-check when the app is about to go to the background.
+const activeTimerSig = computed(() => { const t = (selectedDayRoutine.value || []).find((x) => x && x.timerActive && x.timerEndTime && !x.timerPausedAt); return t ? `${taskKey(t)}|${t.timerEndTime}` : ''; });
+watch(activeTimerSig, () => { try { focusTick(); } catch (e) { console.warn('focus live', e && e.message); } });
+const focusOnHide = () => { if (document.visibilityState === 'hidden') { try { focusTick(); } catch (e) { /* ignore */ } } };
+onMounted(() => document.addEventListener('visibilitychange', focusOnHide));
+onBeforeUnmount(() => document.removeEventListener('visibilitychange', focusOnHide));
 onBeforeUnmount(() => { clearInterval(focusIv); });
 watch(() => [eh.running.value, isViewingToday.value, (selectedDayRoutine.value || []).length], () => {
   if (!eh.running.value || !isViewingToday.value) return;
