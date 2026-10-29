@@ -2,6 +2,7 @@ import Foundation
 import Capacitor
 import AVFoundation
 import Speech
+import MediaPlayer
 
 /// Local Capacitor plugin "ClingVoice":
 ///  - Boss voice: AVSpeechSynthesizer with the best installed MALE English voice (Premium > Enhanced > compact), low pitch, brisk clipped lines.
@@ -14,6 +15,7 @@ public class ClingVoicePlugin: CAPPlugin, CAPBridgedPlugin, AVSpeechSynthesizerD
         CAPPluginMethod(name: "voiceInfo", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "speak", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "stop", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "releaseAudio", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "recognitionAvailable", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "requestRecognitionPermission", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "startListening", returnType: CAPPluginReturnPromise),
@@ -88,6 +90,29 @@ public class ClingVoicePlugin: CAPPlugin, CAPBridgedPlugin, AVSpeechSynthesizerD
     }
 
     private func finishPending() { remaining = 0; if let c = pendingCall { pendingCall = nil; c.resolve(["done": true]) } }
+
+    /// Lock-screen fix: after speech/audio ends or is cancelled, drop the "Now Playing" entry (ClingNote 0:01 / -0:00 player),
+    /// stop receiving remote-control events and give the audio session back (other apps resume). Alarms use AlarmKit
+    /// (system-owned audio), so deactivating our session does not affect them. Called from JS (useVoiceover.releaseMedia)
+    /// only when focus music is NOT playing, so the music's lock-screen entry is never torn down. Category stays .playback for the next clip.
+    static func releaseNowPlaying() {
+        let center = MPNowPlayingInfoCenter.default()
+        center.nowPlayingInfo = nil
+        if #available(iOS 13.0, *) { center.playbackState = .stopped }
+        let rc = MPRemoteCommandCenter.shared()
+        for cmd in [rc.playCommand, rc.pauseCommand, rc.togglePlayPauseCommand, rc.stopCommand, rc.nextTrackCommand, rc.previousTrackCommand, rc.changePlaybackPositionCommand, rc.skipForwardCommand, rc.skipBackwardCommand] {
+            cmd.removeTarget(nil); cmd.isEnabled = false
+        }
+        UIApplication.shared.endReceivingRemoteControlEvents()
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+    }
+
+    @objc func releaseAudio(_ call: CAPPluginCall) {
+        DispatchQueue.main.async {
+            if self.synth.isSpeaking || self.audioEngine.isRunning { call.resolve(["released": false]); return }
+            Self.releaseNowPlaying(); call.resolve(["released": true])
+        }
+    }
     public func speechSynthesizer(_ s: AVSpeechSynthesizer, didFinish u: AVSpeechUtterance) { remaining -= 1; if remaining <= 0 { finishPending() } }
     public func speechSynthesizer(_ s: AVSpeechSynthesizer, didCancel u: AVSpeechUtterance) { finishPending() }
 

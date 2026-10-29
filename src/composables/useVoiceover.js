@@ -20,6 +20,26 @@ let audio = null; let token = 0;
 const base = (typeof process !== 'undefined' && process.env && process.env.BASE_URL) || '/';
 const el = () => { if (!audio && typeof Audio !== 'undefined') { audio = new Audio(); audio.preload = 'auto'; audio.addEventListener('ended', () => { voSpeaking.value = false; }); } return audio; };
 
+// Lock-screen "Now Playing" cleanup. A WKWebView <audio> element that played (and still holds a src) registers as the app's
+// Now Playing item, so iOS kept a dead "ClingNote 0:01 / -0:00 ▶" player after every spoken line. Once speech ends or is
+// cancelled: detach the media (pause, drop src, load()), clear navigator.mediaSession, then (debounced, only if nothing
+// started again) ask the native side to clear MPNowPlayingInfoCenter / remote commands and deactivate the audio session.
+let releaseTimer = null;
+export const RELEASE_DELAY_MS = 700;
+export function releaseMedia() {
+  const a = audio;
+  if (a) { try { a.onplaying = null; a.onended = null; a.onerror = null; a.pause(); a.removeAttribute('src'); a.load(); } catch (e) { /* ignore */ } }
+  if (musicHolds()) return; // focus music owns the widget (title ClingNote / Focus music); leave it and the session alone
+  try { const ms = typeof navigator !== 'undefined' && navigator.mediaSession; if (ms) { ms.metadata = null; ms.playbackState = 'none'; } } catch (e) { /* ignore */ }
+  if (releaseTimer) clearTimeout(releaseTimer);
+  const my = token;
+  releaseTimer = setTimeout(() => { releaseTimer = null; if (my !== token || voSpeaking.value || musicHolds()) return; releaseNative(); }, RELEASE_DELAY_MS);
+}
+let releaseNative = () => { import('@/utils/clingVoice').then((m) => { if (m.nativeVoiceAvailable()) return m.ClingVoice.releaseAudio(); return null; }).catch(() => {}); };
+let musicHolds = () => false;
+export const _setMusicHolds = (f) => { musicHolds = f; }; // set by useFocusMusic (avoids an import cycle)
+export const _setNativeRelease = (f) => { releaseNative = f; }; // tests
+
 
 export { liveChunks, MAX_LIVE_CHARS };
 export const bundledSrc = (text) => { const k = phraseKey(text); return PHRASE_KEYS.has(k) ? `${base}voiceover/p/${k}.mp3` : ''; };
@@ -46,13 +66,14 @@ function playSrc(src, my, { onEnd, onFail }) {
   a.onplaying = () => { started = true; };
   a.onended = () => { if (my === token && onEnd) onEnd(); };
   a.onerror = fail;
+  if (releaseTimer) { clearTimeout(releaseTimer); releaseTimer = null; }
   a.src = src; voSpeaking.value = true;
   try { const p = a.play(); if (p && p.catch) p.catch(fail); } catch (e) { fail(); }
 }
 
 export function stopVoice() {
   token++; voSpeaking.value = false;
-  try { const a = audio; if (a) { a.pause(); a.currentTime = 0; } } catch (e) { /* ignore */ }
+  releaseMedia();
 }
 
 // Speak one chunk: bundled MP3 for a known static line, else the live voice, else fallbackKey's MP3, else silence.
@@ -69,7 +90,7 @@ export function speakLive(text, { onEnd, fallbackKey } = {}) {
   const parts = liveChunks(text);
   if (voMuted.value || !parts.length) return false;
   stopVoice(); const my = token; voSpeaking.value = true;
-  const step = (i) => { if (my !== token) return; if (i >= parts.length) { voSpeaking.value = false; if (onEnd) onEnd(); return; } speakChunk(parts[i], my, () => step(i + 1), fallbackKey); };
+  const step = (i) => { if (my !== token) return; if (i >= parts.length) { voSpeaking.value = false; releaseMedia(); if (onEnd) onEnd(); return; } speakChunk(parts[i], my, () => step(i + 1), fallbackKey); };
   step(0);
   return true;
 }
@@ -78,7 +99,7 @@ export function speakLive(text, { onEnd, fallbackKey } = {}) {
 export function playVoice(key, { onEnd } = {}) {
   stopVoice(); if (voMuted.value || !voUnlocked.value || !SCRIPTS[key]) return false;
   const my = token;
-  playSrc(`${base}voiceover/${key}.mp3`, my, { onEnd, onFail: () => { if (my === token) speakLive(SCRIPTS[key], { onEnd }); } });
+  playSrc(`${base}voiceover/${key}.mp3`, my, { onEnd: () => { voSpeaking.value = false; releaseMedia(); if (onEnd) onEnd(); }, onFail: () => { if (my === token) speakLive(SCRIPTS[key], { onEnd }); } });
   return true;
 }
 
@@ -94,7 +115,7 @@ export function playFlow({ before = '', key = '', text = '' }) {
 // Call from inside a tap handler. Primes the shared element (silent) so later swaps can autoplay on iOS.
 export function unlockVoice() {
   if (voUnlocked.value) return; voUnlocked.value = true;
-  const a = el(); if (a) { try { a.muted = true; a.src = `${base}voiceover/ob_age.mp3`; const p = a.play(); const done = () => { a.pause(); a.muted = false; };
+  const a = el(); if (a) { try { a.muted = true; a.src = `${base}voiceover/ob_age.mp3`; const p = a.play(); const done = () => { a.pause(); a.muted = false; if (!voSpeaking.value) releaseMedia(); };
     p && p.then ? p.then(done, done) : done(); } catch (e) { a.muted = false; } }
 }
 
