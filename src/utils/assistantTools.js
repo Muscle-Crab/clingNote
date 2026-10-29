@@ -98,6 +98,9 @@ export const validateCall = (name, args = {}, { refs = {}, tasksByKey = new Map(
     case 'place_reminder': {
       const title = String(a.title || '').replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, 120); const place = String(a.place || '').trim().slice(0, 40).toLowerCase();
       if (!title || !place) return { ok: false, error: 'Need a task and a place.' };
+      // "in 2 hours" is a time, not a place: a timed create_tasks item at now + N (place_reminder is only "when I get to X").
+      const relTime = /\b(?:in|after)\s+(?:\d+(?:\.\d+)?|an?|one|two|three|four|five|six|ten|fifteen|twenty|thirty|half an?)\s*(?:hours?|hrs?|h|minutes?|mins?)\b/i;
+      if (/\d|hour|minute|\bmin|\bhr/.test(place) || (relTime.test(userText) && !/\b(?:get to|arrive|reach|i'?m at|when i'?m)\b/i.test(userText))) return { ok: false, error: 'That is a time, not a place. Use create_tasks with a timed item: date + start = context.now + N (type task today, schedule if it lands tomorrow).' };
       return { ok: true, args: { title, place, saveHere: !!a.save_here } };
     }
     case 'app_lock': return ['status', 'pick_apps', 'emergency_unlock', 'turn_off'].includes(a.action) ? { ok: true, args: { action: a.action } } : { ok: false, error: 'Unknown action.' };

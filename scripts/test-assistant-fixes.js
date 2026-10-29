@@ -35,6 +35,11 @@ ok(v.ok && v.args.items[0].start === '15:00' && v.args.items[1].remindAt === `${
 const tk = { id: 'z1', title: 'ZZTEST t' }; const s2 = { ...snap, refs: { t1: 'z1' }, tasksByKey: new Map([['z1', tk]]) };
 v = T.validateCall('edit_task', { ref: 't1', start: '5 PM' }, s2); ok(v.ok && v.args.patch.startTime === '17:00', 'edit_task start 5 PM');
 v = T.validateCall('reschedule_task', { ref: 't1', time: '3pm' }, s2); ok(v.ok && v.args.time === '15:00', 'reschedule_task time 3pm');
+// ---- Fix 3: "in 2 hours" is a timed item, not place_reminder ----
+v = T.validateCall('place_reminder', { title: 'ZZTEST stretch', place: 'in 2 hours' }, snap); ok(!v.ok && /create_tasks/.test(v.error), 'place "in 2 hours" rejected');
+v = T.validateCall('place_reminder', { title: 'ZZTEST stretch', place: 'home' }, { ...snap, userText: 'remind me to stretch in 2 hours' }); ok(!v.ok, 'relative-time utterance rejects place_reminder');
+v = T.validateCall('place_reminder', { title: 'ZZTEST milk', place: 'store' }, { ...snap, userText: 'remind me to buy milk when I get to the store' }); ok(v.ok, 'real place reminder still works');
+ok(/never place_reminder/.test(A.SYSTEM), 'prompt: in N hours is not place_reminder');
 //__MORE__
 console.log(`\n${n} assistant-fix tests passed`);
 })().catch((e) => { console.error(e); process.exit(1); });
