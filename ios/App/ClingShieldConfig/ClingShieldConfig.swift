@@ -2,7 +2,7 @@ import ManagedSettings
 import ManagedSettingsUI
 import UIKit
 
-/// ShieldConfiguration extension (bundle app.clingnote.ios.shieldconfig): ClingNote-branded shield. NOT yet an Xcode target.
+/// ShieldConfiguration extension (bundle app.clingnote.ios.shieldconfig): ClingNote-branded shield.
 class ClingShieldConfig: ShieldConfigurationDataSource {
     private func shield() -> ShieldConfiguration {
         let label = (LockShared.defaults?.dictionary(forKey: LockShared.stateKey)?["label"] as? String) ?? ""

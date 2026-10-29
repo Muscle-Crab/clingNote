@@ -110,5 +110,12 @@ const snapOf = (limitRemaining = 5) => { const b = T.buildContext({ tasks }); re
     && !T.needsConfirm('app_lock', { action: 'status' }) && T.needsConfirm('app_lock', { action: 'emergency_unlock' }), 'brain dump / rollover / emergency unlock need confirm');
   ok(/3\. C/.test(T.describeCall('create_tasks', { items: [{ title: 'A' }, { title: 'B', start: '18:00' }, { title: 'C' }] })), 'brain dump review lists every item');
   ok(T.validateCall('log_habit', { name: 'water' }).ok && !T.validateCall('place_reminder', { title: 'milk' }).ok && !T.validateCall('app_lock', { action: 'x' }).ok && T.validateCall('auto_schedule', { write_calendar: true }).args.writeCalendar === true, 'new tool validation');
+  const lv = T.validateCall('lock_apps', { apps: ['TikTok', ' YT ', ''], minutes: 120 });
+  ok(lv.ok && lv.args.apps.join() === 'TikTok,YT' && lv.args.minutes === 120 && !lv.args.until_unlock, 'lock_apps validation');
+  ok(T.validateCall('lock_apps', { apps: ['x'] }).args.until_unlock === true && !T.validateCall('lock_apps', { apps: [] }).ok && T.validateCall('lock_apps', { apps: ['x'], minutes: 99999 }).args.minutes === 1440, 'lock_apps defaults/clamp');
+  ok(T.validateCall('unlock_apps', { apps: ['all'] }).ok && T.validateCall('open_app_picker', {}).ok && !T.needsConfirm('lock_apps', { apps: ['x'] }), 'unlock/open_app_picker');
+  const lockLog = []; const exL = createAssistantExecutor({ tasks: () => [], today: () => '2026-10-26', pro: () => false, limitRemaining: async () => 3, lockByName: async (n, a) => { lockLog.push([n, a]); return n === 'lock_apps' ? { locked: a.apps } : { onboarding: true }; } });
+  ok((await exL.run('lock_apps', { apps: ['TikTok'], minutes: 5 })).locked[0] === 'TikTok' && (await exL.run('open_app_picker', {})).onboarding && lockLog.length === 2, 'executor lock routes');
+  ok(T.buildContext({ lockApps: [{ label: 'TikTok', locked: true }] }).context.lockApps[0].name === 'TikTok' && !('lockApps' in T.buildContext({}).context), 'context lockApps');
   console.log(`test-assistant: ${pass} passed`);
 })().catch((e) => { console.error(e); process.exit(1); });

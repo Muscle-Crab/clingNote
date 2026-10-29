@@ -1,0 +1,41 @@
+// Unit tests: app-lock name resolution + guided first-lock pending-request resume (src/utils/appLockNames.js).
+import assert from 'assert';
+import { resolveApps, canonical, untilFor, planLock, resumePending, prettyName, fmtDuration, PENDING_TTL } from '../src/utils/appLockNames.js';
+let n = 0; const ok = (c, m) => { assert.ok(c, m); n++; };
+const L = ['TikTok', 'YouTube', 'Instagram', 'Reddit'];
+ok(canonical('YT') === 'youtube' && canonical('tik tok') === 'tiktok' && canonical('Insta') === 'instagram', 'aliases');
+let r = resolveApps(['TikTok'], L); ok(r.matched.join() === 'TikTok' && !r.unknown.length, 'single');
+r = resolveApps(['tik tok', 'YT'], L); ok(r.matched.join() === 'TikTok,YouTube', 'multiple + aliases');
+r = resolveApps(['TikTok and YouTube'], L); ok(r.matched.join() === 'TikTok,YouTube', 'split "and" inside one string');
+r = resolveApps(['youtub', 'redit'], L); ok(r.matched.join() === 'YouTube,Reddit', 'typos/prefix');
+r = resolveApps(['the tiktok app'.replace('the ', '')], L); ok(r.matched.join() === 'TikTok', '"app" suffix ignored');
+r = resolveApps(['Snapchat'], L); ok(r.unknown.join() === 'Snapchat' && !r.matched.length, 'unknown');
+r = resolveApps(['everything'], L); ok(r.matched.length === 4, 'all');
+r = resolveApps(['you'], ['YouTube', 'YouTube Kids']); ok(r.ambiguous.length === 1 && r.ambiguous[0].options.length === 2, 'ambiguous prefix');
+r = resolveApps(['YouTube'], ['YouTube', 'YouTube Kids']); ok(r.matched.join() === 'YouTube', 'exact wins over prefix');
+r = resolveApps(['Game'], ['Game 1', 'Game 2']); ok(r.ambiguous.length === 1, 'ambiguous custom names');
+ok(prettyName('yt') === 'YouTube' && prettyName('tik tok') === 'TikTok' && prettyName('candy crush') === 'Candy Crush', 'pretty names');
+const now = 1_000_000_000_000;
+ok(untilFor({ minutes: 120 }, now) === now + 7200000 && untilFor({ until_unlock: true, minutes: 30 }, now) === 0 && untilFor({}, now) === 0 && untilFor({ minutes: 99999 }, now) === now + 1440 * 60000, 'durations');
+ok(fmtDuration(now + 7200000, now) === 'for 2h' && fmtDuration(now + 90 * 60000, now) === 'for 1h 30m' && fmtDuration(0) === 'until you unlock them', 'fmt');
+// planning
+let p = planLock('lock', { apps: ['TikTok', 'YT'], minutes: 120 }, L, now); ok(p.kind === 'run' && p.labels.join() === 'TikTok,YouTube', 'plan run');
+p = planLock('lock', { apps: ['TikTok'], minutes: 120 }, [], now); ok(p.kind === 'onboard' && p.firstTime && p.missing.join() === 'TikTok' && p.pending.minutes === 120, 'first lock -> onboarding with pending');
+p = planLock('lock', { apps: ['TikTok', 'Snapchat'] }, L, now); ok(p.kind === 'onboard' && !p.firstTime && p.missing.join() === 'Snapchat', 'unknown app -> onboarding');
+p = planLock('unlock', { apps: ['YouTube'] }, L, now); ok(p.kind === 'run' && p.labels.join() === 'YouTube', 'unlock');
+p = planLock('unlock', {}, L, now); ok(p.kind === 'run' && p.all && p.labels.length === 4, 'unlock all');
+p = planLock('unlock', { apps: ['Snapchat'] }, L, now); ok(p.kind === 'ask', 'unlock unknown -> no picker');
+p = planLock('lock', { apps: ['you'] }, ['YouTube', 'YouTube Kids'], now); ok(p.kind === 'ask' && /YouTube and YouTube Kids/.test(p.question), 'ambiguous -> ask');
+p = planLock('lock', { apps: [] }, L, now); ok(p.kind === 'ask', 'no apps -> ask');
+// resume after the guided picker
+const pend = planLock('lock', { apps: ['TikTok'], minutes: 120 }, [], now).pending;
+let z = resumePending(pend, ['TikTok'], { now: now + 60000 }); ok(z.kind === 'run' && z.labels.join() === 'TikTok', 'resume runs original lock');
+ok(untilFor(pend, now + 60000) === now + 60000 + 7200000, 'duration counted from resume time');
+z = resumePending(pend, ['Tik Tok'], { now: now + 1 }); ok(z.kind === 'run' && z.labels.join() === 'Tik Tok', 'resume matches user-typed label');
+z = resumePending(pend, ['Instagram'], { now: now + 1 }); ok(z.kind === 'drop' && z.reason === 'not_picked' && z.stillMissing.join() === 'TikTok', 'picked something else -> not resumed');
+const pend2 = planLock('lock', { apps: ['TikTok', 'YouTube'], until_unlock: true }, [], now).pending;
+z = resumePending(pend2, ['TikTok'], { now: now + 1 }); ok(z.kind === 'run' && z.labels.join() === 'TikTok' && z.stillMissing.join() === 'YouTube', 'partial pick -> lock what was picked, report missing');
+z = resumePending(pend, ['TikTok'], { saved: false, now: now + 1 }); ok(z.kind === 'drop' && z.reason === 'cancelled', 'cancel drops');
+z = resumePending(pend, ['TikTok'], { now: now + PENDING_TTL + 1 }); ok(z.kind === 'drop' && z.reason === 'stale', 'stale drops');
+ok(resumePending(null, L).kind === 'drop', 'no pending');
+console.log(`app-lock names: ${n} passed`);

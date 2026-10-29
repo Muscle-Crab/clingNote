@@ -122,6 +122,7 @@
 
 
       <AssistantSheet v-if="askOpen" :executor="assistantExecutor" :listen-on-open="assistantListen" @close="askOpen = false" />
+      <LockGuideSheet v-bind="lockGuide" @pick="lockGuidePick" @close="lockGuideClose" />
       <VoiceModal v-if="voiceOpen" :transcript="liveTranscript" :supported="voiceSupported" :capability="voiceCap" :error="voiceError" :hint="voiceHint" :added="voiceAdded" :items="voiceItems" :busy="voiceBusy" :source="voiceSource" @undo="undoVoiceTask" @cancel="cancelVoiceInput" @finish="finishVoiceInput" @confirm="confirmVoiceItems" @relisten="relistenVoice" />
       <div v-if="repeatToast" :key="repeatToast.id" class="repeat-toast" :class="{ 'repeat-toast--err': repeatToast.error }" :role="repeatToast.error ? 'alert' : 'status'" data-test="repeat-toast">🔁 {{ repeatToast.text }} <button v-if="repeatToast.undo" type="button" data-test="repeat-undo" @click="() => { const u = repeatToast.undo; repeatToast = null; u(); }">Undo</button></div>
       <div v-if="noteToast" :key="'n' + noteToast.id" class="repeat-toast" :class="{ 'repeat-toast--err': noteToast.error }" :role="noteToast.error ? 'alert' : 'status'" data-test="note-toast">{{ noteToast.text }}</div>
@@ -355,6 +356,8 @@ import { reactionLine, shouldRoast, checkinMarks, checkinLine, dueMark, overbook
 import { loadHabits, saveHabits, addHabit, logHabit, habitSummary } from '@/utils/habits';
 import { autoSchedule } from '@/utils/autoSchedule';
 import { clingLock, clingNative, lockAvailable, nativeAvailable } from '@/native/clingNative';
+import { planLock, resumePending, untilFor, fmtDuration, joinNames } from '@/utils/appLockNames';
+import LockGuideSheet from '@/components/home/LockGuideSheet.vue';
 import { LOCK_PREF, PENALTY_KEY, EMERGENCY_PENALTY, shouldShield, busyToDay } from '@/utils/appLock';
 import { previewDayTarget, requiredPoints } from '@/utils/dayTarget';
 const askOpen = ref(false); // Assistant sheet (✨ next to the bell, and the bubble in the task list header)
@@ -3601,6 +3604,49 @@ const agentWeek = async (untilToday) => {
   return out;
 };
 const agentIdx = (task) => { const i = realIndex(task); if (i < 0) throw new Error('That task is no longer in today\'s list.'); return i; };
+// Per-app lock by name (assistant lock_apps / unlock_apps / open_app_picker). Names resolve against labels the user confirmed in
+// the native picker (utils/appLockNames). Unknown app -> guided LockGuideSheet, then the pending request resumes after picking.
+const lockAppsCache = ref([]);
+const lockGuide = ref({ open: false, step: 'guide', missing: [], firstTime: true, busy: false, error: '', summary: '', apps: [], pending: null });
+const refreshLockApps = async () => { if (!lockAvailable()) return []; const r = await clingLock.labeledApps(); lockAppsCache.value = (r && r.apps) || []; return lockAppsCache.value; };
+const runLockPlan = async (action, plan, pending) => {
+  const until = action === 'lock' ? untilFor(pending) : 0;
+  if (action === 'lock') {
+    const a0 = await clingLock.requestAuthorization(); if (a0.status !== 'approved') return { error: 'Screen Time permission was not given.' };
+    const r = await clingLock.lockApps(plan.labels, until); lockAppsCache.value = r.apps || lockAppsCache.value;
+    if (r.error) return { error: r.error === 'not_authorized' ? 'Screen Time permission was not given.' : r.error };
+    const locked = r.locked || [];
+    return { locked, summary: locked.length ? `Locked ${joinNames(locked)} ${fmtDuration(until)}.` : 'Nothing was locked.', ...(plan.stillMissing && plan.stillMissing.length ? { not_picked: plan.stillMissing } : {}), ...(plan.unknown && plan.unknown.length ? { not_found: plan.unknown } : {}) };
+  }
+  const r = await clingLock.unlockApps(plan.all ? ['*'] : plan.labels); lockAppsCache.value = r.apps || lockAppsCache.value;
+  const un = r.unlocked || []; return { unlocked: un, summary: un.length ? `Unlocked ${plan.all ? 'all your apps' : joinNames(un)}.` : 'Nothing was locked.' };
+};
+const lockByName = async (name, a = {}) => {
+  if (!lockAvailable()) return { error: 'App lock needs the ClingNote iPhone app (iOS 16+).' };
+  const labels = (await refreshLockApps()).map((x) => x.label);
+  if (name === 'open_app_picker') { lockGuide.value = { ...lockGuide.value, open: true, step: 'guide', missing: [], firstTime: !labels.length, busy: false, error: '', pending: null }; return { onboarding: true, summary: 'Opened the app list guide.' }; }
+  const action = name === 'lock_apps' ? 'lock' : 'unlock';
+  const plan = planLock(action, a, labels);
+  if (plan.kind === 'ask') return { ask: plan.question };
+  if (plan.kind === 'onboard') { lockGuide.value = { ...lockGuide.value, open: true, step: 'guide', missing: plan.missing, firstTime: plan.firstTime, busy: false, error: '', pending: plan.pending };
+    return { onboarding: true, not_picked: plan.missing, summary: `${joinNames(plan.missing)} ${plan.missing.length > 1 ? 'need' : 'needs'} to be picked once. I opened a short guide; the lock finishes right after.` }; }
+  return runLockPlan(action, plan, { ...a, apps: plan.labels });
+};
+const lockGuidePick = async () => {
+  const g = lockGuide.value; lockGuide.value = { ...g, busy: true, error: '' };
+  const a0 = await clingLock.requestAuthorization();
+  if (a0.status !== 'approved') { lockGuide.value = { ...lockGuide.value, busy: false, error: 'Screen Time permission is needed. Allow it when iOS asks.' }; return; }
+  const r = await clingLock.pickNamedApps(g.missing || []);
+  lockAppsCache.value = r.apps || lockAppsCache.value;
+  if (!r.saved) { lockGuide.value = { ...lockGuide.value, busy: false }; return; }
+  const next = resumePending(g.pending, lockAppsCache.value.map((x) => x.label), { saved: true });
+  let summary = `Saved ${lockAppsCache.value.length} app${lockAppsCache.value.length === 1 ? '' : 's'}. Say "lock" and a name anytime.`;
+  if (next.kind === 'run') { const res = await runLockPlan(g.pending.action, next, g.pending); summary = res.error || `${res.summary}${res.not_picked ? ` ${joinNames(res.not_picked)} wasn't picked.` : ''}`; }
+  else if (next.kind === 'drop' && next.reason === 'not_picked') summary = `${joinNames(next.stillMissing)} wasn't picked, so nothing was locked.`;
+  else if (next.kind === 'ask') summary = next.question;
+  lockGuide.value = { ...lockGuide.value, busy: false, step: 'done', summary, apps: lockAppsCache.value, pending: null };
+};
+const lockGuideClose = () => { if (!lockGuide.value.busy) lockGuide.value = { ...lockGuide.value, open: false, pending: null }; };
 const assistantExecutor = createAssistantExecutor({
   tasks: () => todayTasksForTarget.value,
   today: () => getTodayId(),
@@ -3613,7 +3659,7 @@ const assistantExecutor = createAssistantExecutor({
   stats: () => ({ streak: streak.value, points: pointsAccumulated.value, hours: eh.hoursPref.value,
     target: eh.lock.value ? eh.lock.value.target : previewDayTarget(todayTasksForTarget.value, eh.hoursPref.value, eh.stats.value).target,
     lock: eh.lock.value ? { endsAt: eh.endsLabel.value || '', earned: eh.lock.value.earned || 0, target: eh.lock.value.target || 0 } : null,
-    upcoming: scheduledList.value || [], settings: { sounds: !!soundEnabled.value, boss_voice: !voMuted.value, spoken_replies: !!assistantSession.speak.value }, route: '/home' }),
+    upcoming: scheduledList.value || [], lockApps: lockAvailable() ? lockAppsCache.value : null, settings: { sounds: !!soundEnabled.value, boss_voice: !voMuted.value, spoken_replies: !!assistantSession.speak.value }, route: '/home' }),
   addTask: async (it) => {
     error.value = '';
     if (it.type === 'reminder') { const r = await saveReminder({ title: it.title, remindAt: it.remindAt }, { schedule: scheduleLocal }); return { ok: r.ok, error: r.error }; }
@@ -3667,8 +3713,9 @@ const assistantExecutor = createAssistantExecutor({
       places[place] = { lat: here.lat, lng: here.lng }; try { localStorage.setItem(KEYP, JSON.stringify(places)); } catch (e) { /* ignore */ } }
     const p = places[place]; const r = await clingNative.addGeofence({ id: `${place}-${Date.now()}`, lat: p.lat, lng: p.lng, radius: 150, body: title, repeats: false });
     return r.error ? { error: r.error } : { ok: true }; },
+  lockByName: (name, a) => lockByName(name, a),
   appLock: async (action) => {
-    if (!lockAvailable()) return { error: 'App lock is not available in this version yet.' };
+    if (!lockAvailable()) return { error: 'App lock needs the iPhone app (iOS 16+).' };
     if (action === 'pick_apps') { const a0 = await clingLock.requestAuthorization(); if (a0.status !== 'approved') return { error: 'Screen Time permission was not given.' }; const r = await clingLock.pickApps(); if (r.saved) { try { localStorage.setItem(LOCK_PREF, '1'); } catch (e) { /* ignore */ } } syncAppLock(); return { saved: !!r.saved, apps: r.apps || 0 }; }
     if (action === 'turn_off') { try { localStorage.removeItem(LOCK_PREF); } catch (e) { /* ignore */ } await clingLock.stopLock(); return { summary: 'App lock off' }; }
     if (action === 'emergency_unlock') { await clingLock.stopLock(); const day = localDateStr(); let pen = []; try { pen = JSON.parse(localStorage.getItem(PENALTY_KEY) || '[]'); } catch (e) { /* ignore */ }

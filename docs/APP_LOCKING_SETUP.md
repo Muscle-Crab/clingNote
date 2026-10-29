@@ -19,3 +19,11 @@
 
 - **In-app agents can't lock or close other apps.** Anything built inside ClingNote, including the assistant, is sandboxed to ClingNote. It can only decide *when* locking starts or stops. The Shield and Device Activity extensions do the actual blocking.
 - **Siri can open ClingNote, but it can't force-quit other apps.** A voice request to close apps shows a reminder or a shortcut instead of closing them directly.
+
+## Build 35: lock apps by name (assistant)
+- Targets ClingLockMonitor (app.clingnote.ios.lockmonitor) + ClingShieldConfig (app.clingnote.ios.shieldconfig) are embedded; CLING_APP_LOCK is on for App + extensions.
+- Family Controls (Distribution) must be ticked in the developer portal on app.clingnote.ios, .lockmonitor and .shieldconfig (the ASC API has no FAMILY_CONTROLS capability type), and App Group group.app.clingnote.ios assigned to the two extension IDs.
+- Assistant tools: lock_apps({apps, minutes?|until_unlock}), unlock_apps({apps}), open_app_picker. Names resolve on device (src/utils/appLockNames.js) against labels the user confirmed in the native picker (ClingLock.pickNamedApps). Apple never exposes app names, so the label is user-confirmed.
+- Unknown/never-picked app -> LockGuideSheet explains the privacy rule, opens FamilyActivityPicker + naming step, then resumePending() finishes the original request (10 min TTL).
+- Each locked app gets a DeviceActivity schedule "clingApp.<id>" (min 15 min, iOS rule); ClingLockMonitor lifts it at intervalDidEnd. Locks shorter than 15 min are also cleared by the app on next open past their end time.
+- Tests: scripts/test-app-lock-names.mjs, scripts/test-assistant.js (offline); scripts/harness-lock-live.js (live OpenAI, not in check).

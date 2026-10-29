@@ -11,6 +11,11 @@ export const clingLock = {
   pickApps: safe('ClingLock', Lock, (p) => p.pickApps(), { saved: false }),
   startLock: safe('ClingLock', Lock, (p, untilMs, label = '') => p.startLock({ untilMs, label }), { locked: false }),
   stopLock: safe('ClingLock', Lock, (p) => p.stopLock(), { locked: false }),
+  // per-app locks by user-confirmed label (src/utils/appLockNames.js resolves spoken names to these labels)
+  labeledApps: safe('ClingLock', Lock, (p) => p.labeledApps(), { apps: [] }),
+  pickNamedApps: safe('ClingLock', Lock, (p, suggest = []) => p.pickNamedApps({ suggest }), { saved: false, apps: [] }),
+  lockApps: safe('ClingLock', Lock, (p, labels, untilMs = 0) => p.lockApps({ labels, untilMs }), { locked: [] }),
+  unlockApps: safe('ClingLock', Lock, (p, labels = []) => p.unlockApps({ labels }), { unlocked: [] }),
 };
 export const nativeAvailable = () => avail('ClingNative');
 export const clingNative = {

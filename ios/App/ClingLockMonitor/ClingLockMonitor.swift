@@ -3,9 +3,7 @@ import ManagedSettings
 import FamilyControls
 import Foundation
 
-/// DeviceActivityMonitor extension (bundle app.clingnote.ios.lockmonitor). NOT yet an Xcode target: add it in Xcode
-/// (File > New > Target > Device Activity Monitor Extension), include ../Shared/LockShared.swift. NEEDS ON-DEVICE TEST
-/// and Family Controls (Distribution) on this extension App ID.
+/// DeviceActivityMonitor extension (bundle app.clingnote.ios.lockmonitor). Clears the 8-hour shield and per-app timed locks.
 class ClingLockMonitor: DeviceActivityMonitor {
     let store = ManagedSettingsStore(named: .clingLock)
     override func intervalDidStart(for activity: DeviceActivityName) {
@@ -18,6 +16,10 @@ class ClingLockMonitor: DeviceActivityMonitor {
     }
     override func intervalDidEnd(for activity: DeviceActivityName) {
         super.intervalDidEnd(for: activity)
+        if activity.rawValue.hasPrefix(AppLocks.activityPrefix) {  // per-app timed lock ended
+            let id = String(activity.rawValue.dropFirst(AppLocks.activityPrefix.count))
+            var l = AppLocks.locked(); l[id] = nil; AppLocks.saveLocked(l); AppLocks.apply(); return
+        }
         guard activity == .clingLock else { return }
         store.shield.applications = nil; store.shield.applicationCategories = nil; store.shield.webDomains = nil
         LockShared.defaults?.set(["locked": false, "until": 0], forKey: LockShared.stateKey)

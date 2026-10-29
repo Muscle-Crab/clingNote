@@ -48,6 +48,12 @@ jobs:
             codesign --force --sign - --entitlements ClingNoteWidget/ClingNoteWidget.entitlements "$WIDGET"
             echo "Widget:"; codesign -d --entitlements :- "$WIDGET" 2>&1 | head -20
           fi
+          # Screen Time extensions (Family Controls + App Group): sign before the app.
+          for EXT in ClingLockMonitor ClingShieldConfig; do
+            test -d "$APP/PlugIns/$EXT.appex" || { echo "missing $EXT.appex"; exit 1; }
+            codesign --force --sign - --entitlements $EXT/$EXT.entitlements "$APP/PlugIns/$EXT.appex"
+            echo "$EXT:"; codesign -d --entitlements :- "$APP/PlugIns/$EXT.appex" 2>&1 | head -20
+          done
           echo "Before:"; codesign -d --entitlements :- "$APP" 2>&1 | head -20 || true
           codesign --force --sign - --entitlements App/App.entitlements "$APP"
           echo "After:"; codesign -d --entitlements :- "$APP" 2>&1 | head -20

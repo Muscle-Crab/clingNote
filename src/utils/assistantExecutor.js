@@ -48,6 +48,7 @@ export function createAssistantExecutor(deps) {
       case 'auto_schedule': { const r = await deps.autoSchedule(a); return r.error ? { error: r.error } : { ok: true, placed: r.plan.map((p) => `${p.task.title} ${p.start}`), unplaced: r.unplaced.map((t) => t.title), summary: `${r.plan.length} scheduled` }; }
       case 'add_habit': case 'log_habit': case 'get_habits': { const r = await deps.habit(name, a); return r.error ? { error: r.error } : { ok: true, ...r }; }
       case 'place_reminder': { const r = await deps.placeReminder(a); return r.error ? { error: r.error } : { ok: true, summary: `${a.title} @ ${a.place}` }; }
+      case 'lock_apps': case 'unlock_apps': case 'open_app_picker': { if (!deps.lockByName) return { error: 'App lock needs the iPhone app.' }; const r = await deps.lockByName(name, a); return r.error ? { error: r.error } : { ok: true, ...r }; }
       case 'app_lock': { const r = await deps.appLock(a.action); return r.error ? { error: r.error } : { ok: true, ...r }; }
       default: return { error: 'Unknown tool' };
     }

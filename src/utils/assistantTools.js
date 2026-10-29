@@ -30,7 +30,7 @@ export const pointsForItem = (it = {}) => {
 
 // Compact context for the model: tasks get short refs ("t1"...) mapped back to the real task by key on the client.
 export const taskKeyOf = (t) => (t && t.id) || `${t && t.createdAt}|${t && t.title}`;
-export const buildContext = ({ tasks = [], now = new Date(), tz = '', pro = false, limit = null, streak = 0, points = 0, target = null, hours = 8, lock = null, upcoming = [], settings = {}, route = '/home' } = {}) => {
+export const buildContext = ({ tasks = [], now = new Date(), tz = '', pro = false, limit = null, streak = 0, points = 0, target = null, hours = 8, lock = null, upcoming = [], settings = {}, route = '/home', lockApps = null } = {}) => {
   const refs = {};
   const list = (tasks || []).slice(0, 50).map((t, i) => {
     const ref = `t${i + 1}`; refs[ref] = taskKeyOf(t);
@@ -39,7 +39,8 @@ export const buildContext = ({ tasks = [], now = new Date(), tz = '', pro = fals
   const p = (n) => String(n).padStart(2, '0');
   return { refs, context: { now: `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}T${p(now.getHours())}:${p(now.getMinutes())}`, tz, pro: !!pro,
     limit, streak, pointsToday: points, bossTarget: target, hoursToday: hours, lock, tasks: list,
-    upcoming: (upcoming || []).slice(0, 15).map((e) => ({ title: String(e.title || '').slice(0, 80), date: e.scheduledDate || e.date || '', time: e.scheduledTime || e.time || '' })), settings, route } };
+    upcoming: (upcoming || []).slice(0, 15).map((e) => ({ title: String(e.title || '').slice(0, 80), date: e.scheduledDate || e.date || '', time: e.scheduledTime || e.time || '' })), settings, route,
+    ...(lockApps ? { lockApps: lockApps.slice(0, 30).map((x) => ({ name: String(x.label || '').slice(0, 40), locked: !!x.locked, ...(x.until ? { until: new Date(x.until).toISOString().slice(11, 16) } : {}) })) } : {}) } };
 };
 
 // -> { ok, args } | { ok:false, error } . refs: { t1: key }, tasksByKey: Map(key -> task)
@@ -96,6 +97,13 @@ export const validateCall = (name, args = {}, { refs = {}, tasksByKey = new Map(
       return { ok: true, args: { title, place, saveHere: !!a.save_here } };
     }
     case 'app_lock': return ['status', 'pick_apps', 'emergency_unlock', 'turn_off'].includes(a.action) ? { ok: true, args: { action: a.action } } : { ok: false, error: 'Unknown action.' };
+    case 'lock_apps': case 'unlock_apps': {
+      const apps = (Array.isArray(a.apps) ? a.apps : (a.apps ? [a.apps] : [])).map((x) => String(x || '').replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, 40)).filter(Boolean).slice(0, 12);
+      if (name === 'lock_apps' && !apps.length) return { ok: false, error: 'Which apps?' };
+      const m = Math.round(Number(a.minutes)); const minutes = m > 0 ? Math.min(1440, m) : 0;
+      return { ok: true, args: name === 'lock_apps' ? { apps, minutes, until_unlock: !!a.until_unlock || !minutes } : { apps } };
+    }
+    case 'open_app_picker': return { ok: true, args: {} };
     case 'find_tasks': { const q = String(a.query || '').slice(0, 80).trim(); const d = String(a.day || '').slice(0, 12).trim(); return q || d ? { ok: true, args: { query: q, day: d } } : { ok: false, error: 'Say what to look for.' }; }
     case 'snooze_task': { const r = needTask(); if (!r.ok) return r; const m = Math.round(Number(a.minutes)); if (!(m > 0 && m <= 1440)) return { ok: false, error: 'Minutes 1..1440.' }; return { ok: true, args: { task: r.task, minutes: m } }; }
     case 'add_subtasks': { const r = needTask(); if (!r.ok) return r; const items = (Array.isArray(a.items) ? a.items : []).map((x) => String(x || '').replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, 100)).filter(Boolean).slice(0, 12); return items.length ? { ok: true, args: { task: r.task, items } } : { ok: false, error: 'No subtasks.' }; }
