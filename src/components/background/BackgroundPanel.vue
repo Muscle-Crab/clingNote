@@ -18,7 +18,7 @@
 
         <h3 class="bgp-h">Animation</h3>
         <div class="bgp-anims" role="radiogroup" aria-label="Background animation">
-          <button v-for="a in ANIMS" :key="a.id" type="button" role="radio" class="bgp-chip" :class="{ on: bg.prefs.anim === a.id }" :aria-checked="bg.prefs.anim === a.id" :data-test="'bg-anim-' + a.id" @click="bg.setAnim(a.id)"><span aria-hidden="true">{{ a.icon }}</span>{{ a.label }}</button>
+          <button v-for="a in ANIMS" :key="a.id" type="button" role="radio" class="bgp-chip" :class="{ on: shownAnim === a.id }" :aria-checked="shownAnim === a.id" :disabled="!animAllowed(curImg, a.id)" :title="animAllowed(curImg, a.id) ? null : 'Doesn\'t fit this picture'" :data-test="'bg-anim-' + a.id" @click="bg.setAnim(a.id)"><span aria-hidden="true">{{ a.icon }}</span>{{ a.label }}</button>
         </div>
         <div v-if="reduced" class="bgp-note bgp-motion" data-test="bg-reduced-note">
           <p>Your device has <b>Reduce Motion</b> turned on, so animations show as a still picture.</p>
@@ -53,6 +53,12 @@ import { ref, watch, onBeforeUnmount } from 'vue';
 import { useBackground } from '@/composables/useBackground';
 import { ANIMS, TRACKS, IMAGES, ROTATE_MINS } from '@/utils/bgPrefs';
 import { imageCss } from '@/utils/bgImage';
+import { animAllowed, effectiveAnim } from '@/utils/heroAmbience';
+import { effectiveImage } from '@/utils/bgPrefs';
+import { computed } from 'vue';
+// Weather that doesn't fit the chosen picture (rain/snow on a sunny scene) is greyed out; the saved choice comes back with a fitting picture.
+const curImg = computed(() => effectiveImage(bg.prefs.image, bg.customImage.value));
+const shownAnim = computed(() => effectiveAnim(curImg.value, bg.prefs.anim));
 
 const props = defineProps({ open: { type: Boolean, default: false } });
 defineEmits(['close']);
@@ -99,6 +105,7 @@ const volWheel = (e) => bg.setVolume(nudgeVolume(bg.prefs.volume, e.deltaY || -e
 .bgp-chip { min-height: 64px; border-radius: 12px; border: 1.5px solid #2a2f3f; background: #1a1d29; color: inherit; font-size: .8rem; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; cursor: pointer; }
 .bgp-chip span { font-size: 1.4rem; }
 .bgp-chip.on, .bgp-track.on { border-color: #6b8cff; background: #232a47; }
+.bgp-chip:disabled { opacity: .35; cursor: not-allowed; filter: grayscale(1); }
 .bgp-tracks { display: grid; gap: 8px; }
 .bgp-track { text-align: left; min-height: 48px; padding: 8px 12px; border-radius: 12px; border: 1.5px solid #2a2f3f; background: #1a1d29; color: inherit; cursor: pointer; display: flex; flex-direction: column; gap: 2px; }
 .bgp-track small { color: #9aa3b8; }
