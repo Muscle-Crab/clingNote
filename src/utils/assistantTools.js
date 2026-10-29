@@ -1,7 +1,7 @@
 // ClingNote assistant: pure client-side tool validation (no Firebase here, unit-tested in scripts/test-assistant.js).
 // Server: netlify/functions/ai.js task 'agent' (declarations in netlify/functions/lib/agentTools.js). Tools execute in HomeView
 // through the SAME code paths as the UI (daily limit, lock rules, Firestore rules, notifications all still apply).
-import { normalizeItems } from './voiceIntent';
+import { normalizeItems, toHHMM } from './voiceIntent';
 import { estimateFor } from './taskEstimate';
 import { clampHours } from './eightHour';
 import { validateText, LIMITS } from './community';
@@ -15,7 +15,6 @@ export const READ_TOOLS = new Set(['get_overview', 'navigate', 'get_stats', 'fin
 export const PAGES = { home: '/home', upcoming: '/upcoming', rankings: '/rankings', community: '/community', discipline: '/discipline', pals: '/pals', about: '/about', support: '/support', paywall: '/paywall' };
 export const SETTINGS = ['sounds', 'boss_voice', 'spoken_replies'];
 export const MAX_CREATE = 15;
-const okT = (s) => /^([01]\d|2[0-3]):[0-5]\d$/.test(String(s || ''));
 const okD = (s) => /^\d{4}-\d{2}-\d{2}$/.test(String(s || ''));
 
 // Dynamic task points: the model's value (or the user's spoken number) clamped to the app range 5..150; missing -> the existing estimator
@@ -69,7 +68,7 @@ export const validateCall = (name, args = {}, { refs = {}, tasksByKey = new Map(
       const patch = {};
       if (typeof a.title === 'string' && a.title.trim()) patch.title = a.title.replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, 140);
       if (a.durationMin != null) { const m = Math.round(Number(a.durationMin)); if (m > 0 && m <= 600) patch.estimateMin = m; }
-      if (a.start != null) { if (a.start === '' || okT(a.start)) patch.startTime = a.start; }
+      if (a.start != null) { if (a.start === '') patch.startTime = ''; else if (toHHMM(a.start)) patch.startTime = toHHMM(a.start); }
       if (typeof a.notes === 'string') patch.notes = a.notes.slice(0, 1000);
       if (a.priority === 'high') patch.priority = 'high';
       else if (a.priority === 'normal' || a.priority === '') patch.priority = ''; // 'normal' (schema) or legacy '' clears high
@@ -81,10 +80,11 @@ export const validateCall = (name, args = {}, { refs = {}, tasksByKey = new Map(
     case 'reschedule_task': {
       const r = needTask(); if (!r.ok) return r;
       if (a.date && !okD(a.date)) return { ok: false, error: 'Bad date.' };
-      if (a.time && !okT(a.time)) return { ok: false, error: 'Bad time.' };
+      const tm = a.time ? toHHMM(a.time) : '';
+      if (a.time && !tm) return { ok: false, error: 'Bad time.' };
       if (a.date && today && a.date < today) return { ok: false, error: 'Date is in the past.' };
       if (!a.date && !a.time) return { ok: false, error: 'Give a date or time.' };
-      return { ok: true, args: { task: r.task, date: a.date && a.date !== today ? a.date : '', time: a.time || '' } };
+      return { ok: true, args: { task: r.task, date: a.date && a.date !== today ? a.date : '', time: tm } };
     }
     case 'delete_task': case 'complete_task': { const r = needTask(); if (!r.ok) return r; if (name === 'complete_task' && r.task.completed) return { ok: false, error: 'Already done.' }; return { ok: true, args: { task: r.task } }; }
     case 'start_timer': { const r = needTask(); if (!r.ok) return r; const m = Math.round(Number(a.minutes)) || Number(r.task.estimateMin) || Number(r.task.minutes) || 25; return { ok: true, args: { task: r.task, minutes: Math.min(600, Math.max(1, m)) } }; }

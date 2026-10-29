@@ -27,6 +27,14 @@ ok(/item\["date"\]/.test(fs.readFileSync(path.join(__dirname, '../ios/App/App/Cl
 const ex = createAssistantExecutor({ tasks: () => [], today: () => TODAY, pro: () => false, limitRemaining: async () => 5, addTask: async () => ({ ok: true }) });
 const r = await ex.run('create_tasks', { items: [{ title: 'ZZTEST bank', date: TMR, start: '10:00', points: 10 }] });
 ok(r.summary.includes(`on ${TMR}`) && r.summary.includes('at 10:00'), 'confirm chip shows date');
+// ---- Fix 2: 12-hour times ----
+ok(V.toHHMM('3pm') === '15:00' && V.toHHMM('5 PM') === '17:00' && V.toHHMM('3:30 p.m.') === '15:30' && V.toHHMM('12am') === '00:00' && V.toHHMM('12 pm') === '12:00' && V.toHHMM('09:05') === '09:05' && V.toHHMM('9:05') === '09:05', 'toHHMM parses 12h and 24h');
+ok(V.toHHMM('13pm') === '' && V.toHHMM('25:00') === '' && V.toHHMM('soon') === '', 'toHHMM rejects junk');
+v = T.validateCall('create_tasks', { items: [{ title: 'ZZTEST store', points: 10, start: '3pm' }, { title: 'ZZTEST call', type: 'reminder', remindAt: `${TODAY}T5 PM`, points: 5 }] }, snap);
+ok(v.ok && v.args.items[0].start === '15:00' && v.args.items[1].remindAt === `${TODAY}T17:00`, 'create_tasks keeps 3pm / 5 PM');
+const tk = { id: 'z1', title: 'ZZTEST t' }; const s2 = { ...snap, refs: { t1: 'z1' }, tasksByKey: new Map([['z1', tk]]) };
+v = T.validateCall('edit_task', { ref: 't1', start: '5 PM' }, s2); ok(v.ok && v.args.patch.startTime === '17:00', 'edit_task start 5 PM');
+v = T.validateCall('reschedule_task', { ref: 't1', time: '3pm' }, s2); ok(v.ok && v.args.time === '15:00', 'reschedule_task time 3pm');
 //__MORE__
 console.log(`\n${n} assistant-fix tests passed`);
 })().catch((e) => { console.error(e); process.exit(1); });
