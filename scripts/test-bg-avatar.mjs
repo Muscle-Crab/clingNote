@@ -12,7 +12,7 @@ assert.equal(initialsOf('Dalton Vee'), 'DV'); assert.equal(initialsOf('', 'zz.te
 assert.deepEqual(cropRect(400, 200), { sx: 100, sy: 0, s: 200 });
 assert.ok(isAvatarSrc('data:image/jpeg;base64,AAAA')); assert.ok(!isAvatarSrc('')); assert.ok(!isAvatarSrc('javascript:alert(1)')); assert.ok(!isAvatarSrc('http://x/y.png'));
 // background picture: built-in choices, sanitised, default = current forest look
-assert.deepEqual(IMAGES.map((i) => i.id), ['forest', 'night', 'ocean', 'sunrise', 'mountains', 'dark']);
+assert.deepEqual(IMAGES.map((i) => i.id), ['forest', 'night', 'ocean', 'sunrise', 'mountains', 'campfire', 'dark']);
 assert.equal(sanitize({ image: 'url(javascript:1)' }).image, 'forest'); assert.equal(sanitize({ image: 'custom' }).image, 'custom'); assert.equal(sanitize({}).image, 'forest');
 assert.equal(sanitize({ image: 'ocean', musicOn: true }).musicOn, true, 'image does not disturb music-on persistence');
 const imgSt = mem(); savePrefs({ image: 'sunrise' }, imgSt); assert.equal(loadPrefs(imgSt).image, 'sunrise', 'picture choice survives a restart');
@@ -29,7 +29,10 @@ console.log('test-bg-avatar: ok');
 {
   const { animAllowed, effectiveAnim, coverRect, makeAmbience, stepAmbience, treeShift } = await import('../src/utils/heroAmbience.js');
   const { windAt } = await import('../src/utils/bgScenes.js');
-  for (const img of ['sunrise', 'ocean']) { assert.ok(!animAllowed(img, 'rain') && !animAllowed(img, 'snow'), img + ' is clear'); assert.equal(effectiveAnim(img, 'rain'), 'none'); assert.ok(animAllowed(img, 'fire')); }
+  for (const img of ['sunrise', 'ocean']) { assert.ok(!animAllowed(img, 'rain') && !animAllowed(img, 'snow'), img + ' is clear'); assert.equal(effectiveAnim(img, 'rain'), 'none'); assert.ok(!animAllowed(img, 'fire')); }
+  assert.ok(animAllowed('campfire', 'fire') && animAllowed('campfire', 'snow') && !animAllowed('campfire', 'rain'), 'campfire: fire + snow, never rain');
+  for (const img of ['forest', 'night', 'mountains', 'dark', 'custom']) assert.ok(!animAllowed(img, 'fire'), 'fire only on campfire');
+  { const am = makeAmbience('campfire', 'fire', 390, 404); assert.ok(am.embers.length > 0 && am.embers.length <= 12, 'a few embers'); for (let i = 0; i < 200; i++) stepAmbience(am, 0.05); assert.ok(am.embers.every((e) => e.y < 404 && e.y > -50), 'embers loop'); }
   assert.ok(animAllowed('forest', 'rain') && animAllowed('forest', 'snow') && animAllowed('mountains', 'rain'));
   assert.ok(!animAllowed('night', 'rain') && animAllowed('night', 'snow'));
   const cr = coverRect(1024, 576, 390, 404); assert.ok(cr.w >= 390 - 0.01 && cr.h >= 404 - 0.01 && cr.x <= 0 && cr.y <= 0, 'cover fills the box');

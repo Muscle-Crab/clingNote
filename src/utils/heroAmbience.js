@@ -4,7 +4,7 @@
 import { windAt } from './bgScenes.js';
 
 const TAU = Math.PI * 2;
-// Picture -> allowed animations. Sunny/dusk pictures never get rain or snow; "fire" (fireplace glow) is cozy, not weather, so it fits everywhere.
+// Picture -> allowed animations. Sunny/dusk pictures never get rain or snow; the warm "fire" glow only fits the Campfire picture (which also has live flames).
 // Positions are fractions of the source image (x, y); trees = the region whose pixels sway (base = where trunks are rooted).
 export const SCENES = {
   forest: { weather: ['snow', 'rain'], wind: 1, moon: { x: 0.82, y: 0.175, r: 0.035 }, stars: { x0: 0.38, x1: 0.98, y0: 0.02, y1: 0.36 },
@@ -13,11 +13,12 @@ export const SCENES = {
   ocean: { weather: [], wind: 0.3 }, // sunset over the sea: clear
   sunrise: { weather: [], wind: 0.3 }, // sunny: clear
   mountains: { weather: ['snow', 'rain'], wind: 0.8, clouds: { y0: 0.08, y1: 0.3 } }, // overcast grey-blue ridges: rain or snow
+  campfire: { weather: ['snow', 'fire'], wind: 0.3, stars: { x0: 0.02, x1: 0.98, y0: 0.02, y1: 0.42 }, fire: { x: 0.69, y: 0.55, w: 0.06 } }, // night camp: light snow fits, rain would put it out
   dark: { weather: ['snow', 'rain'], wind: 0.5 }, // plain gradient: anything
   custom: { weather: ['snow', 'rain'], wind: 0.5 }, // user's own photo: we can't tell, so allow both (they chose it)
 };
 export const sceneFor = (img) => SCENES[img] || SCENES.forest;
-export const animAllowed = (img, anim) => anim === 'none' || anim === 'fire' || sceneFor(img).weather.includes(anim);
+export const animAllowed = (img, anim) => anim === 'none' || sceneFor(img).weather.includes(anim);
 export const effectiveAnim = (img, anim) => (animAllowed(img, anim) ? anim : 'none');
 
 // CSS `background-position: px% py%; background-size: cover` for an iw x ih image in a w x h box.
@@ -34,9 +35,12 @@ export const makeAmbience = (img, anim, w, h, iw = 1024, ih = 576) => {
   if (sc.stars) for (let i = 0; i < 26; i++) { const p = P(sc.stars.x0 + r() * (sc.stars.x1 - sc.stars.x0), sc.stars.y0 + r() * (sc.stars.y1 - sc.stars.y0)); if (p.x > 0 && p.x < w && p.y > 0 && p.y < h * 0.6) stars.push({ ...p, f: 0.25 + r() * 0.6, ph: r() * TAU, s: 0.5 + r() * 0.9 }); }
   const clouds = [];
   if (sc.clouds) for (let i = 0; i < 4; i++) { const p = P(r(), sc.clouds.y0 + r() * (sc.clouds.y1 - sc.clouds.y0)); clouds.push({ x: r() * (w + 240) - 120, y: p.y, rx: 70 + r() * 90, ry: 10 + r() * 12, v: 2.5 + r() * 3, a: 0.05 + r() * 0.05 }); }
-  return { img, anim, w, h, rect, sc, stars, clouds, t: 0, moon: sc.moon ? { ...P(sc.moon.x, sc.moon.y), r: sc.moon.r * rect.w } : null };
+  const embers = []; if (sc.fire) for (let i = 0; i < 9; i++) embers.push(ember(sc.fire, rect, r, true));
+  return { img, anim, w, h, rect, sc, stars, clouds, embers, r, t: 0, moon: sc.moon ? { ...P(sc.moon.x, sc.moon.y), r: sc.moon.r * rect.w } : null };
 };
-export const stepAmbience = (a, dt) => { dt = Math.min(dt, 0.1); a.t += dt; for (const c of a.clouds) { c.x += c.v * dt; if (c.x - c.rx > a.w) c.x = -c.rx * 2; } return a; };
+// A few embers drift up lazily from the fire, swaying, cooling from yellow to dull red.
+function ember(f, rect, r, initial) { const life = 2.2 + r() * 2.6; const fw = f.w * rect.w; return { x: rect.x + f.x * rect.w + (r() - 0.5) * fw * 0.6, y: rect.y + f.y * rect.h - fw * 0.3, vy: -(10 + r() * 16), ph: r() * 6.28, sway: 4 + r() * 8, life: initial ? r() * life : life, max: life, s: 0.8 + r() * 1.1 }; }
+export const stepAmbience = (a, dt) => { dt = Math.min(dt, 0.1); a.t += dt; for (let i = 0; i < a.embers.length; i++) { const e = a.embers[i]; e.life -= dt; e.y += e.vy * dt; e.x += Math.sin(a.t * 1.1 + e.ph) * e.sway * dt; if (e.life <= 0) a.embers[i] = ember(a.sc.fire, a.rect, a.r, false); } for (const c of a.clouds) { c.x += c.v * dt; if (c.x - c.rx > a.w) c.x = -c.rx * 2; } return a; };
 const smooth = (e0, e1, x) => { const t = Math.min(1, Math.max(0, (x - e0) / (e1 - e0))); return t * t * (3 - 2 * t); };
 
 // Tree mask (gw x gh grid over the image, 0..1): dark silhouette pixels under the tree skyline sway; sky, moon, clouds and lit mountains stay put.
@@ -67,9 +71,9 @@ export const treeShift = (a, fx, fy) => {
 // picture is redrawn cover-fit and the tree region is mesh-warped; otherwise only transparent overlays are drawn over the CSS picture.
 export const drawAmbience = (ctx, a, image) => {
   const { w, h, rect } = a; ctx.clearRect(0, 0, w, h); ctx.globalAlpha = 1;
-  if (image && a.sc.trees) {
+  if (image && (a.sc.trees || a.sc.fire)) {
     const iw = image.naturalWidth || image.width; const ih = image.naturalHeight || image.height; const s = rect.w / iw;
-    ctx.drawImage(image, rect.x, rect.y, rect.w, rect.h);
+    ctx.drawImage(image, rect.x, rect.y, rect.w, rect.h); if (a.sc.trees) {
     const tr = a.sc.trees; const cw = 14; const ch = 7; // screen px per mesh cell
     const sx0 = Math.max(rect.x + tr.x0 * rect.w, 0); const sx1 = Math.min(rect.x + tr.x1 * rect.w, w);
     const sy0 = Math.max(rect.y + (tr.top - 0.05) * rect.h, 0); const sy1 = Math.min(rect.y + tr.base * rect.h, h);
@@ -81,7 +85,7 @@ export const drawAmbience = (ctx, a, image) => {
         ctx.drawImage(image, (x - rect.x) / s, (y - rect.y) / s, (cw + 1) / s, (ch + 1) / s, x + dx, y, cw + 1, ch + 1);
       }
     }
-  }
+  } }
   if (a.moon) { // gentle glow breathing (~9 s)
     const m = a.moon; const k = 0.75 + 0.25 * Math.sin((a.t * TAU) / 9);
     const g = ctx.createRadialGradient(m.x, m.y, m.r * 0.6, m.x, m.y, m.r * 5);
@@ -96,6 +100,15 @@ export const drawAmbience = (ctx, a, image) => {
     ctx.save(); ctx.translate(c.x, c.y); ctx.scale(1, c.ry / c.rx); ctx.translate(-c.x, -c.y); ctx.fillStyle = g; ctx.fillRect(c.x - c.rx, c.y - c.rx, c.rx * 2, c.rx * 2); ctx.restore();
   }
   ctx.globalAlpha = 1;
+  if (a.sc.fire) { // warm flickering firelight on the trees and ground around the fire (slow, soft)
+    const f = a.sc.fire; const fx = rect.x + f.x * rect.w; const fy = rect.y + f.y * rect.h; const R = rect.w * 0.42;
+    const k = 0.86 + 0.07 * Math.sin(a.t * 2.1) + 0.04 * Math.sin(a.t * 4.7 + 1.3) + 0.03 * Math.sin(a.t * 9.3);
+    ctx.globalCompositeOperation = 'lighter';
+    const g = ctx.createRadialGradient(fx, fy, 0, fx, fy, R); g.addColorStop(0, `rgba(255,140,50,${0.30 * k})`); g.addColorStop(0.35, `rgba(255,110,40,${0.12 * k})`); g.addColorStop(1, 'rgba(255,90,30,0)');
+    ctx.fillStyle = g; ctx.fillRect(fx - R, fy - R, R * 2, R * 2);
+    for (const e of a.embers) { const q = Math.max(0, e.life / e.max); ctx.globalAlpha = Math.min(1, q * 1.6) * 0.85; ctx.fillStyle = q > 0.6 ? '#ffd27a' : q > 0.3 ? '#ff9a3c' : '#c8461e'; ctx.beginPath(); ctx.arc(e.x, e.y, e.s * (0.6 + q * 0.5), 0, Math.PI * 2); ctx.fill(); }
+    ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+  }
   if (a.anim === 'rain') { const g = ctx.createLinearGradient(0, 0, 0, h); g.addColorStop(0, 'rgba(10,16,30,.28)'); g.addColorStop(0.6, 'rgba(60,75,100,.10)'); g.addColorStop(1, 'rgba(10,16,30,0)'); ctx.fillStyle = g; ctx.fillRect(0, 0, w, h); }
   else if (a.anim === 'snow') { const g = ctx.createLinearGradient(0, 0, 0, h); g.addColorStop(0, 'rgba(215,225,245,.07)'); g.addColorStop(1, 'rgba(215,225,245,.02)'); ctx.fillStyle = g; ctx.fillRect(0, 0, w, h); }
 };

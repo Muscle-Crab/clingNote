@@ -5,9 +5,10 @@ import night from '@/assets/bg/bg-night.jpg';
 import ocean from '@/assets/bg/bg-ocean.jpg';
 import sunrise from '@/assets/bg/bg-sunrise.jpg';
 import mountains from '@/assets/bg/bg-mountains.jpg';
+import campfire from '@/assets/bg/bg-campfire.jpg';
 import forest from '@/assets/hero-forest.jpg';
 
-const files = { forest, night, ocean, sunrise, mountains };
+const files = { forest, night, ocean, sunrise, mountains, campfire };
 export const imageCss = (id, custom = '') => {
   const e = effectiveImage(id, custom);
   if (e === 'dark') return 'linear-gradient(180deg, #172036, #0B1220 70%, #070D1C)';
