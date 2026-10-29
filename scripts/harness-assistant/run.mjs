@@ -1,0 +1,16 @@
+import { chromium } from 'playwright-core';
+const S = '/workspace/build37-shots/'; const r = {};
+const b = await chromium.launch({ executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox', '--autoplay-policy=no-user-gesture-required'] });
+const ctx = await b.newContext({ viewport: { width: 390, height: 760 }, deviceScaleFactor: 2 });
+const p = await ctx.newPage(); await p.goto('http://localhost:8137/'); await p.waitForSelector('[data-test=assistant-sheet]');
+const st = () => p.evaluate(() => ({ speaking: window.__h.voSpeaking.value, intro: JSON.parse(localStorage.getItem('cn.assistant.intro') || '{}') }));
+r.firstOpen = await st();
+await p.locator('[data-test=assistant-input]').type('Z'); r.afterTyping = await st();
+await p.screenshot({ path: S + 'assistant-help-closed.png' });
+await p.locator('[data-test=assistant-help]').click(); await p.waitForTimeout(150);
+r.popover = await p.locator('[data-test=assistant-help-pop]').count();
+await p.screenshot({ path: S + 'assistant-help-open.png' });
+await p.mouse.click(30, 700); r.popoverAfterOutside = await p.locator('[data-test=assistant-help-pop]').count();
+await p.locator('[data-test=assistant-x], .ask-x').first().click(); r.afterClose = await st();
+await p.locator('[data-test=reopen]').click(); await p.waitForTimeout(100); r.secondOpen = await st();
+await b.close(); console.log(JSON.stringify(r, null, 1));

@@ -6,10 +6,17 @@
       <button type="button" class="ask-x" data-test="assistant-speak-toggle" :aria-pressed="speak ? 'true' : 'false'" :aria-label="speak ? 'Spoken replies on' : 'Spoken replies off'" @click="setSpeak(!speak)">
         <i :class="speak ? 'fas fa-volume-up' : 'fas fa-volume-mute'"></i>
       </button>
+      <button type="button" class="ask-x ask-help-btn" data-test="assistant-help" :aria-expanded="helpOpen ? 'true' : 'false'" aria-label="What can the assistant do?" @click.stop="helpOpen = !helpOpen">?</button>
       <button type="button" class="ask-clear" data-test="assistant-clear" :disabled="!msgs.length || busy" @click="clear">Clear</button>
     </header>
+    <div v-if="helpOpen" class="ask-help-scrim" data-test="assistant-help-scrim" @click="helpOpen = false"></div>
+    <div v-if="helpOpen" class="ask-help" role="dialog" aria-label="About the assistant" data-test="assistant-help-pop" @click.stop>
+      <p class="ask-help-lead">Your ClingNote assistant plans your day, adds, moves or finishes tasks, and locks or unlocks apps. Try saying:</p>
+      <ul class="ask-help-list"><li v-for="x in INTRO_EXAMPLES" :key="x">“{{ x }}”</li></ul>
+      <button type="button" class="ask-help-hear" data-test="assistant-help-hear" @click="hearIntro">🔊 Hear it</button>
+    </div>
     <div ref="listEl" class="ask-list" aria-live="polite">
-      <p v-if="!msgs.length" class="ask-empty">Talk to me: "Plan my day: gym at 7, deep work on the report for two hours, then groceries." I can add, edit, move, delete and finish tasks, start your day, change settings, open pages and post to Community.</p>
+      <p v-if="!msgs.length" class="ask-empty">I can plan your day, add, move or finish tasks, and lock or unlock apps. Try: "Plan my day with gym at 7 and two hours of deep work", "Move groceries to the afternoon", "Mark the report done", "Lock Instagram for an hour", or "Unlock my apps".</p>
       <div v-for="(m, i) in msgs" :key="i" class="ask-bubble" :class="m.role === 'user' ? 'ask-bubble--me' : m.role === 'action' ? 'asst-action' : 'ask-bubble--ai'">
         <span class="ask-text">{{ m.content }}</span>
         <button v-if="m.role === 'assistant'" type="button" class="ask-speak" aria-label="Read aloud" @click="readAloud(m.content)">🔊</button>
@@ -29,7 +36,7 @@
     <p v-if="remaining != null" class="ask-quota" data-test="assistant-quota">{{ remaining }} assistant message{{ remaining === 1 ? '' : 's' }} left today</p>
     <form class="ask-bar" @submit.prevent="send()">
       <button type="button" class="ask-mic" :class="{ on: listening }" :aria-label="listening ? 'Stop and send' : 'Talk'" data-test="assistant-mic" :disabled="(busy && !pending) || !micOk" @click="toggleMic">🎙️</button>
-      <textarea v-model="draft" class="ask-in" rows="1" maxlength="2000" :placeholder="listening ? 'Listening… tap 🎙️ to send' : 'Say or type anything…'" data-test="assistant-input" @keydown.enter.exact.prevent="send()"></textarea>
+      <textarea v-model="draft" class="ask-in" rows="1" maxlength="2000" :placeholder="listening ? 'Listening… tap 🎙️ to send' : 'Say or type anything…'" data-test="assistant-input" @keydown.enter.exact.prevent="send()" @input="intro.cancel()" @focus="intro.cancel()"></textarea>
       <button type="submit" class="ask-send" data-test="assistant-send" :disabled="(busy && !pending) || !draft.trim()">Send</button>
     </form>
   </div>
@@ -47,6 +54,7 @@ import { startNativeSpeech, nativeSpeechAvailable } from '@/composables/useNativ
 import { assistantSession, saveAssistant, clearAssistant } from '@/utils/assistantSession';
 import { runAgentTurn } from '@/utils/assistantLoop';
 import { spokenConfirm, ttsText } from '@/utils/assistantTools';
+import { createIntro, INTRO_EXAMPLES } from '@/utils/assistantIntro';
 
 const props = defineProps({ executor: { type: Object, required: true }, listenOnOpen: Boolean });
 const emit = defineEmits(['close', 'state']);
@@ -58,7 +66,11 @@ const WebSR = typeof window !== 'undefined' ? (window.SpeechRecognition || windo
 const micOk = native || !!WebSR;
 const scroll = () => nextTick(() => { if (listEl.value) listEl.value.scrollTop = listEl.value.scrollHeight; });
 const push = (role, content) => { msgs.value = [...msgs.value, { role, content }]; scroll(); };
-const setSpeak = (v) => { speak.value = v; if (!v) stopVoice(); saveAssistant(); };
+const helpOpen = ref(false);
+// Spoken intro on open (respects both the sheet speaker toggle and the global voice mute inside speakLive); any user input cancels it.
+const intro = createIntro({ speak: (t) => { unlockVoice(); return speakLive(t) !== false; }, stop: stopVoice, enabled: () => !!speak.value });
+const hearIntro = () => { helpOpen.value = false; intro.cancel(); if (!speak.value) setSpeak(true); intro.start(true); };
+const setSpeak = (v) => { speak.value = v; if (!v) { intro.cancel(); stopVoice(); } saveAssistant(); };
 const say = (t) => { if (speak.value) { unlockVoice(); stopVoice(); speakLive(ttsText(t)); } };
 const decide = (yes) => { const p = pending.value; if (!p) return; pending.value = null; push('action', yes ? `✔ ${p.summary.split('\n')[0]}` : '✖ Cancelled'); p.resolve(!!yes); };
 const confirm = (c) => new Promise((resolve) => { pending.value = { ...c, resolve }; emit('state', { pending: true }); scroll(); say(c.name === 'post_to_community' ? 'Here is the draft post. Post it?' : `${c.summary} Say yes or no.`); });
@@ -70,7 +82,7 @@ const send = async (text = draft.value) => {
   const q = String(text || '').trim(); if (!q) return;
   if (pending.value) { const d = spokenConfirm(q); if (d) { draft.value = ''; decide(d === 'yes'); return; } decide(false); draft.value = q; return; } // anything else = no; text stays in the box to send next
   if (busy.value) return;
-  stopMic(); stopVoice(); err.value = ''; needsPro.value = false;
+  intro.cancel(); stopMic(); stopVoice(); err.value = ''; needsPro.value = false;
   push('user', q); draft.value = ''; busy.value = true; emit('state', { busy: true });
   try {
     const r = await runAgentTurn({ text: q, contents: assistantSession.contents.value, call, executor: props.executor, confirm, onEvent });
@@ -92,6 +104,7 @@ const report = (m) => { m.reported = true; push('action', '⚑ Reported. Thanks,
 let stopper = null; let rec = null;
 const stopMic = () => { if (stopper) { const s = stopper; stopper = null; (s.finish || s)(); } if (rec) { try { rec.stop(); } catch (e) { /* ignore */ } rec = null; } listening.value = false; };
 const toggleMic = async () => {
+  intro.cancel();
   if (listening.value) { stopMic(); if (draft.value.trim()) send(); return; } // tap again = send (push-to-talk)
   stopVoice(); // barge-in
   const base = draft.value.trim(); err.value = '';
@@ -104,12 +117,20 @@ const toggleMic = async () => {
   rec.onerror = (e) => { if (e.error !== 'aborted' && e.error !== 'no-speech') err.value = 'Voice input failed.'; };
   try { rec.start(); listening.value = true; } catch (e) { err.value = 'Could not start voice input.'; }
 };
-onMounted(() => { if (props.listenOnOpen && micOk) toggleMic(); });
-onBeforeUnmount(() => { stopMic(); stopVoice(); if (pending.value) decide(false); });
+onMounted(() => { if (props.listenOnOpen && micOk) toggleMic(); else intro.start(); });
+onBeforeUnmount(() => { intro.cancel(); stopMic(); stopVoice(); if (pending.value) decide(false); });
 scroll();
 </script>
 
 <style scoped>
+.ask-help-btn { font-weight: 700; font-size: .95rem; }
+.ask-help-scrim { position: fixed; inset: 0; z-index: 1; }
+.ask-help { position: absolute; z-index: 2; top: calc(env(safe-area-inset-top, 0px) + 3rem); right: .75rem; max-width: 18rem; padding: .7rem .8rem; border-radius: .75rem;
+  background: var(--c-surface-2, #232327); border: 1px solid var(--c-border, #2a2a2e); box-shadow: 0 8px 24px rgba(0,0,0,.45); font-size: .82rem; line-height: 1.35; }
+.ask-help-lead { margin: 0 0 .35rem; }
+.ask-help-list { margin: 0 0 .5rem; padding-left: 1rem; opacity: .85; }
+.ask-help-list li { margin: .1rem 0; }
+.ask-help-hear { background: transparent; border: 1px solid var(--c-border, #3a3a3e); color: inherit; border-radius: 999px; padding: .2rem .65rem; font-size: .78rem; }
 .ask-sheet { position: fixed; inset: 0; z-index: 210; display: flex; flex-direction: column; background: var(--c-surface, #18181b); color: var(--c-text, #eee);
   padding: calc(env(safe-area-inset-top, 0px) + .5rem) .75rem calc(env(safe-area-inset-bottom, 0px) + .75rem); overscroll-behavior: contain; }
 .ask-head { display: flex; align-items: center; gap: .25rem; padding-bottom: .5rem; border-bottom: 1px solid var(--c-border, #2a2a2e); }
