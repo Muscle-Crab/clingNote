@@ -54,6 +54,7 @@ public class ClingLockPlugin: CAPPlugin, CAPBridgedPlugin {
         let s = Self.loadSelection()
         let st = LockShared.defaults?.dictionary(forKey: LockShared.stateKey) ?? [:]
         call.resolve(["authorization": Self.authString(), "locked": (st["locked"] as? Bool) ?? false, "until": st["until"] ?? 0,
+                      "monitoring": DeviceActivityCenter().activities.contains(.clingLock),
                       "selectionCount": s.applicationTokens.count + s.categoryTokens.count + s.webDomainTokens.count])
     }
 
@@ -81,15 +82,22 @@ public class ClingLockPlugin: CAPPlugin, CAPBridgedPlugin {
         guard until.timeIntervalSinceNow > 60 else { call.reject("untilMs must be > 1 min ahead"); return }
         Self.applyShield()
         LockShared.defaults?.set(["locked": true, "until": untilMs, "label": call.getString("label") ?? ""], forKey: LockShared.stateKey)
-        let cal = Calendar.current
-        // DeviceActivity needs >= 15 min intervals; start a minute back so intervalDidStart re-applies right away.
-        let start = cal.dateComponents([.year, .month, .day, .hour, .minute, .second], from: Date().addingTimeInterval(-60))
-        let end = cal.dateComponents([.year, .month, .day, .hour, .minute, .second], from: max(until, Date().addingTimeInterval(15 * 60)))
+        AppLocks.cleanupExpired()
+        // DeviceActivity needs >= 15 min intervals. The end is never pushed past `until`: with < 15 min left the
+        // window is (until - 15 min ... until), which may start in the past so intervalDidStart re-applies right away.
+        let startDate = min(Date().addingTimeInterval(-60), until.addingTimeInterval(-15 * 60))
+        let start = AppLocks.comps(startDate), end = AppLocks.comps(until)
         do {
             DeviceActivityCenter().stopMonitoring([.clingLock])
             try DeviceActivityCenter().startMonitoring(.clingLock, during: DeviceActivitySchedule(intervalStart: start, intervalEnd: end, repeats: false))
-            call.resolve(["locked": true])
-        } catch { call.resolve(["locked": true, "monitor": "failed: \(error)"]) } // shield is on; app clears it on next open past `until`
+            call.resolve(["locked": true, "monitor": "ok"])
+        } catch {
+            // No schedule means nothing would ever lift the shield: take it down rather than leave an un-expiring lock.
+            Self.clearShield()
+            DeviceActivityCenter().stopMonitoring([.clingLock])
+            LockShared.defaults?.set(["locked": false, "until": 0], forKey: LockShared.stateKey)
+            call.resolve(["locked": false, "monitor": "failed: \(error)"])
+        }
     }
 
     @objc func stopLock(_ call: CAPPluginCall) {
@@ -121,7 +129,7 @@ public class ClingLockPlugin: CAPPlugin, CAPBridgedPlugin {
 
     @objc func labeledApps(_ call: CAPPluginCall) {
         guard #available(iOS 16.0, *) else { call.resolve(["apps": []]); return }
-        AppLocks.apply(); call.resolve(["apps": Self.appsPayload(), "authorization": Self.authString()])
+        AppLocks.cleanupExpired(); call.resolve(["apps": Self.appsPayload(), "authorization": Self.authString()])
     }
 
     /// FamilyActivityPicker (preselected with saved apps) then a naming step: Apple shows each app's real name/icon
@@ -153,17 +161,16 @@ public class ClingLockPlugin: CAPPlugin, CAPBridgedPlugin {
         let want = Set(((call.getArray("labels") as? [String]) ?? []).map { $0.lowercased() })
         let untilMs = call.getDouble("untilMs") ?? 0
         let hits = AppLocks.apps().filter { want.contains($0.label.lowercased()) }
+        AppLocks.cleanupExpired()
         var l = AppLocks.locked(); var warn: [String] = []
-        let cal = Calendar.current; let comps: Set<Calendar.Component> = [.year, .month, .day, .hour, .minute, .second]
         for a in hits {
             l[a.id] = untilMs
             let name = DeviceActivityName(AppLocks.activityPrefix + a.id)
             DeviceActivityCenter().stopMonitoring([name])
             if untilMs > 0 {
                 let until = Date(timeIntervalSince1970: untilMs / 1000)
-                // DeviceActivity needs >= 15 min; shorter locks are cleared by the app (apply() drops expired) on next open.
-                let end = max(until, Date().addingTimeInterval(15 * 60))
-                do { try DeviceActivityCenter().startMonitoring(name, during: DeviceActivitySchedule(intervalStart: cal.dateComponents(comps, from: Date().addingTimeInterval(-60)), intervalEnd: cal.dateComponents(comps, from: end), repeats: false)) }
+                                let startDate = min(Date().addingTimeInterval(-60), until.addingTimeInterval(-15 * 60)) // >= 15 min, end stays `until`
+                do { try DeviceActivityCenter().startMonitoring(name, during: DeviceActivitySchedule(intervalStart: AppLocks.comps(startDate), intervalEnd: AppLocks.comps(until), repeats: false)) }
                 catch { warn.append("\(a.label): \(error)") }
             }
         }

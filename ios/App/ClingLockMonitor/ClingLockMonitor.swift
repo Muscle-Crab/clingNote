@@ -19,10 +19,14 @@ class ClingLockMonitor: DeviceActivityMonitor {
         super.intervalDidEnd(for: activity)
         if activity.rawValue.hasPrefix(AppLocks.activityPrefix) {  // per-app timed lock ended
             let id = String(activity.rawValue.dropFirst(AppLocks.activityPrefix.count))
-            var l = AppLocks.locked(); l[id] = nil; AppLocks.saveLocked(l); AppLocks.apply(); notifyLockEnded(); return
+            var l = AppLocks.locked(); l[id] = nil; AppLocks.saveLocked(l); AppLocks.apply()
+            DeviceActivityCenter().stopMonitoring([activity]) // free the slot (schedules count toward the system limit)
+            notifyLockEnded(); return
         }
         guard activity == .clingLock else { return }
         store.shield.applications = nil; store.shield.applicationCategories = nil; store.shield.webDomains = nil
+        AppLocks.cleanupExpired() // clingApps store: drop expired per-app locks and their schedules, keep still-active ones
+        DeviceActivityCenter().stopMonitoring([.clingLock])
         LockShared.defaults?.set(["locked": false, "until": 0], forKey: LockShared.stateKey)
         notifyLockEnded()
     }

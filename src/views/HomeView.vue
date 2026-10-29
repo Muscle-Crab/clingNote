@@ -359,7 +359,7 @@ import { autoSchedule } from '@/utils/autoSchedule';
 import { clingLock, clingNative, lockAvailable, nativeAvailable } from '@/native/clingNative';
 import { planLock, resumePending, untilFor, fmtDuration, joinNames, withTimeout } from '@/utils/appLockNames';
 import LockGuideSheet from '@/components/home/LockGuideSheet.vue';
-import { LOCK_PREF, PENALTY_KEY, EMERGENCY_PENALTY, shouldShield, busyToDay } from '@/utils/appLock';
+import { LOCK_PREF, PENALTY_KEY, EMERGENCY_PENALTY, shouldShield, lockAction, busyToDay } from '@/utils/appLock';
 import { previewDayTarget, requiredPoints } from '@/utils/dayTarget';
 const askOpen = ref(false); // Assistant sheet (✨ next to the bell, and the bubble in the task list header)
 const assistantListen = ref(false);
@@ -3532,15 +3532,26 @@ const lockUnlockedDay = ref((() => { try { const p = JSON.parse(localStorage.get
 const lockEnabled = () => { try { return localStorage.getItem(LOCK_PREF) === '1'; } catch (e) { return false; } };
 let lockOn = null;
 const syncAppLock = async () => {
-  if (!lockAvailable() || !isViewingToday.value) return;
+  if (!lockAvailable()) return;
   const st = await clingLock.status();
-  const want = shouldShield({ enabled: lockEnabled(), running: eh.running.value, endMs: eh.lock.value && eh.lock.value.endMs, selectionCount: st.selectionCount || 0,
+  // Expired shield / app locks are cleared on open or foreground whichever day is shown (labeledApps drops expired entries natively).
+  if (st.locked && Number(st.until) > 0 && Number(st.until) <= Date.now()) { lockOn = null; await clingLock.stopLock(); clingLock.labeledApps(); return; }
+  clingLock.labeledApps();
+  if (!isViewingToday.value) return;
+  const endMs = eh.lock.value && eh.lock.value.endMs;
+  const want = shouldShield({ enabled: lockEnabled(), running: eh.running.value, endMs, selectionCount: st.selectionCount || 0,
     earned: pointsAccumulated.value || 0, required: dayRequiredPts.value || 0, openTasks: (selectedDayRoutine.value || []).filter((t) => t && !t.completed && t.status !== 'wontdo').length,
     unlockedToday: lockUnlockedDay.value === localDateStr() });
-  if (want && lockOn !== eh.lock.value.endMs) { lockOn = eh.lock.value.endMs; await clingLock.startLock(lockOn, 'ClingNote lock-in'); }
-  else if (!want && (lockOn || st.locked)) { lockOn = null; await clingLock.stopLock(); }
+  const act = lockAction({ want, endMs, st });
+  if (act === 'start') {
+    lockOn = endMs; const r = await clingLock.startLock(endMs, 'ClingNote lock-in');
+    console.info('[clingLock] startLock', r && r.monitor);
+    if (r && r.monitor && r.monitor !== 'ok') { lockOn = null; error.value = "App lock couldn't be scheduled, so apps stay unlocked for now."; }
+  } else if (act === 'stop') { lockOn = null; await clingLock.stopLock(); }
+  else if (want) lockOn = endMs;
 };
-watch(() => [eh.running.value, pointsAccumulated.value, dayRequiredPts.value, streakProgress.value, lockUnlockedDay.value], () => { syncAppLock(); });
+watch(() => [eh.running.value, pointsAccumulated.value, dayRequiredPts.value, streakProgress.value, lockUnlockedDay.value, Math.floor(nowTick.value / 60000)], () => { syncAppLock(); });
+onMounted(() => { setTimeout(syncAppLock, 1200); });
 // ---- Siri / Shortcuts / Action Button "Add task" queue ----
 // Native takeIntents() clears the App Group queue, so items are copied into a local buffer first and only removed once saved
 // (or dropped for good, e.g. daily limit). Nothing runs until the user and today's list are loaded; tasks always land on today.

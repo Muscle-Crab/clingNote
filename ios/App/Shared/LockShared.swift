@@ -58,6 +58,21 @@ enum AppLocks {
         let tokens = Set(apps().filter { l[$0.id] != nil }.map { $0.token })
         store.shield.applications = tokens.isEmpty ? nil : tokens
     }
+    /// Schedule components without seconds (DeviceActivity schedules are minute-granular).
+    static func comps(_ d: Date) -> DateComponents { Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: d) }
+    /// Stops per-app DeviceActivity schedules whose saved entry is gone or expired (they count toward the system
+    /// limit), then drops expired entries and re-shields the rest.
+    static func cleanupExpired(now: Double = Date().timeIntervalSince1970 * 1000) {
+        let l = locked()
+        let stale = DeviceActivityCenter().activities.filter { a in
+            guard a.rawValue.hasPrefix(activityPrefix) else { return false }
+            let id = String(a.rawValue.dropFirst(activityPrefix.count))
+            guard let u = l[id] else { return true }
+            return u > 0 && u <= now
+        }
+        if !stale.isEmpty { DeviceActivityCenter().stopMonitoring(stale) }
+        apply(now: now)
+    }
 }
 @available(iOS 16.0, *)
 extension ManagedSettingsStore.Name { static let clingApps = Self("clingApps") }
