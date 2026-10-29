@@ -15,12 +15,12 @@ const toGemini = (body) => {
   return { ...(sys ? { systemInstruction: { parts: [{ text: sys }] } } : {}), contents, generationConfig };
 };
 // Gemini retires models (404 "no longer available"). Try the configured model, then known-current fallbacks.
-const GEMINI_FALLBACKS = ['gemini-flash-latest', 'gemini-3-flash-preview', 'gemini-3.8-flash'];
+const GEMINI_FALLBACKS = ['gemini-3-flash-preview', 'gemini-flash-latest', 'gemini-3.8-flash'];
 const geminiGenerate = async (f, primary, reqBody) => {
   const models = [primary, ...GEMINI_FALLBACKS.filter((m) => m !== primary)];
-  let r; let data; let model;
+  let r; let data; let model; const deadline = Date.now() + 26000;
   for (model of models) {
-    const t0 = Date.now(); const ac = new AbortController(); const timer = setTimeout(() => ac.abort(), 12000);
+    const t0 = Date.now(); const ac = new AbortController(); const timer = setTimeout(() => ac.abort(), Math.max(1000, deadline - Date.now()));
     try {
       r = await f(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': process.env.GEMINI_API_KEY }, body: JSON.stringify(reqBody), signal: ac.signal,
@@ -28,7 +28,7 @@ const geminiGenerate = async (f, primary, reqBody) => {
       data = await r.json().catch(() => ({}));
     } catch (e) { r = { ok: false, status: 504 }; data = {}; console.error('gemini timeout/abort', model, Date.now() - t0, 'ms'); continue; } finally { clearTimeout(timer); }
     console.log('gemini', model, r.status, Date.now() - t0, 'ms');
-    if (r.status !== 404) break;
+    if (r.status !== 404 || Date.now() > deadline - 1000) break;
     console.error('gemini model unavailable, trying fallback', model);
   }
   return { r, data, model };
