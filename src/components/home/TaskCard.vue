@@ -290,13 +290,22 @@ const whenText = computed(() => {
   return 'Today';
 });
 // Close the "..." menu on Escape or any press outside the menu/its button.
-const onDocDown = (e) => { if (!e.target.closest || !e.target.closest('.task-actions, .task-more')) moreOpen.value = false; };
+// A press that closes the menu must not also act as a tap: the click that follows the pointerdown would otherwise hit
+// onCardTap and open the details modal (also covers the iOS WebView delayed click). Swallow that one click on task cards.
+let swallowOff = null;
+const swallowClick = (e) => { if (e.target.closest && e.target.closest('.task-card')) { e.stopPropagation(); e.preventDefault(); } unswallow(); };
+const unswallow = () => { document.removeEventListener('click', swallowClick, true); clearTimeout(swallowOff); swallowOff = null; };
+const onDocDown = (e) => {
+  if (e.target.closest && e.target.closest('.task-actions, .task-more')) return;
+  moreOpen.value = false; unswallow();
+  document.addEventListener('click', swallowClick, true); swallowOff = setTimeout(unswallow, 700);
+};
 const onDocKey = (e) => { if (e.key === 'Escape') moreOpen.value = false; };
 watch(moreOpen, (open) => {
   if (open) { document.addEventListener('pointerdown', onDocDown, true); document.addEventListener('keydown', onDocKey); }
   else { document.removeEventListener('pointerdown', onDocDown, true); document.removeEventListener('keydown', onDocKey); }
 });
-onBeforeUnmount(() => { document.removeEventListener('pointerdown', onDocDown, true); document.removeEventListener('keydown', onDocKey); });
+onBeforeUnmount(() => { document.removeEventListener('pointerdown', onDocDown, true); document.removeEventListener('keydown', onDocKey); unswallow(); });
 const schedDate = ref('');
 const schedTime = ref('');
 const tomorrow = (() => { const d = new Date(); d.setDate(d.getDate() + 1); return d.toLocaleDateString('en-CA'); })();
