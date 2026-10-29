@@ -139,7 +139,7 @@
 
         <div v-else class="task-list-wrap">
           <TaskListHeader :label="isViewingToday ? 'Today' : FULL_DAY_NAMES[selectedDayIndex]" :is-today="isViewingToday" :completed="completedTaskCount" :total="dayTasks.length"
-                          :sound-enabled="soundEnabled" :boss-voice-on="!voMuted" :assistant-live="askOpen" :show-completed="showCompleted" v-model:prefs="viewPrefs" @toggle-sound="toggleSound" @toggle-boss-voice="setVoMuted(!voMuted)" @open-assistant="openAssistant" @toggle-completed="showCompleted = !showCompleted"
+                          :sound-enabled="soundEnabled" :boss-voice-on="!voMuted" :assistant-live="askOpen" :show-completed="showCompleted" v-model:prefs="viewPrefs" @toggle-sound="toggleSound" @toggle-boss-voice="setVoMuted(!voMuted)" @open-assistant="openAssistant" @toggle-completed="showCompleted = !showCompleted" @show-tips="replayTips"
                           :day-tools="isViewingToday && !!userId" @plan-day="openPlanDay" @templates="openTemplates" />
           <RoutineStrip v-if="isViewingToday && routineItems.length" :items="routineItems" :week="routineWeekStats" @toggle="toggleRoutineTask" />
 
@@ -208,8 +208,8 @@
       <ScheduledList v-if="userId" :tasks="futureScheduled" :today-str="todayStr" :error="scheduledError" :series="templatesOf(scheduledList)" @edit="editScheduledEntry"
                      @move-today="moveScheduledToToday" @update="updateScheduledDate" @delete="deleteScheduled" />
 
-      <FabButtons :show-add="false" :user-id="userId" :assistant-live="askOpen" @add="onAddClick" @assistant="openAssistant" />
-
+      <FabButtons :show-add="false" :user-id="userId" :assistant-live="askOpen" @add="onAddClick" @assistant="openAssistant" @sergeant="onSergeant" @menu-open="coachSignal('menu-open')" />
+      <CoachSpotlight :step="coachStep" @skip="coachEnd" @skip-all="coachSkipAll" />
 
     </div>
   </div>
@@ -321,6 +321,9 @@ import TaskListHeader from '@/components/home/TaskListHeader.vue';
 import RoutineStrip from '@/components/home/RoutineStrip.vue';
 import { markRoutineDone, skipRoutineToday, canSkipToday, routineToday, routineWeek } from '@/utils/routine';
 import FabButtons from '@/components/home/FabButtons.vue';
+import CoachSpotlight from '@/components/onboarding/CoachSpotlight.vue';
+import { replanMoves, replanLine, behindMinutes, nextLine, criticalLine } from '@/utils/sergeantMenu';
+import { loadCoach, saveCoach, lessonFor, markDone, stepMatches } from '@/utils/coachLessons';
 import IdleState from '@/components/home/IdleState.vue';
 import WontDoList from '@/components/home/WontDoList.vue';
 import LoadSummary from '@/components/home/LoadSummary.vue';
@@ -381,7 +384,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import data from '@/data.json';
 import {db} from '@/firebaseConfig'; // Assuming you have imported the Firebase setup file and exported the db instance
-import { doc, setDoc, serverTimestamp, getDoc, updateDoc, getFirestore, runTransaction, onSnapshot } from 'firebase/firestore';
+import { doc, setDoc, serverTimestamp, getDoc, updateDoc, getFirestore, runTransaction, onSnapshot, arrayUnion } from 'firebase/firestore';
 const modalOpen = ref(false);
 import { deleteObject } from "firebase/storage";
 import { widgetTaskId } from '@/utils/widgetSnapshot';
@@ -1244,6 +1247,7 @@ const toggleTaskCompletion = async (index) => {
   }
 
   if (isToday(selectedDayIndex.value)) onBossToggle(task).finally(() => updateStreakOnCompletion(task)); // both directions; pending ignored
+  if (task.completed) setTimeout(() => coachStart('first-task-done'), 1200); // coach: first lesson once a task is done
 
   // Remove one-time tasks from the UI immediately (a locked day keeps every task: completed ones stay in place)
   const lockedToggle = selectedDayLocked.value;
@@ -3067,6 +3071,7 @@ const toggleTaskImportance = async (index) => {
   if (blockIfShut()) return false;
   const task = { ...selectedDayRoutine.value[index] };
   task.important = !task.important;
+  if (task.important) setTimeout(() => coachStart('important-added'), 1500);
 
   // Voice feedback
   const voiceMessage = task.important ? "Got it. That one's important." : "Okay, it's not marked important anymore.";
@@ -3732,16 +3737,7 @@ const assistantExecutor = createAssistantExecutor({
   rollUnfinished: async () => { if (!isViewingToday.value) return { moved: 0 }; const to = tomorrowStr(); let moved = 0;
     for (const t of rollCandidates(selectedDayRoutine.value)) { const i = agentIdx(t); if (i < 0) continue; await scheduleExistingTask(i, t, { date: to, time: t.startTime || '' }); moved++; }
     return { moved }; },
-  autoSchedule: async ({ writeCalendar }) => {
-    const acc = await clingNative.calendarAccess(); const now = new Date(); const d1 = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime();
-    const busy = acc.granted ? busyToDay((await clingNative.busy(now.getTime(), d1)).busy, now) : [];
-    const untilMin = (() => { const [h, m] = String(disciplineSettings.value.deadline || '22:00').split(':').map(Number); return (h || 22) * 60 + (m || 0); })();
-    const r = autoSchedule(selectedDayRoutine.value.filter((t) => !t.completed && t.status !== 'wontdo'), busy, { nowMin: now.getHours() * 60 + now.getMinutes(), untilMin: Math.max(untilMin, now.getHours() * 60 + 60) });
-    for (const p of r.plan) { if (p.task.startTime === p.start) continue; await editTask(agentIdx(p.task), p.task, { startTime: p.start });
-      if (writeCalendar && acc.granted) { const [h, m] = p.start.split(':').map(Number); const [eh2, em] = p.end.split(':').map(Number); const b = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        await clingNative.addEvent({ title: p.task.title, startMs: b.getTime() + (h * 60 + m) * 60000, endMs: b.getTime() + (eh2 * 60 + em) * 60000 }); } }
-    return { ...r, calendar: acc.granted ? 'used' : 'no access (free time = whole day)' };
-  },
+  autoSchedule: (o) => autoScheduleToday(o), // shared with the sergeant Replan
   habit: async (name, a) => { const uid = userId.value; let list = loadHabits(uid);
     if (name === 'add_habit') { list = addHabit(list, a.name); saveHabits(uid, list); return { habits: habitSummary(list) }; }
     if (name === 'log_habit') { const r = logHabit(list, a.name, localDateStr(), a.done); if (!r.habit) return { error: `No habit called ${a.name}. Add it first?` }; saveHabits(uid, r.list); return { habit: habitSummary([r.habit], localDateStr())[0] }; }
@@ -3801,6 +3797,57 @@ const skipLockIn = async () => {
   try { await skipLockInToday(userId.value, dk); await ensureLegacyDayStarted(); } catch (e) { console.warn('skip lock-in:', e); }
 };
 watch([() => eh.phase.value, () => eh.phaseInfo.value.dayKey, userId, selectedDayIndex, () => lockInToday.value], maybeShowDayPrompt, { immediate: true });
+
+// ── Shared auto-schedule (assistant tool + sergeant Replan): fits today's open tasks into free time; returns { plan, moves }.
+async function autoScheduleToday({ writeCalendar = false } = {}) {
+    const acc = await clingNative.calendarAccess(); const now = new Date(); const d1 = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime();
+    const busy = acc.granted ? busyToDay((await clingNative.busy(now.getTime(), d1)).busy, now) : [];
+    const untilMin = (() => { const [h, m] = String(disciplineSettings.value.deadline || '22:00').split(':').map(Number); return (h || 22) * 60 + (m || 0); })();
+    const r = autoSchedule(selectedDayRoutine.value.filter((t) => !t.completed && t.status !== 'wontdo'), busy, { nowMin: now.getHours() * 60 + now.getMinutes(), untilMin: Math.max(untilMin, now.getHours() * 60 + 60) });
+    const moves = replanMoves(r.plan);
+    for (const p of r.plan) { if (p.task.startTime === p.start) continue; await editTask(agentIdx(p.task), p.task, { startTime: p.start });
+      if (writeCalendar && acc.granted) { const [h, m] = p.start.split(':').map(Number); const [eh2, em] = p.end.split(':').map(Number); const b = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        await clingNative.addEvent({ title: p.task.title, startMs: b.getTime() + (h * 60 + m) * 60000, endMs: b.getTime() + (eh2 * 60 + em) * 60000 }); } }
+    return { ...r, moves, calendar: acc.granted ? 'used' : 'no access (free time = whole day)' };
+}
+
+// ── Sergeant long-press menu (plan phase 1) + interactive coach ──
+const coachStep = ref(null); let coachLesson = null; let coachIdx = 0;
+const coachState = () => loadCoach(userId.value);
+const coachShow = () => { const st = coachLesson && coachLesson.steps[coachIdx]; coachStep.value = st || null;
+  if (st && !voMuted.value && !document.hidden) speakLive(st.line); };
+const coachStart = (trigger, opts = {}) => { if (coachLesson || !userId.value) return; const l = lessonFor(trigger, coachState(), opts); if (!l) return; coachLesson = l; coachIdx = 0; coachShow(); };
+const coachEnd = () => { if (coachLesson) saveCoach(userId.value, markDone(coachState(), coachLesson.id)); coachLesson = null; coachStep.value = null; };
+const coachSkipAll = () => { coachEnd(); saveCoach(userId.value, { ...coachState(), off: true }); showNoteToast('Tips off. Turn them on in the ☰ menu: Show me tips again.'); };
+const coachSignal = (sig) => { if (!coachLesson || !stepMatches(coachStep.value, sig)) return; coachIdx++; if (coachIdx >= coachLesson.steps.length) coachEnd(); else coachShow(); };
+const replayTips = () => { saveCoach(userId.value, { done: [], off: false }); coachLesson = null; coachStart('first-task-done', { force: true }); };
+const sgSay = (line, opts) => { if (opts && opts.undo) showRepeatToast(line, opts); else showNoteToast(line); if (!voMuted.value && !document.hidden) speakLive(line); };
+const onSergeant = async (id) => {
+  coachSignal('sg-' + id);
+  if (blockIfShut()) return;
+  const open = (selectedDayRoutine.value || []).filter((t) => !t.completed && t.status !== 'wontdo');
+  try {
+    if (id === 'next') { const r = suggestNext(selectedDayRoutine.value, { minutesLeft: eh.running.value ? Math.round(eh.remainingMs.value / 60000) : null }); sgSay(nextLine(r)); return; }
+    if (id === 'critical') { const r = suggestNext(selectedDayRoutine.value, {}); const t = r && r.task; if (!t) { sgSay(criticalLine(null)); return; }
+      if (t.important) { sgSay(criticalLine(t, true)); return; } const i = selectedDayRoutine.value.indexOf(t); if (i >= 0) await toggleTaskImportance(i); showRepeatToast(criticalLine(t, false)); return; }
+    if (id === 'replan') { if (!isViewingToday.value || !open.length) { sgSay(nextLine(null)); return; }
+      const behind = behindMinutes(open); const snap = open.map((t) => ({ t, from: t.startTime || '' }));
+      const r = await autoScheduleToday({ writeCalendar: false });
+      sgSay(replanLine(r.moves || [], behind), (r.moves || []).length ? { undo: async () => {
+        for (const x of snap) { const cur = selectedDayRoutine.value.find((t) => (t.createdAt || t.title) === (x.t.createdAt || x.t.title)); if (cur && (cur.startTime || '') !== x.from) await editTask(agentIdx(cur), cur, { startTime: x.from }); }
+        showRepeatToast('Plan put back.'); } } : {}); return; }
+    if (id === 'off') { const today = localDateStr();
+      if (!window.confirm("Take today off? Your streak won't break and you won't need to finish tasks today.")) return;
+      const ref0 = doc(db, 'streaks', userId.value); await setDoc(ref0, { offDates: arrayUnion(today) }, { merge: true });
+      const sd = await getDoc(ref0); if (sd.exists()) applyStreakState(sd.data());
+      sgSay("Day off. Your streak is safe. Rest well."); }
+  } catch (e) { console.error('sergeant', id, e); showRepeatToast('That did not work. Try again.', { error: true }); }
+};
+// relevance triggers: behind schedule (checked each minute), Friday (holiday), on Home load
+let coachTick = null;
+onMounted(() => { coachTick = setInterval(() => { if (!isViewingToday.value || coachLesson) return;
+  if (behindMinutes(selectedDayRoutine.value) >= 15) coachStart('behind'); else if (new Date().getDay() === 5) coachStart('friday'); }, 60000); });
+onBeforeUnmount(() => clearInterval(coachTick));
 </script>
 
 

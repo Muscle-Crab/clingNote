@@ -31,6 +31,7 @@
           <button type="button" class="sort-toggle" data-test="menu-boss-voice" :aria-pressed="bossVoiceOn ? 'true' : 'false'" @click="$emit('toggle-boss-voice')">
             <i :class="bossVoiceOn ? 'fas fa-microphone' : 'fas fa-microphone-slash'" aria-hidden="true"></i> Robot voice: {{ bossVoiceOn ? 'On' : 'Off' }}
           </button>
+          <button type="button" class="sort-toggle" data-test="menu-show-tips" @click="open = false; $emit('show-tips')"><i class="fas fa-lightbulb" aria-hidden="true"></i> Show me tips again</button>
           <button v-if="!isDefaultPrefs(prefs)" class="sort-reset" @click="$emit('update:prefs', { sort: 'manual', filter: 'all' })">Reset</button>
         </div>
       </div>
@@ -60,7 +61,7 @@ defineProps({
   showCompleted: { type: Boolean, default: false },
   dayTools: Boolean, // Plan my day + Day templates live in this existing menu (no extra row on Home)
 });
-defineEmits(['toggle-sound', 'toggle-boss-voice', 'open-assistant', 'toggle-completed', 'update:prefs', 'plan-day', 'templates']);
+defineEmits(['toggle-sound', 'toggle-boss-voice', 'open-assistant', 'toggle-completed', 'update:prefs', 'plan-day', 'templates', 'show-tips']);
 </script>
 
 <style scoped>
