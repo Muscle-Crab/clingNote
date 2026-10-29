@@ -28,4 +28,8 @@ const st = async (p) => p.then(() => 200, (e) => e.status);
 assert.equal(await st(requirePro({ headers: {} }, { verify, db: db({ isPro: true }) })), 401);
 assert.equal(await st(requirePro({ headers: { authorization: 'Bearer good' } }, { verify, db: db({ isPro: false }) })), 402);
 assert.equal(await st(requirePro({ headers: { authorization: 'Bearer good' } }, { verify, db: db({ isPro: true, plan: 'yearly' }) })), 200);
+// Repeat-series occurrences (templateId) never use up the daily limit (build 36 bug: 8 daily repeats blocked every add).
+{ const occ = [...Array(8)].map((_, i) => ({ id: `t${i}_2026-10-29`, templateId: `t${i}`, scheduledDate: '2026-10-29' }));
+  const r = checkDailyLimit(true, '2026-10-29', [[]], [...occ, { id: 'one', scheduledDate: '2026-10-29' }]);
+  assert.equal(r.ok, true); assert.equal(r.count, 1); }
 console.log('test-limits: ok');
