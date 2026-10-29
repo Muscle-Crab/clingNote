@@ -14,15 +14,27 @@ const toGemini = (body) => {
   if (body.response_format && body.response_format.type === 'json_object') generationConfig.responseMimeType = 'application/json';
   return { ...(sys ? { systemInstruction: { parts: [{ text: sys }] } } : {}), contents, generationConfig };
 };
+// Gemini retires models (404 "no longer available"). Try the configured model, then known-current fallbacks.
+const GEMINI_FALLBACKS = ['gemini-3.8-flash', 'gemini-flash-latest'];
+const geminiGenerate = async (f, primary, reqBody) => {
+  const models = [primary, ...GEMINI_FALLBACKS.filter((m) => m !== primary)];
+  let r; let data; let model;
+  for (model of models) {
+    r = await f(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': process.env.GEMINI_API_KEY }, body: JSON.stringify(reqBody),
+    });
+    data = await r.json().catch(() => ({}));
+    if (r.status !== 404) break;
+    console.error('gemini model unavailable, trying fallback', model);
+  }
+  return { r, data, model };
+};
 const callChat = async (body, { fetch: f = fetch, prefer } = {}) => {
   const provider = pickProvider(body, { prefer });
   if (!provider) throw Object.assign(new Error('Server not configured'), { status: 500 });
   if (provider === 'gemini') {
     const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
-    const r = await f(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': process.env.GEMINI_API_KEY }, body: JSON.stringify(toGemini(body)),
-    });
-    const data = await r.json().catch(() => ({}));
+    const { r, data } = await geminiGenerate(f, model, toGemini(body));
     if (!r.ok) throw Object.assign(new Error('AI request failed'), { status: 502 });
     return { provider, content: (data.candidates?.[0]?.content?.parts || []).map((p) => p.text || '').join('') };
   }
@@ -36,11 +48,7 @@ const callChat = async (body, { fetch: f = fetch, prefer } = {}) => {
 // Native Gemini call (function calling): returns the model's raw parts so the client can echo thought signatures back.
 const callGeminiRaw = async (reqBody, { fetch: f = fetch } = {}) => {
   if (!process.env.GEMINI_API_KEY) throw Object.assign(new Error('Server not configured'), { status: 500 });
-  const model = process.env.GEMINI_AGENT_MODEL || process.env.GEMINI_MODEL || 'gemini-3-flash-preview';
-  const r = await f(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': process.env.GEMINI_API_KEY }, body: JSON.stringify(reqBody),
-  });
-  const data = await r.json().catch(() => ({}));
+  const { r, data, model } = await geminiGenerate(f, process.env.GEMINI_AGENT_MODEL || process.env.GEMINI_MODEL || 'gemini-3-flash-preview', reqBody);
   if (!r.ok) {
     console.error('gemini error', r.status, model, JSON.stringify(data && data.error));
     throw Object.assign(new Error('AI request failed'), { status: r.status === 429 ? 429 : 502 });
