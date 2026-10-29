@@ -7,7 +7,7 @@
       <div class="coach-pane" :style="{ left: 0, top: rect.bottom + 'px', right: 0, bottom: 0 }"></div>
       <div class="coach-pane" :style="{ left: 0, top: rect.top + 'px', width: rect.left + 'px', height: rect.h + 'px' }"></div>
       <div class="coach-pane" :style="{ left: rect.right + 'px', top: rect.top + 'px', right: 0, height: rect.h + 'px' }"></div>
-      <div class="coach-ring" :style="{ left: rect.left + 'px', top: rect.top + 'px', width: rect.w + 'px', height: rect.h + 'px' }" aria-hidden="true"></div>
+      <div class="coach-ring" :class="{ 'coach-ring--tap': step.until === 'tap' }" data-test="coach-ring" @click="step.until === 'tap' && $emit('tap')" :style="{ left: rect.left + 'px', top: rect.top + 'px', width: rect.w + 'px', height: rect.h + 'px' }" aria-hidden="true"></div>
     </template>
     <div v-else class="coach-pane" style="inset: 0"></div>
     <div class="coach-say" :class="{ 'coach-say--top': below }" :style="sayStyle">
@@ -25,7 +25,7 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
 import RobotCoach from '@/components/robot/RobotCoach.vue';
 const props = defineProps({ step: { type: Object, default: null } });
-defineEmits(['skip', 'skip-all']);
+defineEmits(['skip', 'skip-all', 'tap']);
 const rect = ref(null); const PAD = 8;
 const measure = () => {
   const el = props.step && document.querySelector(props.step.target);
@@ -58,5 +58,7 @@ onMounted(loop); onBeforeUnmount(() => cancelAnimationFrame(raf));
 .coach-actions { position: fixed; top: calc(12px + env(safe-area-inset-top)); right: 12px; display: flex; gap: 8px; pointer-events: auto; z-index: 102; }
 .coach-skip { min-height: 48px; padding: 0 20px; border-radius: 999px; border: 2px solid #fff; background: rgba(4, 8, 18, .6); color: #fff; font-size: 18px; font-weight: 800; cursor: pointer; }
 .coach-skip--all { border-color: rgba(255,255,255,.5); font-weight: 600; font-size: 16px; }
+/* 'tap' steps: the ring itself takes the tap (decorative targets have no click of their own) */
+.coach-ring--tap { pointer-events: auto; cursor: pointer; }
 @media (prefers-reduced-motion: reduce) { .coach-ring { animation: none; } }
 </style>

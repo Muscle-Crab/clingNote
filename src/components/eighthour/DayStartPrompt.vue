@@ -21,10 +21,11 @@
         <p class="dsp-sub" data-test="day-prompt-confirm-text">Your day will end at <b data-test="day-prompt-end">{{ endLabel }}</b> and the app shuts down then.</p>
         <p v-if="target.total" class="dsp-sub" data-test="day-prompt-target-confirm">You need <b>{{ dayPtsLabel(earned, target.target) }}</b> today.</p>
         <p class="dsp-fine">{{ hoursLabel(hours) }} hours, starting when you confirm. This can't be changed today.</p>
+        <label v-if="canLock" class="dsp-fine dsp-lock" data-test="day-prompt-lock"><input v-model="lockApps" type="checkbox" /> 🔒 Lock my distracting apps until the day ends</label>
         <p v-if="error" class="dsp-err" role="alert" data-test="day-prompt-error">{{ error }}</p>
         <div class="dsp-row">
           <button type="button" class="dsp-btn" :disabled="busy" data-test="day-prompt-change" @click="step = 'pick'">Change</button>
-          <button type="button" class="dsp-btn dsp-btn--primary" :disabled="busy" data-test="day-prompt-confirm" @click="$emit('confirm', hours)">{{ busy ? 'Starting…' : 'Confirm' }}</button>
+          <button type="button" class="dsp-btn dsp-btn--primary" :disabled="busy" data-test="day-prompt-confirm" @click="$emit('confirm', hours, { lock: canLock && lockApps })">{{ busy ? 'Starting…' : 'Confirm' }}</button>
           <button type="button" class="dsp-btn dsp-skip" :disabled="busy" data-test="day-prompt-skip" @click="$emit('skip')">Skip lock-in today</button>
         </div>
       </template>
@@ -37,8 +38,10 @@ import { computed, ref, onBeforeUnmount } from 'vue';
 import { HOUR_OPTIONS, hoursLabel, clampHours, hoursMs, fmtClock } from '@/utils/eightHour';
 import { previewDayTarget, dayPtsLabel } from '@/utils/dayTarget';
 
-const props = defineProps({ initialHours: { type: Number, default: 8 }, nowMs: { type: Function, default: () => Date.now() }, tz: { type: String, default: '' }, busy: Boolean, error: { type: String, default: '' }, tasks: { type: Array, default: () => [] }, stats: { type: Object, default: () => ({}) }, earned: { type: Number, default: 0 } });
+const props = defineProps({
+  canLock: { type: Boolean, default: false }, /* iOS app lock available: offer the hard lock at day start */ initialHours: { type: Number, default: 8 }, nowMs: { type: Function, default: () => Date.now() }, tz: { type: String, default: '' }, busy: Boolean, error: { type: String, default: '' }, tasks: { type: Array, default: () => [] }, stats: { type: Object, default: () => ({}) }, earned: { type: Number, default: 0 } });
 defineEmits(['confirm', 'skip']);
+const lockApps = ref(true);
 const step = ref('pick');
 const hours = ref(clampHours(props.initialHours));
 const idx = computed({ get: () => Math.max(0, HOUR_OPTIONS.indexOf(hours.value)), set: (i) => { hours.value = HOUR_OPTIONS[Math.min(HOUR_OPTIONS.length - 1, Math.max(0, i))]; } });
@@ -60,4 +63,5 @@ const endLabel = computed(() => { void tick.value; const tz = props.tz || Intl.D
 .dsp-btn { min-height: 44px; padding: 0 16px; border-radius: 12px; border: 1px solid var(--c-border, #2a2a2e); background: var(--c-surface-2, #22252a); color: inherit; font-weight: 700; width: 100%; }
 .dsp-btn--primary { background: #378ADD; border-color: #378ADD; color: #fff; }
 .dsp-skip { flex-basis: 100%; background: transparent; border: 0; text-decoration: underline; opacity: .8; }
+.dsp-lock { display: flex; gap: .5rem; align-items: center; font-size: 17px; min-height: 44px; cursor: pointer; }
 </style>

@@ -22,6 +22,7 @@
       <button v-for="a in SERGEANT_ACTIONS" :key="a.id" type="button" role="menuitem" class="sg-item" :data-coach="'sg-' + a.id" :data-test="'sg-' + a.id" @click="choose(a.id)">
         <span class="sg-ic" aria-hidden="true">{{ a.icon }}</span><span class="sg-txt"><b>{{ a.label }}</b><small>{{ a.hint }}</small></span>
       </button>
+      <button v-if="locked" type="button" role="menuitem" class="sg-item" data-coach="sg-unlock" data-test="sg-unlock" @click="choose('unlock')"><span class="sg-ic" aria-hidden="true">🔓</span><span class="sg-txt"><b>Emergency unlock</b><small>Costs points</small></span></button>
       <button type="button" role="menuitem" class="sg-item sg-talk" data-test="sg-talk" @click="talk"><span class="sg-ic" aria-hidden="true">🎙️</span><span class="sg-txt"><b>Talk to me</b></span></button>
     </div>
   </div>
@@ -33,6 +34,7 @@ import RobotAvatar from './RobotAvatar.vue';
 import { SERGEANT_ACTIONS, HOLD_MS } from '@/utils/sergeantMenu';
 // Bottom-left floating assistant button (replaces the old standalone mic FAB). Tap = open; long-press = open listening.
 defineProps({
+  locked: { type: Boolean, default: false }, // hard lock on: menu shows Emergency unlock
   userId: { type: String, default: null },
   assistantLive: { type: Boolean, default: false },
   showAdd: { type: Boolean, default: true },
