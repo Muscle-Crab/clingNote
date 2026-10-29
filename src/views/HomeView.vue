@@ -234,7 +234,7 @@ import { activeFromForDay, isHiddenOnDate, seriesDays, withoutSeries } from '@/u
 import { useTaskViewPrefs } from '@/composables/useTaskViewPrefs';
 import { viewTasks, canReorder, applyManualOrder, normalizePrefs, visibleCount, shouldHandleShortcut } from '@/utils/taskView';
 import { ACTIVE_CAP, taskKey, activeCount, loadSummary, buildSchedule } from '@/utils/taskPlanning';
-import { localYMD, isStaleCompletion } from '@/utils/localDate';
+import { localYMD, isStaleCompletion, pruneStaleDay } from '@/utils/localDate';
 import { getTodayId, formatSessionTime, getCurrentDate, formatTime, isToday } from '@/utils/dateTime';
 import { badges } from '@/utils/gamification';
 import { recordMonthlyToggle, awardFinishedMonth } from '@/composables/useMonthlyStats';
@@ -1059,7 +1059,8 @@ const fetchSelectedDayRoutine = async () => {
       if (!isDayLocked(selectedDay.day) && tasks.some((t) => isStaleCompletion(t, dayIdx))) { // (8-hour locked day is never reset)
         if (seq !== fetchSeq) return; // stale: no reset write for a day that is no longer selected
         const now = new Date();
-        const resetStale = (list) => list.map((t) => (isStaleCompletion(t, dayIdx, now)
+        // Day rollover: completed one-time tasks (incl. repeat-series copies) from an earlier day leave the list; recurring ones reset.
+        const resetStale = (list) => pruneStaleDay(list, dayIdx, now).map((t) => (isStaleCompletion(t, dayIdx, now)
           ? resetSubtasks({ ...t, completed: false, completedAt: null, timerActive: false, timerStartedAt: null, timerEndTime: null, timerStoppedAt: null })
           : t));
         // A rejected write (e.g. shut 8-hour window, offline) must never hide the day's tasks: show the server copy as-is.
@@ -1250,11 +1251,10 @@ const toggleTaskCompletion = async (index) => {
   // widget / Live Activity / notification action) selectedDayLocked is false; removing the task then was rejected by the rules
   // (locked arrays never shrink) -> the card vanished from Done and an in-app completion was never stored (no points).
   const lockedToggle = completionKeepsInPlace({ uiLocked: selectedDayLocked.value, sourceLocked: isDayLocked(days[selectedDayIndex.value]?.day) });
-  if (task.type === "one-time" && !lockedToggle) {
-    selectedDayRoutine.value.splice(index, 1);
-  } else {
-    selectedDayRoutine.value.splice(index, 1, task); // Update recurring tasks
-  }
+  // Completed tasks (one-time and repeat-series copies too) stay in place in the Completed section for the rest of the day;
+  // completed one-time tasks leave the list at the day rollover (pruneStaleDay on the next load of this weekday).
+  const before = selectedDayRoutine.value[index];
+  selectedDayRoutine.value.splice(index, 1, task);
 
   const selectedDayDocRef = doc(db, 'weeklyRoutines', `${userId.value}_${days[selectedDayIndex.value].day}`);
 
@@ -1270,24 +1270,17 @@ const toggleTaskCompletion = async (index) => {
       if (lockedToggle) {
         // 8-hour lock: update in place; the array never shrinks and no locked field changes
         tasks[at] = { ...tasks[at], completed: task.completed, completedAt: task.completedAt, timerActive: false, timerStoppedAt: task.timerStoppedAt };
-      } else if (task.type === "one-time" && task.completed) {
-        tasks.splice(at, 1); // Remove the one-time task completely
       } else {
         tasks[at] = { ...tasks[at], ...task };
       }
 
-      if (tasks.length > 0 || lockedToggle) {
-        tx.update(selectedDayDocRef, { tasks, updatedAt: serverTimestamp() });
-      } else {
-        tx.delete(selectedDayDocRef); // the only task was this one-time task
-      }
+      tx.update(selectedDayDocRef, { tasks, updatedAt: serverTimestamp() }); // in place: the array never shrinks (lockedDayUnchanged)
     });
     console.log("Task completion updated successfully");
   } catch (error) {
     console.error("Error updating task completion:", error);
-    if (task.type === "one-time" && !lockedToggle && !selectedDayRoutine.value.some((t) => sameTask(t, task))) {
-      selectedDayRoutine.value.splice(Math.min(index, selectedDayRoutine.value.length), 0, { ...task, completed: !task.completed }); // write rejected: never lose the card
-    }
+    const at = selectedDayRoutine.value.findIndex((t) => sameTask(t, task));
+    if (at >= 0 && before) selectedDayRoutine.value.splice(at, 1, before); // write rejected: never lose the card, show the stored state
     return false;
   }
 
@@ -1456,21 +1449,7 @@ const checkAllTasksCompleted = async () => {
     fetchSelectedDayRoutine();
     await saveDailyPerformance();
 
-    // 🗑 Remove completed one-time tasks only; recurring/routine tasks are always kept.
-    // (The old filter callback returned undefined for every non-one-time task, so the whole routine was dropped and the doc deleted.)
-    if (selectedDayLocked.value) return; // 8-hour lock: the day's array never shrinks
-    const isDoneOneTime = (t) => t && t.type === 'one-time' && t.completed;
-    selectedDayRoutine.value = selectedDayRoutine.value.filter((t) => !isDoneOneTime(t));
-
-    // 🔄 Update Firestore (transaction on the server copy: never overwrite with a stale local list, never delete the doc)
-    try {
-      const dayName = days[selectedDayIndex.value].day;
-      await mutateDay(dayName, (tasks) => tasks.filter((t) => !isDoneOneTime(t)));
-      console.log("✅ Completed one-time tasks removed; recurring tasks kept.");
-
-    } catch (error) {
-      console.error("❌ Error updating Firestore:", error);
-    }
+    // Completed one-time tasks stay visible until the day rollover (pruneStaleDay); nothing is removed here.
   }
 };
 
@@ -3637,7 +3616,7 @@ const agentWeek = async (untilToday) => {
     let tasks = [];
     if (i === todayIdx.value && isViewingToday.value) tasks = selectedDayRoutine.value;
     else { try { const snap = await getDoc(doc(db, 'weeklyRoutines', `${userId.value}_${days[i].day}`)); tasks = snap.exists() ? (snap.data().tasks || []) : []; } catch (e) { tasks = []; } }
-    out.push({ day: days[i].day, tasks: (tasks || []).map((t) => (isStaleCompletion(t, i) ? { ...t, completed: false } : t)) });
+    out.push({ day: days[i].day, tasks: pruneStaleDay(tasks || [], i).map((t) => (isStaleCompletion(t, i) ? { ...t, completed: false } : t)) });
   }
   return out;
 };
