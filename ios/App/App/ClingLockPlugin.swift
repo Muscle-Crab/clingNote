@@ -26,6 +26,7 @@ public class ClingLockPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "labeledApps", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "lockApps", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "unlockApps", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setLockEndAlert", returnType: CAPPluginReturnPromise),
     ]
 
     @objc func requestAuthorization(_ call: CAPPluginCall) {
@@ -74,6 +75,7 @@ public class ClingLockPlugin: CAPPlugin, CAPBridgedPlugin {
 
     @objc func startLock(_ call: CAPPluginCall) {
         guard #available(iOS 16.0, *) else { call.reject("iOS 16 required"); return }
+        LockShared.installLockEndSound()
         let untilMs = call.getDouble("untilMs") ?? 0
         let until = Date(timeIntervalSince1970: untilMs / 1000)
         guard until.timeIntervalSinceNow > 60 else { call.reject("untilMs must be > 1 min ahead"); return }
@@ -98,6 +100,16 @@ public class ClingLockPlugin: CAPPlugin, CAPBridgedPlugin {
         call.resolve(["locked": false])
     }
 
+    /// Lock-end notification level read by ClingLockMonitor.notifyLockEnded(). Omit `level` to just read it.
+    @objc func setLockEndAlert(_ call: CAPPluginCall) {
+        guard #available(iOS 16.0, *) else { call.resolve(["level": "loud"]); return }
+        LockShared.installLockEndSound()
+        if let l = call.getString("level") {
+            guard LockShared.lockEndAlertLevels.contains(l) else { call.reject("invalid level"); return }
+            LockShared.defaults?.set(l, forKey: LockShared.lockEndAlertKey)
+        }
+        call.resolve(["level": LockShared.defaults?.string(forKey: LockShared.lockEndAlertKey) ?? LockShared.lockEndAlertDefault])
+    }
 
     // MARK: per-app locks by label (assistant: "lock TikTok and YouTube for 2 hours", "unlock YouTube")
 
@@ -136,6 +148,7 @@ public class ClingLockPlugin: CAPPlugin, CAPBridgedPlugin {
     /// labels: [String] (already resolved to saved labels by JS); untilMs: Double? (absent/0 = until unlocked).
     @objc func lockApps(_ call: CAPPluginCall) {
         guard #available(iOS 16.0, *) else { call.reject("iOS 16 required"); return }
+        LockShared.installLockEndSound()
         guard AuthorizationCenter.shared.authorizationStatus == .approved else { call.resolve(["locked": [], "error": "not_authorized"]); return }
         let want = Set(((call.getArray("labels") as? [String]) ?? []).map { $0.lowercased() })
         let untilMs = call.getDouble("untilMs") ?? 0

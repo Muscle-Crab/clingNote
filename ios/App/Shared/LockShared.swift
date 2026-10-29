@@ -11,7 +11,22 @@ enum LockShared {
     static let group = "group.app.clingnote.ios"
     static let selectionKey = "lock.selection"
     static let stateKey = "lock.state"
+    static let lockEndAlertKey = "lockEndAlert"   // off | subtle | standard | loud | maximum
+    static let lockEndAlertDefault = "loud"
+    static let lockEndAlertLevels: Set<String> = ["off", "subtle", "standard", "loud", "maximum"]
     static var defaults: UserDefaults? { UserDefaults(suiteName: group) }
+    /// Spoken drill-sergeant clip for the lock-ended alert (App/lock_ended_voice.caf, ~2.9 s).
+    static let lockEndSoundName = "lock_ended_voice.caf"
+    /// Copies the clip from the main app bundle into <App Group>/Library/Sounds, where iOS resolves
+    /// UNNotificationSound(named:) for notifications posted by the ClingLockMonitor extension. Main app only.
+    static func installLockEndSound() {
+        guard let src = Bundle.main.url(forResource: "lock_ended_voice", withExtension: "caf"),
+              let box = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: group) else { return }
+        let dir = box.appendingPathComponent("Library/Sounds", isDirectory: true), dst = dir.appendingPathComponent(lockEndSoundName)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        if FileManager.default.fileExists(atPath: dst.path) { return }
+        try? FileManager.default.copyItem(at: src, to: dst)
+    }
 }
 
 @available(iOS 16.0, *)

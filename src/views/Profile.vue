@@ -85,6 +85,8 @@
           <section v-if="isOwn" class="pf-card pf-card--flush" data-test="lock-in-setting">
             <label class="pf-row"><span class="pf-ico" aria-hidden="true">🔒</span><span class="pf-row-title">Lock-in<small class="pf-dl-sub">8-hour lock: a timed day that shuts the app at the end. Off by default; you can skip it on any day.</small></span>
               <input type="checkbox" role="switch" class="pf-switch" data-test="lock-in-toggle" :checked="lockIn.enabled" :disabled="!lockIn.loaded" @change="onLockInToggle($event.target.checked)" /></label>
+            <label v-if="lockIn.enabled" class="pf-row pf-row--divided" data-test="lock-end-alert-row"><span class="pf-ico" aria-hidden="true">📣</span><span class="pf-row-title">Lock-end alert<small class="pf-dl-sub">How hard ClingNote alerts you when a lock ends</small></span>
+              <select class="pf-time" data-test="lock-end-alert" :value="lockEndAlert" @change="onLockEndAlert($event.target.value)"><option v-for="o in LOCK_END_OPTS" :key="o.v" :value="o.v">{{ o.l }}</option></select></label>
           </section>
           <section v-if="isOwn" class="pf-card pf-card--flush" data-test="wake-alarm-setting">
             <label class="pf-row"><span class="pf-ico" aria-hidden="true">⏰</span><span class="pf-row-title">Wake-up alarm<small class="pf-dl-sub" data-test="wake-alarm-sub">{{ wakeOk ? 'ClingNote asks you each day if you want an alarm, then rings at your time, even on silent (iOS 26+). Off by default.' : 'iOS app only: install ClingNote on your iPhone to use it.' }}</small></span>
@@ -160,6 +162,13 @@ const onWakeToggle = async (on) => { wakeBusy.value = true; try { await setWakeE
 const toggleWakeDay = (n) => { const d = wake.value.days; const next = d.includes(n) ? d.filter((x) => x !== n) : [...d, n]; if (next.length) setWakeDays(next).catch(() => {}); };
 const wakePromptHint = computed(() => (toMin(wake.value.promptTime) < toMin(wake.value.time) ? "Morning: asks about that morning's alarm" : 'Evening: asks about the next morning'));
 const onLockInToggle = async (on) => { const u = auth.currentUser; if (!u) return; try { await setLockInEnabled(u.uid, on); } catch (e) { console.warn('lock-in toggle:', e); loadLockIn(true).catch(() => {}); } };
+// Lock-end alert level (App Group defaults via ClingLock.setLockEndAlert; localStorage mirror for web/first paint).
+const LOCK_END_OPTS = [{ v: 'off', l: 'Off' }, { v: 'subtle', l: 'Subtle' }, { v: 'standard', l: 'Standard' }, { v: 'loud', l: 'Loud' }, { v: 'maximum', l: 'Maximum' }];
+const LOCK_END_KEY = 'cling.lockEndAlert';
+const lockEndAlert = ref((() => { try { return localStorage.getItem(LOCK_END_KEY) || 'loud'; } catch (e) { return 'loud'; } })());
+if (lockAvailable()) clingLock.setLockEndAlert().then((r) => { if (r && r.level) lockEndAlert.value = r.level; }).catch(() => {});
+const onLockEndAlert = (v) => { lockEndAlert.value = v; try { localStorage.setItem(LOCK_END_KEY, v); } catch (e) { /* ignore */ } if (lockAvailable()) clingLock.setLockEndAlert(v).catch(() => {}); };
+import { clingLock, lockAvailable } from '@/native/clingNative';
 import PushSettings from '@/components/PushSettings.vue';
 import DeleteAccount from '@/components/DeleteAccount.vue';
 import { syncPublicProfile } from '@/composables/usePublicProfile';

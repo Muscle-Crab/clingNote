@@ -26,14 +26,25 @@ class ClingLockMonitor: DeviceActivityMonitor {
         LockShared.defaults?.set(["locked": false, "until": 0], forKey: LockShared.stateKey)
         notifyLockEnded()
     }
-    /// Lock time is up: loudest alert iOS allows without Apple's separate Critical Alerts entitlement.
-    /// Time Sensitive breaks through Focus / scheduled summary; .defaultCritical plays at full volume even on silent
-    /// once that entitlement is granted, and falls back to the standard alert sound until then.
+    /// Lock time is up. Aggressiveness is user-selectable (Settings > Lock-in > "Lock-end alert", App Group key
+    /// LockShared.lockEndAlertKey): off | subtle (passive, silent) | standard (active, default sound) |
+    /// loud (timeSensitive, default sound; default) | maximum (timeSensitive + .defaultCritical, which plays at full
+    /// volume on silent only once Apple grants the Critical Alerts entitlement, else falls back to the standard sound).
     private func notifyLockEnded() {
+        let level = LockShared.defaults?.string(forKey: LockShared.lockEndAlertKey) ?? LockShared.lockEndAlertDefault
+        if level == "off" { return }
+        let voice = UNNotificationSoundName(LockShared.lockEndSoundName)
         let c = UNMutableNotificationContent()
         c.title = "ClingNote"; c.body = "Your lock time is up."
-        c.interruptionLevel = .timeSensitive
-        c.sound = .defaultCritical
+        switch level {
+        case "subtle": c.interruptionLevel = .passive; c.sound = nil
+        // Standard/Loud/Maximum play the spoken clip (App Group Library/Sounds, installed by the app);
+        // iOS falls back to the default sound if the file is missing. Maximum's critical variant needs the
+        // Critical Alerts entitlement to bypass silent; without it iOS plays it as a normal sound.
+        case "standard": c.interruptionLevel = .active; c.sound = UNNotificationSound(named: voice)
+        case "maximum": c.interruptionLevel = .timeSensitive; c.sound = .criticalSoundNamed(voice, withAudioVolume: 1.0)
+        default: c.interruptionLevel = .timeSensitive; c.sound = UNNotificationSound(named: voice) // loud
+        }
         UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "cling.lock.ended.\(UUID().uuidString)", content: c, trigger: nil))
     }
 }

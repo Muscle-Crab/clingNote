@@ -16,6 +16,8 @@ export const clingLock = {
   pickNamedApps: safe('ClingLock', Lock, (p, suggest = []) => p.pickNamedApps({ suggest }), { saved: false, apps: [] }),
   lockApps: safe('ClingLock', Lock, (p, labels, untilMs = 0) => p.lockApps({ labels, untilMs }), { locked: [] }),
   unlockApps: safe('ClingLock', Lock, (p, labels = []) => p.unlockApps({ labels }), { unlocked: [] }),
+  // Lock-end alert level: off | subtle | standard | loud (default) | maximum. Omit level to read.
+  setLockEndAlert: safe('ClingLock', Lock, (p, level) => p.setLockEndAlert(level ? { level } : {}), { level: 'loud' }),
 };
 export const nativeAvailable = () => avail('ClingNative');
 export const clingNative = {
