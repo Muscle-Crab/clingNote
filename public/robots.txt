@@ -28,4 +28,4 @@ Disallow: /fdfd
 Disallow: /welcome
 Disallow: /test.html
 
-Sitemap: https://clingnote.com/sitemap.xml
+Sitemap: https://clingnote.netlify.app/sitemap.xml

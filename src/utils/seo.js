@@ -1,5 +1,5 @@
 // Per-route <title>/description/canonical/OG/Twitter updates for the SPA (static defaults live in public/index.html).
-export const SITE = 'https://clingnote.com';
+export const SITE = 'https://clingnote.netlify.app';
 export const APP_NAME = 'ClingNote: Daily Task Planner';
 const D = 'ClingNote is a daily task planner and productivity app: task management, routine tracker, habit and streak tracking, and focus with app lock.';
 export const PAGES = {

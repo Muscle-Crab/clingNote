@@ -7,7 +7,7 @@
     <!-- Loading Screen -->
     <div v-if="isLoading" class="splash-screen">
       <div class="splash-inner">
-        <div class="splash-logo">✦</div>
+        <div class="splash-logo"><img class="splash-app-icon" src="/app-icon-robot.png" alt="ClingNote" width="64" height="64" draggable="false"></div>
         <h1 class="splash-title">Welcome back</h1>
         <p class="splash-sub">Preparing your workspace...</p>
         <div class="splash-loader">
@@ -4321,6 +4321,7 @@ onBeforeUnmount(() => clearInterval(coachTick));
   z-index: 100;
 }
 .splash-inner { text-align: center; }
+.splash-app-icon { display: block; width: 64px; height: 64px; margin: 0 auto; border-radius: 14px; box-shadow: 0 4px 14px rgba(0,0,0,0.25); }
 .splash-logo {
   font-size: 3rem;
   color: var(--c-warn, #F59E0B);
