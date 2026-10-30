@@ -41,6 +41,14 @@ Return in JSON format like:
 }`;
     return { costsCredit: false, body: { model: 'gpt-4o-mini', temperature: 0.7, max_tokens: 2000, messages: [{ role: 'user', content: prompt }] } };
   }
+  if (task === 'estimate') {
+    // One task -> minutes it takes. The client validates (src/utils/aiEstimate.js parseAiMinutes) and keeps its local guess on any failure.
+    const title = clip(input.title, 200); const notes = clip(input.notes, 500);
+    if (!title) throw Object.assign(new Error('Empty title'), { status: 400 });
+    const prompt = `Estimate how many minutes this personal to-do task realistically takes for one person. Task: "${title}"${notes ? `. Notes: "${notes}"` : ''}.
+Return ONLY JSON: {"minutes": <integer between 5 and 600>}`;
+    return { costsCredit: false, body: { model: 'gpt-4o-mini', temperature: 0, max_tokens: 30, messages: [{ role: 'user', content: prompt }] } };
+  }
   if (task === 'voice-intent') {
     // Spoken utterance -> JSON items. The client validates the result (src/utils/voiceIntent.js normalizeItems) and falls back to its local parser.
     const text = clip(input.text, 4000); const nowLocal = clip(input.now, 25); const tz = clip(input.tz, 60);

@@ -20,6 +20,20 @@ const fail = (status, error, extra = {}) => Object.assign(new Error(error), { st
 const tsMs = (t) => (t == null ? null : typeof t === 'number' ? t : typeof t.toMillis === 'function' ? t.toMillis() : t._seconds != null ? t._seconds * 1000 + Math.floor((t._nanoseconds || 0) / 1e6) : t.ms != null ? t.ms : null);
 const defaultTs = (ms) => getAdmin().firestore.Timestamp.fromMillis(ms);
 const taskKeyOf = (t) => `${t?.createdAt || ''}|${t?.title || ''}`;
+const stableIdOf = (t) => (t && (t.id != null && t.id !== '' ? `id:${t.id}` : `k:${taskKeyOf(t)}`)) || '';
+// Points earned on the locked set. Each lock slot n belongs to the task stored at lock.indexes[n] when the day started; match it by its
+// stable id (lock.ids[n]) so reorders/inserts after Start Day can't shift points onto another task, falling back to lock.indexes[n]
+// for locks written before ids existed. Never tasks[n] (that was the bug: slot n is not array position n).
+const lockedEarned = (lock, tasks) => {
+  const list = tasks || []; const byId = new Map(); list.forEach((t) => { const k = stableIdOf(t); if (k && !byId.has(k)) byId.set(k, t); });
+  let earned = 0, done = 0;
+  (lock.points || []).forEach((p, n) => {
+    const id = lock.ids && lock.ids[n]; const idx = lock.indexes ? lock.indexes[n] : undefined;
+    const t = id && byId.has(id) ? byId.get(id) : (idx != null ? list[idx] : undefined);
+    if (t && t.completed) { earned += Number(p) || 0; done += 1; }
+  });
+  return { earned, done };
+};
 
 // Tasks that count toward the day: the visible ones (recurring copies with a later activeFrom are hidden today).
 const pruneStale = (tasks, tz, dayKey) => tasks.filter((t) => { if (!t || t.type !== 'one-time' || !t.completed || !t.completedAt) return true;
@@ -68,7 +82,7 @@ const settleIfOver = async (ctx, doc, now) => {
     const wrote = tsMs(d && d.updatedAt);
     if (d && wrote != null && wrote <= lock.endMs) {
       const tasks = d.tasks || [];
-      const full = (lock.points || []).reduce((s, p, i) => s + (tasks[i] && tasks[i].completed ? p : 0), 0);
+      const full = lockedEarned(lock, tasks).earned;
       earned = Math.max(earned, full);
     }
   } catch (e) { /* keep the server-time progress value */ }
@@ -171,7 +185,7 @@ const actions = {
     rows.forEach(({ i }, n) => { next[i] = { ...next[i], completed: false, completedAt: null, timerActive: false, points: est[n].points, complexity: est[n].complexity, estimateMin: est[n].minutes }; });
     const points = rows.map((_, n) => est[n].points);
     const lock = { hours, dayKey: ph.dayKey, dayName, tz: doc.plan.tz, wakeTime: doc.plan.wakeTime, startMs: ph.startMs, endMs: ph.endMs, taskCount: rows.length, plannedCount: doc.plan.taskCount,
-      indexes: rows.map(({ i }) => i), points, totalPoints: points.reduce((a, b) => a + b, 0), target, targetSource, targetLevel: tgt.level, estimateSource: source, earned: 0, done: 0, settled: false };
+      indexes: rows.map(({ i }) => i), ids: rows.map(({ t }) => stableIdOf(t)), points, totalPoints: points.reduce((a, b) => a + b, 0), target, targetSource, targetLevel: tgt.level, estimateSource: source, earned: 0, done: 0, settled: false };
     await ctx.db.runTransaction(async (tx) => {
       const cur = await tx.get(ctx.db.doc(`eightHour/${ctx.uid}`));
       const l = cur.exists ? cur.data().lock : null;
@@ -189,8 +203,7 @@ const actions = {
     if (!lock || ctx.now < lock.startMs || ctx.now >= lock.endMs) { doc = await settleIfOver(ctx, doc, ctx.now); return view(doc, ctx.now); }
     const dsnap = await ctx.db.doc(`weeklyRoutines/${ctx.uid}_${lock.dayName}`).get();
     const tasks = dsnap.exists ? (dsnap.data().tasks || []) : [];
-    let earned = 0, done = 0;
-    (lock.indexes || []).forEach((idx, n) => { if (tasks[idx] && tasks[idx].completed) { earned += lock.points[n]; done += 1; } });
+    const { earned, done } = lockedEarned(lock, tasks);
     const next = { ...lock, earned, done };
     await ctx.db.doc(`eightHour/${ctx.uid}`).set({ lock: { ...next, startAt: ctx.ts(lock.startMs), endAt: ctx.ts(lock.endMs), shutUntil: ctx.ts(core.shutUntilMs(lock)) } }, { merge: true });
     return view({ ...doc, lock: next }, ctx.now);
@@ -215,4 +228,4 @@ const rawHandler = async (event, _ctx, deps = {}) => {
 };
 const { withCors } = require('./lib/cors');
 exports.handler = withCors(rawHandler);
-exports._internal = { actions, settleIfOver, countable, pruneStale, aiRefine };
+exports._internal = { actions, settleIfOver, lockedEarned, stableIdOf, countable, pruneStale, aiRefine };

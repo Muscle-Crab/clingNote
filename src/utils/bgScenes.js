@@ -1,6 +1,7 @@
 // Lightweight particle scenes for the Background layer (pure sim + canvas draw; no DOM access except lazily-built sprites).
 // Calm by design: light-to-moderate rain, slow drifting snow, a cozy steady fire. Every particle has a depth z (0 = far, 1 = near):
 // far = smaller / slower / fainter, near = bigger / faster / brighter (parallax). Particles spawn above the top edge and loop seamlessly.
+import { safeRadialGradient } from './canvasSafe.js';
 const rnd = (r, a, b) => a + r() * (b - a);
 const TAU = Math.PI * 2;
 
@@ -106,13 +107,14 @@ export const drawScene = (ctx, s) => {
     for (const sp of s.splash) { const k = sp.t / 0.45; ctx.globalAlpha = sp.a * 0.7 * (1 - k); ctx.beginPath(); ctx.ellipse(sp.x, sp.y, 1.5 + k * 7, 0.5 + k * 1.6, 0, 0, TAU); ctx.stroke(); }
   } else {
     const flick = 0.9 + Math.sin(s.t * 2.1) * 0.04 + Math.sin(s.t * 5.3 + 1) * 0.025; // cozy, steady
-    const g = ctx.createRadialGradient(w / 2, h, 10, w / 2, h, h * 0.7);
-    g.addColorStop(0, `rgba(255,140,50,${0.42 * flick})`); g.addColorStop(0.5, `rgba(255,95,30,${0.16 * flick})`); g.addColorStop(1, 'rgba(255,60,0,0)');
-    ctx.globalAlpha = 1; ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+    const g = safeRadialGradient(ctx, w / 2, h, 10, w / 2, h, h * 0.7);
+    if (g) { g.addColorStop(0, `rgba(255,140,50,${0.42 * flick})`); g.addColorStop(0.5, `rgba(255,95,30,${0.16 * flick})`); g.addColorStop(1, 'rgba(255,60,0,0)');
+    ctx.globalAlpha = 1; ctx.fillStyle = g; ctx.fillRect(0, 0, w, h); }
     ctx.globalCompositeOperation = 'lighter';
     for (const p of s.p) {
       const k = Math.max(0, p.life / p.max); const rad = p.rad * (0.35 + k * 0.65);
-      const gr = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, rad);
+      const gr = safeRadialGradient(ctx, p.x, p.y, 0, p.x, p.y, rad);
+      if (!gr) continue;
       gr.addColorStop(0, `rgba(255,${Math.round(120 + 100 * k)},50,${0.45 * k})`); gr.addColorStop(1, 'rgba(255,60,0,0)');
       ctx.globalAlpha = 1; ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(p.x, p.y, rad, 0, TAU); ctx.fill();
     }

@@ -1,6 +1,7 @@
 // Home header picture "life": which weather fits which picture, plus the calm ambient layer drawn over the picture
 // (tree sway via a smooth mesh warp limited to the tree region, slow cloud wisps, soft star twinkle, gentle moon glow, rain mist / snow haze).
 // Pure helpers + a canvas draw; the Vue wrapper (HeroAmbience.vue) owns the canvas, rAF and visibility.
+import { safeRadialGradient } from './canvasSafe.js';
 import { windAt } from './bgScenes.js';
 
 const TAU = Math.PI * 2;
@@ -88,14 +89,15 @@ export const drawAmbience = (ctx, a, image) => {
   } }
   if (a.moon) { // gentle glow breathing (~9 s)
     const m = a.moon; const k = 0.75 + 0.25 * Math.sin((a.t * TAU) / 9);
-    const g = ctx.createRadialGradient(m.x, m.y, m.r * 0.6, m.x, m.y, m.r * 5);
-    g.addColorStop(0, `rgba(200,215,255,${0.16 * k})`); g.addColorStop(1, 'rgba(200,215,255,0)');
-    ctx.fillStyle = g; ctx.fillRect(m.x - m.r * 5, m.y - m.r * 5, m.r * 10, m.r * 10);
+    const g = safeRadialGradient(ctx, m.x, m.y, m.r * 0.6, m.x, m.y, m.r * 5);
+    if (g) { g.addColorStop(0, `rgba(200,215,255,${0.16 * k})`); g.addColorStop(1, 'rgba(200,215,255,0)');
+    ctx.fillStyle = g; ctx.fillRect(m.x - m.r * 5, m.y - m.r * 5, m.r * 10, m.r * 10); }
   }
   ctx.fillStyle = '#eef3ff';
   for (const st of a.stars) { const tw = 0.5 + 0.5 * Math.sin(a.t * st.f * TAU * 0.25 + st.ph); ctx.globalAlpha = 0.12 + 0.55 * tw * tw; ctx.fillRect(st.x - st.s / 2, st.y - st.s / 2, st.s, st.s); }
   for (const c of a.clouds) {
-    ctx.globalAlpha = 1; const g = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, c.rx);
+    ctx.globalAlpha = 1; const g = safeRadialGradient(ctx, c.x, c.y, 0, c.x, c.y, c.rx);
+    if (!g || !(c.ry > 0)) continue;
     g.addColorStop(0, `rgba(170,185,215,${c.a})`); g.addColorStop(1, 'rgba(170,185,215,0)');
     ctx.save(); ctx.translate(c.x, c.y); ctx.scale(1, c.ry / c.rx); ctx.translate(-c.x, -c.y); ctx.fillStyle = g; ctx.fillRect(c.x - c.rx, c.y - c.rx, c.rx * 2, c.rx * 2); ctx.restore();
   }
@@ -104,8 +106,9 @@ export const drawAmbience = (ctx, a, image) => {
     const f = a.sc.fire; const fx = rect.x + f.x * rect.w; const fy = rect.y + f.y * rect.h; const R = rect.w * 0.42;
     const k = 0.86 + 0.07 * Math.sin(a.t * 2.1) + 0.04 * Math.sin(a.t * 4.7 + 1.3) + 0.03 * Math.sin(a.t * 9.3);
     ctx.globalCompositeOperation = 'lighter';
-    const g = ctx.createRadialGradient(fx, fy, 0, fx, fy, R); g.addColorStop(0, `rgba(255,140,50,${0.30 * k})`); g.addColorStop(0.35, `rgba(255,110,40,${0.12 * k})`); g.addColorStop(1, 'rgba(255,90,30,0)');
-    ctx.fillStyle = g; ctx.fillRect(fx - R, fy - R, R * 2, R * 2);
+    const g = safeRadialGradient(ctx, fx, fy, 0, fx, fy, R);
+    if (g) { g.addColorStop(0, `rgba(255,140,50,${0.30 * k})`); g.addColorStop(0.35, `rgba(255,110,40,${0.12 * k})`); g.addColorStop(1, 'rgba(255,90,30,0)');
+    ctx.fillStyle = g; ctx.fillRect(fx - R, fy - R, R * 2, R * 2); }
     for (const e of a.embers) { const q = Math.max(0, e.life / e.max); ctx.globalAlpha = Math.min(1, q * 1.6) * 0.85; ctx.fillStyle = q > 0.6 ? '#ffd27a' : q > 0.3 ? '#ff9a3c' : '#c8461e'; ctx.beginPath(); ctx.arc(e.x, e.y, e.s * (0.6 + q * 0.5), 0, Math.PI * 2); ctx.fill(); }
     ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
   }

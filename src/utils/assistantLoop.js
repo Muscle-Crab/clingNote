@@ -7,12 +7,17 @@ export const MAX_STEPS = 5;
 const CLAIM = /\b(?:done|all set|updated|changed|moved|rescheduled|added|deleted|removed|set (?:it|that|the)|saved|scheduled|locked|unlocked|marked)\b/i;
 export const claimsChange = (text) => CLAIM.test(String(text || '')) && !/\?\s*$/.test(String(text || '').trim());
 export const NO_TOOL_NUDGE = '[app] No tool was called, so nothing changed. Call the needed tool now (for several changes, call each), or tell the user plainly it was not done.';
+// A write that failed this turn must not be confirmed: the reply names what didn't save instead of the model's "Done".
+const READ_TOOLS = new Set(['get_overview', 'get_stats', 'find_tasks', 'suggest_next', 'navigate']);
+const failText = (r) => (r && (r.error || (Array.isArray(r.failed) && r.failed.length ? r.failed.map((f) => `${f.title}: ${f.error}`).join('; ') : (r.ok === false ? 'not saved' : '')))) || '';
+export const failedWriteReply = (errs) => `That didn't save${errs.length ? ` (${errs[0].slice(0, 160)})` : ''}. Nothing was changed${errs.length > 1 ? ' for some items' : ''}; try again.`;
 export const NO_TOOL_FIX = "I haven't changed anything yet. Tell me again what to change and I'll do it.";
 // call(input) -> { parts, toolCalls, text, remaining }; executor: { snapshot() -> { refs, context, tasksByKey, today, limitRemaining }, run(name, args) -> result }
 // confirm({ name, args, summary }) -> Promise<boolean>; onEvent(e) for UI (tool ran / declined).
 export async function runAgentTurn({ text, contents = [], call, executor, confirm, onEvent = () => {} }) {
   const convo = [...contents, { role: 'user', parts: [{ text: String(text) }] }];
-  let remaining; let ranTool = false; let nudged = false;
+  let remaining; let ranTool = false; let nudged = false; let wrote = false; const writeErrs = [];
+  const finish = (txt, extra = {}) => { const t = String(txt || '').trim(); if (writeErrs.length && (!wrote || !t) && (!t || claimsChange(t))) return { reply: failedWriteReply(writeErrs), contents: convo, remaining, failed: true }; return { reply: t || (wrote ? 'Done.' : 'OK.'), contents: convo, remaining, ...extra }; };
   for (let step = 0; step <= MAX_STEPS; step++) {
     const snap = await executor.snapshot();
     const res = await call({ contents: convo, context: snap.context, step });
@@ -24,17 +29,18 @@ export async function runAgentTurn({ text, contents = [], call, executor, confir
       if (!nudged && step < MAX_STEPS) { nudged = true; convo.push({ role: 'user', parts: [{ text: NO_TOOL_NUDGE }] }); continue; }
       return { reply: NO_TOOL_FIX, contents: convo, remaining, corrected: true };
     }
-    if (!calls.length || step === MAX_STEPS) return { reply: String(res.text || '').trim() || (calls.length ? 'I stopped there. Anything else?' : 'Done.'), contents: convo, remaining };
+    if (!calls.length || step === MAX_STEPS) return finish(String(res.text || '').trim() || (calls.length ? 'I stopped there. Anything else?' : ''));
     const responses = [];
     ranTool = true;
     for (const c of calls) {
       const v = validateCall(c.name, c.args, { ...snap, userText: text });
       let response;
-      if (!v.ok) response = { error: v.error, ...(v.limit ? { limitReached: true } : {}) };
+      if (!v.ok) { response = { error: v.error, ...(v.limit ? { limitReached: true } : {}) }; if (!READ_TOOLS.has(c.name)) writeErrs.push(v.limit ? 'daily limit reached' : 'not saved'); }
       else if (needsConfirm(c.name, v.args) && !(await confirm({ name: c.name, args: v.args, summary: describeCall(c.name, v.args) }))) { response = c.name === 'create_tasks' ? { declined: true, note: 'Not saved. If the user said what to change, apply it and call create_tasks again with the full corrected list; otherwise drop it.' } : { declined: true, note: 'The user said no. Do not retry.' }; onEvent({ type: 'declined', name: c.name }); }
       else {
         try { response = (await executor.run(c.name, v.args)) || { ok: true }; }
         catch (e) { response = { error: (e && e.message) || 'Failed' }; }
+        if (!READ_TOOLS.has(c.name)) { const f = failText(response); if (f) writeErrs.push(f); if (response && response.ok !== false && !response.error && (!response.failed || response.added)) wrote = true; }
         onEvent({ type: 'ran', name: c.name, response });
       }
       responses.push({ functionResponse: { name: c.name, response: JSON.parse(JSON.stringify(response)) } });
@@ -43,7 +49,7 @@ export async function runAgentTurn({ text, contents = [], call, executor, confir
     const fin = responses.map((r) => r.functionResponse.response).find((r) => r && r.done === true); // tool handed the turn to UI (e.g. lock guide)
     if (fin) return { reply: String(fin.summary || 'Done.'), contents: convo, remaining };
   }
-  return { reply: 'Done.', contents: convo, remaining };
+  return finish('');
 }
 // History stored on-device only (last N turns; a turn's tool exchange is trimmed together so a functionCall never loses its response).
 export const trimContents = (contents, max = 30) => {

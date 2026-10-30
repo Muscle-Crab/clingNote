@@ -196,3 +196,12 @@ await t('firestore.rules + storage.rules contain the community sections', () => 
 });
 console.log(`\n${n} community tests passed`);
 })().catch((e) => { console.error(e); process.exit(1); });
+
+// fitWithin must exist (useCommunity.js imports it) and behave.
+{
+  const c = require('fs').readFileSync(require('path').join(__dirname, '../src/composables/useCommunity.js'), 'utf8');
+  const names = (c.match(/import \{([^}]*)\} from '@\/utils\/community'/) || [])[1].split(',').map((s) => s.trim()).filter(Boolean);
+  const src = require('fs').readFileSync(require('path').join(__dirname, '../src/utils/community.js'), 'utf8');
+  for (const n of names) if (!new RegExp(`export const ${n}\\b`).test(src)) throw new Error(`useCommunity imports missing ${n}`);
+  console.log('community: all useCommunity imports exist (' + names.join(', ') + ')');
+}

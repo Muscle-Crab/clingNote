@@ -1,6 +1,7 @@
 // Campfire flames for the "Campfire" picture. WebGL (one small quad around the fire, cheap fragment shader) with a Canvas2D fallback.
 // Flames: fbm-noise driven turbulent upward flow, gentle flicker, color ramp white-yellow core -> orange -> red -> faint smoke.
 // Heat shimmer: the picture just above the flames is resampled with a tiny noise offset. Calm on purpose (slow flow, soft flicker).
+import { safeRadialGradient } from './canvasSafe.js';
 const VS = `attribute vec2 p; uniform vec4 vbox; uniform vec2 vres; varying vec2 uv;
 void main(){ uv = p; vec2 px = vbox.xy + p * vbox.zw; vec2 c = px / vres * 2.0 - 1.0; gl_Position = vec4(c.x, -c.y, 0.0, 1.0); }`;
 const FS = `#ifdef GL_FRAGMENT_PRECISION_HIGH
@@ -86,7 +87,8 @@ export const drawFire2D = (ctx, t, a) => {
   for (let i = 0; i < 7; i++) {
     const ph = i * 1.7; const hh = fw * (1.1 + 0.35 * Math.sin(t * (1.6 + i * 0.21) + ph)) * (i % 3 === 0 ? 1.25 : 0.9);
     const x = cx + (i - 3) * fw * 0.09 + Math.sin(t * 1.3 + ph) * fw * 0.05; const r = fw * 0.32;
-    const g = ctx.createRadialGradient(x, by - hh * 0.35, 0, x, by - hh * 0.35, hh * 0.6);
+    const g = safeRadialGradient(ctx, x, by - hh * 0.35, 0, x, by - hh * 0.35, hh * 0.6);
+    if (!g || !(r > 0)) continue;
     g.addColorStop(0, 'rgba(255,240,200,.55)'); g.addColorStop(0.3, 'rgba(255,170,60,.35)'); g.addColorStop(0.7, 'rgba(230,70,20,.12)'); g.addColorStop(1, 'rgba(120,20,0,0)');
     ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(x, by - hh * 0.35, r, hh * 0.6, 0, 0, Math.PI * 2); ctx.fill();
   }

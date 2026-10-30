@@ -347,7 +347,8 @@ import { homeDay } from '@/utils/homeDay';
 import DayStartPrompt from '@/components/eighthour/DayStartPrompt.vue';
 import { useEightHour, syncAfterAuth, setDayLengthHours, loadDayLengthHours, promptSeenFor, markPromptSeen } from '@/composables/useEightHour';
 import { countableIndexes, taskRange, hoursLabel } from '@/utils/eightHour';
-import { estimateFor, chipValues } from '@/utils/taskEstimate';
+import { estimateFor, chipValues, withAiEstimate } from '@/utils/taskEstimate';
+import { requestAiEstimate } from '@/utils/aiEstimate';
 import { patchTouchesLocked } from '@/utils/eightHourLock';
 import { isDayLocked, completionKeepsInPlace, isLockError, assertTasksChangeAllowed, lockedMessage, isShutdown, shutMessage } from '@/utils/eightHourLock';
 import ReminderModal from '@/components/home/ReminderModal.vue';
@@ -674,6 +675,18 @@ const startDay = async () => {
   if (!userId.value) {
     alert("Please log in first.");
     return;
+  }
+  // Lock-in on: Start Day starts the server 8-hour day (wake time = now when there is no plan yet / it has not arrived),
+  // via the same hours prompt + confirm as the card. The legacy session is written by confirmDayStart.
+  if (lockInToday.value && !eh.lock.value && isToday(selectedDayIndex.value)) {
+    try {
+      if (eh.phase.value === 'none' || eh.phase.value === 'before') {
+        const d = new Date(); const wakeTime = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+        const n = countableIndexes(selectedDayRoutine.value || [], eh.phaseInfo.value.dayKey || '').length;
+        await eh.savePlan({ wakeTime, taskCount: Math.max(1, n) });
+      }
+      if (eh.phase.value === 'ready') { openDayPrompt(); if (dayPromptOpen.value) return; }
+    } catch (e) { console.warn('start 8h day:', e && e.message); ehStartError.value = (e && e.message) || 'Could not start the 8-hour day'; }
   }
 
   const today = getTodayId();
@@ -2119,12 +2132,28 @@ const addNewTask = async () => {
       return false;
     }
     try { if (hadReminder) await scheduleNotification(task, task.reminder); } catch (e) { console.error(e); }
+    refineWithAi(task, selectedDays.map((d) => d.day), key); // background; keeps the local estimate when the AI is unavailable
     fetchUserName(userId.value).then((n) => n && sendNotificationToPlayer(n, 'created')).catch(() => {});
     return true;
   })());
   return true;
 };
 let lastAddPersist = Promise.resolve(true);
+// Server AI estimate for a task saved with an automatic (local) estimate. Pro + AI consent already given only (never prompts, never opens
+// the paywall); any failure (offline, no server key, timeout, bad answer) silently keeps the local estimate. Locked days are left alone.
+const refineWithAi = async (task, dayNames, key) => {
+  try {
+    if (!task || task.estimateSource !== 'local' || task.pointsSource === 'ai') return;
+    const u = auth.currentUser;
+    if (!u || !(rcProActive(u.uid) || isProUser(await loadUserDoc())) || !(await hasAiConsent())) return; // web Pro (users doc) or iOS RevenueCat
+    const minutes = await requestAiEstimate(task, (t, input) => askAi(t, input));
+    const patched = minutes ? withAiEstimate(task, minutes) : null;
+    if (!patched) return;
+    const fields = { minutes: patched.minutes, complexity: patched.complexity, points: patched.points, estimateSource: 'ai' };
+    await Promise.all(dayNames.filter((d) => !isDayLocked(d)).map((d) => mutateDay(d, (l) => l.map((t) => (taskKey(t) === key && t.estimateSource === 'local' ? { ...t, ...fields } : t)))));
+    if (selectedDayRoutine.value) selectedDayRoutine.value = selectedDayRoutine.value.map((t) => (taskKey(t) === key && t.estimateSource === 'local' && !isDayLocked(days[selectedDayIndex.value].day) ? { ...t, ...fields } : t));
+  } catch (e) { console.warn('AI estimate skipped:', e && e.message); }
+};
 
 // Repeat control on task cards: keep one copy of the task (same createdAt+title) on every chosen weekday.
 // Copies keep the original createdAt, so making a task recurring never counts as a new task toward the daily limit.
@@ -3354,9 +3383,11 @@ const patchTask = async (index, task, patch) => {
     // re-estimate when the inputs change (only possible outside a running lock: estimateMin/title are locked fields there)
     if (['estimateMin', 'title', 'notes', 'priority'].some((k) => patch[k] !== undefined) && !isDayLocked(dayName)) { const e = estimateFor(task); Object.assign(task, e); saved = { ...saved, ...e }; }
     await patchStoredTask(userId.value, dayName, before, index, saved);
+    return true;
   } catch (e) {
     if (!lockMessage(e)) console.error('Error saving task field:', e);
     if (isLockError(e)) fetchSelectedDayRoutine();
+    return false;
   }
 };
 
@@ -3368,14 +3399,14 @@ const editTask = async (index, task, rawPatch) => {
   if (!Object.keys(patch).length) return;
   const dayName = days[selectedDayIndex.value].day;
   const lockedHit = patchTouchesLocked(patch);
-  if (isDayLocked(dayName) && lockedHit.length) { alert(`${lockedMessage()} (${lockedHit.join(', ')})`); return; }
+  if (isDayLocked(dayName) && lockedHit.length) { alert(`${lockedMessage()} (${lockedHit.join(', ')})`); return false; }
   const oldKey = taskKey(task);
   if (patch.estimateMin !== undefined) {
     patch.estimateMin = cleanEstimate(patch.estimateMin);
     // editable during lock-in and after play: a started timer's end time moves with the new duration
     if (timerStarted(task)) patch = { ...patch, ...retimePatch(task, patch.estimateMin) };
   }
-  await patchTask(index, task, patch);
+  if ((await patchTask(index, task, patch)) === false) return false;
   if (patch.timerEndTime && task.timerActive && !task.timerPausedAt) { try { scheduleTimerDone(task); } catch (e) { /* notification reschedule best-effort */ } }
   if (seriesKey.value === oldKey) {
     const sp = seriesPatch(patch);
@@ -3523,7 +3554,8 @@ const ensureLegacyDayStarted = async () => {
 // (end = confirm time + hours, frozen for the day). Nothing starts by itself any more.
 const dayPromptOpen = ref(false);
 const ehBusy = ref(false);
-const lockInToday = computed(() => lockIn.value.enabled && lockIn.value.skipDate !== (eh.phaseInfo.value.dayKey || ''));
+// no plan yet => no dayKey: an empty skipDate must not read as "skipped today" (that blocked Start Day for planless web users)
+const lockInToday = computed(() => lockIn.value.enabled && !(lockIn.value.skipDate && lockIn.value.skipDate === (eh.phaseInfo.value.dayKey || '')));
 const openDayPrompt = () => { if (lockInToday.value && eh.phase.value === 'ready' && !eh.lock.value && isToday(selectedDayIndex.value)) { ehStartError.value = ''; dayPromptOpen.value = true; } };
 const maybeShowDayPrompt = () => {
   if (!userId.value || !lockInToday.value || eh.phase.value !== 'ready' || eh.lock.value || dayPromptOpen.value || !isToday(selectedDayIndex.value)) return;
@@ -3798,7 +3830,7 @@ const assistantExecutor = createAssistantExecutor({
   weekStats: async () => ({ ...weekStats(await agentWeek(true), { streak: streak.value, bestStreak: bestStreak.value }), pointsToday: pointsAccumulated.value, pointsNeededToday: dayRequiredPts.value || 0, streakDoneToday: streakProgress.value, streakLeft: Math.max(0, DAILY_STREAK_MIN - streakProgress.value), habits: habitSummary(loadHabits(userId.value), localDateStr()) }),
   findTasks: async ({ query, day }) => searchTasks(await agentWeek(false), scheduledList.value || [], { query, day }),
   suggestNext: async () => suggestNext(selectedDayRoutine.value, { minutesLeft: eh.running.value ? Math.round(eh.remainingMs.value / 60000) : null }),
-  snooze: async (task, minutes) => { const t = snoozeTo(new Date(), minutes); if (t.nextDay) return { error: 'That runs past midnight: reschedule it to tomorrow instead.' }; await editTask(agentIdx(task), task, { startTime: t.time }); return t; },
+  snooze: async (task, minutes) => { const t = snoozeTo(new Date(), minutes); if (t.nextDay) return { error: 'That runs past midnight: reschedule it to tomorrow instead.' }; if ((await editTask(agentIdx(task), task, { startTime: t.time })) === false) return { error: 'Could not move it (day locked or offline).' }; return t; },
   addSubtasks: (task, items) => editTask(agentIdx(task), task, { subtasks: items.reduce((l, x) => addSubtask(l, x), subtasksOf(task)) }),
   rollUnfinished: async () => { if (!isViewingToday.value) return { moved: 0 }; const to = tomorrowStr(); let moved = 0;
     for (const t of rollCandidates(selectedDayRoutine.value)) { const i = agentIdx(t); if (i < 0) continue; await scheduleExistingTask(i, t, { date: to, time: t.startTime || '' }); moved++; }
