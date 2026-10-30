@@ -103,8 +103,8 @@ public class ClingLockPlugin: CAPPlugin, CAPBridgedPlugin {
     @objc func stopLock(_ call: CAPPluginCall) {
         guard #available(iOS 16.0, *) else { call.resolve(["locked": false]); return }
         Self.clearShield()
+        LockShared.defaults?.set(["locked": false, "until": 0], forKey: LockShared.stateKey) // before stop: extension sees "stopped by app"
         DeviceActivityCenter().stopMonitoring([.clingLock])
-        LockShared.defaults?.set(["locked": false, "until": 0], forKey: LockShared.stateKey)
         call.resolve(["locked": false])
     }
 
@@ -163,6 +163,8 @@ public class ClingLockPlugin: CAPPlugin, CAPBridgedPlugin {
         let hits = AppLocks.apps().filter { want.contains($0.label.lowercased()) }
         AppLocks.cleanupExpired()
         var l = AppLocks.locked(); var warn: [String] = []
+        for a in hits { l[a.id] = untilMs }
+        AppLocks.saveLocked(l) // before stop/start: a restart-triggered intervalDidEnd must see the new (future) end
         for a in hits {
             l[a.id] = untilMs
             let name = DeviceActivityName(AppLocks.activityPrefix + a.id)
@@ -185,8 +187,10 @@ public class ClingLockPlugin: CAPPlugin, CAPBridgedPlugin {
         let want = Set(raw.map { $0.lowercased() })
         let hits = AppLocks.apps().filter { all || want.contains($0.label.lowercased()) }
         var l = AppLocks.locked()
-        for a in hits { l[a.id] = nil; DeviceActivityCenter().stopMonitoring([DeviceActivityName(AppLocks.activityPrefix + a.id)]) }
-        AppLocks.saveLocked(l); AppLocks.apply()
+        for a in hits { l[a.id] = nil }
+        AppLocks.saveLocked(l) // before stop: the extension's intervalDidEnd must see no entry (no alert)
+        for a in hits { DeviceActivityCenter().stopMonitoring([DeviceActivityName(AppLocks.activityPrefix + a.id)]) }
+        AppLocks.apply()
         call.resolve(["unlocked": hits.map { $0.label }, "apps": Self.appsPayload()])
     }
 

@@ -19,11 +19,24 @@ class ClingLockMonitor: DeviceActivityMonitor {
         super.intervalDidEnd(for: activity)
         if activity.rawValue.hasPrefix(AppLocks.activityPrefix) {  // per-app timed lock ended
             let id = String(activity.rawValue.dropFirst(AppLocks.activityPrefix.count))
+            // Restart artifact (app re-scheduled/unlocked this activity): leave the saved lock and the new schedule alone.
+            let untilMs = AppLocks.locked()[id] ?? 0
+            if !LockEndAlertGate.isRealEnd(untilMs: untilMs, nowMs: Date().timeIntervalSince1970 * 1000) { return }
             var l = AppLocks.locked(); l[id] = nil; AppLocks.saveLocked(l); AppLocks.apply()
             DeviceActivityCenter().stopMonitoring([activity]) // free the slot (schedules count toward the system limit)
             notifyLockEnded(); return
         }
         guard activity == .clingLock else { return }
+        // iOS also calls intervalDidEnd when the app stops/restarts monitoring (startLock does stop+start on every open and
+        // minute tick). Build 36 treated that as the lock ending: cleared the shield, stopped the NEW schedule and alerted,
+        // so the app restarted it a minute later -> "Your lock time is up." over and over. Only a real end counts.
+        let st = LockShared.defaults?.dictionary(forKey: LockShared.stateKey) ?? [:]
+        let untilMs = (st["until"] as? Double) ?? Double((st["until"] as? Int) ?? 0)
+        if !LockEndAlertGate.isRealEnd(untilMs: untilMs, nowMs: Date().timeIntervalSince1970 * 1000) {
+            if untilMs > 0 { return } // lock still running (restart): keep shield + new schedule
+            store.shield.applications = nil; store.shield.applicationCategories = nil; store.shield.webDomains = nil
+            return // stopped by the app (stopLock): no alert
+        }
         store.shield.applications = nil; store.shield.applicationCategories = nil; store.shield.webDomains = nil
         AppLocks.cleanupExpired() // clingApps store: drop expired per-app locks and their schedules, keep still-active ones
         DeviceActivityCenter().stopMonitoring([.clingLock])
@@ -64,5 +77,9 @@ enum LockEndAlertGate {
     static let identifier = "cling.lock.ended"
     static let lastKey = "lock.endAlert.lastAt"
     static let window: Double = 90 // seconds: ends of several activities at the same minute collapse into one alert
+    /// Real end = a saved end time that has (nearly) arrived. Schedules are minute-granular (end truncated to the minute,
+    /// so it can fire up to 60 s before `until`), hence the slack. 0 / missing = stopped by the app, far future = restart.
+    static let endSlackMs: Double = 90_000
+    static func isRealEnd(untilMs: Double, nowMs: Double) -> Bool { untilMs > 0 && untilMs <= nowMs + endSlackMs }
     static func shouldPost(last: Double, now: Double) -> Bool { last <= 0 || now - last >= window || now < last }
 }
