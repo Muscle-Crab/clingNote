@@ -336,7 +336,7 @@ const load = async () => {
     if (my === seq) loading.value = false;
   }
 };
-onMounted(load);
+onMounted(() => load().then(() => { if (route.currentRoute.value.query.delete === '1') setTimeout(() => { const el = document.getElementById('delete-account'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 50); })); // ☰ menu "Delete Account" link lands on the delete section
 // iOS: make sure RevenueCat is logged in and customerInfo is read for this page (the auth listener may not have finished yet).
 onMounted(() => { if (isNativeIOS() && auth.currentUser) import("@/utils/iap").then((m) => m.ensureIapUser(auth.currentUser)).catch(() => {}); });
 watch(() => route.currentRoute.value.params.userId, (n, o) => { if (n && n !== o) load(); });

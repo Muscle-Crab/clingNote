@@ -34,7 +34,7 @@
 
     <!-- Sidebar -->
     <aside :class="{ 'hidden': !sidebarOpen, 'block': sidebarOpen }"
-           class="app-sidebar fixed inset-y-0 left-0 z-50 w-64">
+           class="app-sidebar fixed inset-y-0 left-0 z-50 w-64" aria-label="Main menu">
       <div class="flex items-center justify-between p-4">
         <router-link to="/" class="flex items-center space-x-3 rtl:space-x-reverse">
           <span class="flex items-center space-x-3 rtl:space-x-reverse">
@@ -45,8 +45,8 @@
             <span class="self-center text-xl font-semibold whitespace-nowrap">ClingNote</span>
           </span>
         </router-link>
-        <button @click="closeSidebar" type="button"
-                class="text-gray-500 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 focus:outline-none">
+        <button @click="closeSidebar" type="button" data-test="nav-close"
+                class="app-sidebar-close">
           <span class="sr-only">Close sidebar</span>
           <svg class="w-6 h-6" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20">
             <path fill-rule="evenodd"
@@ -77,6 +77,8 @@
           <li v-if="userId" class="app-sidebar-item"><i class="fas fa-user-friends"></i><router-link to="/pals" class="app-sidebar-link" data-test="nav-pals">Manager &amp; Pals<span v-if="palBadge.count.value" class="pl-nav-badge">{{ palBadge.count.value }}</span></router-link></li>
           <li v-if="userId" class="app-sidebar-item"><i class="fas fa-users"></i><router-link to="/community" class="app-sidebar-link" data-test="nav-community">Community</router-link></li>
           <li class="app-sidebar-item"><i class="fas fa-gavel"></i><router-link to="/discipline" class="app-sidebar-link">Discipline</router-link></li>
+          <li v-if="userId" class="app-sidebar-item"><i class="fas fa-umbrella-beach"></i><router-link :to="{ path: '/home', query: { menu: 'off' } }" class="app-sidebar-link" data-test="nav-day-off">Holiday / day off</router-link></li>
+          <li v-if="userId" class="app-sidebar-item"><i class="fas fa-lightbulb"></i><router-link :to="{ path: '/home', query: { menu: 'tips' } }" class="app-sidebar-link" data-test="nav-show-tips">Show me tips again</router-link></li>
 
 
 
@@ -123,7 +125,7 @@
           <!-- Logout -->
           <li class="app-sidebar-item">
             <i class="fas fa-sign-out-alt"></i>
-            <button @click="logout"
+            <button type="button" @click="logout"
                     class="app-sidebar-link">
               Logout
             </button>
@@ -255,10 +257,12 @@ onMounted(() => {
 .app-topbar-inner > a { margin-left: auto; }
 .app-avatar-link { min-width: 44px; min-height: 44px; justify-content: center; }
 .app-avatar { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; font-size: 14px; font-weight: 700; letter-spacing: .02em; color: #fff; background: rgba(12,22,48,.7); border: 1.5px solid #3D6FD8; }
-.app-sidebar { background: #0A1226; border-right: 1px solid #16223F; color: #E6E9EF; }
+.app-sidebar { background: #0A1226; border-right: 1px solid #16223F; color: #E6E9EF; padding-top: env(safe-area-inset-top); padding-bottom: calc(var(--tabbar-h, 64px) + env(safe-area-inset-bottom)); overflow-y: auto; overscroll-behavior: contain; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
+.app-sidebar-close { display: inline-grid; place-items: center; width: 44px; height: 44px; margin-right: -10px; border: 0; border-radius: 10px; background: none; color: #8791A5; cursor: pointer; }
+.app-sidebar-close:hover { color: #E6E9EF; background: #121C33; }
 .app-sidebar-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .app-sidebar-item { position: relative; display: flex; align-items: center; gap: 12px; padding: 0 12px; height: 40px; border-radius: 10px; color: #8791A5; }
-.app-sidebar-item:hover { background: #1A1E28; color: #E6E9EF; }
+.app-sidebar-item:hover { background: #121C33; color: #E6E9EF; }
 .app-sidebar-item i { width: 18px; text-align: center; }
 .app-sidebar-link { color: #B4BCCB; font-weight: 500; font-size: 14px; background: none; border: 0; padding: 0; cursor: pointer; text-decoration: none; }
 .app-sidebar-link::after { content: ''; position: absolute; inset: 0; } /* whole row is clickable */
