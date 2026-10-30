@@ -15,6 +15,8 @@ struct FocusActivityAttributes: ActivityAttributes {
         var ptsTarget: Int? = nil
         /// End of the started 8-hour day; nil = no day running.
         var dayEndsAt: Date? = nil
+        /// Auto-started focus session (src/utils/focusAutoStart.js): no Pause button, only Done.
+        var locked: Bool? = nil
     }
     var title: String
     /// widgetTaskId of the focused task (src/utils/widgetSnapshot.js), carried by the Pause/Resume/Done intents.

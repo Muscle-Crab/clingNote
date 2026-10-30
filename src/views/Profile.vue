@@ -87,6 +87,8 @@
               <input type="checkbox" role="switch" class="pf-switch" data-test="lock-in-toggle" :checked="lockIn.enabled" :disabled="!lockIn.loaded" @change="onLockInToggle($event.target.checked)" /></label>
             <label v-if="lockIn.enabled" class="pf-row pf-row--divided" data-test="lock-end-alert-row"><span class="pf-ico" aria-hidden="true">📣</span><span class="pf-row-title">Lock-end alert<small class="pf-dl-sub">How hard ClingNote alerts you when a lock ends</small></span>
               <select class="pf-time" data-test="lock-end-alert" :value="lockEndAlert" @change="onLockEndAlert($event.target.value)"><option v-for="o in LOCK_END_OPTS" :key="o.v" :value="o.v">{{ o.l }}</option></select></label>
+            <label class="pf-row pf-row--divided" data-test="auto-focus-row"><span class="pf-ico" aria-hidden="true">🎯</span><span class="pf-row-title">Auto-start focus<small class="pf-dl-sub">Starts a task's timer at its start time (and when iPhone Focus turns on) and locks you in until it ends</small></span>
+              <input type="checkbox" role="switch" class="pf-switch" data-test="auto-focus-toggle" :checked="autoFocus" @change="onAutoFocus($event.target.checked)" /></label>
           </section>
           <section v-if="isOwn" class="pf-card pf-card--flush" data-test="wake-alarm-setting">
             <label class="pf-row"><span class="pf-ico" aria-hidden="true">⏰</span><span class="pf-row-title">Wake-up alarm<small class="pf-dl-sub" data-test="wake-alarm-sub">{{ wakeOk ? 'ClingNote asks you each day if you want an alarm, then rings at your time, even on silent (iOS 26+). Off by default.' : 'iOS app only: install ClingNote on your iPhone to use it.' }}</small></span>
@@ -154,6 +156,7 @@
 
 <script setup>
 import { lockIn, loadLockIn, setLockInEnabled } from '@/utils/lockIn';
+import { readAutoFocus, writeAutoFocus } from '@/utils/focusAutoStart';
 loadLockIn(true).catch(() => {});
 import { wake, wakeSupported, loadWake, setWakeEnabled, setWakeTime, setWakePromptTime, setWakeDays } from '@/composables/useWakeAlarm';
 import { toMin } from '@/utils/wakeAlarm';
@@ -163,6 +166,8 @@ if (wakeOk && auth.currentUser) loadWake(auth.currentUser.uid, true).catch(() =>
 const onWakeToggle = async (on) => { wakeBusy.value = true; try { await setWakeEnabled(on); } catch (e) { console.warn('wake alarm toggle:', e); } wakeBusy.value = false; };
 const toggleWakeDay = (n) => { const d = wake.value.days; const next = d.includes(n) ? d.filter((x) => x !== n) : [...d, n]; if (next.length) setWakeDays(next).catch(() => {}); };
 const wakePromptHint = computed(() => (toMin(wake.value.promptTime) < toMin(wake.value.time) ? "Morning: asks about that morning's alarm" : 'Evening: asks about the next morning'));
+const autoFocus = ref(readAutoFocus(localStorage)); // per device (src/utils/focusAutoStart.js)
+const onAutoFocus = (on) => { writeAutoFocus(localStorage, on); autoFocus.value = !!on; };
 const onLockInToggle = async (on) => { const u = auth.currentUser; if (!u) return; try { await setLockInEnabled(u.uid, on); } catch (e) { console.warn('lock-in toggle:', e); loadLockIn(true).catch(() => {}); } };
 // Lock-end alert level (App Group defaults via ClingLock.setLockEndAlert; localStorage mirror for web/first paint).
 const LOCK_END_OPTS = [{ v: 'off', l: 'Off' }, { v: 'subtle', l: 'Subtle' }, { v: 'standard', l: 'Standard' }, { v: 'loud', l: 'Loud' }, { v: 'maximum', l: 'Maximum' }];

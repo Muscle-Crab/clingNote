@@ -26,6 +26,8 @@ public class ClingNativePlugin: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDe
         CAPPluginMethod(name: "updateFocusActivity", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getFocusActions", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "ackFocusActions", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "getFocusFilter", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "ackFocusFilter", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "takeIntents", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "takeTimerIntents", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "calSyncEnsure", returnType: CAPPluginReturnPromise),
@@ -169,7 +171,8 @@ public class ClingNativePlugin: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDe
             endsAt: ends, paused: paused,
             remainingSec: paused ? max(0, call.getInt("remainingSec") ?? 0) : nil,
             ptsDone: call.getInt("ptsDone"), ptsTarget: call.getInt("ptsTarget"),
-            dayEndsAt: dayEndMs > 0 ? Date(timeIntervalSince1970: dayEndMs / 1000) : nil)
+            dayEndsAt: dayEndMs > 0 ? Date(timeIntervalSince1970: dayEndMs / 1000) : nil,
+            locked: (call.getBool("locked") ?? false) ? true : nil)
     }
     #endif
     @objc func startFocusActivity(_ call: CAPPluginCall) {
@@ -216,6 +219,15 @@ public class ClingNativePlugin: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDe
     @objc func ackFocusActions(_ call: CAPPluginCall) {
         let ids = Set((call.getArray("ids") as? [String]) ?? [])
         FocusActionStore.ack(ids: ids)
+        call.resolve()
+    }
+    /// iOS Focus filter on/off events queued by ClingFocusFilter ([{id, kind, minutes?, ts}]); removed only via ackFocusFilter.
+    @objc func getFocusFilter(_ call: CAPPluginCall) {
+        guard let d = UserDefaults(suiteName: FocusFilterStore.appGroup) else { call.resolve(["items": []]); return }
+        call.resolve(["items": FocusFilterStore.read(d)])
+    }
+    @objc func ackFocusFilter(_ call: CAPPluginCall) {
+        FocusFilterStore.ack(ids: Set((call.getArray("ids") as? [String]) ?? []))
         call.resolve()
     }
     @objc func endFocusActivity(_ call: CAPPluginCall) {

@@ -167,6 +167,49 @@ struct StartTimerIntent: AppIntent {
     }
 }
 
+// MARK: - iOS Focus filter: "Focus mode auto-start"
+// Settings > Focus > (Work or any Focus) > Add Filter > ClingNote > turn on "Auto-start focus". iOS calls perform() when that Focus
+// turns on (manually, by its schedule, location or app trigger) with the configured values, and again with the DEFAULT values when it
+// turns off, so autoStart == false means "off". The intent cannot run app code for long: it only appends {id, kind, minutes?, ts} to
+// App Group "focus.filter"; the app drains it on launch/foreground (HomeView drainFocusFilter -> src/utils/focusAutoStart.js) and starts
+// the day + the next task's locked focus timer through its normal paths. NEEDS CI COMPILE + ON-DEVICE TESTING.
+enum FocusFilterStore {
+    static let appGroup = "group.app.clingnote.ios"
+    static let key = "focus.filter"
+    static func read(_ d: UserDefaults) -> [[String: Any]] { (d.array(forKey: key) as? [[String: Any]]) ?? [] }
+    static func append(on: Bool, minutes: Int?) {
+        guard let d = UserDefaults(suiteName: appGroup) else { return }
+        var q = read(d)
+        var item: [String: Any] = ["id": UUID().uuidString, "kind": on ? "on" : "off", "ts": Date().timeIntervalSince1970 * 1000]
+        if let m = minutes { item["minutes"] = m }
+        q.append(item)
+        d.set(Array(q.suffix(10)), forKey: key)
+    }
+    static func ack(ids: Set<String>) {
+        guard let d = UserDefaults(suiteName: appGroup) else { return }
+        d.set(read(d).filter { !ids.contains(($0["id"] as? String) ?? "") }, forKey: key)
+    }
+}
+
+@available(iOS 16.0, *)
+struct ClingFocusFilter: SetFocusFilterIntent {
+    static var title: LocalizedStringResource = "Auto-start focus"
+    static var description: IntentDescription? = IntentDescription("When this Focus turns on, ClingNote starts your day and your next task's focus timer, locked until it ends.")
+    @Parameter(title: "Auto-start focus", default: false) var autoStart: Bool
+    @Parameter(title: "Minutes", inclusiveRange: (5, 240)) var minutes: Int?
+
+    var displayRepresentation: DisplayRepresentation {
+        let text = minutes.map { "\($0) min, locked" } ?? "Task estimate, locked"
+        let sub: LocalizedStringResource = "\(text)"
+        return DisplayRepresentation(title: autoStart ? "Auto-start focus" : "Off", subtitle: autoStart ? sub : nil)
+    }
+
+    func perform() async throws -> some IntentResult {
+        FocusFilterStore.append(on: autoStart, minutes: autoStart ? minutes : nil)
+        return .result()
+    }
+}
+
 @available(iOS 16.0, *)
 struct ClingShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
