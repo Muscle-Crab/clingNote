@@ -1,0 +1,20 @@
+// Run: node scripts/test-plan-phase1.mjs — sergeant long-press menu + interactive coach (plan phase 1).
+import assert from 'assert'; import fs from 'fs'; import path from 'path'; import os from 'os'; import { fileURLToPath } from 'url';
+const dir = path.dirname(fileURLToPath(import.meta.url)); const src = (f) => fs.readFileSync(path.join(dir, '..', f), 'utf8');
+const load = async (f) => { const t = path.join(os.tmpdir(), 'pp1-' + path.basename(f).replace('.js', '.mjs')); fs.writeFileSync(t, src(f)); return import(t + '?' + Date.now()); };
+const S = await load('src/utils/sergeantMenu.js'); const C = await load('src/utils/coachLessons.js');
+let n = 0; const t = (name, fn) => { fn(); n++; console.log('ok -', name); };
+t('four sergeant actions', () => assert.deepEqual(S.SERGEANT_ACTIONS.map((a) => a.id), ['next', 'replan', 'off', 'critical']));
+t('replanMoves only lists changed tasks', () => { const m = S.replanMoves([{ task: { title: 'a', startTime: '09:00' }, start: '09:00' }, { task: { title: 'b', startTime: '10:00' }, start: '11:00' }]); assert.equal(m.length, 1); assert.equal(m[0].from, '10:00'); });
+t('replanLine wording', () => { assert.equal(S.replanLine([{}, {}], 40), '40 min behind. Moved 2 tasks.'); assert.match(S.replanLine([], 0), /Nothing to move/); });
+t('behindMinutes', () => { const now = new Date(2026, 9, 29, 10, 30); assert.equal(S.behindMinutes([{ startTime: '09:50' }, { startTime: '11:00' }, { startTime: '08:00', completed: true }], now), 40); assert.equal(S.behindMinutes([], now), 0); });
+const mem = () => { const m = {}; return { getItem: (k) => m[k] ?? null, setItem: (k, v) => { m[k] = v; } }; };
+t('one lesson per trigger, once', () => { const st = { done: [], off: false }; const l = C.lessonFor('first-task-done', st); assert.equal(l.id, 'sergeant'); assert.equal(C.lessonFor('first-task-done', C.markDone(st, 'sergeant')).id, 'grow-scene'); assert.equal(C.lessonFor('first-task-done', C.markDone(C.markDone(st, 'sergeant'), 'grow-scene')), null); });
+t('disabled lessons never show', () => { for (const l of C.LESSONS.filter((x) => !x.enabled)) assert.notEqual((C.lessonFor(l.trigger, { done: [], off: false }) || {}).id, l.id); });
+t('skip all stops lessons, force replays', () => { assert.equal(C.lessonFor('behind', { done: [], off: true }), null); assert.equal(C.lessonFor('first-task-done', { done: ['sergeant'], off: true }, { force: true }).id, 'sergeant'); });
+t('steps wait for the real action', () => { const s = C.LESSONS[0].steps[0]; assert(!C.stepMatches(s, 'sg-next')); assert(C.stepMatches(s, 'menu-open')); assert(C.stepMatches({ until: 'sg-any' }, 'sg-off')); });
+t('coach state persists per user', () => { const m = mem(); C.saveCoach('u1', { done: ['x'], off: true }, m); assert.deepEqual(C.loadCoach('u1', m), { done: ['x'], off: true }); assert.deepEqual(C.loadCoach('u2', m).done, []); });
+t('every enabled step targets a data-coach element that exists', () => { const all = ['src/components/home/FabButtons.vue', 'src/components/home/TaskCard.vue', 'src/components/home/ProgressBar.vue'].map(src).join('\n'); for (const l of C.LESSONS.filter((x) => x.enabled)) for (const s of l.steps) { const m = /data-coach="([^"]+)"/.exec(s.target); if (!m) { assert(all.includes('task-more'), s.target); continue; } const id = m[1]; assert(all.includes(`data-coach="${id}"`) || (id.startsWith('sg-') && all.includes(":data-coach=\"'sg-' + a.id\"")), id); } });
+t('home wiring', () => { const h = src('src/views/HomeView.vue'); assert(h.includes('@sergeant="onSergeant"')); assert(h.includes('<CoachSpotlight')); assert(h.includes('@show-tips="replayTips"')); assert(src('src/components/home/TaskListHeader.vue').includes('Show me tips again')); });
+t('skip always visible + big text', () => { const c = src('src/components/onboarding/CoachSpotlight.vue'); assert(/coach-skip"[^>]*@click/.test(c)); assert(!/v-if="[^"]*"\s+class="coach-skip/.test(c)); assert(/\.coach-line \{[^}]*font-size: 2[0-9]px/.test(c)); assert(c.includes('prefers-reduced-motion')); });
+console.log(`\n${n} plan-phase1 tests passed`);

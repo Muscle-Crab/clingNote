@@ -12,25 +12,44 @@
       <span>Add Task</span>
     </router-link>
 
-    <button type="button" class="fab fab-voice fab-assistant" :class="{ 'fab-voice--listening': assistantLive }" data-test="assistant-bubble"
-        title="Assistant (hold to talk)" aria-label="Assistant. Tap to open, press and hold to talk"
+    <button type="button" class="fab fab-voice fab-assistant" :class="{ 'fab-voice--listening': assistantLive }" data-test="assistant-bubble" data-coach="sergeant"
+        title="Assistant (hold for choices)" aria-label="Assistant. Tap to open, press and hold for choices" :aria-expanded="menuOpen ? 'true' : 'false'"
         @pointerdown="hold" @pointerup="release" @pointerleave="release" @pointercancel="release" @contextmenu.prevent @click="onClick">
       <RobotAvatar class="fab-robot" :live="assistantLive" />
     </button>
+    <!-- Sergeant long-press menu: only exists while open (no permanent UI); anchored to the robot it came from. -->
+    <div v-if="menuOpen" ref="menuEl" class="sg-menu" role="menu" aria-label="Robot choices" data-test="sergeant-menu" @keydown.esc="close">
+      <button v-for="a in SERGEANT_ACTIONS" :key="a.id" type="button" role="menuitem" class="sg-item" :data-coach="'sg-' + a.id" :data-test="'sg-' + a.id" @click="choose(a.id)">
+        <span class="sg-ic" aria-hidden="true">{{ a.icon }}</span><span class="sg-txt"><b>{{ a.label }}</b><small>{{ a.hint }}</small></span>
+      </button>
+      <button v-if="locked" type="button" role="menuitem" class="sg-item" data-coach="sg-unlock" data-test="sg-unlock" @click="choose('unlock')"><span class="sg-ic" aria-hidden="true">🔓</span><span class="sg-txt"><b>Emergency unlock</b><small>Costs points</small></span></button>
+      <button type="button" role="menuitem" class="sg-item sg-talk" data-test="sg-talk" @click="talk"><span class="sg-ic" aria-hidden="true">🎙️</span><span class="sg-txt"><b>Talk to me</b></span></button>
+    </div>
   </div>
 </template>
 
 <script setup>
+import { ref, watch, nextTick, onBeforeUnmount } from 'vue';
 import RobotAvatar from './RobotAvatar.vue';
+import { SERGEANT_ACTIONS, HOLD_MS } from '@/utils/sergeantMenu';
 // Bottom-left floating assistant button (replaces the old standalone mic FAB). Tap = open; long-press = open listening.
 defineProps({
+  locked: { type: Boolean, default: false }, // hard lock on: menu shows Emergency unlock
   userId: { type: String, default: null },
   assistantLive: { type: Boolean, default: false },
   showAdd: { type: Boolean, default: true },
 });
-const emit = defineEmits(['add', 'assistant']);
+const emit = defineEmits(['add', 'assistant', 'sergeant', 'menu-open']);
+// Tap = open the assistant. Press and hold = the sergeant menu (What's next · Replan · I'm off · Make critical · Talk).
+const menuOpen = ref(false); const menuEl = ref(null);
 let t = null; let longed = false;
-const hold = () => { longed = false; clearTimeout(t); t = setTimeout(() => { longed = true; emit('assistant', true); }, 550); };
+const close = () => { menuOpen.value = false; };
+const choose = (id) => { menuOpen.value = false; emit('sergeant', id); };
+const talk = () => { menuOpen.value = false; emit('assistant', true); };
+const onDocDown = (e) => { if (menuEl.value && !menuEl.value.contains(e.target) && !e.target.closest('[data-coach="sergeant"], .coach-skip')) menuOpen.value = false; };
+watch(menuOpen, (o) => { document.removeEventListener('pointerdown', onDocDown, true); if (o) { document.addEventListener('pointerdown', onDocDown, true); emit('menu-open'); nextTick(() => menuEl.value && menuEl.value.querySelector('button') && menuEl.value.querySelector('button').focus({ preventScroll: true })); } });
+onBeforeUnmount(() => document.removeEventListener('pointerdown', onDocDown, true));
+const hold = () => { longed = false; clearTimeout(t); t = setTimeout(() => { longed = true; menuOpen.value = true; try { navigator.vibrate && navigator.vibrate(15); } catch (e) { /* ignore */ } }, HOLD_MS); };
 const release = (e) => { clearTimeout(t); if (longed && e) e.preventDefault(); };
 const onClick = () => { if (longed) { longed = false; return; } emit('assistant', false); };
 </script>
@@ -51,5 +70,14 @@ const onClick = () => { if (longed) { longed = false; return; } emit('assistant'
 .fab-assistant { touch-action: manipulation; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 .fab-assistant { padding: 3px; overflow: visible; }
 .fab-robot { width: 46px; height: 46px; }
+/* sergeant menu: big plain text, large tap targets (older users); sits above the robot, gone when closed */
+.sg-menu { position: fixed; left: max(12px, calc((100vw - 540px) / 2 + 12px)); max-width: calc(100vw - 24px); bottom: calc(96px + env(safe-area-inset-bottom)); z-index: 101; min-width: 250px; display: flex; flex-direction: column; gap: 4px; padding: 8px; background: var(--c-surface-2); border: 1px solid var(--c-border); border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,.45); }
+.sg-item { display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 6px 12px; background: transparent; border: 0; border-radius: 12px; color: var(--c-text); text-align: left; cursor: pointer; }
+.sg-item:hover, .sg-item:focus-visible { background: var(--c-surface); outline: none; }
+.sg-ic { font-size: 24px; width: 30px; text-align: center; }
+.sg-txt { display: flex; flex-direction: column; }
+.sg-txt b { font-size: 19px; line-height: 1.2; }
+.sg-txt small { font-size: 15px; color: var(--c-text-2); }
+.sg-talk { border-top: 1px solid var(--c-border); border-radius: 0 0 12px 12px; }
 .fab-assistant.fab-voice--listening { box-shadow: 0 0 0 2px #4aa8ff, 0 0 14px 2px rgba(74, 168, 255, .65); }
 </style>

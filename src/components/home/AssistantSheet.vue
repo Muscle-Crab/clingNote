@@ -74,7 +74,7 @@ const setSpeak = (v) => { speak.value = v; if (!v) { intro.cancel(); stopVoice()
 const say = (t) => { if (speak.value) { unlockVoice(); stopVoice(); speakLive(ttsText(t)); } };
 const decide = (yes) => { const p = pending.value; if (!p) return; pending.value = null; push('action', yes ? `✔ ${p.summary.split('\n')[0]}` : '✖ Cancelled'); p.resolve(!!yes); };
 const confirm = (c) => new Promise((resolve) => { pending.value = { ...c, resolve }; emit('state', { pending: true }); scroll(); say(c.name === 'post_to_community' ? 'Here is the draft post. Post it?' : `${c.summary} Say yes or no.`); });
-const LABEL = { create_tasks: '➕ Added', edit_task: '✏️ Edited', reschedule_task: '📅 Moved', delete_task: '🗑 Deleted', complete_task: '✅ Done', start_timer: '⏱ Timer started', set_boss_checkin: '🤖 Robot check-in', start_day: '🔒 Day started', set_day_hours: '⏳ Hours set', set_setting: '⚙️ Setting', navigate: '🧭 Opened', post_to_community: '📣 Posted' };
+const LABEL = { set_alarm: '⏰ Alarm set', set_holiday: '🏖️ Days off', create_tasks: '➕ Added', edit_task: '✏️ Edited', reschedule_task: '📅 Moved', delete_task: '🗑 Deleted', complete_task: '✅ Done', start_timer: '⏱ Timer started', set_boss_checkin: '🤖 Robot check-in', start_day: '🔒 Day started', set_day_hours: '⏳ Hours set', set_setting: '⚙️ Setting', navigate: '🧭 Opened', post_to_community: '📣 Posted' };
 const onEvent = (e) => { if (e.type === 'ran' && LABEL[e.name] && !(e.response && e.response.error)) push('action', `${LABEL[e.name]}${e.response && e.response.summary ? `: ${e.response.summary}` : ''}`); };
 const call = (input) => askAi('agent', input);
 

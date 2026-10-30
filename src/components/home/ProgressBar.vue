@@ -1,6 +1,6 @@
 <template>
   <div class="progress-section">
-    <div class="progress-top">
+    <div class="progress-top" data-coach="grow">
       <div class="progress-ring" role="img" :aria-label="'Progress ' + pct + ' percent'">
         <svg viewBox="0 0 100 100" class="ring-svg" aria-hidden="true">
           <circle cx="50" cy="50" r="42" class="ring-track" />
@@ -13,7 +13,7 @@
         <p v-if="total !== null" class="progress-sub">{{ done }} of {{ total }} tasks complete</p>
         <div class="milestone-row">
           <div v-for="(milestone, index) in milestones" :key="index" class="milestone-dot"
-               :class="{ 'milestone-dot--reached': percentage >= milestone.percent && milestone !== current, 'milestone-dot--current': milestone === current, 'milestone-dot--future': percentage < milestone.percent }"
+               :class="{ 'milestone-dot--reached': grow >= milestone.percent && milestone !== current, 'milestone-dot--current': milestone === current, 'milestone-dot--future': grow < milestone.percent }"
                :title="milestone.icon + ' ' + milestone.percent + '%'">
             <span class="milestone-icon">{{ milestone.icon }}</span>
           </div>
@@ -26,8 +26,8 @@
     </div>
     <div class="progress-foot">
       <p class="foot-item foot-item--streak" :class="{ 'foot-item--risk': streakStatus === 'at-risk' }" :title="`Complete ${streakMin} tasks a day (after Start Day) to keep your streak. Today: ${streakProgress}/${streakMin}. Every ${FREEZE_EVERY} days in a row earns a freeze (max ${FREEZE_MAX}) that covers a missed day.`">
-        <span class="foot-icon"><span aria-hidden="true">🔥</span><span v-if="freezes > 0" class="foot-freeze" data-test="streak-freezes" :title="`${freezes} streak freeze${freezes === 1 ? '' : 's'} held: covers a missed day automatically. Earn 1 per ${FREEZE_EVERY} days in a row (max ${FREEZE_MAX}).`" :aria-label="`${freezes} streak freeze${freezes === 1 ? '' : 's'}`">🧊{{ freezes }}</span></span>
-        <span class="foot-text"><span><strong data-test="streak-count">{{ Math.min(streak, STREAK_CAP) }}/{{ STREAK_CAP }}</strong>&nbsp;day streak</span><small data-test="streak-today">{{ Math.min(streakProgress, streakMin) }}/{{ streakMin }} done today to keep it</small></span>
+        <span class="foot-icon"><span aria-hidden="true" data-test="streak-icon">{{ offToday ? '🏖️' : '🔥' }}</span><span v-if="freezes > 0" class="foot-freeze" data-test="streak-freezes" :title="`${freezes} streak freeze${freezes === 1 ? '' : 's'} held: covers a missed day automatically. Earn 1 per ${FREEZE_EVERY} days in a row (max ${FREEZE_MAX}).`" :aria-label="`${freezes} streak freeze${freezes === 1 ? '' : 's'}`">🧊{{ freezes }}</span></span>
+        <span class="foot-text"><span><strong data-test="streak-count">{{ Math.min(streak, STREAK_CAP) }}/{{ STREAK_CAP }}</strong>&nbsp;day streak</span><small v-if="offToday" data-test="streak-today">Day off · streak safe</small><small v-else data-test="streak-today">{{ Math.min(streakProgress, streakMin) }}/{{ streakMin }} done today to keep it</small></span>
       </p>
       <p class="foot-item foot-item--pts"><span class="coin" aria-hidden="true">★</span><strong data-test="day-pts">{{ target > 0 ? dayPtsLabel(points, target) : `${points} pts` }}</strong></p>
     </div>
@@ -37,6 +37,7 @@
 <script setup>
 import { computed } from 'vue';
 import { STREAK_CAP, FREEZE_EVERY, FREEZE_MAX } from '@/utils/streak';
+import { growPct } from '@/utils/planPhase2';
 import { dayPtsLabel } from '@/utils/dayTarget';
 import stage0 from '@/assets/stages/stage-0-sprout.jpg';
 import stage1 from '@/assets/stages/stage-1-leafy.jpg';
@@ -55,14 +56,17 @@ const props = defineProps({
   freezes: { type: Number, default: 0 }, // held streak freeze days
   points: { type: Number, default: 0 },
   target: { type: Number, default: 0 }, // boss day target (required); shown as earned/required
+  offToday: { type: Boolean, default: false }, // holiday mode: 🏖️ instead of 🔥
 });
 const C = 2 * Math.PI * 42;
 // Scene art per stage, same order as the milestone icons: 🌱 sprout, 🌿 leafy plant, 🌳 tree, 🌲 pine, 🏔️ peak
 const STAGE_IMAGES = [stage0, stage1, stage2, stage3, stage4];
 const pct = computed(() => Math.round(Math.min(100, Math.max(0, Number(props.percentage) || 0))));
 const stageIndex = computed(() => Math.max(0, Math.min(STAGE_IMAGES.length - 1, props.milestones.indexOf(current.value))));
+// growing scene: grows with today's points (vs the target) or task progress, whichever is further
+const grow = computed(() => growPct(props.percentage, props.points, props.target));
 const current = computed(() => {
-  const reached = props.milestones.filter((m) => props.percentage >= m.percent);
+  const reached = props.milestones.filter((m) => grow.value >= m.percent);
   return reached[reached.length - 1] || props.milestones[0] || null;
 });
 </script>

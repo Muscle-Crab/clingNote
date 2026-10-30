@@ -122,18 +122,31 @@ export function parseUtterance(text, now = new Date()) {
   return splitClauses(text).map((c) => parseClause(c, now)).filter((it) => it.title);
 }
 
+// Any model/user time -> 'HH:MM' 24h or '': accepts '15:00', '9:05', '3pm', '5 PM', '3:30 p.m.', '12am'.
+export const toHHMM = (s) => {
+  const t = String(s == null ? '' : s).trim().toLowerCase().replace(/\./g, '');
+  let m = t.match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm|a|p)$/);
+  if (m) { const h = Number(m[1]); const mi = Number(m[2] || 0); if (h < 1 || h > 12 || mi > 59) return ''; return hm((h % 12) + (m[3][0] === 'p' ? 12 : 0), mi); }
+  m = t.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+  if (m) { const h = Number(m[1]); const mi = Number(m[2]); return h < 24 && mi < 60 ? hm(h, mi) : ''; }
+  return '';
+};
+// The user's words name a day other than today ("tomorrow", "Friday", "in 3 days"): an item with no date must not silently become today.
+export const namesOtherDay = (text) => /\b(?:tomorrow|tmrw|tmr|next week|in\s+(?:\d+|a|one|two|three|four|five|six|seven)\s+days?|(?:mon|tues|wednes|thurs|fri|satur|sun)days?)\b/i.test(String(text || ''));
 // Validate / normalise items from any interpreter (AI or local) before they reach the confirm sheet.
-export function normalizeItems(items, now = new Date()) {
+export function normalizeItems(items, now = new Date(), { userText = '' } = {}) {
   if (!Array.isArray(items)) return [];
+  const strictDate = namesOtherDay(userText);
   const okD = (s) => /^\d{4}-\d{2}-\d{2}$/.test(String(s || ''));
-  const okT = (s) => /^([01]\d|2[0-3]):[0-5]\d$/.test(String(s || ''));
   return items.slice(0, MAX_ITEMS).map((x) => {
     const type = ['task', 'reminder', 'schedule'].includes(x && x.type) ? x.type : 'task';
     const title = String((x && x.title) || '').replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, 140);
+    if (strictDate && !okD(x.date) && !/^\d{4}-\d{2}-\d{2}T/.test(String(x.remindAt || ''))) return { title, missingDate: true };
     const date = okD(x.date) ? x.date : ymd(now);
-    const start = okT(x.start) ? x.start : '';
+    const start = toHHMM(x.start);
     const durationMin = Math.max(0, Math.min(24 * 60, Math.round(Number(x.durationMin) || 0)));
-    let remindAt = /^\d{4}-\d{2}-\d{2}T([01]\d|2[0-3]):[0-5]\d$/.test(String(x.remindAt || '')) ? x.remindAt : '';
+    const ra = String(x.remindAt || '').match(/^(\d{4}-\d{2}-\d{2})[T ](.+)$/); const raT = ra ? toHHMM(ra[2]) : '';
+    let remindAt = ra && raT ? `${ra[1]}T${raT}` : '';
     if (type === 'reminder' && !remindAt) remindAt = `${date}T${start || '09:00'}`;
     const st2 = start || (type === 'reminder' ? remindAt.slice(11) : type === 'schedule' ? '09:00' : '');
     const section = ['morning', 'noon', 'afternoon'].includes(x.section) ? x.section : ''; // optional Home section; an explicit start time wins when saved

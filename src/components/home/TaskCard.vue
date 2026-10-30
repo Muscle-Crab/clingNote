@@ -126,7 +126,7 @@
                       </button>
                     </div>
                     <button type="button" class="task-more" :class="{ 'task-more--open': moreOpen }" title="More actions" aria-label="More actions"
-                        :aria-expanded="moreOpen ? 'true' : 'false'" @click.stop="moreOpen = !moreOpen">
+                        :aria-expanded="moreOpen ? 'true' : 'false'" @click.stop="moreOpen = !moreOpen; moreOpen && coachSig('task-menu-open')">
                       <i class="fas fa-ellipsis-h"></i>
                     </button>
 
@@ -134,6 +134,7 @@
                       <button @click="$emit('toggle-expand'); moreOpen = false" class="action-btn" title="Details" aria-label="Show details">📝</button>
                       <button type="button" @click="repeatOpen = !repeatOpen; moreOpen = false" class="action-btn" data-test="repeat-btn" :class="{ 'action-btn--on': repeatOnAny }" :title="repeatOnAny ? repeatText : 'Make recurring'" aria-label="Repeat settings">🔁</button>
                       <button @click="$emit('open-reminder')" class="action-btn" title="Reminder" aria-label="Add reminder">📅</button>
+                      <button v-if="!task.completed" type="button" @click="$emit('alarm'); moreOpen = false" class="action-btn" data-coach="bell" data-test="alarm-btn" :class="{ 'action-btn--on': !!task.alarmAt }" :title="task.alarmAt ? 'Alarm set (tap to cancel)' : 'Boss alarm: rings until you start'" :aria-label="task.alarmAt ? 'Cancel alarm' : 'Set alarm'">{{ task.alarmAt ? '🔔' : '⏰' }}</button>
                       <button @click="$emit('transfer')" class="action-btn" title="Transfer" aria-label="Transfer to another day">🔄</button>
                       <button @click="fileInput && fileInput.click()" class="action-btn" title="Attach file" aria-label="Attach file">📎</button>
                       <input type="file" ref="fileInput" accept="image/*,.pdf,.doc,.docx,.txt" @change="$emit('upload', $event)" class="hidden-input" />
@@ -220,6 +221,8 @@
 </template>
 
 <script setup>
+// coach signal (interactive tips): HomeView listens for cn:coach
+const coachSig = (sig) => { try { window.dispatchEvent(new window.CustomEvent('cn:coach', { detail: sig })); } catch (e) { /* ignore */ } };
 import { burstFrom, lightHaptic, prefersReducedMotion, COMPLETE_MS, CELEBRATE_MS } from '@/composables/useTaskMotion';
 import { bossHp } from '@/utils/discipline';
 import { dueBadge, scheduleLabel, scheduledOverdue } from '@/utils/scheduling';
@@ -262,7 +265,7 @@ const props = defineProps({
   section: { type: String, default: '' }, // Home section this card is shown in (enables Move to ... in the ... menu)
 });
 const emit = defineEmits(['skip-today', 'move-section', 'set-repeat', 'set-boss', 'toggle-expand', 'toggle-complete', 'open-detail', 'toggle-important', 'patch', 'subtask-patch',
-  'toggle-label', 'open-reminder', 'transfer', 'video', 'upload', 'timer', 'wont-do', 'delete', 'schedule', 'toggle-repeat']);
+  'toggle-label', 'open-reminder', 'transfer', 'video', 'upload', 'timer', 'wont-do', 'delete', 'schedule', 'toggle-repeat', 'alarm']);
 // 🔁 one-tap toggle (HomeView passes repeatInfo = { on, label, pending } covering both repeat models)
 const repeatPop = ref(false);
 const onRepeatTap = () => { repeatPop.value = true; setTimeout(() => { repeatPop.value = false; }, 260); emit('toggle-repeat'); };

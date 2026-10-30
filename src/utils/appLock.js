@@ -1,6 +1,19 @@
 // App lock policy (pure): when the shield should be on, and the emergency-unlock penalty.
 export const LOCK_PREF = 'cn.appLock.on'; export const PENALTY_KEY = 'cn.appLock.penalties';
 export const EMERGENCY_PENALTY = 25;
+// Emergency-unlock penalties live in Firestore (streaks/{uid}.lockPenalties) with localStorage as the offline copy.
+// Merge both (dedupe by day+at, oldest first, keep 60); entries tagged for another account are dropped.
+// toPush = local entries the account doesn't have yet (made offline) so the caller can upload them.
+const penKey = (p) => `${p.day}|${p.at}`;
+export const mergePenalties = (local = [], remote = [], uid = '') => {
+  const ok = (p) => p && typeof p.day === 'string' && (!uid || !p.uid || p.uid === uid);
+  const r = (Array.isArray(remote) ? remote : []).filter(ok); const have = new Set(r.map(penKey));
+  const toPush = (Array.isArray(local) ? local : []).filter((p) => ok(p) && !have.has(penKey(p)));
+  const seen = new Set(); const merged = [...r, ...toPush].filter((p) => { const k = penKey(p); if (seen.has(k)) return false; seen.add(k); return true; })
+    .sort((a, b) => (a.at || 0) - (b.at || 0)).slice(-60);
+  return { merged, toPush: toPush.map(({ day, points, at }) => ({ day, points, at })) };
+};
+export const lastPenaltyDay = (list = []) => (list.length ? list[list.length - 1].day : '');
 // on: lock-in running, user opted in, apps chosen, goal not yet met, not emergency-unlocked today
 export const shouldShield = ({ enabled, running, endMs, now = Date.now(), selectionCount = 0, earned = 0, required = 0, openTasks = 1, unlockedToday = false }) =>
   !!(enabled && running && selectionCount > 0 && endMs > now + 60000 && !unlockedToday && openTasks > 0 && !(required > 0 && earned >= required));

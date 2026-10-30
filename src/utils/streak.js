@@ -42,7 +42,18 @@ const norm = (s) => ({
   freezeBank: clampBank(s?.freezeBank), // held freeze days (earned 1 per FREEZE_EVERY counted days in a row, max FREEZE_MAX)
   freezeRun: Math.max(0, Math.floor(Number(s?.freezeRun) || 0)), // counted days in a row toward the next freeze
   frozenDates: Array.isArray(s?.frozenDates) ? s.frozenDates.slice(-FROZEN_KEEP) : [], // missed days a freeze covered
+  offDates: Array.isArray(s?.offDates) ? s.offDates.slice(-FROZEN_KEEP) : [], // planned days off ("I'm off"): bridged, never counted, bank untouched
 });
+// Planned days off: walk lastCompletionDate forward over consecutive off days before `today`, so they never break
+// the streak (and never grow it or use a freeze). Pure; returns the normalised state.
+export const bridgeOffDays = (state, today) => {
+  const s = norm(state);
+  if (!s.offDates.length || !s.lastCompletionDate || !s.streak) return s;
+  const off = new Set(s.offDates); let lc = s.lastCompletionDate;
+  for (let i = 0; i < 60; i += 1) { const nx = addDaysLocal(lc, 1); if (nx >= today || !off.has(nx)) break; lc = nx; }
+  return lc === s.lastCompletionDate ? s : { ...s, lastCompletionDate: lc };
+};
+export const addOffDates = (state, dates) => { const s = norm(state); return [...new Set([...s.offDates, ...(dates || [])])].sort().slice(-FROZEN_KEEP); };
 export const COUNTED_KEEP = 62;
 const addCounted = (list, d) => [...list.filter((x) => x !== d), d].slice(-COUNTED_KEEP);
 
@@ -50,7 +61,7 @@ export const todayCount = (state, today) => { const s = norm(state); return s.da
 
 // Days missed (not counted) between the last counted day and `today` that would break the streak (0 = not broken).
 export const missedDays = (state, today, gap = ALLOWED_GAP_DAYS) => {
-  const s = norm(state);
+  const s = bridgeOffDays(state, today);
   if (!s.lastCompletionDate || !s.streak || s.lastCompletionDate === today) return [];
   const diff = dayDiff(s.lastCompletionDate, today);
   if (diff <= gap) return [];
@@ -60,7 +71,7 @@ export const missedDays = (state, today, gap = ALLOWED_GAP_DAYS) => {
 
 // Auto-cover missed days with held freezes. -> { state, used, dates }. Covers only when the bank covers every missed day.
 export const applyFreezes = (state, today, gap = ALLOWED_GAP_DAYS) => {
-  const s = norm(state);
+  const s = bridgeOffDays(state, today);
   const miss = missedDays(s, today, gap);
   if (!miss.length || miss.length > s.freezeBank) return { state: s, used: 0, dates: [] };
   let counted = s.counted; for (const d of miss) counted = addCounted(counted, d);
@@ -80,7 +91,7 @@ export const recordCompletion = (state, today, gap = ALLOWED_GAP_DAYS) => {
   const s0 = norm(state);
   if (s0.lastCompletionDate === today) return s0;
   const before = { streak: s0.streak, bestStreak: s0.bestStreak, lastCompletionDate: s0.lastCompletionDate, freezeBank: s0.freezeBank, freezeRun: s0.freezeRun, frozenDates: s0.frozenDates, counted: s0.counted };
-  const s = applyFreezes(s0, today, gap).state;
+  const s = applyFreezes(bridgeOffDays(s0, today), today, gap).state;
   const diff = s.lastCompletionDate ? dayDiff(s.lastCompletionDate, today) : Infinity;
   if (diff < 0) return s0; // clock went backwards; ignore
   const continued = diff <= gap && s.streak > 0;
@@ -105,7 +116,7 @@ export const applyTaskToggle = (state, today, { key, completed, pending = false,
 
 // Evaluate on `today`. status: 'none' | 'done' | 'at-risk' | 'broken'. progress = completed today.
 export const evaluateStreak = (state, today, gap = ALLOWED_GAP_DAYS, min = DAILY_STREAK_MIN) => {
-  const s = norm(state);
+  const s = bridgeOffDays(state, today);
   const progress = todayCount(s, today);
   const base = { ...s, progress, min };
   if (s.lastCompletionDate === today) return { ...base, status: 'done' };
