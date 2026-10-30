@@ -123,7 +123,8 @@
 
           <h2 class="pf-section">More</h2>
           <section class="pf-card pf-card--flush">
-            <router-link to="/onboarding" data-test="replay-onboarding" class="pf-row"><span class="pf-ico" aria-hidden="true">🔄</span><span class="pf-row-title">Replay onboarding</span><span class="pf-chev" aria-hidden="true">›</span></router-link>
+            <button type="button" data-test="stats-row" class="pf-row" @click="openStats"><span class="pf-ico" aria-hidden="true">📊</span><span class="pf-row-title">Stats</span><span class="pf-chev" aria-hidden="true">›</span></button>
+            <router-link to="/onboarding" data-test="replay-onboarding" class="pf-row pf-row--divided"><span class="pf-ico" aria-hidden="true">🔄</span><span class="pf-row-title">Replay onboarding</span><span class="pf-chev" aria-hidden="true">›</span></router-link>
             <button v-if="isOwn" type="button" data-test="rate-app" class="pf-row pf-row--divided" @click="rateApp"><span class="pf-ico" aria-hidden="true">⭐</span><span class="pf-row-title">Rate ClingNote</span><span class="pf-chev" aria-hidden="true">›</span></button>
             <router-link to="/support" class="pf-row pf-row--divided" data-test="profile-support"><span class="pf-ico" aria-hidden="true">💬</span><span class="pf-row-title">Help &amp; support</span><span class="pf-chev" aria-hidden="true">›</span></router-link>
             <router-link to="/privacy-policy" class="pf-row pf-row--divided"><span class="pf-ico" aria-hidden="true">🔒</span><span class="pf-row-title">Privacy policy</span><span class="pf-chev" aria-hidden="true">›</span></router-link>
@@ -147,6 +148,7 @@
       <div v-else-if="loading" class="pf-state">Loading...</div>
       <div v-else class="pf-state">Couldn't load this profile. <button @click="load" class="pf-link">Retry</button></div>
     </div>
+    <StatsSheet v-if="statsOpen" :data="statsData" :loading="statsLoading" @close="statsOpen = false" />
   </div>
 </template>
 
@@ -221,7 +223,10 @@ const onIcsImport = async (ev) => { const u = auth.currentUser; const f = ev.tar
 const xferOpen = ref(false); const xferBusy = ref(false); const xferMsg = ref(''); const xferInput = ref(null);
 const onExport = async (fmt) => { const u = auth.currentUser; if (!u) return; xferBusy.value = true; try { const r = await exportTasks(u.uid, fmt, { native: isNativeIOS() }); xferMsg.value = r.result === 'failed' ? 'Could not save the file.' : r.result === 'cancelled' ? '' : `Exported ${r.count} task${r.count === 1 ? '' : 's'} as ${fmt.toUpperCase()}.`; } catch (e) { xferMsg.value = 'Export failed.'; } xferBusy.value = false; };
 const onImport = async (ev) => { const u = auth.currentUser; const f = ev.target.files && ev.target.files[0]; ev.target.value = ''; if (!u || !f) return; xferBusy.value = true; try { const r = await importTasks(u.uid, await readTextFile(f), { pro: userIsPro.value }); xferMsg.value = r.message; } catch (e) { xferMsg.value = (e && e.message) || 'Import failed.'; } xferBusy.value = false; };
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, getDocs, collection, query, where, documentId } from 'firebase/firestore';
+import StatsSheet from '@/components/profile/StatsSheet.vue';
+import { buildStats, monthKeysFor, countsFromMonthly, gridStart } from '@/utils/statsView';
+import { localDateStr } from '@/utils/streak';
 import { useRouter } from 'vue-router';
 import { auth, db } from '@/firebaseConfig';
 const route = useRouter();
@@ -252,6 +257,27 @@ const loadStats = async (uid) => {
     const n = (v) => (Number.isFinite(+v) ? Math.max(0, Math.floor(+v)) : 0);
     stats.value = { streak: n(d.streak), best: n(d.bestStreak ?? d.streak), milestones: rewardsFor(n(d.bestStreak ?? d.streak)).unlocked.length, totalMilestones: MILESTONES.length };
   } catch (e) { stats.value = null; }
+};
+// B39 Stats sheet: read-only, own profile only. Heatmap from monthlyStats/{m}/private/{uid}.done (owner-only), streaks/{uid}.counted
+// as a fallback, and dailyCheckins for optional mood dots. Missing/denied docs just count as empty.
+const statsOpen = ref(false);
+const statsLoading = ref(false);
+const statsData = ref(null);
+const openStats = async () => {
+  statsOpen.value = true;
+  const uid = auth.currentUser?.uid;
+  if (!uid || statsLoading.value) return;
+  statsLoading.value = true;
+  try {
+    const today = localDateStr();
+    const safe = (pr) => withTimeout(pr, 8000, 'stats').catch(() => null);
+    const months = await Promise.all(monthKeysFor(today).map((mk) => safe(getDoc(doc(db, 'monthlyStats', mk, 'private', uid)))));
+    const st = await safe(getDoc(doc(db, 'streaks', uid)));
+    const from = gridStart(today);
+    const ck = await safe(getDocs(query(collection(db, 'users', uid, 'dailyCheckins'), where(documentId(), '>=', from))));
+    const moods = {}; (ck?.docs || []).forEach((d) => { moods[d.id] = d.data()?.mood; });
+    statsData.value = buildStats({ todayStr: today, counts: countsFromMonthly(months.map((m) => (m && m.exists() ? m.data() : null))), counted: st && st.exists() ? st.data().counted : [], moods });
+  } catch (e) { statsData.value = null; } finally { statsLoading.value = false; }
 };
 const fileInput = ref(null);
 const avatarBusy = ref(false);
