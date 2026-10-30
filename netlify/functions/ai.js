@@ -8,7 +8,7 @@ const { verifyUser } = require('./lib/notify');
 const { callChat, callAgentRaw } = require('./lib/aiProvider');
 const { ASK_LIMITS, AGENT_LIMITS } = require('./lib/askConfig');
 const agentLib = require('./lib/agentTools');
-const { buildRequest } = require('./lib/aiPrompts');
+const { buildRequest, normalizeBreakdown } = require('./lib/aiPrompts');
 
 const json = (statusCode, body) => ({ statusCode, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 
@@ -56,6 +56,28 @@ const handleAsk = async (event, body, deps) => {
   }
 };
 
+// task 'breakdown' (task card "Break it down"): any signed-in user, shares the free daily 'ask' quota (Pro unlimited); a failed or unusable reply
+// gives the quota back. Reply: { steps: [{ title, minutes }] } (validated here; the client adds points with the app's own scoring).
+const handleBreakdown = async (event, body, deps) => {
+  const uid = await verifyUser(event.headers, deps.verify || ((t) => getAdmin().auth().verifyIdToken(t)));
+  const req = buildRequest('breakdown', body.input || {}); // 400 on empty title
+  if (!process.env.OPENAI_API_KEY && !process.env.GEMINI_API_KEY) return json(500, { error: 'Server not configured' });
+  const db = deps.db || getAdmin().firestore();
+  const pro = await userIsPro(db, uid);
+  const limit = pro ? ASK_LIMITS.PRO_PER_DAY : ASK_LIMITS.FREE_PER_DAY;
+  let used;
+  try { used = await takeAskQuota(db, uid, limit); }
+  catch (e) { if (e.status === 429) return json(429, { error: pro ? 'Daily limit reached' : `Free plan: ${limit} AI requests a day. Upgrade to Pro for unlimited.`, limit, remaining: 0, pro }); throw e; }
+  try {
+    const out = await callChat(req.body, { fetch: deps.fetch, prefer: 'openai' });
+    const steps = normalizeBreakdown(out.content);
+    return json(200, { steps, pro, limit, remaining: limit == null ? null : Math.max(0, limit - used) });
+  } catch (e) {
+    await giveBackAsk(db, uid).catch(() => {});
+    return json(e.status === 500 ? 500 : 502, { error: e.status === 500 ? 'Server not configured' : "Couldn't break this down right now" });
+  }
+};
+
 // task 'agent' (ClingNote assistant): OpenAI tool calling if OPENAI_API_KEY is set, else Gemini function calling; tools executed on the client. input: { contents (Gemini turns), context, step }.
 // 1 quota unit per NEW user message (shared with 'ask'); tool-result round trips are free but capped (per turn + per day).
 const takeSteps = async (db, uid) => db.runTransaction(async (tx) => {
@@ -99,6 +121,7 @@ const rawHandler = async (event, ctx, deps = {}) => {
     let body; try { body = JSON.parse(event.body || '{}'); } catch (e) { return json(400, { error: 'Bad JSON' }); }
     if (body && body.task === 'ask') return await handleAsk(event, body, deps);
     if (body && body.task === 'agent') return await handleAgent(event, body, deps);
+    if (body && body.task === 'breakdown') return await handleBreakdown(event, body, deps);
     const uid = await requirePro(event, { verify: deps.verify, db: deps.db }); // 401 / 402 unless Pro
     if (!process.env.OPENAI_API_KEY && !process.env.GEMINI_API_KEY) return json(500, { error: 'Server not configured' });
     const req = buildRequest(body.task, body.input);

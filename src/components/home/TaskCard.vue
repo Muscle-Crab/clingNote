@@ -136,6 +136,7 @@
                       <button @click="$emit('open-reminder')" class="action-btn" title="Reminder" aria-label="Add reminder">📅</button>
                       <button v-if="!task.completed" type="button" @click="$emit('alarm'); moreOpen = false" class="action-btn" data-coach="bell" data-test="alarm-btn" :class="{ 'action-btn--on': !!task.alarmAt }" :title="task.alarmAt ? 'Alarm set (tap to cancel)' : 'Boss alarm: rings until you start'" :aria-label="task.alarmAt ? 'Cancel alarm' : 'Set alarm'">{{ task.alarmAt ? '🔔' : '⏰' }}</button>
                       <button @click="$emit('transfer')" class="action-btn" title="Transfer" aria-label="Transfer to another day">🔄</button>
+                      <button v-if="!task.completed" type="button" @click="$emit('breakdown'); moreOpen = false" class="action-btn" data-test="breakdown-btn" title="Break it down (AI first steps)" aria-label="Break it down">🪄</button>
                       <button @click="fileInput && fileInput.click()" class="action-btn" title="Attach file" aria-label="Attach file">📎</button>
                       <input type="file" ref="fileInput" accept="image/*,.pdf,.doc,.docx,.txt" @change="$emit('upload', $event)" class="hidden-input" />
   <!--                    <button @click="showTimerModal = true" class="action-btn" title="Timer">⏱️</button>-->
@@ -264,7 +265,7 @@ const props = defineProps({
   allOccurrences: { type: Boolean, default: false },
   section: { type: String, default: '' }, // Home section this card is shown in (enables Move to ... in the ... menu)
 });
-const emit = defineEmits(['skip-today', 'move-section', 'set-repeat', 'set-boss', 'toggle-expand', 'toggle-complete', 'open-detail', 'toggle-important', 'patch', 'subtask-patch',
+const emit = defineEmits(['breakdown', 'skip-today', 'move-section', 'set-repeat', 'set-boss', 'toggle-expand', 'toggle-complete', 'open-detail', 'toggle-important', 'patch', 'subtask-patch',
   'toggle-label', 'open-reminder', 'transfer', 'video', 'upload', 'timer', 'wont-do', 'delete', 'schedule', 'toggle-repeat', 'alarm']);
 // 🔁 one-tap toggle (HomeView passes repeatInfo = { on, label, pending } covering both repeat models)
 const repeatPop = ref(false);
@@ -541,6 +542,7 @@ const onPressEnd = () => { if (pressTimer !== 'fired') clearTimeout(pressTimer);
   .field-grid { grid-template-columns: 1fr; }
   .coin-value::after { content: ''; }
   .task-actions { left: var(--sp-2); right: var(--sp-2); justify-content: space-between; }
+  .task-actions .action-btn:not(.move-btn) { width: 36px; } /* 9 icons (with 🪄 Break it down) still fit one row at 360-390px */
 }
 .boss-bar { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
 .boss-label { font-size: var(--fs-xs, .7rem); font-weight: 800; color: #b91c1c; }

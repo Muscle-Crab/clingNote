@@ -166,7 +166,7 @@
                   @patch="editTask(realIndex(task), task, $event)" @subtask-patch="onSubtaskPatch(realIndex(task), task, $event)"
                   @toggle-label="toggleLabelHighlight" @open-reminder="openModal('calendar', realIndex(task), task.title)" @transfer="openTransferModal(realIndex(task))"
                   @video="openYouTubeModal(realIndex(task))" @upload="handleUpload($event, realIndex(task))" @timer="openTaskTimerModal(realIndex(task))"
-                  @wont-do="openWontDoModal(realIndex(task))" @delete="deleteTask(realIndex(task))" @schedule="scheduleExistingTask(realIndex(task), task, $event)" @set-repeat="setTaskRepeat(task, $event)" :repeat-info="repeatStateOf(task)" @toggle-repeat="toggleTaskRepeat(task)"
+                  @wont-do="openWontDoModal(realIndex(task))" @delete="deleteTask(realIndex(task))" @breakdown="openBreakdown(task)" @schedule="scheduleExistingTask(realIndex(task), task, $event)" @set-repeat="setTaskRepeat(task, $event)" :repeat-info="repeatStateOf(task)" @toggle-repeat="toggleTaskRepeat(task)"
                   :can-skip="isViewingToday && !selectedDayLocked && canSkipToday(task, scheduledList)" @skip-today="skipTaskToday(task)"
               />
           </TaskSections>
@@ -190,7 +190,7 @@
                   @patch="editTask(realIndex(task), task, $event)" @subtask-patch="onSubtaskPatch(realIndex(task), task, $event)"
                   @toggle-label="toggleLabelHighlight" @open-reminder="openModal('calendar', realIndex(task), task.title)" @transfer="openTransferModal(realIndex(task))"
                   @video="openYouTubeModal(realIndex(task))" @upload="handleUpload($event, realIndex(task))" @timer="openTaskTimerModal(realIndex(task))"
-                  @wont-do="openWontDoModal(realIndex(task))" @delete="deleteTask(realIndex(task))" @schedule="scheduleExistingTask(realIndex(task), task, $event)" @set-repeat="setTaskRepeat(task, $event)" :repeat-info="repeatStateOf(task)" @toggle-repeat="toggleTaskRepeat(task)" />
+                  @wont-do="openWontDoModal(realIndex(task))" @delete="deleteTask(realIndex(task))" @breakdown="openBreakdown(task)" @schedule="scheduleExistingTask(realIndex(task), task, $event)" @set-repeat="setTaskRepeat(task, $event)" :repeat-info="repeatStateOf(task)" @toggle-repeat="toggleTaskRepeat(task)" />
             </div>
           </div>
 
@@ -210,6 +210,7 @@
 
       <FabButtons :show-add="false" :user-id="userId" :assistant-live="askOpen" @add="onAddClick" @assistant="openAssistant" @sergeant="onSergeant" @menu-open="coachSignal('menu-open')" :locked="hardLocked" />
       <CoachSpotlight :step="coachStep" @skip="coachEnd" @skip-all="coachSkipAll" @tap="coachSignal('tap')" />
+      <BreakdownSheet v-if="bd.open" :title="bd.task?.title || ''" :steps="bd.steps" :loading="bd.loading" :error="bd.error" @close="closeBreakdown" @retry="runBreakdown" @confirm="confirmBreakdown" />
       <HolidayModal v-if="holidayOpen" :today="localDateStr()" @close="holidayOpen = false" @save="saveDaysOff" />
 
     </div>
@@ -354,6 +355,8 @@ import TimeStatsBar from '@/components/home/TimeStatsBar.vue';
 import TimerModal from '@/components/home/TimerModal.vue';
 import TransferModal from '@/components/home/TransferModal.vue';
 import HolidayModal from '@/components/home/HolidayModal.vue';
+import BreakdownSheet from '@/components/home/BreakdownSheet.vue';
+import { scoreSteps, appendSteps, breakdownError } from '@/utils/breakdown';
 import { clingAlarm, alarmPluginAvailable } from '@/native/clingAlarm';
 import { ALARM_SOUND, SNOOZE_MINUTES } from '@/utils/wakeAlarm';
 import { shouldAutoReplan, isOffDay, offLine, offRange, alarmAtFor, alarmLine, unlockAccepted, UNLOCK_WORD } from '@/utils/planPhase2';
@@ -3398,6 +3401,28 @@ const highlightRollover = () => {
   rolledKeys.value = rollover.value ? rollover.value.tasks.map(taskKey) : [];
   dismissRollover();
   setTimeout(() => { rolledKeys.value = []; }, 8000);
+};
+
+// "Break it down" (⋯ menu): AI first steps -> preview sheet -> appended as subtasks (same patch path as the checklist). Errors stay in the sheet.
+const bd = ref({ open: false, task: null, steps: [], loading: false, error: '' });
+let bdSeq = 0;
+const runBreakdown = async () => {
+  const task = bd.value.task; if (!task) return; const seq = ++bdSeq;
+  bd.value = { ...bd.value, loading: true, error: '', steps: [] };
+  try {
+    if (!(await ensureAiConsent())) throw Object.assign(new Error('AI consent declined'), { status: 'consent-declined' }); // one-time data-sharing consent first
+    const data = await askAi('breakdown', { title: task.title || '', notes: String(task.notes || task.description || '').slice(0, 600) });
+    const steps = scoreSteps(data && data.steps, task.title);
+    if (seq !== bdSeq || !bd.value.open) return;
+    bd.value = { ...bd.value, loading: false, steps, error: steps.length ? '' : breakdownError({}) };
+  } catch (e) { if (seq === bdSeq && bd.value.open) bd.value = { ...bd.value, loading: false, error: breakdownError(e) }; }
+};
+const openBreakdown = (task) => { if (blockIfShut()) return; bd.value = { open: true, task, steps: [], loading: true, error: '' }; runBreakdown(); };
+const closeBreakdown = () => { bdSeq++; bd.value = { open: false, task: null, steps: [], loading: false, error: '' }; };
+const confirmBreakdown = async (chosen) => {
+  const task = bd.value.task; closeBreakdown();
+  const idx = realIndex(task); if (idx < 0 || !chosen || !chosen.length) return;
+  await onSubtaskPatch(idx, task, { subtasks: appendSteps(subtasksOf(task), chosen) });
 };
 
 // Subtasks: saved through the same patch path; optionally complete the parent when all are done

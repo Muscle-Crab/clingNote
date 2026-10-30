@@ -62,7 +62,31 @@ Titles: short, capitalised, imperative, no filler ("um", "I need to", "so basica
     const sys = `You are ClingNote's friendly assistant inside a productivity and to-do app. Answer any question helpfully, accurately and concisely (usually under 150 words, plain text, short paragraphs or simple "-" lists, no markdown tables). If you're not sure, say so. For medical, legal or financial questions give general information and suggest a professional. Don't claim to have done things in the app.`;
     return { costsCredit: false, ask: true, body: { model: 'gpt-4o-mini', temperature: 0.6, max_tokens: 700, messages: [{ role: 'system', content: sys }, ...hist, { role: 'user', content: q }] } };
   }
+  if (task === 'breakdown') {
+    // "Break it down": a vague task -> 3..6 small concrete FIRST steps with minutes. The client scores each step (estimateFor) and the server
+    // re-validates the reply (normalizeBreakdown) so a bad model answer never reaches the UI.
+    const title = clip(input.title, 200); const notes = clip(input.notes, 600);
+    if (!title) throw Object.assign(new Error('Empty task'), { status: 400 });
+    const sys = `You help people start tasks they keep putting off. Split the user's task into 3 to 6 small, concrete, physical first steps, in order.
+Each step: a short imperative title (max 8 words, starts with a verb, no numbering, no emoji) and a realistic duration in minutes (2 to 60; the first step should take 10 minutes or less).
+Steps must be specific to this task, not generic advice ("plan", "get motivated"). Do not repeat the task title as a step.
+Return ONLY JSON: {"steps":[{"title":"...","minutes":5}]}`;
+    const user = notes ? `Task: ${title}\nNotes: ${notes}` : `Task: ${title}`;
+    return { costsCredit: false, ask: true, body: { model: 'gpt-4o-mini', temperature: 0.4, max_tokens: 400, response_format: { type: 'json_object' }, messages: [{ role: 'system', content: sys }, { role: 'user', content: user }] } };
+  }
   throw Object.assign(new Error('Unknown task'), { status: 400 });
 };
 
-module.exports = { buildRequest };
+// Validates a model reply for 'breakdown': JSON (optionally fenced) -> [{ title, minutes }] (3..6 kept, minutes clamped 1..120). Throws 502 when unusable.
+const normalizeBreakdown = (content) => {
+  let data = content;
+  if (typeof data === 'string') { const m = /\{[\s\S]*\}/.exec(data); try { data = JSON.parse(m ? m[0] : data); } catch (e) { data = null; } }
+  const raw = Array.isArray(data) ? data : (data && Array.isArray(data.steps) ? data.steps : []);
+  const seen = new Set();
+  const steps = raw.map((x) => ({ title: clip(typeof x === 'string' ? x : x && x.title, 80).replace(/^\s*(?:\d+[.)]|[-*•])\s*/, ''), minutes: int(x && x.minutes, 1, 120, 10) }))
+    .filter((x) => x.title && !seen.has(x.title.toLowerCase()) && seen.add(x.title.toLowerCase())).slice(0, 6);
+  if (steps.length < 2) throw Object.assign(new Error('AI reply unusable'), { status: 502 });
+  return steps;
+};
+
+module.exports = { buildRequest, normalizeBreakdown };
