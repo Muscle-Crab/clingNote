@@ -66,7 +66,7 @@ export const reconcileFocusActions = async ({ queue, getTasks, apply = {}, appli
 };
 
 // Live Activity content for the running (or paused) focus task. dayEndMs: end of the 8-hour day (0 = none).
-export const focusActivityState = (t, { ptsDone = 0, ptsTarget = 0, dayEndMs = 0, now = Date.now() } = {}) => {
+export const focusActivityState = (t, { ptsDone = 0, ptsTarget = 0, dayEndMs = 0, appsUnlocked = 0, now = Date.now() } = {}) => {
   if (!t || !t.timerActive || !ms(t.timerEndTime) || t.completed === true) return null;
   const paused = !!ms(t.timerPausedAt);
   return {
@@ -74,8 +74,9 @@ export const focusActivityState = (t, { ptsDone = 0, ptsTarget = 0, dayEndMs = 0
     endsAtMs: paused ? now + remainingMs(t, now) : ms(t.timerEndTime), paused, locked: t.focusLock === true, remainingSec: Math.round(remainingMs(t, now) / 1000),
     ptsDone: Math.max(0, Math.round(Number(ptsDone) || 0)), ptsTarget: Math.max(0, Math.round(Number(ptsTarget) || 0)),
     dayEndsAtMs: dayEndMs > now ? Math.round(dayEndMs) : 0,
+    ...(appsUnlocked > 0 ? { appsUnlocked: Math.round(appsUnlocked) } : {}),
   };
 };
 // identity of the activity (a new one is requested when it changes) and of its content (an update is pushed when it changes)
 export const focusActivityKey = (s) => (s ? `${s.taskId}` : '');
-export const focusContentSig = (s) => (s ? `${s.paused ? `p${s.remainingSec}` : s.endsAtMs}${s.locked ? 'L' : ''}|${s.ptsDone}/${s.ptsTarget}|${s.dayEndsAtMs}` : '');
+export const focusContentSig = (s) => (s ? `${s.paused ? `p${s.remainingSec}` : s.endsAtMs}${s.locked ? 'L' : ''}${s.appsUnlocked ? `U${s.appsUnlocked}` : ''}|${s.ptsDone}/${s.ptsTarget}|${s.dayEndsAtMs}` : '');

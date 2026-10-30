@@ -77,7 +77,7 @@ export const withTimeout = (p, ms) => { let t; return Promise.race([Promise.reso
 // Truthful unlock result. before: labeledApps payload before the call [{label, locked}]; unlocked: labels native touched;
 // overall: {locked} from clingLock.status() (the lock-in / Discipline shield, separate ManagedSettings store); taskApps: labels
 // currently allowed by a running task. Never reports the opposite of the real state.
-export const describeUnlock = ({ plan = {}, before = [], unlocked = [], overall = {}, all = false } = {}) => {
+export const describeUnlock = ({ plan = {}, before = [], unlocked = [], overall = {}, all = false, taskAllow = null } = {}) => {
   const wasLocked = new Set(before.filter((a) => a && a.locked).map((a) => a.label));
   const freed = unlocked.filter((l) => wasLocked.has(l)); const notLocked = (plan.labels || []).filter((l) => !wasLocked.has(l) && !all);
   const unnamed = plan.unknown || []; const big = !!(overall && overall.locked);
@@ -93,6 +93,8 @@ export const describeUnlock = ({ plan = {}, before = [], unlocked = [], overall 
     if (unnamed.length) { out.not_found = unnamed; parts.push(`I can't see ${joinNames(unnamed)} in your named apps, so I can't unlock it by name. If it's still blocked, it comes from Screen Time or another lock; name it in the app list to control it here.`); }
     if (!parts.length) parts.push('Nothing was locked by name.');
   }
+  // Per-task app unlock (utils/taskAppUnlock.js): the running task's own apps are already open; say so, never fake it for others.
+  if (taskAllow && taskAllow.count) { out.task_unlock = taskAllow; parts.push(`The ${taskAllow.count} app${taskAllow.count === 1 ? '' : 's'} picked for "${taskAllow.title}" ${taskAllow.count === 1 ? 'is' : 'are'} unlocked while its timer runs.`); }
   out.summary = parts.join(' ');
   return out;
 };

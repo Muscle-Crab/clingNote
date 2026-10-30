@@ -26,6 +26,10 @@ public class ClingLockPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "labeledApps", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "lockApps", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "unlockApps", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "pickTaskApps", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "taskApps", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "allowTaskApps", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "endTaskApps", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setLockEndAlert", returnType: CAPPluginReturnPromise),
     ]
 
@@ -64,7 +68,7 @@ public class ClingLockPlugin: CAPPlugin, CAPBridgedPlugin {
             let model = PickerModel(selection: Self.loadSelection())
             var host: UIViewController?
             let view = PickerView(model: model) { save in
-                if save, let data = try? PropertyListEncoder().encode(model.selection) { LockShared.defaults?.set(data, forKey: LockShared.selectionKey) }
+                if save, let data = try? PropertyListEncoder().encode(model.selection) { LockShared.defaults?.set(data, forKey: LockShared.selectionKey); Self.saveSelectionTokens(model.selection) }
                 host?.dismiss(animated: true)
                 let s = model.selection
                 call.resolve(["saved": save, "apps": s.applicationTokens.count, "categories": s.categoryTokens.count, "sites": s.webDomainTokens.count])
@@ -194,12 +198,70 @@ public class ClingLockPlugin: CAPPlugin, CAPBridgedPlugin {
         call.resolve(["unlocked": hits.map { $0.label }, "apps": Self.appsPayload()])
     }
 
+    // MARK: per-task app unlock (TaskAllow in Shared/LockShared.swift; state machine in src/utils/taskAppUnlock.js)
+
+    /// FamilyActivityPicker (apps only) preselected with the task's saved apps. -> {saved, count}
+    @objc func pickTaskApps(_ call: CAPPluginCall) {
+        guard #available(iOS 16.0, *) else { call.reject("iOS 16 required"); return }
+        guard let id = call.getString("taskId"), !id.isEmpty else { call.reject("taskId required"); return }
+        DispatchQueue.main.async {
+            var sel = FamilyActivitySelection(); sel.applicationTokens = Set(TaskAllow.apps(id))
+            let model = PickerModel(selection: sel)
+            var host: UIViewController?
+            let view = PickerView(model: model) { save in
+                if save { TaskAllow.setApps(id, Array(model.selection.applicationTokens)); if TaskAllow.active()?.taskId == id { TaskAllow.reapply() } }
+                host?.dismiss(animated: true)
+                call.resolve(["saved": save, "count": TaskAllow.apps(id).count])
+            }
+            host = UIHostingController(rootView: view)
+            self.bridge?.viewController?.present(host!, animated: true)
+        }
+    }
+    /// -> {count, active: {taskId, untilMs} | null}. Also expires a stale allowance (relaunch after a kill).
+    @objc func taskApps(_ call: CAPPluginCall) {
+        guard #available(iOS 16.0, *) else { call.resolve(["count": 0]); return }
+        TaskAllow.expireIfNeeded()
+        let a = TaskAllow.active()
+        call.resolve(["count": TaskAllow.apps(call.getString("taskId") ?? "").count,
+                      "active": a.map { ["taskId": $0.taskId, "untilMs": $0.until, "count": TaskAllow.apps($0.taskId).count] } as Any])
+    }
+    /// Takes the task's apps off every shield until untilMs (or endTaskApps). The DeviceActivity end re-locks in the extension.
+    @objc func allowTaskApps(_ call: CAPPluginCall) {
+        guard #available(iOS 16.0, *) else { call.resolve(["allowed": 0]); return }
+        guard let id = call.getString("taskId"), !id.isEmpty else { call.reject("taskId required"); return }
+        let untilMs = call.getDouble("untilMs") ?? 0
+        let until = Date(timeIntervalSince1970: untilMs / 1000)
+        guard until.timeIntervalSinceNow > 60, !TaskAllow.apps(id).isEmpty else { call.resolve(["allowed": 0]); return }
+        TaskAllow.setActive(id, until: untilMs)
+        let startDate = min(Date().addingTimeInterval(-60), until.addingTimeInterval(-15 * 60)) // >= 15 min window, never past until
+        do {
+            DeviceActivityCenter().stopMonitoring([.clingTask])
+            try DeviceActivityCenter().startMonitoring(.clingTask, during: DeviceActivitySchedule(intervalStart: AppLocks.comps(startDate), intervalEnd: AppLocks.comps(until), repeats: false))
+        } catch {
+            TaskAllow.clearActive(); TaskAllow.reapply() // no schedule = nothing would re-lock: refuse rather than leave apps open
+            call.resolve(["allowed": 0, "monitor": "failed: \(error)"]); return
+        }
+        TaskAllow.reapply()
+        call.resolve(["allowed": TaskAllow.apps(id).count, "untilMs": untilMs, "monitor": "ok"])
+    }
+    /// Task completed / ended early / timer done: re-lock now. Optional taskId only ends that task's allowance.
+    @objc func endTaskApps(_ call: CAPPluginCall) {
+        guard #available(iOS 16.0, *) else { call.resolve(["ended": false]); return }
+        if let id = call.getString("taskId"), let a = TaskAllow.active(), a.taskId != id { call.resolve(["ended": false]); return }
+        TaskAllow.clearActive() // before stop: the extension's intervalDidEnd must see no allowance
+        DeviceActivityCenter().stopMonitoring([.clingTask])
+        TaskAllow.reapply()
+        call.resolve(["ended": true])
+    }
+
     @available(iOS 16.0, *)
     static func applyShield() {
-        let s = loadSelection(); let store = ManagedSettingsStore(named: .clingLock)
-        store.shield.applications = s.applicationTokens.isEmpty ? nil : s.applicationTokens
-        store.shield.applicationCategories = s.categoryTokens.isEmpty ? nil : .specific(s.categoryTokens)
-        store.shield.webDomains = s.webDomainTokens.isEmpty ? nil : s.webDomainTokens
+        saveSelectionTokens(loadSelection()); LockIn.shield() // minus the running task's allowed apps (TaskAllow)
+    }
+    @available(iOS 16.0, *)
+    static func saveSelectionTokens(_ s: FamilyActivitySelection) {
+        let t = LockSelectionTokens(apps: s.applicationTokens, categories: s.categoryTokens, domains: s.webDomainTokens)
+        if let d = try? JSONEncoder().encode(t) { LockShared.defaults?.set(d, forKey: LockShared.selectionTokensKey) }
     }
     @available(iOS 16.0, *)
     static func clearShield() {

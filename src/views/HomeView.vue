@@ -112,7 +112,8 @@
                        @close="closeTaskDetailModal" @preview="showImagePreview = true"
                        @remove-attachment="removeTaskAttachment" @toggle-label="toggleLabelHighlight"
                        @upload="uploadFromDetail" @video="videoFromDetail"
-                       :schedule="detailSchedule" :day-date="selectedDayDate" :sched-error="schedEditError" @save-schedule="saveTaskSchedule" />
+                       :schedule="detailSchedule" :day-date="selectedDayDate" :sched-error="schedEditError" @save-schedule="saveTaskSchedule"
+                       :task-apps="detailTaskApps" @pick-apps="pickTaskAppsFromDetail" />
 
 
       <ImagePreview v-if="showImagePreview" :src="taskDetail.imageURL" @close="showImagePreview = false" />
@@ -378,6 +379,7 @@ import { loadHabits, saveHabits, addHabit, logHabit, habitSummary } from '@/util
 import { autoSchedule } from '@/utils/autoSchedule';
 import { clingLock, clingNative, lockAvailable, nativeAvailable } from '@/native/clingNative';
 import { planLock, resumePending, untilFor, fmtDuration, joinNames, withTimeout, describeUnlock } from '@/utils/appLockNames';
+import { planTaskUnlock } from '@/utils/taskAppUnlock';
 import LockGuideSheet from '@/components/home/LockGuideSheet.vue';
 import { LOCK_PREF, PENALTY_KEY, EMERGENCY_PENALTY, shouldShield, lockAction, busyToDay, mergePenalties, lastPenaltyDay } from '@/utils/appLock';
 import { previewDayTarget, requiredPoints } from '@/utils/dayTarget';
@@ -3644,8 +3646,37 @@ const focusSpoken = new Map(); // task key -> Set(marks)
 // Lock-screen Live Activity: running OR paused timer (paused = frozen remaining time + "Paused"), points toward today's target and
 // time left in the 8-hour day. A new activity per timer session; content updates (pause, points, day) go through updateFocusActivity.
 const focusTask = () => (selectedDayRoutine.value || []).find((x) => x && x.timerActive && x.timerEndTime && x.completed !== true);
-const focusLiveState = (t) => focusActivityState(t, { ptsDone: pointsAccumulated.value, ptsTarget: dayRequiredPts.value || 0, dayEndMs: (eh.running.value && eh.lock.value && eh.lock.value.endMs) || 0 });
+const focusLiveState = (t) => focusActivityState(t, { ptsDone: pointsAccumulated.value, ptsTarget: dayRequiredPts.value || 0, dayEndMs: (eh.running.value && eh.lock.value && eh.lock.value.endMs) || 0,
+  appsUnlocked: taskAllow.value && t && taskAllow.value.taskId === widgetTaskId(t) ? taskAllow.value.count || 0 : 0 });
+// ---- Per-task app unlock (utils/taskAppUnlock.js; native TaskAllow). Apps a task needs come off the shields while its timer runs and
+// re-lock on complete / end early / pause / timer end (natively via the "clingTask" DeviceActivity end, also when the app is killed).
+const TASK_APPS_KEY = 'cn.taskApps'; // {taskId: count} (tokens stay native; this only tells the planner which tasks have apps)
+const taskAppCounts = ref((() => { try { return JSON.parse(localStorage.getItem(TASK_APPS_KEY) || '{}') || {}; } catch (e) { return {}; } })());
+const taskAllow = ref(null); // native active allowance {taskId, untilMs, count} | null
+const taskGate = () => { const d = discState.value || {}; const today = localDateStr();
+  return strictOn.value && d.bossDate === today && d.bossClearedDate !== today ? { refuse: 'Strict Discipline: clear the boss check-in first, then task apps unlock.' } : {}; };
+let taskAppsBusy = false;
+const syncTaskApps = async ({ relaunch = false } = {}) => {
+  if (!lockAvailable() || taskAppsBusy) return; taskAppsBusy = true;
+  try {
+    if (relaunch || taskAllow.value === null) { const r = await clingLock.taskApps(); taskAllow.value = (r && r.active) || false; } // native expires a stale one first
+    const plan = planTaskUnlock(taskAllow.value || null, selectedDayRoutine.value || [], { appCounts: taskAppCounts.value, gate: taskGate() });
+    if (plan.cmd === 'allow') { const r = await clingLock.allowTaskApps(plan.taskId, plan.untilMs); taskAllow.value = r && r.allowed ? { taskId: plan.taskId, untilMs: plan.untilMs, count: r.allowed } : false; }
+    else if (plan.cmd === 'end') { await clingLock.endTaskApps(); taskAllow.value = false; }
+  } catch (e) { console.warn('task apps', e && e.message); } finally { taskAppsBusy = false; }
+};
+const detailTaskApps = computed(() => { const t = taskDetail.value; if (!t || !lockAvailable()) return { available: false };
+  const id = widgetTaskId(t); const a = taskAllow.value; return { available: true, count: Number(taskAppCounts.value[id]) || 0, active: !!(a && a.taskId === id), untilMs: (a && a.taskId === id && a.untilMs) || 0 }; });
+const pickTaskAppsFromDetail = async () => {
+  const t = taskDetail.value; if (!t || !lockAvailable()) return; const a0 = await clingLock.requestAuthorization(); if (a0.status !== 'approved') return;
+  const id = widgetTaskId(t); const r = await clingLock.pickTaskApps(id); if (!r || !r.saved) return;
+  const m = { ...taskAppCounts.value }; if (r.count) m[id] = r.count; else delete m[id]; taskAppCounts.value = m;
+  try { localStorage.setItem(TASK_APPS_KEY, JSON.stringify(m)); } catch (e) { /* ignore */ }
+  syncTaskApps();
+};
+onMounted(() => { setTimeout(() => syncTaskApps({ relaunch: true }), 1500); });
 const focusTick = () => {
+  if (taskAllow.value && taskAllow.value.untilMs <= Date.now()) syncTaskApps({ relaunch: true }); // timer expiry: native already re-locked
   const t = focusTask();
   if (!t) { if (focusLive) { focusLive = false; focusSig = ''; clingNative.endFocusActivity(); } return; }
   const end = new Date(t.timerEndTime).getTime(); const k = `${taskKey(t)}|${t.timerStartedAt || ''}`;
@@ -3665,7 +3696,9 @@ onMounted(() => { focusIv = setInterval(focusTick, 15000); });
 // next 15 s poll: ActivityKit only allows Activity.request while the app is in the foreground, so a user who locks the phone right after
 // tapping Start used to get no Live Activity (build 36). Also re-check when the app is about to go to the background.
 const activeTimerSig = computed(() => { const t = focusTask(); return t ? `${taskKey(t)}|${t.timerEndTime}|${t.timerPausedAt || ''}|${pointsAccumulated.value}/${dayRequiredPts.value || 0}|${(eh.lock.value && eh.lock.value.endMs) || 0}` : ''; });
-watch(activeTimerSig, () => { try { focusTick(); } catch (e) { console.warn('focus live', e && e.message); } });
+watch(activeTimerSig, () => { try { focusTick(); } catch (e) { console.warn('focus live', e && e.message); } syncTaskApps(); });
+watch(() => (selectedDayRoutine.value || []).map((t) => (t && t.completed ? 1 : 0)).join(''), () => { syncTaskApps(); });
+watch(() => JSON.stringify(taskAllow.value || null), () => { try { focusTick(); } catch (e) { /* ignore */ } }); // lock-screen "🔓 N apps"
 // ---- Lock-screen Pause / Resume / Done (FocusIntents.swift queues {id, kind, taskId, ts} in the App Group) ----
 // Done goes through widgetComplete -> toggleTaskCompletion: the same path as completing in-app, so the server and Firestore credit the
 // points once (an already-completed task is a no-op). Applied ids are remembered so a re-delivered action never applies twice.
@@ -3929,7 +3962,8 @@ const runLockPlan = async (action, plan, pending) => {
   }
   const before = lockAppsCache.value.slice(); const overall = await clingLock.status().catch(() => ({}));
   const r = plan.labels.length || plan.all ? await clingLock.unlockApps(plan.all ? ['*'] : plan.labels) : { unlocked: [] }; lockAppsCache.value = r.apps || lockAppsCache.value;
-  return describeUnlock({ plan, before, unlocked: r.unlocked || [], overall, all: !!plan.all });
+  const ta = taskAllow.value; const tt = ta && (selectedDayRoutine.value || []).find((x) => x && widgetTaskId(x) === ta.taskId);
+  return describeUnlock({ plan, before, unlocked: r.unlocked || [], overall, all: !!plan.all, taskAllow: ta && tt ? { title: tt.title, count: ta.count, untilMs: ta.untilMs } : null });
 };
 const lockByName = async (name, a = {}) => {
   if (!lockAvailable()) return { error: 'App lock needs the ClingNote iPhone app (iOS 16+).' };

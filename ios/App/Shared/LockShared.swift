@@ -55,7 +55,7 @@ enum AppLocks {
     /// Drops expired entries, then shields exactly the still-locked tokens.
     static func apply(now: Double = Date().timeIntervalSince1970 * 1000) {
         var l = locked(); l = l.filter { $0.value == 0 || $0.value > now }; saveLocked(l)
-        let tokens = Set(apps().filter { l[$0.id] != nil }.map { $0.token })
+        let tokens = Set(apps().filter { l[$0.id] != nil }.map { $0.token }).subtracting(TaskAllow.allowed(now: now))
         store.shield.applications = tokens.isEmpty ? nil : tokens
     }
     /// Schedule components without seconds (DeviceActivity schedules are minute-granular).
@@ -71,11 +71,77 @@ enum AppLocks {
             return u > 0 && u <= now
         }
         if !stale.isEmpty { DeviceActivityCenter().stopMonitoring(stale) }
+        if let a = TaskAllow.active(), !TaskAllow.isLive(until: a.until, nowMs: now) { TaskAllow.clearActive(); DeviceActivityCenter().stopMonitoring([.clingTask]); TaskAllow.reapply(); return }
         apply(now: now)
     }
 }
 @available(iOS 16.0, *)
 extension ManagedSettingsStore.Name { static let clingApps = Self("clingApps") }
+
+/// Per-task app unlock: apps a task needs (picked once per task with FamilyActivityPicker, stored as opaque tokens) are
+/// taken out of every ClingNote shield while that task runs, then re-locked when it is completed, ended early or its
+/// window ends. The window end is a DeviceActivity schedule ("clingTask"), so ClingLockMonitor re-locks even when the app
+/// was killed; the app also re-checks on launch (cleanupExpired). Pure rule mirrored in src/utils/taskAppUnlock.js.
+@available(iOS 16.0, *)
+extension DeviceActivityName { static let clingTask = Self("clingTask") }
+@available(iOS 16.0, *)
+enum TaskAllow {
+    static let appsKey = "lock.taskApps"     // [taskId: [ApplicationToken]] (JSON)
+    static let activeKey = "lock.taskAllow"  // ["taskId": String, "until": Double ms]
+    static func all() -> [String: [ApplicationToken]] {
+        guard let d = LockShared.defaults?.data(forKey: appsKey), let m = try? JSONDecoder().decode([String: [ApplicationToken]].self, from: d) else { return [:] }
+        return m
+    }
+    static func apps(_ taskId: String) -> [ApplicationToken] { all()[taskId] ?? [] }
+    static func setApps(_ taskId: String, _ t: [ApplicationToken]) {
+        var m = all(); m[taskId] = t.isEmpty ? nil : t
+        if let d = try? JSONEncoder().encode(m) { LockShared.defaults?.set(d, forKey: appsKey) }
+    }
+    static func active() -> (taskId: String, until: Double)? {
+        guard let a = LockShared.defaults?.dictionary(forKey: activeKey), let id = a["taskId"] as? String, !id.isEmpty else { return nil }
+        return (id, (a["until"] as? Double) ?? Double((a["until"] as? Int) ?? 0))
+    }
+    /// Pure: is the allowance still live? until 0 never counts (an allowance always has an end).
+    static func isLive(until: Double, nowMs: Double) -> Bool { until > nowMs }
+    /// Tokens to keep OFF the shields right now (empty when no live allowance).
+    static func allowed(now: Double = Date().timeIntervalSince1970 * 1000) -> Set<ApplicationToken> {
+        guard let a = active(), isLive(until: a.until, nowMs: now) else { return [] }
+        return Set(apps(a.taskId))
+    }
+    static func setActive(_ taskId: String, until: Double) { LockShared.defaults?.set(["taskId": taskId, "until": until], forKey: activeKey) }
+    static func clearActive() { LockShared.defaults?.removeObject(forKey: activeKey) }
+    /// Re-applies both shields with the current allowance (lock-in store only while the lock-in is on).
+    static func reapply() {
+        let st = LockShared.defaults?.dictionary(forKey: LockShared.stateKey) ?? [:]
+        if (st["locked"] as? Bool) == true { LockIn.shield() }
+        AppLocks.apply()
+    }
+    /// Drops an expired allowance (relaunch after the app was killed / monitor missed) and re-locks.
+    static func expireIfNeeded(now: Double = Date().timeIntervalSince1970 * 1000) {
+        guard let a = active(), !isLive(until: a.until, nowMs: now) else { return }
+        clearActive(); DeviceActivityCenter().stopMonitoring([.clingTask]); reapply()
+    }
+}
+
+/// Lock-in shield (store .clingLock) from the saved selection, minus the running task's allowed apps.
+@available(iOS 16.0, *)
+enum LockIn {
+    static func shield() {
+        let store = ManagedSettingsStore(named: .clingLock)
+        guard let d = LockShared.defaults?.data(forKey: LockShared.selectionTokensKey),
+              let sel = try? JSONDecoder().decode(LockSelectionTokens.self, from: d) else { return }
+        let allow = TaskAllow.allowed()
+        let apps = sel.apps.subtracting(allow)
+        store.shield.applications = apps.isEmpty ? nil : apps
+        store.shield.applicationCategories = sel.categories.isEmpty ? nil : .specific(sel.categories, except: allow)
+        store.shield.webDomains = sel.domains.isEmpty ? nil : sel.domains
+    }
+}
+/// Token copy of the lock-in FamilyActivitySelection, so extensions shield it without importing FamilyControls here.
+@available(iOS 16.0, *)
+struct LockSelectionTokens: Codable { var apps: Set<ApplicationToken>; var categories: Set<ActivityCategoryToken>; var domains: Set<WebDomainToken> }
+@available(iOS 16.0, *)
+extension LockShared { static let selectionTokensKey = "lock.selectionTokens" }
 #endif
 
 #endif

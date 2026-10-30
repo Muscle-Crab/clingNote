@@ -17,6 +17,8 @@ struct FocusActivityAttributes: ActivityAttributes {
         var dayEndsAt: Date? = nil
         /// Auto-started focus session (src/utils/focusAutoStart.js): no Pause button, only Done.
         var locked: Bool? = nil
+        /// Apps unlocked for this task (per-task app unlock, TaskAllow); nil/0 = none.
+        var appsUnlocked: Int? = nil
     }
     var title: String
     /// widgetTaskId of the focused task (src/utils/widgetSnapshot.js), carried by the Pause/Resume/Done intents.

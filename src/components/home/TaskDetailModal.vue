@@ -48,6 +48,13 @@
           <span>{{ formatShortDate(task.reminder.date) }} at {{ formatTime(task.reminder.time) }}</span>
         </div>
 
+        <!-- Per-task app unlock (iPhone): one compact row in the existing detail-row style, no extra box -->
+        <button v-if="taskApps.available" type="button" class="detail-row detail-row--tap" data-test="detail-task-apps" @click="$emit('pick-apps')">
+          <span class="detail-row-icon">{{ taskApps.active ? '🔓' : '📱' }}</span>
+          <span class="detail-row-grow">{{ taskAppsLabel }}</span>
+          <span class="detail-row-chev" aria-hidden="true">›</span>
+        </button>
+
         <div class="detail-sched" data-test="detail-schedule">
           <p v-if="label" class="detail-row" data-test="sched-label">{{ label }}</p>
           <SchedulePicker v-model="sched" :min-date="sched.repeat === 'never' ? dayDate : ''" />
@@ -96,6 +103,7 @@ import SchedulePicker from './SchedulePicker.vue';
 import { categoryOf } from '@/utils/taskCategory';
 import { estimateOf, formatClock, formatDuration, toMinutes } from '@/utils/taskPlanning';
 import { subtaskProgress } from '@/utils/subtasks';
+import { taskAppsRowLabel } from '@/utils/taskAppUnlock';
 
 const props = defineProps({
   task: { type: Object, default: () => ({}) },
@@ -103,8 +111,9 @@ const props = defineProps({
   schedule: { type: Object, default: () => ({ on: false, date: '', time: '', repeat: 'never', days: [], dayOfMonth: '', until: '' }) },
   dayDate: { type: String, default: '' },
   schedError: { type: String, default: '' },
+  taskApps: { type: Object, default: () => ({ available: false }) },
 });
-const emit = defineEmits(['upload', 'video', 'close', 'preview', 'remove-attachment', 'toggle-label', 'save-schedule']);
+const emit = defineEmits(['upload', 'video', 'close', 'preview', 'remove-attachment', 'toggle-label', 'save-schedule', 'pick-apps']);
 const clone = (o) => JSON.parse(JSON.stringify(o || {}));
 const original = ref(clone(props.schedule));
 const sched = ref(clone(props.schedule));
@@ -126,6 +135,7 @@ const facts = computed(() => {
   if (t.status && t.status !== 'todo') out.push(t.status[0].toUpperCase() + t.status.slice(1));
   return out;
 });
+const taskAppsLabel = computed(() => taskAppsRowLabel(props.taskApps.count || 0, props.taskApps));
 const save = (scope) => emit('save-schedule', { sched: clone(sched.value), scope });
 </script>
 
@@ -234,6 +244,9 @@ const save = (scope) => emit('save-schedule', { sched: clone(sched.value), scope
   border-top: 1px solid var(--c-border, #2a2a2e);
 }
 .detail-row-icon { font-size: 1rem; flex-shrink: 0; }
+.detail-row--tap { width: 100%; background: none; border-left: 0; border-right: 0; border-bottom: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; align-items: center; }
+.detail-row-grow { flex: 1; min-width: 0; color: var(--c-text-2, #9a9891); }
+.detail-row-chev { color: var(--c-text-3, #6b6a66); }
 .detail-row-label { font-weight: 600; font-size: 0.78rem; color: var(--c-text-3, #6b6a66); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
 .detail-row-content { color: var(--c-text-2, #9a9891); }
 .detail-labels { display: flex; flex-wrap: wrap; gap: 6px; padding-top: 10px; border-top: 1px solid var(--c-border, #2a2a2e); }

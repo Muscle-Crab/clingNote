@@ -21,6 +21,11 @@ export const clingLock = {
   pickNamedApps: safe('ClingLock', Lock, (p, suggest = []) => p.pickNamedApps({ suggest }), { saved: false, apps: [] }),
   lockApps: safe('ClingLock', Lock, (p, labels, untilMs = 0) => p.lockApps({ labels, untilMs }), { locked: [] }),
   unlockApps: safe('ClingLock', Lock, (p, labels = []) => p.unlockApps({ labels }), { unlocked: [] }),
+  // per-task app unlock (src/utils/taskAppUnlock.js): pick apps a task needs; allow them while its timer runs; end re-locks
+  pickTaskApps: safe('ClingLock', Lock, (p, taskId) => p.pickTaskApps({ taskId }), { saved: false, count: 0 }),
+  taskApps: safe('ClingLock', Lock, (p, taskId = '') => p.taskApps({ taskId }), { count: 0, active: null }),
+  allowTaskApps: safe('ClingLock', Lock, (p, taskId, untilMs) => p.allowTaskApps({ taskId, untilMs }), { allowed: 0 }),
+  endTaskApps: safe('ClingLock', Lock, (p, taskId) => p.endTaskApps(taskId ? { taskId } : {}), { ended: false }),
   // Lock-end alert level: off | subtle | standard | loud (default) | maximum. Omit level to read.
   setLockEndAlert: safe('ClingLock', Lock, (p, level) => p.setLockEndAlert(level ? { level } : {}), { level: 'loud' }),
 };

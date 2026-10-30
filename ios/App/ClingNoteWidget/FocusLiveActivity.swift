@@ -50,7 +50,7 @@ struct FocusLockScreenView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .center) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(state.paused ? "Paused" : "Focus").font(.caption).foregroundColor(state.paused ? .orange : .secondary)
+                    Text((state.paused ? "Paused" : "Focus") + FocusFormat.unlockedSuffix(state.appsUnlocked)).font(.caption).foregroundColor(state.paused ? .orange : .secondary)
                     Text(attributes.title).font(.headline).lineLimit(1)
                 }
                 Spacer()
@@ -140,4 +140,6 @@ enum FocusFormat {
         let h = s / 3600, m = (s % 3600) / 60, r = s % 60
         return h > 0 ? String(format: "%d:%02d:%02d", h, m, r) : String(format: "%d:%02d", m, r)
     }
+    /// " · 🔓 2 apps" while the task's apps are unlocked (same caption line, no new block).
+    static func unlockedSuffix(_ n: Int?) -> String { guard let n = n, n > 0 else { return "" }; return " · 🔓 \(n) app\(n == 1 ? "" : "s")" }
 }

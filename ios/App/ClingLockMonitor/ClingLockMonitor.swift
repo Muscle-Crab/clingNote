@@ -9,6 +9,7 @@ class ClingLockMonitor: DeviceActivityMonitor {
     let store = ManagedSettingsStore(named: .clingLock)
     override func intervalDidStart(for activity: DeviceActivityName) {
         super.intervalDidStart(for: activity)
+        if activity == .clingLock, LockShared.defaults?.data(forKey: LockShared.selectionTokensKey) != nil { LockIn.shield(); return } // minus task-allowed apps
         guard activity == .clingLock, let data = LockShared.defaults?.data(forKey: LockShared.selectionKey),
               let s = try? PropertyListDecoder().decode(FamilyActivitySelection.self, from: data) else { return }
         store.shield.applications = s.applicationTokens.isEmpty ? nil : s.applicationTokens
@@ -17,6 +18,11 @@ class ClingLockMonitor: DeviceActivityMonitor {
     }
     override func intervalDidEnd(for activity: DeviceActivityName) {
         super.intervalDidEnd(for: activity)
+        if activity == .clingTask { // per-task app unlock window ended (works when the app was killed)
+            let until = TaskAllow.active()?.until ?? 0
+            if !LockEndAlertGate.isRealEnd(untilMs: until, nowMs: Date().timeIntervalSince1970 * 1000) { return } // restart / already ended by the app
+            TaskAllow.clearActive(); TaskAllow.reapply(); DeviceActivityCenter().stopMonitoring([activity]); return
+        }
         if activity.rawValue.hasPrefix(AppLocks.activityPrefix) {  // per-app timed lock ended
             let id = String(activity.rawValue.dropFirst(AppLocks.activityPrefix.count))
             // Restart artifact (app re-scheduled/unlocked this activity): leave the saved lock and the new schedule alone.

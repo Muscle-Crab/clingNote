@@ -172,7 +172,8 @@ public class ClingNativePlugin: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDe
             remainingSec: paused ? max(0, call.getInt("remainingSec") ?? 0) : nil,
             ptsDone: call.getInt("ptsDone"), ptsTarget: call.getInt("ptsTarget"),
             dayEndsAt: dayEndMs > 0 ? Date(timeIntervalSince1970: dayEndMs / 1000) : nil,
-            locked: (call.getBool("locked") ?? false) ? true : nil)
+            locked: (call.getBool("locked") ?? false) ? true : nil,
+            appsUnlocked: (call.getInt("appsUnlocked") ?? 0) > 0 ? call.getInt("appsUnlocked") : nil)
     }
     #endif
     @objc func startFocusActivity(_ call: CAPPluginCall) {
