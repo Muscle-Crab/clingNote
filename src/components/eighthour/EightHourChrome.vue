@@ -34,6 +34,7 @@ import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { auth } from '@/firebaseConfig';
 import { useEightHour } from '@/composables/useEightHour';
 import { paceOf, pendingCelebration } from '@/utils/pressure';
+import { localYMD } from '@/utils/localDate';
 import { pillState, SHUT_ROUTES, PILL_ROUTES, SEEN_KEY } from '@/utils/eightHourChrome';
 import { speak } from '@/composables/useSpeech';
 import { hoursLabel, WARN_MINUTES } from '@/utils/eightHour';
@@ -80,10 +81,11 @@ const readSeen = () => { try { return JSON.parse(localStorage.getItem(SEEN_KEY) 
 const cele = ref(null);
 watch(() => [uid.value, eh.stats.value, eh.st.data?.offline], () => {
   if (!uid.value || eh.st.data?.offline || cele.value) return;
-  const c = pendingCelebration(eh.stats.value, readSeen());
+  const c = pendingCelebration(eh.stats.value, readSeen(), localYMD());
   if (!c) return;
+  try { localStorage.setItem(SEEN_KEY, JSON.stringify({ ...readSeen(), [c.key]: c.id })); } catch (e) { /* ignore */ } // mark seen BEFORE showing: once only
+  if (c.stale) return; // an old result: never surface it days later
   cele.value = c;
-  try { localStorage.setItem(SEEN_KEY, JSON.stringify({ ...readSeen(), [c.key]: c.id })); } catch (e) { /* ignore */ }
   try { speak(c.voice); } catch (e) { /* no speech */ }
   setTimeout(() => { if (cele.value === c) cele.value = null; }, 7000);
 }, { immediate: true });

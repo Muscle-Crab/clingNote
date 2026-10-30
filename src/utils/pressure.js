@@ -31,7 +31,21 @@ export const badgeLabel = (id) => BADGE_INFO[id] || { name: id, icon: '🏅' };
 export const levelOf = (xp = 0) => 1 + Math.floor(Math.sqrt(Math.max(0, xp) / 50));
 
 // Transient celebration to show once (keyed so it never repeats): the latest day result or a new manager award.
-export const pendingCelebration = (stats, seen = {}) => {
+const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const ymdMs = (k) => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(k || '')); return m ? Date.UTC(+m[1], +m[2] - 1, +m[3]) : NaN; };
+// "Yesterday (Oct 29)", "Today (Oct 30)" or "Mon (Oct 26)" for the day a result belongs to (dayKey = YYYY-MM-DD, today = local YYYY-MM-DD).
+export const dayLabel = (dayKey, today) => {
+  const d = ymdMs(dayKey); if (!Number.isFinite(d)) return '';
+  const md = `${MON[new Date(d).getUTCMonth()]} ${new Date(d).getUTCDate()}`;
+  const diff = Math.round((ymdMs(today) - d) / 86400000);
+  if (diff === 0) return `Today (${md})`; if (diff === 1) return `Yesterday (${md})`;
+  return `${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][new Date(d).getUTCDay()]} (${md})`;
+};
+// The server settles a finished day lazily (on the next call), so the result shown here usually belongs to an EARLIER day.
+// It always carries that day's date, never reads as today's outcome, and is shown once (seen.day). Results older than
+// MAX_AGE_DAYS are returned with stale:true so the caller marks them seen without showing them.
+export const MAX_AGE_DAYS = 2;
+export const pendingCelebration = (stats, seen = {}, today = '') => {
   if (!stats) return null;
   const a = (stats.awards || [])[0];
   if (a && a.at && String(a.at) !== String(seen.award || '')) {
@@ -39,13 +53,17 @@ export const pendingCelebration = (stats, seen = {}) => {
     return { key: 'award', id: String(a.at), title: 'Your manager sent you a bonus', lines: [a.bonus ? `+${a.bonus} coins` : '', b ? `${b.icon} ${b.name}` : '', a.note ? `“${a.note}”` : '', a.from ? `from ${a.from}` : ''].filter(Boolean), voice: 'Nice! Your manager just sent you a bonus.' };
   }
   if (stats.lastDay && stats.lastDay !== seen.day) {
+    const when = today ? dayLabel(stats.lastDay, today) : '';
+    const age = today ? Math.round((ymdMs(today) - ymdMs(stats.lastDay)) / 86400000) : 0;
+    const stale = Number.isFinite(age) && age > MAX_AGE_DAYS;
+    const prefix = when || `Day ${stats.lastDay}`; const spoken = /^Today/.test(prefix) ? 'Today' : /^Yesterday/.test(prefix) ? 'Yesterday' : 'On your last day';
     if (stats.lastResult === 'met' && stats.lastReward) {
       const r = stats.lastReward; const b = r.badge ? badgeLabel(r.badge) : null;
-      return { key: 'day', id: stats.lastDay, title: 'Goal met. Well done.', lines: [`+${r.xp} XP · +${r.coins} coins`, r.shield ? '🛡️ Streak shield earned' : '', b ? `${b.icon} ${b.name} badge` : '', `🔥 ${stats.streak} day streak`].filter(Boolean), voice: `You hit your goal. That's a ${stats.streak} day streak. Let's keep it going.` };
+      return { key: 'day', id: stats.lastDay, dayKey: stats.lastDay, stale, title: `${prefix}: goal met. Well done.`, lines: [`+${r.xp} XP · +${r.coins} coins`, r.shield ? '🛡️ Streak shield earned' : '', b ? `${b.icon} ${b.name} badge` : '', `🔥 ${stats.streak} day streak`].filter(Boolean), voice: `${spoken} you hit your goal. That's a ${stats.streak} day streak. Let's keep it going.` };
     }
     if (stats.lastResult === 'missed' && stats.lastPenalty) {
       const p = stats.lastPenalty;
-      return { key: 'day', id: stats.lastDay, miss: true, title: 'Goal missed.', lines: [p.shieldUsed ? '🛡️ A shield saved your streak' : 'Streak lost', p.coins ? `-${p.coins} coins` : '', 'Target goes up until you hit it'].filter(Boolean), voice: p.shieldUsed ? "You missed the goal, but your shield saved the streak. Let's make tomorrow count." : "You missed the goal, and the streak reset. That's okay. Tomorrow we hit it." };
+      return { key: 'day', id: stats.lastDay, dayKey: stats.lastDay, stale, miss: true, title: `${prefix}: goal missed.`, lines: [p.shieldUsed ? '🛡️ A shield saved your streak' : 'Streak reset', p.coins ? `-${p.coins} coins` : '', 'Target goes up until you hit it'].filter(Boolean), voice: p.shieldUsed ? `${spoken} you missed the goal, but your shield saved the streak. Let's make today count.` : `${spoken} you missed the goal, and the streak reset. That's okay. Today is a fresh start.` };
     }
   }
   return null;
