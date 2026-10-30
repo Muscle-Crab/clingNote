@@ -27,8 +27,8 @@ export function createAssistantExecutor(deps) {
         }
         return { ok: !failed.length, added: added.length, summary: added.join(', '), ...(failed.length ? { failed } : {}) };
       }
-      case 'edit_task': await deps.editTask(a.task, a.patch); return { ok: true, summary: a.task.title };
-      case 'reschedule_task': await deps.reschedule(a.task, { date: a.date, time: a.time }); return { ok: true, summary: `${a.task.title} → ${[a.date || 'today', a.time].filter(Boolean).join(' ')}` };
+      case 'edit_task': { const ok = await deps.editTask(a.task, a.patch); return ok === false ? { error: 'Could not save the change (day locked or offline).' } : { ok: true, summary: a.task.title }; }
+      case 'reschedule_task': { const ok = await deps.reschedule(a.task, { date: a.date, time: a.time }); if (ok === false) return { error: 'Could not move it (day locked or offline).' }; } return { ok: true, summary: `${a.task.title} → ${[a.date || 'today', a.time].filter(Boolean).join(' ')}` };
       case 'delete_task': { const ok = await deps.deleteTask(a.task); return ok === false ? { error: 'Could not delete (day locked or shut).' } : { ok: true, summary: a.task.title }; }
       case 'complete_task': { const ok = await deps.complete(a.task); return ok === false ? { error: 'Could not complete.' } : { ok: true, summary: a.task.title }; }
       case 'start_timer': await deps.startTimer(a.task, a.minutes); return { ok: true, summary: `${a.task.title}, ${a.minutes} min` };

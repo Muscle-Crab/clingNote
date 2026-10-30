@@ -58,6 +58,21 @@ const cleanTitle = (s) => {
   return t ? t[0].toUpperCase() + t.slice(1) : '';
 };
 
+// "in 2 hours", "In 2h", "in 90 min", "in half an hour", "in an hour and a half", "in 2 and a half hours", "in 1 hour 15 minutes",
+// "in a couple of hours" -> minutes from now (0 = none). Used by the local parser and to backfill a model item that dropped the time.
+const REL_UNIT_H = '(?:hours?|hrs?|h)'; const REL_UNIT_M = '(?:minutes?|mins?|m)';
+export const relativeMinutes = (text) => {
+  const t = ` ${String(text || '').toLowerCase().replace(/\s+/g, ' ')} `;
+  let m = t.match(/\b(?:in|after)\s+(?:a\s+|one\s+)?half(?:\s+an?)?\s+hour\b/); if (m) return { min: 30, match: m[0] };
+  m = t.match(/\b(?:in|after)\s+(?:an?|one)\s+hour\s+and\s+a\s+half\b/); if (m) return { min: 90, match: m[0] };
+  m = t.match(new RegExp(`\\b(?:in|after)\\s+${NUMW}\\s+and\\s+a\\s+half\\s+${REL_UNIT_H}\\b`)); if (m && num(m[1].replace(/ of$/, '')) != null) return { min: Math.round((num(m[1].replace(/ of$/, '')) + 0.5) * 60), match: m[0] };
+  m = t.match(new RegExp(`\\b(?:in|after)\\s+${NUMW}\\s*${REL_UNIT_H}(?:\\s+(?:and\\s+)?(\\d+)\\s*${REL_UNIT_M})?\\b`)); if (m && num(m[1].replace(/ of$/, '')) != null) return { min: Math.round(num(m[1].replace(/ of$/, '')) * 60) + (Number(m[2]) || 0), match: m[0] };
+  m = t.match(new RegExp(`\\b(?:in|after)\\s+${NUMW}\\s*${REL_UNIT_M}\\b`)); if (m && num(m[1].replace(/ of$/, '')) != null) return { min: Math.round(num(m[1].replace(/ of$/, ''))), match: m[0] };
+  return null;
+};
+// now + N minutes -> { date: 'YYYY-MM-DD', start: 'HH:MM' } (crosses midnight correctly).
+export const relativeSlot = (min, now = new Date()) => { const t = new Date(now.getTime() + min * 60000); return { date: ymd(t), start: hm(t.getHours(), t.getMinutes()) }; };
+
 export function parseClause(text, now = new Date()) {
   const st = { s: ` ${String(text || '').trim().replace(FILLER, ' ').replace(/^(?:(?:also|and|then|plus|so|okay|ok|um+|uh+|next|after that|afterwards|first(?:ly)?|second(?:ly)?|third(?:ly)?|fourth|finally|lastly|number \w+),?:?\s+)+/i, '')} ` };
   let kind = ''; let weak = '';
@@ -65,7 +80,8 @@ export function parseClause(text, now = new Date()) {
   else if (take(st, /^\s*(?:please\s+)?(?:schedule|block(?:\s+out|\s+off)?|set aside|carve out)\b/i)) kind = 'schedule';
   else { const w = take(st, /^\s*(?:please\s+)?(book|reserve|plan)\b/i, (m) => m[1]); if (w) { kind = 'schedule'; weak = w; } }
   const date = parseDate(st, now);
-  const rel = take(st, new RegExp(`\\bin\\s+${NUMW}\\s*(minutes?|mins?|hours?|hrs?)\\b`, 'i'), (m) => ({ rel: Math.round(num(m[1].replace(/ of$/, '')) * (/^h/i.test(m[2]) ? 60 : 1)) }));
+  const relM = relativeMinutes(st.s);
+  const rel = relM && relM.min > 0 ? (take(st, new RegExp(relM.match.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i')), { rel: relM.min }) : null;
   const dur = parseDuration(st);
   const time = rel || parseTime(st);
   // "block the evening for the essay": a day part names the block itself
@@ -137,10 +153,17 @@ export const namesOtherDay = (text) => /\b(?:tomorrow|tmrw|tmr|next week|in\s+(?
 export function normalizeItems(items, now = new Date(), { userText = '' } = {}) {
   if (!Array.isArray(items)) return [];
   const strictDate = namesOtherDay(userText);
+  // "in 2 hours": a single item the model left without a time gets now + N (it was once saved with no time at all).
+  const relU = relativeMinutes(userText); const relFill = relU && relU.min > 0 && items.length === 1 ? relativeSlot(relU.min, now) : null;
   const okD = (s) => /^\d{4}-\d{2}-\d{2}$/.test(String(s || ''));
-  return items.slice(0, MAX_ITEMS).map((x) => {
-    const type = ['task', 'reminder', 'schedule'].includes(x && x.type) ? x.type : 'task';
+  return items.slice(0, MAX_ITEMS).map((x0) => {
+    let x = x0;
     const title = String((x && x.title) || '').replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, 140);
+    if (relFill && x && !toHHMM(x.start) && !/^\d{4}-\d{2}-\d{2}T/.test(String(x.remindAt || ''))) {
+      x = { ...x, date: relFill.date, start: relFill.start, ...(x.type === 'reminder' ? { remindAt: `${relFill.date}T${relFill.start}` } : {}) };
+      if (x.type !== 'reminder' && relFill.date !== ymd(now)) x = { ...x, type: 'schedule' }; // lands tomorrow
+    }
+    const type = ['task', 'reminder', 'schedule'].includes(x && x.type) ? x.type : 'task';
     if (strictDate && !okD(x.date) && !/^\d{4}-\d{2}-\d{2}T/.test(String(x.remindAt || ''))) return { title, missingDate: true };
     const date = okD(x.date) ? x.date : ymd(now);
     const start = toHHMM(x.start);

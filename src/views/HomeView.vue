@@ -3363,9 +3363,11 @@ const patchTask = async (index, task, patch) => {
     // re-estimate when the inputs change (only possible outside a running lock: estimateMin/title are locked fields there)
     if (['estimateMin', 'title', 'notes', 'priority'].some((k) => patch[k] !== undefined) && !isDayLocked(dayName)) { const e = estimateFor(task); Object.assign(task, e); saved = { ...saved, ...e }; }
     await patchStoredTask(userId.value, dayName, before, index, saved);
+    return true;
   } catch (e) {
     if (!lockMessage(e)) console.error('Error saving task field:', e);
     if (isLockError(e)) fetchSelectedDayRoutine();
+    return false;
   }
 };
 
@@ -3377,14 +3379,14 @@ const editTask = async (index, task, rawPatch) => {
   if (!Object.keys(patch).length) return;
   const dayName = days[selectedDayIndex.value].day;
   const lockedHit = patchTouchesLocked(patch);
-  if (isDayLocked(dayName) && lockedHit.length) { alert(`${lockedMessage()} (${lockedHit.join(', ')})`); return; }
+  if (isDayLocked(dayName) && lockedHit.length) { alert(`${lockedMessage()} (${lockedHit.join(', ')})`); return false; }
   const oldKey = taskKey(task);
   if (patch.estimateMin !== undefined) {
     patch.estimateMin = cleanEstimate(patch.estimateMin);
     // editable during lock-in and after play: a started timer's end time moves with the new duration
     if (timerStarted(task)) patch = { ...patch, ...retimePatch(task, patch.estimateMin) };
   }
-  await patchTask(index, task, patch);
+  if ((await patchTask(index, task, patch)) === false) return false;
   if (patch.timerEndTime && task.timerActive && !task.timerPausedAt) { try { scheduleTimerDone(task); } catch (e) { /* notification reschedule best-effort */ } }
   if (seriesKey.value === oldKey) {
     const sp = seriesPatch(patch);
@@ -3786,7 +3788,7 @@ const assistantExecutor = createAssistantExecutor({
   weekStats: async () => ({ ...weekStats(await agentWeek(true), { streak: streak.value, bestStreak: bestStreak.value }), pointsToday: pointsAccumulated.value, pointsNeededToday: dayRequiredPts.value || 0, streakDoneToday: streakProgress.value, streakLeft: Math.max(0, DAILY_STREAK_MIN - streakProgress.value), habits: habitSummary(loadHabits(userId.value), localDateStr()) }),
   findTasks: async ({ query, day }) => searchTasks(await agentWeek(false), scheduledList.value || [], { query, day }),
   suggestNext: async () => suggestNext(selectedDayRoutine.value, { minutesLeft: eh.running.value ? Math.round(eh.remainingMs.value / 60000) : null }),
-  snooze: async (task, minutes) => { const t = snoozeTo(new Date(), minutes); if (t.nextDay) return { error: 'That runs past midnight: reschedule it to tomorrow instead.' }; await editTask(agentIdx(task), task, { startTime: t.time }); return t; },
+  snooze: async (task, minutes) => { const t = snoozeTo(new Date(), minutes); if (t.nextDay) return { error: 'That runs past midnight: reschedule it to tomorrow instead.' }; if ((await editTask(agentIdx(task), task, { startTime: t.time })) === false) return { error: 'Could not move it (day locked or offline).' }; return t; },
   addSubtasks: (task, items) => editTask(agentIdx(task), task, { subtasks: items.reduce((l, x) => addSubtask(l, x), subtasksOf(task)) }),
   rollUnfinished: async () => { if (!isViewingToday.value) return { moved: 0 }; const to = tomorrowStr(); let moved = 0;
     for (const t of rollCandidates(selectedDayRoutine.value)) { const i = agentIdx(t); if (i < 0) continue; await scheduleExistingTask(i, t, { date: to, time: t.startTime || '' }); moved++; }
