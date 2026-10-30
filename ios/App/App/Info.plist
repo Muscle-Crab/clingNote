@@ -116,5 +116,13 @@
 	<true/>
 	<key>OneSignal_suppress_launch_urls</key>
 	<true/>
+	<!-- TikTok App Events SDK. Values come from build settings TIKTOK_APP_ID / TIKTOK_ACCESS_TOKEN (empty by default = SDK not started).
+	     CI passes them via xcodebuild args (repo variable TIKTOK_APP_ID, secret TIKTOK_ACCESS_TOKEN). Never commit real values. -->
+	<key>TikTokAppStoreID</key>
+	<string>6826148686</string>
+	<key>TikTokAppID</key>
+	<string>$(TIKTOK_APP_ID)</string>
+	<key>TikTokAccessToken</key>
+	<string>$(TIKTOK_ACCESS_TOKEN)</string>
 </dict>
 </plist>

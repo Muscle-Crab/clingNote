@@ -1,6 +1,7 @@
 # Builds the Capacitor iOS app on a GitHub macOS runner and uploads it to TestFlight (sandbox IAP testing + App Review build).
 # Manual only (workflow_dispatch). Needs repo secrets: ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8_BASE64 (App Store Connect API key, role >= App Manager),
-# and VUE_APP_REVENUECAT_IOS_KEY (RevenueCat public "appl_" SDK key). Nothing here runs until the App Store Connect app record exists.
+# and VUE_APP_REVENUECAT_IOS_KEY (RevenueCat public "appl_" SDK key). Optional: repo variable TIKTOK_APP_ID + secret TIKTOK_ACCESS_TOKEN
+# (TikTok App Events SDK; if unset the app builds fine and simply skips TikTok init). The TikTokBusinessSDK Swift package is resolved by xcodebuild itself. Nothing here runs until the App Store Connect app record exists.
 name: ios-testflight
 on:
   workflow_dispatch: {}
@@ -36,6 +37,7 @@ jobs:
           # Unsigned archive: the team has no registered devices, so Xcode cannot make a development profile. The export step below signs with cloud-managed distribution signing.
           xcodebuild -project App.xcodeproj -scheme App -configuration Release -destination 'generic/platform=iOS' \
             -archivePath $RUNNER_TEMP/App.xcarchive CURRENT_PROJECT_VERSION=${{ github.run_number }} \
+            TIKTOK_APP_ID="${{ vars.TIKTOK_APP_ID }}" TIKTOK_ACCESS_TOKEN="${{ secrets.TIKTOK_ACCESS_TOKEN }}" \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" archive
       - name: Embed entitlements in the unsigned archive
         working-directory: ios/App

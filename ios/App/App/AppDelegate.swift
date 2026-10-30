@@ -13,6 +13,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
             try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [.mixWithOthers])
             try AVAudioSession.sharedInstance().setActive(true)
         } catch { NSLog("ClingNote audio session setup failed: \(error)") }
+        InstallAttribution.start()
         return true
     }
 

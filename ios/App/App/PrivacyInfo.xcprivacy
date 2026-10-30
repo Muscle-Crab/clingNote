@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!-- ClingNote privacy manifest. Keep in sync with the App Privacy answers in App Store Connect and with src/views/privacy-policy.vue.
-     No tracking (no ATT prompt, no ad identifiers, no analytics SDK in the iOS app). Third-party SDKs (Capacitor, OneSignal, RevenueCat) ship their own manifests. -->
+     No ATT prompt and no IDFA: NSPrivacyTracking stays false. Install attribution: TikTok App Events SDK (ships its own manifest) and a first-open ping
+     to our reddit-install function -> Reddit Conversions API. Both send device/usage data (not linked to the account) for ad measurement, declared below.
+     Third-party SDKs (Capacitor, OneSignal, RevenueCat, TikTokBusinessSDK) ship their own manifests. -->
 <plist version="1.0">
 <dict>
 	<key>NSPrivacyTracking</key>
@@ -92,6 +94,8 @@
 			<key>NSPrivacyCollectedDataTypePurposes</key>
 			<array>
 				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+				<string>NSPrivacyCollectedDataTypePurposeDeveloperAdvertising</string>
+				<string>NSPrivacyCollectedDataTypePurposeAnalytics</string>
 			</array>
 		</dict>
 		<dict>
@@ -104,6 +108,19 @@
 			<key>NSPrivacyCollectedDataTypePurposes</key>
 			<array>
 				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeProductInteraction</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeDeveloperAdvertising</string>
+				<string>NSPrivacyCollectedDataTypePurposeAnalytics</string>
 			</array>
 		</dict>
 	</array>
