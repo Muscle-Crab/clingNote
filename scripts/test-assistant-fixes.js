@@ -77,5 +77,14 @@ ok(T.validateCall('auto_schedule', {}, snap).args.writeCalendar === false && T.v
 const H = fs.readFileSync(path.join(__dirname, '../src/views/HomeView.vue'), 'utf8'); const eu = H.slice(H.indexOf('const emergencyUnlock = '), H.indexOf('\nconst ', H.indexOf('const emergencyUnlock = ') + 10));
 ok(/lockPenalties: arrayUnion\(/.test(eu) && /'streaks', userId\.value/.test(eu), 'emergency unlock penalty stored in Firestore');
 ok(/setAlarm: async/.test(H) && /clingAlarm\.scheduleOnce/.test(H.slice(H.indexOf('setAlarm: async'))) && /offRange\(from, to/.test(H), 'HomeView reuses clingAlarm + offRange/offDates');
+// Fix 6b: startup reads the penalty from the account (Firestore), localStorage only as offline fallback, kept in sync
+const L6 = load('utils/appLock.js');
+let m = L6.mergePenalties([], [{ day: TODAY, points: 25, at: 5 }], 'u1'); ok(m.merged.length === 1 && L6.lastPenaltyDay(m.merged) === TODAY && m.toPush.length === 0, 'remote penalty applies on a fresh device');
+m = L6.mergePenalties([{ day: TODAY, points: 25, at: 9, uid: 'u1' }], [], 'u1'); ok(m.merged.length === 1 && m.toPush.length === 1 && !('uid' in m.toPush[0]), 'offline local penalty kept + queued for upload');
+m = L6.mergePenalties([{ day: TODAY, points: 25, at: 5, uid: 'u1' }], [{ day: TODAY, points: 25, at: 5 }], 'u1'); ok(m.merged.length === 1 && m.toPush.length === 0, 'same penalty deduped');
+m = L6.mergePenalties([{ day: TODAY, points: 25, at: 7, uid: 'other' }], [], 'u1'); ok(m.merged.length === 0 && m.toPush.length === 0, 'another account\'s local penalty ignored');
+m = L6.mergePenalties([{ day: '2026-01-01', at: 1 }], [{ day: TODAY, at: 2 }], 'u1'); ok(L6.lastPenaltyDay(m.merged) === TODAY, 'latest day wins');
+const cs = H.slice(H.indexOf('const checkStreakOnCompletion'), H.indexOf('const checkStreakOnCompletion') + 600); const sp = H.slice(H.indexOf('const syncLockPenalties'), H.indexOf('const syncLockPenalties') + 900);
+ok(/syncLockPenalties\(data\.lockPenalties\)/.test(cs) && /lockUnlockedDay\.value = lastPenaltyDay/.test(sp) && /localStorage\.setItem\(PENALTY_KEY/.test(sp) && /arrayUnion\(\.\.\.toPush\)/.test(sp), 'startup reads Firestore lockPenalties, syncs both ways');
 console.log(`\n${n} assistant-fix tests passed`);
 })().catch((e) => { console.error(e); process.exit(1); });

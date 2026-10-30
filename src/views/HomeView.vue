@@ -370,7 +370,7 @@ import { autoSchedule } from '@/utils/autoSchedule';
 import { clingLock, clingNative, lockAvailable, nativeAvailable } from '@/native/clingNative';
 import { planLock, resumePending, untilFor, fmtDuration, joinNames, withTimeout } from '@/utils/appLockNames';
 import LockGuideSheet from '@/components/home/LockGuideSheet.vue';
-import { LOCK_PREF, PENALTY_KEY, EMERGENCY_PENALTY, shouldShield, lockAction, busyToDay } from '@/utils/appLock';
+import { LOCK_PREF, PENALTY_KEY, EMERGENCY_PENALTY, shouldShield, lockAction, busyToDay, mergePenalties, lastPenaltyDay } from '@/utils/appLock';
 import { previewDayTarget, requiredPoints } from '@/utils/dayTarget';
 const askOpen = ref(false); // Assistant sheet (✨ next to the bell, and the bubble in the task list header)
 const assistantListen = ref(false);
@@ -2440,6 +2440,7 @@ const checkStreakOnCompletion = async () => {
     const snap = await getDoc(streakDocRef);
     if (!snap.exists()) { streakStatus.value = 'none'; return; }
     let data = snap.data();
+    syncLockPenalties(data.lockPenalties);
     unlockedBadges.value = data.unlockedBadges || [];
     let ev = evaluateStreak(data, localDateStr(), streakGap());
     // Held freeze days (1 per 7 counted days in a row, max 2) auto-cover missed days so the streak holds.
@@ -3558,6 +3559,15 @@ watch(() => [eh.running.value, isViewingToday.value, (selectedDayRoutine.value |
 });
 // ---- App lock (Screen Time shield) ----
 const lockUnlockedDay = ref((() => { try { const p = JSON.parse(localStorage.getItem(PENALTY_KEY) || '[]'); return p.length ? p[p.length - 1].day : ''; } catch (e) { return ''; } })());
+// Startup: the account's Firestore penalties win (another device may have unlocked); localStorage is the offline fallback.
+// Penalties booked offline are uploaded, and the merged list is written back locally.
+const syncLockPenalties = async (remote) => {
+  if (!userId.value) return; let local = []; try { local = JSON.parse(localStorage.getItem(PENALTY_KEY) || '[]'); } catch (e) { /* ignore */ }
+  const { merged, toPush } = mergePenalties(local, remote, userId.value);
+  try { localStorage.setItem(PENALTY_KEY, JSON.stringify(merged.map((p) => ({ ...p, uid: userId.value })))); } catch (e) { /* ignore */ }
+  lockUnlockedDay.value = lastPenaltyDay(merged);
+  if (toPush.length) { try { await setDoc(doc(db, 'streaks', userId.value), { lockPenalties: arrayUnion(...toPush) }, { merge: true }); } catch (e) { console.warn('penalty sync', e && e.message); } }
+};
 const lockEnabled = () => { try { return localStorage.getItem(LOCK_PREF) === '1'; } catch (e) { return false; } };
 let lockOn = null;
 const hardLocked = ref(false); // shield up now: the sergeant menu shows Emergency unlock
@@ -3585,8 +3595,8 @@ watch(() => [eh.running.value, pointsAccumulated.value, dayRequiredPts.value, st
 onMounted(() => { setTimeout(syncAppLock, 1200); });
 // Emergency unlock (assistant tool + sergeant menu): stops the shield for today and books the point penalty.
 const emergencyUnlock = async () => { await clingLock.stopLock(); hardLocked.value = false; const day = localDateStr(); let pen = []; try { pen = JSON.parse(localStorage.getItem(PENALTY_KEY) || '[]'); } catch (e) { /* ignore */ }
-  pen.push({ day, points: EMERGENCY_PENALTY, at: Date.now() }); try { localStorage.setItem(PENALTY_KEY, JSON.stringify(pen.slice(-60))); } catch (e) { /* ignore */ }
-  if (userId.value) { try { await setDoc(doc(db, 'streaks', userId.value), { lockPenalties: arrayUnion({ day, points: EMERGENCY_PENALTY, at: Date.now() }) }, { merge: true }); } catch (e) { console.warn('penalty sync', e && e.message); } }
+  const at = Date.now(); pen.push({ day, points: EMERGENCY_PENALTY, at, uid: userId.value || '' }); try { localStorage.setItem(PENALTY_KEY, JSON.stringify(pen.slice(-60))); } catch (e) { /* ignore */ }
+  if (userId.value) { try { await setDoc(doc(db, 'streaks', userId.value), { lockPenalties: arrayUnion({ day, points: EMERGENCY_PENALTY, at }) }, { merge: true }); } catch (e) { console.warn('penalty sync', e && e.message); } }
   lockUnlockedDay.value = day; return { summary: `Unlocked. Penalty: ${EMERGENCY_PENALTY} extra points owed today.`, penalty: EMERGENCY_PENALTY }; };
 // Hard lock chosen at day start: pick apps once if needed, turn the lock on, the shield runs until the day ends (shouldShield/endMs).
 const startHardLock = async () => {
