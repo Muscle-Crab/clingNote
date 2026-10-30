@@ -124,5 +124,12 @@
 	<string>$(TIKTOK_APP_ID)</string>
 	<key>TikTokAccessToken</key>
 	<string>$(TIKTOK_ACCESS_TOKEN)</string>
+	<!-- Firebase Analytics (native only, for Google Ads App campaign / YouTube first_open). IDFA stays off: no AdSupport / IdentitySupport product. -->
+	<key>FIREBASE_ANALYTICS_COLLECTION_ENABLED</key>
+	<true/>
+	<key>GOOGLE_ANALYTICS_ADID_COLLECTION_ENABLED</key>
+	<false/>
+	<key>GOOGLE_ANALYTICS_IDFV_COLLECTION_ENABLED</key>
+	<true/>
 </dict>
 </plist>

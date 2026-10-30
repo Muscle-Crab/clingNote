@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!-- ClingNote privacy manifest. Keep in sync with the App Privacy answers in App Store Connect and with src/views/privacy-policy.vue.
-     No ATT prompt and no IDFA: NSPrivacyTracking stays false. Install attribution: TikTok App Events SDK (ships its own manifest) and a first-open ping
+     No ATT prompt and no IDFA: NSPrivacyTracking stays false. Install attribution: Firebase Analytics (native only, first_open for Google Ads/YouTube, IDFV but no IDFA), TikTok App Events SDK (ships its own manifest) and a first-open ping
      to our reddit-install function -> Reddit Conversions API. Both send device/usage data (not linked to the account) for ad measurement, declared below.
-     Third-party SDKs (Capacitor, OneSignal, RevenueCat, TikTokBusinessSDK) ship their own manifests. -->
+     Third-party SDKs (Capacitor, OneSignal, RevenueCat, TikTokBusinessSDK, FirebaseAnalytics/GoogleAppMeasurement) ship their own manifests. -->
 <plist version="1.0">
 <dict>
 	<key>NSPrivacyTracking</key>
