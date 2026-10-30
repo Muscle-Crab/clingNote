@@ -13,6 +13,7 @@
         </div>
         <p class="dsp-sub">Ends around <b data-test="day-prompt-preview">{{ endLabel }}</b> if you start now.</p>
         <p v-if="target.total" class="dsp-sub" data-test="day-prompt-target">Today's target: <b>{{ dayPtsLabel(earned, target.target) }}</b> <span class="dsp-of">({{ target.total }} available)</span></p>
+        <slot name="checkin" />
         <button type="button" class="dsp-btn dsp-btn--primary" data-test="day-prompt-next" @click="step = 'confirm'">Continue</button>
         <button type="button" class="dsp-btn dsp-skip" data-test="day-prompt-skip-pick" @click="$emit('skip')">Skip lock-in today</button>
       </template>

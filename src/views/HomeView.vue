@@ -62,7 +62,7 @@
         <EightHourCard v-if="lockInToday || eh.lock.value" :tasks="ehTasks" :start-error="ehStartError" @retry="syncAfterAuth" @start="openDayPrompt" />
         <PlanDaySheet v-if="planOpen" :tasks="dayTasks" :busy="planBusy" :error="planError" @previewed="onPlanPreviewed" @confirm="onPlanConfirm" @close="planOpen = false" />
         <DayTemplatesSheet v-if="tplOpen" :templates="dayTemplates" :task-count="templateItemCount" :busy="tplBusy" :error="tplError" :note="tplNote" @apply="applyDayTemplate" @save="saveDayTemplate" @remove="removeDayTemplate" @close="tplOpen = false" />
-        <DayStartPrompt v-if="dayPromptOpen" :initial-hours="eh.hoursPref.value" :now-ms="eh.nowMs" :tz="eh.plan.value?.tz || ''" :busy="ehBusy" :error="ehStartError" :tasks="todayTasksForTarget" :stats="eh.stats.value" :earned="pointsAccumulated || 0" @confirm="confirmDayStart" @skip="skipLockIn" :can-lock="lockAvailable()" />
+        <DayStartPrompt v-if="dayPromptOpen" :initial-hours="eh.hoursPref.value" :now-ms="eh.nowMs" :tz="eh.plan.value?.tz || ''" :busy="ehBusy" :error="ehStartError" :tasks="todayTasksForTarget" :stats="eh.stats.value" :earned="pointsAccumulated || 0" @confirm="confirmDayStart" @skip="skipLockIn" :can-lock="lockAvailable()"><template #checkin><CheckinRow :value="checkin" @pick="saveCheckin" /></template></DayStartPrompt>
 
         <ProgressBar :percentage="calculateCompletionPercentage()" :milestones="milestones" :done="completedTaskCount || 0" :total="dayTasks.length"
                      :streak="streak" :streak-status="streakStatus" :streak-progress="streakProgress" :streak-min="DAILY_STREAK_MIN" :freezes="streakFreezes" :points="pointsAccumulated || 0" :target="isViewingToday ? dayRequiredPts : 0" :off-today="isViewingToday && offToday" />
@@ -201,7 +201,7 @@
 
         </div>
       </section>
-      <StartDayPrompt v-else-if="isViewingToday" :done="!!daySession.ended" :ended-at="daySession.endedAtText" @start="startDay" />
+      <StartDayPrompt v-else-if="isViewingToday" :done="!!daySession.ended" :ended-at="daySession.endedAtText" @start="startDay"><template #checkin><CheckinRow :value="checkin" @pick="saveCheckin" /></template></StartDayPrompt>
 
       <TimeStatsBar v-if="isViewingToday" :stats="timeStats" :ended="!!daySession.ended" :suggest="suggestShutdown && !shutdownDismissed" @wrap-up="openShutdown" />
 
@@ -319,6 +319,8 @@ import { lightHaptic } from '@/composables/useTaskMotion';
 import ScheduledList from '@/components/home/ScheduledList.vue';
 import EmptyState from '@/components/home/EmptyState.vue';
 import StartDayPrompt from '@/components/home/StartDayPrompt.vue';
+import CheckinRow from '@/components/home/CheckinRow.vue';
+import { checkinPatch, checkinPath, cleanCheckin } from '@/utils/checkin';
 import TaskListHeader from '@/components/home/TaskListHeader.vue';
 import RoutineStrip from '@/components/home/RoutineStrip.vue';
 import { markRoutineDone, skipRoutineToday, canSkipToday, routineToday, routineWeek } from '@/utils/routine';
@@ -1855,6 +1857,21 @@ const showRepeatToast = (text, { undo = null, error = false } = {}) => {
 // ── Routine: compact checklist row + weekly dots (utils/routine.js); Skip today (⋯ menu / edit chips) ──
 const routineItems = computed(() => routineToday(scheduledList.value, isViewingToday.value ? selectedDayRoutine.value : [], todayStr.value));
 const routineWeekStats = computed(() => routineWeek(scheduledList.value, todayStr.value));
+// B39 mood check-in (optional, one tap each) -> users/{uid}/dailyCheckins/{today}. Loaded once per user+day; a failed save keeps the tap locally.
+const checkin = ref({});
+let checkinKey = '';
+const loadCheckin = async () => {
+  const path = checkinPath(userId.value, getTodayId()); const key = path ? path.join('/') : '';
+  if (!path || key === checkinKey) return; checkinKey = key; checkin.value = {};
+  try { const snap = await getDoc(doc(db, ...path)); if (snap.exists() && checkinKey === key) checkin.value = cleanCheckin(snap.data()); } catch (e) { console.warn('checkin load', e); }
+};
+const saveCheckin = async (kind, value) => {
+  const date = getTodayId(); const patch = checkinPatch(checkin.value, kind, value, date); const path = checkinPath(userId.value, date);
+  if (!patch || !path) return;
+  checkin.value = { ...checkin.value, ...patch };
+  try { await setDoc(doc(db, ...path), { ...patch, at: serverTimestamp() }, { merge: true }); } catch (e) { console.warn('checkin save', e); }
+};
+watch(userId, () => { loadCheckin(); }, { immediate: true });
 const toggleRoutineTask = (task) => { const i = realIndex(task); if (i >= 0) toggleTaskCompletion(i); };
 const skipTaskToday = async (task) => {
   if (!userId.value || !task || blockIfLocked() || blockIfShut()) return;

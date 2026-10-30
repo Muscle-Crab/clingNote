@@ -17,6 +17,8 @@
         <strong>Start Day</strong>.
       </p>
 
+      <slot name="checkin" />
+
       <button
           @click="$emit('start')"
           class="btn-primary"
