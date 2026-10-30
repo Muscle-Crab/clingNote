@@ -32,8 +32,13 @@ export const clingNative = {
   currentLocation: safe('ClingNative', Native, (p) => p.currentLocation(), null),
   addGeofence: safe('ClingNative', Native, (p, g) => p.addGeofence(g), { id: '' }),
   removeGeofence: safe('ClingNative', Native, (p, id) => p.removeGeofence({ id }), {}),
-  startFocusActivity: safe('ClingNative', Native, (p, title, endsAtMs) => p.startFocusActivity({ title, endsAtMs }), { started: false }),
+  // Lock-screen focus Live Activity. state: src/utils/focusActions.js focusActivityState() (+ notifId of the timer notification).
+  startFocusActivity: safe('ClingNative', Native, (p, title, endsAtMs, state = {}) => p.startFocusActivity({ ...state, title, endsAtMs }), { started: false }),
+  updateFocusActivity: safe('ClingNative', Native, (p, state) => p.updateFocusActivity(state), { updated: 0 }),
   endFocusActivity: safe('ClingNative', Native, (p) => p.endFocusActivity(), {}),
+  // Pause/Resume/Done taps on the Live Activity (FocusIntents.swift), read then acked by id after reconcile (no loss on a crash mid-apply).
+  getFocusActions: safe('ClingNative', Native, (p) => p.getFocusActions(), { items: [] }),
+  ackFocusActions: safe('ClingNative', Native, (p, ids) => p.ackFocusActions({ ids }), {}),
   takeIntents: safe('ClingNative', Native, (p) => p.takeIntents(), { items: [] }),
   // Two-way calendar sync (utils/calendarSync.js): one dedicated "ClingNote" calendar; events carry url clingnote://task/<key>.
   calSyncEnsure: safe('ClingNative', Native, (p, calendarId = '') => p.calSyncEnsure({ calendarId }), { calendarId: '' }),

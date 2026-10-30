@@ -23,6 +23,9 @@ public class ClingNativePlugin: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDe
         CAPPluginMethod(name: "removeGeofence", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "startFocusActivity", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "endFocusActivity", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "updateFocusActivity", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "getFocusActions", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "ackFocusActions", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "takeIntents", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "takeTimerIntents", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "calSyncEnsure", returnType: CAPPluginReturnPromise),
@@ -155,21 +158,65 @@ public class ClingNativePlugin: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDe
     }
 
     // MARK: Live Activity
+    #if canImport(ActivityKit)
+    /// ContentState from the JS payload (src/utils/focusActions.js focusActivityState).
+    @available(iOS 16.1, *)
+    private func focusState(_ call: CAPPluginCall) -> FocusActivityAttributes.ContentState {
+        let ends = Date(timeIntervalSince1970: (call.getDouble("endsAtMs") ?? 0) / 1000)
+        let paused = call.getBool("paused") ?? false
+        let dayEndMs = call.getDouble("dayEndsAtMs") ?? 0
+        return FocusActivityAttributes.ContentState(
+            endsAt: ends, paused: paused,
+            remainingSec: paused ? max(0, call.getInt("remainingSec") ?? 0) : nil,
+            ptsDone: call.getInt("ptsDone"), ptsTarget: call.getInt("ptsTarget"),
+            dayEndsAt: dayEndMs > 0 ? Date(timeIntervalSince1970: dayEndMs / 1000) : nil)
+    }
+    #endif
     @objc func startFocusActivity(_ call: CAPPluginCall) {
         #if canImport(ActivityKit)
         guard #available(iOS 16.2, *), ActivityAuthorizationInfo().areActivitiesEnabled else { call.resolve(["started": false]); return }
-        let ends = Date(timeIntervalSince1970: (call.getDouble("endsAtMs") ?? 0) / 1000)
+        let state = focusState(call)
+        let taskId = call.getString("taskId") ?? ""
+        let notifId = call.getString("notifId") ?? ""
         Task {
             for a in Activity<FocusActivityAttributes>.activities { await a.end(nil, dismissalPolicy: .immediate) }
             do {
-                _ = try Activity.request(attributes: FocusActivityAttributes(title: call.getString("title") ?? "Focus"),
-                                         content: .init(state: .init(endsAt: ends, paused: false), staleDate: ends))
+                let attrs = FocusActivityAttributes(title: call.getString("title") ?? "Focus",
+                                                    taskId: taskId.isEmpty ? nil : taskId, notifId: notifId.isEmpty ? nil : notifId)
+                _ = try Activity.request(attributes: attrs, content: .init(state: state, staleDate: state.paused ? nil : state.endsAt))
                 call.resolve(["started": true])
             } catch { call.resolve(["started": false, "error": "\(error)"]) }
         }
         #else
         call.resolve(["started": false])
         #endif
+    }
+    /// Points / paused / day-left changes for the running activity (no new request, so it also works from the background).
+    @objc func updateFocusActivity(_ call: CAPPluginCall) {
+        #if canImport(ActivityKit)
+        guard #available(iOS 16.2, *) else { call.resolve(["updated": 0]); return }
+        let state = focusState(call)
+        let taskId = call.getString("taskId") ?? ""
+        Task {
+            var n = 0
+            for a in Activity<FocusActivityAttributes>.activities where taskId.isEmpty || (a.attributes.taskId ?? "") == taskId {
+                await a.update(ActivityContent(state: state, staleDate: state.paused ? nil : state.endsAt)); n += 1
+            }
+            call.resolve(["updated": n])
+        }
+        #else
+        call.resolve(["updated": 0])
+        #endif
+    }
+    /// Lock-screen Pause/Resume/Done taps queued by FocusIntents.swift ([{id, kind, taskId, ts}]); removed only via ackFocusActions.
+    @objc func getFocusActions(_ call: CAPPluginCall) {
+        guard let d = UserDefaults(suiteName: FocusActionStore.appGroup) else { call.resolve(["items": []]); return }
+        call.resolve(["items": FocusActionStore.read(d)])
+    }
+    @objc func ackFocusActions(_ call: CAPPluginCall) {
+        let ids = Set((call.getArray("ids") as? [String]) ?? [])
+        FocusActionStore.ack(ids: ids)
+        call.resolve()
     }
     @objc func endFocusActivity(_ call: CAPPluginCall) {
         #if canImport(ActivityKit)

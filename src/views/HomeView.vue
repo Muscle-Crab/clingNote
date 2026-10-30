@@ -304,7 +304,7 @@ const mutateDay = (dayName, fn) => runTransaction(db, async (tx) => {
 });
 const strictAllowed = ref(true); // false for free users once ENFORCE_PAYWALL is on
 loadUserDoc().then((d) => { strictAllowed.value = canUse(d, 'strictBoss'); }).catch(() => {});
-import { scheduleLocal, scheduleTimerDone, cancelLocal, timerKey, cancelTaskNotifications, taskKeyOf } from '@/utils/localNotify';
+import { scheduleLocal, scheduleTimerDone, cancelLocal, timerKey, cancelTaskNotifications, taskKeyOf, notifId } from '@/utils/localNotify';
 import { scheduleNotification, sendNotificationToPlayer, linkPushUser } from '@/composables/useNotifications';
 import { speak } from '@/composables/useSpeech';
 import { completionPercentage, computeTimeStats, daysLeftInYearFrom, heroTitleFor } from '@/utils/dayStats';
@@ -399,6 +399,7 @@ import { doc, setDoc, serverTimestamp, getDoc, updateDoc, getFirestore, runTrans
 const modalOpen = ref(false);
 import { deleteObject } from "firebase/storage";
 import { widgetTaskId } from '@/utils/widgetSnapshot';
+import { reconcileFocusActions, pausePatch, resumePatch, focusActivityState, focusContentSig } from '@/utils/focusActions';
 
 const currentTime = ref([]);
 const showAdvanced = ref(false)
@@ -486,6 +487,7 @@ const startCountdownWatcher = () => {
 
       if (
           task.timerActive &&
+          !task.timerPausedAt && // paused from the lock screen: frozen, never expires while paused
           task.status !== 'pending' && // pending tasks never auto-carry as overdue
           task.timerEndTime &&
           new Date(task.timerEndTime).getTime() <= Date.now()
@@ -3593,22 +3595,65 @@ const onceToday = (k) => { const day = localDateStr(); try { if (localStorage.ge
 watch(streakStatus, (st) => { let last = null; try { last = localStorage.getItem('cn.boss.roast'); } catch (e) { /* ignore */ }
   if (shouldRoast(st, localDateStr(), last) && onceToday('cn.boss.roast')) setTimeout(() => bossReact('missed'), 2500); });
 const focusSpoken = new Map(); // task key -> Set(marks)
+// Lock-screen Live Activity: running OR paused timer (paused = frozen remaining time + "Paused"), points toward today's target and
+// time left in the 8-hour day. A new activity per timer session; content updates (pause, points, day) go through updateFocusActivity.
+const focusTask = () => (selectedDayRoutine.value || []).find((x) => x && x.timerActive && x.timerEndTime && x.completed !== true);
+const focusLiveState = (t) => focusActivityState(t, { ptsDone: pointsAccumulated.value, ptsTarget: dayRequiredPts.value || 0, dayEndMs: (eh.running.value && eh.lock.value && eh.lock.value.endMs) || 0 });
 const focusTick = () => {
-  const t = (selectedDayRoutine.value || []).find((x) => x && x.timerActive && x.timerEndTime && !x.timerPausedAt);
-  if (!t) { if (focusLive) { focusLive = false; clingNative.endFocusActivity(); } return; }
-  const end = new Date(t.timerEndTime).getTime(); const k = `${taskKey(t)}|${end}`;
-  if (!focusLive || focusLive !== k) { focusLive = k; clingNative.startFocusActivity(t.title, end); }
+  const t = focusTask();
+  if (!t) { if (focusLive) { focusLive = false; focusSig = ''; clingNative.endFocusActivity(); } return; }
+  const end = new Date(t.timerEndTime).getTime(); const k = `${taskKey(t)}|${t.timerStartedAt || ''}`;
+  const st = focusLiveState(t); const sig = focusContentSig(st);
+  if (!focusLive || focusLive !== k) {
+    focusLive = k; focusSig = sig; clingNative.startFocusActivity(st.title, st.endsAtMs, { ...st, notifId: String(notifId(timerKey(t))) });
+  } else if (sig !== focusSig) { focusSig = sig; clingNative.updateFocusActivity(st); }
+  if (t.timerPausedAt) return; // no spoken check-ins while paused
   const total = Math.max(1, Math.round((end - new Date(t.timerStartedAt || Date.now()).getTime()) / 60000));
   const spoken = focusSpoken.get(k) || new Set(); const m = dueMark(checkinMarks(total), end - Date.now(), spoken);
   if (m != null) { spoken.add(m); focusSpoken.set(k, spoken); if (!voMuted.value && !document.hidden) speakLive(checkinLine(m, t.title)); }
 };
+let focusSig = '';
 let focusLive = false; let focusIv = null;
 onMounted(() => { focusIv = setInterval(focusTick, 15000); });
 // Start/end the lock-screen Live Activity the moment a timer starts/stops (any path: timer modal, card, assistant, widget), not on the
 // next 15 s poll: ActivityKit only allows Activity.request while the app is in the foreground, so a user who locks the phone right after
 // tapping Start used to get no Live Activity (build 36). Also re-check when the app is about to go to the background.
-const activeTimerSig = computed(() => { const t = (selectedDayRoutine.value || []).find((x) => x && x.timerActive && x.timerEndTime && !x.timerPausedAt); return t ? `${taskKey(t)}|${t.timerEndTime}` : ''; });
+const activeTimerSig = computed(() => { const t = focusTask(); return t ? `${taskKey(t)}|${t.timerEndTime}|${t.timerPausedAt || ''}|${pointsAccumulated.value}/${dayRequiredPts.value || 0}|${(eh.lock.value && eh.lock.value.endMs) || 0}` : ''; });
 watch(activeTimerSig, () => { try { focusTick(); } catch (e) { console.warn('focus live', e && e.message); } });
+// ---- Lock-screen Pause / Resume / Done (FocusIntents.swift queues {id, kind, taskId, ts} in the App Group) ----
+// Done goes through widgetComplete -> toggleTaskCompletion: the same path as completing in-app, so the server and Firestore credit the
+// points once (an already-completed task is a no-op). Applied ids are remembered so a re-delivered action never applies twice.
+const FOCUS_APPLIED_KEY = 'cn.focus.applied';
+let focusDraining = false;
+const focusPatchTask = async (taskId, mk) => {
+  const i = selectedDayRoutine.value.findIndex((t) => t && widgetTaskId(t) === taskId); if (i < 0) return false;
+  const t = { ...selectedDayRoutine.value[i], ...mk(selectedDayRoutine.value[i]) };
+  selectedDayRoutine.value.splice(i, 1, t);
+  await saveSelectedDayTasks();
+  if (t.timerPausedAt) cancelLocal(timerKey(t)).catch(() => {}); else scheduleTimerDone(t);
+  return true;
+};
+const drainFocusActions = async () => {
+  if (!nativeAvailable() || focusDraining || !userId.value || todayIdx.value < 0) return; focusDraining = true;
+  try {
+    const r = await clingNative.getFocusActions(); const items = (r && r.items) || []; if (!items.length) return;
+    if (!isViewingToday.value) { selectedDayIndex.value = todayIdx.value; await fetchSelectedDayRoutine(); }
+    let applied = []; try { applied = JSON.parse(localStorage.getItem(FOCUS_APPLIED_KEY) || '[]'); } catch (e) { applied = []; }
+    const out = await reconcileFocusActions({ queue: items, applied: Array.isArray(applied) ? applied : [], getTasks: () => selectedDayRoutine.value || [],
+      apply: {
+        pause: (id, ts) => focusPatchTask(id, (t) => pausePatch(t, ts)),
+        resume: (id, ts) => focusPatchTask(id, (t) => resumePatch(t, ts)),
+        done: (id) => widgetComplete(id, 'complete'),
+      } });
+    try { localStorage.setItem(FOCUS_APPLIED_KEY, JSON.stringify(out.applied)); } catch (e) { /* ignore */ }
+    if (out.acked.length) await clingNative.ackFocusActions(out.acked);
+    focusTick();
+  } catch (e) { console.warn('focus actions', e && e.message); } finally { focusDraining = false; }
+};
+const onFocusActionsVisible = () => { if (!document.hidden) setTimeout(drainFocusActions, 600); };
+watch(userId, (u) => { if (u) setTimeout(drainFocusActions, 1800); });
+onMounted(() => { setTimeout(drainFocusActions, 1800); document.addEventListener('visibilitychange', onFocusActionsVisible); });
+onBeforeUnmount(() => document.removeEventListener('visibilitychange', onFocusActionsVisible));
 const focusOnHide = () => { if (document.visibilityState === 'hidden') { try { focusTick(); } catch (e) { /* ignore */ } } };
 onMounted(() => document.addEventListener('visibilitychange', focusOnHide));
 onBeforeUnmount(() => document.removeEventListener('visibilitychange', focusOnHide));

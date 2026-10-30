@@ -7,6 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		C1A0E50000000000000000B1 /* FocusIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A0E50000000000000000A1 /* FocusIntents.swift */; };
+		C1A0E50000000000000000B2 /* FocusIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A0E50000000000000000A1 /* FocusIntents.swift */; };
+		C1A0E50000000000000000B3 /* StartFocusControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A0E50000000000000000A2 /* StartFocusControl.swift */; };
 		A1B2C3D4E5F60718293A4D02 /* cn_task.caf in Resources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4D01 /* cn_task.caf */; };
 		A1B2C3D4E5F60718293A4D12 /* cn_morning.caf in Resources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4D11 /* cn_morning.caf */; };
 		A1B2C3D4E5F60718293A4D32 /* lock_ended_voice.caf in Resources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4D31 /* lock_ended_voice.caf */; };
@@ -50,6 +53,8 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		C1A0E50000000000000000A1 /* FocusIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = FocusIntents.swift; path = ../Shared/FocusIntents.swift; sourceTree = "<group>"; };
+		C1A0E50000000000000000A2 /* StartFocusControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StartFocusControl.swift; sourceTree = "<group>"; };
 		A1B2C3D4E5F60718293A4D01 /* cn_task.caf */ = {isa = PBXFileReference; lastKnownFileType = audio.caf; path = cn_task.caf; sourceTree = "<group>"; };
 		A1B2C3D4E5F60718293A4D11 /* cn_morning.caf */ = {isa = PBXFileReference; lastKnownFileType = audio.caf; path = cn_morning.caf; sourceTree = "<group>"; };
 		A1B2C3D4E5F60718293A4D31 /* lock_ended_voice.caf */ = {isa = PBXFileReference; lastKnownFileType = audio.caf; path = lock_ended_voice.caf; sourceTree = "<group>"; };
@@ -201,6 +206,7 @@
 				C1A0E0000000000000000001 /* ClingWidgetPlugin.swift */,
 				C1A0E00000000000000000F0 /* ClingVoicePlugin.swift */,
 				C1A0E1000000000000000005 /* FocusActivityAttributes.swift */,
+				C1A0E50000000000000000A1 /* FocusIntents.swift */,
 				C1A0E1000000000000000004 /* LockShared.swift */,
 				C1A0E1000000000000000003 /* ClingIntents.swift */,
 				C1A0E1000000000000000002 /* ClingNativePlugin.swift */,
@@ -232,6 +238,7 @@
 				C1A0E0000000000000000018 /* CompleteTaskIntent.swift */,
 				C1A0E000000000000000001A /* MatchupWidget.swift */,
 				C1A0E1000000000000000006 /* FocusLiveActivity.swift */,
+				C1A0E50000000000000000A2 /* StartFocusControl.swift */,
 				C1A0E2000000000000000003 /* WakeAlarmLiveActivity.swift */,
 				C1A0E0000000000000000005 /* Info.plist */,
 				C1A0E0000000000000000006 /* ClingNoteWidget.entitlements */,
@@ -426,6 +433,7 @@
 				C1A0E0000000000000000002 /* ClingWidgetPlugin.swift in Sources */,
 				C1A0E00000000000000000F1 /* ClingVoicePlugin.swift in Sources */,
 				C1A0E1000000000000000015 /* FocusActivityAttributes.swift in Sources */,
+				C1A0E50000000000000000B1 /* FocusIntents.swift in Sources */,
 				C1A0E1000000000000000014 /* LockShared.swift in Sources */,
 				C1A0E1000000000000000013 /* ClingIntents.swift in Sources */,
 				C1A0E1000000000000000012 /* ClingNativePlugin.swift in Sources */,
@@ -444,6 +452,8 @@
 				C1A0E000000000000000001B /* MatchupWidget.swift in Sources */,
 				C1A0E1000000000000000017 /* FocusLiveActivity.swift in Sources */,
 				C1A0E1000000000000000016 /* FocusActivityAttributes.swift in Sources */,
+				C1A0E50000000000000000B2 /* FocusIntents.swift in Sources */,
+				C1A0E50000000000000000B3 /* StartFocusControl.swift in Sources */,
 				C1A0E2000000000000000014 /* WakeAlarmLiveActivity.swift in Sources */,
 				C1A0E2000000000000000013 /* WakeAlarmMetadata.swift in Sources */,
 			);
