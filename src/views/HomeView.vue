@@ -1784,7 +1784,7 @@ const submitScheduledTask = async () => {
   };
   Object.assign(fields, estimateFor(fields)); // scheduled / recurring copies carry the estimate too
   const entry = sc.repeat !== 'never'
-    ? buildRecurringTemplate({ ...fields, scheduledTime: sc.time, remindAt: sc.remindAt || '' }, sc.date, { freq: sc.repeat, days: sc.days, dayOfMonth: sc.dayOfMonth, until: sc.until, everyDays: sc.everyDays })
+    ? buildRecurringTemplate({ ...fields, scheduledTime: sc.time, remindAt: sc.remindAt || '' }, sc.date, { freq: sc.repeat, days: sc.days, dayOfMonth: sc.dayOfMonth, until: sc.until, everyDays: sc.everyDays, timesPerWeek: sc.timesPerWeek })
     : buildScheduledEntry(fields, sc.date, sc.time);
   if (!entry) { error.value = 'Could not schedule this task.'; return false; }
   try {

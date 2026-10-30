@@ -11,10 +11,17 @@
       </div>
       <span class="sp-label">Repeat</span>
       <div class="sp-seg" role="radiogroup" aria-label="Repeat">
-        <button v-for="o in OPTS" :key="o.v" type="button" role="radio" :aria-checked="String(model.repeat === o.v)" class="sp-seg-btn" :class="{ on: model.repeat === o.v }" :data-test="'repeat-' + o.v" @click="setRepeat(o.v)">{{ o.l }}</button>
+        <button v-for="o in OPTS" :key="o.v" type="button" role="radio" :aria-checked="String(segOn(o.v))" class="sp-seg-btn" :class="{ on: segOn(o.v) }" :data-test="'repeat-' + o.v" @click="setRepeat(o.v)">{{ o.l }}</button>
       </div>
-      <div v-if="model.repeat === 'weekly'" class="sp-days" role="group" aria-label="Weekdays">
-        <button v-for="(w, i) in WEEKDAYS" :key="w" type="button" class="sp-day" :class="{ on: (model.days || []).includes(i) }" :aria-pressed="String((model.days || []).includes(i))" :data-test="'wd-' + i" @click="toggleDay(i)">{{ w.slice(0, 2) }}</button>
+      <div v-if="model.repeat === 'weekly' || model.repeat === XWEEK" class="sp-days" role="group" aria-label="Weekdays">
+        <button v-for="(w, i) in WEEKDAYS" :key="w" type="button" class="sp-day" :class="{ on: model.repeat === 'weekly' && (model.days || []).includes(i) }" :aria-pressed="String(model.repeat === 'weekly' && (model.days || []).includes(i))" :data-test="'wd-' + i" @click="toggleDay(i)">{{ w.slice(0, 2) }}</button>
+        <button type="button" class="sp-day sp-any" :class="{ on: model.repeat === XWEEK }" :aria-pressed="String(model.repeat === XWEEK)" data-test="repeat-xweek" title="N times a week, any day" @click="setRepeat(XWEEK)">Any</button>
+      </div>
+      <div v-if="model.repeat === XWEEK" class="sp-row">
+        <select class="sp-input sp-num" v-model.number="model.timesPerWeek" aria-label="Times a week" data-test="sched-xweek">
+          <option v-for="n in 6" :key="n" :value="n">{{ n }}×</option>
+        </select>
+        <span class="sp-hint">a week, any day</span>
       </div>
       <div v-if="model.repeat === 'monthly'" class="sp-row">
         <span class="sp-hint">Day of month</span>
@@ -41,6 +48,7 @@
 <script setup>
 import { computed } from 'vue';
 import { WEEKDAYS, describeRecurrence, fmtTime, formatScheduledDate, AFTER } from '@/utils/scheduling';
+import { XWEEK } from '@/utils/schedEdit';
 
 const model = defineModel({ type: Object, required: true });
 const props = defineProps({ minDate: { type: String, default: '' } });
@@ -48,13 +56,15 @@ const OPTS = [{ v: 'never', l: 'Never' }, { v: 'daily', l: 'Daily' }, { v: 'week
 const dayOf = (s) => (s ? new Date(`${s}T12:00:00`) : new Date());
 const dom = computed(() => dayOf(model.value.date).getDate());
 const toggle = () => { model.value.on = !model.value.on; if (model.value.on && !model.value.date) model.value.date = props.minDate || new Date().toLocaleDateString('en-CA'); };
-const setRepeat = (v) => { model.value.repeat = v; if (v === AFTER && !(Number(model.value.everyDays) >= 1)) model.value.everyDays = 3; if (v === 'weekly' && !(model.value.days || []).length) model.value.days = [dayOf(model.value.date).getDay()]; };
-const toggleDay = (i) => { const d = new Set(model.value.days || []); d.has(i) ? d.delete(i) : d.add(i); model.value.days = [...d].sort(); };
+const segOn = (v) => model.value.repeat === v || (v === 'weekly' && model.value.repeat === XWEEK);
+const setRepeat = (v) => { model.value.repeat = v; if (v === XWEEK && !(Number(model.value.timesPerWeek) >= 1 && Number(model.value.timesPerWeek) <= 6)) model.value.timesPerWeek = 3; if (v === AFTER && !(Number(model.value.everyDays) >= 1)) model.value.everyDays = 3; if (v === 'weekly' && !(model.value.days || []).length) model.value.days = [dayOf(model.value.date).getDay()]; };
+const toggleDay = (i) => { if (model.value.repeat === XWEEK) { model.value.repeat = 'weekly'; model.value.days = [i]; return; } const d = new Set(model.value.days || []); d.has(i) ? d.delete(i) : d.add(i); model.value.days = [...d].sort(); };
 const summary = computed(() => {
   const m = model.value; const t = m.time ? ` at ${fmtTime(m.time)}` : '';
   if (m.repeat === 'never') return `Once on ${formatScheduledDate(m.date)}${t}. Shows on that day${m.time ? ' and reminds you' : ''}.`;
-  const r = describeRecurrence({ freq: m.repeat, days: m.days, dayOfMonth: m.dayOfMonth || dom.value, everyDays: m.everyDays });
+  const r = describeRecurrence({ freq: m.repeat, days: m.days, dayOfMonth: m.dayOfMonth || dom.value, everyDays: m.everyDays, timesPerWeek: m.repeat === XWEEK ? m.timesPerWeek : undefined });
   const rem = m.remindAt ? ` Reminder ${fmtTime(m.remindAt)} each repeat day.` : '';
+  if (m.repeat === XWEEK) return `${r}${t}, from ${formatScheduledDate(m.date)}. Shows each day until done ${m.timesPerWeek}× that week (Mon–Sun).${rem}`;
   if (m.repeat === AFTER) return `${r}${t}, first on ${formatScheduledDate(m.date)}. Next one is set when you finish it.${rem}`;
   return `${r}${t}, from ${formatScheduledDate(m.date)}${m.until ? ` until ${formatScheduledDate(m.until)}` : ''}. Each occurrence is its own task.${rem}`;
 });
@@ -77,6 +87,7 @@ const summary = computed(() => {
 .sp-seg-btn.on { background: var(--c-accent, #2F6FFF); color: #fff; font-weight: 600; }
 .sp-days { display: flex; gap: .3rem; flex-wrap: wrap; }
 .sp-day { width: 2.2rem; height: 2.2rem; border-radius: 50%; border: 1px solid var(--c-border, #2a2a2e); background: transparent; color: var(--c-text-2, #a1a09b); font: inherit; font-size: .75rem; cursor: pointer; }
+.sp-any { width: auto; padding: 0 .6rem; border-radius: 1.1rem; }
 .sp-day.on { background: var(--c-accent, #2F6FFF); color: #fff; border-color: var(--c-accent, #2F6FFF); }
 .sp-row { display: flex; align-items: center; gap: .6rem; }
 .sp-row .sp-input:not(.sp-num) { flex: 1; }

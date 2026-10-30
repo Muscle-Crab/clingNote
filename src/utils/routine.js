@@ -4,7 +4,7 @@
 //   tpl.doneOn: ['YYYY-MM-DD']  calendar series -> the occurrence date; after-completion series -> the completion date.
 // Skip today: calendar series -> date added to tpl.skip (occursOn() then ignores it); after-completion series -> nextDate = today + 1
 //   (it stays due, just not today). Neither records a completion, so streak / points / daily counts are untouched.
-import { isTemplate, isMaterialized, occursOn, addDaysStr, mondayOf, isValidDate, isAfterCompletion, clampEveryDays, instanceId } from './scheduling.js';
+import { isTemplate, isMaterialized, occursOn, addDaysStr, mondayOf, isValidDate, isAfterCompletion, clampEveryDays, instanceId, isFlexWeekly, flexTimes, flexDoneInWeek } from './scheduling.js';
 
 export const DONE_KEEP_DAYS = 70;
 const prune = (dates, todayStr) => [...new Set(dates || [])].filter((d) => isValidDate(d) && d >= addDaysStr(todayStr, -DONE_KEEP_DAYS)).sort();
@@ -62,8 +62,37 @@ const routineOn = (tpl, date, todayStr) => {
     const pending = tpl.nextDate && !tpl.stopped ? (tpl.nextDate < todayStr ? todayStr : tpl.nextDate) : '';
     return { due: pending === date, done: false };
   }
+  if (isFlexWeekly(tpl)) { // flexible N×/week: a done day counts; an undone past day is never a 'miss' (any day works)
+    if ((tpl.doneOn || []).includes(date) && occursOn(tpl, date)) return { due: true, done: true };
+    if (date < todayStr || tpl.stopped) return { due: false, done: false };
+    return { due: occursOn(tpl, date), done: false };
+  }
   if (!occursOn(tpl, date)) return { due: false, done: false };
   return { due: true, done: (tpl.doneOn || []).includes(date) };
+};
+
+// Per-series streak that never breaks on a day the series isn't required:
+//   flexible N×/week -> consecutive Mon–Sun weeks with >= N completions (the current week adds once met, never breaks while open);
+//   calendar series  -> consecutive required dates done (non-occurring / skipped days are ignored; today open doesn't break);
+//   after-completion -> number of completions in the kept log that were on time is not tracked here, so: completions count.
+export const routineStreak = (tpl, todayStr) => {
+  if (!tpl || !isTemplate(tpl) || !isValidDate(todayStr)) return { streak: 0, unit: 'day' };
+  const done = new Set(tpl.doneOn || []);
+  const floor = addDaysStr(todayStr, -DONE_KEEP_DAYS);
+  const start = tpl.startDate && tpl.startDate > floor ? tpl.startDate : floor;
+  if (isFlexWeekly(tpl)) {
+    const n = flexTimes(tpl); let wk = mondayOf(todayStr); let streak = 0;
+    if (flexDoneInWeek(tpl, todayStr) >= n) streak++;
+    for (wk = addDaysStr(wk, -7); addDaysStr(wk, 6) >= start; wk = addDaysStr(wk, -7)) { if (flexDoneInWeek(tpl, wk) >= n) streak++; else break; }
+    return { streak, unit: 'week' };
+  }
+  if (isAfterCompletion(tpl)) return { streak: done.size, unit: 'time' };
+  let streak = 0;
+  for (let d = todayStr; d >= start; d = addDaysStr(d, -1)) {
+    if (!occursOn(tpl, d)) continue; // not required that day: neither counts nor breaks
+    if (done.has(d)) streak++; else if (d === todayStr) continue; else break;
+  }
+  return { streak, unit: 'day' };
 };
 
 // Today's checklist: [{ id, title, done, task }]. `task` = its open copy in today's list (tap toggles it), or null.
@@ -72,7 +101,8 @@ export const routineToday = (list, dayTasks, todayStr) => (list || []).filter(is
   // today's copy first; else the latest overdue copy still in the list (an after-completion task stays until done)
   const mine = (dayTasks || []).filter((t) => t && t.templateId === tpl.id && (!t.scheduledFor || t.scheduledFor <= todayStr));
   const task = mine.find((t) => t.scheduledFor === todayStr) || mine.sort((x, y) => String(y.scheduledFor || '').localeCompare(String(x.scheduledFor || '')))[0] || null;
-  return [{ id: tpl.id, title: tpl.title, done: r.done || !!task?.completed, task }];
+  const flex = isFlexWeekly(tpl) ? { done: flexDoneInWeek(tpl, todayStr), n: flexTimes(tpl) } : null;
+  return [{ id: tpl.id, title: tpl.title, done: r.done || !!task?.completed, task, flex, streak: routineStreak(tpl, todayStr).streak }];
 });
 
 // This week (Mon–Sun containing todayStr): per-day { date, label, total, done, state } + totals.

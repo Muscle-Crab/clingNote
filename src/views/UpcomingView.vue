@@ -48,9 +48,10 @@
         <div v-if="editing === t.id" class="up-edit">
           <input v-model="draft[t.id].title" class="up-input" aria-label="Title" />
           <select v-model="draft[t.id].freq" class="up-input" aria-label="Repeat">
-            <option value="weekly">Weekly</option><option value="daily">Daily</option><option value="monthly">Monthly</option><option value="afterCompletion">Days after done</option>
+            <option value="weekly">Weekly</option><option value="xweek">N× a week, any day</option><option value="daily">Daily</option><option value="monthly">Monthly</option><option value="afterCompletion">Days after done</option>
           </select>
           <input v-if="draft[t.id].freq === 'afterCompletion'" v-model.number="draft[t.id].everyDays" type="number" min="1" max="365" class="up-input" aria-label="Days after I finish" />
+          <input v-if="draft[t.id].freq === 'xweek'" v-model.number="draft[t.id].timesPerWeek" type="number" min="1" max="6" class="up-input" aria-label="Times a week" />
           <span v-if="draft[t.id].freq === 'weekly'" class="up-wd">
             <label v-for="(w, i) in WEEKDAYS" :key="w"><input type="checkbox" :value="i" v-model="draft[t.id].days" /> {{ w }}</label>
           </span>
@@ -83,7 +84,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '@/firebaseConfig';
 import { localDateStr } from '@/utils/streak';
 import { routineWeek } from '@/utils/routine';
-import { clampEveryDays } from '@/utils/scheduling';
+import { clampEveryDays, clampTimesPerWeek, flexTimes, ALL_DAYS } from '@/utils/scheduling';
 import { isAfterCompletion, futureOf, groupByDate, formatScheduledDate, isTemplate, describeRecurrence, nextOccurrences, sundayOf, addDaysStr, visibleFrom, removeScheduled, rescheduleEntry, WEEKDAYS, isValidDate } from '@/utils/scheduling';
 import { loadScheduled, mutateScheduled } from '@/composables/useScheduledTasks';
 import { loadDayTasks } from '@/composables/useDayPersistence';
@@ -125,7 +126,8 @@ const move = (e, date) => { if (isValidDate(date) && date >= today) run((l) => r
 const stopTemplate = (t) => run((l) => l.map((x) => (x.id === t.id ? { ...x, stopped: true } : x)));
 const saveTemplate = (t) => {
   const d = draft.value[t.id];
-  const r = { freq: d.freq };
+  if (d.freq === 'xweek' && !clampTimesPerWeek(d.timesPerWeek)) { error.value = 'Pick 1–6 times a week.'; return; }
+  const r = d.freq === 'xweek' ? { freq: 'weekly', days: [...ALL_DAYS], timesPerWeek: clampTimesPerWeek(d.timesPerWeek) } : { freq: d.freq };
   if (d.freq === 'weekly') r.days = [...new Set(d.days.map(Number))].sort();
   if (d.freq === 'weekly' && !r.days.length) { error.value = 'Pick at least one weekday.'; return; }
   if (d.freq === 'monthly') r.dayOfMonth = Math.min(31, Math.max(1, Number(d.dayOfMonth) || 1));
@@ -141,7 +143,7 @@ onMounted(() => onAuthStateChanged(auth, async (u) => {
   try {
     list.value = await loadScheduled(uid.value);
     try { const ls = await Promise.all(WEEKDAYS.map((n) => loadDayTasks(uid.value, n))); dayLists.value = Object.fromEntries(WEEKDAYS.map((n, i) => [n, ls[i]])); } catch (e) { console.error(e); }
-    draft.value = Object.fromEntries(list.value.filter(isTemplate).map((t) => [t.id, { title: t.title, freq: t.recurrence.freq, days: [...(t.recurrence.days || [])], dayOfMonth: t.recurrence.dayOfMonth || 1, everyDays: t.recurrence.everyDays || 3 }]));
+    draft.value = Object.fromEntries(list.value.filter(isTemplate).map((t) => [t.id, { title: t.title, freq: flexTimes(t.recurrence) ? 'xweek' : t.recurrence.freq, timesPerWeek: flexTimes(t.recurrence) || 3, days: [...(t.recurrence.days || [])], dayOfMonth: t.recurrence.dayOfMonth || 1, everyDays: t.recurrence.everyDays || 3 }]));
   } catch (e) { console.error(e); error.value = 'Scheduled tasks could not be loaded.'; }
   loading.value = false;
 }));

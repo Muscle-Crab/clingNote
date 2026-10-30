@@ -13,7 +13,7 @@
     <div v-if="open" class="rs-chips">
       <button v-for="it in items" :key="it.id" type="button" class="rs-chip" :class="{ 'is-done': it.done }" data-test="routine-chip"
         :disabled="!it.task" :aria-pressed="it.done ? 'true' : 'false'" @click="it.task && $emit('toggle', it.task)">
-        <i class="fas" :class="it.done ? 'fa-check-circle' : 'fa-circle'" aria-hidden="true"></i> {{ it.title }}
+        <i class="fas" :class="it.done ? 'fa-check-circle' : 'fa-circle'" aria-hidden="true"></i> {{ it.title }}<span v-if="it.flex" class="rs-meta" data-test="routine-flex"> · {{ it.flex.done }}/{{ it.flex.n }} this wk</span><span v-if="it.streak >= 2" class="rs-meta"> · 🔥{{ it.streak }}</span>
       </button>
     </div>
   </div>
@@ -31,6 +31,7 @@ const pct = computed(() => (props.week.total ? Math.round((props.week.done / pro
 </script>
 
 <style scoped>
+.rs-meta { opacity: .7; font-size: .85em; font-weight: 500; }
 .rs { margin: 0 0 8px; }
 .rs-row { width: 100%; display: flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 2px; background: none; border: 0; color: var(--c-text-2, #a1a09b); font: inherit; font-size: .82rem; cursor: pointer; text-align: left; }
 .rs-title b { color: var(--c-text, #ecebe8); font-weight: 700; }

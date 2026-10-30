@@ -99,7 +99,7 @@ export const parseImport = (text) => {
   const scheduled = [];
   for (const r of Array.isArray(raw.scheduled) ? raw.scheduled : []) {
     const e = cleanScheduled(r); if (!e) { skipped += 1; continue; }
-    if (isObj(r.recurrence) && ['daily', 'weekly', 'monthly'].includes(r.recurrence.freq)) e.recurrence = { freq: r.recurrence.freq, ...(Array.isArray(r.recurrence.days) ? { days: r.recurrence.days.filter((x) => Number.isInteger(x) && x >= 0 && x <= 6) } : {}), ...(date(r.recurrence.until) ? { until: r.recurrence.until } : {}) };
+    if (isObj(r.recurrence) && ['daily', 'weekly', 'monthly'].includes(r.recurrence.freq)) e.recurrence = { freq: r.recurrence.freq, ...(Array.isArray(r.recurrence.days) ? { days: r.recurrence.days.filter((x) => Number.isInteger(x) && x >= 0 && x <= 6) } : {}), ...(date(r.recurrence.until) ? { until: r.recurrence.until } : {}), ...(r.recurrence.freq === 'weekly' && Number.isInteger(r.recurrence.timesPerWeek) && r.recurrence.timesPerWeek >= 1 && r.recurrence.timesPerWeek <= 6 ? { timesPerWeek: r.recurrence.timesPerWeek } : {}) };
     scheduled.push(e); total += 1;
   }
   if (total > IMPORT_LIMITS.tasks) return { ok: false, error: `Too many tasks (${total}); the limit is ${IMPORT_LIMITS.tasks}.` };
