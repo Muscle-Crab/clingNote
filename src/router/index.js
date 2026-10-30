@@ -12,6 +12,7 @@ import { isPro, canUse } from '@/utils/pro';
 import { withRcPro, rcProActive, loadUserDoc } from '@/composables/usePro';
 import { db } from '../firebaseConfig';
 import { doc, getDoc } from 'firebase/firestore';
+import { applySeo } from '@/utils/seo';
 import { homeFor, setMode, getPendingManagerToken, clearPendingManagerToken } from '@/utils/appMode';
 
 const routes = [
@@ -19,7 +20,8 @@ const routes = [
     path: '/',
     name: 'Root',
     // placeholder, redirection handled in route guard
-    component: () => import('../views/landing.vue')
+    component: () => import('../views/landing.vue'),
+    meta: { seo: 'landing' }
   },
   {
     path: '/home',
@@ -98,7 +100,7 @@ const routes = [
     path: '/about',
     name: 'about',
     component: () => import('../views/AboutView.vue'),
-    meta: { webOnly: true } // About ClingNote (web nav only; iOS has Support instead)
+    meta: { webOnly: true, seo: 'about' } // About ClingNote (web nav only; iOS has Support instead)
   },
   {
     path: '/payment-success',
@@ -116,7 +118,8 @@ const routes = [
   {
     path: '/landing',
     name: 'Landing',
-    component: () => import('../views/landing.vue')
+    component: () => import('../views/landing.vue'),
+    meta: { seo: 'landing' }
   },
   {
     // Pal invite deep link (QR / iPhone Camera / universal link) → prefilled Pals hub; user confirms with Connect.
@@ -155,7 +158,8 @@ const routes = [
   {
     path: '/:pathMatch(.*)*',
     name: 'NotFoundComponent',
-    component: () => import('@/views/NotFoundComponent.vue')
+    component: () => import('@/views/NotFoundComponent.vue'),
+    meta: { seo: 'notfound' }
   },
   {
     path: '/fdfd',
@@ -174,12 +178,14 @@ const routes = [
   {
     path: '/login',
     name: 'Login',
-    component: Login
+    component: Login,
+    meta: { seo: 'login' }
   },
   {
     path: '/terms',
     name: 'TermsandCondition',
-    component: TermsandCondition
+    component: TermsandCondition,
+    meta: { seo: 'terms' }
   },
   {
     // Email sign-up was removed: accounts are created by Sign in with Apple / Google. Old links land on /login.
@@ -189,15 +195,18 @@ const routes = [
   {
     path: '/sub',
     name: 'subs',
-    component: () => import('../views/Subs.vue')
+    component: () => import('../views/Subs.vue'),
+    meta: { seo: 'pricing' }
   },{
     path: '/support',
     name: 'support',
-    component: () => import('../views/SupportView.vue')
+    component: () => import('../views/SupportView.vue'),
+    meta: { seo: 'support' }
   },{
     path: '/privacy-policy',
     name: 'privacy',
-    component: () => import('../views/privacy-policy.vue')
+    component: () => import('../views/privacy-policy.vue'),
+    meta: { seo: 'privacy' }
   }
 ];
 
@@ -290,6 +299,7 @@ router.beforeEach(async (to, from, next) => {
 });
 
 // Remember the last mode used (User mode = your tasks, Manager mode = people you manage).
-router.afterEach((to) => { if (to.path === '/home') setMode('user'); else if (to.path === '/manage' || to.path.startsWith('/manage/')) setMode('manager'); });
+router.afterEach((to) => { try { applySeo(to); } catch (e) { /* never block navigation */ }
+   if (to.path === '/home') setMode('user'); else if (to.path === '/manage' || to.path.startsWith('/manage/')) setMode('manager'); });
 
 export default router;

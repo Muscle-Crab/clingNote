@@ -1,2 +1,31 @@
 User-agent: *
-Disallow:
+Allow: /
+Allow: /landing
+Allow: /sub
+Allow: /login
+Allow: /support
+Allow: /about
+Allow: /terms
+Allow: /privacy-policy
+Disallow: /.netlify/
+Disallow: /home
+Disallow: /onboarding
+Disallow: /paywall
+Disallow: /pro/
+Disallow: /payment-success
+Disallow: /rankings
+Disallow: /community
+Disallow: /discipline
+Disallow: /gate
+Disallow: /upcoming
+Disallow: /profile/
+Disallow: /pals
+Disallow: /pal/
+Disallow: /m/
+Disallow: /manage
+Disallow: /chat
+Disallow: /fdfd
+Disallow: /welcome
+Disallow: /test.html
+
+Sitemap: https://clingnote.com/sitemap.xml
