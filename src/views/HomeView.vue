@@ -39,7 +39,7 @@
         ⚠️ {{ disciplineWarning === '30m' ? '30 minutes' : '2 hours' }} until your {{ disciplineSettings.deadline }} deadline — {{ streakProgress }}/{{ DAILY_STREAK_MIN }} done
       </div>
                 <BossPanel v-if="strictOn && !bossHidden && (bossLines.length || verdictScreen)" class="home-notice" :lines="bossLines" :verdict="verdictScreen"
-                 @dismiss="bossHidden = true" @dismiss-line="idleNudge = null" @ack-verdict="dismissVerdict" />
+                 @dismiss="bossHidden = true" @dismiss-line="idleNudge = null" @ack-verdict="dismissVerdict" @roll="bossRoll()" />
                 <MorningReport v-if="morningRecap && isViewingToday" class="home-notice" :recap="morningRecap" @close="morningRecap = null" />
                 <LoadSummary v-if="isViewingToday" :load="todayLoad" :expanded="showSchedule" @toggle="showSchedule = !showSchedule" />
               </div>
@@ -125,7 +125,7 @@
       <LockGuideSheet v-bind="lockGuide" @pick="lockGuidePick" @close="lockGuideClose" />
       <VoiceModal v-if="voiceOpen" :transcript="liveTranscript" :supported="voiceSupported" :capability="voiceCap" :error="voiceError" :hint="voiceHint" :added="voiceAdded" :items="voiceItems" :busy="voiceBusy" :source="voiceSource" @undo="undoVoiceTask" @cancel="cancelVoiceInput" @finish="finishVoiceInput" @confirm="confirmVoiceItems" @relisten="relistenVoice" />
       <div v-if="repeatToast" :key="repeatToast.id" class="repeat-toast" :class="{ 'repeat-toast--err': repeatToast.error }" :role="repeatToast.error ? 'alert' : 'status'" data-test="repeat-toast">🔁 {{ repeatToast.text }} <button v-if="repeatToast.undo" type="button" data-test="repeat-undo" @click="() => { const u = repeatToast.undo; repeatToast = null; u(); }">Undo</button></div>
-      <div v-if="noteToast" :key="'n' + noteToast.id" class="repeat-toast" :class="{ 'repeat-toast--err': noteToast.error }" :role="noteToast.error ? 'alert' : 'status'" data-test="note-toast">{{ noteToast.text }}</div>
+      <div v-if="noteToast" :key="'n' + noteToast.id" class="repeat-toast" :class="{ 'repeat-toast--err': noteToast.error }" :role="noteToast.error ? 'alert' : 'status'" data-test="note-toast">{{ noteToast.text }}<template v-if="noteToast.actions"> <button v-for="a in noteToast.actions" :key="a.id" type="button" :data-test="'roll-' + a.id" @click="() => { const f = a.run; noteToast = null; f(); }">{{ a.label }}</button></template></div>
       <div v-if="!voiceOpen && voiceAdded.some((e) => e.undoUntil > nowTick)" class="voice-toasts" role="status">
         <div v-for="e in voiceAdded.filter((x) => x.undoUntil > nowTick)" :key="e.id" class="voice-toast">🎙 Added “{{ e.title }}” <button type="button" @click="undoVoiceTask(e)">Undo</button></div>
       </div>
@@ -229,6 +229,7 @@ import { listCoverage, uniqueRenderKeys } from '@/utils/listCoverage';
 import { registerIntentHandler, runIntentDrain } from '@/native/intentDrain';
 import { intentCreateArgs, intentOutcome, bumpTries as bumpIntentTries, outOfTries as intentOutOfTries, readBuffer as readIntentBuffer, writeBuffer as writeIntentBuffer } from '@/utils/intentQueue';
 import { weekStats, searchTasks, suggestNext, snoozeTo } from '@/utils/assistantExtras';
+import { rollNext, rollLine, keyOf as rollKey } from '@/utils/rollNext';
 import { ref, onMounted, onBeforeUnmount, computed, watch, reactive, nextTick } from 'vue';
 import { useSounds } from '@/composables/useSounds';
 import { patchStoredTask, loadDayTasks, carryTasksToDay } from '@/composables/useDayPersistence';
@@ -1863,7 +1864,7 @@ const saveTaskSchedule = async ({ sched, scope }) => {
 const repeatPending = reactive({});
 const repeatToast = ref(null); let repeatToastTimer = null;
 const noteToast = ref(null); let noteToastTimer = null; // generic one-line toast (Siri adds, templates, day plan)
-const showNoteToast = (text, { error = false } = {}) => { clearTimeout(noteToastTimer); noteToast.value = { text, error, id: Date.now() }; noteToastTimer = setTimeout(() => { noteToast.value = null; }, error ? 6000 : 4000); };
+const showNoteToast = (text, { error = false, actions = null } = {}) => { clearTimeout(noteToastTimer); noteToast.value = { text, error, actions, id: Date.now() }; noteToastTimer = setTimeout(() => { noteToast.value = null; }, error ? 6000 : actions ? 9000 : 4000); };
 const showRepeatToast = (text, { undo = null, error = false } = {}) => {
   clearTimeout(repeatToastTimer);
   repeatToast.value = { text, undo, error, id: Date.now() };
@@ -3874,7 +3875,7 @@ const assistantExecutor = createAssistantExecutor({
   },
   weekStats: async () => ({ ...weekStats(await agentWeek(true), { streak: streak.value, bestStreak: bestStreak.value }), pointsToday: pointsAccumulated.value, pointsNeededToday: dayRequiredPts.value || 0, streakDoneToday: streakProgress.value, streakLeft: Math.max(0, DAILY_STREAK_MIN - streakProgress.value), habits: habitSummary(loadHabits(userId.value), localDateStr()) }),
   findTasks: async ({ query, day }) => searchTasks(await agentWeek(false), scheduledList.value || [], { query, day }),
-  suggestNext: async () => suggestNext(selectedDayRoutine.value, { minutesLeft: eh.running.value ? Math.round(eh.remainingMs.value / 60000) : null }),
+  suggestNext: async (a = {}) => (a.mode === 'roll' ? rollNext(selectedDayRoutine.value, rollCtx()) : suggestNext(selectedDayRoutine.value, { minutesLeft: eh.running.value ? Math.round(eh.remainingMs.value / 60000) : null })),
   snooze: async (task, minutes) => { const t = snoozeTo(new Date(), minutes); if (t.nextDay) return { error: 'That runs past midnight: reschedule it to tomorrow instead.' }; if ((await editTask(agentIdx(task), task, { startTime: t.time })) === false) return { error: 'Could not move it (day locked or offline).' }; return t; },
   addSubtasks: (task, items) => editTask(agentIdx(task), task, { subtasks: items.reduce((l, x) => addSubtask(l, x), subtasksOf(task)) }),
   rollUnfinished: async () => { if (!isViewingToday.value) return { moved: 0 }; const to = tomorrowStr(); let moved = 0;
@@ -3973,6 +3974,22 @@ const coachEnd = () => { if (coachLesson) saveCoach(userId.value, markDone(coach
 const coachSkipAll = () => { coachEnd(); saveCoach(userId.value, { ...coachState(), off: true }); showNoteToast('Tips off. Turn them on in the ☰ menu: Show me tips again.'); };
 const coachSignal = (sig) => { if (!coachLesson || !stepMatches(coachStep.value, sig)) return; coachIdx++; if (coachIdx >= coachLesson.steps.length) coachEnd(); else coachShow(); };
 const replayTips = () => { saveCoach(userId.value, { done: [], off: false }); coachLesson = null; coachStart('first-task-done', { force: true }); };
+// ── What's next / roll a task (build 40): weighted pick from today's open tasks; one line in the boss bubble + voice, Start / Reroll.
+const rollCtx = () => ({ now: new Date(), locked: !!eh.running.value, energy: (checkin.value && checkin.value.energy) || '' });
+const bossRoll = (exclude = '') => {
+  if (blockIfShut()) return null;
+  const r = isViewingToday.value ? rollNext(selectedDayRoutine.value, { ...rollCtx(), exclude }) : { task: null, reason: 'no tasks' };
+  const line = rollLine(r); const t = r.task;
+  const actions = t ? [...(t.timerActive ? [] : [{ id: 'start', label: 'Start', run: () => rollStart(t) }]), ...(r.left > 1 ? [{ id: 'reroll', label: 'Reroll', run: () => bossRoll(rollKey(t)) }] : [])] : null;
+  showNoteToast(line, { actions }); if (!voMuted.value && !document.hidden) speakLive(line);
+  return r;
+};
+const rollStart = async (t) => {
+  const i = selectedDayRoutine.value.indexOf(t); if (i < 0) { showNoteToast('That task is no longer in today\'s list.', { error: true }); return; }
+  if (t.timerActive) return; // already running
+  const m = Math.min(600, Math.max(1, Math.round(Number(t.estimateMin) || Number(t.minutes) || 25)));
+  selectedTimerTaskIndex.value = i; selectedTimerHours.value = Math.floor(m / 60); selectedTimerMinutes.value = m % 60; await startTimer();
+};
 const sgSay = (line, opts) => { if (opts && opts.undo) showRepeatToast(line, opts); else showNoteToast(line); if (!voMuted.value && !document.hidden) speakLive(line); };
 const onSergeantReplan = async (open, onUndo) => {
   const behind = behindMinutes(open); const snap = open.map((t) => ({ t, from: t.startTime || '' }));
@@ -3987,7 +4004,7 @@ const onSergeant = async (id) => {
   if (blockIfShut()) return;
   const open = (selectedDayRoutine.value || []).filter((t) => !t.completed && t.status !== 'wontdo');
   try {
-    if (id === 'next') { const r = suggestNext(selectedDayRoutine.value, { minutesLeft: eh.running.value ? Math.round(eh.remainingMs.value / 60000) : null }); sgSay(nextLine(r)); return; }
+    if (id === 'next') { bossRoll(); return; } // "What's next" in the hold menu = the boss rolls a task (Start / Reroll)
     if (id === 'critical') { const r = suggestNext(selectedDayRoutine.value, {}); const t = r && r.task; if (!t) { sgSay(criticalLine(null)); return; }
       if (t.important) { sgSay(criticalLine(t, true)); return; } const i = selectedDayRoutine.value.indexOf(t); if (i >= 0) await toggleTaskImportance(i); showRepeatToast(criticalLine(t, false)); return; }
     if (id === 'replan') { if (!isViewingToday.value || !open.length) { sgSay(nextLine(null)); return; } await onSergeantReplan(open); return; }

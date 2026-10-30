@@ -1,0 +1,26 @@
+// What's next / roll a task: weighting, exclusions, reroll, empty states, line, tool arg.
+import assert from 'node:assert/strict';
+import { rollNext, rollWeight, rollLine, openToday } from '../src/utils/rollNext.js';
+import { createRequire } from 'node:module';
+const { load } = createRequire(import.meta.url)('./lib/srcRequire');
+const { validateCall } = load('utils/assistantTools.js');
+const { createAssistantExecutor } = load('utils/assistantExecutor.js');
+let n = 0; const ok = (name, f) => { f(); n++; console.log('ok', name); };
+const now = new Date(2026, 9, 30, 10, 0);
+const T = [{ title: 'A', points: 10, createdAt: 1 }, { title: 'B', points: 90, createdAt: 2 }, { title: 'Done', points: 500, completed: true }, { title: 'Skip', points: 500, status: 'wontdo' }];
+ok('only open tasks', () => { assert.deepEqual(openToday(T).map((t) => t.title), ['A', 'B']); });
+ok('weighted by points', () => { const r = rollNext(T, { now }, () => 0.5); assert.equal(r.task.title, 'B'); assert.equal(rollNext(T, { now }, () => 0.01).task.title, 'A'); });
+ok('due time boosts', () => { assert.ok(rollWeight({ points: 10, startTime: '09:30' }, { nowM: 600 }) > rollWeight({ points: 10 }, { nowM: 600 }) * 3); assert.ok(rollWeight({ points: 10, startTime: '10:15' }, { nowM: 600 }) > rollWeight({ points: 10, startTime: '15:00' }, { nowM: 600 })); });
+ok('locked order boosts first', () => { const w0 = rollWeight({ points: 10 }, { locked: true, rank: 0, total: 3 }); const w2 = rollWeight({ points: 10 }, { locked: true, rank: 2, total: 3 }); assert.equal(w0, 40); assert.equal(w2, 10); assert.equal(rollWeight({ points: 10 }, { locked: false, rank: 0, total: 3 }), 10); });
+ok('low energy favors short', () => { assert.ok(rollWeight({ points: 10, estimateMin: 15 }, { energy: 'low' }) > rollWeight({ points: 10, estimateMin: 90 }, { energy: 'low' })); });
+ok('high energy favors big', () => { assert.ok(rollWeight({ points: 60 }, { energy: 'high' }) > rollWeight({ points: 60 }, {})); });
+ok('reroll excludes last pick', () => { for (let i = 0; i < 20; i++) assert.equal(rollNext(T, { now, exclude: 2 }, Math.random).task.title, 'A'); });
+ok('single task reroll keeps it', () => { assert.equal(rollNext([T[0]], { now, exclude: 1 }).task.title, 'A'); });
+ok('running timer wins', () => { assert.equal(rollNext([...T, { title: 'R', timerActive: true }], { now }).task.title, 'R'); });
+ok('distribution roughly by weight', () => { let b = 0; let s = 1; const rnd = () => { s = (s * 16807) % 2147483647; return s / 2147483647; }; for (let i = 0; i < 2000; i++) if (rollNext(T, { now }, rnd).task.title === 'B') b++; assert.ok(b > 1650 && b < 1950, String(b)); });
+ok('empty states', () => { assert.equal(rollNext([], { now }).task, null); assert.match(rollLine(rollNext([], { now })), /No tasks today/); assert.match(rollLine(rollNext([T[2]], { now })), /All done/); });
+ok('line', () => { assert.equal(rollLine({ task: { title: 'Gym' }, reason: 'it is due at 10:30' }), 'Next: Gym, it is due at 10:30.'); });
+ok('tool roll mode', () => { assert.deepEqual(validateCall('suggest_next', { mode: 'roll' }, {}).args, { mode: 'roll' }); assert.deepEqual(validateCall('suggest_next', {}, {}).args, {}); });
+const ex = createAssistantExecutor({ suggestNext: async (a) => (a && a.mode === 'roll' ? rollNext(T, { now }, () => 0.9) : { task: null, reason: 'x' }) });
+await (async () => { const r = await ex.run('suggest_next', { mode: 'roll' }); assert.equal(r.next, 'B'); n++; console.log('ok executor roll'); })();
+console.log(`roll-next: ${n} passed`);

@@ -92,7 +92,8 @@ export const validateCall = (name, args = {}, { refs = {}, tasksByKey = new Map(
     case 'start_day': case 'set_day_hours': { const h = Number(a.hours); if (!Number.isFinite(h) || h <= 0) return { ok: false, error: 'Ask the user how many hours.' }; return { ok: true, args: { hours: clampHours(h) } }; }
     case 'set_setting': return SETTINGS.includes(a.setting) ? { ok: true, args: { setting: a.setting, on: !!a.on } } : { ok: false, error: 'Unknown setting.' };
     case 'navigate': return PAGES[a.page] ? { ok: true, args: { path: PAGES[a.page] } } : { ok: false, error: 'Unknown page.' };
-    case 'get_overview': case 'get_stats': case 'suggest_next': case 'get_habits': case 'roll_unfinished': return { ok: true, args: {} };
+    case 'suggest_next': return { ok: true, args: a.mode === 'roll' ? { mode: 'roll' } : {} }; // roll = weighted pick (points, due time, plan order, energy)
+    case 'get_overview': case 'get_stats': case 'get_habits': case 'roll_unfinished': return { ok: true, args: {} };
     case 'auto_schedule': return { ok: true, args: { writeCalendar: a.write_calendar === true } }; // off unless the model explicitly sets it
     case 'add_habit': case 'log_habit': { const n = String(a.name || '').replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, 60); return n ? { ok: true, args: { name: n, done: a.done !== false } } : { ok: false, error: 'Which habit?' }; }
     case 'place_reminder': {

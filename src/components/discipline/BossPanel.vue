@@ -1,7 +1,7 @@
 <template>
   <section class="boss" :class="'boss--' + tone" role="status" aria-live="polite" aria-label="Strict Coach">
     <header class="boss-head">
-      <RobotCoach class="boss-sgt" :size="40" :talking="tone === 'alert' || tone === 'fail' || tone === 'warn'" label="Your robot coach" /><span class="boss-icon" aria-hidden="true">{{ icon }}</span>
+      <button type="button" class="boss-sgt-tap" data-test="boss-roll" aria-label="What's next? Tap the robot to roll your next task" title="Tap: what's next" @click="$emit('roll')"><RobotCoach class="boss-sgt" :size="40" :talking="tone === 'alert' || tone === 'fail' || tone === 'warn'" label="Your robot coach" /></button><span class="boss-icon" aria-hidden="true">{{ icon }}</span>
       <p class="boss-title">Your robot <span class="boss-chip">{{ chip }}</span></p>
       <button type="button" class="boss-btn" :aria-expanded="open ? 'true' : 'false'" :aria-label="open ? 'Collapse robot coach panel' : 'Expand robot coach panel'" @click="open = !open">{{ open ? '▾' : '▸' }}</button>
       <button type="button" class="boss-btn" aria-label="Hide robot coach panel for now" @click="$emit('dismiss')">✕</button>
@@ -32,7 +32,7 @@ const props = defineProps({
   lines: { type: Array, default: () => [] }, // [{ kind, text, dismissible }]
   verdict: { type: Object, default: null }, // { v, text, date }
 });
-defineEmits(['dismiss', 'dismiss-line', 'ack-verdict']);
+defineEmits(['dismiss', 'dismiss-line', 'ack-verdict', 'roll']); // roll = tap the robot face: "what's next" (no long-press here: hold is the FAB menu)
 const open = ref(!!props.verdict); // compact by default; a verdict opens expanded
 const ICONS = { morning: '📋', midday: '📢', evening: '🚨', idle: '👀', watching: '👁️' };
 const tone = computed(() => {
@@ -52,6 +52,10 @@ const chip = computed(() => ({ pass: 'Verdict', fail: 'Verdict', alert: 'Watchin
 .boss-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px; }
 .boss-icon { font-size: 16px; line-height: 1; }
 .boss-sgt { flex: none; margin: -6px 0; }
+/* the robot face itself is the tap target: no visible box, just the existing avatar */
+.boss-sgt-tap { all: unset; flex: none; cursor: pointer; border-radius: 22%; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+.boss-sgt-tap:focus-visible { outline: 2px solid var(--c-accent, #4F6FF0); outline-offset: 2px; }
+.boss-sgt-tap:active { transform: scale(.94); }
 .boss-title { margin: 0; flex: 1; font-weight: 700; font-size: var(--fs-md, 14px); display: flex; align-items: center; gap: 8px; }
 .boss-chip { font-size: var(--fs-xs, 11px); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--c-text-3, #8791A5); background: var(--c-surface-2, #1A1E28); padding: 2px 8px; border-radius: 999px; }
 .boss-btn { width: 28px; height: 28px; border-radius: 8px; border: 0; background: transparent; color: var(--c-text-3, #8791A5); cursor: pointer; font-size: 13px; }
