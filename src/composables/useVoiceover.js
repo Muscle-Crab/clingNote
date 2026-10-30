@@ -18,6 +18,11 @@ export const voUnlocked = ref(false);
 export const voSpeaking = ref(false);
 let audio = null; let token = 0;
 const base = (typeof process !== 'undefined' && process.env && process.env.BASE_URL) || '/';
+// Some engines report no MP3 decoder at all (canPlayType('audio/mpeg') === ''), e.g. WebKitGTK/WPE builds without the
+// GStreamer codec plugins (Playwright's Linux WebKit). Handing such an engine an MP3 src from a tap crashes its web
+// process, so skip media there and treat the line as "no voice available". iOS WKWebView / Safari / Chrome all say
+// 'maybe'/'probably'; an element without canPlayType (tests) is treated as capable.
+export const canPlayMp3 = (a) => { try { return !a || typeof a.canPlayType !== 'function' || a.canPlayType('audio/mpeg') !== ''; } catch (e) { return true; } };
 const el = () => { if (!audio && typeof Audio !== 'undefined') { audio = new Audio(); audio.preload = 'auto'; audio.addEventListener('ended', () => { voSpeaking.value = false; }); } return audio; };
 
 // Lock-screen "Now Playing" cleanup. A WKWebView <audio> element that played (and still holds a src) registers as the app's
@@ -60,7 +65,7 @@ async function liveUrl(text) {
 
 // Play one source on the shared element; onFail fires at most once and never after playback really started.
 function playSrc(src, my, { onEnd, onFail }) {
-  const a = el(); if (!a || my !== token) { onFail(); return; }
+  const a = el(); if (!a || my !== token || !canPlayMp3(a)) { onFail(); return; }
   let started = false; let failed = false;
   const fail = () => { if (failed || started || my !== token) return; failed = true; onFail(); };
   a.onplaying = () => { started = true; };
@@ -78,6 +83,7 @@ export function stopVoice() {
 
 // Speak one chunk: bundled MP3 for a known static line, else the live voice, else fallbackKey's MP3, else silence.
 function speakChunk(t, my, next, fallbackKey) {
+  if (!canPlayMp3(el())) { next(); return; } // no decoder: don't fetch live audio or touch the element
   const fallback = () => { if (my !== token) return; if (fallbackKey && SCRIPTS[fallbackKey]) playSrc(`${base}voiceover/${fallbackKey}.mp3`, my, { onEnd: next, onFail: next }); else next(); };
   const live = () => liveUrl(t).then((u) => { if (my !== token) return; if (u) playSrc(u, my, { onEnd: next, onFail: fallback }); else fallback(); }, fallback);
   const local = bundledSrc(t);
@@ -115,7 +121,7 @@ export function playFlow({ before = '', key = '', text = '' }) {
 // Call from inside a tap handler. Primes the shared element (silent) so later swaps can autoplay on iOS.
 export function unlockVoice() {
   if (voUnlocked.value) return; voUnlocked.value = true;
-  const a = el(); if (a) { try { a.muted = true; a.src = `${base}voiceover/ob_age.mp3`; const p = a.play(); const done = () => { a.pause(); a.muted = false; if (!voSpeaking.value) releaseMedia(); };
+  const a = el(); if (a && canPlayMp3(a)) { try { a.muted = true; a.src = `${base}voiceover/ob_age.mp3`; const p = a.play(); const done = () => { a.pause(); a.muted = false; if (!voSpeaking.value) releaseMedia(); };
     p && p.then ? p.then(done, done) : done(); } catch (e) { a.muted = false; } }
 }
 

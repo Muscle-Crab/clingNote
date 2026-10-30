@@ -7,6 +7,8 @@
 const base = (typeof process !== 'undefined' && process.env && process.env.BASE_URL) || '/';
 let a = null; let active = false; let handlers = {};
 const ms = () => (typeof navigator !== 'undefined' && navigator.mediaSession) || null;
+// no MP3 decoder (e.g. Linux WebKit without GStreamer codecs): playing would crash the web process, so skip (see useVoiceover)
+const canPlayMp3 = (x) => { try { return typeof x.canPlayType !== 'function' || x.canPlayType('audio/mpeg') !== ''; } catch (e) { return true; } };
 const el = () => { if (!a && typeof Audio !== 'undefined') { a = new Audio(); a.loop = true; a.preload = 'auto'; a.volume = 1; } return a; };
 const ACTIONS = ['play', 'pause', 'stop'];
 
@@ -23,7 +25,7 @@ function meta(subtitle, state) {
 // Call from the same tap that starts the music (iOS needs the gesture for media playback).
 export function npStart(subtitle, h = {}) {
   handlers = h; active = true;
-  const x = el(); if (x) { if (!x.getAttribute('src')) x.src = `${base}audio/np-anchor.mp3`; try { const p = x.play(); if (p && p.catch) p.catch(() => {}); } catch (e) { /* ignore */ } }
+  const x = el(); if (x && canPlayMp3(x)) { if (!x.getAttribute('src')) x.src = `${base}audio/np-anchor.mp3`; try { const p = x.play(); if (p && p.catch) p.catch(() => {}); } catch (e) { /* ignore */ } }
   meta(subtitle, 'playing');
 }
 export function npTitle(subtitle) { if (active) meta(subtitle, a && !a.paused ? 'playing' : 'paused'); }

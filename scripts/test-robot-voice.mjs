@@ -23,3 +23,16 @@ const ch = liveChunks(long); assert(ch.length > 1 && ch.every((c) => c.length <=
 assert.deepEqual(liveChunks('**Hi** there.'), ['Hi there.']);
 const uv = readFileSync('src/composables/useVoiceover.js', 'utf8'); assert(uv.includes("fnUrl('tts')") || uv.includes('fnUrl("tts")'), 'live tts path');
 console.log(`ok   robot voice: ${src.length} files clean, ${PHRASES.length} phrases + ${Object.keys(SCRIPTS).length} scripts bundled`);
+
+// WebKit without an MP3 decoder (Playwright Linux WebKit) crashed its web process when a tapped task set an MP3 src.
+{
+  const vo = readFileSync('src/composables/useVoiceover.js', 'utf8');
+  const m = vo.match(/export const canPlayMp3 = (\(a\) => \{.*\});/); assert(m, 'canPlayMp3 helper');
+  const canPlayMp3 = new Function(`return ${m[1]}`)();
+  assert.strictEqual(canPlayMp3({ canPlayType: () => 'maybe' }), true); assert.strictEqual(canPlayMp3({ canPlayType: () => '' }), false); assert.strictEqual(canPlayMp3({}), true);
+  assert(/if \(!a \|\| my !== token \|\| !canPlayMp3\(a\)\)/.test(vo), 'playSrc guarded');
+  assert(/function speakChunk[^\n]*\n\s*if \(!canPlayMp3\(el\(\)\)\)/.test(vo), 'speakChunk guarded');
+  assert(/if \(a && canPlayMp3\(a\)\) \{ try \{ a\.muted = true/.test(vo), 'unlockVoice guarded');
+  assert(/x && canPlayMp3\(x\)/.test(readFileSync('src/composables/useNowPlaying.js', 'utf8')), 'now playing guarded');
+  console.log('ok   robot voice: no media on engines without an MP3 decoder');
+}
