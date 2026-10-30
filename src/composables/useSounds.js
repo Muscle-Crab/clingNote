@@ -80,7 +80,7 @@ export function useSounds() {
   const toggleSound = () => {
     soundEnabled.value = !soundEnabled.value;
     try { localStorage.setItem(STORAGE_KEY, String(soundEnabled.value)); } catch (e) { /* ignore */ }
-    if (soundEnabled.value) playSound('dragStart');
+    if (soundEnabled.value) playSound('dragStart'); // (src/utils/sfx.js reads the same 'soundEnabled' key)
   };
 
   // Milestone chime: only on an upward crossing caused by the user completing a task

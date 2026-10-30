@@ -65,7 +65,7 @@
         <DayStartPrompt v-if="dayPromptOpen" :initial-hours="eh.hoursPref.value" :now-ms="eh.nowMs" :tz="eh.plan.value?.tz || ''" :busy="ehBusy" :error="ehStartError" :tasks="todayTasksForTarget" :stats="eh.stats.value" :earned="pointsAccumulated || 0" @confirm="confirmDayStart" @skip="skipLockIn" :can-lock="lockAvailable()"><template #checkin><CheckinRow :value="checkin" @pick="saveCheckin" /></template></DayStartPrompt>
 
         <ProgressBar :percentage="calculateCompletionPercentage()" :milestones="milestones" :done="completedTaskCount || 0" :total="dayTasks.length"
-                     :streak="streak" :streak-status="streakStatus" :streak-progress="streakProgress" :streak-min="DAILY_STREAK_MIN" :freezes="streakFreezes" :points="pointsAccumulated || 0" :target="isViewingToday ? dayRequiredPts : 0" :off-today="isViewingToday && offToday" />
+                     :streak="streak" :streak-status="streakStatus" :streak-progress="streakProgress" :streak-min="DAILY_STREAK_MIN" :freezes="streakFreezes" :points="pointsAccumulated || 0" :target="isViewingToday ? dayRequiredPts : 0" :off-today="isViewingToday && offToday" :uid="userId || ''" :hold="!!rewardScreen || !!lossScreen" />
 
       </section>
       <ShutdownPrompt class="home-notice" :suggest="false" :open="shutdownOpen" :done="shutdownDone" :open-tasks="shutdownOpenTasks"
@@ -341,6 +341,7 @@ import CelebrationOverlay from '@/components/home/CelebrationOverlay.vue';
 import DayTabs from '@/components/home/DayTabs.vue';
 import ImagePreview from '@/components/home/ImagePreview.vue';
 import ProgressBar from '@/components/home/ProgressBar.vue';
+import { sfx } from '@/utils/sfx';
 import EightHourCard from '@/components/home/EightHourCard.vue';
 import WakeAlarmPrompt from '@/components/home/WakeAlarmPrompt.vue';
 import { lockIn, loadLockIn, skipLockInToday } from '@/utils/lockIn';
@@ -447,8 +448,8 @@ const blockIfLocked = (dayIdx = selectedDayIndex.value) => {
   return true;
 };
 // 8-hour hard stop: once today's started day has ended, every task action is refused until the next wake time (data layer also guards).
-const blockIfShut = () => { if (!isShutdown()) return false; alert(shutMessage()); return true; };
-const lockMessage = (e) => { if (isLockError(e)) { alert(e.message); return true; } return false; };
+const blockIfShut = () => { if (!isShutdown()) return false; sfx('error'); alert(shutMessage()); return true; };
+const lockMessage = (e) => { if (isLockError(e)) { sfx('error'); alert(e.message); return true; } return false; };
 // Locked-in day (planned, countdown not started): today's list may grow past the minimum up to the overload cap for the chosen hours.
 // Returns the block message when adding one more would pass the cap, otherwise null. Adding never changes plan.taskCount.
 const planOverCap = () => {
@@ -897,6 +898,7 @@ const onAddClick = async () => {
   openModal('task');
 };
 const openModal = (type = 'task', index = null, title = '') => {
+  sfx('open');
   if (type === 'calendar') {
     selectedTaskIndex.value = index; // Store task index
     selectedTaskTitle.value = title || "Task Reminder";
@@ -920,7 +922,7 @@ const viewItems = computed(() => viewTasks(selectedDayRoutine.value, effectivePr
 const displayTasks = computed(() => viewItems.value.map((i) => i.task));
 // ---- Plan my day (user picks start + hours; preview; saved only on Confirm) ----
 const planOpen = ref(false); const planBusy = ref(false); const planError = ref('');
-const openPlanDay = async () => { if (!isViewingToday.value) { selectedDayIndex.value = todayIdx.value; await fetchSelectedDayRoutine(); } planError.value = ''; planOpen.value = true; };
+const openPlanDay = async () => { sfx('open'); if (!isViewingToday.value) { selectedDayIndex.value = todayIdx.value; await fetchSelectedDayRoutine(); } planError.value = ''; planOpen.value = true; };
 const onPlanPreviewed = (p) => { if (voMuted.value || document.hidden) return;
   speakLive(p.unplaced.length ? `Here's your plan. ${p.unplaced.length} task${p.unplaced.length === 1 ? " doesn't" : "s don't"} fit. Add hours or confirm.` : `Here's your plan, ${p.start} to ${p.end}. Confirm and I'll set the times.`); };
 const onPlanConfirm = async (p) => {
@@ -937,7 +939,7 @@ const onPlanConfirm = async (p) => {
 const templateItemCount = computed(() => { const r = makeTemplate('x', dayTasks.value); return r.ok ? r.template.items.length : 0; });
 const { templates: dayTemplates, load: loadDayTemplates, save: storeDayTemplate, remove: dropDayTemplate } = useDayTemplates();
 const tplOpen = ref(false); const tplBusy = ref(false); const tplError = ref(''); const tplNote = ref('');
-const openTemplates = async () => { if (!isViewingToday.value) { selectedDayIndex.value = todayIdx.value; await fetchSelectedDayRoutine(); } tplError.value = ''; tplNote.value = ''; tplOpen.value = true; loadDayTemplates(userId.value); };
+const openTemplates = async () => { sfx('open'); if (!isViewingToday.value) { selectedDayIndex.value = todayIdx.value; await fetchSelectedDayRoutine(); } tplError.value = ''; tplNote.value = ''; tplOpen.value = true; loadDayTemplates(userId.value); };
 const saveDayTemplate = async ({ name, withTimes }) => {
   const r = makeTemplate(name, dayTasks.value, { withTimes }); if (!r.ok) { tplError.value = r.error; return; }
   tplBusy.value = true; tplError.value = '';
@@ -1146,6 +1148,7 @@ const startTimer = async (opts = {}) => {
   selectedDayRoutine.value[selectedTimerTaskIndex.value] = task;
 
   await saveSelectedDayTasks();
+  sfx('timerStart');
   scheduleTimerDone(task); // iOS: on-device notification at end time (JS timers stop when backgrounded)
 
   showTimerModal.value = false;
@@ -1257,7 +1260,7 @@ const toggleTaskCompletion = async (index) => {
   if (task.completed) {
     if (task.alarmId) { clingAlarm.cancel(task.alarmId).catch(() => {}); task.alarmId = null; task.alarmAt = null; } // boss alarm: done before it rang
     markUserCompletion();
-    playSound("complete");
+    sfx("complete"); // central sfx (same Sounds setting)
     const completedNow = new Date().toISOString();
 
     task.completedAt = completedNow;
@@ -1274,6 +1277,7 @@ const toggleTaskCompletion = async (index) => {
       await sendNotificationToPlayer(userName, "completed");
     }
   } else {
+    sfx('tap'); // un-complete: light tap
     task.completedAt = null;
     task.timerStoppedAt = null;
     task.timerActive = false;
@@ -1680,7 +1684,7 @@ const updateStreakOnCompletion = async (task) => {
     applyStreakState(next);
     // streak music (respects the Sounds toggle inside playSound): fanfare when the streak is hit / goes up, else a rising step 1→5
     if (task.completed) {
-      if (streak.value > prevStreak || (prevProg < DAILY_STREAK_MIN && streakProgress.value >= DAILY_STREAK_MIN)) playSound('streakHit');
+      if (streak.value > prevStreak) { /* the Daily progress card plays the kill-streak charge + impact */ } else if (prevProg < DAILY_STREAK_MIN && streakProgress.value >= DAILY_STREAK_MIN) playSound('streakHit');
       else if (streakProgress.value > prevProg && streakProgress.value <= DAILY_STREAK_MIN) playSound('streakStep', { step: streakProgress.value, of: DAILY_STREAK_MIN });
     }
     if (task.completed) bossReact(streak.value > prevStreak || (prevProg < DAILY_STREAK_MIN && streakProgress.value >= DAILY_STREAK_MIN) ? 'streak' : 'done', task.title);
@@ -1870,7 +1874,7 @@ const saveTaskSchedule = async ({ sched, scope }) => {
 const repeatPending = reactive({});
 const repeatToast = ref(null); let repeatToastTimer = null;
 const noteToast = ref(null); let noteToastTimer = null; // generic one-line toast (Siri adds, templates, day plan)
-const showNoteToast = (text, { error = false, actions = null } = {}) => { clearTimeout(noteToastTimer); noteToast.value = { text, error, actions, id: Date.now() }; noteToastTimer = setTimeout(() => { noteToast.value = null; }, error ? 6000 : actions ? 9000 : 4000); };
+const showNoteToast = (text, { error = false, actions = null } = {}) => { if (error) sfx('error'); clearTimeout(noteToastTimer); noteToast.value = { text, error, actions, id: Date.now() }; noteToastTimer = setTimeout(() => { noteToast.value = null; }, error ? 6000 : actions ? 9000 : 4000); };
 const showRepeatToast = (text, { undo = null, error = false } = {}) => {
   clearTimeout(repeatToastTimer);
   repeatToast.value = { text, undo, error, id: Date.now() };
@@ -2126,6 +2130,7 @@ const addNewTask = async () => {
   const hadReminder = !!task.reminder;
   newTask.value = blankTask();
   capWarning.value = false; capOverride.value = false;
+  sfx('add');
   closeModal();
   error.value = '';
   lastAddPersist = trackWrite((async () => {
@@ -3015,6 +3020,7 @@ onMounted(async () => {
 const taskDetailModalOpen = ref(false);
 const taskDetail = ref({});
 const openTaskDetailModal = (task) => {
+  sfx('open');
   taskDetail.value = task;
   taskDetailModalOpen.value = true;
 };
@@ -3717,6 +3723,7 @@ const drainFocusFilter = async () => {
 };
 // Explicit way out of a locked session: confirm, then the timer stops in place (no points; the task stays open).
 const endFocusEarly = async (index) => {
+  sfx('timerStop');
   const t = selectedDayRoutine.value[index]; if (!t || !lockedFocus([t])) return;
   if (!window.confirm(`End focus on “${t.title}” early? The timer stops and the task stays open (no points).`)) return;
   selectedDayRoutine.value.splice(index, 1, { ...t, ...endEarlyPatch() });
@@ -3842,6 +3849,7 @@ onMounted(() => { setTimeout(drainTimerIntents, 2000); document.addEventListener
 onBeforeUnmount(() => document.removeEventListener('visibilitychange', onTimerIntentVisible));
 watch(dayRequiredPts, (n) => { if (isViewingToday.value && isNativeIOS()) import('@/utils/widgetSync').then((m) => m.setWidgetDayTarget(n)).catch(() => {}); }, { immediate: true });
 const openAssistant = (listen = false) => {
+  sfx('open');
   if (userId.value) loadAssistant(userId.value);
   if (!isViewingToday.value && todayIdx.value >= 0) selectedDayIndex.value = todayIdx.value; // the assistant works on today's list
   assistantListen.value = !!listen; askOpen.value = true;
