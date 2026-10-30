@@ -120,3 +120,10 @@ export const visibleNotifs = (list, blocked, prefs = DEFAULT_NOTIF_PREFS) => fil
 export const unreadCount = (list) => (list || []).filter((n) => !n.read).length;
 export const isAdminEmail = (email) => String(email || '').toLowerCase() === ADMIN_EMAIL;
 export const followId = (from, to) => `${from}_${to}`;
+// Scale (w, h) down to fit inside a max x max box, keeping the aspect ratio; never upscales.
+// Restored after the photo removal dropped it while useCommunity.js still imported it. Safe on 0/NaN input.
+export const fitWithin = (w, h, max = 1600) => {
+  const W = Number.isFinite(w) && w > 0 ? w : 0; const H = Number.isFinite(h) && h > 0 ? h : 0; const M = Number.isFinite(max) && max > 0 ? max : 1600;
+  if (!W || !H) return { w: Math.round(W), h: Math.round(H) };
+  const s = Math.min(1, M / Math.max(W, H)); return { w: Math.max(1, Math.round(W * s)), h: Math.max(1, Math.round(H * s)) };
+};
