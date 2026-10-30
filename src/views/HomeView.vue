@@ -344,7 +344,8 @@ import { homeDay } from '@/utils/homeDay';
 import DayStartPrompt from '@/components/eighthour/DayStartPrompt.vue';
 import { useEightHour, syncAfterAuth, setDayLengthHours, loadDayLengthHours, promptSeenFor, markPromptSeen } from '@/composables/useEightHour';
 import { countableIndexes, taskRange, hoursLabel } from '@/utils/eightHour';
-import { estimateFor, chipValues } from '@/utils/taskEstimate';
+import { estimateFor, chipValues, withAiEstimate } from '@/utils/taskEstimate';
+import { requestAiEstimate } from '@/utils/aiEstimate';
 import { patchTouchesLocked } from '@/utils/eightHourLock';
 import { isDayLocked, completionKeepsInPlace, isLockError, assertTasksChangeAllowed, lockedMessage, isShutdown, shutMessage } from '@/utils/eightHourLock';
 import ReminderModal from '@/components/home/ReminderModal.vue';
@@ -2111,12 +2112,28 @@ const addNewTask = async () => {
       return false;
     }
     try { if (hadReminder) await scheduleNotification(task, task.reminder); } catch (e) { console.error(e); }
+    refineWithAi(task, selectedDays.map((d) => d.day), key); // background; keeps the local estimate when the AI is unavailable
     fetchUserName(userId.value).then((n) => n && sendNotificationToPlayer(n, 'created')).catch(() => {});
     return true;
   })());
   return true;
 };
 let lastAddPersist = Promise.resolve(true);
+// Server AI estimate for a task saved with an automatic (local) estimate. Pro + AI consent already given only (never prompts, never opens
+// the paywall); any failure (offline, no server key, timeout, bad answer) silently keeps the local estimate. Locked days are left alone.
+const refineWithAi = async (task, dayNames, key) => {
+  try {
+    if (!task || task.estimateSource !== 'local' || task.pointsSource === 'ai') return;
+    const u = auth.currentUser;
+    if (!u || !(rcProActive(u.uid) || isProUser(await loadUserDoc())) || !(await hasAiConsent())) return; // web Pro (users doc) or iOS RevenueCat
+    const minutes = await requestAiEstimate(task, (t, input) => askAi(t, input));
+    const patched = minutes ? withAiEstimate(task, minutes) : null;
+    if (!patched) return;
+    const fields = { minutes: patched.minutes, complexity: patched.complexity, points: patched.points, estimateSource: 'ai' };
+    await Promise.all(dayNames.filter((d) => !isDayLocked(d)).map((d) => mutateDay(d, (l) => l.map((t) => (taskKey(t) === key && t.estimateSource === 'local' ? { ...t, ...fields } : t)))));
+    if (selectedDayRoutine.value) selectedDayRoutine.value = selectedDayRoutine.value.map((t) => (taskKey(t) === key && t.estimateSource === 'local' && !isDayLocked(days[selectedDayIndex.value].day) ? { ...t, ...fields } : t));
+  } catch (e) { console.warn('AI estimate skipped:', e && e.message); }
+};
 
 // Repeat control on task cards: keep one copy of the task (same createdAt+title) on every chosen weekday.
 // Copies keep the original createdAt, so making a task recurring never counts as a new task toward the daily limit.

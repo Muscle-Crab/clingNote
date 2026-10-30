@@ -180,3 +180,21 @@ export const applyAiEstimate = (task, minutes) => {
   if (!Number.isFinite(n) || n <= 0 || Number(task.estimateMin) > 0) return task;
   return { ...task, minutes: round5(n), estimateSource: 'ai' };
 };
+
+// Parse the server's 'estimate' answer ({"minutes": N}, possibly fenced) -> minutes, or 0 when unusable.
+export const parseAiMinutes = (content) => {
+  try {
+    const o = JSON.parse(String(content || '').replace(/^```(?:json)?\s*|\s*```$/g, '').trim());
+    const n = Math.round(Number(o && o.minutes));
+    return Number.isFinite(n) && n >= 1 && n <= 1440 ? n : 0;
+  } catch (e) { return 0; }
+};
+// Ask the server AI for minutes. `ask(task, input)` -> { content }. Never throws: offline, no key, not Pro, timeout, bad JSON -> 0
+// (the caller keeps the instant local estimate).
+export const requestAiEstimate = async (task, ask, { timeoutMs = 8000 } = {}) => {
+  if (!ask || !task || !String(task.title || '').trim() || Number(task.estimateMin) > 0) return 0;
+  try {
+    const data = await Promise.race([ask('estimate', { title: task.title, notes: task.notes || '' }), new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), timeoutMs))]);
+    return parseAiMinutes(data && data.content);
+  } catch (e) { return 0; }
+};
