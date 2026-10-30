@@ -34,11 +34,14 @@ const { buildPayload, authHeader } = require(path.join(__dirname, '../netlify/fu
       assert.ok(!/os_v2_app_|Basic [A-Za-z0-9+/=]{30,}|Bearer [A-Za-z0-9]{40,}/.test(c), `key-like string in ${f}`);
     }
   });
-  await t('notify.getAdmin uses the shared firebaseAdmin helper (all credential env var names)', async () => {
+  // Resolve firebase-admin the way lib/firebaseAdmin.js does (netlify/functions/node_modules first), so the stub replaces the module it actually loads.
+  const libDir = path.join(__dirname, '../netlify/functions/lib'); let hasFirebaseAdmin = true; try { require.resolve('firebase-admin', { paths: [libDir] }); } catch (e) { hasFirebaseAdmin = false; }
+  if (!hasFirebaseAdmin) console.log('skip - notify.getAdmin shared helper case: firebase-admin is not installed (run `npm ci` in the repo root and in netlify/functions)');
+  else await t('notify.getAdmin uses the shared firebaseAdmin helper (all credential env var names)', async () => {
     const notify = require(path.join(__dirname, '../netlify/functions/lib/notify.js')); const shared = require(path.join(__dirname, '../netlify/functions/lib/firebaseAdmin.js'));
     assert.strictEqual(notify.getAdmin, shared.getAdmin, 'one init helper');
     const keys = ['FIREBASE_SERVICE_ACCOUNT', 'GOOGLE_APPLICATION_CREDENTIALS_BASE64', 'GOOGLE_APPLICATION_CREDENTIALS_BASE']; const saved = {}; keys.forEach((k) => { saved[k] = process.env[k]; delete process.env[k]; });
-    const fakePath = require.resolve('firebase-admin'); const savedMod = require.cache[fakePath]; const inits = [];
+    const fakePath = require.resolve('firebase-admin', { paths: [libDir] }); const savedMod = require.cache[fakePath]; const inits = [];
     try {
       for (const k of keys) {
         delete require.cache[require.resolve(path.join(__dirname, '../netlify/functions/lib/firebaseAdmin.js'))];
