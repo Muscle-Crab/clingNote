@@ -966,8 +966,9 @@ const onCreateTaskEvt = () => onAddClick();
 const handleHomeQuery = (delay = 0) => {
   const cur = _proRouter.currentRoute.value; if (cur.path !== '/home') return;
   { const ask = parseAsk(cur.query); if (ask.open) { const q = { ...cur.query }; delete q.ask; _proRouter.replace({ query: q }); setTimeout(() => openAssistant(ask.listen), 400 + delay); return; } }
+  if (cur.query.menu === 'off' || cur.query.menu === 'tips') { const m = cur.query.menu; const q = { ...cur.query }; delete q.menu; _proRouter.replace({ query: q }); setTimeout(() => (m === 'off' ? (holidayOpen.value = true) : replayTips()), 300 + delay); return; } // ☰ menu: Holiday / day off, Show me tips again
   if (cur.query.new === '1') { const q = { ...cur.query }; delete q.new; _proRouter.replace({ query: q }); setTimeout(onAddClick, 600 + delay); } };
-watch(() => [_proRouter.currentRoute.value.query.new, _proRouter.currentRoute.value.query.ask], ([n, a]) => { if (n === '1' || a) handleHomeQuery(); });
+watch(() => [_proRouter.currentRoute.value.query.new, _proRouter.currentRoute.value.query.ask, _proRouter.currentRoute.value.query.menu], ([n, a, m]) => { if (n === '1' || a || m) handleHomeQuery(); });
 onMounted(() => { window.addEventListener('cn:create-task', onCreateTaskEvt); handleHomeQuery(); });
 onBeforeUnmount(() => window.removeEventListener('cn:create-task', onCreateTaskEvt));
 // Robot coach report buttons (components/voiceover/BossBriefing.vue) -> real Home actions on today's list.
