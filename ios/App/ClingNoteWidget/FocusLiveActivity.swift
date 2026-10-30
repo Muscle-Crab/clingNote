@@ -117,7 +117,7 @@ struct FocusButtons: View {
                         Button(intent: FocusResumeIntent(taskId: id)) {
                             Label("Resume", systemImage: "play.fill").frame(maxWidth: .infinity)
                         }
-                    } else {
+                    } else if !(state.locked ?? false) {
                         Button(intent: FocusPauseIntent(taskId: id)) {
                             Label("Pause", systemImage: "pause.fill").frame(maxWidth: .infinity)
                         }

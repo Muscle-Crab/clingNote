@@ -116,6 +116,10 @@ struct FocusPauseIntent: LiveActivityIntent {
     init(taskId: String) { self.taskId = taskId }
 
     func perform() async throws -> some IntentResult {
+        // An auto-started (locked) focus can't be paused; the button is hidden, this also covers an older activity.
+        if Activity<FocusActivityAttributes>.activities.contains(where: { ($0.attributes.taskId ?? "") == taskId && ($0.content.state.locked ?? false) }) {
+            return .result()
+        }
         FocusActionStore.append(kind: "pause", taskId: taskId)
         await FocusActivityUpdater.setPaused(true, taskId: taskId)
         return .result()

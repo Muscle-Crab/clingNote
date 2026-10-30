@@ -11,7 +11,7 @@ const ms = (v) => { if (v == null || v === '') return 0; const n = typeof v === 
 
 export const actionId = (a) => (a && a.id ? String(a.id) : `${a && a.kind}:${a && a.taskId}@${a && a.ts}`);
 
-// -> 'invalid' | 'duplicate' | 'stale' | 'missing' | 'already-done' | 'noop' | 'pause' | 'resume' | 'done'
+// -> 'invalid' | 'duplicate' | 'stale' | 'missing' | 'already-done' | 'noop' | 'locked' | 'pause' | 'resume' | 'done'
 export const classifyFocusAction = (a, tasks, { now = Date.now(), applied = [] } = {}) => {
   if (!a || !KINDS.includes(a.kind) || typeof a.taskId !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(a.taskId)) return 'invalid';
   if ((applied || []).includes(actionId(a))) return 'duplicate';
@@ -21,6 +21,7 @@ export const classifyFocusAction = (a, tasks, { now = Date.now(), applied = [] }
   if (!t) return 'missing';
   if (t.completed === true) return a.kind === 'done' ? 'already-done' : 'noop';
   if (a.kind === 'done') return 'done';
+  if (a.kind === 'pause' && t.focusLock === true) return 'locked'; // auto-started focus can't be paused (only Done / end early in-app)
   // pause/resume only act on the timer session they were tapped in: an action from before this timer started is stale
   const started = ms(t.timerStartedAt);
   if (started && ts < started - 1000) return 'stale';
@@ -70,11 +71,11 @@ export const focusActivityState = (t, { ptsDone = 0, ptsTarget = 0, dayEndMs = 0
   const paused = !!ms(t.timerPausedAt);
   return {
     taskId: widgetTaskId(t), title: String(t.title || 'Focus').slice(0, 80),
-    endsAtMs: paused ? now + remainingMs(t, now) : ms(t.timerEndTime), paused, remainingSec: Math.round(remainingMs(t, now) / 1000),
+    endsAtMs: paused ? now + remainingMs(t, now) : ms(t.timerEndTime), paused, locked: t.focusLock === true, remainingSec: Math.round(remainingMs(t, now) / 1000),
     ptsDone: Math.max(0, Math.round(Number(ptsDone) || 0)), ptsTarget: Math.max(0, Math.round(Number(ptsTarget) || 0)),
     dayEndsAtMs: dayEndMs > now ? Math.round(dayEndMs) : 0,
   };
 };
 // identity of the activity (a new one is requested when it changes) and of its content (an update is pushed when it changes)
 export const focusActivityKey = (s) => (s ? `${s.taskId}` : '');
-export const focusContentSig = (s) => (s ? `${s.paused ? `p${s.remainingSec}` : s.endsAtMs}|${s.ptsDone}/${s.ptsTarget}|${s.dayEndsAtMs}` : '');
+export const focusContentSig = (s) => (s ? `${s.paused ? `p${s.remainingSec}` : s.endsAtMs}${s.locked ? 'L' : ''}|${s.ptsDone}/${s.ptsTarget}|${s.dayEndsAtMs}` : '');

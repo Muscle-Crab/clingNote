@@ -39,6 +39,8 @@ export const clingNative = {
   // Pause/Resume/Done taps on the Live Activity (FocusIntents.swift), read then acked by id after reconcile (no loss on a crash mid-apply).
   getFocusActions: safe('ClingNative', Native, (p) => p.getFocusActions(), { items: [] }),
   ackFocusActions: safe('ClingNative', Native, (p, ids) => p.ackFocusActions({ ids }), {}),
+  getFocusFilter: safe('ClingNative', Native, (p) => p.getFocusFilter(), { items: [] }), // iOS Focus filter on/off events (ClingFocusFilter)
+  ackFocusFilter: safe('ClingNative', Native, (p, ids) => p.ackFocusFilter({ ids }), {}),
   takeIntents: safe('ClingNative', Native, (p) => p.takeIntents(), { items: [] }),
   // Two-way calendar sync (utils/calendarSync.js): one dedicated "ClingNote" calendar; events carry url clingnote://task/<key>.
   calSyncEnsure: safe('ClingNative', Native, (p, calendarId = '') => p.calSyncEnsure({ calendarId }), { calendarId: '' }),

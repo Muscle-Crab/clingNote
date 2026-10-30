@@ -165,7 +165,7 @@
                   @edit="toggleExpanded(task)" @series="seriesKey = $event ? taskKey(task) : null"
                   @patch="editTask(realIndex(task), task, $event)" @subtask-patch="onSubtaskPatch(realIndex(task), task, $event)"
                   @toggle-label="toggleLabelHighlight" @open-reminder="openModal('calendar', realIndex(task), task.title)" @transfer="openTransferModal(realIndex(task))"
-                  @video="openYouTubeModal(realIndex(task))" @upload="handleUpload($event, realIndex(task))" @timer="openTaskTimerModal(realIndex(task))"
+                  @video="openYouTubeModal(realIndex(task))" @upload="handleUpload($event, realIndex(task))" @timer="openTaskTimerModal(realIndex(task))" @end-focus="endFocusEarly(realIndex(task))"
                   @wont-do="openWontDoModal(realIndex(task))" @delete="deleteTask(realIndex(task))" @breakdown="openBreakdown(task)" @schedule="scheduleExistingTask(realIndex(task), task, $event)" @set-repeat="setTaskRepeat(task, $event)" :repeat-info="repeatStateOf(task)" @toggle-repeat="toggleTaskRepeat(task)"
                   :can-skip="isViewingToday && !selectedDayLocked && canSkipToday(task, scheduledList)" @skip-today="skipTaskToday(task)"
               />
@@ -262,7 +262,7 @@ import { applyTaskToggle, evaluateStreak, localDateStr, dayDiff, ALLOWED_GAP_DAY
 import { pickTimerIntent } from '@/utils/siriIntents';
 import { askAi } from '@/composables/useAi';
 import { ensureAiConsent, hasAiConsent } from '@/composables/useAiConsent';
-import { useRouter as _useRouter } from 'vue-router';
+import { useRouter as _useRouter, onBeforeRouteLeave } from 'vue-router';
 import { requirePro, loadUserDoc, rcProActive } from '@/composables/usePro';
 import { isPro as isProUser } from '@/utils/pro';
 import { checkDailyLimit } from '@/utils/taskLimits';
@@ -400,6 +400,7 @@ import { doc, setDoc, serverTimestamp, getDoc, updateDoc, getFirestore, runTrans
 const modalOpen = ref(false);
 import { deleteObject } from "firebase/storage";
 import { widgetTaskId } from '@/utils/widgetSnapshot';
+import { readAutoFocus, readList, writeList, AUTO_FIRED_KEY, FILTER_APPLIED_KEY, dueAutoFocus, nextFocusIndex, reduceFilterEvents, lockedFocus, lockMessage as focusLockMessage, endEarlyPatch, focusShieldEnd, taskMinutes } from '@/utils/focusAutoStart';
 import { reconcileFocusActions, pausePatch, resumePatch, focusActivityState, focusContentSig } from '@/utils/focusActions';
 
 const currentTime = ref([]);
@@ -1112,9 +1113,12 @@ const days = data.days;
 const showTimerModal = ref(false);
 const selectedTimerDuration = ref(5); // default to 5 minutes
 
-const startTimer = async () => {
+const startTimer = async (opts = {}) => {
   if (blockIfShut()) return false;
   if (selectedTimerTaskIndex.value === null) return;
+  { const lk = lockedFocus(selectedDayRoutine.value || []); // auto-started focus: no other timer until it ends / is ended early
+    if (lk && lk !== selectedDayRoutine.value[selectedTimerTaskIndex.value]) { showNoteToast(focusLockMessage(lk), { error: true }); selectedTimerTaskIndex.value = null; return false; }
+    if (lk) { selectedTimerTaskIndex.value = null; return false; } }
 
   const totalMinutes =
       (Number(selectedTimerHours.value) * 60) +
@@ -1135,6 +1139,8 @@ const startTimer = async () => {
     timerStartedAt: new Date(now).toISOString(),
     timerEndTime: new Date(endTime).toISOString(),
     timerDurationMinutes: totalMinutes,
+    timerPausedAt: null,
+    focusLock: !!(opts && opts.lock === true), // auto-start (scheduled time / iOS Focus) locks the session
   };
 
   selectedDayRoutine.value[selectedTimerTaskIndex.value] = task;
@@ -3664,6 +3670,74 @@ watch(() => [eh.running.value, isViewingToday.value, (selectedDayRoutine.value |
   const r = overbooked(selectedDayRoutine.value || [], Math.round(eh.remainingMs.value / 60000));
   if (r.over && onceToday('cn.boss.overbooked')) { error.value = r.line; if (!voMuted.value && !document.hidden) speakLive(r.line); }
 });
+// ---- Focus mode auto-start + focus lock (src/utils/focusAutoStart.js; iOS Focus filter: ClingIntents.swift ClingFocusFilter) ----
+// Auto-start = Profile > Preferences "Auto-start focus" (per device). Triggers: a task's start time arriving while the app is open, and
+// the iPhone Focus turning on (queued natively, drained here on launch/foreground). Both go through confirmDayStart / startTimer.
+let autoFocusBusy = false;
+const autoStartFocus = async (reason, { index = -1, minutes = 0, key = '' } = {}) => {
+  if (autoFocusBusy || !userId.value || !isViewingToday.value || isShutdown()) return false; autoFocusBusy = true;
+  try {
+    if (daySession.value.ended) return false; // day already wrapped up: nothing auto-starts
+    // Start the day too (no prompts): the 8-hour day when Lock-in is on, else the plain day session; the task list shows behind it.
+    if (lockInToday.value && !eh.lock.value) {
+      if (eh.phase.value === 'none' || eh.phase.value === 'before') {
+        const d = new Date(); const wakeTime = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+        await eh.savePlan({ wakeTime, taskCount: Math.max(1, countableIndexes(selectedDayRoutine.value || [], eh.phaseInfo.value.dayKey || '').length) });
+      }
+      if (eh.phase.value === 'ready') await confirmDayStart(eh.hoursPref.value, { lock: lockEnabled() });
+    } else if (!daySession.value.started) { await startDay(); }
+    const list = selectedDayRoutine.value || []; if (lockedFocus(list)) return false;
+    const i = index >= 0 ? index : nextFocusIndex(list); const t = list[i]; if (!t) return false;
+    if (key) { const f = readList(localStorage, AUTO_FIRED_KEY); writeList(localStorage, AUTO_FIRED_KEY, [...f, key]); }
+    const m = minutes || taskMinutes(t);
+    selectedTimerTaskIndex.value = i; selectedTimerHours.value = Math.floor(m / 60); selectedTimerMinutes.value = m % 60;
+    if ((await startTimer({ lock: true })) === false) return false;
+    const line = `Focus started${reason === 'filter' ? ' (iPhone Focus on)' : ''}: “${t.title}” for ${m} min. Locked in until it ends.`;
+    showNoteToast(line); if (!voMuted.value && !document.hidden) speakLive(line);
+    focusTick(); syncAppLock();
+    return true;
+  } catch (e) { console.warn('auto focus', e && e.message); return false; } finally { autoFocusBusy = false; }
+};
+const autoFocusCheck = () => {
+  if (!readAutoFocus(localStorage) || !userId.value || !isViewingToday.value || document.hidden) return;
+  const d = new Date(); const due = dueAutoFocus(selectedDayRoutine.value || [], { nowMin: d.getHours() * 60 + d.getMinutes(), dayKey: localDateStr(), fired: readList(localStorage, AUTO_FIRED_KEY) });
+  if (due) autoStartFocus('scheduled', due);
+};
+let filterDraining = false;
+const drainFocusFilter = async () => {
+  if (!nativeAvailable() || filterDraining || !userId.value || todayIdx.value < 0) return; filterDraining = true;
+  try {
+    const r = await clingNative.getFocusFilter(); const items = (r && r.items) || []; if (!items.length) return;
+    const out = reduceFilterEvents(items, { applied: readList(localStorage, FILTER_APPLIED_KEY) });
+    writeList(localStorage, FILTER_APPLIED_KEY, out.applied); await clingNative.ackFocusFilter(out.ids);
+    if (out.state !== 'on' || !readAutoFocus(localStorage)) return;
+    if (!isViewingToday.value) { selectedDayIndex.value = todayIdx.value; await fetchSelectedDayRoutine(); }
+    await autoStartFocus('filter', { minutes: out.minutes });
+  } catch (e) { console.warn('focus filter', e && e.message); } finally { filterDraining = false; }
+};
+// Explicit way out of a locked session: confirm, then the timer stops in place (no points; the task stays open).
+const endFocusEarly = async (index) => {
+  const t = selectedDayRoutine.value[index]; if (!t || !lockedFocus([t])) return;
+  if (!window.confirm(`End focus on “${t.title}” early? The timer stops and the task stays open (no points).`)) return;
+  selectedDayRoutine.value.splice(index, 1, { ...t, ...endEarlyPatch() });
+  await saveSelectedDayTasks().catch((e) => console.warn('end focus not saved:', e));
+  cancelLocal(timerKey(t)).catch(() => {}); focusTick(); syncAppLock();
+  showNoteToast('Focus ended early.');
+};
+// Locked in: Home can't be left (sign-out still works); coming back to the app says what you are locked into.
+onBeforeRouteLeave((to) => {
+  const lk = lockedFocus(selectedDayRoutine.value || []); if (!lk || /^\/(login|welcome)/.test(to.path || '')) return true;
+  showNoteToast(focusLockMessage(lk), { error: true }); return false;
+});
+const onAutoFocusVisible = () => {
+  if (document.hidden) return;
+  const lk = lockedFocus(selectedDayRoutine.value || []); if (lk) showNoteToast(focusLockMessage(lk));
+  setTimeout(() => { drainFocusFilter(); autoFocusCheck(); }, 1000);
+};
+let autoFocusIv = null;
+onMounted(() => { autoFocusIv = setInterval(autoFocusCheck, 20000); setTimeout(() => { drainFocusFilter(); autoFocusCheck(); }, 2500); document.addEventListener('visibilitychange', onAutoFocusVisible); });
+onBeforeUnmount(() => { clearInterval(autoFocusIv); document.removeEventListener('visibilitychange', onAutoFocusVisible); });
+watch(() => [userId.value, (selectedDayRoutine.value || []).length], () => setTimeout(autoFocusCheck, 1500));
 // ---- App lock (Screen Time shield) ----
 const lockUnlockedDay = ref((() => { try { const p = JSON.parse(localStorage.getItem(PENALTY_KEY) || '[]'); return p.length ? p[p.length - 1].day : ''; } catch (e) { return ''; } })());
 // Startup: the account's Firestore penalties win (another device may have unlocked); localStorage is the offline fallback.
@@ -3689,10 +3763,11 @@ const syncAppLock = async () => {
   const want = shouldShield({ enabled: lockEnabled(), running: eh.running.value, endMs, selectionCount: st.selectionCount || 0,
     earned: pointsAccumulated.value || 0, required: dayRequiredPts.value || 0, openTasks: (selectedDayRoutine.value || []).filter((t) => t && !t.completed && t.status !== 'wontdo').length,
     unlockedToday: lockUnlockedDay.value === localDateStr() });
-  const act = lockAction({ want, endMs, st });
-  hardLocked.value = !!want;
+  const fEnd = focusShieldEnd({ dayWant: !!want, enabled: lockEnabled(), selectionCount: st.selectionCount || 0, locked: lockedFocus(selectedDayRoutine.value || []) });
+  const act = lockAction({ want: !!(want || fEnd), endMs: fEnd || endMs, st });
+  hardLocked.value = !!(want || fEnd);
   if (act === 'start') {
-    lockOn = endMs; const r = await clingLock.startLock(endMs, 'ClingNote lock-in');
+    lockOn = fEnd || endMs; const r = await clingLock.startLock(fEnd || endMs, fEnd ? 'ClingNote focus' : 'ClingNote lock-in');
     console.info('[clingLock] startLock', r && r.monitor);
     if (r && r.monitor && r.monitor !== 'ok') { lockOn = null; error.value = "App lock couldn't be scheduled, so apps stay unlocked for now."; }
   } else if (act === 'stop') { lockOn = null; await clingLock.stopLock(); }

@@ -121,7 +121,10 @@
                       <i class="fas fa-chevron-down"></i>
                     </button>
                     <div class="task-play-wrap">
-                      <button type="button" class="task-play" :class="{ 'task-play--primary': upNext }" title="Start focus timer" aria-label="Start focus timer" @click.stop="$emit('timer')">
+                      <button v-if="focusLocked" type="button" class="task-play task-play--locked" data-test="focus-lock-btn" title="Focus locked. Tap to end early" aria-label="Focus locked. Tap to end focus early" @click.stop="$emit('end-focus')">
+                        <i class="fas fa-lock"></i>
+                      </button>
+                      <button v-else type="button" class="task-play" :class="{ 'task-play--primary': upNext }" title="Start focus timer" aria-label="Start focus timer" @click.stop="$emit('timer')">
                         <i class="fas fa-play"></i>
                       </button>
                     </div>
@@ -266,7 +269,7 @@ const props = defineProps({
   section: { type: String, default: '' }, // Home section this card is shown in (enables Move to ... in the ... menu)
 });
 const emit = defineEmits(['breakdown', 'skip-today', 'move-section', 'set-repeat', 'set-boss', 'toggle-expand', 'toggle-complete', 'open-detail', 'toggle-important', 'patch', 'subtask-patch',
-  'toggle-label', 'open-reminder', 'transfer', 'video', 'upload', 'timer', 'wont-do', 'delete', 'schedule', 'toggle-repeat', 'alarm']);
+  'toggle-label', 'open-reminder', 'transfer', 'video', 'upload', 'timer', 'end-focus', 'wont-do', 'delete', 'schedule', 'toggle-repeat', 'alarm']);
 // 🔁 one-tap toggle (HomeView passes repeatInfo = { on, label, pending } covering both repeat models)
 const repeatPop = ref(false);
 const onRepeatTap = () => { repeatPop.value = true; setTimeout(() => { repeatPop.value = false; }, 260); emit('toggle-repeat'); };
@@ -370,7 +373,8 @@ const extrasTitle = computed(() => [props.task.nextAction, props.task.notes].fil
 const schedText = computed(() => scheduleLabel(props.task));
 const schedLate = computed(() => !!props.task?.scheduledFor && scheduledOverdue(props.task, new Date()));
 const est = computed(() => chipValues(props.task));
-const timerLocked = computed(() => timerStarted(props.task)); // estimate frozen once play was pressed
+const timerLocked = computed(() => timerStarted(props.task));
+const focusLocked = computed(() => props.task.focusLock === true && props.task.timerActive === true && props.task.completed !== true); // auto-started focus: play becomes the lock // estimate frozen once play was pressed
 const estLocked = computed(() => false); // estimate/timer stay editable during lock-in and after play (end time is shifted)
 // Long-press (550 ms, finger kept still) on the card opens the editor.
 let pressTimer = null;
@@ -530,6 +534,8 @@ const onPressEnd = () => { if (pressTimer !== 'fired') clearTimeout(pressTimer);
 .task-play { width: 40px; height: 40px; display: inline-flex; align-items: center; justify-content: center; background: none; border: none; padding: 0; cursor: pointer; position: relative; font-size: 11px; color: var(--c-on-accent); }
 .task-play::before { content: ''; position: absolute; width: 32px; height: 32px; border-radius: 50%; background: #2F6BFF; transition: background .15s; }
 .task-play i { position: relative; margin-left: 2px; }
+.task-play--locked::before { background: var(--c-warn, #D97706); }
+.task-play--locked i { margin-left: 0; }
 .task-play:hover::before { background: var(--c-accent-hover); }
 .task-more, .task-chevron { width: 40px; height: 40px; border: none; background: none; border-radius: var(--r); color: var(--c-text-2); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; font-size: var(--fs-md); padding: 0; }
 .task-more:hover, .task-chevron:hover, .task-more--open { background: var(--c-surface-2); color: var(--c-text); }
