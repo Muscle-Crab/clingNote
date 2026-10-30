@@ -33,7 +33,7 @@ const DECLARATIONS = [
   fn('get_overview', 'Read the latest tasks, points, daily target, streak, lock state, upcoming schedule and limits.'),
   fn('get_stats', 'Streak, best streak, this week\'s planned/done tasks, completion rate and points per day (for "how did I do", "what\'s my streak").'),
   fn('find_tasks', 'Search this week\'s tasks and the upcoming schedule by words and/or weekday ("what did I plan for Friday", "find the dentist task").', { query: S('STRING'), day: S('STRING', { description: 'weekday name, optional' }) }),
-  fn('suggest_next', 'Pick the best task to do next from due times, points and time left today.'),
+  fn('suggest_next', 'Pick the best task to do next from due times, points and time left today. mode "roll" = the boss rolls a weighted pick (points, due time, locked plan order, energy check-in); use it for "roll a task" / "surprise me".', { mode: S('STRING', { enum: ['best', 'roll'] }) }),
   fn('snooze_task', 'Push a task\'s start time (and its phone alert) N minutes from now ("remind me in 30 min").', { ref: TASK_REF, minutes: S('INTEGER') }, ['ref', 'minutes']),
   fn('roll_unfinished', "Move today's unfinished tasks to tomorrow (evening wrap-up). Needs the user's OK."),
   fn('auto_schedule', "Fit today's open untimed tasks into free time between calendar events and set their start times. Needs the user's OK.", { write_calendar: S('BOOLEAN', { description: 'Default false. Set true ONLY when the user asks to add the blocks to their phone calendar.' }) }),

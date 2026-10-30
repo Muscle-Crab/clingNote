@@ -2,7 +2,7 @@
 // Same actions as saying them to the assistant; each maps onto existing logic (suggestNext, autoSchedule, streak offDates,
 // task.important). Pure helpers only; HomeView wires them.
 export const SERGEANT_ACTIONS = [
-  { id: 'next', label: "What's next", icon: '👉', hint: 'One task to do now' },
+  { id: 'next', label: "What's next", icon: '👉', hint: 'Robot rolls one task · Start or Reroll' },
   { id: 'replan', label: 'Replan', icon: '🔄', hint: 'Fit the rest of today' },
   { id: 'off', label: "I'm off today", icon: '🏖️', hint: 'Streak stays safe' },
   { id: 'critical', label: 'Make critical', icon: '❗', hint: 'Mark the next task' },
