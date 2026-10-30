@@ -15,3 +15,7 @@ export const isStaleCompletion = (task, dayIdx, now = new Date()) => {
   if (Number.isNaN(c.getTime())) return false;
   return localYMD(c) < lastOccurrenceYMD(dayIdx, now);
 };
+
+// Day rollover for completed one-time tasks (incl. repeat-series copies, stored as one-time with templateId): they stay in the
+// Completed section all day and leave the list once completed before this weekday's latest local occurrence (i.e. after local midnight).
+export const pruneStaleDay = (tasks, dayIdx, now = new Date()) => (tasks || []).filter((t) => !(t && t.type === 'one-time' && isStaleCompletion(t, dayIdx, now)));

@@ -47,3 +47,7 @@ export const assertTasksChangeAllowed = (dayName, oldTasks, newTasks, what) => {
 // Field patches on one task: reject the fields the lock freezes.
 export const patchTouchesLocked = (patch) => Object.keys(patch || {}).filter((k) => LOCKED_FIELDS.includes(k));
 export const assertPatchAllowed = (dayName, patch) => { assertNotShut(); if (isDayLocked(dayName) && patchTouchesLocked(patch).length) throw new LockError(patchTouchesLocked(patch).join(', ')); };
+
+// Completing a task on a locked day updates it in place (never removes it). True when EITHER the UI state or the lock source
+// (server or device-cached lock) says the day is locked: the UI state is false while the 8-hour data is still loading.
+export const completionKeepsInPlace = ({ uiLocked, sourceLocked }) => !!(uiLocked || sourceLocked);

@@ -22,6 +22,8 @@ const defaultTs = (ms) => getAdmin().firestore.Timestamp.fromMillis(ms);
 const taskKeyOf = (t) => `${t?.createdAt || ''}|${t?.title || ''}`;
 
 // Tasks that count toward the day: the visible ones (recurring copies with a later activeFrom are hidden today).
+const pruneStale = (tasks, tz, dayKey) => tasks.filter((t) => { if (!t || t.type !== 'one-time' || !t.completed || !t.completedAt) return true;
+  const ms = Date.parse(t.completedAt); return !Number.isFinite(ms) || core.dayKeyIn(tz, ms) >= dayKey; });
 const countable = (tasks, dayKey) => tasks.map((t, i) => ({ t, i })).filter(({ t }) => t && !(t.activeFrom && dayKey < t.activeFrom));
 
 // ── REQUIRES SERVER AI (OPENAI_API_KEY + user consent). Without them this returns null and the heuristic is used. ──
@@ -132,7 +134,9 @@ const actions = {
     const dayName = core.dayNameIn(doc.plan.tz, ph.startMs);
     const dayRef = ctx.db.doc(`weeklyRoutines/${ctx.uid}_${dayName}`);
     const dsnap = await dayRef.get();
-    const stored = dsnap.exists ? (dsnap.data().tasks || []) : [];
+    // Day rollover: completed one-time tasks (incl. repeat-series copies) stay visible on the day they were done and leave the list
+    // at the next local day; drop leftovers from an earlier day here so Start Day never re-opens them into the locked set.
+    const stored = pruneStale(dsnap.exists ? (dsnap.data().tasks || []) : [], doc.plan.tz, ph.dayKey);
     const rows = countable(stored, ph.dayKey);
     const range = core.taskRange(hours); // min derived from the chosen hours, max = MAX_TASKS_PER_DAY (plan.taskCount is no longer an exact requirement)
     if (rows.length === 0) throw fail(409, `Add at least ${range.min} task${range.min === 1 ? '' : 's'} for today first.`, { code: 'no-tasks' });
@@ -211,4 +215,4 @@ const rawHandler = async (event, _ctx, deps = {}) => {
 };
 const { withCors } = require('./lib/cors');
 exports.handler = withCors(rawHandler);
-exports._internal = { actions, settleIfOver, countable, aiRefine };
+exports._internal = { actions, settleIfOver, countable, pruneStale, aiRefine };

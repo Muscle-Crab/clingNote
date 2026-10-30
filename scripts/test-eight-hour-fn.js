@@ -51,7 +51,7 @@ const call = async (db, body, extra = {}) => { const r = await handler(ev(body),
 
   // add tasks (client writes the day doc) and start
   clock = at('2026-10-23T11:20:00Z');
-  db.store['weeklyRoutines/u1_Fri'] = { tasks: [T('Write the quarterly report', { completed: true, completedAt: '2026-10-22T20:00:00Z' }), T('Reply to Sam'), T('Workout', { estimateMin: 45 }), T('Future thing', { activeFrom: '2026-10-30' }), T('Email the team')] }; // 4 countable = the 8h minimum (taskRange: ceil(8/2))
+  db.store['weeklyRoutines/u1_Fri'] = { tasks: [T('Write the quarterly report', { type: 'recurring', completed: true, completedAt: '2026-10-22T20:00:00Z' }), T('Reply to Sam'), T('Workout', { estimateMin: 45 }), T('Future thing', { activeFrom: '2026-10-30' }), T('Email the team')] }; // 4 countable = the 8h minimum (taskRange: ceil(8/2))
   r = await call(db, { action: 'start' });
   eq([r.code, r.body.phase], [200, 'running']);
   const L = r.body.lock;
@@ -60,7 +60,7 @@ const call = async (db, body, extra = {}) => { const r = await handler(ev(body),
   ok(L.points.length === 4 && L.points.every((p) => p >= 5), 'points per task assigned');
   eq(L.totalPoints, L.points.reduce((a, b) => a + b, 0)); ok(L.target > 0 && L.target <= L.totalPoints, 'target within total');
   const day = db.store['weeklyRoutines/u1_Fri'].tasks;
-  eq(day.length, 5, 'day doc keeps its size'); eq(day[0].completed, false, 'stale completion from yesterday reset'); eq(day[0].points, L.points[0]); eq(day[3].points, undefined, 'hidden recurring copy is not part of the day');
+  eq(day.length, 5, 'day doc keeps its size'); eq(day[0].completed, false, 'stale recurring completion from yesterday reset (completed one-time leftovers are pruned: test-completed-stay.js)'); eq(day[0].points, L.points[0]); eq(day[3].points, undefined, 'hidden recurring copy is not part of the day');
   ok(db.store['eightHour/u1'].lock.endAt instanceof Ts && db.store['eightHour/u1'].lock.startAt instanceof Ts, 'timestamps stored for rules');
   const frozen = JSON.stringify(db.store['eightHour/u1'].lock);
 
