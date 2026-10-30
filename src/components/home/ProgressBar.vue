@@ -37,9 +37,13 @@
       </p>
       <!-- kill-streak style level-up: overlay only while animating (charge: medal ring fills + number ticks up, then impact) -->
       <div v-if="streakFx" class="streak-fx" :class="'streak-fx--' + streakFx.phase" data-test="streak-fx" aria-hidden="true">
-        <svg viewBox="0 0 64 64" class="streak-medal"><circle cx="32" cy="32" r="27" class="medal-track" /><circle cx="32" cy="32" r="27" class="medal-fill" :stroke-dasharray="MC" :stroke-dashoffset="MC * (1 - streakFx.fill)" /></svg>
+        <svg viewBox="0 0 64 64" class="streak-medal" data-test="streak-rank" :data-rank="fxRank.name" :style="{ '--rank-glow': fxRank.glow, '--rank-burst': fxRank.burst }"><circle cx="32" cy="32" r="27" class="medal-track" />
+          <!-- rank emblem (PUBG-style tier) inside the existing medal: charge shows the current tier, impact swaps to the reached one -->
+          <path :d="RANK_SHAPES[fxRank.shape]" class="rank-emblem" :data-test="'rank-emblem-' + fxRank.name.toLowerCase()" :fill="fxRank.fill" :stroke="fxRank.rim" transform="rotate(90 32 32)" />
+          <g v-if="streakFx.burst" class="rank-burst" data-test="rank-burst" :data-rank="fxRank.name"><line v-for="a in 12" :key="a" x1="32" y1="6" x2="32" y2="0" :stroke="fxRank.burst" :transform="`rotate(${a * 30} 32 32)`" /></g>
+          <circle cx="32" cy="32" r="27" class="medal-fill" :stroke="fxRank.rim" :stroke-dasharray="MC" :stroke-dashoffset="MC * (1 - streakFx.fill)" /></svg>
         <span class="streak-fx-num" :style="{ transform: `scale(${0.7 + streakFx.fill * 0.6})` }">{{ Math.round(streakFx.num) }}</span>
-        <span class="streak-fx-label">DAY STREAK</span>
+        <span class="streak-fx-label" data-test="streak-rank-label">{{ fxRank.name.toUpperCase() }} · DAY STREAK</span>
       </div>
       <p class="foot-item foot-item--pts"><span class="coin" aria-hidden="true">★</span><strong data-test="day-pts" :class="{ 'num-bump': bump.pts }">{{ target > 0 ? dayPtsLabel(Math.round(shownPts), target) : `${Math.round(shownPts)} pts` }}</strong></p>
     </div>
@@ -52,6 +56,7 @@ import { sfx, coinTickTimes } from '@/utils/sfx';
 import { tweenNumber, prefersReducedMotion, readSeen, writeSeen } from '@/utils/countUp';
 import { localDateStr } from '@/utils/streak';
 import { STREAK_CAP, FREEZE_EVERY, FREEZE_MAX } from '@/utils/streak';
+import { rankFor, rankUp, RANK_SHAPES } from '@/utils/streakRank';
 import { growPct } from '@/utils/planPhase2';
 import { dayPtsLabel } from '@/utils/dayTarget';
 import stage0 from '@/assets/stages/stage-0-sprout.jpg';
@@ -132,14 +137,15 @@ watch(stageIndex, (to) => {
 // streak: kill-streak style counter (charge ~1s: medal fills, number ticks up + scales; impact: overshoot/shake/glow; settle)
 const shownStreak = ref(props.streak), streakFx = ref(null);
 let queued = null;
+const fxRank = computed(() => rankFor(streakFx.value ? streakFx.value.rank : shownStreak.value));
 const playStreak = (from, to) => {
   if (props.hold) { queued = [from, to]; return; }
   writeSeen('streak', props.uid, to);
   if (prefersReducedMotion()) { shownStreak.value = to; return; }
-  const CHARGE = 1000; streakFx.value = { phase: 'charge', fill: 0, num: from }; sfx('charge', { dur: CHARGE / 1000, force: false });
+  const CHARGE = 1000; streakFx.value = { phase: 'charge', fill: 0, num: from, rank: from, burst: false }; sfx('charge', { dur: CHARGE / 1000, force: false });
   cancels.streak = tweenNumber(0, 1, CHARGE, (v) => { if (streakFx.value) { streakFx.value.fill = v; streakFx.value.num = from + (to - from) * v; } }, (t) => t * t);
-  later(() => { if (!streakFx.value) return; streakFx.value = { phase: 'impact', fill: 1, num: to }; sfx('impact'); }, CHARGE);
-  later(() => { if (streakFx.value) streakFx.value.phase = 'settle'; shownStreak.value = to; }, CHARGE + 700);
+  later(() => { if (!streakFx.value) return; streakFx.value = { phase: 'impact', fill: 1, num: to, rank: to, burst: rankUp(from, to) }; sfx('impact'); }, CHARGE);
+  later(() => { if (streakFx.value) { streakFx.value.phase = 'settle'; } shownStreak.value = to; }, CHARGE + 700);
   later(() => { streakFx.value = null; }, CHARGE + 1150);
 };
 watch(() => props.streak, (to) => {
@@ -222,12 +228,17 @@ defineExpose({ skipAnims });
 .streak-fx { position: absolute; z-index: 4; left: 0; top: 50%; width: 50%; display: flex; align-items: center; justify-content: center; gap: 10px; pointer-events: none; transform: translateY(-50%); }
 .streak-medal { position: absolute; width: 64px; height: 64px; left: calc(50% - 32px); top: calc(50% - 32px); transform: rotate(-90deg); filter: drop-shadow(0 0 6px rgba(255,170,40,.6)); }
 .medal-track { fill: rgba(10,18,40,.85); stroke: rgba(255,255,255,.15); stroke-width: 5; }
-.medal-fill { fill: none; stroke: #FFB23F; stroke-width: 5; stroke-linecap: round; }
+.medal-fill { fill: none; stroke-width: 5; stroke-linecap: round; }
 .streak-fx-num { position: relative; font-size: 34px; font-weight: 900; color: #FFF3D6; text-shadow: 0 0 10px rgba(255,150,30,.9), 0 2px 0 #7A3A00; font-variant-numeric: tabular-nums; }
 .streak-fx-label { position: absolute; top: calc(50% + 26px); font-size: 9px; font-weight: 900; letter-spacing: .18em; color: #FFCF7A; text-shadow: 0 0 6px rgba(255,140,0,.8); }
 .streak-fx--impact .streak-fx-num { animation: fx-impact .7s cubic-bezier(.2,2,.4,1) both; }
 .streak-fx--impact { animation: fx-shake .35s linear; }
-.streak-fx--impact .streak-medal { filter: drop-shadow(0 0 16px rgba(255,190,60,1)); }
+.rank-emblem { stroke-width: 2; opacity: .9; transition: fill .2s, stroke .2s; }
+.streak-fx--impact .rank-emblem { transform-origin: 32px 32px; animation: rank-pop .6s cubic-bezier(.2,2,.4,1) both; }
+@keyframes rank-pop { 0% { transform: rotate(90deg) scale(.6); } 40% { transform: rotate(90deg) scale(1.25); } 100% { transform: rotate(90deg) scale(1); } }
+.rank-burst line { stroke-width: 3; stroke-linecap: round; transform-box: view-box; animation: rank-burst .65s ease-out both; }
+@keyframes rank-burst { 0% { opacity: 0; stroke-dasharray: 0 8; } 30% { opacity: 1; } 100% { opacity: 0; stroke-dasharray: 6 8; stroke-dashoffset: -6; } }
+.streak-fx--impact .streak-medal { filter: drop-shadow(0 0 16px var(--rank-glow, rgba(255,190,60,1))); }
 @keyframes fx-impact { 0% { transform: scale(1.3); } 25% { transform: scale(2.1); color: #fff; text-shadow: 0 0 24px #FFB23F, 0 0 46px #FF6A00; } 100% { transform: scale(1.4); } }
 @keyframes fx-shake { 0%,100% { transform: translate(0,-50%); } 20% { transform: translate(-4px,calc(-50% + 2px)); } 40% { transform: translate(4px,calc(-50% - 2px)); } 60% { transform: translate(-3px,-50%); } 80% { transform: translate(2px,calc(-50% + 1px)); } }
 .streak-fx--settle { animation: fx-settle .45s ease-in both; }

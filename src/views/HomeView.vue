@@ -258,6 +258,7 @@ import BackgroundPanel from '@/components/background/BackgroundPanel.vue';
 import { useBackground } from '@/composables/useBackground';
 import { buildRecap, reportDue, prevDay } from '@/utils/dailyReport';
 import { monthKey, prevMonthKey } from '@/utils/ranking';
+import { recheckDay, countableDoneKeys, recheckChanges } from '@/utils/streak';
 import { applyTaskToggle, evaluateStreak, localDateStr, dayDiff, ALLOWED_GAP_DAYS, DAILY_STREAK_MIN, capStreak, lostReason, applyFreezes } from '@/utils/streak';
 import { pickTimerIntent } from '@/utils/siriIntents';
 import { askAi } from '@/composables/useAi';
@@ -1665,6 +1666,38 @@ const applyStreakState = (st) => {
   offDates.value = Array.isArray(st && st.offDates) ? st.offDates : [];
   try { localStorage.setItem(`streakCache_${userId.value}`, JSON.stringify(st)); } catch (e) { /* cache only */ }
 };
+// Start Day time in ms (null = unknown). Tasks completed before Start Day never count toward the streak.
+const dayStartMs = () => { const st = daySession.value.startTime; if (!st) return null; const ms = typeof st.toMillis === 'function' ? st.toMillis() : (st instanceof Date ? st.getTime() : Date.parse(st)); return Number.isFinite(ms) ? ms : null; };
+const completedAfterStart = (t) => { if (!daySession.value.started) return false; const s = dayStartMs(); const at = t && t.completedAt ? Date.parse(t.completedAt) : NaN; return s == null || !Number.isFinite(at) || at >= s; };
+// Automatic streak recheck (B41): runs when the gate clears, the day starts, today's tasks change, on a timer, on resume /
+// visibility, not only on the next task tap. Same rules: only tasks done after Start Day, only when the gate allows it.
+let recheckBusy = false; let recheckAgain = false;
+const recheckStreak = async (why = '') => {
+  if (!userId.value || !isViewingToday.value || !daySession.value.started) return false;
+  if (recheckBusy) { recheckAgain = true; return false; }
+  recheckBusy = true;
+  try {
+    if (['timer', 'visible', 'resume'].includes(why)) { try { discState.value = await loadDisciplineState(userId.value); } catch (e) { /* keep the last known gate */ } } // boss cleared on another device
+    const today = localDateStr(); const gap = streakGap(); const gate = streakGateNow();
+    const tasks = (selectedDayRoutine.value || []).filter((t) => t && isTaskVisibleOn(t, today));
+    const ref0 = doc(db, 'streaks', userId.value);
+    const prevStreak = streak.value;
+    const next = await runTransaction(db, async (tx) => {
+      const snap = await tx.get(ref0); const cur = snap.exists() ? snap.data() : null;
+      const prevDone = cur && cur.dayDate === today && Array.isArray(cur.dayDone) ? cur.dayDone : [];
+      const { keys, drop } = countableDoneKeys(tasks, { started: true, startMs: dayStartMs(), keyOf: taskKey, prevDone });
+      const n = recheckDay(cur, today, { keys, drop, gate }, gap);
+      if (!recheckChanges(cur, n, today)) return null;
+      tx.set(ref0, { ...n, updatedAt: serverTimestamp() }, { merge: true });
+      return n;
+    });
+    if (next) { applyStreakState(next); if (streak.value > prevStreak) window.dispatchEvent(new window.CustomEvent('cn:streak-recheck', { detail: { why, streak: streak.value } })); }
+    return !!next;
+  } catch (e) { console.error('streak recheck failed:', e && e.message); return false; }
+  finally { recheckBusy = false; if (recheckAgain) { recheckAgain = false; setTimeout(() => recheckStreak('again'), 50); } }
+};
+let recheckTimer = null; const scheduleRecheck = (why) => { clearTimeout(recheckTimer); recheckTimer = setTimeout(() => recheckStreak(why), 400); };
+const STREAK_RECHECK_MS = 45000; // periodic recheck while the app is open
 // Called when a task on today's tab is (un)completed; counts distinct non-pending tasks toward DAILY_STREAK_MIN.
 const updateStreakOnCompletion = async (task) => {
   if (!userId.value || !task) return;
@@ -1672,7 +1705,7 @@ const updateStreakOnCompletion = async (task) => {
   const streakDocRef = doc(db, 'streaks', userId.value);
   try {
     // Transaction: two quick toggles (or two devices) can no longer read the same doc and overwrite each other's update.
-    const toggle = { key: taskKey(task), completed: !!task.completed, pending: task.status === 'pending', gate: streakGateNow() && !!daySession.value.started };
+    const toggle = { key: taskKey(task), completed: !!task.completed && completedAfterStart(task), pending: task.status === 'pending', gate: streakGateNow() && !!daySession.value.started }; // only tasks done after Start Day count
     const today = localDateStr(), gap = streakGap();
     const next = await runTransaction(db, async (tx) => {
       const snap = await tx.get(streakDocRef);
@@ -3847,6 +3880,19 @@ const onTimerIntentVisible = () => { if (!document.hidden) setTimeout(drainTimer
 watch(userId, (u) => { if (u) setTimeout(drainTimerIntents, 2000); });
 onMounted(() => { setTimeout(drainTimerIntents, 2000); document.addEventListener('visibilitychange', onTimerIntentVisible); });
 onBeforeUnmount(() => document.removeEventListener('visibilitychange', onTimerIntentVisible));
+watch(() => [discState.value.bossDate, discState.value.bossClearedDate, !!disciplineSettings.value.enabled, disciplineSettings.value.deadline], () => scheduleRecheck('gate'));
+watch(() => [daySession.value.started, String(daySession.value.startTime && (daySession.value.startTime.seconds || daySession.value.startTime))], () => scheduleRecheck('day-start'));
+watch(() => (isViewingToday.value ? (selectedDayRoutine.value || []).map((t) => `${t && taskKey(t)}:${t && t.completed ? 1 : 0}:${t && t.status}:${t && t.completedAt}`).join('|') : ''), () => scheduleRecheck('tasks'));
+watch(todayStr, () => scheduleRecheck('new-day'));
+let streakTick = null; const onRecheckVisible = () => { if (document.visibilityState === 'visible') scheduleRecheck('visible'); };
+const onRecheckResume = () => scheduleRecheck('resume');
+onMounted(() => {
+  streakTick = setInterval(() => { if (document.visibilityState !== 'hidden') recheckStreak('timer'); }, STREAK_RECHECK_MS);
+  document.addEventListener('visibilitychange', onRecheckVisible); window.addEventListener('focus', onRecheckResume); window.addEventListener('cn:app-resume', onRecheckResume);
+  import('@capacitor/app').then(({ App }) => App.addListener('resume', onRecheckResume)).then((h) => { recheckResumeHandle = h; }).catch(() => {});
+});
+let recheckResumeHandle = null;
+onBeforeUnmount(() => { clearInterval(streakTick); clearTimeout(recheckTimer); document.removeEventListener('visibilitychange', onRecheckVisible); window.removeEventListener('focus', onRecheckResume); window.removeEventListener('cn:app-resume', onRecheckResume); try { recheckResumeHandle && recheckResumeHandle.remove(); } catch (e) { /* */ } });
 watch(dayRequiredPts, (n) => { if (isViewingToday.value && isNativeIOS()) import('@/utils/widgetSync').then((m) => m.setWidgetDayTarget(n)).catch(() => {}); }, { immediate: true });
 const openAssistant = (listen = false) => {
   sfx('open');

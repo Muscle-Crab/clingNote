@@ -135,3 +135,37 @@ export const lostReason = (state, today, min = DAILY_STREAK_MIN) => {
   if (n > 0 && n < min) return `Only ${n}/${min} tasks were completed yesterday.`;
   return "You didn't press Start Day and finish tasks yesterday.";
 };
+
+// ---- Automatic recheck (B41) ----
+// Tasks completed today that may count toward the streak: done, not pending, and completed after Start Day.
+// A task with no completedAt counts only if it was already counted (legacy data); nothing counts before Start Day.
+// startMs = Start Day time in ms (null = started, time unknown). `prevDone` = keys already in today's dayDone.
+export const countableDoneKeys = (tasks, { started = false, startMs = null, keyOf, prevDone = [] } = {}) => {
+  if (!started || !Array.isArray(tasks) || !keyOf) return { keys: [], drop: [] };
+  const prev = new Set(prevDone); const keys = []; const drop = [];
+  for (const t of tasks) {
+    if (!t) continue; const k = keyOf(t); if (!k) continue;
+    const at = t.completedAt ? Date.parse(t.completedAt) : NaN;
+    const ok = !!t.completed && t.status !== 'pending' && (Number.isFinite(at) ? (startMs == null || at >= startMs) : prev.has(k));
+    (ok ? keys : drop).push(k);
+  }
+  return { keys, drop };
+};
+// Re-evaluate today from the current task list + gate (no tap needed). Adds countable keys, drops listed tasks that
+// no longer count; counts the day once >= min and the gate allows it. Never un-counts an already counted day here
+// (un-completing still goes through applyTaskToggle), so a deadline passing later can't take back a counted day.
+export const recheckDay = (state, today, { keys = [], drop = [], gate = true } = {}, gap = ALLOWED_GAP_DAYS, min = DAILY_STREAK_MIN) => {
+  let s = norm(state);
+  const done = new Set(s.dayDate === today ? s.dayDone : []);
+  drop.forEach((k) => done.delete(k)); keys.forEach((k) => done.add(k));
+  const lastDay = s.dayDate && s.dayDate !== today ? { date: s.dayDate, count: s.dayDone.length } : (state?.lastDay || null);
+  s = { ...s, dayDate: today, dayDone: [...done], prev: s.dayDate === today ? s.prev : null, lastDay };
+  if (done.size >= min && gate) return recordCompletion(s, today, gap);
+  return s;
+};
+// True when recheckDay would change what is stored (avoids needless writes).
+export const recheckChanges = (before, after, today) => {
+  const b = norm(before); const bd = new Set(b.dayDate === today ? b.dayDone : []);
+  return after.streak !== b.streak || after.lastCompletionDate !== b.lastCompletionDate || after.dayDate !== b.dayDate
+    || after.dayDone.length !== bd.size || after.dayDone.some((k) => !bd.has(k));
+};
