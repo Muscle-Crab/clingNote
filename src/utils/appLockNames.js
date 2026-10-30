@@ -56,7 +56,9 @@ export const planLock = (action, args = {}, labels = [], now = Date.now()) => {
     const missing = (r.unknown.length ? r.unknown : names).map(prettyName);
     return { kind: 'onboard', missing, firstTime: !labels.length, pending: { action, apps: names, minutes: args.minutes || 0, until_unlock: !!args.until_unlock, createdAt: now } };
   }
-  if (action === 'unlock' && !r.matched.length) return { kind: 'ask', question: `${joinNames(r.unknown.map(prettyName))} ${r.unknown.length > 1 ? "aren't" : "isn't"} locked.` };
+  // Not a named app: we can't see whether it's blocked (Screen Time tokens are opaque; it may sit in the overall lock-in shield).
+  // Never claim "isn't locked" here; the caller checks the overall lock and explains (see describeUnlock).
+  if (action === 'unlock' && !r.matched.length) return { kind: 'unnamed', unknown: r.unknown.map(prettyName) };
   return { kind: 'run', labels: r.matched, unknown: r.unknown };
 };
 // After the guided picker: re-plan the saved request with the new labels. Stale (>10 min) or cancelled -> drop it.
@@ -71,3 +73,26 @@ export const resumePending = (pending, labels = [], { saved = true, now = Date.n
 
 // Reject with { code: 'timeout' } if p doesn't settle within ms (native pickers can hang; the guide must never stay busy).
 export const withTimeout = (p, ms) => { let t; return Promise.race([Promise.resolve(p), new Promise((_, rej) => { t = setTimeout(() => { const e = new Error('timeout'); e.code = 'timeout'; rej(e); }, ms); })]).finally(() => clearTimeout(t)); };
+
+// Truthful unlock result. before: labeledApps payload before the call [{label, locked}]; unlocked: labels native touched;
+// overall: {locked} from clingLock.status() (the lock-in / Discipline shield, separate ManagedSettings store); taskApps: labels
+// currently allowed by a running task. Never reports the opposite of the real state.
+export const describeUnlock = ({ plan = {}, before = [], unlocked = [], overall = {}, all = false } = {}) => {
+  const wasLocked = new Set(before.filter((a) => a && a.locked).map((a) => a.label));
+  const freed = unlocked.filter((l) => wasLocked.has(l)); const notLocked = (plan.labels || []).filter((l) => !wasLocked.has(l) && !all);
+  const unnamed = plan.unknown || []; const big = !!(overall && overall.locked);
+  const out = { unlocked: freed };
+  const parts = [];
+  if (freed.length) parts.push(`Unlocked ${all ? 'all your named apps' : joinNames(freed)}.`);
+  if (big) {
+    out.still_blocked_by = 'lock_in'; out.can_emergency_unlock = true;
+    const who = joinNames([...(all ? [] : notLocked), ...unnamed]) || (freed.length ? joinNames(freed) : 'Your apps');
+    parts.push(`${who} ${freed.length ? 'may still be' : 'is'} blocked by your lock-in app lock, which I can only lift with an emergency unlock (costs points, needs your OK).`);
+  } else {
+    if (notLocked.length) parts.push(`${joinNames(notLocked)} ${notLocked.length > 1 ? "weren't" : "wasn't"} locked by name.`);
+    if (unnamed.length) { out.not_found = unnamed; parts.push(`I can't see ${joinNames(unnamed)} in your named apps, so I can't unlock it by name. If it's still blocked, it comes from Screen Time or another lock; name it in the app list to control it here.`); }
+    if (!parts.length) parts.push('Nothing was locked by name.');
+  }
+  out.summary = parts.join(' ');
+  return out;
+};

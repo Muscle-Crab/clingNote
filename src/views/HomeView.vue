@@ -377,7 +377,7 @@ import { reactionLine, shouldRoast, checkinMarks, checkinLine, dueMark, overbook
 import { loadHabits, saveHabits, addHabit, logHabit, habitSummary } from '@/utils/habits';
 import { autoSchedule } from '@/utils/autoSchedule';
 import { clingLock, clingNative, lockAvailable, nativeAvailable } from '@/native/clingNative';
-import { planLock, resumePending, untilFor, fmtDuration, joinNames, withTimeout } from '@/utils/appLockNames';
+import { planLock, resumePending, untilFor, fmtDuration, joinNames, withTimeout, describeUnlock } from '@/utils/appLockNames';
 import LockGuideSheet from '@/components/home/LockGuideSheet.vue';
 import { LOCK_PREF, PENALTY_KEY, EMERGENCY_PENALTY, shouldShield, lockAction, busyToDay, mergePenalties, lastPenaltyDay } from '@/utils/appLock';
 import { previewDayTarget, requiredPoints } from '@/utils/dayTarget';
@@ -3927,8 +3927,9 @@ const runLockPlan = async (action, plan, pending) => {
     const locked = r.locked || [];
     return { locked, summary: locked.length ? `Locked ${joinNames(locked)} ${fmtDuration(until)}.` : 'Nothing was locked.', ...(plan.stillMissing && plan.stillMissing.length ? { not_picked: plan.stillMissing } : {}), ...(plan.unknown && plan.unknown.length ? { not_found: plan.unknown } : {}) };
   }
-  const r = await clingLock.unlockApps(plan.all ? ['*'] : plan.labels); lockAppsCache.value = r.apps || lockAppsCache.value;
-  const un = r.unlocked || []; return { unlocked: un, summary: un.length ? `Unlocked ${plan.all ? 'all your apps' : joinNames(un)}.` : 'Nothing was locked.' };
+  const before = lockAppsCache.value.slice(); const overall = await clingLock.status().catch(() => ({}));
+  const r = plan.labels.length || plan.all ? await clingLock.unlockApps(plan.all ? ['*'] : plan.labels) : { unlocked: [] }; lockAppsCache.value = r.apps || lockAppsCache.value;
+  return describeUnlock({ plan, before, unlocked: r.unlocked || [], overall, all: !!plan.all });
 };
 const lockByName = async (name, a = {}) => {
   if (!lockAvailable()) return { error: 'App lock needs the ClingNote iPhone app (iOS 16+).' };
@@ -3940,6 +3941,7 @@ const lockByName = async (name, a = {}) => {
   const action = name === 'lock_apps' ? 'lock' : 'unlock';
   const plan = planLock(action, a, labels);
   if (plan.kind === 'ask') return { ask: plan.question };
+  if (plan.kind === 'unnamed') return runLockPlan('unlock', { labels: [], unknown: plan.unknown }, a);
   if (plan.kind === 'onboard') { askOpen.value = false; lockGuide.value = { ...lockGuide.value, open: true, step: 'guide', missing: plan.missing, firstTime: plan.firstTime, busy: false, error: '', pending: plan.pending };
     return { ...guideOpen(`${joinNames(plan.missing)} ${plan.missing.length > 1 ? 'need' : 'needs'} to be picked once. I opened a short guide; the lock finishes right after.`), not_picked: plan.missing }; }
   return runLockPlan(action, plan, { ...a, apps: plan.labels });

@@ -1,6 +1,6 @@
 // Unit tests: app-lock name resolution + guided first-lock pending-request resume (src/utils/appLockNames.js).
 import assert from 'assert';
-import { resolveApps, canonical, untilFor, planLock, resumePending, prettyName, fmtDuration, PENDING_TTL } from '../src/utils/appLockNames.js';
+import { resolveApps, canonical, untilFor, planLock, resumePending, prettyName, fmtDuration, PENDING_TTL, describeUnlock } from '../src/utils/appLockNames.js';
 let n = 0; const ok = (c, m) => { assert.ok(c, m); n++; };
 const L = ['TikTok', 'YouTube', 'Instagram', 'Reddit'];
 ok(canonical('YT') === 'youtube' && canonical('tik tok') === 'tiktok' && canonical('Insta') === 'instagram', 'aliases');
@@ -24,7 +24,7 @@ p = planLock('lock', { apps: ['TikTok'], minutes: 120 }, [], now); ok(p.kind ===
 p = planLock('lock', { apps: ['TikTok', 'Snapchat'] }, L, now); ok(p.kind === 'onboard' && !p.firstTime && p.missing.join() === 'Snapchat', 'unknown app -> onboarding');
 p = planLock('unlock', { apps: ['YouTube'] }, L, now); ok(p.kind === 'run' && p.labels.join() === 'YouTube', 'unlock');
 p = planLock('unlock', {}, L, now); ok(p.kind === 'run' && p.all && p.labels.length === 4, 'unlock all');
-p = planLock('unlock', { apps: ['Snapchat'] }, L, now); ok(p.kind === 'ask', 'unlock unknown -> no picker');
+p = planLock('unlock', { apps: ['Snapchat'] }, L, now); ok(p.kind === 'unnamed' && p.unknown.join() === 'Snapchat', 'unlock unknown -> unnamed, never "isn\'t locked"');
 p = planLock('lock', { apps: ['you'] }, ['YouTube', 'YouTube Kids'], now); ok(p.kind === 'ask' && /YouTube and YouTube Kids/.test(p.question), 'ambiguous -> ask');
 p = planLock('lock', { apps: [] }, L, now); ok(p.kind === 'ask', 'no apps -> ask');
 // resume after the guided picker
@@ -39,3 +39,16 @@ z = resumePending(pend, ['TikTok'], { saved: false, now: now + 1 }); ok(z.kind =
 z = resumePending(pend, ['TikTok'], { now: now + PENDING_TTL + 1 }); ok(z.kind === 'drop' && z.reason === 'stale', 'stale drops');
 ok(resumePending(null, L).kind === 'drop', 'no pending');
 console.log(`app-lock names: ${n} passed`);
+// bug: "unlock YouTube" while YouTube sat in the lock-in shield (not a named app) answered "YouTube isn't locked."
+{ const p0 = planLock('unlock', { apps: ['YouTube'] }, ['TikTok']);
+  let d = describeUnlock({ plan: { labels: [], unknown: p0.unknown }, before: [], unlocked: [], overall: { locked: true } });
+  ok(d.still_blocked_by === 'lock_in' && /YouTube is blocked by your lock-in/.test(d.summary) && !/isn't locked|not locked/i.test(d.summary), 'unnamed + lock-in -> explains, never says unlocked/not locked');
+  d = describeUnlock({ plan: { labels: [], unknown: ['YouTube'] }, overall: { locked: false } });
+  ok(d.not_found.join() === 'YouTube' && /can't see YouTube/.test(d.summary) && !d.unlocked.length, 'unnamed, no lock-in -> not found');
+  d = describeUnlock({ plan: { labels: ['YouTube'] }, before: [{ label: 'YouTube', locked: true }], unlocked: ['YouTube'], overall: {} });
+  ok(d.summary === 'Unlocked YouTube.' && d.unlocked.join() === 'YouTube', 'named + locked -> unlocked');
+  d = describeUnlock({ plan: { labels: ['YouTube'] }, before: [{ label: 'YouTube', locked: false }], unlocked: ['YouTube'], overall: {} });
+  ok(!d.unlocked.length && /wasn't locked/.test(d.summary), 'named but not locked -> no false "Unlocked"');
+  d = describeUnlock({ plan: { labels: ['YouTube'] }, before: [{ label: 'YouTube', locked: true }], unlocked: ['YouTube'], overall: { locked: true } });
+  ok(/Unlocked YouTube/.test(d.summary) && d.still_blocked_by === 'lock_in', 'named unlocked but lock-in still on -> says so'); }
+console.log('describeUnlock ok');
