@@ -670,6 +670,18 @@ const startDay = async () => {
     alert("Please log in first.");
     return;
   }
+  // Lock-in on: Start Day starts the server 8-hour day (wake time = now when there is no plan yet / it has not arrived),
+  // via the same hours prompt + confirm as the card. The legacy session is written by confirmDayStart.
+  if (lockInToday.value && !eh.lock.value && isToday(selectedDayIndex.value)) {
+    try {
+      if (eh.phase.value === 'none' || eh.phase.value === 'before') {
+        const d = new Date(); const wakeTime = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+        const n = countableIndexes(selectedDayRoutine.value || [], eh.phaseInfo.value.dayKey || '').length;
+        await eh.savePlan({ wakeTime, taskCount: Math.max(1, n) });
+      }
+      if (eh.phase.value === 'ready') { openDayPrompt(); if (dayPromptOpen.value) return; }
+    } catch (e) { console.warn('start 8h day:', e && e.message); ehStartError.value = (e && e.message) || 'Could not start the 8-hour day'; }
+  }
 
   const today = getTodayId();
   const now = new Date();
@@ -3481,7 +3493,8 @@ const ensureLegacyDayStarted = async () => {
 // (end = confirm time + hours, frozen for the day). Nothing starts by itself any more.
 const dayPromptOpen = ref(false);
 const ehBusy = ref(false);
-const lockInToday = computed(() => lockIn.value.enabled && lockIn.value.skipDate !== (eh.phaseInfo.value.dayKey || ''));
+// no plan yet => no dayKey: an empty skipDate must not read as "skipped today" (that blocked Start Day for planless web users)
+const lockInToday = computed(() => lockIn.value.enabled && !(lockIn.value.skipDate && lockIn.value.skipDate === (eh.phaseInfo.value.dayKey || '')));
 const openDayPrompt = () => { if (lockInToday.value && eh.phase.value === 'ready' && !eh.lock.value && isToday(selectedDayIndex.value)) { ehStartError.value = ''; dayPromptOpen.value = true; } };
 const maybeShowDayPrompt = () => {
   if (!userId.value || !lockInToday.value || eh.phase.value !== 'ready' || eh.lock.value || dayPromptOpen.value || !isToday(selectedDayIndex.value)) return;
