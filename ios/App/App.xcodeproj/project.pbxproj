@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		7A1C0E0100000000000000B3 /* FirebaseAnalytics in Frameworks */ = {isa = PBXBuildFile; productRef = 7A1C0E0100000000000000B2 /* FirebaseAnalytics */; };
+		7A1C0E0100000000000000A3 /* TikTokBusinessSDK in Frameworks */ = {isa = PBXBuildFile; productRef = 7A1C0E0100000000000000A2 /* TikTokBusinessSDK */; };
 		C1A0E50000000000000000B1 /* FocusIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A0E50000000000000000A1 /* FocusIntents.swift */; };
 		C1A0E50000000000000000B2 /* FocusIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A0E50000000000000000A1 /* FocusIntents.swift */; };
 		C1A0E50000000000000000B3 /* StartFocusControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A0E50000000000000000A2 /* StartFocusControl.swift */; };
@@ -30,6 +32,7 @@
 		2FAD9763203C412B000D30F8 /* config.xml in Resources */ = {isa = PBXBuildFile; fileRef = 2FAD9762203C412B000D30F8 /* config.xml */; };
 		4D22ABE92AF431CB00220026 /* CapApp-SPM in Frameworks */ = {isa = PBXBuildFile; productRef = 4D22ABE82AF431CB00220026 /* CapApp-SPM */; };
 		50379B232058CBB4000EE86E /* capacitor.config.json in Resources */ = {isa = PBXBuildFile; fileRef = 50379B222058CBB4000EE86E /* capacitor.config.json */; };
+		7A1C0E0100000000000000A5 /* InstallAttribution.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1C0E0100000000000000A4 /* InstallAttribution.swift */; };
 		504EC3081FED79650016851F /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 504EC3071FED79650016851F /* AppDelegate.swift */; };
 		504EC30D1FED79650016851F /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 504EC30B1FED79650016851F /* Main.storyboard */; };
 		504EC30F1FED79650016851F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 504EC30E1FED79650016851F /* Assets.xcassets */; };
@@ -73,6 +76,7 @@
 		2FAD9762203C412B000D30F8 /* config.xml */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = config.xml; sourceTree = "<group>"; };
 		50379B222058CBB4000EE86E /* capacitor.config.json */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.json; path = capacitor.config.json; sourceTree = "<group>"; };
 		504EC3041FED79650016851F /* App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = App.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		7A1C0E0100000000000000A4 /* InstallAttribution.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstallAttribution.swift; sourceTree = "<group>"; };
 		504EC3071FED79650016851F /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		504EC30C1FED79650016851F /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
 		504EC30E1FED79650016851F /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -147,6 +151,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				4D22ABE92AF431CB00220026 /* CapApp-SPM in Frameworks */,
+				7A1C0E0100000000000000A3 /* TikTokBusinessSDK in Frameworks */,
+				7A1C0E0100000000000000B3 /* FirebaseAnalytics in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -215,6 +221,7 @@
 				C1A0E1000000000000000001 /* ClingLockPlugin.swift */,
 				50379B222058CBB4000EE86E /* capacitor.config.json */,
 				504EC3071FED79650016851F /* AppDelegate.swift */,
+				7A1C0E0100000000000000A4 /* InstallAttribution.swift */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
 				504EC30E1FED79650016851F /* Assets.xcassets */,
 				504EC3101FED79650016851F /* LaunchScreen.storyboard */,
@@ -288,6 +295,8 @@
 			name = App;
 			packageProductDependencies = (
 				4D22ABE82AF431CB00220026 /* CapApp-SPM */,
+				7A1C0E0100000000000000A2 /* TikTokBusinessSDK */,
+				7A1C0E0100000000000000B2 /* FirebaseAnalytics */,
 			);
 			productName = App;
 			productReference = 504EC3041FED79650016851F /* App.app */;
@@ -381,6 +390,8 @@
 			mainGroup = 504EC2FB1FED79650016851F;
 			packageReferences = (
 				D4C12C0A2AAA248700AAC8A2 /* XCLocalSwiftPackageReference "CapApp-SPM" */,
+				7A1C0E0100000000000000A1 /* XCRemoteSwiftPackageReference "tiktok-business-ios-sdk" */,
+				7A1C0E0100000000000000B1 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
 			);
 			productRefGroup = 504EC3051FED79650016851F /* Products */;
 			projectDirPath = "";
@@ -429,6 +440,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				504EC3081FED79650016851F /* AppDelegate.swift in Sources */,
+				7A1C0E0100000000000000A5 /* InstallAttribution.swift in Sources */,
 				9582B6832FE993A70072D4E8 /* SceneDelegate.swift in Sources */,
 				C1A0E0000000000000000002 /* ClingWidgetPlugin.swift in Sources */,
 				C1A0E00000000000000000F1 /* ClingVoicePlugin.swift in Sources */,
@@ -644,6 +656,8 @@
 				CODE_SIGN_ENTITLEMENTS = App/App.entitlements;
 				DEVELOPMENT_TEAM = R856C5DK22;
 				PRODUCT_BUNDLE_IDENTIFIER = app.clingnote.ios;
+				TIKTOK_ACCESS_TOKEN = "";
+				TIKTOK_APP_ID = "";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG CLING_APP_LOCK";
 				SWIFT_VERSION = 5.0;
@@ -667,6 +681,8 @@
 				CODE_SIGN_ENTITLEMENTS = App/App.entitlements;
 				DEVELOPMENT_TEAM = R856C5DK22;
 				PRODUCT_BUNDLE_IDENTIFIER = app.clingnote.ios;
+				TIKTOK_ACCESS_TOKEN = "";
+				TIKTOK_APP_ID = "";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = CLING_APP_LOCK;
 				SWIFT_VERSION = 5.0;
@@ -889,11 +905,40 @@
 		};
 /* End XCLocalSwiftPackageReference section */
 
+/* Begin XCRemoteSwiftPackageReference section */
+		7A1C0E0100000000000000A1 /* XCRemoteSwiftPackageReference "tiktok-business-ios-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/tiktok/tiktok-business-ios-sdk";
+			requirement = {
+				kind = upToNextMinorVersion;
+				minimumVersion = 1.7.2;
+			};
+		};
+		7A1C0E0100000000000000B1 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/firebase/firebase-ios-sdk.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 12.7.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
 /* Begin XCSwiftPackageProductDependency section */
+		7A1C0E0100000000000000A2 /* TikTokBusinessSDK */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 7A1C0E0100000000000000A1 /* XCRemoteSwiftPackageReference "tiktok-business-ios-sdk" */;
+			productName = TikTokBusinessSDK;
+		};
 		4D22ABE82AF431CB00220026 /* CapApp-SPM */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = D4C12C0A2AAA248700AAC8A2 /* XCLocalSwiftPackageReference "CapApp-SPM" */;
 			productName = "CapApp-SPM";
+		};
+		7A1C0E0100000000000000B2 /* FirebaseAnalytics */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 7A1C0E0100000000000000B1 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAnalytics;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
