@@ -46,8 +46,9 @@ const placeActions = () => {
   const busy = [];
   if (rect.value) busy.push([rect.value.top, rect.value.bottom]);
   const sr = sayEl.value && sayEl.value.getBoundingClientRect(); if (sr && sr.height) busy.push([sr.top, sr.bottom]);
-  const free = (top) => top >= gap && top + h <= vh - gap && busy.every(([a, b]) => top + h + gap <= a || top >= b + gap);
-  const mid = Math.round(vh / 2 - h / 2);
+  const bottomSafe = 34 + gap; // home indicator / safe area
+  const free = (top) => top >= gap && top + h <= vh - bottomSafe && busy.every(([a, b]) => top + h + gap <= a || top >= b + gap);
+  const mid = Math.round(vh * 0.72 - h / 2); // lower third, nearest free spot
   for (let d = 0; d <= vh; d += 8) { if (free(mid - d)) { actTop.value = mid - d; return; } if (free(mid + d)) { actTop.value = mid + d; return; } }
   actTop.value = mid;
 };
@@ -67,7 +68,7 @@ onMounted(loop); onBeforeUnmount(() => cancelAnimationFrame(raf));
 .coach-text { flex: 1; }
 .coach-line { margin: 0; font-size: 24px; line-height: 1.25; font-weight: 800; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.6); }
 .coach-cap { margin: 6px 0 0; font-size: 18px; line-height: 1.35; color: #dfe6f3; }
-.coach-actions { position: fixed; top: calc(50% - 24px); left: 0; right: 0; display: flex; justify-content: center; gap: 8px; width: max-content; margin: 0 auto; pointer-events: auto; z-index: 102; }
+.coach-actions { position: fixed; top: calc(72% - 24px); left: 0; right: 0; display: flex; justify-content: center; gap: 8px; width: max-content; margin: 0 auto; pointer-events: auto; z-index: 102; }
 .coach-skip { min-height: 48px; padding: 0 20px; border-radius: 999px; border: 2px solid #fff; background: rgba(4, 8, 18, .6); color: #fff; font-size: 18px; font-weight: 800; cursor: pointer; }
 .coach-skip--all { border-color: rgba(255,255,255,.5); font-weight: 600; font-size: 16px; }
 /* 'tap' steps: the ring itself takes the tap (decorative targets have no click of their own) */
