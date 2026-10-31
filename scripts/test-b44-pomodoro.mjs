@@ -28,9 +28,10 @@ t('Live Activity state carries the phase; content sig changes per phase', () => 
   assert.notStrictEqual(focusContentSig(a), focusContentSig(b));
   assert.ok(!('phase' in focusActivityState({ title: 'x', timerActive: true, timerEndTime: new Date(NOW + M).toISOString() }, { now: NOW })));
 });
-t('wiring: chip in timer sheet, watcher advances phases, copies drop it, Swift shows the phase', () => {
-  const tm = rd('src/components/home/TimerModal.vue'); assert.match(tm, /data-test="timer-pomo"/); assert.match(tm, /'start-pomo'/);
-  const h = rd('src/views/HomeView.vue'); assert.match(h, /@start-pomo="startTimer\(\{ pomo: true \}\)"/); assert.match(h, /nextPomoPatch\(task, Date\.now\(\)\)/); assert.match(h, /timerLockedMin, timerPomo, boss/);
+t('wiring: 🍅 in the existing ⋯ menu, watcher advances phases, copies drop it, Swift shows the phase', () => {
+  const card = rd('src/components/home/TaskCard.vue'); const menu = card.slice(card.indexOf('class="task-actions"'), card.indexOf('class="move-row"'));
+  assert.match(menu, /data-test="pomodoro-btn"/); assert.match(card, /defineEmits\(\['breakdown', 'pomodoro'/);
+  const h = rd('src/views/HomeView.vue'); assert.strictEqual((h.match(/@pomodoro="startPomodoro\(realIndex\(task\)\)"/g) || []).length, 2); assert.match(h, /startTimer\(\{ pomo: true \}\)/); assert.match(h, /nextPomoPatch\(task, Date\.now\(\)\)/); assert.match(h, /timerLockedMin, timerPomo, boss/);
   assert.match(rd('ios/App/Shared/FocusActivityAttributes.swift'), /var phase: String\? = nil/);
   assert.match(rd('ios/App/App/ClingNativePlugin.swift'), /phase: \(call\.getString\("phase"\)/);
   assert.match(rd('ios/App/ClingNoteWidget/FocusLiveActivity.swift'), /state\.phase \?\? "Focus"/);
