@@ -1,5 +1,6 @@
 // POST /.netlify/functions/eight-hour-day   Authorization: Bearer <Firebase ID token>
-// Body: { action: 'state' | 'plan' | 'start' | 'progress', ... }
+// Body: { action: 'state' | 'plan' | 'start' | 'schedule' | 'progress', ... }
+// Evening mode: 'start' accepts blocks:[{time,hours}] (split day), 'schedule' adds later blocks; due blocks start on their own (see autoStart).
 //
 // Server-authoritative 8-hour day. The server clock decides when the window starts and ends, the server writes the locked values
 // (window, task count, points per task, daily target) to eightHour/{uid} (admin-only; clients can read but never write, see firestore.rules),
@@ -69,7 +70,10 @@ const aiRefine = async (items, stats, { fetch: f, apiKey }) => {
 };
 
 const publicLock = (l) => (l ? { hours: core.clampHours(l.hours), dayKey: l.dayKey, dayName: l.dayName, tz: l.tz, wakeTime: l.wakeTime, startMs: l.startMs, endMs: l.endMs, taskCount: l.taskCount, plannedCount: l.plannedCount,
-  points: l.points, totalPoints: l.totalPoints, target: l.target, targetSource: l.targetSource, estimateSource: l.estimateSource, earned: l.earned || 0, done: l.done || 0, settled: !!l.settled } : null);
+  points: l.points, totalPoints: l.totalPoints, target: l.target, targetSource: l.targetSource, estimateSource: l.estimateSource, earned: l.earned || 0, done: l.done || 0, settled: !!l.settled,
+  index: core.blockIndex(l), scheduled: !!l.scheduled, pending: core.pendingOf(l).map((b) => ({ dayKey: b.dayKey, index: b.index, startMs: b.startMs, endMs: b.endMs, hours: b.hours })) } : null);
+// What firestore.rules read: startAt/endAt bound the edit lock, shutUntil the read-only hard stop (= endMs while a later block is pending).
+const lockWrite = (ctx, lock) => ({ ...lock, startAt: ctx.ts(lock.startMs), endAt: ctx.ts(lock.endMs), shutUntil: ctx.ts(core.rulesShutUntilMs(lock)) });
 
 // Settle a finished window once: final earned, history row, new stats. Idempotent (settled flag + settleDay's lastDay check).
 const settleIfOver = async (ctx, doc, now) => {
@@ -87,27 +91,125 @@ const settleIfOver = async (ctx, doc, now) => {
     }
   } catch (e) { /* keep the server-time progress value */ }
   const settledLock = { ...lock, earned, settled: true };
-  const stats = core.settleDay(doc.stats, { dayKey: lock.dayKey, earned, target: lock.target, allDone: (lock.totalPoints || 0) > 0 && earned >= lock.totalPoints });
+  const idx = core.blockIndex(lock);
+  // The streak/target settle once per day, on the day's FIRST block. Later blocks (evening mode) and empty scheduled blocks only write a history row.
+  const counts = idx === 0 && !(lock.scheduled && !(lock.taskCount > 0)); // legacy locks (no index/taskCount) still settle
+  const stats = counts ? core.settleDay(doc.stats, { dayKey: lock.dayKey, earned, target: lock.target, allDone: (lock.totalPoints || 0) > 0 && earned >= lock.totalPoints }) : { ...core.defaultStats(), ...(doc.stats || {}) };
   const next = { ...doc, lock: settledLock, stats };
-  await ctx.db.doc(`eightHour/${ctx.uid}`).set({ lock: { ...settledLock, startAt: ctx.ts(lock.startMs), endAt: ctx.ts(lock.endMs), shutUntil: ctx.ts(core.shutUntilMs(lock)) }, stats }, { merge: true });
-  await ctx.db.doc(`eightHour/${ctx.uid}/history/${lock.dayKey}`).set({ dayKey: lock.dayKey, startMs: lock.startMs, endMs: lock.endMs, taskCount: lock.taskCount, total: lock.totalPoints, target: lock.target, earned, met: stats.lastResult === 'met', settledMs: ctx.now });
+  await ctx.db.doc(`eightHour/${ctx.uid}`).set({ lock: lockWrite(ctx, settledLock), ...(counts ? { stats } : {}) }, { merge: true });
+  const hid = idx === 0 ? lock.dayKey : core.sessionKey(lock.dayKey, idx);
+  await ctx.db.doc(`eightHour/${ctx.uid}/history/${hid}`).set({ dayKey: lock.dayKey, index: idx, startMs: lock.startMs, endMs: lock.endMs, taskCount: lock.taskCount, total: lock.totalPoints, target: lock.target, earned,
+    met: counts ? stats.lastResult === 'met' : (lock.target > 0 && earned >= lock.target), streakCounted: counts, settledMs: ctx.now });
   return next;
 };
 
 const loadDoc = async (ctx) => { const s = await ctx.db.doc(`eightHour/${ctx.uid}`).get(); return s.exists ? s.data() : {}; };
-const phaseOf = (doc, now) => core.evaluatePhase({ wakeTime: doc.plan?.wakeTime, tz: doc.plan?.tz, nowMs: now, lock: doc.lock ? { startMs: doc.lock.startMs, endMs: doc.lock.endMs, dayKey: doc.lock.dayKey } : null });
+// hours: the frozen lock hours, else the user's default day length (doc.dayLengthHours is attached by loadUserDefaults; missing = core default).
+const phaseOf = (doc, now) => core.evaluatePhase({ wakeTime: doc.plan?.wakeTime, tz: doc.plan?.tz, nowMs: now, hours: doc.lock?.hours ?? doc.dayLengthHours,
+  lock: doc.lock ? { startMs: doc.lock.startMs, endMs: doc.lock.endMs, dayKey: doc.lock.dayKey, index: doc.lock.index, pending: doc.lock.pending } : null });
+const userDoc = async (ctx) => { const u = await ctx.db.doc(`users/${ctx.uid}`).get(); return u.exists ? u.data() : {}; };
 const view = (doc, now) => {
   const ph = phaseOf(doc, now);
-  return { now, phase: ph.phase, window: ph.phase === 'none' ? null : { startMs: ph.startMs || null, endMs: ph.endMs || null, wakeMs: ph.wakeMs || null, dayKey: ph.dayKey || null, missed: !!ph.missed },
+  return { now, phase: ph.phase, window: ph.phase === 'none' ? null : { startMs: ph.startMs || null, endMs: ph.endMs || null, wakeMs: ph.wakeMs || null, dayKey: ph.dayKey || null, missed: !!ph.missed, nextStartMs: ph.nextStartMs || null, nextEndMs: ph.nextEndMs || null },
     plan: doc.plan ? { wakeTime: doc.plan.wakeTime, tz: doc.plan.tz, taskCount: doc.plan.taskCount } : null,
-    lock: ph.phase === 'running' || (doc.lock && (doc.lock.dayKey === ph.dayKey || core.isShut(doc.lock, now))) ? publicLock(doc.lock) : null, // kept while the hard stop runs (until the next wake time)
+    lock: ph.phase === 'running' || ph.phase === 'gap' || (doc.lock && (doc.lock.dayKey === ph.dayKey || core.isShut(doc.lock, now))) ? publicLock(doc.lock) : null, // kept while the hard stop runs (until the next wake time)
     stats: { ...core.defaultStats(), ...(doc.stats || {}) }, reward: core.rewardFor((doc.stats || {}).streak || 0) };
+};
+
+// Lock one block. index 0 = the day's main block: snapshot every countable task, reset completions, enforce the task range (strict).
+// index > 0 (a later block the same day): lock only the still-open tasks, keep completions, no minimum (0 open tasks = an empty block that
+// still shuts nothing early and settles neutrally). Scheduled blocks keep their FIXED start/end even when started late.
+const beginBlock = async (ctx, doc, { hours, startMs, endMs, dayKey, index, pending = [], strict, scheduled = false, apiKey = null }) => {
+  const tz = doc.plan.tz;
+  const dayName = core.dayNameIn(tz, startMs);
+  const dayRef = ctx.db.doc(`weeklyRoutines/${ctx.uid}_${dayName}`);
+  const dsnap = await dayRef.get();
+  const later = index > 0;
+  // Day rollover: completed one-time tasks (incl. repeat-series copies) stay visible on the day they were done and leave the list
+  // at the next local day; drop leftovers from an earlier day here so Start Day never re-opens them into the locked set.
+  const stored = pruneStale(dsnap.exists ? (dsnap.data().tasks || []) : [], tz, dayKey);
+  let rows = countable(stored, dayKey);
+  if (later) rows = rows.filter(({ t }) => !t.completed);
+  const range = core.taskRange(hours); // min derived from the chosen hours, max = MAX_TASKS_PER_DAY (plan.taskCount is no longer an exact requirement)
+  if (rows.length > range.max) { if (strict) throw fail(409, `At most ${range.max} tasks per day.`, { code: 'too-many' }); rows = rows.slice(0, range.max); }
+  if (strict) {
+    if (rows.length === 0) throw fail(409, `Add at least ${range.min} task${range.min === 1 ? '' : 's'} for today first.`, { code: 'no-tasks' });
+    if (rows.length < range.min) throw fail(409, `Need at least ${range.min} tasks for ${core.hoursLabel(hours)} hours; you have ${rows.length}.`, { code: 'too-few' });
+  }
+  const stats = { ...core.defaultStats(), ...(doc.stats || {}) };
+
+  let est = rows.map(({ t }) => core.estimateTask({ title: t.title, notes: t.notes, estimateMin: t.estimateMin, priority: t.priority }));
+  let ratioAi = null; let source = 'heuristic';
+  // REQUIRES SERVER AI: only with OPENAI_API_KEY on the server and the user's AI consent (users/{uid}.aiConsent). Otherwise the heuristic above stands.
+  if (apiKey && rows.length) {
+    const u = await ctx.db.doc(`users/${ctx.uid}`).get();
+    if (u.exists && u.data().aiConsent === true) {
+      const ai = await aiRefine(rows.map(({ t }, n) => ({ title: t.title, notes: t.notes, priority: t.priority, minutes: est[n].minutes })), stats, { fetch: ctx.fetch, apiKey });
+      if (ai) {
+        est = est.map((e, n) => (ai.tasks[n] ? { complexity: ai.tasks[n].complexity, minutes: ai.tasks[n].minutes, points: core.pointsFor(ai.tasks[n].complexity, ai.tasks[n].minutes), source: 'ai' } : e));
+        ratioAi = ai.ratio; source = 'ai';
+      }
+    }
+  }
+  // Assistant-rated points (Gemini, stored on the task as pointsSource 'ai') survive the lock, clamped to the same 5..150 range as pointsFor.
+  est = est.map((e, n) => { const t = rows[n].t; const p = Math.round(Number(t.points)); if (t.pointsSource !== 'ai' || !(p > 0)) return e;
+    const cx = Math.round(Number(t.complexity)); return { ...e, points: Math.min(150, Math.max(5, p)), complexity: cx >= 1 && cx <= 5 ? cx : e.complexity, source: 'assistant' }; });
+  const blockMin = Math.round((endMs - startMs) / 60000);
+  const tgt = core.dailyTarget(est.map((e) => ({ points: e.points, minutes: e.minutes })), stats, blockMin);
+  let target = tgt.target; let targetSource = 'heuristic';
+  if (ratioAi != null && tgt.total > 0) { // the model can only make the target tighter than the level-based one, never easier
+    const raised = core.clamp(core.round5(tgt.total * Math.max(ratioAi, tgt.effRatio)), 5, tgt.total);
+    if (raised > target) { target = raised; targetSource = 'ai'; }
+  }
+  const next = stored.map((t) => ({ ...t })); // identical order and size: the lock compares by index
+  rows.forEach(({ i }, n) => { next[i] = { ...next[i], ...(later ? {} : { completed: false, completedAt: null }), timerActive: false, points: est[n].points, complexity: est[n].complexity, estimateMin: est[n].minutes }; });
+  const points = rows.map((_, n) => est[n].points);
+  const lock = { hours, index, scheduled, placeholder: false, dayKey, dayName, tz, wakeTime: doc.plan.wakeTime, startMs, endMs, taskCount: rows.length, plannedCount: doc.plan.taskCount,
+    indexes: rows.map(({ i }) => i), ids: rows.map(({ t }) => stableIdOf(t)), points, totalPoints: points.reduce((a, b) => a + b, 0), target, targetSource, targetLevel: tgt.level, estimateSource: source, earned: 0, done: 0, settled: false,
+    pending: pending.map((b) => ({ dayKey: b.dayKey, index: b.index, startMs: b.startMs, endMs: b.endMs, hours: b.hours })) };
+  const ref = ctx.db.doc(`eightHour/${ctx.uid}`);
+  await ctx.db.runTransaction(async (tx) => {
+    const cur = await tx.get(ref);
+    const l = cur.exists ? cur.data().lock : null;
+    if (l && !l.placeholder && l.dayKey === lock.dayKey && core.blockIndex(l) === index) return; // another device won the race (same day + block)
+    const archive = l && !l.placeholder && l.dayKey ? { sessions: { [core.sessionKey(l.dayKey, core.blockIndex(l))]: JSON.parse(JSON.stringify({ ...publicLock(l), pending: [] })) } } : {};
+    tx.set(dayRef, { tasks: next, updatedAt: ctx.serverTime() }, { merge: true });
+    tx.set(ref, { ...archive, lock: lockWrite(ctx, lock) }, { merge: true });
+  });
+  return view(await loadDoc(ctx), ctx.now);
+};
+
+// Start every scheduled block whose start has arrived (server clock), even late, at its fixed start/end. Blocks that ended unseen are
+// archived as missed. Requires the previous block to be over (it is: blocks never overlap). Returns the fresh doc.
+const autoStart = async (ctx, doc) => {
+  const lock = doc.lock;
+  if (!lock || !doc.plan || !core.validTz(doc.plan.tz)) return doc;
+  if (ctx.now >= lock.startMs && ctx.now < lock.endMs) return doc;
+  const pend = core.pendingOf(lock);
+  const due = pend.find((b) => b.startMs <= ctx.now && b.endMs > ctx.now);
+  const stale = pend.filter((b) => b.endMs <= ctx.now);
+  if (!due && !stale.length) return doc;
+  if (!due) { // every due block was missed: drop them (history rows) and let the normal hard stop apply from the last one
+    const rest = pend.filter((b) => b.endMs > ctx.now);
+    const lastEnd = Math.max(...stale.map((b) => b.endMs));
+    const nextLock = { ...lock, pending: rest };
+    for (const b of stale) await ctx.db.doc(`eightHour/${ctx.uid}/history/${core.sessionKey(b.dayKey, b.index)}`).set({ dayKey: b.dayKey, index: b.index, startMs: b.startMs, endMs: b.endMs, missedStart: true, settledMs: ctx.now });
+    const w = lockWrite(ctx, nextLock); if (!rest.length) w.shutUntil = ctx.ts(core.shutUntilMs({ ...lock, endMs: lastEnd }));
+    await ctx.db.doc(`eightHour/${ctx.uid}`).set({ lock: w }, { merge: true });
+    return { ...doc, lock: nextLock };
+  }
+  const rest = pend.filter((b) => b !== due && b.endMs > ctx.now);
+  try {
+    await beginBlock(ctx, doc, { hours: due.hours, startMs: due.startMs, endMs: due.endMs, dayKey: due.dayKey, index: due.index, pending: rest, strict: false, scheduled: true, apiKey: null });
+  } catch (e) { if (!e.status) throw e; }
+  return loadDoc(ctx);
 };
 
 const actions = {
   async state(ctx) {
     let doc = await loadDoc(ctx);
     doc = await settleIfOver(ctx, doc, ctx.now);
+    doc = await autoStart(ctx, doc);
     return view(doc, ctx.now);
   },
 
@@ -115,6 +217,7 @@ const actions = {
   async plan(ctx, body) {
     let doc = await loadDoc(ctx);
     doc = await settleIfOver(ctx, doc, ctx.now);
+    doc = await autoStart(ctx, doc);
     const wake = core.parseWake(body.wakeTime);
     if (!wake) throw fail(400, 'Pick a valid wake time (HH:MM)');
     const tz = body.tz || doc.plan?.tz;
@@ -135,77 +238,74 @@ const actions = {
   async start(ctx, body = {}) {
     let doc = await loadDoc(ctx);
     doc = await settleIfOver(ctx, doc, ctx.now);
+    doc = await autoStart(ctx, doc);
+    const ud = await userDoc(ctx); doc = { ...doc, dayLengthHours: ud.dayLengthHours };
     const ph = phaseOf(doc, ctx.now);
     if (ph.phase === 'running') return view(doc, ctx.now); // already started (second device / retry)
+    if (ph.phase === 'gap') throw fail(409, 'Your next lock-in is already scheduled.', { code: 'gap' });
     if (ph.phase !== 'ready') throw fail(409, ph.phase === 'before' ? 'Your wake time has not arrived yet.' : ph.phase === 'ended' ? 'Today\'s day is already over.' : 'Pick a wake time first.', { code: ph.phase });
-    { // lock-in is opt-in (users/{uid}.lockInEnabled === true) and can be skipped for one date (lockInSkipDate === dayKey)
-      const u = await ctx.db.doc(`users/${ctx.uid}`).get(); const ud = u.exists ? u.data() : {};
-      if (ud.lockInEnabled !== true) throw fail(403, 'Lock-in is off. Turn it on in Settings to use the countdown lock.', { code: 'lock-in-off' });
-      if (ud.lockInSkipDate && ud.lockInSkipDate === ph.dayKey) throw fail(403, 'Lock-in is skipped for today.', { code: 'lock-in-skipped' });
-    }
+    // lock-in is opt-in (users/{uid}.lockInEnabled === true) and can be skipped for one date (lockInSkipDate === dayKey)
+    if (ud.lockInEnabled !== true) throw fail(403, 'Lock-in is off. Turn it on in Settings to use the countdown lock.', { code: 'lock-in-off' });
+    if (ud.lockInSkipDate && ud.lockInSkipDate === ph.dayKey) throw fail(403, 'Lock-in is skipped for today.', { code: 'lock-in-skipped' });
     const hours = core.clampHours(body.hours);
-    ph.startMs = ctx.now; ph.endMs = ctx.now + core.hoursMs(hours); // confirm-time start: end = confirm + hours
-    const dayName = core.dayNameIn(doc.plan.tz, ph.startMs);
-    const dayRef = ctx.db.doc(`weeklyRoutines/${ctx.uid}_${dayName}`);
-    const dsnap = await dayRef.get();
-    // Day rollover: completed one-time tasks (incl. repeat-series copies) stay visible on the day they were done and leave the list
-    // at the next local day; drop leftovers from an earlier day here so Start Day never re-opens them into the locked set.
-    const stored = pruneStale(dsnap.exists ? (dsnap.data().tasks || []) : [], doc.plan.tz, ph.dayKey);
-    const rows = countable(stored, ph.dayKey);
-    const range = core.taskRange(hours); // min derived from the chosen hours, max = MAX_TASKS_PER_DAY (plan.taskCount is no longer an exact requirement)
-    if (rows.length === 0) throw fail(409, `Add at least ${range.min} task${range.min === 1 ? '' : 's'} for today first.`, { code: 'no-tasks' });
-    if (rows.length > range.max) throw fail(409, `At most ${range.max} tasks per day.`, { code: 'too-many' });
-    if (rows.length < range.min) throw fail(409, `Need at least ${range.min} tasks for ${core.hoursLabel(hours)} hours; you have ${rows.length}.`, { code: 'too-few' });
-    const stats = { ...core.defaultStats(), ...(doc.stats || {}) };
+    const startMs = ctx.now, endMs = ctx.now + core.hoursMs(hours); // confirm-time start: end = confirm + hours
+    let pending = [];
+    if (Array.isArray(body.blocks) && body.blocks.length) { // split day: later blocks today, fixed now (before they start)
+      const r = core.planBlocks({ requests: body.blocks, tz: doc.plan.tz, nowMs: ctx.now, notBefore: endMs, existing: [{ startMs, endMs, dayKey: ph.dayKey, index: 0 }] });
+      if (!r.ok) throw fail(400, r.error, { code: 'bad-blocks' });
+      if (r.blocks.some((x) => x.dayKey !== ph.dayKey)) throw fail(400, 'Split blocks must be later today. Use Schedule for tomorrow.', { code: 'bad-blocks' });
+      pending = r.blocks;
+    }
+    return beginBlock(ctx, doc, { hours, startMs, endMs, dayKey: ph.dayKey, index: 0, pending, strict: true, apiKey: ctx.apiKey });
+  },
 
-    let est = rows.map(({ t }) => core.estimateTask({ title: t.title, notes: t.notes, estimateMin: t.estimateMin, priority: t.priority }));
-    let ratioAi = null; let source = 'heuristic';
-    // REQUIRES SERVER AI: only with OPENAI_API_KEY on the server and the user's AI consent (users/{uid}.aiConsent). Otherwise the heuristic above stands.
-    const apiKey = ctx.apiKey;
-    if (apiKey) {
-      const u = await ctx.db.doc(`users/${ctx.uid}`).get();
-      if (u.exists && u.data().aiConsent === true) {
-        const ai = await aiRefine(rows.map(({ t }, n) => ({ title: t.title, notes: t.notes, priority: t.priority, minutes: est[n].minutes })), stats, { fetch: ctx.fetch, apiKey });
-        if (ai) {
-          est = est.map((e, n) => (ai.tasks[n] ? { complexity: ai.tasks[n].complexity, minutes: ai.tasks[n].minutes, points: core.pointsFor(ai.tasks[n].complexity, ai.tasks[n].minutes), source: 'ai' } : e));
-          ratioAi = ai.ratio; source = 'ai';
-        }
-      }
+  // Evening mode, option 1: schedule the next lock-in(s). body.blocks: [{ time: 'HH:MM' (plan time zone), hours }]. Blocks are appended to
+  // lock.pending; they can never be removed or shortened (no cancel action exists), must start >= 5 min from now, within 18h, after the running block,
+  // and not overlap anything already fixed. The app stays usable until a block starts; the server (and the native schedule) then start it.
+  async schedule(ctx, body = {}) {
+    let doc = await loadDoc(ctx);
+    doc = await settleIfOver(ctx, doc, ctx.now);
+    doc = await autoStart(ctx, doc);
+    if (!doc.plan || !core.validTz(doc.plan.tz)) throw fail(409, 'Pick a wake time first.', { code: 'none' });
+    const ud = await userDoc(ctx);
+    if (ud.lockInEnabled !== true) throw fail(403, 'Lock-in is off. Turn it on in Settings to use the countdown lock.', { code: 'lock-in-off' });
+    const lock = doc.lock || null;
+    const existing = [];
+    if (lock) { existing.push({ startMs: lock.startMs, endMs: lock.endMs, dayKey: lock.dayKey, index: core.blockIndex(lock) }); core.pendingOf(lock).forEach((b) => existing.push(b)); }
+    Object.entries(doc.sessions || {}).forEach(([, x]) => { if (x && x.dayKey) existing.push({ startMs: x.startMs, endMs: x.endMs, dayKey: x.dayKey, index: x.index || 0 }); });
+    const r = core.planBlocks({ requests: body.blocks, tz: doc.plan.tz, nowMs: ctx.now, existing, notBefore: lock ? Math.max(ctx.now, lock.endMs > ctx.now ? lock.endMs : 0) : 0 });
+    if (!r.ok) throw fail(400, r.error, { code: 'bad-blocks' });
+    // Anti-cheat: from the hard stop, the next block must begin BEFORE the stop would have lifted anyway (the next wake time);
+    // otherwise "schedule something tomorrow afternoon" would simply unlock the app all night.
+    if (lock && core.isShut(lock, ctx.now)) {
+      const lastEnd = Math.max(lock.endMs, ...core.pendingOf(lock).map((b) => b.endMs)); const until = core.shutUntilMs({ ...lock, endMs: lastEnd });
+      if (r.blocks.some((b) => b.startMs >= until)) throw fail(400, `While shut, the next lock-in has to start before ${core.fmtClock(until, doc.plan.tz)}.`, { code: 'bad-blocks' });
     }
-    // Assistant-rated points (Gemini, stored on the task as pointsSource 'ai') survive the lock, clamped to the same 5..150 range as pointsFor.
-    est = est.map((e, n) => { const t = rows[n].t; const p = Math.round(Number(t.points)); if (t.pointsSource !== 'ai' || !(p > 0)) return e;
-      const cx = Math.round(Number(t.complexity)); return { ...e, points: Math.min(150, Math.max(5, p)), complexity: cx >= 1 && cx <= 5 ? cx : e.complexity, source: 'assistant' }; });
-    const tgt = core.dailyTarget(est.map((e) => ({ points: e.points, minutes: e.minutes })), stats, hours * 60);
-    let target = tgt.target; let targetSource = 'heuristic';
-    if (ratioAi != null && tgt.total > 0) { // the model can only make the target tighter than the level-based one, never easier
-      const raised = core.clamp(core.round5(tgt.total * Math.max(ratioAi, tgt.effRatio)), 5, tgt.total);
-      if (raised > target) { target = raised; targetSource = 'ai'; }
-    }
-    const next = stored.map((t) => ({ ...t })); // identical order and size: the lock compares by index
-    rows.forEach(({ i }, n) => { next[i] = { ...next[i], completed: false, completedAt: null, timerActive: false, points: est[n].points, complexity: est[n].complexity, estimateMin: est[n].minutes }; });
-    const points = rows.map((_, n) => est[n].points);
-    const lock = { hours, dayKey: ph.dayKey, dayName, tz: doc.plan.tz, wakeTime: doc.plan.wakeTime, startMs: ph.startMs, endMs: ph.endMs, taskCount: rows.length, plannedCount: doc.plan.taskCount,
-      indexes: rows.map(({ i }) => i), ids: rows.map(({ t }) => stableIdOf(t)), points, totalPoints: points.reduce((a, b) => a + b, 0), target, targetSource, targetLevel: tgt.level, estimateSource: source, earned: 0, done: 0, settled: false };
+    const ref = ctx.db.doc(`eightHour/${ctx.uid}`);
+    let out = null;
     await ctx.db.runTransaction(async (tx) => {
-      const cur = await tx.get(ctx.db.doc(`eightHour/${ctx.uid}`));
-      const l = cur.exists ? cur.data().lock : null;
-      if (l && l.dayKey === lock.dayKey) return; // another device won the race
-      tx.set(dayRef, { tasks: next, updatedAt: ctx.serverTime() }, { merge: true });
-      tx.set(ctx.db.doc(`eightHour/${ctx.uid}`), { lock: { ...lock, startAt: ctx.ts(lock.startMs), endAt: ctx.ts(lock.endMs), shutUntil: ctx.ts(core.shutUntilMs(lock)) } }, { merge: true });
+      const cur = await tx.get(ref); const d = cur.exists ? cur.data() : {}; const l = d.lock || null;
+      if (l && lock && core.sessionKey(l.dayKey, core.blockIndex(l)) !== core.sessionKey(lock.dayKey, core.blockIndex(lock))) throw fail(409, 'Your lock-in changed. Try again.', { code: 'race' });
+      if (l && core.pendingOf(l).length !== core.pendingOf(lock).length) throw fail(409, 'Your lock-in changed. Try again.', { code: 'race' });
+      // No lock yet (first ever use): a placeholder "ended" lock carries the pending list so every reader sees the schedule.
+      const base = l || { hours: core.clampHours(ud.dayLengthHours), dayKey: '', dayName: '', tz: doc.plan.tz, wakeTime: doc.plan.wakeTime, startMs: 0, endMs: 0, taskCount: 0, points: [], totalPoints: 0, target: 0, earned: 0, done: 0, settled: true, placeholder: true };
+      const nextLock = { ...base, pending: [...core.pendingOf(l), ...r.blocks] };
+      tx.set(ref, { lock: lockWrite(ctx, nextLock) }, { merge: true });
+      out = nextLock;
     });
-    return view(await loadDoc(ctx), ctx.now);
+    return view({ ...doc, lock: out }, ctx.now);
   },
 
   // Record progress from the server's point of view (call after each completion). Counts only locked tasks, only inside the window.
   async progress(ctx) {
     let doc = await loadDoc(ctx);
     const lock = doc.lock;
-    if (!lock || ctx.now < lock.startMs || ctx.now >= lock.endMs) { doc = await settleIfOver(ctx, doc, ctx.now); return view(doc, ctx.now); }
+    if (!lock || ctx.now < lock.startMs || ctx.now >= lock.endMs) { doc = await settleIfOver(ctx, doc, ctx.now); doc = await autoStart(ctx, doc); return view(doc, ctx.now); }
     const dsnap = await ctx.db.doc(`weeklyRoutines/${ctx.uid}_${lock.dayName}`).get();
     const tasks = dsnap.exists ? (dsnap.data().tasks || []) : [];
     const { earned, done } = lockedEarned(lock, tasks);
     const next = { ...lock, earned, done };
-    await ctx.db.doc(`eightHour/${ctx.uid}`).set({ lock: { ...next, startAt: ctx.ts(lock.startMs), endAt: ctx.ts(lock.endMs), shutUntil: ctx.ts(core.shutUntilMs(lock)) } }, { merge: true });
+    await ctx.db.doc(`eightHour/${ctx.uid}`).set({ lock: lockWrite(ctx, next) }, { merge: true });
     return view({ ...doc, lock: next }, ctx.now);
   },
 };
@@ -228,4 +328,4 @@ const rawHandler = async (event, _ctx, deps = {}) => {
 };
 const { withCors } = require('./lib/cors');
 exports.handler = withCors(rawHandler);
-exports._internal = { actions, settleIfOver, lockedEarned, stableIdOf, countable, pruneStale, aiRefine };
+exports._internal = { actions, beginBlock, autoStart, phaseOf, settleIfOver, lockedEarned, stableIdOf, countable, pruneStale, aiRefine };

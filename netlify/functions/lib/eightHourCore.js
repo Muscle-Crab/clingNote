@@ -54,6 +54,50 @@ const wakeInstant = (dayKey, wake, tz) => {
   return t;
 };
 
+// ── evening mode: scheduled / split lock-in blocks ──
+// A day can hold up to MAX_BLOCKS_PER_DAY blocks. lock = the current/latest block (lock.index, missing = 0 for old single-lock docs);
+// lock.pending = later blocks [{ dayKey, index, startMs, endMs, hours }] fixed BEFORE they start (never shortened or removed).
+// Finished blocks are archived in doc.sessions keyed by sessionKey(dayKey, index).
+const BLOCK_HOURS = Object.freeze({ min: 1, max: 12, step: 0.5 });
+const MAX_BLOCKS_PER_DAY = 3;
+const SCHEDULE_LEAD_MS = 5 * 60000;           // a block must be set at least 5 minutes before it starts
+const SCHEDULE_HORIZON_MS = 18 * 3600000;     // and start within the next 18 hours
+const clampBlockHours = (h) => { const n = Number(h); if (!Number.isFinite(n)) return null; return Math.min(BLOCK_HOURS.max, Math.max(BLOCK_HOURS.min, Math.round(n / BLOCK_HOURS.step) * BLOCK_HOURS.step)); };
+const sessionKey = (dayKey, index) => `${dayKey}#${Number(index) || 0}`;
+const blockIndex = (lock) => (lock && Number.isInteger(lock.index) ? lock.index : 0);
+const pendingOf = (lock) => (lock && Array.isArray(lock.pending) ? lock.pending.filter((b) => b && Number.isFinite(b.startMs) && Number.isFinite(b.endMs)).slice().sort((a, b) => a.startMs - b.startMs) : []);
+const nextPending = (lock, nowMs) => pendingOf(lock).find((b) => b.endMs > nowMs) || null;
+// Next instant of wall-clock "HH:MM" in tz strictly after afterMs (today or the following day).
+const nextAt = (time, tz, afterMs) => {
+  const w = parseWake(time); if (!w || !validTz(tz)) return null;
+  let k = dayKeyIn(tz, afterMs);
+  for (let i = 0; i < 3; i++) { const t = wakeInstant(k, w, tz); if (t > afterMs) return t; k = nextDayKey(k); }
+  return null;
+};
+const overlaps = (a, b) => a.startMs < b.endMs && b.startMs < a.endMs;
+// Validate requested blocks [{time, hours}] -> { ok, blocks:[{dayKey,index,startMs,endMs,hours}] } or { ok:false, error }.
+// existing: blocks already fixed ({startMs,endMs,dayKey,index}); nowMs: server clock; notBefore: earliest allowed start (e.g. the running block's end).
+const planBlocks = ({ requests, tz, nowMs, existing = [], notBefore = 0 }) => {
+  const list = Array.isArray(requests) ? requests : [];
+  if (!list.length) return { ok: false, error: 'Pick a start time and hours.' };
+  const fixed = existing.slice(); const out = [];
+  const base = Math.max(nowMs + SCHEDULE_LEAD_MS - 1, notBefore - 1);
+  for (const r of list) {
+    const hours = clampBlockHours(r && r.hours);
+    if (hours == null) return { ok: false, error: 'Pick how many hours.' };
+    const startMs = nextAt(r && r.time, tz, base);
+    if (startMs == null) return { ok: false, error: 'Pick a valid start time (HH:MM).' };
+    if (startMs - nowMs > SCHEDULE_HORIZON_MS) return { ok: false, error: 'You can only schedule up to 18 hours ahead.' };
+    const b = { startMs, endMs: startMs + hours * 3600000, hours, dayKey: dayKeyIn(tz, startMs) };
+    if (fixed.some((x) => overlaps(x, b))) return { ok: false, error: 'That overlaps another lock-in block.' };
+    const sameDay = fixed.filter((x) => x.dayKey === b.dayKey);
+    if (sameDay.length >= MAX_BLOCKS_PER_DAY) return { ok: false, error: `At most ${MAX_BLOCKS_PER_DAY} lock-in blocks per day.` };
+    b.index = sameDay.reduce((m, x) => Math.max(m, (Number(x.index) || 0) + 1), 0);
+    fixed.push(b); out.push(b);
+  }
+  return { ok: true, blocks: out };
+};
+
 // ── the 8-hour window state machine ──
 // lock: { startMs, endMs, dayKey } of the most recent window (or null). Returns the phase for `nowMs`:
 //   none     no wake time chosen yet (onboarding not finished)
@@ -61,8 +105,13 @@ const wakeInstant = (dayKey, wake, tz) => {
 //   ready    wake time has arrived and the window has not begun yet (server begins it now, if there are tasks)
 //   running  window in progress (everything locked)
 //   ended    today's window is over (next one begins at tomorrow's wake time)
+//   gap      (evening mode) a later block is scheduled: the app stays open until it starts (nextStartMs)
+// A pending block whose start has arrived reports 'ready' with scheduled: true (the server begins it at its FIXED start/end).
 const evaluatePhase = ({ wakeTime, tz, nowMs, lock, mode = START_MODE, hours = DAY_HOURS.default }) => {
-  if (lock && nowMs >= lock.startMs && nowMs < lock.endMs) return { phase: 'running', startMs: lock.startMs, endMs: lock.endMs, dayKey: lock.dayKey };
+  if (lock && nowMs >= lock.startMs && nowMs < lock.endMs) return { phase: 'running', startMs: lock.startMs, endMs: lock.endMs, dayKey: lock.dayKey, index: blockIndex(lock) };
+  const next = nextPending(lock, nowMs);
+  if (next && nowMs >= next.startMs) return { phase: 'ready', scheduled: true, startMs: next.startMs, endMs: next.endMs, dayKey: next.dayKey, index: next.index, hours: next.hours };
+  if (next) return { phase: 'gap', nextStartMs: next.startMs, nextEndMs: next.endMs, startMs: lock.startMs, endMs: lock.endMs, dayKey: lock.dayKey, index: blockIndex(lock) };
   const wake = parseWake(wakeTime);
   if (!wake || !validTz(tz)) return { phase: 'none' };
   const today = dayKeyIn(tz, nowMs);
@@ -88,7 +137,15 @@ const shutUntilMs = (lock) => {
 };
 // Which end-of-day warnings are due: [15, 5] minutes before endMs -> the largest threshold already reached (15 or 5), else 0.
 const warningDue = (endMs, nowMs) => { const left = endMs - nowMs; if (!(left > 0)) return 0; for (const m of [...WARN_MINUTES].sort((a, b) => a - b)) if (left <= m * 60000) return m; return 0; };
-const isShut = (lock, nowMs) => !!lock && nowMs >= lock.endMs && nowMs < shutUntilMs(lock);
+// Evening mode: while a later block is pending the app is NOT shut (gap); after the last block the usual hard stop applies,
+// counted from the latest block end. rulesShutUntilMs is what the server writes to lock.shutUntil for firestore.rules (gap = endMs, i.e. open).
+const isShut = (lock, nowMs) => {
+  if (!lock || !(nowMs >= lock.endMs)) return false;
+  if (nextPending(lock, nowMs)) return false;
+  const lastEnd = Math.max(lock.endMs, ...pendingOf(lock).map((b) => b.endMs));
+  return nowMs >= lastEnd && nowMs < shutUntilMs({ ...lock, endMs: lastEnd });
+};
+const rulesShutUntilMs = (lock) => (pendingOf(lock).length ? lock.endMs : shutUntilMs(lock));
 
 // ── display helpers ──
 const countdownParts = (ms) => { const s = Math.max(0, Math.floor(ms / 1000)); return { h: Math.floor(s / 3600), m: Math.floor((s % 3600) / 60), s: s % 60 }; };
@@ -215,5 +272,6 @@ module.exports = {
   clamp, round5, parseWake, fmtWake, validTz, partsIn, dayKeyIn, dayNameIn, wakeInstant, evaluatePhase,
   countdownParts, fmtCountdown, fmtClock, fmtWakeLabel,
   complexityFromMinutes, complexityFromText, pointsFor, estimateTask, levelRatio, dailyTarget,
-  lockedChangeAllowed, nextDayKey, shutUntilMs, isShut, countableIndexes, progressOf, defaultStats, settleDay, rewardsForDay, penaltyForMiss, badgeFor, MAX_SHIELDS, SHIELD_MIN_RATIO, failureNotice, rewardFor,
+  lockedChangeAllowed, nextDayKey, shutUntilMs, isShut, rulesShutUntilMs,
+  BLOCK_HOURS, MAX_BLOCKS_PER_DAY, SCHEDULE_LEAD_MS, SCHEDULE_HORIZON_MS, clampBlockHours, sessionKey, blockIndex, pendingOf, nextPending, nextAt, planBlocks, countableIndexes, progressOf, defaultStats, settleDay, rewardsForDay, penaltyForMiss, badgeFor, MAX_SHIELDS, SHIELD_MIN_RATIO, failureNotice, rewardFor,
 };
