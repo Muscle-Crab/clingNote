@@ -4,6 +4,7 @@
 // not muted, since muted elements are ignored by iOS) and set navigator.mediaSession metadata: title "ClingNote", subtitle = track name.
 // Lock-screen play/pause call back into useBackground. stop() pauses, drops the src, clears mediaSession and asks the native side to clear
 // MPNowPlayingInfoCenter / remote commands and deactivate the audio session. Voice lines (useVoiceover) never take over this entry.
+import { setMusicPlaying } from '../utils/audioSession.js';
 const base = (typeof process !== 'undefined' && process.env && process.env.BASE_URL) || '/';
 let a = null; let active = false; let handlers = {};
 const ms = () => (typeof navigator !== 'undefined' && navigator.mediaSession) || null;
@@ -24,7 +25,7 @@ function meta(subtitle, state) {
 
 // Call from the same tap that starts the music (iOS needs the gesture for media playback).
 export function npStart(subtitle, h = {}) {
-  handlers = h; active = true;
+  handlers = h; active = true; setMusicPlaying(true);
   const x = el(); if (x && canPlayMp3(x)) { if (!x.getAttribute('src')) x.src = `${base}audio/np-anchor.mp3`; try { const p = x.play(); if (p && p.catch) p.catch(() => {}); } catch (e) { /* ignore */ } }
   meta(subtitle, 'playing');
 }
@@ -32,7 +33,7 @@ export function npTitle(subtitle) { if (active) meta(subtitle, a && !a.paused ? 
 // Lock-screen pause: keep the widget (paused) so play works from the lock screen.
 export function npPaused(subtitle) { if (!active) return; if (a) { try { a.pause(); } catch (e) { /* ignore */ } } meta(subtitle, 'paused'); }
 export function npStop() {
-  const was = active; active = false; handlers = {};
+  const was = active; active = false; handlers = {}; setMusicPlaying(false);
   if (a) { try { a.pause(); a.removeAttribute('src'); a.load(); } catch (e) { /* ignore */ } }
   const s = ms(); if (s) { try { s.metadata = null; s.playbackState = 'none'; ACTIONS.forEach((k) => { try { s.setActionHandler(k, null); } catch (e) { /* ignore */ } }); } catch (e) { /* ignore */ } }
   if (was) import('@/composables/useVoiceover').then((m) => m.releaseMedia()).catch(() => {});

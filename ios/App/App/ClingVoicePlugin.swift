@@ -16,6 +16,8 @@ public class ClingVoicePlugin: CAPPlugin, CAPBridgedPlugin, AVSpeechSynthesizerD
         CAPPluginMethod(name: "speak", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "stop", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "releaseAudio", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "otherAudioPlaying", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setMusicPlaying", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "recognitionAvailable", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "requestRecognitionPermission", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "startListening", returnType: CAPPluginReturnPromise),
@@ -26,6 +28,8 @@ public class ClingVoicePlugin: CAPPlugin, CAPBridgedPlugin, AVSpeechSynthesizerD
     private let synth = AVSpeechSynthesizer()
     private var pendingCall: CAPPluginCall?
     private var remaining = 0
+    /// Last value the web side reported: in-app focus music is playing (never deactivate the session under it).
+    private var musicPlaying = false
     static let preferred = ["Evan", "Nathan", "Aaron", "Tom", "Reed", "Alex", "Fred"]
 
     override public func load() { synth.delegate = self }
@@ -68,7 +72,7 @@ public class ClingVoicePlugin: CAPPlugin, CAPBridgedPlugin, AVSpeechSynthesizerD
         DispatchQueue.main.async {
             if self.synth.isSpeaking { self.synth.stopSpeaking(at: .immediate) }
             self.finishPending()
-            try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio, options: [.duckOthers])
+            try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio, options: [.mixWithOthers, .duckOthers])
             try? AVAudioSession.sharedInstance().setActive(true)
             let voice = Self.bestVoice()
             self.pendingCall = call; self.remaining = lines.count
@@ -91,11 +95,26 @@ public class ClingVoicePlugin: CAPPlugin, CAPBridgedPlugin, AVSpeechSynthesizerD
 
     private func finishPending() { remaining = 0; if let c = pendingCall { pendingCall = nil; c.resolve(["done": true]) } }
 
+    /// After speaking: stop ducking, keep mixing with other apps' audio.
+    private func restoreMix() { try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [.mixWithOthers]) }
+
+    /// Web side (utils/audioSession.js) reports when the in-app focus music starts/stops.
+    @objc func setMusicPlaying(_ call: CAPPluginCall) {
+        let on = call.getBool("playing") ?? false
+        DispatchQueue.main.async { self.musicPlaying = on; call.resolve() }
+    }
+
+    /// True when another app (music, podcast) is playing, so a foreground notification is not spoken over it.
+    @objc func otherAudioPlaying(_ call: CAPPluginCall) {
+        let s = AVAudioSession.sharedInstance()
+        call.resolve(["playing": s.isOtherAudioPlaying || s.secondaryAudioShouldBeSilencedHint])
+    }
+
     /// Lock-screen fix: after speech/audio ends or is cancelled, drop the "Now Playing" entry (ClingNote 0:01 / -0:00 player),
     /// stop receiving remote-control events and give the audio session back (other apps resume). Alarms use AlarmKit
     /// (system-owned audio), so deactivating our session does not affect them. Called from JS (useVoiceover.releaseMedia)
     /// only when focus music is NOT playing, so the music's lock-screen entry is never torn down. Category stays .playback for the next clip.
-    static func releaseNowPlaying() {
+    static func releaseNowPlaying(musicPlaying: Bool = false) {
         let center = MPNowPlayingInfoCenter.default()
         center.nowPlayingInfo = nil
         if #available(iOS 13.0, *) { center.playbackState = .stopped }
@@ -104,17 +123,20 @@ public class ClingVoicePlugin: CAPPlugin, CAPBridgedPlugin, AVSpeechSynthesizerD
             cmd.removeTarget(nil); cmd.isEnabled = false
         }
         UIApplication.shared.endReceivingRemoteControlEvents()
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        if !musicPlaying { try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation) }
     }
 
     @objc func releaseAudio(_ call: CAPPluginCall) {
+        let music = call.getBool("musicPlaying") ?? false
         DispatchQueue.main.async {
+            self.musicPlaying = music
             if self.synth.isSpeaking || self.audioEngine.isRunning { call.resolve(["released": false]); return }
-            Self.releaseNowPlaying(); call.resolve(["released": true])
+            if music { call.resolve(["released": false]); return } // focus music owns the session and Now Playing entry
+            Self.releaseNowPlaying(musicPlaying: music); call.resolve(["released": true])
         }
     }
-    public func speechSynthesizer(_ s: AVSpeechSynthesizer, didFinish u: AVSpeechUtterance) { remaining -= 1; if remaining <= 0 { finishPending() } }
-    public func speechSynthesizer(_ s: AVSpeechSynthesizer, didCancel u: AVSpeechUtterance) { finishPending() }
+    public func speechSynthesizer(_ s: AVSpeechSynthesizer, didFinish u: AVSpeechUtterance) { remaining -= 1; if remaining <= 0 { restoreMix(); finishPending() } }
+    public func speechSynthesizer(_ s: AVSpeechSynthesizer, didCancel u: AVSpeechUtterance) { restoreMix(); finishPending() }
 
     // MARK: - Voice input (speech recognition)
     private let audioEngine = AVAudioEngine()
@@ -187,6 +209,7 @@ public class ClingVoicePlugin: CAPPlugin, CAPBridgedPlugin, AVSpeechSynthesizerD
         audioEngine.inputNode.removeTap(onBus: 0)
         audioEngine.reset()
         request = nil; task = nil; recognizer = nil
-        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [.mixWithOthers])
+        restoreMix()
+        if !musicPlaying { try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation) }
     }
 }

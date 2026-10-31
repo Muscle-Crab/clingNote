@@ -2,6 +2,7 @@
 // (no samples, no third-party audio, so no license applies). Quiet, short, throttled.
 // Honors the existing Sounds on/off setting (localStorage 'soundEnabled', toggled in the Home menu).
 // Plays only after a real user gesture has happened in this page session (never on first page load).
+import { ensureAmbient } from './audioSession.js';
 const STORAGE_KEY = 'soundEnabled';
 const THROTTLE_MS = { tap: 90, open: 200, add: 250, complete: 200, timerStart: 400, timerStop: 400, points: 0, coin: 45, levelUp: 1500, impact: 1200, charge: 1200, grow: 1200, error: 500 };
 let ctx = null; let gestured = false; const last = {}; let OFF = 0; // OFF: schedule offset (offline rendering only)
@@ -20,6 +21,7 @@ export const sfxAllowed = (kind, now = Date.now()) => {
 };
 const getCtx = () => {
   try {
+    ensureAmbient();
     if (!ctx) { const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return null; ctx = new AC(); }
     if (ctx.state === 'suspended') ctx.resume();
     return ctx;

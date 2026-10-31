@@ -26,6 +26,8 @@ export function useSounds() {
   let ctx = null;
   const getCtx = () => {
     try {
+      // iOS: play under the 'ambient' session (mixes with other apps' audio); leave 'playback' alone while focus music plays (utils/audioSession.js)
+      try { const as = navigator.audioSession; if (as && window.Capacitor && window.Capacitor.getPlatform && window.Capacitor.getPlatform() === 'ios' && as.type !== 'playback' && as.type !== 'ambient') as.type = 'ambient'; } catch (e) { /* unsupported */ }
       if (!ctx) {
         const AC = window.AudioContext || window.webkitAudioContext;
         if (!AC) return null;

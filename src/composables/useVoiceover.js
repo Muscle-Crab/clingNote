@@ -6,6 +6,7 @@
 //    There is deliberately NO device TTS / speechSynthesis fallback (that was the robotic default voice).
 // iOS WKWebView needs a user gesture before audio: unlock() on the first tap primes ONE shared <audio> element,
 // after which later src swaps can play without a fresh gesture. Mute is remembered in localStorage ("Robot voice" setting).
+import { ensureAmbient, musicPlaying } from '../utils/audioSession.js';
 import { ref } from 'vue';
 import { SCRIPTS } from '@/voiceover/scripts';
 import { PHRASE_KEYS, phraseKey, liveChunks, MAX_LIVE_CHARS } from '@/voiceover/phrases';
@@ -40,7 +41,7 @@ export function releaseMedia() {
   const my = token;
   releaseTimer = setTimeout(() => { releaseTimer = null; if (my !== token || voSpeaking.value || musicHolds()) return; releaseNative(); }, RELEASE_DELAY_MS);
 }
-let releaseNative = () => { import('@/utils/clingVoice').then((m) => { if (m.nativeVoiceAvailable()) return m.ClingVoice.releaseAudio(); return null; }).catch(() => {}); };
+let releaseNative = () => { import('@/utils/clingVoice').then((m) => { if (m.nativeVoiceAvailable()) return m.ClingVoice.releaseAudio({ musicPlaying: musicPlaying() || musicHolds() }); return null; }).catch(() => {}); };
 let musicHolds = () => false;
 export const _setMusicHolds = (f) => { musicHolds = f; }; // set by useFocusMusic (avoids an import cycle)
 export const _setNativeRelease = (f) => { releaseNative = f; }; // tests
@@ -72,7 +73,7 @@ function playSrc(src, my, { onEnd, onFail }) {
   a.onended = () => { if (my === token && onEnd) onEnd(); };
   a.onerror = fail;
   if (releaseTimer) { clearTimeout(releaseTimer); releaseTimer = null; }
-  a.src = src; voSpeaking.value = true;
+  ensureAmbient(); a.src = src; voSpeaking.value = true;
   try { const p = a.play(); if (p && p.catch) p.catch(fail); } catch (e) { fail(); }
 }
 

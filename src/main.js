@@ -13,6 +13,9 @@ import { auth } from './firebaseConfig'
 import { loadPrefs, loadCustomImage } from './utils/bgPrefs'
 import { applyBackgroundImage } from './utils/bgImage'
 import { interceptBlankLinks } from './utils/openExternal'
+import { initAudioSession } from './utils/audioSession'
+
+try { initAudioSession(); } catch (e) { /* iOS only: mix with other apps' audio */ }
 
 
 // Saved home/header background picture (per device); default = the original forest art.
@@ -75,7 +78,7 @@ if (isNative()) {
   const wakeMod = import('./composables/useWakeAlarm').then((w) => { w.installWakeAlarm({ onAuth: (cb) => onAuthStateChanged(auth, cb) }); return w; });
   Promise.all([import('./utils/notifTap'), import('@capacitor/local-notifications'), import('./utils/nativePush')]).then(([t, ln, np]) => {
     np.initNativePush();
-    t.installNotificationTaps({ router, authReady, oneSignal: window.plugins?.OneSignal, localNotifications: ln.LocalNotifications, speak: (line) => import('@/composables/useVoiceover').then((v) => v.speakLive(line)).catch(() => {}), onAction: (a) => wakeMod.then((w) => w.onWakeNotificationAction(a)).catch(() => {}) });
+    t.installNotificationTaps({ router, authReady, oneSignal: window.plugins?.OneSignal, localNotifications: ln.LocalNotifications, otherAudioPlaying: () => import('./utils/clingVoice').then((m) => (m.nativeVoiceAvailable() ? m.ClingVoice.otherAudioPlaying().then((r) => !!(r && r.playing)) : true)), speak: (line) => import('@/composables/useVoiceover').then((v) => v.speakLive(line)).catch(() => {}), onAction: (a) => wakeMod.then((w) => w.onWakeNotificationAction(a)).catch(() => {}) });
   }).catch(() => {});
 }
 
