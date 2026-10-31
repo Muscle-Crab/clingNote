@@ -31,6 +31,7 @@ public class ClingLockPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "taskApps", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "allowTaskApps", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "endTaskApps", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setShieldFriend", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setLockEndAlert", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "scheduleWakeLock", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "cancelWakeLock", returnType: CAPPluginReturnPromise),
@@ -202,6 +203,13 @@ public class ClingLockPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     /// Lock-end notification level read by ClingLockMonitor.notifyLockEnded(). Omit `level` to just read it.
+    /// Optional friend-approved unlock (default off): the shield only mentions a friend when this is on.
+    @objc func setShieldFriend(_ call: CAPPluginCall) {
+        let on = call.getBool("on") ?? false
+        LockShared.defaults?.set(on, forKey: "clingShieldFriend")
+        call.resolve(["on": on])
+    }
+
     @objc func setLockEndAlert(_ call: CAPPluginCall) {
         guard #available(iOS 16.0, *) else { call.resolve(["level": "loud"]); return }
         LockShared.installLockEndSound()

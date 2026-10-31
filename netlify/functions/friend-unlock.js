@@ -1,4 +1,5 @@
 // Friend-approved early unlock (Coach mode). Records: unlockRequests/{sha256(token)} (server-only; Firestore rules deny clients).
+// Early unlock with a friend is OPTIONAL (Settings → Coach mode → "Friend approval to unlock", default off); the function refuses requests while it is off.
 // Signed in (Authorization: Bearer <Firebase ID token>):
 //   POST { action:'request', friendName, minutes:10|20|30, reason? } -> { token, url, expiresAt }   (one pending request per user; a new one replaces it)
 //   POST { action:'status', token }                                  -> { status, minutes, decidedAt }  (owner only)
@@ -40,7 +41,9 @@ const rawHandler = async (event = {}, ctx, deps = {}) => {
     const uid = await verifyUser(event.headers || {}, deps.verify);
     if (action === 'request') {
       const friendName = F.clip(body.friendName, 40); if (!friendName) throw err(400, 'Pick a friend first');
-      const u = await db.doc(`users/${uid}`).get(); const p = await db.doc(`publicProfiles/${uid}`).get();
+      const u = await db.doc(`users/${uid}`).get();
+      if (!(u.exists && u.data().gamePlan && u.data().gamePlan.friendUnlock === true)) throw err(403, 'Friend approval is off. Turn it on in Settings → Coach mode.'); // optional feature, default off
+      const p = await db.doc(`publicProfiles/${uid}`).get();
       const ownerName = F.clip((p.exists && p.data().name) || (u.exists && u.data().name) || '', 60);
       const prev = u.exists && u.data().friendUnlock && u.data().friendUnlock.hash;
       if (prev) await db.doc(`unlockRequests/${prev}`).set({ status: 'replaced' }, { merge: true }).catch(() => {});

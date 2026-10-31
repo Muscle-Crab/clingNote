@@ -13,6 +13,11 @@ t('1 defaults + onboarding wake time as day start', () => {
   const g = G.normPlan({}); assert.strictEqual(g.dayStart, '09:00'); assert.strictEqual(g.reviewDow, 0); assert.strictEqual(g.reviewTime, '18:00'); assert.strictEqual(g.minGoal, 50);
   assert.strictEqual(G.normPlan({}, '07:30').dayStart, '07:30'); assert.strictEqual(G.normPlan({ dayStart: '10:00' }, '07:30').dayStart, '10:00');
 });
+t('6 friend approval is optional and OFF by default', () => {
+  assert.strictEqual(G.normPlan({}).friendUnlock, false); assert.strictEqual(G.normPlan({ friend: { name: 'ZZTEST Sam' } }).friendUnlock, false);
+  assert.strictEqual(G.normPlan({ friendUnlock: true }).friendUnlock, true); assert.strictEqual(G.normPlan({ friendUnlock: 'yes' }).friendUnlock, false);
+  const row = fs.readFileSync(new URL('../src/components/home/GamePlanRow.vue', import.meta.url), 'utf8'); assert(/v-if="locked && friendOn"/.test(row));
+});
 t('1 edits are queued, applied only at the weekly review', () => {
   let g = G.normPlan({ dayStart: '09:00', lastReview: G.reviewKey(G.normPlan({}), at(2, 12)) }); // Mon Nov 2: reviewed Sun Nov 1
   g = G.queueEdit(g, { dayStart: '06:00', friend: { name: 'x' } }, at(3, 10));
@@ -104,6 +109,6 @@ t('wiring: Home row, Coach-only, earned/close, gate, carry, review, ask; Profile
   const c = src('src/components/home/TaskCard.vue'); assert(/data-test="size-edit"/.test(c));
   assert.equal(G.sizeOf({ points: 20 }), 'm'); assert.equal(G.sizeOf({ points: 10 }), 's'); assert.equal(G.sizeOf({ points: 60 }), 'l'); assert.equal(G.sizeOf({ points: 60, estimateMin: 10 }), 's'); assert.equal(G.sizeOf({ size: 'l', points: 10 }), 'l');
   const m = src('src/components/home/MorningReport.vue'); assert(/mr-penalty/.test(m) && /mr-goal-why/.test(m));
-  const sw = src('ios/App/App/ClingLockPlugin.swift'); assert(/everApproved/.test(sw)); assert(/Ask your friend/.test(src('ios/App/ClingShieldConfig/ClingShieldConfig.swift')));
+  const sw = src('ios/App/App/ClingLockPlugin.swift'); assert(/everApproved/.test(sw)); const sh = src('ios/App/ClingShieldConfig/ClingShieldConfig.swift'); assert(/clingShieldFriend/.test(sh) && /Ask your friend/.test(sh) && /Open ClingNote to see your plan/.test(sh), 'shield friend line follows the toggle'); assert(/setShieldFriend/.test(sw) && /clingShieldFriend/.test(sw));
 });
 console.log(`\ngameplan: ${n} ok`);

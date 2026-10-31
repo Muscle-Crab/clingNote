@@ -136,7 +136,7 @@
       <section v-if="canViewSelectedDayTasks"
                class="task-section">
         <GamePlanRow v-if="gpOn && isViewingToday" :text="gpText" :phase="gpPhase.phase" :review="gpReview" :leftovers="gpLeft" :tomorrow="gpTomorrow"
-                     :locked="hardLocked || gpGate" :gate="gpGate" :friend="(gp.friend && gp.friend.name) || ''" :unlock="gpUnlock" :penalty="gpPenaltyToday" :after-close="gpEarned.afterClose"
+                     :locked="hardLocked || gpGate" :gate="gpGate" :friend="(gp.friend && gp.friend.name) || ''" :friend-on="gp.friendUnlock" :unlock="gpUnlock" :penalty="gpPenaltyToday" :after-close="gpEarned.afterClose"
                      @carry="gpCarry" @review="gpApplyReview" @ask="gpAsk" @share="gpShare" />
         <EmptyState v-if="dayTasks.length === 0" :show-add="true" :show-templates="isViewingToday && !!userId" @add="onAddClick" @templates="openTemplates" />
 
@@ -3933,6 +3933,7 @@ const gpOn = computed(() => isStrictMode.value);
 watch(gpOn, (on) => { GP.setSizeMode(on); if (!on) GP.setQuietWindows([]); }, { immediate: true });
 const gpLoad = (d) => {
   gp.value = GP.normPlan(d && d.gamePlan, d && d.onboarding && d.onboarding.wakeTime);
+  if (lockAvailable()) clingLock.setShieldFriend(gp.value.friendUnlock).catch(() => {}); // shield text follows the toggle
   gpLog.value = (d && d.gpLog) || {}; gpPenalty.value = (d && d.gpPenalty) || null; gpLoaded.value = true;
   // First run: this week counts as reviewed, so the review first appears at the next review time.
   if (gpOn.value && !(d && d.gamePlan && d.gamePlan.lastReview)) { gp.value = { ...gp.value, lastReview: GP.reviewKey(gp.value, Date.now()) }; gpSave(); }
@@ -3967,8 +3968,8 @@ const strictPlan = (st) => {
   writeStrictDay(sd);
   let r = strictShield({ running: eh.running.value, dayEndMs: sd.dayEndMs, goal, earned, tasksDone: tasksDoneToday.value, goalAt: sd.goalAt, selectionCount: st.selectionCount || 0,
     enabled: lockEnabled(), unlockedToday: lockUnlockedDay.value === localDateStr(), offDay: (offDates.value || []).includes(localDateStr()) });
-  if (gpOn.value) { // game plan: friend-approved unlock window wins; otherwise social apps stay locked until the morning checklist is done
-    if (gpUnlock.value.untilMs > Date.now()) r = { ...r, want: false, phase: 'friend' };
+  if (gpOn.value) { // game plan: optional friend-approved unlock window wins (only when enabled); otherwise social apps stay locked until the morning checklist is done
+    if (gp.value.friendUnlock && gpUnlock.value.untilMs > Date.now()) r = { ...r, want: false, phase: 'friend' };
     else if (!r.want && gpGate.value && lockEnabled() && (st.selectionCount || 0) > 0 && lockUnlockedDay.value !== localDateStr()) r = { ...r, want: true, untilMs: gpPhase.value.closeMs, phase: 'checklist' };
   }
   strictState.value = r;
@@ -4095,7 +4096,7 @@ const gpAuthCheck = (st) => {
   try { localStorage.setItem(GP_AUTH_KEY, st.authorization === 'approved' ? 'approved' : (r.revoked ? 'revoked' : prev)); } catch (e) { /* ignore */ }
   if (r.penalty) { gpPenalty.value = { day, points: r.penalty, reason: 'screen-time-revoked', at: Date.now() }; saveBossField({ gpPenalty: gpPenalty.value }); }
 };
-// 6. Early unlock with a friend's OK: share a link; the friend approves on the website; then an 8 s countdown before the shield drops.
+// 6. Optional (Settings → Coach mode toggle, default off) early unlock with a friend's OK: share a link; the friend approves on the website; then an 8 s countdown before the shield drops.
 const GP_UNLOCK_KEY = 'cn.gp.unlock';
 const gpUnlock = ref((() => { try { const v = JSON.parse(localStorage.getItem(GP_UNLOCK_KEY) || 'null'); return v && v.day === localDateStr() ? v : { status: '' }; } catch (e) { return { status: '' }; } })());
 const gpUnlockSet = (v) => { gpUnlock.value = { day: localDateStr(), ...v }; try { localStorage.setItem(GP_UNLOCK_KEY, JSON.stringify(gpUnlock.value)); } catch (e) { /* ignore */ } };
@@ -4106,7 +4107,7 @@ const gpShare = async () => { const url = gpUnlock.value.url; if (!url) return;
   const text = `Can you OK ${gpUnlock.value.minutes} min of my apps early? ${url}`;
   try { if (navigator.share) { await navigator.share({ title: 'ClingNote unlock', text, url }); return; } } catch (e) { /* cancelled */ }
   try { await navigator.clipboard.writeText(url); showRepeatToast('Link copied. Send it to your friend.'); } catch (e) { /* ignore */ } };
-const gpAsk = async (minutes) => {
+const gpAsk = async (minutes) => { if (!gp.value.friendUnlock) return;
   try { const j = await gpCall({ action: 'request', friendName: gp.value.friend && gp.value.friend.name, minutes });
     gpUnlockSet({ status: 'pending', token: j.token, url: j.url, minutes }); gpShare(); }
   catch (e) { gpUnlockSet({ status: 'error', error: e.message }); }

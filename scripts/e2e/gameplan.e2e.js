@@ -66,9 +66,15 @@ const lastSunday = () => { const d = new Date(); d.setDate(d.getDate() - d.getDa
     if (AFTER) {
       ok('settings: one tappable game plan line inside the Coach mode row', await p.locator('[data-test=boss-mode-row] [data-test=gp-settings]').count() === 1);
       await p.click('[data-test=gp-settings]'); await sleep(500);
+      ok('toggle: "Friend approval to unlock" is one row, OFF by default, friend name hidden', await p.locator('[data-test=gp-friend-toggle]').count() === 1 && !(await p.isChecked('[data-test=gp-friend-toggle]')) && await p.locator('[data-test=gp-friend]').count() === 0 && /Friend approval to unlock/.test(await p.locator('[data-test=gp-panel]').innerText()));
+      await shot(p, 'settings-coach-off', '[data-test=boss-mode-row]');
+      await p.check('[data-test=gp-friend-toggle]'); await sleep(1500);
+      ok('toggle: turning it on is saved to users/{uid}.gamePlan.friendUnlock', ((await user(uid)).gamePlan || {}).friendUnlock === true);
+      ok('toggle: on shows the friend name field', await p.locator('[data-test=gp-friend]').count() === 1);
+      await shot(p, 'settings-coach-on', '[data-test=boss-mode-row]');
       await p.fill('[data-test=gp-daystart]', '07:30'); await p.fill('[data-test=gp-friend]', 'ZZTEST Sam'); await p.click('[data-test=gp-save]'); await sleep(1500);
       let g = (await user(uid)).gamePlan || {};
-      ok('settings: first save applies now (day start 07:30, friend saved)', g.dayStart === '07:30' && g.friend && g.friend.name === 'ZZTEST Sam' && !g.pending, JSON.stringify(g));
+      ok('settings: first save applies now (day start 07:30, friend saved, toggle kept)', g.friendUnlock === true && g.dayStart === '07:30' && g.friend && g.friend.name === 'ZZTEST Sam' && !g.pending, JSON.stringify(g));
       await p.fill('[data-test=gp-daystart]', '06:00'); await p.fill('[data-test=gp-mingoal]', '70'); await p.click('[data-test=gp-save]'); await sleep(1500);
       g = (await user(uid)).gamePlan || {};
       ok('settings: later schedule edits are queued for the weekly review', g.dayStart === '07:30' && g.pending && g.pending.dayStart === '06:00' && g.pending.minGoal === 70, JSON.stringify(g));
@@ -169,13 +175,24 @@ const lastSunday = () => { const d = new Date(); d.setDate(d.getDate() - d.getDa
     }
     ok('morning: no page errors', p.errs.length === 0, p.errs.join(' | ')); await p.context().close(); }
 
+  if (ON('friendoff') && AFTER) { const email = 'zztest.gp.friendoff@example.com'; // default OFF: no friend UI even with a friend name saved
+    const uid = await seedUser(email, 'ZZTEST GP Off', [mk('Task', 1)], { ...fresh(ago(180)), scheduledTasks: { tasks: [{ id: 'zzM', title: 'ZZTEST Morning stretch', userId: '', status: 'todo', priority: 'low', labels: [], notes: '', scheduledTime: '', startDate: ymd(), recurrence: { freq: 'daily' }, generated: [], skip: [] }] } });
+    const p = await page(br); await login(p, email); await home(p); await openRow(p);
+    ok('friend off: still locked by the checklist gate', await p.locator('[data-test=gp-gate]').count() === 1, await rowText(p));
+    ok('friend off: no ask chips, request, share or countdown', await p.locator('[data-test^=gp-ask-], [data-test=gp-pending], [data-test=gp-link], [data-test=gp-countdown]').count() === 0);
+    ok('friend off: details never mention a friend', !/friend|ZZTEST Sam/i.test(await rowText(p)), await rowText(p));
+    await shot(p, 'home-details-friend-off', '[data-test=gp-row]');
+    const r = await p.evaluate(async () => (await fetch('/.netlify/functions/friend-unlock', { method: 'POST', body: JSON.stringify({ action: 'request', friendName: 'x', minutes: 10 }) })).status);
+    ok('friend off: function refuses requests (or needs auth)', r === 401 || r === 403, String(r));
+    void uid; ok('friend off: no page errors', p.errs.length === 0, p.errs.join(' | ')); await p.context().close(); }
   if (ON('unlock') && AFTER) { const email = 'zztest.gp.unlock@example.com';
     const monday = (() => { const d = new Date(); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return ymd(d); })();
     const tpl = { id: 'zzMorning', title: 'ZZTEST Morning stretch', userId: '', status: 'todo', priority: 'low', labels: [], notes: '', scheduledTime: '', startDate: monday, recurrence: { freq: 'daily' }, generated: [], skip: [] };
-    const uid = await seedUser(email, 'ZZTEST GP Owner', [mk('Task', 1)], { ...fresh(ago(180)), scheduledTasks: { tasks: [{ ...tpl }] } });
+    const uid = await seedUser(email, 'ZZTEST GP Owner', [mk('Task', 1)], { ...fresh(ago(180), { friendUnlock: true }), scheduledTasks: { tasks: [{ ...tpl }] } });
     const p = await page(br); await login(p, email); await home(p); await openRow(p);
     ok('gate: checklist not done -> apps stay locked', await p.locator('[data-test=gp-gate]').count() === 1 && /Checklist first/.test(await rowText(p)), await rowText(p));
-    await shot(p, 'unlock-gate', '[data-test=gp-row]');
+    await shot(p, 'unlock-gate', '[data-test=gp-row]'); await shot(p, 'home-details-friend-on', '[data-test=gp-row]');
+    ok('friend on: ask chips shown', await p.locator('[data-test=gp-ask-10]').count() === 1);
     await p.click('[data-test=gp-ask-10]'); await sleep(2500);
     const u = await p.evaluate(() => JSON.parse(localStorage.getItem('cn.gp.unlock') || '{}'));
     ok('unlock: request created, link to the website page', u.status === 'pending' && /\/friend-unlock\.html\?t=/.test(u.url || ''), JSON.stringify(u));

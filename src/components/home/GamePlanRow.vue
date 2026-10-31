@@ -1,5 +1,5 @@
 <template>
-  <!-- Coach game plan: ONE compact tappable row (same look as the routine row). Expands inline for the close picker, weekly review and friend unlock. -->
+  <!-- Coach game plan: ONE compact tappable row (same look as the routine row). Expands inline for the close picker, weekly review and (optional) friend unlock. -->
   <div class="gp" data-test="gp-row" :data-phase="phase">
     <button type="button" class="gp-row" data-test="gp-toggle" :aria-expanded="open ? 'true' : 'false'" @click="open = !open">
       <span class="gp-title"><span data-test="gp-text">{{ text }}</span></span>
@@ -24,7 +24,7 @@
         <button type="button" class="gp-btn" data-test="gp-carry" :disabled="!picked.length" @click="$emit('carry', picked); picked = []">Move {{ picked.length || '' }} to {{ tomorrow }}</button>
       </template>
 
-      <template v-if="locked">
+      <template v-if="locked && friendOn">
         <p v-if="unlock.status === 'counting'" class="gp-line" data-test="gp-countdown">Opening in {{ unlock.left }}s… take a breath.</p>
         <p v-else-if="unlock.status === 'pending'" class="gp-line" data-test="gp-pending">Waiting for {{ friend }}. <a :href="unlock.url" data-test="gp-link" @click.prevent="$emit('share')">Share link again</a></p>
         <p v-else-if="unlock.status === 'denied'" class="gp-line" data-test="gp-denied">{{ friend }} said keep it locked.</p>
@@ -44,13 +44,13 @@ import { computed, ref } from 'vue';
 const props = defineProps({
   text: { type: String, default: '' }, phase: { type: String, default: 'work' }, review: { type: Object, default: null },
   leftovers: { type: Array, default: () => [] }, tomorrow: { type: String, default: 'tomorrow' }, locked: { type: Boolean, default: false },
-  gate: { type: Boolean, default: false }, friend: { type: String, default: '' }, unlock: { type: Object, default: () => ({ status: '' }) },
+  gate: { type: Boolean, default: false }, friend: { type: String, default: '' }, friendOn: { type: Boolean, default: false }, unlock: { type: Object, default: () => ({ status: '' }) },
   penalty: { type: Number, default: 0 }, afterClose: { type: Number, default: 0 }, minutes: { type: Array, default: () => [10, 20, 30] },
 });
 defineEmits(['carry', 'review', 'ask', 'share']);
 const open = ref(false); const picked = ref([]); const accepted = ref([]);
 const left = computed(() => props.leftovers);
-const attn = computed(() => !!props.review || (props.phase === 'closed' && props.leftovers.length > 0) || props.unlock.status === 'approved');
+const attn = computed(() => !!props.review || (props.phase === 'closed' && props.leftovers.length > 0) || (props.friendOn && props.unlock.status === 'approved'));
 </script>
 
 <style scoped>

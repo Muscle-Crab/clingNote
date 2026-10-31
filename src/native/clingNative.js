@@ -34,6 +34,7 @@ export const clingLock = {
   allowTaskApps: safe('ClingLock', Lock, (p, taskId, untilMs) => p.allowTaskApps({ taskId, untilMs }), { allowed: 0 }),
   endTaskApps: safe('ClingLock', Lock, (p, taskId) => p.endTaskApps(taskId ? { taskId } : {}), { ended: false }),
   // Lock-end alert level: off | subtle | standard | loud (default) | maximum. Omit level to read.
+  setShieldFriend: safe('ClingLock', Lock, (p, on) => p.setShieldFriend({ on: !!on }), { on: false }),
   setLockEndAlert: safe('ClingLock', Lock, (p, level) => p.setLockEndAlert(level ? { level } : {}), { level: 'loud' }),
   // Wake-up auto-lock (src/utils/wakeLock.js): one daily repeating DeviceActivity at the wake time; skip = device-local 'YYYY-MM-DD'.
   scheduleWakeLock: safe('ClingLock', Lock, (p, { hour, minute, minutes }) => p.scheduleWakeLock({ hour, minute, minutes }), { scheduled: false, monitor: 'unavailable' }),

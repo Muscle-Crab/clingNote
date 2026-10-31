@@ -143,7 +143,8 @@
                 <select class="pf-mini" v-model.number="gpForm.reviewDow" data-test="gp-reviewdow" aria-label="Weekly review day"><option v-for="(d, i) in GP_WEEK" :key="d" :value="i">Review {{ d }}</option></select>
                 <input type="time" class="pf-mini" v-model="gpForm.reviewTime" data-test="gp-reviewtime" aria-label="Weekly review time" />
                 <label class="pf-mini">Min goal <input type="number" min="10" max="500" step="5" class="pf-mini pf-num" v-model.number="gpForm.minGoal" data-test="gp-mingoal" aria-label="Minimum daily goal" /></label>
-                <input type="text" maxlength="40" class="pf-mini" v-model="gpForm.friend" placeholder="Unlock friend's name" data-test="gp-friend" aria-label="Friend who approves early unlocks" />
+                <label class="pf-mini pf-mini--check"><input type="checkbox" :checked="gpPlan.friendUnlock" data-test="gp-friend-toggle" @change="saveFriendUnlock($event.target.checked)" /> Friend approval to unlock</label>
+                <input v-if="gpPlan.friendUnlock" type="text" maxlength="40" class="pf-mini" v-model="gpForm.friend" placeholder="Unlock friend's name" data-test="gp-friend" aria-label="Friend who approves early unlocks" />
                 <button type="button" class="pf-mini" data-test="gp-save" @click="saveGamePlan">Save</button>
                 <small class="pf-dl-sub" data-test="gp-msg" role="status">{{ gpMsg || '2 × 50 min focus + 10 min breaks from the day start; the day closes 8 h after it. Schedule changes wait for the weekly review.' }}</small>
               </span></div>
@@ -267,7 +268,7 @@ const tbSummary = computed(() => blocksSummary(tbSaved.value));
 const loadTimeBlocks = async () => { const u = auth.currentUser; if (!u) return; try { const snap = await getDoc(doc(db, 'users', u.uid)); tbSaved.value = normBlocks(snap.exists() ? snap.data().timeBlocks : null); { const d = snap.exists() ? snap.data() : {}; bossMode.value = d.bossMode === 'strict' ? 'strict' : 'simple'; emergencyOn.value = d.emergencyUnlock !== false; gpHas.value = !!(d.gamePlan && d.gamePlan.userSet); gpPlan.value = GP.normPlan(d.gamePlan, d.onboarding && d.onboarding.wakeTime); gpView(); } tbForm.value = { ...tbSaved.value }; } catch (e) { /* defaults */ } };
 loadTimeBlocks();
 const bossMode = ref('simple'); const emergencyOn = ref(true);
-// Coach game plan settings (fixed week): schedule edits are queued and applied at the weekly review; the friend's name applies now.
+// Coach game plan settings (fixed week): schedule edits are queued and applied at the weekly review; the optional friend-approval toggle and friend's name apply now.
 const GP_WEEK = GP.WEEK; const gpOpen = ref(false); const gpMsg = ref(''); const gpPlan = ref(GP.normPlan({})); const gpHas = ref(false);
 const gpForm = ref({ dayStart: '09:00', reviewDow: 0, reviewTime: '18:00', minGoal: 50, friend: '' });
 const gpView = () => { const p = { ...gpPlan.value, ...(gpPlan.value.pending || {}) }; gpForm.value = { dayStart: p.dayStart, reviewDow: p.reviewDow, reviewTime: p.reviewTime, minGoal: p.minGoal, friend: (gpPlan.value.friend && gpPlan.value.friend.name) || '' }; };
@@ -280,6 +281,9 @@ const saveGamePlan = async () => { const u = auth.currentUser; if (!u) return;
   else if (Object.keys(patch).length) next = GP.queueEdit(next, patch);
   try { await setDoc(doc(db, 'users', u.uid), { gamePlan: next }, { merge: true }); gpPlan.value = next; gpHas.value = true;
     gpMsg.value = next.pending ? `Saved. Schedule change applies at your ${GP.WEEK[gpPlan.value.reviewDow]} ${gpPlan.value.reviewTime} review.` : 'Saved.'; }
+  catch (e) { gpMsg.value = "Couldn't save. Try again."; } };
+const saveFriendUnlock = async (on) => { const u = auth.currentUser; if (!u) return; const next = { ...gpPlan.value, friendUnlock: !!on };
+  try { await setDoc(doc(db, 'users', u.uid), { gamePlan: { friendUnlock: !!on } }, { merge: true }); gpPlan.value = next; gpMsg.value = on ? 'Friend approval on.' : 'Friend approval off.'; }
   catch (e) { gpMsg.value = "Couldn't save. Try again."; } };
 const saveBoss = async (f) => { const u = auth.currentUser; if (!u) return; if ('bossMode' in f) bossMode.value = f.bossMode; if ('emergencyUnlock' in f) emergencyOn.value = f.emergencyUnlock;
   try { await setDoc(doc(db, 'users', u.uid), f, { merge: true }); } catch (e) { console.warn('boss mode save', e && e.message); } };

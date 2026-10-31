@@ -3,11 +3,11 @@ import { ref } from 'vue';
 // 1 fixed weekly schedule (edits queued until the weekly review)   2 focus block = 2 x 50 min, notifications held back
 // 3 automatic 10 min break after each focus session (never costs points)   4 hard close = day start + 8 h, nothing earned after
 // 5 points per finished task by size (S 10 / M 20 / L 40); goal = max(min, min(90% of trailing 14-day median, today's planned load))
-// 6 locking: checklist gate, Screen Time revoke penalty, friend-approved early unlock, friction countdown
+// 6 locking: checklist gate, Screen Time revoke penalty, optional friend-approved early unlock (off by default), friction countdown
 // 7 at close the user picks which leftovers go to tomorrow (nothing rolls over by itself, no penalty)
 // 8 shift-relative: everything anchors to the user's day start (an evening shift may close after midnight)
 
-export const GP_DEFAULTS = { dayStart: '09:00', focusMin: 50, sessions: 2, breakMin: 10, closeHours: 8, reviewDow: 0, reviewTime: '18:00', minGoal: 50, friend: null };
+export const GP_DEFAULTS = { dayStart: '09:00', focusMin: 50, sessions: 2, breakMin: 10, closeHours: 8, reviewDow: 0, reviewTime: '18:00', minGoal: 50, friend: null, friendUnlock: false };
 const HHMM = /^([01]\d|2[0-3]):([0-5]\d)$/;
 export const validHHMM = (s) => HHMM.test(String(s || ''));
 const toMin = (s) => Number(s.slice(0, 2)) * 60 + Number(s.slice(3));
@@ -23,6 +23,7 @@ export const normPlan = (gp = {}, wakeTime = '') => {
   out.reviewDow = Number.isInteger(g.reviewDow) && g.reviewDow >= 0 && g.reviewDow <= 6 ? g.reviewDow : GP_DEFAULTS.reviewDow;
   out.reviewTime = validHHMM(g.reviewTime) ? g.reviewTime : GP_DEFAULTS.reviewTime;
   out.minGoal = Number(g.minGoal) >= 10 ? Math.min(500, round5(Number(g.minGoal))) : GP_DEFAULTS.minGoal;
+  out.friendUnlock = g.friendUnlock === true; // optional, default OFF
   out.friend = g.friend && g.friend.name ? { name: String(g.friend.name).slice(0, 40) } : null;
   out.pending = g.pending && typeof g.pending === 'object' ? g.pending : null;
   out.lastReview = g.lastReview || '';
