@@ -140,16 +140,26 @@ export const lostReason = (state, today, min = DAILY_STREAK_MIN) => {
 // Tasks completed today that may count toward the streak: done, not pending, and completed after Start Day.
 // A task with no completedAt counts only if it was already counted (legacy data); nothing counts before Start Day.
 // startMs = Start Day time in ms (null = started, time unknown). `prevDone` = keys already in today's dayDone.
-export const countableDoneKeys = (tasks, { started = false, startMs = null, keyOf, prevDone = [] } = {}) => {
+// endMs (B43) = the day's Discipline deadline once it has passed: a task completed after it neither counts nor is
+// dropped (a tap after the deadline never counted either), so work finished before the deadline on another device or
+// the widget still counts when the app is only opened later that evening.
+export const countableDoneKeys = (tasks, { started = false, startMs = null, endMs = null, keyOf, prevDone = [] } = {}) => {
   if (!started || !Array.isArray(tasks) || !keyOf) return { keys: [], drop: [] };
   const prev = new Set(prevDone); const keys = []; const drop = [];
   for (const t of tasks) {
     if (!t) continue; const k = keyOf(t); if (!k) continue;
     const at = t.completedAt ? Date.parse(t.completedAt) : NaN;
+    if (endMs != null && Number.isFinite(at) && at > endMs && !prev.has(k)) continue;
     const ok = !!t.completed && t.status !== 'pending' && (Number.isFinite(at) ? (startMs == null || at >= startMs) : prev.has(k));
     (ok ? keys : drop).push(k);
   }
   return { keys, drop };
+};
+// B43: would `tasks` count the day by themselves (>= min countable, gate open)? Used before a deadline settles a day.
+export const dayQualifies = (tasks, { started = false, startMs = null, endMs = null, keyOf, prevDone = [], gate = true } = {}, min = DAILY_STREAK_MIN) => {
+  if (!gate) return false;
+  const { keys } = countableDoneKeys(tasks, { started, startMs, endMs, keyOf, prevDone });
+  return new Set(keys).size >= min;
 };
 // Re-evaluate today from the current task list + gate (no tap needed). Adds countable keys, drops listed tasks that
 // no longer count; counts the day once >= min and the gate allows it. Never un-counts an already counted day here

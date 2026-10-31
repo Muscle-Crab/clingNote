@@ -41,6 +41,13 @@ async function seedDay(uid, { doneAfter = 0, doneBefore = 0, open = 1, boss = fa
   await db.doc(`weeklyRoutines/${uid}_${dayName()}`).set({ tasks });
   await db.doc(`userSettings/${uid}`).set({ daySessions: { [ymd()]: { started: true, ended: false, startTime: admin.firestore.Timestamp.fromMillis(s), endTime: null } } }, { merge: true });
 }
+// B43: pin the Discipline deadline to 23:59 and wait until the server has it, so the recheck scenarios don't depend on the
+// time of day (the 21:00 default settles today as missed late in the evening).
+async function pinDeadline(uid) {
+  await db.doc(`userSettings/${uid}`).set({ discipline: { enabled: true, deadline: '23:59', enabledOn: ymd(), strict: true } }, { merge: true });
+  for (let i = 0; i < 20; i++) { const d = (await db.doc(`userSettings/${uid}`).get()).data(); if (d && d.discipline && d.discipline.deadline === '23:59') return; await sleep(100); }
+  throw new Error('deadline not stored');
+}
 const streakCount = async (p) => (await p.locator('[data-test=streak-count]').textContent().catch(() => '')).trim();
 (async () => {
   const br = await chromium.launch({ executablePath: process.env.CHROME || undefined });
@@ -69,6 +76,7 @@ const streakCount = async (p) => (await p.locator('[data-test=streak-count]').te
   // 2) automatic recheck: 5 tasks done after Start Day + 1 before; no tap -> streak goes 2 -> 3 on its own; the early task is not counted
   if (on('recheck')) { const email = 'zztest.b41.recheck@example.com'; const uid = await seedUser(email, 'ZZTEST Recheck');
     await seedDay(uid, { doneAfter: 5, doneBefore: 1, open: 1 });
+    await pinDeadline(uid);
     await db.doc(`streaks/${uid}`).set({ streak: 2, bestStreak: 2, lastCompletionDate: yday, counted: [yday] });
     const p = await page(br); await login(p, email); await openHome(p); await sleep(6000); await dismiss(p);
     const st = (await db.doc(`streaks/${uid}`).get()).data();
@@ -78,6 +86,7 @@ const streakCount = async (p) => (await p.locator('[data-test=streak-count]').te
   // 3) only 4 after Start Day (+2 before): stays uncounted
   if (on('early')) { const email = 'zztest.b41.early@example.com'; const uid = await seedUser(email, 'ZZTEST Early');
     await seedDay(uid, { doneAfter: 4, doneBefore: 2, open: 1 });
+    await pinDeadline(uid);
     await db.doc(`streaks/${uid}`).set({ streak: 2, bestStreak: 2, lastCompletionDate: yday, counted: [yday] });
     const p = await page(br); await login(p, email); await openHome(p); await sleep(6000);
     const st = (await db.doc(`streaks/${uid}`).get()).data(); ok('recheck: 4 after + 2 before Start Day does not count', st.lastCompletionDate === yday && (st.dayDone || []).length === 4, JSON.stringify({ l: st.lastCompletionDate, d: (st.dayDone || []).length })); await p.context().close(); }

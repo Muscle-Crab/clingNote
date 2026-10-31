@@ -242,9 +242,9 @@ import { localYMD, isStaleCompletion, pruneStaleDay } from '@/utils/localDate';
 import { getTodayId, formatSessionTime, getCurrentDate, formatTime, isToday } from '@/utils/dateTime';
 import { badges } from '@/utils/gamification';
 import { recordMonthlyToggle, awardFinishedMonth } from '@/composables/useMonthlyStats';
-import { loadDisciplineSettings, settleDeadlines, clearLossPending, loadDisciplineState, setBossForDay, setBossCleared, tryFreeze, logDiscipline, patchDisciplineState } from '@/composables/useDiscipline';
+import { loadDisciplineSettings, settleDeadlines, storedDayQualifies, creditDay, clearLossPending, loadDisciplineState, setBossForDay, setBossCleared, tryFreeze, logDiscipline, patchDisciplineState } from '@/composables/useDiscipline';
 import { levelFor, rewardsFor } from '@/utils/rewards';
-import { defaultSettings as defaultDiscipline, warningFor, isPastDeadline, streakGate, BOSS_BONUS } from '@/utils/discipline';
+import { defaultSettings as defaultDiscipline, warningFor, isPastDeadline, streakGate, deadlineAt, BOSS_BONUS } from '@/utils/discipline';
 import DramaOverlay from '@/components/discipline/DramaOverlay.vue';
 import BossPanel from '@/components/discipline/BossPanel.vue';
 import { bossMessage, validReason, carryTask, canAddTask, watchingBlockers, isIdle, verdict as dayVerdict, line as bossLine, IDLE_MINUTES } from '@/utils/strictBoss';
@@ -1556,7 +1556,11 @@ const runDiscipline = async () => {
     } catch (e) { /* notifications optional */ }
   }
   try {
-    const r = await settleDeadlines(userId.value, disciplineSettings.value, now, (sd, missed) => tryFreeze(userId.value, sd, missed, rewardsFor(bestStreak.value).freezes));
+    discState.value = await loadDisciplineState(userId.value); // boss gate must be known before the recheck
+    await recheckStreak('settle'); // B43: count a day that already qualifies before the deadline can settle it as missed
+    const r = await settleDeadlines(userId.value, disciplineSettings.value, now, (sd, missed) => tryFreeze(userId.value, sd, missed, rewardsFor(bestStreak.value).freezes),
+      { qualifies: (d, st, sd) => storedDayQualifies(userId.value, d, disciplineSettings.value, st, sd) });
+    if (r?.credited?.length) { try { const snap = await getDoc(doc(db, 'streaks', userId.value)); if (snap.exists()) applyStreakState(snap.data()); } catch (e) { /* next tick */ } }
     const st = await loadDisciplineState(userId.value);
     discState.value = st;
     if (st?.lossPending) lossScreen.value = st.lossPending;
@@ -1673,6 +1677,15 @@ const dayStartMs = () => { const st = daySession.value.startTime; if (!st) retur
 const completedAfterStart = (t) => { if (!daySession.value.started) return false; const s = dayStartMs(); const at = t && t.completedAt ? Date.parse(t.completedAt) : NaN; return s == null || !Number.isFinite(at) || at >= s; };
 // Automatic streak recheck (B41): runs when the gate clears, the day starts, today's tasks change, on a timer, on resume /
 // visibility, not only on the next task tap. Same rules: only tasks done after Start Day, only when the gate allows it.
+// B43: past the deadline the recheck still counts work completed before it (endMs), so the gate ignores "missed today"
+// there; a tap after the deadline still goes through streakGateNow() and never counts.
+const recheckWindow = (today, now = new Date()) => {
+  const s = disciplineSettings.value;
+  if (!s || !s.enabled) return { gate: streakGateNow(), endMs: null };
+  const dl = deadlineAt(today, s.deadline).getTime();
+  if (now.getTime() < dl) return { gate: streakGateNow(), endMs: null };
+  return { gate: streakGate(s, { bossSet: discState.value.bossDate === today, bossCleared: discState.value.bossClearedDate === today }), endMs: dl };
+};
 let recheckBusy = false; let recheckAgain = false;
 const recheckStreak = async (why = '') => {
   if (!userId.value || !isViewingToday.value || !daySession.value.started) return false;
@@ -1680,14 +1693,14 @@ const recheckStreak = async (why = '') => {
   recheckBusy = true;
   try {
     if (['timer', 'visible', 'resume'].includes(why)) { try { discState.value = await loadDisciplineState(userId.value); } catch (e) { /* keep the last known gate */ } } // boss cleared on another device
-    const today = localDateStr(); const gap = streakGap(); const gate = streakGateNow();
+    const today = localDateStr(); const gap = streakGap(); const { gate, endMs } = recheckWindow(today);
     const tasks = (selectedDayRoutine.value || []).filter((t) => t && isTaskVisibleOn(t, today));
     const ref0 = doc(db, 'streaks', userId.value);
     const prevStreak = streak.value;
     const next = await runTransaction(db, async (tx) => {
       const snap = await tx.get(ref0); const cur = snap.exists() ? snap.data() : null;
       const prevDone = cur && cur.dayDate === today && Array.isArray(cur.dayDone) ? cur.dayDone : [];
-      const { keys, drop } = countableDoneKeys(tasks, { started: true, startMs: dayStartMs(), keyOf: taskKey, prevDone });
+      const { keys, drop } = countableDoneKeys(tasks, { started: true, startMs: dayStartMs(), endMs, keyOf: taskKey, prevDone });
       const n = recheckDay(cur, today, { keys, drop, gate }, gap);
       if (!recheckChanges(cur, n, today)) return null;
       tx.set(ref0, { ...n, updatedAt: serverTimestamp() }, { merge: true });
@@ -2528,6 +2541,19 @@ const checkStreakOnCompletion = async () => {
     syncLockPenalties(data.lockPenalties);
     unlockedBadges.value = data.unlockedBadges || [];
     let ev = evaluateStreak(data, localDateStr(), streakGap());
+    // B43: Discipline Mode, first open after midnight: yesterday may have qualified from work done elsewhere
+    // (other device/widget) before its deadline. Credit it from stored tasks before declaring the streak broken.
+    if (ev.status === 'broken' && data.streak) {
+      try {
+        const y = new Date(); y.setDate(y.getDate() - 1); const yd = localDateStr(y);
+        const ds = await loadDisciplineSettings(userId.value);
+        const dst = ds?.enabled ? await loadDisciplineState(userId.value) : null;
+        if (dst && !(dst.lastSettled && dst.lastSettled >= yd) && await storedDayQualifies(userId.value, yd, ds, dst, data) && await creditDay(userId.value, yd)) {
+          const again = await getDoc(streakDocRef); if (again.exists()) data = again.data();
+          ev = evaluateStreak(data, localDateStr(), streakGap());
+        }
+      } catch (e) { /* fall through to the normal evaluation */ }
+    }
     // Held freeze days (1 per 7 counted days in a row, max 2) auto-cover missed days so the streak holds.
     if (ev.status === 'broken' && data.streak) {
       const fz = applyFreezes(data, localDateStr(), streakGap());
