@@ -4,19 +4,19 @@
 // Lessons for features not built yet are queued here with enabled: false so they switch on when the feature ships.
 export const LESSONS = [
   { id: 'sergeant', enabled: true, trigger: 'first-task-done', steps: [
-    { target: '[data-coach="sergeant"]', line: 'Try it: hold my face for a second.', caption: 'Opens four choices: What\'s next, Replan, I\'m off, Make critical.', until: 'menu-open' },
+    { target: '[data-coach="sergeant"]', line: 'Try it: press and hold my face.', caption: 'Keep your finger on me until the choices open. A quick tap opens chat instead.', until: 'menu-open' },
     { target: '[data-coach="sg-next"]', line: "Tap What's next.", caption: 'I pick the one task to do now.', until: 'sg-next' },
   ] },
   { id: 'replan', enabled: true, trigger: 'behind', steps: [
-    { target: '[data-coach="sergeant"]', line: "You're behind. Hold my face.", caption: 'Your choices open.', until: 'menu-open' },
+    { target: '[data-coach="sergeant"]', line: "You're behind. Press and hold my face.", caption: 'Your choices open.', until: 'menu-open' },
     { target: '[data-coach="sg-replan"]', line: 'Tap Replan.', caption: 'Moves your remaining tasks so the day still fits. Undo puts them back.', until: 'sg-replan' },
   ] },
   { id: 'holiday', enabled: true, trigger: 'friday', steps: [
-    { target: '[data-coach="sergeant"]', line: 'Day off coming? Hold my face.', caption: 'Your choices open.', until: 'menu-open' },
-    { target: '[data-coach="sg-off"]', line: "This is I'm off. Tap it.", caption: 'Pick one day or a whole holiday. Your streak stays safe.', until: 'sg-any' },
+    { target: '[data-coach="sergeant"]', line: 'Day off coming? Press and hold my face.', caption: 'Your choices open.', until: 'menu-open' },
+    { target: '[data-coach="sg-off"]', line: "Tap I'm off.", caption: 'Pick one day or a whole holiday. Your streak stays safe.', until: 'sg-any' },
   ] },
   { id: 'critical', enabled: true, trigger: 'important-added', steps: [
-    { target: '[data-coach="sergeant"]', line: 'Important one? Hold my face.', caption: 'Your choices open.', until: 'menu-open' },
+    { target: '[data-coach="sergeant"]', line: 'Important one? Press and hold my face.', caption: 'Your choices open.', until: 'menu-open' },
     { target: '[data-coach="sg-critical"]', line: 'Tap Make critical.', caption: 'Marks your next task as critical so it stands out.', until: 'sg-critical' },
   ] },
   // Phase 2 lessons
@@ -25,8 +25,8 @@ export const LESSONS = [
     { target: '[data-coach="bell"]', line: 'Tap the alarm clock.', caption: 'Rings like an alarm at the task time until you start it.', until: 'alarm-set' },
   ] },
   { id: 'hard-lock', enabled: true, trigger: 'lock-on', steps: [
-    { target: '[data-coach="sergeant"]', line: 'Apps are locked. Hold my face.', caption: 'See how to get out in an emergency.', until: 'menu-open' },
-    { target: '[data-coach="sg-unlock"]', line: 'This is the emergency exit.', caption: 'You must type UNLOCK, and it costs 25 points. Tap anything to close.', until: 'sg-any' },
+    { target: '[data-coach="sergeant"]', line: 'Apps are locked. Press and hold my face.', caption: 'See how to get out in an emergency.', until: 'menu-open' },
+    { target: '[data-coach="sg-unlock"]', line: 'This is the emergency exit.', caption: 'You type UNLOCK and it costs 25 points. Tap any choice to finish.', until: 'sg-any' },
   ] },
   { id: 'grow-scene', enabled: true, trigger: 'first-task-done', steps: [
     { target: '[data-coach="grow"]', line: 'Look: your scene grew.', caption: 'It grows with every point today. Full scene means goal reached. Tap it.', until: 'tap' },

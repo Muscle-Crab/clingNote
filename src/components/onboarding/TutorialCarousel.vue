@@ -22,11 +22,13 @@ const props = defineProps({ slides: { type: Array, default: () => TOUR_SLIDES },
 const emit = defineEmits(['update:modelValue', 'last']);
 const track = ref(null);
 const index = ref(props.modelValue);
-let autoUntil = 0; // while the buttons scroll the track programmatically, ignore the intermediate scroll positions
+// While Next/Back scroll the track, ignore the intermediate positions until the scroll has actually arrived (iOS smooth
+// scrolling can take longer than a fixed delay; reading a half-way position used to snap the index back one slide).
+let autoUntil = 0; let target = -1;
 
 const onScroll = () => {
   const el = track.value; if (!el || !el.clientWidth) return;
-  if (Date.now() < autoUntil) return;
+  if (target >= 0) { if (Math.abs(el.scrollLeft - target) > 2 && Date.now() < autoUntil) return; target = -1; }
   const i = Math.max(0, Math.min(props.slides.length - 1, Math.round(el.scrollLeft / el.clientWidth)));
   if (i !== index.value) { index.value = i; emit('update:modelValue', i); }
   if (i === props.slides.length - 1) emit('last');
@@ -34,7 +36,7 @@ const onScroll = () => {
 const goTo = (i, smooth = true) => {
   const el = track.value; if (!el) return;
   const reduce = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
-  autoUntil = Date.now() + (smooth && !reduce ? 700 : 150);
+  target = i * el.clientWidth; autoUntil = Date.now() + 2000; // safety: a user swipe takes over after 2 s at most
   el.scrollTo({ left: i * el.clientWidth, behavior: smooth && !reduce ? 'smooth' : 'auto' });
 };
 watch(() => props.modelValue, (v) => { if (v !== index.value) { index.value = v; goTo(v); } });

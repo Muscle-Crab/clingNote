@@ -85,11 +85,14 @@ const canNext = computed(() => (STEPS[step.value] === 'wake' ? !!parseWake(wake.
 const nextLabel = computed(() => (STEPS[step.value] === 'tour' && slide.value < lastSlide ? 'Next' : 'Continue'));
 
 const next = () => {
-  if (STEPS[step.value] === 'tour' && slide.value < lastSlide) { slide.value += 1; carousel.value?.goTo(slide.value); if (slide.value === lastSlide) sawLast.value = true; return; }
+  if (STEPS[step.value] === 'tour' && slide.value < lastSlide) { slide.value += 1; if (slide.value === lastSlide) sawLast.value = true; return; } // the carousel's modelValue watch scrolls (one goTo per tap)
   if (STEPS[step.value] === 'wake' && parseWake(wake.value)) cachePlan({ wakeTime: wake.value, taskCount: taskCount.value, tz: deviceTz() });
   if (canNext.value && step.value < STEPS.length - 1) step.value += 1;
 };
-const back = () => { if (step.value > 0) step.value -= 1; };
+const back = () => { // in the tour, Back pages back one slide first (it used to jump straight to the intro)
+  if (STEPS[step.value] === 'tour' && slide.value > 0) { slide.value -= 1; return; }
+  if (step.value > 0) step.value -= 1;
+};
 
 const finish = (to) => { cachePlan({ wakeTime: wake.value, taskCount: taskCount.value, tz: deviceTz() }); markTutorialSeen(); router.push(to); };
 const finishSignedIn = async () => {
