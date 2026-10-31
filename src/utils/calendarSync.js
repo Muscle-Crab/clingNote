@@ -3,7 +3,12 @@
 // Push: every open, timed task in the sync window -> one event (scheduled one-offs with a time, one-time day-list tasks with a start time).
 // Pull: edits to a linked event (title / start / length) flow back to its task; events created in the ClingNote calendar become scheduled
 //       tasks; deleting a linked event in Calendar is respected (that task is not pushed again until it changes in ClingNote).
-// Conflicts: when both sides changed since the last sync, the calendar edit wins (it is the newer, explicit edit of a time).
+// Conflicts (B44): when both sides changed since the last sync, merge per field (title / start / length) against the last-synced
+//   baseline: a field changed in Calendar takes the Calendar value, any other field keeps the ClingNote value; if both changed the same
+//   field, Calendar wins (the newer, explicit edit). The merged result is written to both sides.
+// Completions (B44): a linked task completed in ClingNote stays in Calendar as "✓ Title" (history), instead of vanishing; a completed task
+//   that was never on the calendar is not added. Calendar edits to a ✓ event are ignored (ClingNote re-asserts it).
+// Duplicates (B44): an unlinked Calendar event with the same title + start as an unlinked ClingNote task is linked, never imported again.
 // Identity: link key `s-<scheduledId>` (also used once a scheduled task is materialized into a day list) or `t-<widgetTaskId>`.
 // Each link stores the event id and the event signature (title|start|end) at the last sync, which is how "changed" is detected.
 import { widgetTaskId } from './widgetSnapshot';
@@ -17,6 +22,10 @@ const pad = (n) => String(n).padStart(2, '0');
 export const localMs = (date, time) => { const [y, m, d] = date.split('-').map(Number); const [h, mi] = time.split(':').map(Number); return new Date(y, m - 1, d, h, mi).getTime(); };
 export const msToLocal = (ms) => { const d = new Date(ms); return { date: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`, time: `${pad(d.getHours())}:${pad(d.getMinutes())}` }; };
 export const sigOf = (ev) => `${String(ev.title || '').trim()}|${Math.round(Number(ev.startMs) / MIN)}|${Math.round(Number(ev.endMs) / MIN)}`;
+export const DONE_MARK = '✓ ';
+export const stripDone = (title) => String(title || '').replace(/^\s*✓\s*/, '').trim();
+const parseSig = (sig) => { const s = String(sig || ''); const b = s.lastIndexOf('|'); const a = s.lastIndexOf('|', b - 1); return { title: s.slice(0, a), start: s.slice(a + 1, b), end: s.slice(b + 1) }; };
+const dupKey = (title, startMs) => `${stripDone(title).toLowerCase()}|${Math.round(Number(startMs) / MIN)}`;
 const minutesOf = (t) => { const n = Math.round(Number(t.estimateMin) || Number(t.minutes) || 0); return n >= 5 && n <= 24 * 60 ? n : DEFAULT_MINUTES; };
 // Title is left out of the hash when the task has a createdAt, so an in-app rename keeps the same link (updates the event instead of a duplicate).
 export const keyOfDayTask = (t) => (t.scheduledId ? `s-${t.scheduledId}` : `t-${t.id || !t.createdAt ? widgetTaskId(t) : widgetTaskId({ createdAt: t.createdAt, title: '' })}`);
@@ -27,21 +36,23 @@ export const syncWindow = (nowMs) => ({ fromMs: nowMs - SYNC_WINDOW_DAYS.back * 
 // Local events. scheduled: users/{uid}.scheduledTasks.tasks; dayLists: { Sun: task[] ... }; weekDates: ['YYYY-MM-DD' x7] (Sun..Sat of this week).
 export const buildLocalEvents = ({ scheduled = [], dayLists = {}, weekDates = [], nowMs = Date.now() }) => {
   const { fromMs, toMs } = syncWindow(nowMs); const out = new Map();
-  const add = (key, t, date, time, src) => {
+  const add = (key, t, date, time, src, done = false) => {
     if (!isValidDate(date) || !isValidTime(time) || out.has(key)) return;
     const startMs = localMs(date, time); if (startMs < fromMs || startMs > toMs) return;
-    const ev = { key, title: String(t.title || '').trim().slice(0, 200), startMs, endMs: startMs + minutesOf(t) * MIN, notes: String(t.notes || '').slice(0, 1000), src };
-    if (!ev.title) return; ev.sig = sigOf(ev); out.set(key, ev);
+    const title = String(t.title || '').trim().slice(0, 200); if (!title) return;
+    const ev = { key, title: done ? `${DONE_MARK}${stripDone(title)}` : title, startMs, endMs: startMs + minutesOf(t) * MIN, notes: String(t.notes || '').slice(0, 1000), src };
+    if (done) ev.done = true;
+    ev.sig = sigOf(ev); out.set(key, ev);
   };
   for (const e of scheduled || []) {
-    if (!e || isTemplate(e) || isMaterialized(e) || e.done || e.templateId) continue;
-    add(`s-${e.id}`, e, e.scheduledDate, e.scheduledTime, { kind: 'scheduled', id: e.id });
+    if (!e || isTemplate(e) || isMaterialized(e) || e.templateId) continue;
+    add(`s-${e.id}`, e, e.scheduledDate, e.scheduledTime, { kind: 'scheduled', id: e.id }, !!e.done);
   }
   ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].forEach((day, i) => {
     for (const t of dayLists[day] || []) {
-      if (!t || t.completed || t.status === 'wontdo' || t.type === 'recurring' || t.templateId) continue;
+      if (!t || t.status === 'wontdo' || t.type === 'recurring' || t.templateId) continue;
       const date = isValidDate(t.scheduledFor) ? t.scheduledFor : isValidDate(t.dueDate) ? t.dueDate : weekDates[i];
-      add(keyOfDayTask(t), t, date, t.startTime, { kind: 'day', day, ref: `${t.createdAt || ''}|${t.title || ''}` });
+      add(keyOfDayTask(t), t, date, t.startTime, { kind: 'day', day, ref: `${t.createdAt || ''}|${t.title || ''}` }, !!t.completed);
     }
   });
   return [...out.values()];
@@ -65,27 +76,48 @@ export const planSync = (local, remote, state = {}) => {
     if (rem) linkedIds.add(rem.id);
     if (!rem) {
       delete links[key];
-      if (loc && loc.sig === link.sig) suppressed[key] = loc.sig; // deleted in Calendar: respect it
+      if (loc && (loc.done || loc.sig === link.sig)) suppressed[key] = loc.sig; // deleted in Calendar: respect it (a ✓ event is never re-added)
       else if (loc) plan.creates.push(loc); // changed in ClingNote since: push again
       continue;
     }
     if (!loc) { plan.removes.push(rem.id); delete links[key]; continue; } // completed / deleted / moved out of the window in ClingNote
     const rsig = sigOf(rem); const remoteChanged = rsig !== link.sig; const localChanged = loc.sig !== link.sig;
+    if (loc.done) { if (remoteChanged || localChanged) { plan.updates.push({ id: rem.id, ev: loc }); links[key] = { id: rem.id, sig: loc.sig }; } continue; } // ✓: ClingNote owns it
     if (remoteChanged) {
-      const a = msToLocal(rem.startMs); const mins = Math.max(5, Math.min(24 * 60, Math.round((rem.endMs - rem.startMs) / MIN)));
-      const fields = { title: String(rem.title || '').trim().slice(0, 200) || loc.title, date: a.date, time: a.time, minutes: mins };
-      plan.pullUpdates.push({ key, id: rem.id, fields, src: loc.src });
-      links[key] = { id: rem.id, sig: rsig };
+      let title = stripDone(rem.title).slice(0, 200) || loc.title; let startMs = rem.startMs; let endMs = rem.endMs;
+      if (localChanged) { // both sides edited: per-field merge against the last-synced baseline
+        const b = parseSig(link.sig); const r = parseSig(rsig);
+        if (r.title === b.title) title = loc.title;
+        if (r.start === b.start) startMs = loc.startMs;
+        if (Number(r.end) - Number(r.start) === Number(b.end) - Number(b.start)) endMs = startMs + (loc.endMs - loc.startMs); else endMs = startMs + (rem.endMs - rem.startMs);
+        plan.conflicts = (plan.conflicts || 0) + 1;
+      }
+      const a = msToLocal(startMs); const mins = Math.max(5, Math.min(24 * 60, Math.round((endMs - startMs) / MIN)));
+      const fields = { title, date: a.date, time: a.time, minutes: mins };
+      const merged = { ...loc, title, startMs, endMs: startMs + mins * MIN }; merged.sig = sigOf(merged);
+      if (merged.sig !== loc.sig) plan.pullUpdates.push({ key, id: rem.id, fields, src: loc.src });
+      if (merged.sig !== rsig) plan.updates.push({ id: rem.id, ev: merged });
+      links[key] = { id: rem.id, sig: merged.sig };
     } else if (localChanged) { plan.updates.push({ id: rem.id, ev: loc }); links[key] = { id: rem.id, sig: loc.sig }; }
   }
+  // unlinked foreign events by title+start, to link an identical ClingNote task instead of creating a twin on either side
+  const foreign = new Map();
+  for (const r of R.values()) if (!linkedIds.has(r.id) && !keyFromUrl(r.url) && !Object.values(links).some((l) => l.id === r.id)) { const k = dupKey(r.title, r.startMs); if (!foreign.has(k)) foreign.set(k, r); }
   for (const loc of L.values()) {
     if (links[loc.key] || plan.creates.includes(loc)) continue;
+    if (loc.done) continue; // completed before it was ever synced: not added
+    const twin = foreign.get(dupKey(loc.title, loc.startMs));
+    if (twin) { links[loc.key] = { id: twin.id, sig: sigOf(twin) }; foreign.delete(dupKey(loc.title, loc.startMs)); linkedIds.add(twin.id); plan.linked = (plan.linked || 0) + 1; continue; }
     if (suppressed[loc.key] !== undefined) { if (suppressed[loc.key] === loc.sig) continue; delete suppressed[loc.key]; } // changed since: sync again
     plan.creates.push(loc);
   }
+  const seenImport = new Set(); // twins of anything already in ClingNote (linked or not) are never imported
+  for (const loc of L.values()) seenImport.add(dupKey(stripDone(loc.title), loc.startMs));
   for (const r of R.values()) {
     if (linkedIds.has(r.id) || Object.values(links).some((l) => l.id === r.id)) continue;
     if (keyFromUrl(r.url)) { plan.removes.push(r.id); continue; } // our own event whose task is gone
+    if (seenImport.has(dupKey(r.title, r.startMs))) continue; // two identical events in Calendar: import one task
+    seenImport.add(dupKey(r.title, r.startMs));
     const title = String(r.title || '').trim(); if (!title || !(r.endMs > r.startMs)) continue;
     const a = msToLocal(r.startMs);
     plan.pullCreates.push({ id: r.id, fields: { title: title.slice(0, 200), date: a.date, time: a.time, minutes: Math.max(5, Math.min(24 * 60, Math.round((r.endMs - r.startMs) / MIN))), notes: String(r.notes || '').slice(0, 1000) } });
@@ -126,12 +158,13 @@ export const applyPullUpdates = (scheduled, dayLists, pulls, { lockedDays = [] }
 export const runCalendarSync = async (io, state = {}, nowMs = Date.now()) => {
   const data = await io.loadLocal(); const { fromMs, toMs } = syncWindow(nowMs);
   const local = buildLocalEvents({ ...data, nowMs }); const remote = await io.list(fromMs, toMs);
-  const plan = planSync(local, remote, state); const links = plan.links; const summary = { pushed: 0, updated: 0, removed: 0, pulled: 0, imported: 0, failed: 0 };
+  const plan = planSync(local, remote, state); const links = plan.links; const summary = { pushed: 0, updated: 0, removed: 0, pulled: 0, imported: 0, failed: 0, merged: plan.conflicts || 0, linked: plan.linked || 0 };
   // pulls first, so a pushed event never overwrites a calendar edit
   let scheduled = data.scheduled || []; let dayLists = data.dayLists || {};
   if (plan.pullUpdates.length || plan.pullCreates.length) {
     const r = applyPullUpdates(scheduled, dayLists, plan.pullUpdates, { lockedDays: io.lockedDays ? io.lockedDays() : [] });
     for (const k of r.skipped) { const l = (state.links || {})[k]; if (l) links[k] = l; else delete links[k]; } // retry next time
+    if (r.skipped.length) plan.updates = plan.updates.filter((u) => !r.skipped.includes(u.ev.key)); // locked day: don't push a merge it can't keep
     scheduled = r.scheduled; dayLists = r.dayLists; let scheduledChanged = r.scheduledChanged; const created = [];
     for (const pc of plan.pullCreates) {
       const id = io.makeId(); const entry = io.buildEntry(pc.fields, id); if (!entry) continue;
