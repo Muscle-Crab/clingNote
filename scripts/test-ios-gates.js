@@ -58,8 +58,8 @@ t('firestore.rules: captains/game writes limited to pickup admins / captains; po
   assert(/commentsChangeOk\(\) && ownMapKeyOnly\('reactions'\) && ownMapKeyOnly\('readComments'\)/.test(r));
   ['ds7513635@gmail.com', 'pablo.novoa89@gmail.com', 'lordsarfo123@gmail.com', 'ideastogether@yahoo.com', 'testing@gmail.com'].forEach((e) => assert(r.includes(e), e));
 });
-t('privacy manifest exists, declares no tracking and is part of the Xcode project; Xcode is pinned in the workflow', () => {
-  const m = rd('ios/App/App/PrivacyInfo.xcprivacy'); assert(/NSPrivacyTracking<\/key>\s*<false\/>/.test(m)); assert(/NSPrivacyAccessedAPICategoryUserDefaults/.test(m));
+t('privacy manifest exists, declares tracking (build 44 ATT; must match NSUserTrackingUsageDescription) and is part of the Xcode project; Xcode is pinned in the workflow', () => {
+  const m = rd('ios/App/App/PrivacyInfo.xcprivacy'); assert(/NSPrivacyTracking<\/key>\s*<true\/>/.test(m)); assert(/NSUserTrackingUsageDescription/.test(rd('ios/App/App/Info.plist'))); assert(/NSPrivacyAccessedAPICategoryUserDefaults/.test(m));
   const px = rd('ios/App/App.xcodeproj/project.pbxproj'); assert((px.match(/PrivacyInfo\.xcprivacy/g) || []).length >= 4);
   assert(/DEVELOPER_DIR: \/Applications\/Xcode_26\.\d+\.app/.test(rd('.github/workflows/ios-testflight.yml')));
 });

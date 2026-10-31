@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		7A1C0E0100000000000000B3 /* FirebaseAnalytics in Frameworks */ = {isa = PBXBuildFile; productRef = 7A1C0E0100000000000000B2 /* FirebaseAnalytics */; };
+		7A1C0E0100000000000000C3 /* FirebaseAnalyticsIdentitySupport in Frameworks */ = {isa = PBXBuildFile; productRef = 7A1C0E0100000000000000C2 /* FirebaseAnalyticsIdentitySupport */; };
 		7A1C0E0100000000000000A3 /* TikTokBusinessSDK in Frameworks */ = {isa = PBXBuildFile; productRef = 7A1C0E0100000000000000A2 /* TikTokBusinessSDK */; };
 		C1A0E50000000000000000B1 /* FocusIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A0E50000000000000000A1 /* FocusIntents.swift */; };
 		C1A0E50000000000000000B2 /* FocusIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A0E50000000000000000A1 /* FocusIntents.swift */; };
@@ -153,6 +154,7 @@
 				4D22ABE92AF431CB00220026 /* CapApp-SPM in Frameworks */,
 				7A1C0E0100000000000000A3 /* TikTokBusinessSDK in Frameworks */,
 				7A1C0E0100000000000000B3 /* FirebaseAnalytics in Frameworks */,
+				7A1C0E0100000000000000C3 /* FirebaseAnalyticsIdentitySupport in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -297,6 +299,7 @@
 				4D22ABE82AF431CB00220026 /* CapApp-SPM */,
 				7A1C0E0100000000000000A2 /* TikTokBusinessSDK */,
 				7A1C0E0100000000000000B2 /* FirebaseAnalytics */,
+				7A1C0E0100000000000000C2 /* FirebaseAnalyticsIdentitySupport */,
 			);
 			productName = App;
 			productReference = 504EC3041FED79650016851F /* App.app */;
@@ -939,6 +942,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 7A1C0E0100000000000000B1 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseAnalytics;
+		};
+		7A1C0E0100000000000000C2 /* FirebaseAnalyticsIdentitySupport */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 7A1C0E0100000000000000B1 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAnalyticsIdentitySupport;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

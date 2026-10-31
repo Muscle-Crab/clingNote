@@ -39,6 +39,9 @@ export const clingLock = {
 export const nativeAvailable = () => avail('ClingNative');
 export const clingNative = {
   calendarAccess: safe('ClingNative', Native, (p) => p.calendarAccess(), { granted: false }),
+  // App Tracking Transparency (src/utils/tracking.js). status: authorized | denied | restricted | notDetermined | unavailable
+  trackingStatus: safe('ClingNative', Native, (p) => p.trackingStatus(), { status: 'unavailable' }),
+  requestTracking: safe('ClingNative', Native, (p) => p.requestTracking(), { status: 'unavailable' }),
   busy: safe('ClingNative', Native, (p, fromMs, toMs) => p.busy({ fromMs, toMs }), { busy: [] }),
   addEvent: safe('ClingNative', Native, (p, ev) => p.addEvent(ev), { id: '' }),
   currentLocation: safe('ClingNative', Native, (p) => p.currentLocation(), null),

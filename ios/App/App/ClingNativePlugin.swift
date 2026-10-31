@@ -35,7 +35,14 @@ public class ClingNativePlugin: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDe
         CAPPluginMethod(name: "calSyncUpsert", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "calSyncRemove", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setPageZoom", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "trackingStatus", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "requestTracking", returnType: CAPPluginReturnPromise),
     ]
+    /// App Tracking Transparency (InstallAttribution). requestTracking prompts at most once; resolves {status}.
+    @objc func trackingStatus(_ call: CAPPluginCall) { call.resolve(["status": InstallAttribution.trackingStatus()]) }
+    @objc func requestTracking(_ call: CAPPluginCall) {
+        DispatchQueue.main.async { InstallAttribution.requestTracking { call.resolve(["status": $0]) } }
+    }
     /// Siri/Shortcuts tasks queued by AddTaskIntent; returned once and cleared.
     @objc func takeIntents(_ call: CAPPluginCall) {
         let d = UserDefaults(suiteName: "group.app.clingnote.ios")

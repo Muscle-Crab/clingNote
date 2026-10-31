@@ -124,12 +124,31 @@
 	<string>$(TIKTOK_APP_ID)</string>
 	<key>TikTokAccessToken</key>
 	<string>$(TIKTOK_ACCESS_TOKEN)</string>
-	<!-- Firebase Analytics (native only, for Google Ads App campaign / YouTube first_open). IDFA stays off: no AdSupport / IdentitySupport product. -->
+	<!-- Firebase Analytics (native only, for Google Ads App campaign / YouTube first_open). FirebaseAnalyticsIdentitySupport is linked; the SDK only
+	     reads the IDFA when ATTrackingManager status is .authorized (prompt shown after onboarding, see InstallAttribution.requestTracking). -->
 	<key>FIREBASE_ANALYTICS_COLLECTION_ENABLED</key>
 	<true/>
 	<key>GOOGLE_ANALYTICS_ADID_COLLECTION_ENABLED</key>
-	<false/>
+	<true/>
 	<key>GOOGLE_ANALYTICS_IDFV_COLLECTION_ENABLED</key>
 	<true/>
+	<!-- App Tracking Transparency prompt text (asked once, after onboarding on the first Home visit; never on cold launch). -->
+	<key>NSUserTrackingUsageDescription</key>
+	<string>ClingNote uses this to see which ads brought you to the app.</string>
+	<!-- Reddit first-open ping (InstallAttribution.redditPingEnabled). OFF until the reddit-install Netlify function is deployed. -->
+	<key>ClingRedditPingEnabled</key>
+	<false/>
+	<!-- SKAdNetwork IDs for TikTok/ByteDance (22mmun2rn5 = TikTok, 238da6jt44 = Pangle). Only matter when this app shows ads; harmless otherwise. -->
+	<key>SKAdNetworkItems</key>
+	<array>
+		<dict>
+			<key>SKAdNetworkIdentifier</key>
+			<string>238da6jt44.skadnetwork</string>
+		</dict>
+		<dict>
+			<key>SKAdNetworkIdentifier</key>
+			<string>22mmun2rn5.skadnetwork</string>
+		</dict>
+	</array>
 </dict>
 </plist>

@@ -1,13 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!-- ClingNote privacy manifest. Keep in sync with the App Privacy answers in App Store Connect and with src/views/privacy-policy.vue.
-     No ATT prompt and no IDFA: NSPrivacyTracking stays false. Install attribution: Firebase Analytics (native only, first_open for Google Ads/YouTube, IDFV but no IDFA), TikTok App Events SDK (ships its own manifest) and a first-open ping
-     to our reddit-install function -> Reddit Conversions API. Both send device/usage data (not linked to the account) for ad measurement, declared below.
+     Build 44: ATT prompt after onboarding; NSPrivacyTracking true. When authorized, Firebase Analytics (+IdentitySupport) and the TikTok App Events SDK
+     (ships its own manifest) send the IDFA with install/open events for ad attribution (= tracking): Device ID + Product Interaction are Used for Tracking.
+     NSPrivacyTrackingDomains left empty on purpose: listing the SDK hosts would make iOS block their non-IDFA (SKAN/IDFV) traffic when ATT is denied.
+     Reddit first-open ping is disabled in this build (Info.plist ClingRedditPingEnabled=false).
      Third-party SDKs (Capacitor, OneSignal, RevenueCat, TikTokBusinessSDK, FirebaseAnalytics/GoogleAppMeasurement) ship their own manifests. -->
 <plist version="1.0">
 <dict>
 	<key>NSPrivacyTracking</key>
-	<false/>
+	<true/>
 	<key>NSPrivacyTrackingDomains</key>
 	<array/>
 	<key>NSPrivacyCollectedDataTypes</key>
@@ -90,11 +92,12 @@
 			<key>NSPrivacyCollectedDataTypeLinked</key>
 			<true/>
 			<key>NSPrivacyCollectedDataTypeTracking</key>
-			<false/>
+			<true/>
 			<key>NSPrivacyCollectedDataTypePurposes</key>
 			<array>
 				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
 				<string>NSPrivacyCollectedDataTypePurposeDeveloperAdvertising</string>
+				<string>NSPrivacyCollectedDataTypePurposeThirdPartyAdvertising</string>
 				<string>NSPrivacyCollectedDataTypePurposeAnalytics</string>
 			</array>
 		</dict>
@@ -116,10 +119,11 @@
 			<key>NSPrivacyCollectedDataTypeLinked</key>
 			<false/>
 			<key>NSPrivacyCollectedDataTypeTracking</key>
-			<false/>
+			<true/>
 			<key>NSPrivacyCollectedDataTypePurposes</key>
 			<array>
 				<string>NSPrivacyCollectedDataTypePurposeDeveloperAdvertising</string>
+				<string>NSPrivacyCollectedDataTypePurposeThirdPartyAdvertising</string>
 				<string>NSPrivacyCollectedDataTypePurposeAnalytics</string>
 			</array>
 		</dict>

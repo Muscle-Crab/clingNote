@@ -378,6 +378,7 @@ import { reactionLine, shouldRoast, checkinMarks, checkinLine, dueMark, overbook
 import { loadHabits, saveHabits, addHabit, logHabit, habitSummary } from '@/utils/habits';
 import { autoSchedule } from '@/utils/autoSchedule';
 import { clingLock, clingNative, lockAvailable, nativeAvailable } from '@/native/clingNative';
+import { maybeAskTracking } from '@/utils/tracking';
 import { planLock, resumePending, untilFor, fmtDuration, joinNames, withTimeout, describeUnlock } from '@/utils/appLockNames';
 import { planTaskUnlock } from '@/utils/taskAppUnlock';
 import LockGuideSheet from '@/components/home/LockGuideSheet.vue';
@@ -512,6 +513,8 @@ const startCountdownWatcher = () => {
 };
 onMounted(() => {
   startCountdownWatcher();
+  // ATT prompt: first Home visit after onboarding (router sends unfinished accounts to /onboarding first). iOS only, once.
+  if (nativeAvailable()) maybeAskTracking({ native: clingNative, storage: window.localStorage });
 });
 const autoTransferTaskToTomorrow = async (index) => {
   const task = {
