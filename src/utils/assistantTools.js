@@ -95,7 +95,9 @@ export const validateCall = (name, args = {}, { refs = {}, tasksByKey = new Map(
     case 'suggest_next': return { ok: true, args: a.mode === 'roll' ? { mode: 'roll' } : {} }; // roll = weighted pick (points, due time, plan order, energy)
     case 'get_overview': case 'get_stats': case 'get_habits': case 'roll_unfinished': return { ok: true, args: {} };
     case 'auto_schedule': return { ok: true, args: { writeCalendar: a.write_calendar === true } }; // off unless the model explicitly sets it
-    case 'add_habit': case 'log_habit': { const n = String(a.name || '').replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, 60); return n ? { ok: true, args: { name: n, done: a.done !== false } } : { ok: false, error: 'Which habit?' }; }
+    case 'add_habit': case 'log_habit': { const n = String(a.name || '').replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, 60); if (!n) return { ok: false, error: 'Which habit?' };
+      const schedule = name === 'add_habit' ? { days: Array.isArray(a.days) ? a.days : undefined, timesPerWeek: a.timesPerWeek, everyDays: a.everyDays } : undefined;
+      return { ok: true, args: { name: n, done: a.done !== false, ...(schedule ? { schedule } : {}) } }; }
     case 'place_reminder': {
       const title = String(a.title || '').replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, 120); const place = String(a.place || '').trim().slice(0, 40).toLowerCase();
       if (!title || !place) return { ok: false, error: 'Need a task and a place.' };

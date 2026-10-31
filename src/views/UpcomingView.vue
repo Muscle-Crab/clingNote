@@ -48,9 +48,9 @@
         <div v-if="editing === t.id" class="up-edit">
           <input v-model="draft[t.id].title" class="up-input" aria-label="Title" />
           <select v-model="draft[t.id].freq" class="up-input" aria-label="Repeat">
-            <option value="weekly">Weekly</option><option value="xweek">N× a week, any day</option><option value="daily">Daily</option><option value="monthly">Monthly</option><option value="afterCompletion">Days after done</option>
+            <option value="weekly">Weekly</option><option value="xweek">N× a week, any day</option><option value="daily">Daily</option><option value="monthly">Monthly</option><option value="afterCompletion">Days after done</option><option value="interval">Every N days</option>
           </select>
-          <input v-if="draft[t.id].freq === 'afterCompletion'" v-model.number="draft[t.id].everyDays" type="number" min="1" max="365" class="up-input" aria-label="Days after I finish" />
+          <input v-if="draft[t.id].freq === 'afterCompletion' || draft[t.id].freq === 'interval'" v-model.number="draft[t.id].everyDays" type="number" min="1" max="365" class="up-input" aria-label="Days after I finish" />
           <input v-if="draft[t.id].freq === 'xweek'" v-model.number="draft[t.id].timesPerWeek" type="number" min="1" max="6" class="up-input" aria-label="Times a week" />
           <span v-if="draft[t.id].freq === 'weekly'" class="up-wd">
             <label v-for="(w, i) in WEEKDAYS" :key="w"><input type="checkbox" :value="i" v-model="draft[t.id].days" /> {{ w }}</label>
@@ -131,7 +131,7 @@ const saveTemplate = (t) => {
   if (d.freq === 'weekly') r.days = [...new Set(d.days.map(Number))].sort();
   if (d.freq === 'weekly' && !r.days.length) { error.value = 'Pick at least one weekday.'; return; }
   if (d.freq === 'monthly') r.dayOfMonth = Math.min(31, Math.max(1, Number(d.dayOfMonth) || 1));
-  if (d.freq === 'afterCompletion') r.everyDays = clampEveryDays(d.everyDays);
+  if (d.freq === 'afterCompletion' || d.freq === 'interval') r.everyDays = clampEveryDays(d.everyDays);
   // Already-generated instances keep their own state; changes apply to future occurrences.
   run((l) => l.map((x) => (x.id === t.id ? { ...x, title: d.title.trim() || x.title, recurrence: r, stopped: false, ...(d.freq === 'afterCompletion' && !x.nextDate ? { nextDate: today } : {}) } : x)));
   editing.value = null;

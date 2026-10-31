@@ -37,6 +37,7 @@ export const rruleFor = (r) => {
   if (!r) return '';
   if (r.freq === 'daily') return 'FREQ=DAILY';
   if (r.freq === 'weekly') return `FREQ=WEEKLY;BYDAY=${(r.days || []).map((d) => WD[d]).join(',')}`;
+  if (r.freq === 'interval') return `FREQ=DAILY;INTERVAL=${Math.max(1, Math.min(365, Math.round(Number(r.everyDays)) || 3))}`;
   if (r.freq === 'monthly') return `FREQ=MONTHLY;BYMONTHDAY=${Number(r.dayOfMonth) || 1}`;
   return '';
 };

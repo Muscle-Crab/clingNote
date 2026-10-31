@@ -27,10 +27,13 @@
         <span class="sp-hint">Day of month</span>
         <input type="number" min="1" max="31" class="sp-input sp-num" v-model.number="model.dayOfMonth" :placeholder="String(dom)" aria-label="Day of month" data-test="sched-dom" />
       </div>
-      <div v-if="model.repeat === AFTER" class="sp-row">
+      <div v-if="model.repeat === AFTER || model.repeat === INTERVAL" class="sp-row">
         <span class="sp-hint">Every</span>
         <input type="number" min="1" max="365" class="sp-input sp-num" v-model.number="model.everyDays" placeholder="3" aria-label="Days after I finish" data-test="sched-every" />
-        <span class="sp-hint">days after I finish</span>
+        <select class="sp-input sp-mode" :value="model.repeat" aria-label="Count from" data-test="sched-every-mode" @change="setRepeat($event.target.value)">
+          <option :value="AFTER">days after I finish</option>
+          <option :value="INTERVAL">days, fixed</option>
+        </select>
       </div>
       <div v-if="model.repeat !== 'never'" class="sp-row">
         <span class="sp-hint">Remind</span>
@@ -47,17 +50,17 @@
 
 <script setup>
 import { computed } from 'vue';
-import { WEEKDAYS, describeRecurrence, fmtTime, formatScheduledDate, AFTER } from '@/utils/scheduling';
+import { WEEKDAYS, describeRecurrence, fmtTime, formatScheduledDate, AFTER, INTERVAL } from '@/utils/scheduling';
 import { XWEEK } from '@/utils/schedEdit';
 
 const model = defineModel({ type: Object, required: true });
 const props = defineProps({ minDate: { type: String, default: '' } });
-const OPTS = [{ v: 'never', l: 'Never' }, { v: 'daily', l: 'Daily' }, { v: 'weekly', l: 'Weekly' }, { v: 'monthly', l: 'Monthly' }, { v: AFTER, l: 'After done' }];
+const OPTS = [{ v: 'never', l: 'Never' }, { v: 'daily', l: 'Daily' }, { v: 'weekly', l: 'Weekly' }, { v: 'monthly', l: 'Monthly' }, { v: AFTER, l: 'Every N' }];
 const dayOf = (s) => (s ? new Date(`${s}T12:00:00`) : new Date());
 const dom = computed(() => dayOf(model.value.date).getDate());
 const toggle = () => { model.value.on = !model.value.on; if (model.value.on && !model.value.date) model.value.date = props.minDate || new Date().toLocaleDateString('en-CA'); };
-const segOn = (v) => model.value.repeat === v || (v === 'weekly' && model.value.repeat === XWEEK);
-const setRepeat = (v) => { model.value.repeat = v; if (v === XWEEK && !(Number(model.value.timesPerWeek) >= 1 && Number(model.value.timesPerWeek) <= 6)) model.value.timesPerWeek = 3; if (v === AFTER && !(Number(model.value.everyDays) >= 1)) model.value.everyDays = 3; if (v === 'weekly' && !(model.value.days || []).length) model.value.days = [dayOf(model.value.date).getDay()]; };
+const segOn = (v) => model.value.repeat === v || (v === 'weekly' && model.value.repeat === XWEEK) || (v === AFTER && model.value.repeat === INTERVAL);
+const setRepeat = (v) => { model.value.repeat = v; if (v === XWEEK && !(Number(model.value.timesPerWeek) >= 1 && Number(model.value.timesPerWeek) <= 6)) model.value.timesPerWeek = 3; if ((v === AFTER || v === INTERVAL) && !(Number(model.value.everyDays) >= (v === INTERVAL ? 2 : 1))) model.value.everyDays = 3; if (v === 'weekly' && !(model.value.days || []).length) model.value.days = [dayOf(model.value.date).getDay()]; };
 const toggleDay = (i) => { if (model.value.repeat === XWEEK) { model.value.repeat = 'weekly'; model.value.days = [i]; return; } const d = new Set(model.value.days || []); d.has(i) ? d.delete(i) : d.add(i); model.value.days = [...d].sort(); };
 const summary = computed(() => {
   const m = model.value; const t = m.time ? ` at ${fmtTime(m.time)}` : '';
@@ -66,6 +69,7 @@ const summary = computed(() => {
   const rem = m.remindAt ? ` Reminder ${fmtTime(m.remindAt)} each repeat day.` : '';
   if (m.repeat === XWEEK) return `${r}${t}, from ${formatScheduledDate(m.date)}. Shows each day until done ${m.timesPerWeek}× that week (Mon–Sun).${rem}`;
   if (m.repeat === AFTER) return `${r}${t}, first on ${formatScheduledDate(m.date)}. Next one is set when you finish it.${rem}`;
+  if (m.repeat === INTERVAL) return `${r}${t}, from ${formatScheduledDate(m.date)}, whether or not you finished the last one.${rem}`;
   return `${r}${t}, from ${formatScheduledDate(m.date)}${m.until ? ` until ${formatScheduledDate(m.until)}` : ''}. Each occurrence is its own task.${rem}`;
 });
 </script>

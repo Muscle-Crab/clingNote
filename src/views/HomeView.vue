@@ -4087,7 +4087,7 @@ const assistantExecutor = createAssistantExecutor({
     return { moved }; },
   autoSchedule: (o) => autoScheduleToday(o), // shared with the sergeant Replan
   habit: async (name, a) => { const uid = userId.value; let list = loadHabits(uid);
-    if (name === 'add_habit') { list = addHabit(list, a.name); saveHabits(uid, list); return { habits: habitSummary(list) }; }
+    if (name === 'add_habit') { list = addHabit(list, a.name, a.schedule); saveHabits(uid, list); return { habits: habitSummary(list, localDateStr()) }; }
     if (name === 'log_habit') { const r = logHabit(list, a.name, localDateStr(), a.done); if (!r.habit) return { error: `No habit called ${a.name}. Add it first?` }; saveHabits(uid, r.list); return { habit: habitSummary([r.habit], localDateStr())[0] }; }
     return { habits: habitSummary(list, localDateStr()) }; },
   placeReminder: async ({ title, place, saveHere }) => { const KEYP = `cn.places.${userId.value}`; let places = {}; try { places = JSON.parse(localStorage.getItem(KEYP) || '{}') || {}; } catch (e) { /* ignore */ }
