@@ -17,8 +17,27 @@ class ClingLockMonitor: DeviceActivityMonitor {
             LockShared.defaults?.set(["locked": true, "until": max(e[1], curUntil), "label": "ClingNote lock-in"], forKey: LockShared.stateKey)
             applyLockShield(); return
         }
+        if activity == WakeLock.activity { startWakeLock(); return }
         guard activity == .clingLock else { return }
         applyLockShield()
+    }
+    /// Wake-up auto-lock: shield the picked apps for today's window and tell the user (no Confirm tap needed). The app creates the
+    /// matching server lock (start = scheduled wake time) on its next open.
+    private func startWakeLock() {
+        guard let w = WakeLock.todayWindow() else { return }
+        let now = Date().timeIntervalSince1970 * 1000
+        guard now < w.untilMs else { return }
+        let blockRunning = ScheduledLocks.all().values.contains { $0.count == 2 && $0[0] <= now && now < $0[1] }
+        let st = LockShared.defaults?.dictionary(forKey: LockShared.stateKey) ?? [:]
+        let curUntil = (st["until"] as? Double) ?? Double((st["until"] as? Int) ?? 0)
+        guard WakeLock.shouldStart(skipYmd: LockShared.defaults?.string(forKey: WakeLock.skipKey), todayYmd: WakeLock.ymd(Date()),
+                                   blockRunning: blockRunning, curUntilMs: curUntil > now ? curUntil : 0, untilMs: w.untilMs) else { return }
+        LockShared.defaults?.set(["locked": true, "until": w.untilMs, "label": WakeLock.label], forKey: LockShared.stateKey)
+        LockShared.defaults?.set(w.startMs, forKey: WakeLock.lastStartKey)
+        applyLockShield()
+        let c = UNMutableNotificationContent()
+        c.title = "ClingNote"; c.body = "Your lock-in started"; c.interruptionLevel = .timeSensitive; c.sound = .default
+        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: WakeLock.startedIdentifier, content: c, trigger: nil))
     }
     private func applyLockShield() {
         if LockShared.defaults?.data(forKey: LockShared.selectionTokensKey) != nil { LockIn.shield(); return } // minus task-allowed apps
@@ -42,6 +61,15 @@ class ClingLockMonitor: DeviceActivityMonitor {
             if !LockEndAlertGate.isRealEnd(untilMs: untilMs, nowMs: Date().timeIntervalSince1970 * 1000) { return }
             var l = AppLocks.locked(); l[id] = nil; AppLocks.saveLocked(l); AppLocks.apply()
             DeviceActivityCenter().stopMonitoring([activity]) // free the slot (schedules count toward the system limit)
+            notifyLockEnded(); return
+        }
+        if activity == WakeLock.activity { // wake-up lock window ended (the daily schedule stays for tomorrow)
+            let st = LockShared.defaults?.dictionary(forKey: LockShared.stateKey) ?? [:]
+            guard (st["label"] as? String) == WakeLock.label else { return } // not ours (skipped, or another lock took over)
+            let untilMs = (st["until"] as? Double) ?? Double((st["until"] as? Int) ?? 0)
+            if !LockEndAlertGate.isRealEnd(untilMs: untilMs, nowMs: Date().timeIntervalSince1970 * 1000) { return } // re-schedule artifact
+            store.shield.applications = nil; store.shield.applicationCategories = nil; store.shield.webDomains = nil
+            LockShared.defaults?.set(["locked": false, "until": 0], forKey: LockShared.stateKey)
             notifyLockEnded(); return
         }
         if let key = ScheduledLocks.key(of: activity) { // evening mode: a scheduled block ended

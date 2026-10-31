@@ -85,6 +85,8 @@
           <section v-if="isOwn" class="pf-card pf-card--flush" data-test="lock-in-setting">
             <label class="pf-row"><span class="pf-ico" aria-hidden="true">🔒</span><span class="pf-row-title">Lock-in<small class="pf-dl-sub">8-hour lock: a timed day that shuts the app at the end. Off by default; you can skip it on any day.</small></span>
               <input type="checkbox" role="switch" class="pf-switch" data-test="lock-in-toggle" :checked="lockIn.enabled" :disabled="!lockIn.loaded" @change="onLockInToggle($event.target.checked)" /></label>
+            <label v-if="lockIn.enabled" class="pf-row pf-row--divided" data-test="wake-lock-row"><span class="pf-ico" aria-hidden="true">🌅</span><span class="pf-row-title">Lock at wake-up<small class="pf-dl-sub" data-test="wake-lock-sub">{{ wakeLockSub }}</small></span>
+              <input type="checkbox" role="switch" class="pf-switch" data-test="wake-lock-toggle" :checked="lockIn.wakeAuto" :disabled="!lockIn.loaded || (!lockIn.wakeAuto && !!wakeLockBlock)" @change="onWakeLockToggle($event.target.checked)" /></label>
             <label v-if="lockIn.enabled" class="pf-row pf-row--divided" data-test="lock-end-alert-row"><span class="pf-ico" aria-hidden="true">📣</span><span class="pf-row-title">Lock-end alert<small class="pf-dl-sub">How hard ClingNote alerts you when a lock ends</small></span>
               <select class="pf-time" data-test="lock-end-alert" :value="lockEndAlert" @change="onLockEndAlert($event.target.value)"><option v-for="o in LOCK_END_OPTS" :key="o.v" :value="o.v">{{ o.l }}</option></select></label>
             <label class="pf-row pf-row--divided" data-test="auto-focus-row"><span class="pf-ico" aria-hidden="true">🎯</span><span class="pf-row-title">Auto-start focus<small class="pf-dl-sub">Starts a task's timer at its start time (and when iPhone Focus turns on) and locks you in until it ends</small></span>
@@ -155,7 +157,8 @@
 </template>
 
 <script setup>
-import { lockIn, loadLockIn, setLockInEnabled } from '@/utils/lockIn';
+import { lockIn, loadLockIn, setLockInEnabled, setWakeAutoLock } from '@/utils/lockIn';
+import { wakeLockNote } from '@/utils/wakeLock';
 import { readAutoFocus, writeAutoFocus } from '@/utils/focusAutoStart';
 loadLockIn(true).catch(() => {});
 import { wake, wakeSupported, loadWake, setWakeEnabled, setWakeTime, setWakePromptTime, setWakeDays } from '@/composables/useWakeAlarm';
@@ -168,6 +171,12 @@ const toggleWakeDay = (n) => { const d = wake.value.days; const next = d.include
 const wakePromptHint = computed(() => (toMin(wake.value.promptTime) < toMin(wake.value.time) ? "Morning: asks about that morning's alarm" : 'Evening: asks about the next morning'));
 const autoFocus = ref(readAutoFocus(localStorage)); // per device (src/utils/focusAutoStart.js)
 const onAutoFocus = (on) => { writeAutoFocus(localStorage, on); autoFocus.value = !!on; };
+// B44 "Lock at wake-up": the picked apps lock at the wake time for the day length, even with ClingNote closed. Needs Screen Time + apps.
+const lockSt = ref({ authorization: 'unsupported', selectionCount: 0 });
+if (lockAvailable()) clingLock.status().then((r) => { if (r) lockSt.value = r; }).catch(() => {});
+const wakeLockBlock = computed(() => wakeLockNote({ native: lockAvailable(), authorized: lockSt.value.authorization === 'approved', selectionCount: lockSt.value.selectionCount || 0, wakeTime: '00:00' } /* the wake time itself is checked on Home */));
+const wakeLockSub = computed(() => wakeLockBlock.value || 'Your picked apps lock at your wake time for your day length, even when ClingNote is closed. Skip lock-in today still works.');
+const onWakeLockToggle = async (on) => { const u = auth.currentUser; if (!u) return; try { await setWakeAutoLock(u.uid, on); } catch (e) { console.warn('wake lock toggle:', e); loadLockIn(true).catch(() => {}); } };
 const onLockInToggle = async (on) => { const u = auth.currentUser; if (!u) return; try { await setLockInEnabled(u.uid, on); } catch (e) { console.warn('lock-in toggle:', e); loadLockIn(true).catch(() => {}); } };
 // Lock-end alert level (App Group defaults via ClingLock.setLockEndAlert; localStorage mirror for web/first paint).
 const LOCK_END_OPTS = [{ v: 'off', l: 'Off' }, { v: 'subtle', l: 'Subtle' }, { v: 'standard', l: 'Standard' }, { v: 'loud', l: 'Loud' }, { v: 'maximum', l: 'Maximum' }];

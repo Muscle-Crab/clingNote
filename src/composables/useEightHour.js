@@ -107,12 +107,13 @@ export const savePlan = async ({ wakeTime, taskCount }) => {
   finally { st.busy = false; }
 };
 // Starts the day NOW for `hours` (only called from the morning Confirm). End = confirm time + hours; frozen for the day.
-export const startNow = async (hours, blocks) => {
+// opts.autoWake (B44 wake-up auto-lock): the window starts at today's wake time (server-checked; users/{uid}.wakeAutoLock).
+export const startNow = async (hours, blocks, opts = {}) => {
   const h = core.clampHours(hours == null ? hoursPref.value : hours);
   st.busy = true;
-  try { const d = await call('start', { hours: h, ...(Array.isArray(blocks) && blocks.length ? { blocks } : {}) }); apply(d); return d; }
+  try { const d = await call('start', { hours: h, ...(Array.isArray(blocks) && blocks.length ? { blocks } : {}), ...(opts.autoWake ? { autoWake: true } : {}) }); apply(d); return d; }
   catch (e) {
-    if (!isUnavailable(e) || e.status === 401) throw e;
+    if (!isUnavailable(e) || e.status === 401 || opts.autoWake) throw e; // a backdated start must be server-checked: retried next open
     const plan = st.data?.plan || readCachedPlan(); const tz = plan?.tz || deviceTz(); const now = nowMs();
     const prev = localLockToday(plan); if (prev) return st.data; // already confirmed today: frozen
     const lock = { dayKey: core.dayKeyIn(tz, now), dayName: core.dayNameIn ? core.dayNameIn(tz, now) : '', startMs: now, endMs: now + core.hoursMs(h), hours: h, wakeTime: plan?.wakeTime, tz, local: true };

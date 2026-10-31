@@ -347,6 +347,7 @@ import { sfx } from '@/utils/sfx';
 import EightHourCard from '@/components/home/EightHourCard.vue';
 import WakeAlarmPrompt from '@/components/home/WakeAlarmPrompt.vue';
 import { lockIn, loadLockIn, skipLockInToday } from '@/utils/lockIn';
+import { wakeLockPlan, shouldReconcileWake } from '@/utils/wakeLock';
 import { homeDay } from '@/utils/homeDay';
 import DayStartPrompt from '@/components/eighthour/DayStartPrompt.vue';
 import { useEightHour, syncAfterAuth, setDayLengthHours, loadDayLengthHours, promptSeenFor, markPromptSeen } from '@/composables/useEightHour';
@@ -3656,8 +3657,22 @@ const ehBusy = ref(false);
 // no plan yet => no dayKey: an empty skipDate must not read as "skipped today" (that blocked Start Day for planless web users)
 const lockInToday = computed(() => lockIn.value.enabled && !(lockIn.value.skipDate && lockIn.value.skipDate === (eh.phaseInfo.value.dayKey || '')));
 const openDayPrompt = () => { if (lockInToday.value && eh.phase.value === 'ready' && !eh.phaseInfo.value.scheduled && !eh.lock.value && isToday(selectedDayIndex.value)) { ehStartError.value = ''; dayPromptOpen.value = true; } };
-const maybeShowDayPrompt = () => {
+// B44 wake-up auto-lock: iOS already locked the apps at the wake time, so on open the day's server lock is created from that time
+// (no prompt, no Confirm). Once per day key; a refusal (e.g. window over) falls back to the normal prompt.
+let wakeReconciled = '';
+const reconcileWakeLock = async () => {
+  const pi = eh.phaseInfo.value; const dk = pi.dayKey || '';
+  if (!dk || wakeReconciled === dk || ehStarting) return false;
+  if (!shouldReconcileWake({ enabled: lockIn.value.wakeAuto, lockInToday: lockInToday.value, phase: eh.phase.value, hasLock: !!eh.lock.value, wakeMs: pi.wakeMs, nowMs: eh.nowMs(), hours: eh.hoursPref.value })) return false;
+  if (lockAvailable()) { const ws = await clingLock.wakeLockStatus().catch(() => null); if (!ws || !ws.scheduled) return false; } // iOS never locked (no Screen Time / apps): normal prompt
+  wakeReconciled = dk; ehStarting = true;
+  try { await eh.startNow(eh.hoursPref.value, null, { autoWake: true }); await ensureLegacyDayStarted().catch(() => {}); await fetchSelectedDayRoutine(); return true; }
+  catch (e) { console.warn('wake lock reconcile:', e && e.message); return false; }
+  finally { ehStarting = false; }
+};
+const maybeShowDayPrompt = async () => {
   if (!userId.value || !lockInToday.value || eh.phase.value !== 'ready' || eh.lock.value || dayPromptOpen.value || !isToday(selectedDayIndex.value)) return;
+  if (await reconcileWakeLock()) return;
   const dk = eh.phaseInfo.value.dayKey || '';
   if (!dk || promptSeenFor() === dk) return; // once per day; the card's Start button reopens it
   markPromptSeen(dk); openDayPrompt();
@@ -3895,6 +3910,19 @@ const syncAppLock = async () => {
   } else if (act === 'stop') { lockOn = null; await clingLock.stopLock(); }
   else if (want) lockOn = endMs;
   scheduleLaterLocks(st);
+  syncWakeLock(st);
+};
+// B44 wake-up auto-lock: keep iOS's daily wake schedule in step with the setting, wake time, day length, evening blocks and skip.
+let wakeSig = '';
+const syncWakeLock = async (st) => {
+  const pi = eh.phaseInfo.value; const plan = eh.plan.value || {};
+  const r = wakeLockPlan({ enabled: lockIn.value.wakeAuto, lockInEnabled: lockIn.value.enabled, native: true, authorized: st.authorization === 'approved', selectionCount: st.selectionCount || 0,
+    wakeTime: plan.wakeTime, hours: eh.hoursPref.value, wakeMs: pi.wakeMs, blocks: eh.pendingBlocks.value });
+  const skip = lockIn.value.skipDate && lockIn.value.skipDate === (pi.dayKey || '') ? localDateStr() : '';
+  const sig = JSON.stringify([r.action, r.hour, r.minute, r.minutes, skip]); if (sig === wakeSig) return; wakeSig = sig;
+  if (r.action === 'schedule') { const x = await clingLock.scheduleWakeLock(r); if (!x || x.monitor !== 'ok') { wakeSig = ''; console.warn('[clingLock] scheduleWakeLock', x && x.monitor); } }
+  else await clingLock.cancelWakeLock();
+  await clingLock.setWakeSkip(skip);
 };
 // Evening mode: hand every pending lock-in block to iOS (DeviceActivity) so the shield goes up at its start even when ClingNote is closed.
 // Same opt-in as the day lock (lock pref + picked apps). Each block is scheduled once per key; native ignores blocks < 15 min long.
@@ -4174,7 +4202,7 @@ watch(userId, (u) => { if (u) loadLockIn(true).then(maybeShowDayPrompt).catch(()
 const skipLockIn = async () => {
   const dk = eh.phaseInfo.value.dayKey || ''; if (!userId.value || !dk) return;
   dayPromptOpen.value = false;
-  try { await skipLockInToday(userId.value, dk); await ensureLegacyDayStarted(); } catch (e) { console.warn('skip lock-in:', e); }
+  try { await skipLockInToday(userId.value, dk); if (lockAvailable()) clingLock.setWakeSkip(localDateStr()).catch(() => {}); await ensureLegacyDayStarted(); } catch (e) { console.warn('skip lock-in:', e); }
 };
 watch([() => eh.phase.value, () => eh.phaseInfo.value.dayKey, userId, selectedDayIndex, () => lockInToday.value], maybeShowDayPrompt, { immediate: true });
 
