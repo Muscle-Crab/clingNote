@@ -11,7 +11,8 @@ export const readLock = (uid, s) => {
 };
 export const writeLock = (uid, l, s) => {
   const ls = store(s); if (!ls || !uid || !l || !Number.isFinite(l.endMs)) return;
-  try { ls.setItem(keyFor(uid), JSON.stringify({ uid, dayKey: l.dayKey, dayName: l.dayName, startMs: l.startMs, endMs: l.endMs, hours: l.hours, local: !!l.local, wakeTime: l.wakeTime, tz: l.tz, earned: l.earned || 0, target: l.target || 0, done: l.done || 0, taskCount: l.taskCount || 0, totalPoints: l.totalPoints || 0 })); } catch (e) { /* private mode */ }
+  try { ls.setItem(keyFor(uid), JSON.stringify({ uid, dayKey: l.dayKey, dayName: l.dayName, startMs: l.startMs, endMs: l.endMs, hours: l.hours, local: !!l.local, wakeTime: l.wakeTime, tz: l.tz, earned: l.earned || 0, target: l.target || 0, done: l.done || 0, taskCount: l.taskCount || 0, totalPoints: l.totalPoints || 0,
+    index: Number.isInteger(l.index) ? l.index : 0, pending: Array.isArray(l.pending) ? l.pending.map((b) => ({ dayKey: b.dayKey, index: b.index, startMs: b.startMs, endMs: b.endMs, hours: b.hours })) : [] })); } catch (e) { /* private mode */ }
 };
 // In-memory server state belongs to one uid too: anything fetched for another uid must not decide the shutdown.
 export const lockFor = (data, dataUid, uid) => (data && data.lock && (dataUid || null) === (uid || null) ? data.lock : null);

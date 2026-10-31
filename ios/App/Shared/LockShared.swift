@@ -34,6 +34,25 @@ extension ManagedSettingsStore.Name { static let clingLock = Self("clingLock") }
 @available(iOS 16.0, *)
 extension DeviceActivityName { static let clingLock = Self("clingLock") }
 
+/// Evening mode: later lock-in blocks scheduled ahead of time, one DeviceActivity each ("clingLockAt.<key>"), so the shield goes up at
+/// the block start even when ClingNote is closed. App Group map key -> [startMs, untilMs]. A block shorter than 15 min is never scheduled
+/// (DeviceActivity minimum interval); iOS starts/ends intervals at minute granularity and may deliver them late.
+@available(iOS 16.0, *)
+enum ScheduledLocks {
+    static let prefix = "clingLockAt."
+    static let storeKey = "clingnote.scheduledLocks.v1"
+    static func all() -> [String: [Double]] { (LockShared.defaults?.dictionary(forKey: storeKey) as? [String: [Double]]) ?? [:] }
+    static func save(_ m: [String: [Double]]) { LockShared.defaults?.set(m, forKey: storeKey) }
+    static func name(_ key: String) -> DeviceActivityName { DeviceActivityName(prefix + key) }
+    static func key(of activity: DeviceActivityName) -> String? { activity.rawValue.hasPrefix(prefix) ? String(activity.rawValue.dropFirst(prefix.count)) : nil }
+    /// Drop entries that already ended (and their schedules): they still count toward the system's activity limit.
+    static func cleanupExpired(nowMs: Double = Date().timeIntervalSince1970 * 1000) {
+        var m = all(); let done = m.filter { $0.value.count == 2 && $0.value[1] <= nowMs }.map { $0.key }
+        if done.isEmpty { return }
+        done.forEach { m[$0] = nil }; save(m); DeviceActivityCenter().stopMonitoring(done.map { name($0) })
+    }
+}
+
 // Per-app locks by user label ("lock TikTok for 2h"). Apple only hands out opaque ApplicationTokens from
 // FamilyActivityPicker, so each picked token is stored with the name the user confirmed for it.
 @available(iOS 16.0, *)

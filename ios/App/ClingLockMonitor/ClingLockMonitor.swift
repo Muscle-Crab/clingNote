@@ -9,8 +9,20 @@ class ClingLockMonitor: DeviceActivityMonitor {
     let store = ManagedSettingsStore(named: .clingLock)
     override func intervalDidStart(for activity: DeviceActivityName) {
         super.intervalDidStart(for: activity)
-        if activity == .clingLock, LockShared.defaults?.data(forKey: LockShared.selectionTokensKey) != nil { LockIn.shield(); return } // minus task-allowed apps
-        guard activity == .clingLock, let data = LockShared.defaults?.data(forKey: LockShared.selectionKey),
+        if let key = ScheduledLocks.key(of: activity) { // evening mode: a scheduled block begins
+            let now = Date().timeIntervalSince1970 * 1000
+            guard let e = ScheduledLocks.all()[key], e.count == 2, now < e[1] else { return }
+            let st = LockShared.defaults?.dictionary(forKey: LockShared.stateKey) ?? [:]
+            let curUntil = (st["until"] as? Double) ?? Double((st["until"] as? Int) ?? 0)
+            LockShared.defaults?.set(["locked": true, "until": max(e[1], curUntil), "label": "ClingNote lock-in"], forKey: LockShared.stateKey)
+            applyLockShield(); return
+        }
+        guard activity == .clingLock else { return }
+        applyLockShield()
+    }
+    private func applyLockShield() {
+        if LockShared.defaults?.data(forKey: LockShared.selectionTokensKey) != nil { LockIn.shield(); return } // minus task-allowed apps
+        guard let data = LockShared.defaults?.data(forKey: LockShared.selectionKey),
               let s = try? PropertyListDecoder().decode(FamilyActivitySelection.self, from: data) else { return }
         store.shield.applications = s.applicationTokens.isEmpty ? nil : s.applicationTokens
         store.shield.applicationCategories = s.categoryTokens.isEmpty ? nil : .specific(s.categoryTokens)
@@ -30,6 +42,18 @@ class ClingLockMonitor: DeviceActivityMonitor {
             if !LockEndAlertGate.isRealEnd(untilMs: untilMs, nowMs: Date().timeIntervalSince1970 * 1000) { return }
             var l = AppLocks.locked(); l[id] = nil; AppLocks.saveLocked(l); AppLocks.apply()
             DeviceActivityCenter().stopMonitoring([activity]) // free the slot (schedules count toward the system limit)
+            notifyLockEnded(); return
+        }
+        if let key = ScheduledLocks.key(of: activity) { // evening mode: a scheduled block ended
+            let untilMs = ScheduledLocks.all()[key]?.last ?? 0
+            if !LockEndAlertGate.isRealEnd(untilMs: untilMs, nowMs: Date().timeIntervalSince1970 * 1000) { return } // restart artifact
+            var m = ScheduledLocks.all(); m[key] = nil; ScheduledLocks.save(m)
+            DeviceActivityCenter().stopMonitoring([activity])
+            let st = LockShared.defaults?.dictionary(forKey: LockShared.stateKey) ?? [:]
+            let curUntil = (st["until"] as? Double) ?? Double((st["until"] as? Int) ?? 0)
+            if curUntil > untilMs + 60_000 { return } // a longer lock (app's own .clingLock) is still running: keep the shield
+            store.shield.applications = nil; store.shield.applicationCategories = nil; store.shield.webDomains = nil
+            LockShared.defaults?.set(["locked": false, "until": 0], forKey: LockShared.stateKey)
             notifyLockEnded(); return
         }
         guard activity == .clingLock else { return }

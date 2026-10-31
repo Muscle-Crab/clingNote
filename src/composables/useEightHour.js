@@ -74,8 +74,16 @@ const apply = (d) => { if (d && d.lock) cacheLock(d.lock); st.uid = curUid(); st
 
 export const nowMs = () => Date.now() + st.offset; // server time (offset measured at the last fetch)
 
+// Evening mode: when a scheduled block's start passes, ask the server once (it starts the block at its fixed time).
+let dueFor = '';
+const dueCheck = () => {
+  const l = shutLock(); const b = l && core.nextPending(l, nowMs());
+  if (!b || nowMs() < b.startMs || !auth.currentUser) return;
+  const k = core.sessionKey(b.dayKey, b.index); if (dueFor === k) return;
+  dueFor = k; refresh().catch(() => {});
+};
 const ensureTimers = () => {
-  if (!timer) timer = setInterval(() => { tick.value = nowMs(); }, 1000);
+  if (!timer) timer = setInterval(() => { tick.value = nowMs(); dueCheck(); }, 1000);
   if (!syncTimer) syncTimer = setInterval(() => { if (auth.currentUser) refresh().catch(() => {}); }, 5 * 60 * 1000);
   if (!visHooked && typeof document !== 'undefined') { visHooked = true; document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && auth.currentUser) refresh().catch(() => {}); }); }
 };
@@ -99,10 +107,10 @@ export const savePlan = async ({ wakeTime, taskCount }) => {
   finally { st.busy = false; }
 };
 // Starts the day NOW for `hours` (only called from the morning Confirm). End = confirm time + hours; frozen for the day.
-export const startNow = async (hours) => {
+export const startNow = async (hours, blocks) => {
   const h = core.clampHours(hours == null ? hoursPref.value : hours);
   st.busy = true;
-  try { const d = await call('start', { hours: h }); apply(d); return d; }
+  try { const d = await call('start', { hours: h, ...(Array.isArray(blocks) && blocks.length ? { blocks } : {}) }); apply(d); return d; }
   catch (e) {
     if (!isUnavailable(e) || e.status === 401) throw e;
     const plan = st.data?.plan || readCachedPlan(); const tz = plan?.tz || deviceTz(); const now = nowMs();
@@ -111,6 +119,8 @@ export const startNow = async (hours) => {
     cacheLock(lock); const d = { ...localState(plan), now }; d.lock = lock; apply(d); st.error = e.message; return d;
   } finally { st.busy = false; }
 };
+// Evening mode: fix later lock-in block(s) [{ time: 'HH:MM', hours }]. Server-only (no offline fallback: a schedule must be server-checked).
+export const scheduleNext = async (blocks) => { st.busy = true; try { const d = await call('schedule', { blocks }); apply(d); return d; } finally { st.busy = false; } };
 export const reportProgress = async () => { try { apply(await call('progress')); } catch (e) { /* server recounts at the end of the window anyway */ } };
 
 // After sign-up / sign-in: fetch the server state and, if the account has no plan yet, save the wake time picked in onboarding.
@@ -130,7 +140,7 @@ export const useEightHour = () => {
   const lockRaw = computed(() => lockFor(st.data, st.uid, curUid()) || (st.data?.offline ? st.data.lock : null));
   const phaseInfo = computed(() => {
     if (!st.data) return { phase: 'loading' };
-    const lk = lockRaw.value && { startMs: lockRaw.value.startMs, endMs: lockRaw.value.endMs, dayKey: lockRaw.value.dayKey };
+    const lk = lockRaw.value && { startMs: lockRaw.value.startMs, endMs: lockRaw.value.endMs, dayKey: lockRaw.value.dayKey, index: lockRaw.value.index, pending: lockRaw.value.pending };
     return core.evaluatePhase({ wakeTime: plan.value?.wakeTime, tz: plan.value?.tz, nowMs: (tick.value, nowMs()), lock: lk, hours: hoursPref.value });
   });
   const phase = computed(() => phaseInfo.value.phase);
@@ -160,10 +170,18 @@ export const useEightHour = () => {
   const shutdown = computed(() => {
     const l = shutLock(); const now = (tick.value, nowMs());
     if (!l || !core.isShut(l, now)) return null;
-    const until = core.shutUntilMs(l);
+    const lastEnd = Math.max(l.endMs, ...core.pendingOf(l).map((b) => b.endMs));
+    const until = core.shutUntilMs({ ...l, endMs: lastEnd });
     return { untilMs: until, untilLabel: core.fmtClock(until, l.tz || deviceTz()), earned: l.earned || 0, target: l.target || 0, done: l.done || 0, total: l.taskCount || 0, met: (l.target || 0) > 0 && (l.earned || 0) >= l.target };
   });
-  return { st, dayHours, warning, hoursPref, data, plan, lock, phase, phaseInfo, running, remainingMs, countdown, endsLabel, startsLabel, stats, shutdown, reward: computed(() => st.data?.reward || ''),
+  // Next scheduled block (evening mode), shown as "Next 6:00 PM" while the app is open in the gap.
+  const nextBlock = computed(() => {
+    const l = lockRaw.value; const b = l && core.nextPending(l, (tick.value, nowMs())); if (!b) return null;
+    const tz = plan.value?.tz || l.tz || deviceTz();
+    return { ...b, startLabel: core.fmtClock(b.startMs, tz), endLabel: core.fmtClock(b.endMs, tz) };
+  });
+  const pendingBlocks = computed(() => core.pendingOf(lockRaw.value).filter((b) => b.endMs > (tick.value, nowMs())));
+  return { st, dayHours, nextBlock, pendingBlocks, scheduleNext, warning, hoursPref, data, plan, lock, phase, phaseInfo, running, remainingMs, countdown, endsLabel, startsLabel, stats, shutdown, reward: computed(() => st.data?.reward || ''),
     refresh, savePlan, startNow, reportProgress, nowMs };
 };
 

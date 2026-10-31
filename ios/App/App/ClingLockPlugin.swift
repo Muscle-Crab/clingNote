@@ -22,6 +22,7 @@ public class ClingLockPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "pickApps", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "startLock", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "stopLock", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "scheduleLock", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "pickNamedApps", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "labeledApps", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "lockApps", returnType: CAPPluginReturnPromise),
@@ -109,7 +110,37 @@ public class ClingLockPlugin: CAPPlugin, CAPBridgedPlugin {
         Self.clearShield()
         LockShared.defaults?.set(["locked": false, "until": 0], forKey: LockShared.stateKey) // before stop: extension sees "stopped by app"
         DeviceActivityCenter().stopMonitoring([.clingLock])
+        // Evening mode: also stop scheduled blocks that already started or ended. FUTURE blocks stay: they were fixed before they
+        // started and the app calls stopLock on every open while no block runs, which must not cancel tonight's block.
+        let now = Date().timeIntervalSince1970 * 1000
+        var m = ScheduledLocks.all(); let due = m.filter { $0.value.count == 2 && $0.value[0] <= now }.map { $0.key }
+        if !due.isEmpty { due.forEach { m[$0] = nil }; ScheduledLocks.save(m); DeviceActivityCenter().stopMonitoring(due.map { ScheduledLocks.name($0) }) }
         call.resolve(["locked": false])
+    }
+
+    /// Evening mode: schedule a later lock-in block { startMs, untilMs, key } as its own DeviceActivity ("clingLockAt.<key>").
+    /// The monitor extension raises the shield at startMs and lifts it at untilMs, even when ClingNote is not running.
+    /// Same key again = no-op (blocks can't be moved or shortened). Limits: >= 15 min long, starts >= 1 min ahead.
+    @objc func scheduleLock(_ call: CAPPluginCall) {
+        guard #available(iOS 16.0, *) else { call.reject("iOS 16 required"); return }
+        let startMs = call.getDouble("startMs") ?? 0, untilMs = call.getDouble("untilMs") ?? 0
+        let key = (call.getString("key") ?? "").filter { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" }
+        guard !key.isEmpty else { call.reject("key required"); return }
+        let start = Date(timeIntervalSince1970: startMs / 1000), until = Date(timeIntervalSince1970: untilMs / 1000)
+        guard start.timeIntervalSinceNow > 60 else { call.reject("startMs must be > 1 min ahead"); return }
+        guard until.timeIntervalSince(start) >= 15 * 60 else { call.reject("blocks under 15 min can't be scheduled"); return }
+        LockShared.installLockEndSound()
+        ScheduledLocks.cleanupExpired()
+        var m = ScheduledLocks.all()
+        if m[key] != nil, DeviceActivityCenter().activities.contains(ScheduledLocks.name(key)) { call.resolve(["scheduled": true, "monitor": "ok", "existing": true]); return }
+        m[key] = [startMs, untilMs]; ScheduledLocks.save(m)
+        do {
+            try DeviceActivityCenter().startMonitoring(ScheduledLocks.name(key), during: DeviceActivitySchedule(intervalStart: AppLocks.comps(start), intervalEnd: AppLocks.comps(until), repeats: false))
+            call.resolve(["scheduled": true, "monitor": "ok"])
+        } catch {
+            m[key] = nil; ScheduledLocks.save(m)
+            call.resolve(["scheduled": false, "monitor": "failed: \(error)"])
+        }
     }
 
     /// Lock-end notification level read by ClingLockMonitor.notifyLockEnded(). Omit `level` to just read it.

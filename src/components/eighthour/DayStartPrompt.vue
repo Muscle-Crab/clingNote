@@ -12,6 +12,14 @@
           <button type="button" class="dsp-step" :disabled="idx >= HOUR_OPTIONS.length - 1" aria-label="Half an hour more" data-test="day-prompt-plus" @click="idx++">+</button>
         </div>
         <p class="dsp-sub">Ends around <b data-test="day-prompt-preview">{{ endLabel }}</b> if you start now.</p>
+        <!-- Evening mode (split day): one compact row; tapping reveals a later block inline. The gap in between stays open. -->
+        <button v-if="!split.on" type="button" class="dsp-split" data-test="day-prompt-split" @click="split.on = true">+ Split: add a later block</button>
+        <div v-else class="dsp-later" data-test="day-prompt-later">
+          <span>Later</span>
+          <input v-model="split.time" type="time" required aria-label="Later block start" data-test="day-prompt-later-time">
+          <select v-model.number="split.hours" aria-label="Later block hours" data-test="day-prompt-later-hours"><option v-for="h in BLOCK_HOUR_OPTIONS" :key="h" :value="h">{{ hoursLabel(h) }}h</option></select>
+          <button type="button" class="dsp-x" aria-label="Remove later block" data-test="day-prompt-later-x" @click="split.on = false">✕</button>
+        </div>
         <p v-if="target.total" class="dsp-sub" data-test="day-prompt-target">Today's target: <b>{{ dayPtsLabel(earned, target.target) }}</b> <span class="dsp-of">({{ target.total }} available)</span></p>
         <slot name="checkin" />
         <button type="button" class="dsp-btn dsp-btn--primary" data-test="day-prompt-next" @click="step = 'confirm'">Continue</button>
@@ -21,12 +29,13 @@
         <h2 id="dsp-t">Are you sure?</h2>
         <p class="dsp-sub" data-test="day-prompt-confirm-text">Your day will end at <b data-test="day-prompt-end">{{ endLabel }}</b> and the app shuts down then.</p>
         <p v-if="target.total" class="dsp-sub" data-test="day-prompt-target-confirm">You need <b>{{ dayPtsLabel(earned, target.target) }}</b> today.</p>
-        <p class="dsp-fine">{{ hoursLabel(hours) }} hours, starting when you confirm. This can't be changed today.</p>
+        <p v-if="laterLabel" class="dsp-sub" data-test="day-prompt-later-text">Then again <b>{{ laterLabel }}</b>. Open in between.</p>
+        <p class="dsp-fine">{{ hoursLabel(hours) }} hours, starting when you confirm. {{ laterLabel ? 'Blocks can\'t be shortened or removed today.' : 'This can\'t be changed today.' }}</p>
         <label v-if="canLock" class="dsp-fine dsp-lock" data-test="day-prompt-lock"><input v-model="lockApps" type="checkbox" /> 🔒 Lock my distracting apps until the day ends</label>
         <p v-if="error" class="dsp-err" role="alert" data-test="day-prompt-error">{{ error }}</p>
         <div class="dsp-row">
           <button type="button" class="dsp-btn" :disabled="busy" data-test="day-prompt-change" @click="step = 'pick'">Change</button>
-          <button type="button" class="dsp-btn dsp-btn--primary" :disabled="busy" data-test="day-prompt-confirm" @click="$emit('confirm', hours, { lock: canLock && lockApps })">{{ busy ? 'Starting…' : 'Confirm' }}</button>
+          <button type="button" class="dsp-btn dsp-btn--primary" :disabled="busy" data-test="day-prompt-confirm" @click="$emit('confirm', hours, { lock: canLock && lockApps, blocks: laterBlocks })">{{ busy ? 'Starting…' : 'Confirm' }}</button>
           <button type="button" class="dsp-btn dsp-skip" :disabled="busy" data-test="day-prompt-skip" @click="$emit('skip')">Skip lock-in today</button>
         </div>
       </template>
@@ -35,8 +44,8 @@
 </template>
 
 <script setup>
-import { computed, ref, onBeforeUnmount } from 'vue';
-import { HOUR_OPTIONS, hoursLabel, clampHours, hoursMs, fmtClock } from '@/utils/eightHour';
+import { computed, ref, reactive, onBeforeUnmount } from 'vue';
+import { HOUR_OPTIONS, BLOCK_HOUR_OPTIONS, hoursLabel, clampHours, hoursMs, fmtClock, nextAt } from '@/utils/eightHour';
 import { previewDayTarget, dayPtsLabel } from '@/utils/dayTarget';
 
 const props = defineProps({
@@ -48,6 +57,10 @@ const hours = ref(clampHours(props.initialHours));
 const idx = computed({ get: () => Math.max(0, HOUR_OPTIONS.indexOf(hours.value)), set: (i) => { hours.value = HOUR_OPTIONS[Math.min(HOUR_OPTIONS.length - 1, Math.max(0, i))]; } });
 const target = computed(() => previewDayTarget(props.tasks, hours.value, props.stats)); // recomputed as the user changes hours or tasks
 const tick = ref(0); const tickId = setInterval(() => { tick.value++; }, 15000); onBeforeUnmount(() => clearInterval(tickId));
+const split = reactive({ on: false, time: '19:00', hours: 3 });
+const laterBlocks = computed(() => (split.on && split.time ? [{ time: split.time, hours: split.hours }] : []));
+const laterLabel = computed(() => { if (!laterBlocks.value.length) return ''; void tick.value; const tz = props.tz || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const s = nextAt(split.time, tz, props.nowMs() + hoursMs(hours.value) - 1); return s ? `${fmtClock(s, tz)}–${fmtClock(s + split.hours * 3600000, tz)}` : ''; });
 const endLabel = computed(() => { void tick.value; const tz = props.tz || Intl.DateTimeFormat().resolvedOptions().timeZone; return fmtClock(props.nowMs() + hoursMs(hours.value), tz); });
 </script>
 
@@ -64,5 +77,9 @@ const endLabel = computed(() => { void tick.value; const tz = props.tz || Intl.D
 .dsp-btn { min-height: 44px; padding: 0 16px; border-radius: 12px; border: 1px solid var(--c-border, #2a2a2e); background: var(--c-surface-2, #22252a); color: inherit; font-weight: 700; width: 100%; }
 .dsp-btn--primary { background: #378ADD; border-color: #378ADD; color: #fff; }
 .dsp-skip { flex-basis: 100%; background: transparent; border: 0; text-decoration: underline; opacity: .8; }
+.dsp-split { background: none; border: 0; color: #9fb7e0; font-weight: 600; font-size: .9rem; min-height: 40px; margin: -6px 0 8px; cursor: pointer; }
+.dsp-later { display: flex; align-items: center; justify-content: center; gap: 8px; margin: -4px 0 12px; font-size: .9rem; color: var(--c-text-2, #b0b0b0); }
+.dsp-later input, .dsp-later select { height: 38px; border-radius: 10px; background: var(--c-surface-2, #22252a); color: inherit; border: 1px solid var(--c-border, #2a2a2e); padding: 0 8px; font-weight: 600; color-scheme: dark; }
+.dsp-x { width: 36px; height: 38px; border: 0; background: none; color: inherit; opacity: .7; cursor: pointer; }
 .dsp-lock { display: flex; gap: .5rem; align-items: center; font-size: 17px; min-height: 44px; cursor: pointer; }
 </style>

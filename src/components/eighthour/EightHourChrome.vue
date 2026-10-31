@@ -15,6 +15,15 @@
       <h2 id="ehs-t">Your {{ hoursText }} hours are up.</h2>
       <p>ClingNote is shut for today. Come back tomorrow at <b data-test="eh-shut-until">{{ shut.untilLabel }}</b>.</p>
       <p class="ehs-res" :class="shut.met ? 'ok' : 'miss'" data-test="eh-shut-result">{{ shut.met ? 'Goal met' : 'Goal missed' }} · {{ shut.earned }}/{{ shut.target }} pts</p>
+      <!-- Evening mode: one compact row; tapping it reveals time + hours inline. A scheduled block can't be cancelled or shortened. -->
+      <button v-if="schedOk && !sch.open" type="button" class="ehs-row" data-test="eh-sched-open" @click="openSched">Schedule next lock-in <span aria-hidden="true">›</span></button>
+      <form v-else-if="schedOk" class="ehs-sched" data-test="eh-sched" @submit.prevent="doSchedule">
+        <input v-model="sch.time" type="time" required aria-label="Start time" data-test="eh-sched-time">
+        <select v-model.number="sch.hours" aria-label="Hours" data-test="eh-sched-hours"><option v-for="h in BLOCK_HOUR_OPTIONS" :key="h" :value="h">{{ hoursLabel(h) }}h</option></select>
+        <button type="submit" :disabled="eh.st.busy" data-test="eh-sched-go">Schedule</button>
+        <small>Opens your tasks until it starts. Can't be cancelled or shortened.</small>
+      </form>
+      <p v-if="sch.err" class="ehs-err" role="alert" data-test="eh-sched-err">{{ sch.err }}</p>
       <nav class="ehs-links">
         <router-link :to="profileLink">Settings</router-link><router-link to="/support">Support</router-link><router-link to="/privacy-policy">Privacy</router-link><router-link to="/sub">Premium</router-link>
         <button type="button" @click="signOutNow" data-test="eh-shut-signout">Sign out</button>
@@ -28,7 +37,7 @@
 </template>
 
 <script setup>
-import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue';
+import { computed, ref, reactive, watch, onMounted, onBeforeUnmount } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { auth } from '@/firebaseConfig';
@@ -37,7 +46,7 @@ import { paceOf, pendingCelebration } from '@/utils/pressure';
 import { localYMD } from '@/utils/localDate';
 import { pillState, SHUT_ROUTES, PILL_ROUTES, SEEN_KEY } from '@/utils/eightHourChrome';
 import { speak } from '@/composables/useSpeech';
-import { hoursLabel, WARN_MINUTES } from '@/utils/eightHour';
+import { hoursLabel, WARN_MINUTES, BLOCK_HOUR_OPTIONS } from '@/utils/eightHour';
 import { scheduleLocal } from '@/utils/localNotify';
 import { homeDayFor } from '@/utils/homeDay';
 import { lockIn } from '@/utils/lockIn';
@@ -67,12 +76,20 @@ const pill = computed(() => {
   if (!uid.value || !PILL_ROUTES.includes(route.name) || route.meta.bare) return null;
   const l = eh.lock.value; const hd = homeDayFor(getTodayId());
   return pillState({ wrapped: hd.wrapped, allDone: hd.allDone, lockInOn: lockIn.value.enabled, phase: eh.phase.value, running: eh.running.value, countdown: eh.countdown.value, startsLabel: eh.startsLabel.value, hasPlan: !!eh.plan.value,
-    shut: !!eh.shutdown.value, untilLabel: eh.shutdown.value?.untilLabel, earned: l ? l.earned || 0 : 0, target: l ? l.target || 0 : 0,
+    shut: !!eh.shutdown.value, untilLabel: eh.shutdown.value?.untilLabel, nextLabel: eh.nextBlock.value?.startLabel || '', earned: l ? l.earned || 0 : 0, target: l ? l.target || 0 : 0,
     hours: eh.dayHours.value,
     pace: l && eh.running.value ? paceOf({ earned: l.earned || 0, target: l.target || 0, startMs: l.startMs, endMs: l.endMs, nowMs: eh.nowMs() }) : null });
 });
 const shut = computed(() => eh.shutdown.value);
 const shutVisible = computed(() => !!(uid.value && shut.value && SHUT_ROUTES.includes(route.name)));
+// ── evening mode: schedule the next lock-in from the hard stop ──
+const schedOk = computed(() => !!(lockIn.value.enabled && eh.plan.value && !eh.st.data?.offline));
+const sch = reactive({ open: false, time: '18:00', hours: 3, err: '' });
+const openSched = () => { sch.open = true; sch.err = ''; };
+const doSchedule = async () => {
+  sch.err = '';
+  try { await eh.scheduleNext([{ time: sch.time, hours: sch.hours }]); sch.open = false; } catch (e) { sch.err = e.message || 'Could not schedule'; }
+};
 const goCard = () => { router.push({ name: 'home' }).then(() => setTimeout(() => document.querySelector('[data-test="eight-hour-card"]')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 250)).catch(() => {}); };
 const signOutNow = async () => { try { await signOut(auth); } finally { router.push('/login'); } };
 
@@ -128,6 +145,12 @@ watch(() => eh.lock.value && eh.running.value && `${eh.lock.value.dayKey}|${eh.l
 .ehs-card { max-width: 360px; text-align: center; color: #e6e9ef; }
 .ehs-icon { font-size: 40px; } .ehs-card h2 { font-size: 22px; font-weight: 800; margin: 8px 0; } .ehs-card p { opacity: .85; margin: 6px 0; }
 .ehs-res { font-weight: 700; } .ehs-res.ok { color: #3cb46e; } .ehs-res.miss { color: #e05a5a; }
+.ehs-row { margin-top: 14px; background: none; border: 0; color: #9fb7e0; font: 600 14px/1.2 system-ui, -apple-system, sans-serif; padding: 10px 6px; min-height: 44px; cursor: pointer; }
+.ehs-sched { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px; margin-top: 14px; }
+.ehs-sched input, .ehs-sched select { height: 40px; border-radius: 10px; border: 1px solid rgba(159,183,224,.35); background: rgba(255,255,255,.06); color: #e6e9ef; padding: 0 10px; font: 600 15px system-ui, -apple-system, sans-serif; color-scheme: dark; }
+.ehs-sched button { height: 40px; padding: 0 16px; border-radius: 10px; border: 0; background: #378ADD; color: #fff; font: 700 14px system-ui, -apple-system, sans-serif; cursor: pointer; }
+.ehs-sched small { flex-basis: 100%; opacity: .6; font-size: 12px; }
+.ehs-err { color: #ffb4b4; font-size: 13px; }
 .ehs-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 14px; margin-top: 18px; font-size: 13px; }
 .ehs-links a, .ehs-links button { color: #9fb7e0; background: none; border: 0; padding: 4px; cursor: pointer; text-decoration: underline; font: inherit; }
 .ehc { position: fixed; left: 50%; top: calc(env(safe-area-inset-top) + 56px); transform: translateX(-50%); z-index: 9400; width: min(340px, 92vw);

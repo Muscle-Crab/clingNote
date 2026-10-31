@@ -3606,7 +3606,7 @@ const dayPromptOpen = ref(false);
 const ehBusy = ref(false);
 // no plan yet => no dayKey: an empty skipDate must not read as "skipped today" (that blocked Start Day for planless web users)
 const lockInToday = computed(() => lockIn.value.enabled && !(lockIn.value.skipDate && lockIn.value.skipDate === (eh.phaseInfo.value.dayKey || '')));
-const openDayPrompt = () => { if (lockInToday.value && eh.phase.value === 'ready' && !eh.lock.value && isToday(selectedDayIndex.value)) { ehStartError.value = ''; dayPromptOpen.value = true; } };
+const openDayPrompt = () => { if (lockInToday.value && eh.phase.value === 'ready' && !eh.phaseInfo.value.scheduled && !eh.lock.value && isToday(selectedDayIndex.value)) { ehStartError.value = ''; dayPromptOpen.value = true; } };
 const maybeShowDayPrompt = () => {
   if (!userId.value || !lockInToday.value || eh.phase.value !== 'ready' || eh.lock.value || dayPromptOpen.value || !isToday(selectedDayIndex.value)) return;
   const dk = eh.phaseInfo.value.dayKey || '';
@@ -3623,7 +3623,7 @@ const confirmDayStart = async (hours, opts = {}) => {
     // Compat with a server that still requires plan.taskCount === list size: sync it to what is stored first (allowed in the ready phase).
     { const plan = eh.plan.value; const n = countableIndexes(selectedDayRoutine.value || [], eh.phaseInfo.value.dayKey || '').length; const r = taskRange(hours);
       if (plan && n >= 1 && n <= r.max && plan.taskCount !== n) await eh.savePlan({ wakeTime: plan.wakeTime, taskCount: n }).catch((e) => console.warn('plan sync:', e && e.message)); }
-    await eh.startNow(hours);
+    await eh.startNow(hours, opts.blocks); // evening mode: optional later blocks today (split day), fixed now
     dayPromptOpen.value = false;
     if (opts.lock) await startHardLock();
     await ensureLegacyDayStarted().catch((e) => console.warn('day session:', e));
@@ -3756,7 +3756,7 @@ const autoStartFocus = async (reason, { index = -1, minutes = 0, key = '' } = {}
         const d = new Date(); const wakeTime = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
         await eh.savePlan({ wakeTime, taskCount: Math.max(1, countableIndexes(selectedDayRoutine.value || [], eh.phaseInfo.value.dayKey || '').length) });
       }
-      if (eh.phase.value === 'ready') await confirmDayStart(eh.hoursPref.value, { lock: lockEnabled() });
+      if (eh.phase.value === 'ready' && !eh.phaseInfo.value.scheduled) await confirmDayStart(eh.hoursPref.value, { lock: lockEnabled() });
     } else if (!daySession.value.started) { await startDay(); }
     const list = selectedDayRoutine.value || []; if (lockedFocus(list)) return false;
     const i = index >= 0 ? index : nextFocusIndex(list); const t = list[i]; if (!t) return false;
@@ -3845,8 +3845,21 @@ const syncAppLock = async () => {
     if (r && r.monitor && r.monitor !== 'ok') { lockOn = null; error.value = "App lock couldn't be scheduled, so apps stay unlocked for now."; }
   } else if (act === 'stop') { lockOn = null; await clingLock.stopLock(); }
   else if (want) lockOn = endMs;
+  scheduleLaterLocks(st);
 };
-watch(() => [eh.running.value, pointsAccumulated.value, dayRequiredPts.value, streakProgress.value, lockUnlockedDay.value, Math.floor(nowTick.value / 60000)], () => { syncAppLock(); });
+// Evening mode: hand every pending lock-in block to iOS (DeviceActivity) so the shield goes up at its start even when ClingNote is closed.
+// Same opt-in as the day lock (lock pref + picked apps). Each block is scheduled once per key; native ignores blocks < 15 min long.
+const nativeScheduled = new Set();
+const scheduleLaterLocks = async (st) => {
+  if (!lockEnabled() || !(st.selectionCount > 0)) return;
+  for (const b of eh.pendingBlocks.value) {
+    const key = `${b.dayKey}_${b.index}`; if (nativeScheduled.has(key) || b.startMs <= Date.now()) continue;
+    nativeScheduled.add(key);
+    const r = await clingLock.scheduleLock({ startMs: b.startMs, untilMs: b.endMs, key });
+    if (!r || r.monitor !== 'ok') { nativeScheduled.delete(key); console.warn('[clingLock] scheduleLock', r && r.monitor); }
+  }
+};
+watch(() => [eh.running.value, eh.pendingBlocks.value.length, pointsAccumulated.value, dayRequiredPts.value, streakProgress.value, lockUnlockedDay.value, Math.floor(nowTick.value / 60000)], () => { syncAppLock(); });
 onMounted(() => { setTimeout(syncAppLock, 1200); });
 // Emergency unlock (assistant tool + sergeant menu): stops the shield for today and books the point penalty.
 const emergencyUnlock = async () => { await clingLock.stopLock(); hardLocked.value = false; const day = localDateStr(); let pen = []; try { pen = JSON.parse(localStorage.getItem(PENALTY_KEY) || '[]'); } catch (e) { /* ignore */ }

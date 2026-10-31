@@ -53,3 +53,15 @@ export const WARN_MINUTES = core.WARN_MINUTES;
 export const warningDue = core.warningDue;
 // 3, 3.5, ... 12 for pickers/steppers
 export const HOUR_OPTIONS = (() => { const o = []; for (let h = core.DAY_HOURS.min; h <= core.DAY_HOURS.max; h += core.DAY_HOURS.step) o.push(h); return o; })();
+// Evening mode (scheduled / split lock-in blocks)
+export const BLOCK_HOURS = core.BLOCK_HOURS;
+export const MAX_BLOCKS_PER_DAY = core.MAX_BLOCKS_PER_DAY;
+export const clampBlockHours = core.clampBlockHours;
+export const sessionKey = core.sessionKey;
+export const blockIndex = core.blockIndex;
+export const pendingOf = core.pendingOf;
+export const nextPending = core.nextPending;
+export const nextAt = core.nextAt;
+export const planBlocks = core.planBlocks;
+export const rulesShutUntilMs = core.rulesShutUntilMs;
+export const BLOCK_HOUR_OPTIONS = (() => { const o = []; for (let h = core.BLOCK_HOURS.min; h <= core.BLOCK_HOURS.max; h += core.BLOCK_HOURS.step) o.push(h); return o; })();

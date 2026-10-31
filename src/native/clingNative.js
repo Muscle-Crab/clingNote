@@ -16,6 +16,13 @@ export const clingLock = {
     catch (e) { const m = `failed: ${String((e && e.message) || e)}`; console.warn('[clingLock] startLock', m); return { locked: false, monitor: m }; }
   },
   stopLock: safe('ClingLock', Lock, (p) => p.stopLock(), { locked: false }),
+  // Evening mode: a later lock-in block as its own DeviceActivity schedule (clingLockAt.<key>), so iOS raises the shield at startMs
+  // even if ClingNote is closed. Resolves { monitor: 'ok' | 'failed: ...' | 'unavailable' }.
+  scheduleLock: async ({ startMs, untilMs, key }) => {
+    if (!avail('ClingLock')) return { monitor: 'unavailable' };
+    try { const r = await Lock.scheduleLock({ startMs, untilMs, key: String(key) }); return { monitor: 'ok', ...r }; }
+    catch (e) { return { monitor: `failed: ${String((e && e.message) || e)}` }; }
+  },
   // per-app locks by user-confirmed label (src/utils/appLockNames.js resolves spoken names to these labels)
   labeledApps: safe('ClingLock', Lock, (p) => p.labeledApps(), { apps: [] }),
   pickNamedApps: safe('ClingLock', Lock, (p, suggest = []) => p.pickNamedApps({ suggest }), { saved: false, apps: [] }),
