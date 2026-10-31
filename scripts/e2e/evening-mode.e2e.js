@@ -82,7 +82,8 @@ const waitFor = async (f, ms = 15000) => { const t = Date.now(); while (Date.now
   await p.click('[data-test=eh-sched-open]'); await p.fill('[data-test=eh-sched-time]', '21:00'); await p.selectOption('[data-test=eh-sched-hours]', '1');
   await sleep(300); await p.screenshot({ path: SHOTS + '6-shut-schedule-form.png' });
   // anti-cheat: a block after the next wake can't be used to escape the shut-down
-  const late = await api(uid, { action: 'schedule', blocks: [{ time: '06:00', hours: 1 }] }) // tomorrow 06:00 is past the next wake (00:00); ok(late.code >= 400, 'block past the next wake refused');
+  // tomorrow 06:00 is past the next wake (00:00)
+  const late = await api(uid, { action: 'schedule', blocks: [{ time: '06:00', hours: 1 }] }); ok(late.code >= 400, 'block past the next wake refused');
   await p.click('[data-test=eh-sched-go]');
   ok(await waitFor(async () => ((await ehDoc(uid)).lock?.pending || []).some((b) => b.startMs === atNY(21))), 'scheduled 21:00 block stored');
   ok(await waitFor(async () => !(await p.locator('[data-test=eh-shutdown]').count())), 'app opens until the block starts');
