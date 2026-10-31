@@ -1,6 +1,6 @@
 <template>
   <button type="button" class="afab" data-test="assistant-fab" aria-label="Assistant (tap to type, hold to talk)" title="Assistant"
-    @pointerdown="lp.down" @pointermove="lp.move" @pointerup="lp.up" @pointercancel="lp.cancel" @contextmenu.prevent @selectstart.prevent @click="onClick">✨</button>
+    @pointerdown="lp.down" @pointermove="lp.move" @pointerup="lp.up" @pointercancel="lp.cancel" @touchstart.prevent="lp.touchstart" @contextmenu.prevent @selectstart.prevent @click="onClick">✨</button>
 </template>
 
 <script setup>
@@ -12,9 +12,9 @@ import { HOLD_MS, askQuery } from '@/utils/assistantFab';
 const router = useRouter();
 const go = (listen) => router.push({ path: '/home', query: askQuery(listen) });
 // Shared press-and-hold (pointer capture + movement tolerance). Tap goes through click so keyboard/VoiceOver work too.
-const lp = createLongPress({ ms: HOLD_MS, onLong: () => go(true) });
+const lp = createLongPress({ ms: HOLD_MS, onTap: () => go(false), onLong: () => go(true) });
 onBeforeUnmount(() => lp.dispose());
-const onClick = () => { if (lp.wasLong()) { lp.dispose(); return; } go(false); };
+const onClick = () => { if (lp.isGhostClick()) { lp.dispose(); return; } go(false); };
 </script>
 
 <style scoped>
