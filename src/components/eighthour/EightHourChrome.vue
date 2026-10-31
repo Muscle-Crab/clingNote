@@ -1,6 +1,6 @@
 <template>
   <!-- Persistent 8-hour countdown pill (centered in the top bar, below the notch / safe area), the hard-stop overlay and one transient celebration. -->
-  <button v-if="pill" type="button" class="ehp" :class="['ehp--' + pill.kind, { 'ehp--tucked': tucked }]" :aria-hidden="tucked ? 'true' : null" :tabindex="tucked ? -1 : null" data-test="eh-pill" :aria-label="pill.aria" @click="goCard">
+  <button v-if="pill" type="button" class="ehp" :class="['ehp--' + pill.kind, { 'ehp--tucked': tucked }]" :aria-hidden="tucked ? 'true' : null" :tabindex="tucked ? -1 : null" data-test="eh-pill" :aria-label="pill.aria" @click="onPill">
     <span class="ehp-dot" aria-hidden="true"></span><span class="ehp-main" role="timer">{{ pill.main }}</span><span v-if="pill.sub" class="ehp-sub">{{ pill.sub }}</span>
   </button>
 
@@ -23,6 +23,7 @@
         <button type="submit" :disabled="eh.st.busy" data-test="eh-sched-go">Schedule</button>
         <small>Opens your tasks until it starts. Can't be cancelled or shortened.</small>
       </form>
+      <button v-if="planState.open" type="button" class="ehs-row" data-test="eh-plan-open" @click="openPlanning">Plan tomorrow <span aria-hidden="true">›</span></button>
       <p v-if="sch.err" class="ehs-err" role="alert" data-test="eh-sched-err">{{ sch.err }}</p>
       <nav class="ehs-links">
         <router-link :to="profileLink">Settings</router-link><router-link to="/support">Support</router-link><router-link to="/privacy-policy">Privacy</router-link><router-link to="/sub">Premium</router-link>
@@ -51,6 +52,7 @@ import { scheduleLocal } from '@/utils/localNotify';
 import { homeDayFor } from '@/utils/homeDay';
 import { lockIn } from '@/utils/lockIn';
 import { getTodayId } from '@/utils/dateTime';
+import { planWindowState, shouldAutoOpen, planWin, readSeen as readPlanSeen, markSeen as markPlanSeen } from '@/utils/planWindow';
 
 const route = useRoute(); const router = useRouter();
 const eh = useEightHour();
@@ -77,11 +79,28 @@ const pill = computed(() => {
   const l = eh.lock.value; const hd = homeDayFor(getTodayId());
   return pillState({ wrapped: hd.wrapped, allDone: hd.allDone, lockInOn: lockIn.value.enabled, phase: eh.phase.value, running: eh.running.value, countdown: eh.countdown.value, startsLabel: eh.startsLabel.value, hasPlan: !!eh.plan.value,
     shut: !!eh.shutdown.value, untilLabel: eh.shutdown.value?.untilLabel, nextLabel: eh.nextBlock.value?.startLabel || '', earned: l ? l.earned || 0 : 0, target: l ? l.target || 0 : 0,
-    hours: eh.dayHours.value,
+    hours: eh.dayHours.value, planning: planningNow.value,
     pace: l && eh.running.value ? paceOf({ earned: l.earned || 0, target: l.target || 0, startMs: l.startMs, endMs: l.endMs, nowMs: eh.nowMs() }) : null });
 });
 const shut = computed(() => eh.shutdown.value);
-const shutVisible = computed(() => !!(uid.value && shut.value && SHUT_ROUTES.includes(route.name)));
+// Tomorrow's planning window (see utils/planWindow.js): opens by itself once per evening at the plan time (default 8 PM), hard close at midnight.
+const planState = computed(() => planWindowState({ nowMs: (shut.value, eh.nowMs()), shut: !!shut.value, planTime: lockIn.value.planTime, tz: eh.lock.value?.tz || eh.plan.value?.tz }));
+const planningNow = computed(() => !!(planWin.active && planState.value.open && planWin.eveningKey === planState.value.eveningKey));
+const openPlanning = () => { planWin.eveningKey = planState.value.eveningKey; planWin.active = true; markPlanSeen(planState.value.eveningKey); if (route.name !== 'home') router.push({ name: 'home' }).catch(() => {}); };
+const closePlanning = () => { planWin.active = false; };
+watch(() => [uid.value, planState.value.open, planState.value.eveningKey], () => {
+  const s = planState.value;
+  if (!s.open) { if (planWin.active) planWin.active = false; return; } // midnight (or wake): hard close
+  if (uid.value && shouldAutoOpen({ open: s.open, eveningKey: s.eveningKey, seenKey: readPlanSeen() })) openPlanning();
+}, { immediate: true });
+const onPill = () => { if (planningNow.value) closePlanning(); else goCard(); };
+const shutVisible = computed(() => !!(uid.value && shut.value && !planningNow.value && SHUT_ROUTES.includes(route.name)));
+// Optional local notification at the plan time (native iOS; no-op on web), once per shut evening.
+watch(() => shut.value && eh.lock.value && `${eh.lock.value.dayKey}|${lockIn.value.planTime}`, (k) => {
+  if (!k || !lockIn.value.enabled) return; const [hh, mm] = String(lockIn.value.planTime || '20:00').split(':').map(Number);
+  const d = new Date(eh.nowMs()); d.setHours(hh, mm, 0, 0); if (d.getTime() <= eh.nowMs()) return;
+  scheduleLocal(`planwin:${eh.lock.value.dayKey}`, { title: 'Plan tomorrow', body: 'Your planning window is open until midnight.', at: d, route: '/home', type: 'planwin' }).catch(() => {});
+}, { immediate: true });
 // ── evening mode: schedule the next lock-in from the hard stop ──
 const schedOk = computed(() => !!(lockIn.value.enabled && eh.plan.value && !eh.st.data?.offline));
 const sch = reactive({ open: false, time: '18:00', hours: 3, err: '' });

@@ -11,6 +11,8 @@ export const lastOccurrenceYMD = (dayIdx, now = new Date()) => localYMDOffset(-(
 // before that weekday's most recent occurrence. Tasks without a parsable completedAt are never treated as stale.
 export const isStaleCompletion = (task, dayIdx, now = new Date()) => {
   if (!task || !task.completed || !task.completedAt) return false;
+  // Completed early for a later day (tomorrow, from the evening planning window): belongs to that day, not to completedAt's.
+  if (/^\d{4}-\d{2}-\d{2}$/.test(task.completedFor || '')) return task.completedFor < lastOccurrenceYMD(dayIdx, now);
   const c = new Date(task.completedAt);
   if (Number.isNaN(c.getTime())) return false;
   return localYMD(c) < lastOccurrenceYMD(dayIdx, now);

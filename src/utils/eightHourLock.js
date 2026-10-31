@@ -3,6 +3,7 @@
 // While the window runs for a weekday doc: no add / delete / swap / reorder / retitle / re-point of tasks, no plan or wake changes.
 // Completing tasks, timers, notes and subtasks stay allowed.
 import { lockedChangeAllowed, LOCKED_FIELDS, isShut, hoursLabel } from './eightHour';
+import { planWindowState, getPlanTime } from './planWindow';
 
 export const LOCKED_MESSAGE = 'Locked: your 8-hour day is running. Tasks, points and the target cannot be changed until it ends.';
 
@@ -18,7 +19,8 @@ export const isDayLocked = (dayName) => {
   return s.lock.dayName === dayName && s.nowMs >= s.lock.startMs && s.nowMs < s.lock.endMs;
 };
 
-// Hard stop: once a started 8-hour day has ended, ALL task changes (add, edit, complete, transfer, timers) are blocked until the next wake time.
+// Hard stop: once a started 8-hour day has ended, task changes are blocked until the next wake time, except completions and
+// tomorrow's planning window (see below).
 export const SHUT_MESSAGE = 'Your 8 hours are up. ClingNote is shut for today. Come back tomorrow.';
 // Same messages with the CURRENT day's length ("your 6.5-hour day"); the constants above are the 8h defaults.
 const curHours = () => { const s = source(); return hoursLabel(s && s.lock ? s.lock.hours : undefined); };
@@ -32,22 +34,36 @@ export class LockError extends Error {
 export class ShutError extends Error {
   constructor() { super(shutMessage()); this.name = 'ShutError'; this.code = 'eight-hour-locked'; this.shut = true; }
 }
-export const assertNotShut = () => { if (isShutdown()) throw new ShutError(); };
+// Shutdown (after the lock-in): completing tasks ALWAYS works (any day, in place on the shut day: the server only counts the window,
+// so a late completion can't raise the lock-in result). Planning (add / edit / delete / reorder) works only on TOMORROW's tab while
+// the planning window is open (plan time, default 8 PM, until a hard close at midnight). Everything else stays shut.
+export const COMPLETION_FIELDS = ['completed', 'completedAt', 'completedFor', 'timerActive', 'timerStoppedAt', 'alarmId', 'alarmAt', 'widgetEffectsPending'];
+const plan = () => { const s = source(); return planWindowState({ nowMs: s ? s.nowMs : Date.now(), shut: isShutdown(), planTime: getPlanTime(), tz: s && s.lock ? s.lock.tz : undefined }); };
+export const planWindowOpen = () => isShutdown() && plan().open;
+export const planTomorrowDay = () => plan().tomorrowDay;
+export const shutDayName = () => (isShutdown() ? currentLock().dayName || '' : '');
+// May this weekday's list be planned right now? (always when not shut; while shut only tomorrow, only inside the window)
+export const canPlanDay = (dayName) => { if (!isShutdown()) return true; const w = plan(); return !!(w.open && dayName && dayName === w.tomorrowDay); };
+export const completionOnlyPatch = (patch) => Object.keys(patch || {}).every((k) => COMPLETION_FIELDS.includes(k));
+const strip = (t) => { const o = { ...(t || {}) }; COMPLETION_FIELDS.forEach((k) => { delete o[k]; }); return JSON.stringify(Object.keys(o).sort().map((k) => [k, o[k]])); };
+export const completionOnlyChange = (oldTasks = [], newTasks = []) => Array.isArray(oldTasks) && Array.isArray(newTasks) && oldTasks.length === newTasks.length && oldTasks.every((t, i) => strip(t) === strip(newTasks[i]));
+// Planning guard: no dayName = a day-less planning action (scheduling, import): allowed only inside the window.
+export const assertNotShut = (dayName) => { if (!isShutdown()) return; if (dayName ? canPlanDay(dayName) : planWindowOpen()) return; throw new ShutError(); };
 export const isLockError = (e) => !!e && e.code === 'eight-hour-locked';
 
 // Whole-day operations that always change the task list (add/delete/transfer-out/won't-do).
-export const assertDayUnlocked = (dayName, what) => { assertNotShut(); if (isDayLocked(dayName)) throw new LockError(what); };
+export const assertDayUnlocked = (dayName, what) => { assertNotShut(dayName); if (isDayLocked(dayName)) throw new LockError(what); };
 // Whole-array writes (reorder, saveSelectedDayTasks, ...): allowed only when the locked identity of every slot is unchanged.
 export const assertTasksChangeAllowed = (dayName, oldTasks, newTasks, what) => {
-  assertNotShut();
+  if (isShutdown() && !canPlanDay(dayName) && !completionOnlyChange(oldTasks, newTasks)) throw new ShutError();
   if (!isDayLocked(dayName)) return;
   const r = lockedChangeAllowed(oldTasks, newTasks);
   if (!r.ok) throw new LockError(what || (r.reason === 'count' ? 'task count' : 'task order or details'));
 };
 // Field patches on one task: reject the fields the lock freezes.
 export const patchTouchesLocked = (patch) => Object.keys(patch || {}).filter((k) => LOCKED_FIELDS.includes(k));
-export const assertPatchAllowed = (dayName, patch) => { assertNotShut(); if (isDayLocked(dayName) && patchTouchesLocked(patch).length) throw new LockError(patchTouchesLocked(patch).join(', ')); };
+export const assertPatchAllowed = (dayName, patch) => { if (isShutdown() && !canPlanDay(dayName) && !completionOnlyPatch(patch)) throw new ShutError(); if (isDayLocked(dayName) && patchTouchesLocked(patch).length) throw new LockError(patchTouchesLocked(patch).join(', ')); };
 
 // Completing a task on a locked day updates it in place (never removes it). True when EITHER the UI state or the lock source
 // (server or device-cached lock) says the day is locked: the UI state is false while the 8-hour data is still loading.
-export const completionKeepsInPlace = ({ uiLocked, sourceLocked }) => !!(uiLocked || sourceLocked);
+export const completionKeepsInPlace = ({ uiLocked, sourceLocked, shutLocked }) => !!(uiLocked || sourceLocked || shutLocked);

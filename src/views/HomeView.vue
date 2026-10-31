@@ -159,7 +159,7 @@
                         @drop="onSectionDrop" @drag-start="onDragStart" @drag-end="onSectionDragEnd" v-slot="{ task, section }">
               <TaskCard :section="section" @move-section="moveTaskToSection(task, $event)"
                   :data-reorder-key="taskKey(task)"
-                  :task="task" :up-next="isViewingToday && !task.completed && taskKey(task) === upNextKey" :drag-disabled="!reorderable" :index="realIndex(task)" :is-today-tab="isViewingToday" :expanded="expandedKey === taskKey(task)"
+                  :task="task" :up-next="isViewingToday && !task.completed && taskKey(task) === upNextKey" :drag-disabled="!reorderable" :index="realIndex(task)" :is-today-tab="isViewingToday" :can-complete="planningTomorrowTab" :expanded="expandedKey === taskKey(task)"
                   :active-labels="activeLabels" :now="nowTick" :show-notification="showNotification" :transfer-notification="transferNotification"
                   @toggle-expand="toggleExpanded(task)" @toggle-complete="toggleTaskCompletion(realIndex(task))" @alarm="toggleTaskAlarm(task)" @open-detail="openTaskDetailModal(task)"
                   @set-boss="setBoss(realIndex(task), task)" @toggle-important="toggleTaskImportance(realIndex(task))" :day-locked="selectedDayLocked" :highlight="rolledKeys.includes(taskKey(task))" :all-occurrences="seriesKey === taskKey(task)"
@@ -238,7 +238,7 @@ import { activeFromForDay, isHiddenOnDate, seriesDays, withoutSeries } from '@/u
 import { useTaskViewPrefs } from '@/composables/useTaskViewPrefs';
 import { viewTasks, canReorder, applyManualOrder, normalizePrefs, visibleCount, shouldHandleShortcut } from '@/utils/taskView';
 import { ACTIVE_CAP, taskKey, activeCount, loadSummary, buildSchedule } from '@/utils/taskPlanning';
-import { localYMD, isStaleCompletion, pruneStaleDay } from '@/utils/localDate';
+import { localYMD, localYMDOffset, isStaleCompletion, pruneStaleDay } from '@/utils/localDate';
 import { getTodayId, formatSessionTime, getCurrentDate, formatTime, isToday } from '@/utils/dateTime';
 import { badges } from '@/utils/gamification';
 import { recordMonthlyToggle, awardFinishedMonth } from '@/composables/useMonthlyStats';
@@ -355,7 +355,9 @@ import { countableIndexes, taskRange, hoursLabel } from '@/utils/eightHour';
 import { estimateFor, chipValues, withAiEstimate } from '@/utils/taskEstimate';
 import { requestAiEstimate } from '@/utils/aiEstimate';
 import { patchTouchesLocked } from '@/utils/eightHourLock';
-import { isDayLocked, completionKeepsInPlace, isLockError, assertTasksChangeAllowed, lockedMessage, isShutdown, shutMessage } from '@/utils/eightHourLock';
+import { isDayLocked, completionKeepsInPlace, isLockError, assertTasksChangeAllowed, lockedMessage, isShutdown, shutMessage, canPlanDay, shutDayName } from '@/utils/eightHourLock';
+import { planWin } from '@/utils/planWindow';
+import { planTomorrowDay as planTomorrowDayName } from '@/utils/eightHourLock';
 import ReminderModal from '@/components/home/ReminderModal.vue';
 import ShutdownPrompt from '@/components/home/ShutdownPrompt.vue';
 import TaskDetailModal from '@/components/home/TaskDetailModal.vue';
@@ -462,8 +464,16 @@ const blockIfLocked = (dayIdx = selectedDayIndex.value) => {
   alert(lockedMessage());
   return true;
 };
-// 8-hour hard stop: once today's started day has ended, every task action is refused until the next wake time (data layer also guards).
-const blockIfShut = () => { if (!isShutdown()) return false; sfx('error'); alert(shutMessage()); return true; };
+// 8-hour hard stop: once today's started day has ended, task actions are refused until the next wake time (data layer also guards),
+// except completing tasks (toggleTaskCompletion never calls this) and planning TOMORROW's tab inside the planning window (8 PM..midnight).
+// Tomorrow's planning window (shutdown, plan time..midnight): Home opens on tomorrow's tab (the same tab path as a tap on it).
+// Planning window: tomorrow's tab also gets the done check (an early completion is stamped completedFor = tomorrow, so it is kept
+// at the rollover and belongs to tomorrow; no streak/boss/lock-in credit tonight).
+const planningTomorrowTab = computed(() => !!(planWin.active && isShutdown() && days[selectedDayIndex.value]?.day === planTomorrowDayName()));
+const goTomorrowTab = () => { const i = days.findIndex((d) => d.day === planTomorrowDayName()); if (i >= 0 && selectedDayIndex.value !== i) selectDate(i); };
+watch(() => planWin.active, (on) => { if (on) goTomorrowTab(); });
+onMounted(() => { if (planWin.active) setTimeout(goTomorrowTab, 0); });
+const blockIfShut = (dayIdx = selectedDayIndex.value) => { if (!isShutdown() || canPlanDay(days[dayIdx]?.day)) return false; sfx('error'); alert(shutMessage()); return true; };
 const lockMessage = (e) => { if (isLockError(e)) { sfx('error'); alert(e.message); return true; } return false; };
 // Locked-in day (planned, countdown not started): today's list may grow past the minimum up to the overload cap for the chosen hours.
 // Returns the block message when adding one more would pass the cap, otherwise null. Adding never changes plan.taskCount.
@@ -852,13 +862,15 @@ const resetTasksToIncomplete = async (dayIndex = selectedDayIndex.value, isCurre
     const existingTasks = docSnap.data().tasks || [];
 
     // Only reset if there are completed tasks to avoid unnecessary updates
-    const hasCompletedTasks = existingTasks.some(task => task.completed);
+    // An early completion for a coming day (completedFor, from the evening planning window) is kept: it belongs to that day.
+    const keepEarly = (t) => !!(t && t.completedFor && t.completedFor >= localYMD());
+    const hasCompletedTasks = existingTasks.some(task => task.completed && !keepEarly(task));
     if (!hasCompletedTasks) {
       console.log(`No completed tasks to reset for ${selectedDay.day}.`);
       return;
     }
 
-    const resetTasks = existingTasks.map(task => resetSubtasks({
+    const resetTasks = existingTasks.map(task => keepEarly(task) ? task : resetSubtasks({
       ...task,
       completed: false
     }));
@@ -1281,7 +1293,8 @@ const { soundEnabled, playSound, toggleSound, markUserCompletion, watchMilestone
 // Stable task identity for transactional updates (id when both have one, else createdAt|title).
 const sameTask = (a, b) => !!a && !!b && ((a.id && b.id) ? a.id === b.id : taskKey(a) === taskKey(b));
 const toggleTaskCompletion = async (index) => {
-  if (blockIfShut()) return false;
+  // Completing works during the shutdown too (any day, incl. tomorrow's planned tasks): the server counts the lock-in result only
+  // inside the window, streak/boss only run for today's tab, so a late completion credits its own day and nothing else.
   const task = { ...selectedDayRoutine.value[index] }; // Create a copy of the task to avoid direct mutation
   task.completed = !task.completed; // Toggle the completed state
   startSpinning(index);
@@ -1292,6 +1305,7 @@ const toggleTaskCompletion = async (index) => {
     const completedNow = new Date().toISOString();
 
     task.completedAt = completedNow;
+    task.completedFor = (!isToday(selectedDayIndex.value) && isShutdown() && days[selectedDayIndex.value]?.day === planTomorrowDayName()) ? localYMDOffset(1) : null; // early (planning window) -> tomorrow's
     task.timerActive = false;
     task.timerStoppedAt = completedNow;
     cancelTaskNotifications(task);
@@ -1307,6 +1321,7 @@ const toggleTaskCompletion = async (index) => {
   } else {
     sfx('tap'); // un-complete: light tap
     task.completedAt = null;
+    task.completedFor = null;
     task.timerStoppedAt = null;
     task.timerActive = false;
     cancelLocal(timerKey(task));
@@ -1320,7 +1335,7 @@ const toggleTaskCompletion = async (index) => {
   // Locked = the UI lock state OR the lock source (server/cached lock). While the 8-hour state is still loading (cold start from a
   // widget / Live Activity / notification action) selectedDayLocked is false; removing the task then was rejected by the rules
   // (locked arrays never shrink) -> the card vanished from Done and an in-app completion was never stored (no points).
-  const lockedToggle = completionKeepsInPlace({ uiLocked: selectedDayLocked.value, sourceLocked: isDayLocked(days[selectedDayIndex.value]?.day) });
+  const lockedToggle = completionKeepsInPlace({ uiLocked: selectedDayLocked.value, sourceLocked: isDayLocked(days[selectedDayIndex.value]?.day), shutLocked: !!shutDayName() && shutDayName() === days[selectedDayIndex.value]?.day });
   // Completed tasks (one-time and repeat-series copies too) stay in place in the Completed section for the rest of the day;
   // completed one-time tasks leave the list at the day rollover (pruneStaleDay on the next load of this weekday).
   const before = selectedDayRoutine.value[index];
@@ -1339,7 +1354,7 @@ const toggleTaskCompletion = async (index) => {
 
       if (lockedToggle) {
         // 8-hour lock: update in place; the array never shrinks and no locked field changes
-        tasks[at] = { ...tasks[at], completed: task.completed, completedAt: task.completedAt, timerActive: false, timerStoppedAt: task.timerStoppedAt };
+        tasks[at] = { ...tasks[at], completed: task.completed, completedAt: task.completedAt, completedFor: task.completedFor || null, timerActive: false, timerStoppedAt: task.timerStoppedAt };
       } else {
         tasks[at] = { ...tasks[at], ...task };
       }
@@ -1357,7 +1372,7 @@ const toggleTaskCompletion = async (index) => {
   if (task.templateId && userId.value) { // routine completion log (doneOn) + repeat-after-completion next date
     try { scheduledList.value = await mutateScheduled(userId.value, (l) => markRoutineDone(l, task, getTodayId(), task.completed)); } catch (e) { console.warn('routine log', e); }
   }
-  if (lockedToggle) eh.reportProgress(); // server recounts earned points from the day doc (server clock)
+  if (lockedToggle && !isShutdown()) eh.reportProgress(); // server recounts earned points from the day doc (server clock)
   checkAllTasksCompleted();
   await saveDailyPerformance();
   // Completed tasks stay in the routine (the Done section renders them); the Done section keeps whatever state the user chose.
@@ -1810,6 +1825,7 @@ onAuthStateChanged(auth, async(user) => {
       selectedDayIndex.value = todayIndex;
       await runScheduledMaterialization(); // add due scheduled tasks to today before the list is fetched
       fetchSelectedDayRoutine(); // Fetch tasks for the current day
+      if (planWin.active) goTomorrowTab(); // evening planning window open: land on tomorrow's tab
     }
   } else {
     userId.value = null; // Clear user ID when the user logs out
@@ -2399,7 +2415,7 @@ const startEditingTask = (index) => {
 };
 
 const updateTask = async () => {
-  if (isShutdown()) { alert(shutMessage()); return; } // edits are allowed during the locked window; only the post-day shutdown blocks them
+  if (!canPlanDay(days[selectedDayIndex.value]?.day)) { alert(shutMessage()); return; } // edits are allowed during the locked window; the post-day shutdown blocks them except on tomorrow's tab in the planning window
   if (editedTask.value.title.trim() === '') {
     error.value = 'Task name cannot be empty';
     return;
@@ -3405,6 +3421,9 @@ const canViewSelectedDayTasks = computed(() => {
 
   // 8-hour day: the list is open while a plan is waiting for its tasks and while the window runs (no separate Start Day press needed)
   if (eh.phase.value === 'running' || eh.phase.value === 'before' || eh.phase.value === 'ready') return true;
+
+  // Evening planning window (shut day): today's list stays open so leftover tasks can still be ticked off in place
+  if (planWin.active && isShutdown()) return true;
 
   // Today requires Start Day
   return daySession.value.started && !daySession.value.ended;

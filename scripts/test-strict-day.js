@@ -51,7 +51,7 @@ t('HomeView/useScheduledTasks/useEightHour wiring for the hard stop', () => {
 });
 t('rules: shut day blocks weeklyRoutines writes (server time)', () => {
   const r = read('firestore.rules'); assert(/function eightHourShut\(uid\)/.test(r));
-  assert(((r.match(/!eightHourShut\(/g) || []).length) >= 3);
+  assert(/function eightHourShutDay\(uid, dayName\)/.test(r)); assert(((r.match(/!eightHourShutDay\(/g) || []).length) >= 3);
 });
 
 t('settleDay: met => xp/coins/shield/badge; missed => coin penalty, shield saves streak at >=50%, warning after 3', () => {

@@ -23,7 +23,7 @@
                          :aria-disabled="dragDisabled ? 'true' : 'false'" :aria-label="'Task ' + (index + 1) + ', drag to reorder'">
                       <i class="fas fa-grip-vertical"></i>
                     </div>
-                    <button v-if="isTodayTab" ref="checkEl" type="button" data-test="task-check" @click.stop="onCheck" @pointerdown.stop @touchstart.stop.passive @mousedown.stop class="task-check" :aria-label="task.completed ? 'Mark not done' : 'Mark done'" :class="{ 'task-check--done': task.completed, 'task-check--pop': completing }">
+                    <button v-if="isTodayTab || canComplete" ref="checkEl" type="button" data-test="task-check" @click.stop="onCheck" @pointerdown.stop @touchstart.stop.passive @mousedown.stop class="task-check" :aria-label="task.completed ? 'Mark not done' : 'Mark done'" :class="{ 'task-check--done': task.completed, 'task-check--pop': completing }">
                       <i v-if="!completing" :class="task.completed ? 'fas fa-check-circle' : 'far fa-circle'"></i>
                       <svg v-else class="check-draw" viewBox="0 0 24 24" aria-hidden="true">
                         <circle class="check-draw__disc" cx="12" cy="12" r="10.5" />
@@ -259,6 +259,7 @@ const props = defineProps({
   task: { type: Object, required: true },
   index: { type: Number, required: true },
   isTodayTab: { type: Boolean, default: false },
+  canComplete: { type: Boolean, default: false }, // planning window: tomorrow's tab can complete too
   expanded: { type: Boolean, default: false },
   activeLabels: { type: Array, default: () => [] },
   now: { type: Number, default: 0 }, // ticking clock from HomeView for running task timers

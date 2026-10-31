@@ -89,6 +89,8 @@
               <input type="checkbox" role="switch" class="pf-switch" data-test="wake-lock-toggle" :checked="lockIn.wakeAuto" :disabled="!lockIn.loaded || (!lockIn.wakeAuto && !!wakeLockBlock)" @change="onWakeLockToggle($event.target.checked)" /></label>
             <label v-if="lockIn.enabled" class="pf-row pf-row--divided" data-test="lock-end-alert-row"><span class="pf-ico" aria-hidden="true">📣</span><span class="pf-row-title">Lock-end alert<small class="pf-dl-sub">How hard ClingNote alerts you when a lock ends</small></span>
               <select class="pf-time" data-test="lock-end-alert" :value="lockEndAlert" @change="onLockEndAlert($event.target.value)"><option v-for="o in LOCK_END_OPTS" :key="o.v" :value="o.v">{{ o.l }}</option></select></label>
+            <label v-if="lockIn.enabled" class="pf-row pf-row--divided" data-test="plan-time-row"><span class="pf-ico" aria-hidden="true">🗓</span><span class="pf-row-title">Plan tomorrow at<small class="pf-dl-sub">After a lock-in, tomorrow's planning opens by itself at this time and closes at midnight</small></span>
+              <input type="time" class="pf-time" data-test="plan-time" :value="lockIn.planTime" @change="onPlanTime($event.target.value)" /></label>
             <label class="pf-row pf-row--divided" data-test="auto-focus-row"><span class="pf-ico" aria-hidden="true">🎯</span><span class="pf-row-title">Auto-start focus<small class="pf-dl-sub">Starts a task's timer at its start time (and when iPhone Focus turns on) and locks you in until it ends</small></span>
               <input type="checkbox" role="switch" class="pf-switch" data-test="auto-focus-toggle" :checked="autoFocus" @change="onAutoFocus($event.target.checked)" /></label>
           </section>
@@ -169,7 +171,7 @@
 </template>
 
 <script setup>
-import { lockIn, loadLockIn, setLockInEnabled, setWakeAutoLock } from '@/utils/lockIn';
+import { lockIn, loadLockIn, setLockInEnabled, setWakeAutoLock, setPlanOpenTime } from '@/utils/lockIn';
 import { wakeLockNote } from '@/utils/wakeLock';
 import { readAutoFocus, writeAutoFocus } from '@/utils/focusAutoStart';
 loadLockIn(true).catch(() => {});
@@ -188,6 +190,7 @@ const lockSt = ref({ authorization: 'unsupported', selectionCount: 0 });
 if (lockAvailable()) clingLock.status().then((r) => { if (r) lockSt.value = r; }).catch(() => {});
 const wakeLockBlock = computed(() => wakeLockNote({ native: lockAvailable(), authorized: lockSt.value.authorization === 'approved', selectionCount: lockSt.value.selectionCount || 0, wakeTime: '00:00' } /* the wake time itself is checked on Home */));
 const wakeLockSub = computed(() => wakeLockBlock.value || 'Your picked apps lock at your wake time for your day length, even when ClingNote is closed. Skip lock-in today still works.');
+const onPlanTime = async (t) => { const u = auth.currentUser; if (!u) return; try { await setPlanOpenTime(u.uid, t); } catch (e) { console.warn('plan time:', e); loadLockIn(true).catch(() => {}); } };
 const onWakeLockToggle = async (on) => { const u = auth.currentUser; if (!u) return; try { await setWakeAutoLock(u.uid, on); } catch (e) { console.warn('wake lock toggle:', e); loadLockIn(true).catch(() => {}); } };
 const onLockInToggle = async (on) => { const u = auth.currentUser; if (!u) return; try { await setLockInEnabled(u.uid, on); } catch (e) { console.warn('lock-in toggle:', e); loadLockIn(true).catch(() => {}); } };
 // Lock-end alert level (App Group defaults via ClingLock.setLockEndAlert; localStorage mirror for web/first paint).

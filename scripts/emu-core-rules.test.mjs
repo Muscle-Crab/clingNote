@@ -45,7 +45,9 @@ await step('locked: delete/reorder blocked', async () => { await assertFails(set
 await step('locked: unlocked other day still editable', () => assertSucceeds(setDoc(doc(db, 'weeklyRoutines', `${U}_Mon`), { tasks: [A] }, { merge: true })));
 // shut
 await adminSet(`eightHour/${U}`, { lock: { dayName: 'Tue', startAt: new Date(now - 9 * 3600e3), endAt: new Date(now - 3600e3), shutUntil: new Date(now + 3600e3) } });
-await step('shut: all task writes blocked', async () => { await assertFails(toggle(db, 'Mon', { ...A, completed: false })); await assertFails(setDoc(doc(db, 'weeklyRoutines', `${U}_Wed`), { tasks: [A] })); });
+await step('shut: completing still works (shut day in place, other days too)', async () => { await assertSucceeds(toggle(db, 'Tue', { ...C, completed: false }, true)); await assertSucceeds(toggle(db, 'Mon', { ...A, completed: false })); });
+await step('shut: shut day frozen except in place', async () => { await assertFails(setDoc(doc(db, 'weeklyRoutines', `${U}_Tue`), { tasks: [A] }, { merge: true })); await assertFails(deleteDoc(doc(db, 'weeklyRoutines', `${U}_Tue`))); });
+await step('shut: tomorrow plannable (window is client-enforced)', () => assertSucceeds(setDoc(doc(db, 'weeklyRoutines', `${U}_Wed`), { tasks: [A] })));
 await step('shut: reads still work (old-week reset falls back to showing tasks)', () => assertSucceeds(getDoc(doc(db, 'weeklyRoutines', `${U}_Mon`))));
 await adminDel(`eightHour/${U}`);
 // streak: concurrent transactional updates do not lose increments

@@ -77,7 +77,10 @@ const waitFor = async (f, ms = 15000) => { const t = Date.now(); while (Date.now
   await sleep(1500); await dd(p); await p.screenshot({ path: SHOTS + '4-block2-running.png' });
 
   // 4) day over: shut overlay offers one compact "Schedule next lock-in" row
-  clock = atNY(20, 2); await p.reload({ waitUntil: 'load' }); await p.waitForSelector('[data-test=eh-shutdown]', { timeout: 20000 }); await sleep(800); await dd(p);
+  clock = atNY(20, 2); await p.reload({ waitUntil: 'load' });
+  // 8 PM opens tomorrow's planning window once; close it via the pill to get back to the shut overlay
+  await sleep(2500); if (/Planning tomorrow/.test(await p.locator('body').innerText())) { await p.locator('.ehp, [data-test=eh-pill]').first().click({ timeout: 4000 }).catch(() => {}); }
+  await p.waitForSelector('[data-test=eh-shutdown]', { timeout: 20000 }); await sleep(800); await dd(p);
   await p.screenshot({ path: SHOTS + '5-shut-schedule-row.png' });
   await p.click('[data-test=eh-sched-open]'); await p.fill('[data-test=eh-sched-time]', '21:00'); await p.selectOption('[data-test=eh-sched-hours]', '1');
   await sleep(300); await p.screenshot({ path: SHOTS + '6-shut-schedule-form.png' });
