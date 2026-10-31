@@ -3,6 +3,7 @@
 // here on launch / foreground through its OWN paths (Done -> the widget completer -> toggleTaskCompletion, the same as tapping the check
 // in-app), so points are awarded once. Pure (only widgetSnapshot), unit-tested in node: scripts/test-focus-actions.mjs.
 import { widgetTaskId } from './widgetSnapshot.js';
+import { pomoLabel } from './pomodoro.js';
 
 export const FOCUS_MAX_AGE_MS = 12 * 3600 * 1000; // an action older than this (or from the future) is ignored
 export const APPLIED_KEEP = 200;
@@ -75,8 +76,9 @@ export const focusActivityState = (t, { ptsDone = 0, ptsTarget = 0, dayEndMs = 0
     ptsDone: Math.max(0, Math.round(Number(ptsDone) || 0)), ptsTarget: Math.max(0, Math.round(Number(ptsTarget) || 0)),
     dayEndsAtMs: dayEndMs > now ? Math.round(dayEndMs) : 0,
     ...(appsUnlocked > 0 ? { appsUnlocked: Math.round(appsUnlocked) } : {}),
+    ...(pomoLabel(t) ? { phase: pomoLabel(t) } : {}),
   };
 };
 // identity of the activity (a new one is requested when it changes) and of its content (an update is pushed when it changes)
 export const focusActivityKey = (s) => (s ? `${s.taskId}` : '');
-export const focusContentSig = (s) => (s ? `${s.paused ? `p${s.remainingSec}` : s.endsAtMs}${s.locked ? 'L' : ''}${s.appsUnlocked ? `U${s.appsUnlocked}` : ''}|${s.ptsDone}/${s.ptsTarget}|${s.dayEndsAtMs}` : '');
+export const focusContentSig = (s) => (s ? `${s.paused ? `p${s.remainingSec}` : s.endsAtMs}${s.locked ? 'L' : ''}${s.appsUnlocked ? `U${s.appsUnlocked}` : ''}${s.phase ? `P${s.phase}` : ''}|${s.ptsDone}/${s.ptsTarget}|${s.dayEndsAtMs}` : '');

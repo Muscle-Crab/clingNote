@@ -91,7 +91,7 @@
       <CelebrationOverlay v-if="showFullScreenAnimation" :streak="streak" @close="closeFullScreenAnimation" />
 
 
-      <TimerModal v-if="showTimerModal" v-model:hours="selectedTimerHours" v-model:minutes="selectedTimerMinutes" @close="showTimerModal = false" @start="startTimer" />
+      <TimerModal v-if="showTimerModal" v-model:hours="selectedTimerHours" v-model:minutes="selectedTimerMinutes" @close="showTimerModal = false" @start="startTimer" @start-pomo="startTimer({ pomo: true })" />
 
 
       <WontDoModal v-if="wontDoModalOpen" v-model:reason="wontDoReason" :strict="strictOn" @cancel="wontDoModalOpen = false" @confirm="markTaskAsWontDo" />
@@ -360,6 +360,7 @@ import ShutdownPrompt from '@/components/home/ShutdownPrompt.vue';
 import TaskDetailModal from '@/components/home/TaskDetailModal.vue';
 import TimeStatsBar from '@/components/home/TimeStatsBar.vue';
 import TimerModal from '@/components/home/TimerModal.vue';
+import { startPomoPatch, nextPomoPatch, isPomo, POMO } from '@/utils/pomodoro';
 import TransferModal from '@/components/home/TransferModal.vue';
 import HolidayModal from '@/components/home/HolidayModal.vue';
 import BreakdownSheet from '@/components/home/BreakdownSheet.vue';
@@ -498,6 +499,13 @@ const startCountdownWatcher = () => {
           task.timerEndTime &&
           new Date(task.timerEndTime).getTime() <= Date.now()
       ) {
+        const nextPhase = isPomo(task) ? nextPomoPatch(task, Date.now()) : null;
+        if (nextPhase) { // pomodoro: focus -> break -> focus ... instead of expiring
+          selectedDayRoutine.value[i] = { ...task, ...nextPhase };
+          sfx('timerStart'); try { scheduleTimerDone(selectedDayRoutine.value[i]); } catch (e) { /* best-effort */ }
+          await saveSelectedDayTasks().catch((e) => console.warn('pomodoro phase not saved:', e));
+          continue;
+        }
         // 8-hour lock: a locked day can never lose a task, so an expired timer only stops in place (no carry to tomorrow).
         // Before: the carry spliced the task and saveSelectedDayTasks threw a LockError inside this interval -> "Unhandled:" overlay.
         if (selectedDayLocked.value || isShutdown()) {
@@ -1125,7 +1133,8 @@ const startTimer = async (opts = {}) => {
     if (lk && lk !== selectedDayRoutine.value[selectedTimerTaskIndex.value]) { showNoteToast(focusLockMessage(lk), { error: true }); selectedTimerTaskIndex.value = null; return false; }
     if (lk) { selectedTimerTaskIndex.value = null; return false; } }
 
-  const totalMinutes =
+  const pomo = !!(opts && opts.pomo === true);
+  const totalMinutes = pomo ? POMO.work :
       (Number(selectedTimerHours.value) * 60) +
       Number(selectedTimerMinutes.value);
 
@@ -1146,6 +1155,8 @@ const startTimer = async (opts = {}) => {
     timerDurationMinutes: totalMinutes,
     timerPausedAt: null,
     focusLock: !!(opts && opts.lock === true), // auto-start (scheduled time / iOS Focus) locks the session
+    timerPomo: null,
+    ...(pomo ? startPomoPatch(now) : {}),
   };
 
   selectedDayRoutine.value[selectedTimerTaskIndex.value] = task;
@@ -2253,7 +2264,7 @@ const setTaskRepeat = async (task, dayNames, { quiet = false, lastRepeat = null 
         else if (has) next = l.map((t) => (taskKey(t) === key ? { ...t, ...patch } : t));
         else {
           const af = i !== selectedDayIndex.value ? activeFromForDay(i) : '';
-          const { timerActive, timerEnd, timerStart, timerStartedAt, timerEndTime, timerStoppedAt, timerDuration, timerRemaining, timerPausedAt, timerLockedMin, boss, ...base } = task; // a copy never inherits a running/stopped timer
+          const { timerActive, timerEnd, timerStart, timerStartedAt, timerEndTime, timerStoppedAt, timerDuration, timerRemaining, timerPausedAt, timerLockedMin, timerPomo, boss, ...base } = task; // a copy never inherits a running/stopped timer
           next = [...l, { ...base, ...patch, completed: false, completedAt: null, status: !base.status || base.status === 'done' ? 'todo' : base.status, activeFrom: af || '' }];
         }
         // legacy tasks carry no `status` (and UI copies can hold undefined fields): Firestore rejects undefined values client-side

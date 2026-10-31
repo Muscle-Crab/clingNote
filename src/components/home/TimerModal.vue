@@ -37,6 +37,7 @@
 
         <div class="timer-preview">
           {{ hours }}h {{ minutes }}m
+          <button type="button" class="pomo-chip" data-test="timer-pomo" title="Pomodoro: 25 min focus, 5 min break, 4 rounds" @click="$emit('start-pomo')">🍅 25/5 ×4</button>
         </div>
       </div>
 
@@ -56,7 +57,7 @@
 <script setup>
 const hours = defineModel('hours');
 const minutes = defineModel('minutes');
-defineEmits(['close', 'start']);
+defineEmits(['close', 'start', 'start-pomo']);
 </script>
 
 <style scoped>
@@ -142,6 +143,17 @@ defineEmits(['close', 'start']);
   color: var(--c-on-accent, #fff);
   font-size: 18px;
   font-weight: 900;
+}
+.pomo-chip {
+  margin-left: 10px;
+  vertical-align: middle;
+  background: transparent;
+  color: var(--c-text-2, #9ca3af);
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 700;
 }
 .timer-footer {
   padding: 14px 20px;

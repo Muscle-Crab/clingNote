@@ -18,7 +18,7 @@ struct FocusLiveActivity: Widget {
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(ctx.state.paused ? "Paused" : "Focus").font(.caption2).foregroundColor(.secondary)
+                        Text(ctx.state.paused ? "Paused" : (ctx.state.phase ?? "Focus")).font(.caption2).foregroundColor(.secondary)
                         Text(ctx.attributes.title).font(.subheadline).lineLimit(1)
                     }
                 }
@@ -50,7 +50,7 @@ struct FocusLockScreenView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .center) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text((state.paused ? "Paused" : "Focus") + FocusFormat.unlockedSuffix(state.appsUnlocked)).font(.caption).foregroundColor(state.paused ? .orange : .secondary)
+                    Text((state.paused ? "Paused" : (state.phase ?? "Focus")) + FocusFormat.unlockedSuffix(state.appsUnlocked)).font(.caption).foregroundColor(state.paused ? .orange : .secondary)
                     Text(attributes.title).font(.headline).lineLimit(1)
                 }
                 Spacer()
