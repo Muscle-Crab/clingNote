@@ -31,7 +31,18 @@ export const breakdownError = (e) => {
   if (st === 429) return (e && e.message && /Free plan/.test(e.message)) ? e.message : 'Daily AI limit reached. Try again tomorrow.';
   if (st === 401) return 'Sign in again to use AI.';
   if (st === 400) return 'Give the task a name first.';
+  if (st === 500 && e && /not configured/i.test(e.message || '')) return "AI isn't available right now. Nothing was changed.";
   if (e && /Not signed in/.test(e.message || '')) return 'Sign in to use AI.';
   if (typeof navigator !== 'undefined' && navigator.onLine === false) return "You're offline. Try again when you're connected.";
   return "Couldn't break this down right now. Try again in a moment.";
+};
+
+// B44: the list is often re-read while the AI is thinking (snapshot / save), so the task object captured at open may be stale.
+// -> index of the same task in the current list: identity first, then id, then createdAt+title; -1 if it is gone.
+export const findTaskIndex = (list, task) => {
+  const l = Array.isArray(list) ? list : []; if (!task) return -1;
+  let i = l.indexOf(task); if (i >= 0) return i;
+  if (task.id) { i = l.findIndex((t) => t && t.id === task.id); if (i >= 0) return i; }
+  if (task.createdAt) i = l.findIndex((t) => t && t.createdAt === task.createdAt && t.title === task.title);
+  return i;
 };

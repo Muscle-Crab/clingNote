@@ -68,7 +68,7 @@ const GOOD = JSON.stringify({ steps: [{ title: 'Put on shoes', minutes: 2 }, { t
   ok(/defineEmits\(\['breakdown'/.test(card), 'emit declared');
   ok((home.match(/@breakdown="openBreakdown\(task\)"/g) || []).length === 2, 'both TaskCard usages wired');
   ok(/<BreakdownSheet v-if="bd.open"/.test(home), 'sheet only rendered when opened (no new block on Home)');
-  ok(/askAi\('breakdown'/.test(home) && /onSubtaskPatch\(idx, task, \{ subtasks: appendSteps/.test(home), 'calls AI, saves via subtask patch');
+  ok(/askAi\('breakdown'/.test(home) && /onSubtaskPatch\(idx, (?:task|cur), \{ subtasks: appendSteps/.test(home), 'calls AI, saves via subtask patch');
   ok(/breakdown-retry/.test(sheet) && /breakdown-add/.test(sheet) && /:disabled="loading \|\| !chosen.length"/.test(sheet), 'preview, retry, confirm');
   console.log(`test-b39-breakdown: ${pass} passed`);
 })().catch((e) => { console.error(e); process.exit(1); });

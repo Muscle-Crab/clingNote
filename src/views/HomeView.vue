@@ -364,7 +364,7 @@ import { startPomoPatch, nextPomoPatch, isPomo, POMO } from '@/utils/pomodoro';
 import TransferModal from '@/components/home/TransferModal.vue';
 import HolidayModal from '@/components/home/HolidayModal.vue';
 import BreakdownSheet from '@/components/home/BreakdownSheet.vue';
-import { scoreSteps, appendSteps, breakdownError } from '@/utils/breakdown';
+import { scoreSteps, appendSteps, breakdownError, findTaskIndex } from '@/utils/breakdown';
 import { clingAlarm, alarmPluginAvailable } from '@/native/clingAlarm';
 import { ALARM_SOUND, SNOOZE_MINUTES } from '@/utils/wakeAlarm';
 import { shouldAutoReplan, isOffDay, offLine, offRange, alarmAtFor, alarmLine, unlockAccepted, UNLOCK_WORD } from '@/utils/planPhase2';
@@ -3556,8 +3556,11 @@ const openBreakdown = (task) => { if (blockIfShut()) return; bd.value = { open: 
 const closeBreakdown = () => { bdSeq++; bd.value = { open: false, task: null, steps: [], loading: false, error: '' }; };
 const confirmBreakdown = async (chosen) => {
   const task = bd.value.task; closeBreakdown();
-  const idx = realIndex(task); if (idx < 0 || !chosen || !chosen.length) return;
-  await onSubtaskPatch(idx, task, { subtasks: appendSteps(subtasksOf(task), chosen) });
+  if (!chosen || !chosen.length) return;
+  const idx = findTaskIndex(selectedDayRoutine.value, task); // list may have been re-read while the AI was thinking
+  if (idx < 0) { showNoteToast('That task changed. Steps not added.', { error: true }); return; }
+  const cur = selectedDayRoutine.value[idx];
+  await onSubtaskPatch(idx, cur, { subtasks: appendSteps(subtasksOf(cur), chosen) });
 };
 
 // Subtasks: saved through the same patch path; optionally complete the parent when all are done
