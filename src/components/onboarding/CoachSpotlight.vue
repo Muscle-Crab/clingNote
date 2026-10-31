@@ -10,11 +10,11 @@
       <div class="coach-ring" :class="{ 'coach-ring--tap': step.until === 'tap' }" data-test="coach-ring" @click="step.until === 'tap' && $emit('tap')" :style="{ left: rect.left + 'px', top: rect.top + 'px', width: rect.w + 'px', height: rect.h + 'px' }" aria-hidden="true"></div>
     </template>
     <div v-else class="coach-pane" style="inset: 0"></div>
-    <div class="coach-say" :class="{ 'coach-say--top': below }" :style="sayStyle">
+    <div ref="sayEl" class="coach-say" :class="{ 'coach-say--top': below }" :style="sayStyle">
       <RobotCoach class="coach-bot" :size="44" :talking="true" :badge="true" />
       <div class="coach-text"><p class="coach-line">{{ step.line }}</p><p class="coach-cap">{{ step.caption }}</p></div>
     </div>
-    <div class="coach-actions">
+    <div ref="actEl" class="coach-actions" :style="actStyle" data-test="coach-actions">
       <button type="button" class="coach-skip" data-test="coach-skip" @click="$emit('skip')">Skip</button>
       <button type="button" class="coach-skip coach-skip--all" data-test="coach-skip-all" @click="$emit('skip-all')">Skip all tips</button>
     </div>
@@ -26,7 +26,7 @@ import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
 import RobotCoach from '@/components/robot/RobotCoach.vue';
 const props = defineProps({ step: { type: Object, default: null } });
 defineEmits(['skip', 'skip-all', 'tap']);
-const rect = ref(null); const PAD = 8;
+const rect = ref(null); const PAD = 8; const sayEl = ref(null); const actEl = ref(null); const actTop = ref(null);
 const measure = () => {
   const el = props.step && document.querySelector(props.step.target);
   if (!el) { rect.value = null; return; }
@@ -40,8 +40,21 @@ const sayStyle = computed(() => {
   if (!rect.value) return { top: '30%' };
   return below.value ? { top: rect.value.bottom + 16 + 'px' } : { bottom: window.innerHeight - rect.value.top + 16 + 'px' };
 });
-let raf = 0; const loop = () => { measure(); raf = requestAnimationFrame(() => setTimeout(loop, 250)); };
-watch(() => props.step, () => measure(), { flush: 'post' });
+// Skip buttons sit mid-screen: as close to the vertical centre as possible without covering the spotlight hole or the caption.
+const placeActions = () => {
+  const vh = window.innerHeight; const h = (actEl.value && actEl.value.offsetHeight) || 48; const gap = 12;
+  const busy = [];
+  if (rect.value) busy.push([rect.value.top, rect.value.bottom]);
+  const sr = sayEl.value && sayEl.value.getBoundingClientRect(); if (sr && sr.height) busy.push([sr.top, sr.bottom]);
+  const bottomSafe = 34 + gap; // home indicator / safe area
+  const free = (top) => top >= gap && top + h <= vh - bottomSafe && busy.every(([a, b]) => top + h + gap <= a || top >= b + gap);
+  const mid = Math.round(vh * 0.72 - h / 2); // lower third, nearest free spot
+  for (let d = 0; d <= vh; d += 8) { if (free(mid - d)) { actTop.value = mid - d; return; } if (free(mid + d)) { actTop.value = mid + d; return; } }
+  actTop.value = mid;
+};
+const actStyle = computed(() => (actTop.value == null ? {} : { top: actTop.value + 'px' }));
+let raf = 0; const loop = () => { measure(); placeActions(); raf = requestAnimationFrame(() => setTimeout(loop, 250)); };
+watch(() => props.step, () => { measure(); placeActions(); }, { flush: 'post' });
 onMounted(loop); onBeforeUnmount(() => cancelAnimationFrame(raf));
 </script>
 
@@ -55,7 +68,7 @@ onMounted(loop); onBeforeUnmount(() => cancelAnimationFrame(raf));
 .coach-text { flex: 1; }
 .coach-line { margin: 0; font-size: 24px; line-height: 1.25; font-weight: 800; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.6); }
 .coach-cap { margin: 6px 0 0; font-size: 18px; line-height: 1.35; color: #dfe6f3; }
-.coach-actions { position: fixed; top: calc(12px + env(safe-area-inset-top)); right: 12px; display: flex; gap: 8px; pointer-events: auto; z-index: 102; }
+.coach-actions { position: fixed; top: calc(72% - 24px); left: 0; right: 0; display: flex; justify-content: center; gap: 8px; width: max-content; margin: 0 auto; pointer-events: auto; z-index: 102; }
 .coach-skip { min-height: 48px; padding: 0 20px; border-radius: 999px; border: 2px solid #fff; background: rgba(4, 8, 18, .6); color: #fff; font-size: 18px; font-weight: 800; cursor: pointer; }
 .coach-skip--all { border-color: rgba(255,255,255,.5); font-weight: 600; font-size: 16px; }
 /* 'tap' steps: the ring itself takes the tap (decorative targets have no click of their own) */

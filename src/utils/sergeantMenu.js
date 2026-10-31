@@ -7,7 +7,7 @@ export const SERGEANT_ACTIONS = [
   { id: 'off', label: "I'm off today", icon: '🏖️', hint: 'Streak stays safe' },
   { id: 'critical', label: 'Make critical', icon: '❗', hint: 'Mark the next task' },
 ];
-export const HOLD_MS = 550;
+export const HOLD_MS = 500; // press-and-hold length; must equal longPress.js HOLD_MS (scripts/test-long-press.mjs) // one hold length for every assistant face
 
 // Replan: snapshot open tasks' start times so one Undo puts them back. plan = autoSchedule().plan ([{ task, start }]).
 export const replanMoves = (plan = []) => (plan || []).filter((p) => p && p.task && (p.task.startTime || '') !== p.start)
