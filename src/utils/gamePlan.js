@@ -1,7 +1,7 @@
 import { ref } from 'vue';
 // Coach-mode game plan (pure helpers; only a Vue ref for the size-mode flag, no Firestore / native imports).
 // 1 fixed weekly schedule (edits queued until the weekly review)   2 focus block = 2 x 50 min, notifications held back
-// 3 automatic 10 min break after each focus session (never costs points)   4 hard close = day start + 8 h, nothing earned after
+// 3 each finished focus session EARNS a 10 min break (banked; the user chooses when to take it; never costs points)   4 hard close = day start + 8 h, nothing earned after
 // 5 points per finished task by size (S 10 / M 20 / L 40); goal = max(min, min(90% of trailing 14-day median, today's planned load))
 // 6 locking: checklist gate, Screen Time revoke penalty, optional friend-approved early unlock (off by default), friction countdown
 // 7 at close the user picks which leftovers go to tomorrow (nothing rolls over by itself, no penalty)
@@ -66,20 +66,42 @@ export const dayWindow = (gp, nowMs = Date.now()) => {
   return { startMs, closeMs: startMs + span, dayKey: ymd(startMs), dow: new Date(startMs).getDay() };
 };
 
-// ---- 2 + 3. focus block: focus 50 / break 10 / focus 50 / break 10 from the day start ----
+// ---- 2 + 3. focus block: focus 50 · (10 min slot) · focus 50 from the day start. Breaks are NOT automatic: ----
+// finishing a focus session earns gp.breakMin minutes into a banked balance; the user starts a break when they choose.
 export const segments = (gp, startMs) => {
   const out = []; let at = startMs;
-  for (let i = 1; i <= gp.sessions; i++) {
-    out.push({ kind: 'focus', n: i, startMs: at, endMs: at + gp.focusMin * MIN }); at += gp.focusMin * MIN;
-    out.push({ kind: 'break', n: i, startMs: at, endMs: at + gp.breakMin * MIN }); at += gp.breakMin * MIN;
-  }
+  for (let i = 1; i <= gp.sessions; i++) { out.push({ kind: 'focus', n: i, startMs: at, endMs: at + gp.focusMin * MIN }); at += (gp.focusMin + gp.breakMin) * MIN; }
   return out;
 };
-// -> { phase: 'before'|'focus'|'break'|'work'|'closed', n, endsMs, leftMin }
-export const phaseAt = (gp, nowMs = Date.now()) => {
+// Per-day break state users/{uid}.gpBreak = { day, used (min), startMs, endMs, prior: { locked, until, label } | null, relocked }.
+export const normBreak = (b, dayKey) => (b && b.day === dayKey ? { day: dayKey, used: Math.max(0, Number(b.used) || 0), startMs: Number(b.startMs) || 0, endMs: Number(b.endMs) || 0, prior: b.prior || null, relocked: b.relocked === true } : { day: dayKey, used: 0, startMs: 0, endMs: 0, prior: null, relocked: false });
+export const breakActive = (b, nowMs) => !!(b && b.startMs && nowMs >= b.startMs && nowMs < b.endMs);
+// Banked balance: earned (breakMin per finished focus session) minus used; never more than the time left before the hard close.
+export const breakBank = (gp, b, nowMs = Date.now()) => {
+  const w = dayWindow(gp, nowMs); const done = nowMs < w.startMs ? 0 : segments(gp, w.startMs).filter((s) => s.endMs <= nowMs).length;
+  const earned = done * gp.breakMin; const used = b && b.day === w.dayKey ? Number(b.used) || 0 : 0;
+  const toClose = Math.max(0, Math.floor((w.closeMs - nowMs) / MIN));
+  return { earned, used, balance: breakActive(b, nowMs) ? 0 : Math.max(0, Math.min(earned - used, toClose)) };
+};
+// User taps "Take break": uses up to breakMin of the balance (never past the hard close). prior = shield state to restore after.
+export const takeBreak = (gp, b, nowMs = Date.now(), prior = null) => {
+  const w = dayWindow(gp, nowMs); const cur = normBreak(b, w.dayKey); const bank = breakBank(gp, cur, nowMs);
+  const min = Math.min(gp.breakMin, bank.balance); if (min <= 0 || nowMs >= w.closeMs) return null;
+  const endMs = Math.min(nowMs + min * MIN, w.closeMs);
+  return { ...cur, used: cur.used + min, startMs: nowMs, endMs, prior: prior || null, relocked: false };
+};
+// After a break: restore exactly the shield that was up before it (if that lock is still meant to run).
+export const relockPlan = (b, nowMs = Date.now()) => {
+  if (!b || !b.endMs || nowMs < b.endMs || b.relocked) return null;
+  const p = b.prior; return p && p.locked && Number(p.until) > nowMs ? { untilMs: Number(p.until), label: p.label || '' } : { untilMs: 0, label: '' };
+};
+export const fmtLeft = (ms) => { const s = Math.max(0, Math.ceil(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+// -> { phase: 'before'|'focus'|'break'|'work'|'closed', n, endsMs, leftMin }   (break only while a user-started break runs)
+export const phaseAt = (gp, nowMs = Date.now(), brk = null) => {
   const w = dayWindow(gp, nowMs);
   if (nowMs < w.startMs) return { phase: 'before', n: 0, endsMs: w.startMs, leftMin: Math.ceil((w.startMs - nowMs) / MIN), ...w };
   if (nowMs >= w.closeMs) return { phase: 'closed', n: 0, endsMs: 0, leftMin: 0, ...w };
+  if (breakActive(brk, nowMs)) return { phase: 'break', n: 0, endsMs: brk.endMs, leftMin: Math.ceil((brk.endMs - nowMs) / MIN), left: fmtLeft(brk.endMs - nowMs), ...w };
   const s = segments(gp, w.startMs).find((x) => nowMs >= x.startMs && nowMs < x.endMs);
   if (s) return { phase: s.kind, n: s.n, endsMs: s.endMs, leftMin: Math.ceil((s.endMs - nowMs) / MIN), ...w };
   return { phase: 'work', n: 0, endsMs: w.closeMs, leftMin: Math.ceil((w.closeMs - nowMs) / MIN), ...w };
@@ -90,8 +112,9 @@ export const deferForQuiet = (atMs, windows = []) => { for (const [a, b] of wind
 let quiet = [];
 export const setQuietWindows = (w) => { quiet = Array.isArray(w) ? w : []; };
 export const quietDefer = (atMs) => deferForQuiet(atMs, quiet);
-export const breakNote = (n, sessions = 2) => (n < sessions ? { title: `Focus ${n} done: 10 min break`, body: `Stand up, water, eyes off the screen. Focus ${n + 1} starts in 10 minutes. Breaks never cost points.` }
-  : { title: 'Focus block done: 10 min break', body: 'Nice work. Take 10 minutes, then keep going until close. Breaks never cost points.' });
+// Focus end: a break was EARNED (banked), not started.
+export const breakNote = (n, sessions = 2, min = 10) => ({ title: n < sessions ? `Focus ${n} done: ${min} min break earned` : `Focus block done: ${min} min break earned`,
+  body: `Take it whenever you want from the game plan line on Home; it opens your apps for ${min} min. Breaks never cost points.` });
 
 // ---- 5. points: per finished task, by size, never by time ----
 export const SIZE_POINTS = { s: 10, m: 20, l: 40 };
@@ -175,11 +198,11 @@ export const carryOver = (picked = [], tomorrowTasks = [], stamp = Date.now()) =
 export const nextDayName = (dayKey) => { const [y, m, d] = dayKey.split('-').map(Number); return WEEK[new Date(y, m - 1, d + 1).getDay()]; };
 
 // Compact Home row text.
-export const rowText = (ph, { earned = 0, goal = 0 } = {}) => {
-  const pts = `${earned}/${goal} pts`;
+export const rowText = (ph, { earned = 0, goal = 0, bank = 0 } = {}) => {
+  const pts = `${earned}/${goal} pts` + (bank > 0 && ph.phase !== 'closed' && ph.phase !== 'break' ? ` · ${bank}m break ready` : '');
   if (ph.phase === 'before') return `Day starts in ${ph.leftMin >= 60 ? `${Math.floor(ph.leftMin / 60)}h ${ph.leftMin % 60}m` : `${ph.leftMin}m`} · ${pts}`;
   if (ph.phase === 'focus') return `Focus ${ph.n}/2 · ${ph.leftMin}m left · notifications held · ${pts}`;
-  if (ph.phase === 'break') return `Break · ${ph.leftMin}m · free, no points lost · ${pts}`;
+  if (ph.phase === 'break') return `Break · ${ph.left || `${ph.leftMin}m`} left · apps open · ${pts}`;
   if (ph.phase === 'work') return `Working · closes in ${Math.floor(ph.leftMin / 60)}h ${ph.leftMin % 60}m · ${pts}`;
   return `Closed · ${pts} · pick tomorrow's tasks`;
 };

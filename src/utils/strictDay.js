@@ -35,10 +35,11 @@ export const wakeAutoOn = ({ mode, wakeAuto, dayKey, offDates, skipDate }) => (n
 export const endOfDay = (nowMs) => { const d = new Date(nowMs); return new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1).getTime(); };
 
 // What the shield should do in strict mode.
-// goalAt = when today's goal was first reached (ms, 0 = not yet). Returns { want, untilMs, phase, windowMin, unlockEndMs }.
-// phases: 'locked' (working toward the goal), 'earned' (unlock window running), 'relocked' (window used up),
+// goalAt = when today's goal was first reached (ms, 0 = not yet). claimedAt = when the user tapped "Start screen time" (0 = not yet):
+// the earned window is never auto-started; it is banked ('ready', still locked) until the user starts it. Returns { want, untilMs, phase, windowMin, unlockEndMs }.
+// phases: 'locked' (working toward the goal), 'ready' (goal met, window banked, user has not started it), 'earned' (unlock window running), 'relocked' (window used up),
 //         'missed' (end time passed without the goal: locked until midnight), 'off' (no session / emergency unlocked / no apps).
-export const strictShield = ({ running = false, dayEndMs = 0, now = Date.now(), goal = 0, earned = 0, tasksDone = 0, goalAt = 0, selectionCount = 0, enabled = true, unlockedToday = false, offDay = false, tuning = STRICT_TUNING } = {}) => {
+export const strictShield = ({ running = false, dayEndMs = 0, now = Date.now(), goal = 0, earned = 0, tasksDone = 0, goalAt = 0, claimedAt = 0, selectionCount = 0, enabled = true, unlockedToday = false, offDay = false, tuning = STRICT_TUNING } = {}) => {
   const midnight = endOfDay(now); const off = { want: false, untilMs: 0, phase: 'off', windowMin: 0, unlockEndMs: 0 };
   if (!enabled || selectionCount <= 0 || unlockedToday || offDay || !dayEndMs) return off;
   const met = goal > 0 && earned >= goal;
@@ -47,7 +48,8 @@ export const strictShield = ({ running = false, dayEndMs = 0, now = Date.now(), 
     return midnight - now > 60000 ? { ...off, want: true, untilMs: midnight, phase: 'missed' } : off;
   }
   const windowMin = earnedWindowMin({ earned, goal, tasksDone }, tuning);
-  const start = goalAt || now; const unlockEndMs = start + windowMin * 60000;
+  if (!claimedAt) return midnight - now > 60000 ? { want: true, untilMs: midnight, phase: 'ready', windowMin, unlockEndMs: 0 } : { ...off, windowMin };
+  const unlockEndMs = claimedAt + windowMin * 60000;
   if (now < unlockEndMs) return { want: false, untilMs: 0, phase: 'earned', windowMin, unlockEndMs };
   return midnight - now > 60000 ? { want: true, untilMs: midnight, phase: 'relocked', windowMin, unlockEndMs } : { ...off, windowMin, unlockEndMs };
 };
@@ -57,7 +59,7 @@ export const fmtMin = (m) => { const v = Math.max(0, Math.round(m)); return v >=
 export const dayEndNote = ({ earned = 0, goal = 0, tasksDone = 0, tuning = STRICT_TUNING } = {}) => {
   const w = earnedWindowMin({ earned, goal, tasksDone }, tuning);
   return w > 0
-    ? { title: `Goal hit: ${earned}/${goal} pts`, body: `You earned ${fmtMin(w)} of screen time. It ends on its own, then apps lock again.`, windowMin: w }
+    ? { title: `Goal hit: ${earned}/${goal} pts`, body: `You earned ${fmtMin(w)} of screen time. Start it from the game plan line on Home whenever you want; when it ends, apps lock again.`, windowMin: w }
     : { title: `Goal missed: ${earned}/${goal} pts`, body: 'No screen time earned today. Apps stay locked until midnight. Fresh start tomorrow.', windowMin: 0 };
 };
 

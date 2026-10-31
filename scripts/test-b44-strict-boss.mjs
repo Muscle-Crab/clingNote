@@ -15,10 +15,13 @@ t('window formula', () => { assert.equal(S.earnedWindowMin({ earned: 50, goal: 5
 t('window clamped + tunable', () => { assert.equal(S.earnedWindowMin({ earned: 500, goal: 50, tasksDone: 100 }), 180); assert.equal(S.earnedWindowMin({ earned: 50, goal: 50 }, { ...S.STRICT_TUNING, baseMin: 5 }), 15); });
 t('window grows with points and tasks', () => { assert.ok(S.earnedWindowMin({ earned: 80, goal: 50, tasksDone: 3 }) > S.earnedWindowMin({ earned: 50, goal: 50, tasksDone: 3 })); assert.ok(S.earnedWindowMin({ earned: 50, goal: 50, tasksDone: 8 }) > S.earnedWindowMin({ earned: 50, goal: 50, tasksDone: 2 })); });
 t('locked while working toward goal', () => { const r = S.strictShield({ ...common, now: base + H, goal: 60, earned: 10 }); assert.equal(r.phase, 'locked'); assert.equal(r.want, true); assert.equal(r.untilMs, dayEnd); });
-t('earned window unlocks, then relocks to midnight', () => {
-  const at = base + 3 * H; const a = S.strictShield({ ...common, now: at + 10 * 60000, goal: 50, earned: 50, tasksDone: 4, goalAt: at });
+t('goal met: window banked (ready, still locked) until the user starts it', () => {
+  const at = base + 3 * H; const r = S.strictShield({ ...common, now: at + 60 * 60000, goal: 50, earned: 50, tasksDone: 4, goalAt: at });
+  assert.equal(r.phase, 'ready'); assert.equal(r.want, true); assert.equal(r.windowMin, 50); assert.equal(r.untilMs, S.endOfDay(at)); });
+t('user-started window unlocks, then relocks to midnight', () => {
+  const at = base + 3 * H; const a = S.strictShield({ ...common, now: at + 10 * 60000, goal: 50, earned: 50, tasksDone: 4, goalAt: base, claimedAt: at });
   assert.equal(a.phase, 'earned'); assert.equal(a.want, false); assert.equal(a.unlockEndMs, at + 50 * 60000);
-  const b = S.strictShield({ ...common, now: at + 51 * 60000, goal: 50, earned: 50, tasksDone: 4, goalAt: at });
+  const b = S.strictShield({ ...common, now: at + 51 * 60000, goal: 50, earned: 50, tasksDone: 4, goalAt: base, claimedAt: at });
   assert.equal(b.phase, 'relocked'); assert.equal(b.want, true); assert.equal(b.untilMs, S.endOfDay(at)); });
 t('missed goal by end time: locked rest of day', () => { const r = S.strictShield({ ...common, running: false, now: dayEnd + 60000, goal: 60, earned: 30 }); assert.equal(r.phase, 'missed'); assert.equal(r.untilMs, S.endOfDay(dayEnd)); });
 t('emergency unlock / off day / no apps -> off', () => { for (const x of [{ unlockedToday: true }, { offDay: true }, { selectionCount: 0 }, { enabled: false }]) assert.equal(S.strictShield({ ...common, now: base + H, goal: 60, ...x }).phase, 'off'); });

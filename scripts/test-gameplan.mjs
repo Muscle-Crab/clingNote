@@ -38,11 +38,30 @@ t('2+3 focus 50 / break 10 / focus 50 / break 10 from the day start', () => {
   const g = G.normPlan({ dayStart: '09:00' });
   assert.strictEqual(G.phaseAt(g, at(2, 8, 30)).phase, 'before');
   const f1 = G.phaseAt(g, at(2, 9, 10)); assert.strictEqual(f1.phase, 'focus'); assert.strictEqual(f1.n, 1); assert.strictEqual(f1.leftMin, 40);
-  assert.strictEqual(G.phaseAt(g, at(2, 9, 55)).phase, 'break');
+  assert.strictEqual(G.phaseAt(g, at(2, 9, 55)).phase, 'work'); // no automatic break
   assert.strictEqual(G.phaseAt(g, at(2, 10, 5)).phase, 'focus'); assert.strictEqual(G.phaseAt(g, at(2, 10, 5)).n, 2);
-  assert.strictEqual(G.phaseAt(g, at(2, 10, 55)).phase, 'break'); assert.strictEqual(G.phaseAt(g, at(2, 11, 0)).phase, 'work');
+  assert.strictEqual(G.phaseAt(g, at(2, 10, 55)).phase, 'work'); assert.strictEqual(G.phaseAt(g, at(2, 11, 0)).phase, 'work');
   assert.deepStrictEqual(G.quietWindows(g, at(2, 9)), [[at(2, 9), at(2, 9, 50)], [at(2, 10), at(2, 10, 50)]]);
-  assert(/10 min break/.test(G.breakNote(1).title) && /never cost points/.test(G.breakNote(1).body));
+  const n = G.breakNote(1); assert(/break earned/.test(n.title) && !/start/i.test(n.title) && /never cost points/.test(n.body));
+});
+t('earned breaks: banked, user-started, no stacking past earned, capped at close, relock to prior', () => {
+  const g = G.normPlan({ dayStart: '09:00' }); const day = G.dayWindow(g, at(2, 9)).dayKey;
+  assert.strictEqual(G.breakBank(g, null, at(2, 9, 10)).balance, 0);
+  assert.strictEqual(G.breakBank(g, null, at(2, 9, 55)).balance, 10);
+  assert.strictEqual(G.breakBank(g, null, at(2, 12)).balance, 20); // used later, both sessions
+  assert(/10m break ready/.test(G.rowText(G.phaseAt(g, at(2, 9, 55)), { earned: 0, goal: 130, bank: 10 })));
+  const prior = { locked: true, until: at(2, 17), label: 'ClingNote lock-in' };
+  const b = G.takeBreak(g, null, at(2, 9, 55), prior); assert.strictEqual(b.used, 10); assert.strictEqual(b.endMs, at(2, 10, 5)); assert.deepStrictEqual(b.prior, prior);
+  assert.strictEqual(G.phaseAt(g, at(2, 10, 0), b).phase, 'break'); assert(/Break · 5:00 left/.test(G.rowText(G.phaseAt(g, at(2, 10, 0), b), {})));
+  assert.strictEqual(G.breakBank(g, b, at(2, 10, 0)).balance, 0);
+  assert.strictEqual(G.takeBreak(g, b, at(2, 10, 6)), null); // no stacking: used it up
+  assert.strictEqual(G.relockPlan(b, at(2, 10, 0)), null);
+  assert.deepStrictEqual(G.relockPlan(b, at(2, 10, 5)), { untilMs: at(2, 17), label: 'ClingNote lock-in' });
+  assert.strictEqual(G.relockPlan({ ...b, relocked: true }, at(2, 11)), null);
+  assert.deepStrictEqual(G.relockPlan({ ...b, prior: { locked: false } }, at(2, 11)), { untilMs: 0, label: '' });
+  const late = G.takeBreak(g, null, at(2, 16, 55)); assert.strictEqual(late.endMs, at(2, 17)); assert.strictEqual(late.used, 5); // close caps it
+  assert.strictEqual(G.takeBreak(g, null, at(2, 17, 1)), null);
+  assert.strictEqual(G.normBreak({ ...b, day: 'old' }, day).used, 0);
 });
 t('2 notifications inside focus are held to the session end (gp/timer pass)', () => {
   G.setQuietWindows([[at(2, 9), at(2, 9, 50)]]); assert.strictEqual(G.quietDefer(at(2, 9, 20)), at(2, 9, 50)); assert.strictEqual(G.quietDefer(at(2, 9, 55)), at(2, 9, 55)); G.setQuietWindows([]);
@@ -96,10 +115,18 @@ t('7 close picker: nothing automatic; picked copies dedupe by title, reset compl
   assert.deepStrictEqual(out.map((x) => x.title), ['a', 'E']); assert.strictEqual(out[1].completedAt, null); assert.strictEqual(out[1].timerActive, false); assert.strictEqual(out[1].carriedFrom, 'c5'); assert(/^gp-carry-77/.test(out[1].createdAt));
   assert.strictEqual(G.nextDayName('2026-11-07'), 'Sun');
 });
+t('wiring: earned break (take-break action, shield lift, relock on expiry/launch, native re-shield, earned note)', () => {
+  const h = src('src/views/HomeView.vue'); const r = src('src/components/home/GamePlanRow.vue');
+  assert(/@take-break="gpTakeBreak"/.test(h) && /data-test="gp-take-break"/.test(r) && /data-test="gp-ready"/.test(r));
+  assert(/GP\.breakActive\(gpBreak\.value, Date\.now\(\)\)\) r = \{ \.\.\.r, want: false, phase: 'break' \}/.test(h));
+  assert(/st = await gpBreakRelock\(st\)/.test(h) && /clingLock\.scheduleLock\(\{ startMs: b\.endMs, untilMs: prior\.until/.test(h));
+  assert(/at: new Date\(s\.endMs\)/.test(h) && !/s\.kind === 'break'/.test(h));
+  assert(/claimedAt: sd\.claimedAt/.test(h) && /@claim-screen="claimScreenTime"/.test(h));
+});
 t('row text per phase', () => {
   const g = G.normPlan({ dayStart: '09:00' });
   assert(/Focus 1\/2/.test(G.rowText(G.phaseAt(g, at(2, 9, 5)), { earned: 0, goal: 130 })));
-  assert(/Break/.test(G.rowText(G.phaseAt(g, at(2, 9, 55)), {}))); assert(/Closed/.test(G.rowText(G.phaseAt(g, at(2, 18)), {})));
+  assert(/Break/.test(G.rowText(G.phaseAt(g, at(2, 9, 56), { day: 'x', startMs: at(2, 9, 55), endMs: at(2, 10, 5) }), {}))); assert(/Closed/.test(G.rowText(G.phaseAt(g, at(2, 18)), {})));
 });
 t('wiring: Home row, Coach-only, earned/close, gate, carry, review, ask; Profile row; TaskCard chips; report', () => {
   const h = src('src/views/HomeView.vue'); assert(/<GamePlanRow v-if="gpOn && isViewingToday"/.test(h)); assert(/const gpOn = computed\(\(\) => isStrictMode\.value\)/.test(h));

@@ -1,8 +1,11 @@
 // JS side of the local iOS plugins ClingLock (Screen Time app lock) and ClingNative (calendar, geofence, Live Activity, Siri queue).
 // Every call is a safe no-op on web / when the plugin is missing.
 import { Capacitor, registerPlugin } from '@capacitor/core';
-const avail = (n) => { try { return Capacitor.getPlatform() === 'ios' && Capacitor.isPluginAvailable(n); } catch (e) { return false; } };
-const Lock = registerPlugin('ClingLock'); const Native = registerPlugin('ClingNative');
+// Emulator e2e builds only: a page-installed window.__clingLockFake stands in for the ClingLock plugin (never in production builds).
+const lockFake = () => (process.env.VUE_APP_FIREBASE_EMULATORS === '1' && typeof window !== 'undefined' && window.__clingLockFake) || null;
+const avail = (n) => { if (n === 'ClingLock' && lockFake()) return true; try { return Capacitor.getPlatform() === 'ios' && Capacitor.isPluginAvailable(n); } catch (e) { return false; } };
+const LockReal = registerPlugin('ClingLock');
+const Lock = new Proxy({}, { get: (_, k) => { const f = lockFake(); return f ? (f[k] || (async () => ({}))) : LockReal[k]; } }); const Native = registerPlugin('ClingNative');
 const safe = (name, plugin, fn, fallback) => async (...a) => { if (!avail(name)) return fallback; try { return await fn(plugin, ...a); } catch (e) { return { ...(typeof fallback === 'object' ? fallback : {}), error: String((e && e.message) || e) }; } };
 export const lockAvailable = () => avail('ClingLock');
 export const clingLock = {
