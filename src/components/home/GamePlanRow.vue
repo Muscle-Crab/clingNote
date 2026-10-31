@@ -2,9 +2,9 @@
   <!-- Coach game plan: ONE compact tappable row (same look as the routine row). Expands inline for the close picker, weekly review and friend unlock. -->
   <div class="gp" data-test="gp-row" :data-phase="phase">
     <button type="button" class="gp-row" data-test="gp-toggle" :aria-expanded="open ? 'true' : 'false'" @click="open = !open">
-      <span class="gp-title">{{ icon }} <span data-test="gp-text">{{ text }}</span></span>
+      <span class="gp-title"><span data-test="gp-text">{{ text }}</span></span>
       <span v-if="attn" class="gp-dot" data-test="gp-attn" aria-label="Needs you"></span>
-      <i class="fas gp-chev" :class="open ? 'fa-chevron-up' : 'fa-chevron-down'" aria-hidden="true"></i>
+      <span class="gp-chev" aria-hidden="true">{{ open ? '‹' : '›' }}</span>
     </button>
     <div v-if="open" class="gp-body">
       <p v-if="gate" class="gp-line" data-test="gp-gate">🔒 Social apps stay locked until your morning checklist is done.</p>
@@ -50,20 +50,19 @@ const props = defineProps({
 defineEmits(['carry', 'review', 'ask', 'share']);
 const open = ref(false); const picked = ref([]); const accepted = ref([]);
 const left = computed(() => props.leftovers);
-const icon = computed(() => ({ before: '🌅', focus: '🎯', break: '☕', work: '🛠', closed: '🌙' }[props.phase] || '🎯'));
 const attn = computed(() => !!props.review || (props.phase === 'closed' && props.leftovers.length > 0) || props.unlock.status === 'approved');
 </script>
 
 <style scoped>
-.gp { margin: 0 0 8px; }
-.gp-row { width: 100%; display: flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 2px; background: none; border: 0; color: var(--c-text-2, #a1a09b); font: inherit; font-size: .82rem; cursor: pointer; text-align: left; }
+.gp { margin: 0 0 4px; opacity: .6; } .gp:focus-within, .gp:hover { opacity: .85; }
+.gp-row { width: 100%; display: flex; align-items: center; gap: 6px; min-height: 22px; padding: 0 2px; background: none; border: 0; color: var(--c-text-3, #7d7c78); font: inherit; font-size: .7rem; cursor: pointer; text-align: left; }
 .gp-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.gp-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--c-accent-text, #5B9BFF); }
+.gp-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--c-accent-text, #5B9BFF); }
 .gp-chev { font-size: .7rem; opacity: .7; }
-.gp-body { padding: 4px 2px 6px; font-size: .8rem; color: var(--c-text-2, #a1a09b); display: grid; gap: 6px; }
-.gp-line, .gp-h { margin: 0; } .gp-h { color: var(--c-text, #ecebe8); font-weight: 600; } .gp-warn { color: var(--c-warning, #d29922); }
+.gp-body { padding: 2px 2px 4px; font-size: .72rem; color: var(--c-text-2, #a1a09b); display: grid; gap: 6px; }
+.gp-line, .gp-h { margin: 0; } .gp-h { color: var(--c-text-2, #a1a09b); font-weight: 600; } .gp-warn { color: var(--c-warning, #d29922); }
 .gp-check { display: flex; gap: 8px; align-items: center; min-height: 32px; }
-.gp-btn, .gp-chip { min-height: 32px; padding: 0 12px; border-radius: 16px; border: 1px solid var(--c-border, #2a2a2e); background: none; color: var(--c-text, #ecebe8); font: inherit; font-size: .8rem; cursor: pointer; justify-self: start; }
+.gp-btn, .gp-chip { min-height: 26px; padding: 0 10px; border-radius: 13px; border: 1px solid var(--c-border, #2a2a2e); background: none; color: var(--c-text, #ecebe8); font: inherit; font-size: .72rem; cursor: pointer; justify-self: start; }
 .gp-btn:disabled { opacity: .5; cursor: default; }
 .gp-ask { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 a { color: var(--c-accent-text, #5B9BFF); }

@@ -161,6 +161,7 @@ const lastSunday = () => { const d = new Date(); d.setDate(d.getDate() - d.getDa
     await shot(p, 'morning-report', 'section.mr');
     if (AFTER) {
       ok('goal: 90% of the 2-week median (100 -> 90), under the 160 planned', /90 pts/.test(await p.locator('[data-test=mr-goal]').innerText().catch(() => '')), await p.locator('[data-test=mr-goal]').innerText().catch(() => ''));
+      await p.click('[data-test=mr-why-toggle]').catch(() => {}); await sleep(300);
       ok('goal: reason shown', /median/i.test(await p.locator('[data-test=mr-goal-why]').innerText().catch(() => '')));
       ok('revoke: penalty shown in the report', /25/.test(await p.locator('[data-test=mr-penalty]').innerText().catch(() => '')));
       await p.keyboard.press('Escape').catch(() => {}); await home(p); await openRow(p);

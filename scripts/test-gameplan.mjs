@@ -102,6 +102,7 @@ t('wiring: Home row, Coach-only, earned/close, gate, carry, review, ask; Profile
   assert(/fnUrl\('friend-unlock'\)/.test(h)); assert(/GP\.countdown/.test(h)); assert(/!gpQuiet/.test(h));
   const p = src('src/views/Profile.vue'); assert(/data-test="gp-settings"/.test(p)); assert(/GP\.queueEdit/.test(p));
   const c = src('src/components/home/TaskCard.vue'); assert(/data-test="size-edit"/.test(c));
+  assert.equal(G.sizeOf({ points: 20 }), 'm'); assert.equal(G.sizeOf({ points: 10 }), 's'); assert.equal(G.sizeOf({ points: 60 }), 'l'); assert.equal(G.sizeOf({ points: 60, estimateMin: 10 }), 's'); assert.equal(G.sizeOf({ size: 'l', points: 10 }), 'l');
   const m = src('src/components/home/MorningReport.vue'); assert(/mr-penalty/.test(m) && /mr-goal-why/.test(m));
   const sw = src('ios/App/App/ClingLockPlugin.swift'); assert(/everApproved/.test(sw)); assert(/Ask your friend/.test(src('ios/App/ClingShieldConfig/ClingShieldConfig.swift')));
 });

@@ -12,8 +12,7 @@
     <p v-if="recap.pointsGoal" data-test="mr-goal">🎯 Today's goal:
       <template v-if="strict"><input v-if="editing" ref="goalIn" v-model.number="draft" class="mr-goal-in" type="number" :min="MINIMUM_GOAL" step="5" inputmode="numeric" aria-label="Points goal" data-test="mr-goal-in" @keyup.enter="saveGoal" @blur="saveGoal" /><button v-else type="button" class="mr-goal-btn" data-test="mr-goal-edit" :title="`Adjust (minimum ${MINIMUM_GOAL})`" @click="editGoal"><strong>{{ goal }} pts</strong> ✎</button></template>
       <strong v-else>{{ recap.pointsGoal.goal }} pts</strong> · {{ recap.pointsGoal.tasks }} task{{ recap.pointsGoal.tasks === 1 ? '' : 's' }}, {{ recap.pointsGoal.load }} pts planned</p>
-    <p v-if="strict && goalWhy" class="mr-why" data-test="mr-goal-why">{{ goalWhy }}</p>
-    <p v-if="penaltyNote" data-test="mr-penalty">⚠️ {{ penaltyNote }}</p>
+    <p v-if="(strict && goalWhy) || penaltyNote" class="mr-why"><button type="button" class="mr-why-btn" data-test="mr-why-toggle" :aria-expanded="whyOpen ? 'true' : 'false'" @click="whyOpen = !whyOpen">{{ penaltyNote ? 'Goal & penalty' : 'How the goal is set' }} {{ whyOpen ? '‹' : '›' }}</button><template v-if="whyOpen"><span v-if="strict && goalWhy" data-test="mr-goal-why"> {{ goalWhy }}</span><span v-if="penaltyNote" data-test="mr-penalty"> {{ penaltyNote }}</span></template></p>
     <p v-if="recap.slipped.length"><strong>Slipped:</strong> {{ recap.slipped.join(', ') }}</p>
     <div v-if="recap.pending.length"><strong>Waiting on:</strong>
       <ul class="mr-list"><li v-for="p in recap.pending" :key="p.title">{{ p.title }}<span v-if="p.on"> · {{ p.on }}</span><span v-if="p.days != null"> · {{ p.days }}d</span></li></ul>
@@ -30,7 +29,7 @@ import { MOODS, MINIMUM_GOAL, wakeGreeting, adjustGoal } from '@/utils/strictDay
 const props = defineProps({ recap: { type: Object, required: true }, strict: { type: Boolean, default: false }, goal: { type: Number, default: 0 }, mood: { type: String, default: '' }, name: { type: String, default: '' }, goalWhy: { type: String, default: '' }, penaltyNote: { type: String, default: '' } });
 const emit = defineEmits(['close', 'mood', 'goal']);
 const greeting = computed(() => wakeGreeting(props.name, new Date().getHours()));
-const editing = ref(false); const draft = ref(0); const goalIn = ref(null);
+const whyOpen = ref(false); const editing = ref(false); const draft = ref(0); const goalIn = ref(null);
 const editGoal = async () => { draft.value = props.goal; editing.value = true; await nextTick(); if (goalIn.value) goalIn.value.focus(); };
 const saveGoal = () => { if (!editing.value) return; editing.value = false; const v = adjustGoal(draft.value); if (v !== props.goal) emit('goal', v); };
 </script>
@@ -47,7 +46,8 @@ const saveGoal = () => { if (!editing.value) return; editing.value = false; cons
 .mr p { margin: 4px 0; }
 .mr-chip { background: none; border: 1px solid var(--c-border, #252B38); border-radius: 999px; padding: 0 6px; margin-left: 4px; font-size: 15px; cursor: pointer; line-height: 1.5; }
 .mr-chip.on { border-color: var(--c-accent, #3C8CFF); background: var(--c-surface-2, #1A1E28); }
-.mr-why { margin-top: -4px; font-size: .8em; opacity: .75; }
+.mr-why { margin-top: -2px; font-size: .72em; opacity: .55; }
+.mr-why-btn { background: none; border: 0; padding: 0; color: inherit; font: inherit; cursor: pointer; }
 .mr-goal-btn { background: none; border: none; padding: 0; color: inherit; font: inherit; cursor: pointer; }
 .mr-goal-in { width: 4.5rem; font: inherit; padding: 0 4px; background: var(--c-bg, #0B0E14); color: var(--c-text, #E6E9EF); border: 1px solid var(--c-accent, #3C8CFF); border-radius: 6px; }
 </style>

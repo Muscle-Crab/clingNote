@@ -97,7 +97,11 @@ export const SIZE_POINTS = { s: 10, m: 20, l: 40 };
 export const SIZE_LABEL = { s: 'Small', m: 'Medium', l: 'Large' };
 export const sizeFromMinutes = (min) => { const m = Number(min) || 0; return m <= 0 ? 'm' : m <= 25 ? 's' : m <= 75 ? 'm' : 'l'; };
 // Stored size (user-picked or AI) wins; otherwise estimated from the task's minutes (typed, AI or the title estimator).
-export const sizeOf = (task = {}, estMinutes = 0) => (SIZE_POINTS[task && task.size] ? task.size : sizeFromMinutes(Number(task && task.estimateMin) || Number(task && task.minutes) || estMinutes));
+export const sizeFromPoints = (p) => (p <= 15 ? 's' : p <= 30 ? 'm' : 'l');
+// Order: picked size > typed minutes > stored minutes > stored points (legacy/AI) > title estimate.
+export const sizeOf = (task = {}, estMinutes = 0) => { const t = task || {}; if (SIZE_POINTS[t.size]) return t.size;
+  const m = Number(t.estimateMin) || Number(t.minutes); if (m > 0) return sizeFromMinutes(m);
+  if (Number(t.points) > 0) return sizeFromPoints(Number(t.points)); return sizeFromMinutes(estMinutes); };
 export const sizePoints = (task, estMinutes) => SIZE_POINTS[sizeOf(task, estMinutes)];
 const sizeMode = ref(false); // reactive so cards re-score when Coach mode loads; on in Coach (strict) mode: chips + earned points use size points
 export const setSizeMode = (on) => { sizeMode.value = !!on; };
