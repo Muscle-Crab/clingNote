@@ -132,6 +132,9 @@
               </span>
               <small class="pf-dl-sub">Mon–Fri. Focus time and lock-ins go to your ClingNote calendar as blocks around your other events (Calendar sync on).</small>
             </div>
+            <div class="pf-row pf-row--divided pf-row--stack" data-test="boss-mode-row"><span class="pf-ico" aria-hidden="true">🤖</span><span class="pf-row-title">Coach mode<small class="pf-dl-sub" data-test="boss-mode-sub">{{ bossMode === 'strict' ? 'Strict: auto-start at wake, earn screen time by hitting your points goal.' : 'Simple: you start the day, apps unlock when the goal is met.' }}</small>
+              <span class="pf-mini-btns"><button v-for="m in ['simple', 'strict']" :key="m" type="button" class="pf-mini" :class="{ 'pf-mini--on': bossMode === m }" :aria-pressed="bossMode === m" :data-test="`boss-${m}`" @click="saveBoss({ bossMode: m })">{{ m === 'strict' ? 'Strict' : 'Simple' }}</button>
+                <label class="pf-mini pf-mini--check"><input type="checkbox" data-test="emergency-toggle" :checked="emergencyOn" @change="saveBoss({ emergencyUnlock: $event.target.checked })" /> Emergency unlock</label></span></span></div>
           </section>
 
           <h2 class="pf-section">More</h2>
@@ -247,8 +250,11 @@ const onIcsImport = async (ev) => { const u = auth.currentUser; const f = ev.tar
 // B44 time blocking: users/{uid}.timeBlocks { start, end, days, focusMin }
 const tbOpen = ref(false); const tbBusy = ref(false); const tbSaved = ref(normBlocks(null)); const tbForm = ref({ ...normBlocks(null) });
 const tbSummary = computed(() => blocksSummary(tbSaved.value));
-const loadTimeBlocks = async () => { const u = auth.currentUser; if (!u) return; try { const snap = await getDoc(doc(db, 'users', u.uid)); tbSaved.value = normBlocks(snap.exists() ? snap.data().timeBlocks : null); tbForm.value = { ...tbSaved.value }; } catch (e) { /* defaults */ } };
+const loadTimeBlocks = async () => { const u = auth.currentUser; if (!u) return; try { const snap = await getDoc(doc(db, 'users', u.uid)); tbSaved.value = normBlocks(snap.exists() ? snap.data().timeBlocks : null); { const d = snap.exists() ? snap.data() : {}; bossMode.value = d.bossMode === 'strict' ? 'strict' : 'simple'; emergencyOn.value = d.emergencyUnlock !== false; } tbForm.value = { ...tbSaved.value }; } catch (e) { /* defaults */ } };
 loadTimeBlocks();
+const bossMode = ref('simple'); const emergencyOn = ref(true);
+const saveBoss = async (f) => { const u = auth.currentUser; if (!u) return; if ('bossMode' in f) bossMode.value = f.bossMode; if ('emergencyUnlock' in f) emergencyOn.value = f.emergencyUnlock;
+  try { await setDoc(doc(db, 'users', u.uid), f, { merge: true }); } catch (e) { console.warn('boss mode save', e && e.message); } };
 const saveTimeBlocks = async () => {
   const u = auth.currentUser; if (!u) return; tbBusy.value = true;
   try { const v = normBlocks(tbForm.value); await setDoc(doc(db, 'users', u.uid), { timeBlocks: v }, { merge: true }); tbSaved.value = v; tbForm.value = { ...v }; tbOpen.value = false; if (calSyncState.value.enabled) syncCalendarNow(u.uid, { pro: userIsPro.value, force: true }).catch(() => {}); }
@@ -532,4 +538,6 @@ onMounted(() => { loadDayLengthHours().then((v) => { dayLen.value = v; }).catch(
 .pf-row--stack { align-items: flex-start; padding: 12px 0; } .pf-row--stack .pf-row-title { min-width: 0; }
 .pf-xfer { padding: 0 0 12px 50px; }
 .pf-chev { transition: transform .15s ease; } .pf-chev--open { transform: rotate(90deg); }
+.pf-mini--on { border-color: var(--c-accent, #3C8CFF) !important; color: var(--c-text, #fff); }
+.pf-mini--check { display: inline-flex; align-items: center; gap: 4px; }
 </style>

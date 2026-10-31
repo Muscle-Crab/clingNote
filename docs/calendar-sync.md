@@ -38,3 +38,15 @@ Tests: `scripts/test-calendar-sync.js`, `scripts/test-b44-calendar-2way.js`.
 - **Busy times**: start/end times from your other device calendars (not the ClingNote calendar) are read on the device, only while sync is on. They show as one "Busy … · free …" row in the schedule picker. Titles are not read, and nothing is stored or uploaded.
 - **Working hours and focus blocks** (Settings → Working hours) are written as ClingNote calendar events on the next sync. The lock-in shows as a focus block.
 - **Location**: plain typed text kept with the task, plus a map link and a time-to-leave reminder computed from a travel time you pick. Device location is not used.
+
+## Strict coach mode (build 44)
+
+Opt-in (onboarding strictness step or Settings > Coach mode). Simple = previous behaviour.
+
+- Wake: greeting + mood check (great/ok/low/rough), stored per day on the user doc (`mood: {day, id}`).
+- Session auto-starts at wake (reuses wake auto-lock) unless the day is an off day/holiday.
+- Social apps shield until the goal is met; end time = existing day-length choice.
+- Goal: `max(50, round5(0.8 × open task points))` (10 pts default per task); user can adjust (min 50, per-day override `pointsGoal: {day, value}`).
+- Earned window once goal met: `clamp(round5(30 × min(earned/goal, 2) + 5 × tasksDone), 15, 180)` minutes (`STRICT_TUNING` in src/utils/strictDay.js). Window starts when the goal is reached; afterwards apps relock until midnight.
+- Goal missed by end time: locked rest of day. Day-end local notification shows points and screen time earned.
+- Per-task unlocks unchanged. Emergency unlock kept, toggle in Settings (`emergencyUnlock: false` disables).

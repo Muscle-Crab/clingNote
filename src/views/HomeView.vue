@@ -40,7 +40,7 @@
       </div>
                 <BossPanel v-if="strictOn && !bossHidden && (bossLines.length || verdictScreen)" class="home-notice" :lines="bossLines" :verdict="verdictScreen"
                  @dismiss="bossHidden = true" @dismiss-line="idleNudge = null" @ack-verdict="dismissVerdict" @roll="bossRoll()" />
-                <MorningReport v-if="morningRecap && isViewingToday" class="home-notice" :recap="morningRecap" @close="morningRecap = null" />
+                <MorningReport v-if="morningRecap && isViewingToday" class="home-notice" :recap="morningRecap" :strict="isStrictMode" :goal="strictGoal" :mood="todayMood" :name="firstNameForBoss" @mood="setMood" @goal="setGoal" @close="morningRecap = null" />
                 <LoadSummary v-if="isViewingToday" :load="todayLoad" :expanded="showSchedule" @toggle="showSchedule = !showSchedule" />
               </div>
               <div class="hero-menu-items" @click="menuOpen = false">
@@ -384,6 +384,7 @@ import { maybeAskTracking } from '@/utils/tracking';
 import { planLock, resumePending, untilFor, fmtDuration, joinNames, withTimeout, describeUnlock } from '@/utils/appLockNames';
 import { planTaskUnlock } from '@/utils/taskAppUnlock';
 import LockGuideSheet from '@/components/home/LockGuideSheet.vue';
+import { normBossMode, emergencyAllowed, goalFor, strictShield, wakeAutoOn, dayEndNote, moodReply } from '@/utils/strictDay';
 import { LOCK_PREF, PENALTY_KEY, EMERGENCY_PENALTY, shouldShield, lockAction, busyToDay, mergePenalties, lastPenaltyDay } from '@/utils/appLock';
 import { previewDayTarget, requiredPoints } from '@/utils/dayTarget';
 const askOpen = ref(false); // Assistant sheet (✨ next to the bell, and the bubble in the task list header)
@@ -3674,7 +3675,7 @@ let wakeReconciled = '';
 const reconcileWakeLock = async () => {
   const pi = eh.phaseInfo.value; const dk = pi.dayKey || '';
   if (!dk || wakeReconciled === dk || ehStarting) return false;
-  if (!shouldReconcileWake({ enabled: lockIn.value.wakeAuto, lockInToday: lockInToday.value, phase: eh.phase.value, hasLock: !!eh.lock.value, wakeMs: pi.wakeMs, nowMs: eh.nowMs(), hours: eh.hoursPref.value })) return false;
+  if (!shouldReconcileWake({ enabled: effWakeAuto.value, lockInToday: lockInToday.value, phase: eh.phase.value, hasLock: !!eh.lock.value, wakeMs: pi.wakeMs, nowMs: eh.nowMs(), hours: eh.hoursPref.value })) return false;
   if (lockAvailable()) { const ws = await clingLock.wakeLockStatus().catch(() => null); if (!ws || !ws.scheduled) return false; } // iOS never locked (no Screen Time / apps): normal prompt
   wakeReconciled = dk; ehStarting = true;
   try { await eh.startNow(eh.hoursPref.value, null, { autoWake: true }); await ensureLegacyDayStarted().catch(() => {}); await fetchSelectedDayRoutine(); return true; }
@@ -3897,6 +3898,38 @@ const syncLockPenalties = async (remote) => {
   lockUnlockedDay.value = lastPenaltyDay(merged);
   if (toPush.length) { try { await setDoc(doc(db, 'streaks', userId.value), { lockPenalties: arrayUnion(...toPush) }, { merge: true }); } catch (e) { console.warn('penalty sync', e && e.message); } }
 };
+// ---- B44 strict boss mode (opt-in; simple = unchanged behaviour) ----
+const bossMode = ref('simple'); const emergencyOn = ref(true); const goalOverride = ref(null); const todayMood = ref('');
+const isStrictMode = computed(() => bossMode.value === 'strict');
+const loadBossPrefs = () => loadUserDoc().then((d) => { const day = localDateStr(); bossMode.value = normBossMode(d && d.bossMode); emergencyOn.value = emergencyAllowed(d);
+  goalOverride.value = d && d.pointsGoal && d.pointsGoal.day === day ? d.pointsGoal : null; todayMood.value = d && d.mood && d.mood.day === day ? d.mood.id : ''; }).catch(() => {});
+onMounted(loadBossPrefs);
+const effWakeAuto = computed(() => wakeAutoOn({ mode: bossMode.value, wakeAuto: lockIn.value.wakeAuto, dayKey: localDateStr(), offDates: offDates.value, skipDate: lockIn.value.skipDate }));
+const strictGoal = computed(() => goalFor(todayTasksForTarget.value, goalOverride.value));
+const tasksDoneToday = computed(() => (todayTasksForTarget.value || []).filter((t) => t && t.completed).length);
+const STRICT_KEY = 'cn.strict.day'; // { day, goalAt, dayEndMs } (this device)
+const readStrictDay = () => { try { const v = JSON.parse(localStorage.getItem(STRICT_KEY) || 'null'); return v && v.day === localDateStr() ? v : { day: localDateStr(), goalAt: 0, dayEndMs: 0 }; } catch (e) { return { day: localDateStr(), goalAt: 0, dayEndMs: 0 }; } };
+const writeStrictDay = (v) => { try { localStorage.setItem(STRICT_KEY, JSON.stringify(v)); } catch (e) { /* ignore */ } };
+const strictState = ref(null);
+const firstNameForBoss = computed(() => String((auth.currentUser && auth.currentUser.displayName) || '').split(' ')[0]);
+const saveBossField = async (fields) => { if (!userId.value) return; try { await setDoc(doc(db, 'users', userId.value), fields, { merge: true }); } catch (e) { console.warn('boss pref', e && e.message); } };
+const setMood = (id) => { todayMood.value = id; saveBossField({ mood: { day: localDateStr(), id } }); showRepeatToast(moodReply(id, strictGoal.value)); };
+const setGoal = (v) => { goalOverride.value = { day: localDateStr(), value: Number(v) }; saveBossField({ pointsGoal: { day: localDateStr(), value: strictGoal.value } }); };
+let strictNoteSig = '';
+const strictPlan = (st) => {
+  const sd = readStrictDay(); const earned = pointsAccumulated.value || 0; const goal = strictGoal.value;
+  if (eh.running.value && eh.lock.value && eh.lock.value.endMs) sd.dayEndMs = eh.lock.value.endMs;
+  if (!sd.goalAt && goal > 0 && earned >= goal) sd.goalAt = Date.now();
+  writeStrictDay(sd);
+  const r = strictShield({ running: eh.running.value, dayEndMs: sd.dayEndMs, goal, earned, tasksDone: tasksDoneToday.value, goalAt: sd.goalAt, selectionCount: st.selectionCount || 0,
+    enabled: lockEnabled(), unlockedToday: lockUnlockedDay.value === localDateStr(), offDay: (offDates.value || []).includes(localDateStr()) });
+  strictState.value = r;
+  if (sd.dayEndMs) { const n = dayEndNote({ earned, goal, tasksDone: tasksDoneToday.value }); const sig = JSON.stringify([sd.dayEndMs, n.title, r.unlockEndMs]);
+    if (sig !== strictNoteSig) { strictNoteSig = sig;
+      if (sd.dayEndMs > Date.now()) scheduleLocal(`strict:dayend:${sd.day}`, { title: n.title, body: n.body, at: new Date(sd.dayEndMs), route: '/home', type: 'strict' });
+      if (r.unlockEndMs > Date.now()) scheduleLocal(`strict:relock:${sd.day}`, { title: 'Earned time is up', body: 'Your screen time window ended, so your apps are locked again.', at: new Date(r.unlockEndMs), route: '/home', type: 'strict' }); } }
+  return r;
+};
 const lockEnabled = () => { try { return localStorage.getItem(LOCK_PREF) === '1'; } catch (e) { return false; } };
 let lockOn = null;
 const hardLocked = ref(false); // shield up now: the sergeant menu shows Emergency unlock
@@ -3907,8 +3940,9 @@ const syncAppLock = async () => {
   if (st.locked && Number(st.until) > 0 && Number(st.until) <= Date.now()) { lockOn = null; await clingLock.stopLock(); clingLock.labeledApps(); return; }
   clingLock.labeledApps();
   if (!isViewingToday.value) return;
-  const endMs = eh.lock.value && eh.lock.value.endMs;
-  const want = shouldShield({ enabled: lockEnabled(), running: eh.running.value, endMs, selectionCount: st.selectionCount || 0,
+  const sp = isStrictMode.value ? strictPlan(st) : null;
+  const endMs = sp ? sp.untilMs : eh.lock.value && eh.lock.value.endMs;
+  const want = sp ? sp.want : shouldShield({ enabled: lockEnabled(), running: eh.running.value, endMs, selectionCount: st.selectionCount || 0,
     earned: pointsAccumulated.value || 0, required: dayRequiredPts.value || 0, openTasks: (selectedDayRoutine.value || []).filter((t) => t && !t.completed && t.status !== 'wontdo').length,
     unlockedToday: lockUnlockedDay.value === localDateStr() });
   const fEnd = focusShieldEnd({ dayWant: !!want, enabled: lockEnabled(), selectionCount: st.selectionCount || 0, locked: lockedFocus(selectedDayRoutine.value || []) });
@@ -3927,7 +3961,7 @@ const syncAppLock = async () => {
 let wakeSig = '';
 const syncWakeLock = async (st) => {
   const pi = eh.phaseInfo.value; const plan = eh.plan.value || {};
-  const r = wakeLockPlan({ enabled: lockIn.value.wakeAuto, lockInEnabled: lockIn.value.enabled, native: true, authorized: st.authorization === 'approved', selectionCount: st.selectionCount || 0,
+  const r = wakeLockPlan({ enabled: effWakeAuto.value, lockInEnabled: lockIn.value.enabled, native: true, authorized: st.authorization === 'approved', selectionCount: st.selectionCount || 0,
     wakeTime: plan.wakeTime, hours: eh.hoursPref.value, wakeMs: pi.wakeMs, blocks: eh.pendingBlocks.value });
   const skip = lockIn.value.skipDate && lockIn.value.skipDate === (pi.dayKey || '') ? localDateStr() : '';
   const sig = JSON.stringify([r.action, r.hour, r.minute, r.minutes, skip]); if (sig === wakeSig) return; wakeSig = sig;
@@ -3947,10 +3981,10 @@ const scheduleLaterLocks = async (st) => {
     if (!r || r.monitor !== 'ok') { nativeScheduled.delete(key); console.warn('[clingLock] scheduleLock', r && r.monitor); }
   }
 };
-watch(() => [eh.running.value, eh.pendingBlocks.value.length, pointsAccumulated.value, dayRequiredPts.value, streakProgress.value, lockUnlockedDay.value, Math.floor(nowTick.value / 60000)], () => { syncAppLock(); });
+watch(() => [eh.running.value, eh.pendingBlocks.value.length, pointsAccumulated.value, dayRequiredPts.value, streakProgress.value, lockUnlockedDay.value, bossMode.value, strictGoal.value, Math.floor(nowTick.value / 60000)], () => { syncAppLock(); });
 onMounted(() => { setTimeout(syncAppLock, 1200); });
 // Emergency unlock (assistant tool + sergeant menu): stops the shield for today and books the point penalty.
-const emergencyUnlock = async () => { await clingLock.stopLock(); hardLocked.value = false; const day = localDateStr(); let pen = []; try { pen = JSON.parse(localStorage.getItem(PENALTY_KEY) || '[]'); } catch (e) { /* ignore */ }
+const emergencyUnlock = async () => { if (!emergencyOn.value) return { summary: 'Emergency unlock is turned off in Settings.', penalty: 0, refused: true }; await clingLock.stopLock(); hardLocked.value = false; const day = localDateStr(); let pen = []; try { pen = JSON.parse(localStorage.getItem(PENALTY_KEY) || '[]'); } catch (e) { /* ignore */ }
   const at = Date.now(); pen.push({ day, points: EMERGENCY_PENALTY, at, uid: userId.value || '' }); try { localStorage.setItem(PENALTY_KEY, JSON.stringify(pen.slice(-60))); } catch (e) { /* ignore */ }
   if (userId.value) { try { await setDoc(doc(db, 'streaks', userId.value), { lockPenalties: arrayUnion({ day, points: EMERGENCY_PENALTY, at }) }, { merge: true }); } catch (e) { console.warn('penalty sync', e && e.message); } }
   lockUnlockedDay.value = day; return { summary: `Unlocked. Penalty: ${EMERGENCY_PENALTY} extra points owed today.`, penalty: EMERGENCY_PENALTY }; };
@@ -4276,6 +4310,7 @@ const onSergeant = async (id) => {
     if (id === 'replan') { if (!isViewingToday.value || !open.length) { sgSay(nextLine(null)); return; } await onSergeantReplan(open); return; }
     if (id === 'off') { holidayOpen.value = true; return; }
     if (id === 'unlock') {
+      if (!emergencyOn.value) { sgSay('Emergency unlock is off. You can turn it back on in Settings.'); return; }
       const typed = window.prompt(`Emergency unlock costs ${EMERGENCY_PENALTY} points today. Type ${UNLOCK_WORD} to open your apps.`);
       if (!unlockAccepted(typed)) { if (typed != null) sgSay('Not unlocked. Stay strong.'); return; }
       const r = await emergencyUnlock(); sgSay(r.summary); }

@@ -55,6 +55,10 @@
         <button v-for="s in STRICT" :key="s.id" class="ob-row" :class="{ on: a.strictness === s.id }" @click="a.strictness = s.id">
           <RobotCoach v-if="s.id === 'drill'" class="em em-sgt" :size="44" :talking="a.strictness === 'drill'" /><span v-else class="em">{{ s.e }}</span><span><b>{{ s.l }}</b><small>{{ s.d }}</small></span>
         </button>
+        <p class="ob-boss" data-test="ob-boss">Coach mode:
+          <button type="button" class="ob-boss-opt" :class="{ on: a.bossMode !== 'strict' }" data-test="ob-boss-simple" @click="a.bossMode = 'simple'">Simple</button>
+          <button type="button" class="ob-boss-opt" :class="{ on: a.bossMode === 'strict' }" data-test="ob-boss-strict" @click="a.bossMode = 'strict'">Strict</button>
+          <small>{{ a.bossMode === 'strict' ? 'Starts at wake, locks apps, you earn screen time by hitting your points goal.' : 'You start the day yourself. Change it any time in Settings.' }}</small></p>
       </section>
 
       <section v-else-if="STEPS[step] === 'notifications'" class="ob-sec">
@@ -120,7 +124,7 @@ const STRICT = [
 const route = useRoute(); const router = useRouter();
 const step = ref(route.query.step === 'paywall' ? STEPS.length : Math.min(Number(route.query.step) || 0, STEPS.length));
 const name = ref('');
-const a = reactive({ goals: [], wakeTime: '07:00', deadline: '21:00', bedTime: '23:00', strictness: 'firm', notifications: 'unknown', age: null, wakeAlarm: 'unknown' });
+const a = reactive({ goals: [], wakeTime: '07:00', deadline: '21:00', bedTime: '23:00', strictness: 'firm', bossMode: 'simple', notifications: 'unknown', age: null, wakeAlarm: 'unknown' });
 // Wake-up alarm step: default 7:00 AM, or the chosen day start minus 30 min when known. Saved as users/{uid}.wakeAlarmEnabled + wakeAlarmTime.
 const alarmTime = ref(DEFAULT_ALARM_TIME); const alarmBusy = ref(false);
 const ageState = computed(() => { const n = Number(a.age); if (!a.age && a.age !== 0) return 'empty'; if (!Number.isInteger(n) || n < 1 || n > 100) return 'invalid'; return n < 13 ? 'under' : 'ok'; });
@@ -148,7 +152,7 @@ onMounted(async () => {
     if (d.onboarding) Object.assign(a, d.onboarding, cp ? { wakeTime: cp.wakeTime } : {}); } catch (e) { console.error('onboarding load', e.message); }
 });
 const persist = (extra = {}) => { const u = auth.currentUser; if (!u) return Promise.resolve();
-  return saveUserFields(u.uid, { onboarding: { ...a }, ...extra }).catch((e) => console.error('onboarding save', e.message)); };
+  return saveUserFields(u.uid, { onboarding: { ...a }, bossMode: a.bossMode === 'strict' ? 'strict' : 'simple', ...extra }).catch((e) => console.error('onboarding save', e.message)); };
 function go(n) {
   if (STEPS[step.value] === 'age' && n > step.value) { if (ageState.value !== 'ok') return; if (auth.currentUser) saveUserFields(auth.currentUser.uid, { age: Number(a.age), ageCollectedAt: new Date() }).catch(() => {}); }
   step.value = n; router.replace({ query: { ...route.query, step: n } }); persist(); }
@@ -195,6 +199,8 @@ async function finish() { await persist({ onboardingComplete: true, onboardingCo
 .ob-opt, .ob-row { text-align: left; font: inherit; color: inherit; cursor: pointer; border-radius: 16px; border: 1.5px solid #2A3C66; background: linear-gradient(180deg, rgba(18,32,63,.92), rgba(12,22,48,.92)); padding: 14px; font-weight: 600; font-size: 14px; }
 .ob-opt .em { display: block; font-size: 24px; margin-bottom: 6px; }
 .ob-opt.on, .ob-row.on { border-color: #3C8CFF; background: #10204A; box-shadow: 0 0 0 3px rgba(47,111,255,.22); }
+.ob-boss { margin: 4px 0 0; font-size: 14px; color: #A9B4CC; } .ob-boss small { display: block; margin-top: 4px; font-size: 12px; }
+.ob-boss-opt { font: inherit; font-weight: 600; color: inherit; margin-left: 6px; padding: 4px 12px; border-radius: 999px; border: 1.5px solid #2A3C66; background: none; cursor: pointer; } .ob-boss-opt.on { border-color: #3C8CFF; background: #10204A; color: #fff; }
 .ob-row { width: 100%; display: flex; gap: 14px; align-items: center; margin-bottom: 10px; } .ob-row .em { font-size: 28px; } .ob-row b { display: block; font-size: 16px; } .ob-row small { color: #A9B4CC; font-weight: 500; font-size: 13px; }
 .ob-field { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; margin-bottom: 10px; border-radius: 16px; border: 1px solid #2A3C66; background: linear-gradient(180deg, rgba(18,32,63,.92), rgba(12,22,48,.92)); font-weight: 600; }
 .ob-field input { width: 160px; text-align: right; font-size: 18px; font-weight: 700; color-scheme: dark; }
