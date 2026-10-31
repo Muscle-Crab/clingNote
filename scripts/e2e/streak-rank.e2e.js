@@ -60,10 +60,13 @@ const streakCount = async (p) => (await p.locator('[data-test=streak-count]').te
     await seedDay(uid, { doneAfter: 0, open: 2 });
     await db.doc(`streaks/${uid}`).set({ streak: n, bestStreak: n, lastCompletionDate: ymd(), dayDate: ymd(), dayDone: [], counted: [ymd()] });
     const p = await page(br, { fn: ([u, v]) => { localStorage.setItem(`cn_seen_streak_${u}`, JSON.stringify({ value: v, date: null })); }, arg: [uid, n - 1] });
+    // record every medal the card shows (timing-independent: a slow machine can finish the charge before a fixed sleep elapses)
+    await p.context().addInitScript(() => { window.__ranks = []; const rec = () => { const e = document.querySelector('[data-test=streak-rank]'); const r = e && e.getAttribute('data-rank'); if (r && window.__ranks[window.__ranks.length - 1] !== r) window.__ranks.push(r); };
+      new MutationObserver(rec).observe(document, { subtree: true, childList: true, attributes: true, attributeFilter: ['data-rank'] }); });
     await login(p, email); await openHome(p);
     await p.waitForSelector('[data-test=streak-fx]', { timeout: 20000 }).catch(() => {});
     const card = p.locator('.progress-section'); await card.scrollIntoViewIfNeeded().catch(() => {});
-    if (n === 1) { await sleep(500); const r0 = await p.getAttribute('[data-test=streak-rank]', 'data-rank').catch(() => null); ok('charge from 0 shows the Bronze medal', r0 === 'Bronze', r0); await card.screenshot({ path: `${SHOTS}${TAG}-rank-0-bronze.png` }).catch(() => {}); }
+    if (n === 1) { await sleep(500); const seen = await p.evaluate(() => window.__ranks || []); ok('charge from 0 shows the Bronze medal', seen[0] === 'Bronze', seen.join(' -> ')); await card.screenshot({ path: `${SHOTS}${TAG}-rank-0-bronze.png` }).catch(() => {}); }
     await p.waitForSelector('[data-test=rank-burst]', { timeout: 4000 }).catch(() => {});
     const r = await p.getAttribute('[data-test=rank-burst]', 'data-rank').catch(() => null);
     const label = await p.textContent('[data-test=streak-rank-label]').catch(() => '');
