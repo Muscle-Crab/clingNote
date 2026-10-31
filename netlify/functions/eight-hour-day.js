@@ -248,7 +248,12 @@ const actions = {
     if (ud.lockInEnabled !== true) throw fail(403, 'Lock-in is off. Turn it on in Settings to use the countdown lock.', { code: 'lock-in-off' });
     if (ud.lockInSkipDate && ud.lockInSkipDate === ph.dayKey) throw fail(403, 'Lock-in is skipped for today.', { code: 'lock-in-skipped' });
     const hours = core.clampHours(body.hours);
-    const startMs = ctx.now, endMs = ctx.now + core.hoursMs(hours); // confirm-time start: end = confirm + hours
+    // B44 wake-up auto-lock: iOS already locked the apps at the wake time (no Confirm), so the window starts THEN, not now. Only with the
+    // opt-in (users/{uid}.wakeAutoLock), only back to today's wake instant, and only while that window is still open.
+    const autoWake = body.autoWake === true;
+    if (autoWake && ud.wakeAutoLock !== true) throw fail(403, 'Lock at wake-up is off.', { code: 'wake-off' });
+    const startMs = autoWake ? ph.wakeMs : ctx.now, endMs = startMs + core.hoursMs(hours); // confirm-time start: end = confirm + hours
+    if (autoWake && !(startMs <= ctx.now && endMs > ctx.now)) throw fail(409, 'Today\'s wake-up lock is already over.', { code: 'ended' });
     let pending = [];
     if (Array.isArray(body.blocks) && body.blocks.length) { // split day: later blocks today, fixed now (before they start)
       const r = core.planBlocks({ requests: body.blocks, tz: doc.plan.tz, nowMs: ctx.now, notBefore: endMs, existing: [{ startMs, endMs, dayKey: ph.dayKey, index: 0 }] });
@@ -256,7 +261,7 @@ const actions = {
       if (r.blocks.some((x) => x.dayKey !== ph.dayKey)) throw fail(400, 'Split blocks must be later today. Use Schedule for tomorrow.', { code: 'bad-blocks' });
       pending = r.blocks;
     }
-    return beginBlock(ctx, doc, { hours, startMs, endMs, dayKey: ph.dayKey, index: 0, pending, strict: true, apiKey: ctx.apiKey });
+    return beginBlock(ctx, doc, { hours, startMs, endMs, dayKey: ph.dayKey, index: 0, pending, strict: !autoWake, apiKey: ctx.apiKey });
   },
 
   // Evening mode, option 1: schedule the next lock-in(s). body.blocks: [{ time: 'HH:MM' (plan time zone), hours }]. Blocks are appended to

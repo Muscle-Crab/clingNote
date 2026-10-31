@@ -32,6 +32,10 @@ public class ClingLockPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "allowTaskApps", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "endTaskApps", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setLockEndAlert", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "scheduleWakeLock", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "cancelWakeLock", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setWakeSkip", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "wakeLockStatus", returnType: CAPPluginReturnPromise),
     ]
 
     @objc func requestAuthorization(_ call: CAPPluginCall) {
@@ -141,6 +145,56 @@ public class ClingLockPlugin: CAPPlugin, CAPBridgedPlugin {
             m[key] = nil; ScheduledLocks.save(m)
             call.resolve(["scheduled": false, "monitor": "failed: \(error)"])
         }
+    }
+
+    /// Wake-up auto-lock (B44): { hour, minute, minutes } -> one daily repeating DeviceActivity (WakeLock.activity). Re-scheduling with the
+    /// same values is a no-op; new values replace the schedule. Needs Screen Time authorization and picked apps (checked here too).
+    @objc func scheduleWakeLock(_ call: CAPPluginCall) {
+        guard #available(iOS 16.0, *) else { call.reject("iOS 16 required"); return }
+        guard AuthorizationCenter.shared.authorizationStatus == .approved else { call.resolve(["scheduled": false, "monitor": "not-authorized"]); return }
+        let sel = ClingLockPlugin.loadSelection()
+        guard !(sel.applicationTokens.isEmpty && sel.categoryTokens.isEmpty && sel.webDomainTokens.isEmpty) else { call.resolve(["scheduled": false, "monitor": "no-apps"]); return }
+        let h = call.getInt("hour") ?? -1, m = call.getInt("minute") ?? -1
+        guard (0...23).contains(h), (0...59).contains(m) else { call.reject("hour/minute required"); return }
+        let n = WakeLock.clampMinutes(call.getInt("minutes") ?? 0)
+        let cfg: [String: Int] = ["hour": h, "minute": m, "minutes": n]
+        if let c = WakeLock.config(), c.hour == h, c.minute == m, c.minutes == n, DeviceActivityCenter().activities.contains(WakeLock.activity) {
+            call.resolve(["scheduled": true, "monitor": "ok", "existing": true]); return
+        }
+        LockShared.installLockEndSound()
+        LockShared.defaults?.set(cfg, forKey: WakeLock.configKey)
+        let endMin = (h * 60 + m + n) % (24 * 60)
+        do {
+            DeviceActivityCenter().stopMonitoring([WakeLock.activity])
+            try DeviceActivityCenter().startMonitoring(WakeLock.activity, during: DeviceActivitySchedule(
+                intervalStart: DateComponents(hour: h, minute: m), intervalEnd: DateComponents(hour: endMin / 60, minute: endMin % 60), repeats: true))
+            call.resolve(["scheduled": true, "monitor": "ok"])
+        } catch {
+            LockShared.defaults?.removeObject(forKey: WakeLock.configKey)
+            call.resolve(["scheduled": false, "monitor": "failed: \(error)"])
+        }
+    }
+    @objc func cancelWakeLock(_ call: CAPPluginCall) {
+        guard #available(iOS 16.0, *) else { call.resolve(["cancelled": false]); return }
+        DeviceActivityCenter().stopMonitoring([WakeLock.activity]); LockShared.defaults?.removeObject(forKey: WakeLock.configKey)
+        call.resolve(["cancelled": true])
+    }
+    /// "Skip lock-in today": the monitor won't lock on this device-local date ("yyyy-MM-dd"). A lock already up today comes down.
+    @objc func setWakeSkip(_ call: CAPPluginCall) {
+        guard #available(iOS 16.0, *) else { call.resolve(["skip": ""]); return }
+        let ymd = call.getString("ymd") ?? ""
+        LockShared.defaults?.set(ymd, forKey: WakeLock.skipKey)
+        let st = LockShared.defaults?.dictionary(forKey: LockShared.stateKey) ?? [:]
+        if ymd == WakeLock.ymd(Date()), (st["label"] as? String) == WakeLock.label { ClingLockPlugin.clearShield(); LockShared.defaults?.set(["locked": false, "until": 0], forKey: LockShared.stateKey) }
+        call.resolve(["skip": ymd])
+    }
+    @objc func wakeLockStatus(_ call: CAPPluginCall) {
+        guard #available(iOS 16.0, *) else { call.resolve(["scheduled": false]); return }
+        var r: [String: Any] = ["scheduled": DeviceActivityCenter().activities.contains(WakeLock.activity),
+                                "lastStartMs": LockShared.defaults?.double(forKey: WakeLock.lastStartKey) ?? 0,
+                                "skip": LockShared.defaults?.string(forKey: WakeLock.skipKey) ?? ""]
+        if let c = WakeLock.config() { r["hour"] = c.hour; r["minute"] = c.minute; r["minutes"] = c.minutes }
+        call.resolve(r)
     }
 
     /// Lock-end notification level read by ClingLockMonitor.notifyLockEnded(). Omit `level` to just read it.

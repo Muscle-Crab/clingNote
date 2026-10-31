@@ -35,6 +35,11 @@ export const clingLock = {
   endTaskApps: safe('ClingLock', Lock, (p, taskId) => p.endTaskApps(taskId ? { taskId } : {}), { ended: false }),
   // Lock-end alert level: off | subtle | standard | loud (default) | maximum. Omit level to read.
   setLockEndAlert: safe('ClingLock', Lock, (p, level) => p.setLockEndAlert(level ? { level } : {}), { level: 'loud' }),
+  // Wake-up auto-lock (src/utils/wakeLock.js): one daily repeating DeviceActivity at the wake time; skip = device-local 'YYYY-MM-DD'.
+  scheduleWakeLock: safe('ClingLock', Lock, (p, { hour, minute, minutes }) => p.scheduleWakeLock({ hour, minute, minutes }), { scheduled: false, monitor: 'unavailable' }),
+  cancelWakeLock: safe('ClingLock', Lock, (p) => p.cancelWakeLock(), { cancelled: false }),
+  setWakeSkip: safe('ClingLock', Lock, (p, ymd) => p.setWakeSkip({ ymd: String(ymd || '') }), { skip: '' }),
+  wakeLockStatus: safe('ClingLock', Lock, (p) => p.wakeLockStatus(), { scheduled: false }),
 };
 export const nativeAvailable = () => avail('ClingNative');
 export const clingNative = {

@@ -164,3 +164,39 @@ extension LockShared { static let selectionTokensKey = "lock.selectionTokens" }
 #endif
 
 #endif
+
+/// Wake-up auto-lock (B44): ONE daily repeating DeviceActivity ("clingWakeLock") from the wake time for the day length, so the picked
+/// apps lock at wake-up even when ClingNote is closed (no Confirm tap). The monitor extension raises the shield at intervalDidStart,
+/// posts "Your lock-in started" and lifts it at the end. App Group keys (mirrored in scripts/test-b44-wake-lock.mjs):
+///   lock.wake = ["hour", "minute", "minutes"]  · lock.wakeSkip = "yyyy-MM-dd" (Skip lock-in today) · lock.wakeLastStart = ms
+@available(iOS 16.0, *)
+enum WakeLock {
+    static let activity = DeviceActivityName("clingWakeLock")
+    static let configKey = "lock.wake"
+    static let skipKey = "lock.wakeSkip"
+    static let lastStartKey = "lock.wakeLastStart"
+    static let label = "ClingNote wake lock-in"
+    static let startedIdentifier = "cling.lock.started"
+    static func ymd(_ d: Date) -> String {
+        let f = DateFormatter(); f.calendar = Calendar(identifier: .gregorian); f.locale = Locale(identifier: "en_US_POSIX"); f.timeZone = .current
+        f.dateFormat = "yyyy-MM-dd"; return f.string(from: d)
+    }
+    static func config() -> (hour: Int, minute: Int, minutes: Int)? {
+        guard let c = LockShared.defaults?.dictionary(forKey: configKey), let h = c["hour"] as? Int, let m = c["minute"] as? Int, let n = c["minutes"] as? Int else { return nil }
+        return (h, m, n)
+    }
+    /// 15 min .. 12 h (DeviceActivity minimum interval; day length is already clamped 3..12 h in the app).
+    static func clampMinutes(_ n: Int) -> Int { min(12 * 60, max(15, n)) }
+    /// Pure gate used by the monitor: skipped today, or an evening block / longer lock already running -> don't start.
+    static func shouldStart(skipYmd: String?, todayYmd: String, blockRunning: Bool, curUntilMs: Double, untilMs: Double) -> Bool {
+        if let s = skipYmd, s == todayYmd { return false }
+        if blockRunning { return false }
+        return curUntilMs < untilMs
+    }
+    /// Today's interval from the saved config (start = wake time today).
+    static func todayWindow(now: Date = Date()) -> (startMs: Double, untilMs: Double)? {
+        guard let c = config(), let s = Calendar.current.date(bySettingHour: c.hour, minute: c.minute, second: 0, of: now) else { return nil }
+        let start = s.timeIntervalSince1970 * 1000
+        return (start, start + Double(clampMinutes(c.minutes)) * 60_000)
+    }
+}
