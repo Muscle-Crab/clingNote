@@ -14,7 +14,7 @@
 
     <button type="button" class="fab fab-voice fab-assistant" :class="{ 'fab-voice--listening': assistantLive }" data-test="assistant-bubble" data-coach="sergeant"
         title="Assistant (hold for choices)" aria-label="Assistant. Tap to open, press and hold for choices" :aria-expanded="menuOpen ? 'true' : 'false'"
-        @pointerdown="lp.down" @pointermove="lp.move" @pointerup="lp.up" @pointercancel="lp.cancel" @contextmenu.prevent @selectstart.prevent @dragstart.prevent @click="onClick">
+        @pointerdown="lp.down" @pointermove="lp.move" @pointerup="lp.up" @pointercancel="lp.cancel" @touchstart.prevent="lp.touchstart" @contextmenu.prevent @selectstart.prevent @dragstart.prevent @click="onClick">
       <RobotAvatar class="fab-robot" :live="assistantLive" />
     </button>
     <!-- Sergeant long-press menu: only exists while open (no permanent UI); anchored to the robot it came from. -->
@@ -51,9 +51,9 @@ const onDocDown = (e) => { if (menuEl.value && !menuEl.value.contains(e.target) 
 watch(menuOpen, (o) => { document.removeEventListener('pointerdown', onDocDown, true); if (o) { document.addEventListener('pointerdown', onDocDown, true); emit('menu-open'); nextTick(() => menuEl.value && menuEl.value.querySelector('button') && menuEl.value.querySelector('button').focus({ preventScroll: true })); } });
 onBeforeUnmount(() => document.removeEventListener('pointerdown', onDocDown, true));
 // Press-and-hold: shared helper (pointer capture + movement tolerance; pointerleave no longer cancels, see utils/longPress.js).
-const lp = createLongPress({ ms: HOLD_MS, onLong: () => { menuOpen.value = true; } });
+const lp = createLongPress({ ms: HOLD_MS, onTap: () => emit('assistant', false), onLong: () => { menuOpen.value = true; } });
 onBeforeUnmount(() => lp.dispose());
-const onClick = () => { if (lp.wasLong()) { lp.dispose(); return; } emit('assistant', false); };
+const onClick = () => { if (lp.isGhostClick()) { lp.dispose(); return; } emit('assistant', false); };
 </script>
 
 <style scoped>
