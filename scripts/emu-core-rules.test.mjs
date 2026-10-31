@@ -57,6 +57,13 @@ await step('streak transactions are atomic', async () => {
   const n = (await getDoc(ref)).data().n; if (n !== 5) throw new Error('n=' + n);
 });
 await step('dailyReports local-date key write', () => assertSucceeds(setDoc(doc(db, 'dailyReports', `${U}_2026-10-25`), { userId: U, completedTasks: 1, totalTasks: 2 })));
+// Coach game plan: plan/log/penalty on the own users doc; unlock requests are server-only (friend-unlock function).
+await step('game plan fields on own users doc', () => assertSucceeds(setDoc(doc(db, 'users', U), { gamePlan: { dayStart: '09:00', reviewDow: 0, reviewTime: '18:00', minGoal: 50, friend: { name: 'ZZTEST Sam' }, pending: null, lastReview: '2026-11-01' }, gpLog: { '2026-11-02': { earned: 60, goal: 50 } }, gpPenalty: { day: '2026-11-02', points: 25 } }, { merge: true })));
+await step('unlockRequests: no client read/write (own or other)', async () => {
+  await adminSet('unlockRequests/zztesthash', { uid: U, status: 'pending' });
+  await assertFails(getDoc(doc(db, 'unlockRequests', 'zztesthash'))); await assertFails(setDoc(doc(db, 'unlockRequests', 'zztesthash'), { status: 'approved' }));
+  await assertFails(setDoc(doc(other, 'unlockRequests', 'x2'), { uid: O, status: 'approved' }));
+});
 await env.cleanup();
 for (const r of results) console.log(r.join(' | '));
 process.exit(results.some((r) => r[0] === 'FAIL') ? 1 : 0);

@@ -296,6 +296,8 @@ service cloud.firestore {
       allow write: if false;
     }
     match /managerLinks/{hash} { allow read, write: if false; }
+    // Friend-approved early unlock (Coach mode): written only by the friend-unlock function; tokens are stored hashed.
+    match /unlockRequests/{hash} { allow read, write: if false; }
     // Block + Report (App Store 1.2): written only by the manager-pal function.
     match /blocks/{blockId} { allow read: if isAuthenticated() && request.auth.uid == resource.data.blockerUid; allow write: if false; }
     match /reports/{reportId} { allow read, write: if false; }

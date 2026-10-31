@@ -11,7 +11,7 @@ class ClingShieldConfig: ShieldConfigurationDataSource {
             backgroundColor: UIColor(red: 0.07, green: 0.09, blue: 0.15, alpha: 1),
             icon: UIImage(named: "AppIcon"),
             title: ShieldConfiguration.Label(text: "Locked in — ClingNote", color: .white),
-            subtitle: ShieldConfiguration.Label(text: label.isEmpty ? "Finish your tasks to unlock." : "Locked in on \(label).", color: .lightGray),
+            subtitle: ShieldConfiguration.Label(text: (label.isEmpty ? "Finish your tasks to unlock." : "Locked in on \(label).") + " Need it early? Ask your friend in ClingNote.", color: .lightGray),
             primaryButtonLabel: ShieldConfiguration.Label(text: "Back to work", color: .white),
             primaryButtonBackgroundColor: UIColor(red: 0.12, green: 0.36, blue: 1, alpha: 1))
     }

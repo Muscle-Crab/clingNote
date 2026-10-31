@@ -136,7 +136,17 @@
             </div>
             <div class="pf-row pf-row--divided pf-row--stack" data-test="boss-mode-row"><span class="pf-ico" aria-hidden="true">🤖</span><span class="pf-row-title">Coach mode<small class="pf-dl-sub" data-test="boss-mode-sub">{{ bossMode === 'strict' ? 'Strict: auto-start at wake, earn screen time by hitting your points goal.' : 'Simple: you start the day, apps unlock when the goal is met.' }}</small>
               <span class="pf-mini-btns"><button v-for="m in ['simple', 'strict']" :key="m" type="button" class="pf-mini" :class="{ 'pf-mini--on': bossMode === m }" :aria-pressed="bossMode === m" :data-test="`boss-${m}`" @click="saveBoss({ bossMode: m })">{{ m === 'strict' ? 'Strict' : 'Simple' }}</button>
-                <label class="pf-mini pf-mini--check"><input type="checkbox" data-test="emergency-toggle" :checked="emergencyOn" @change="saveBoss({ emergencyUnlock: $event.target.checked })" /> Emergency unlock</label></span></span></div>
+                <label class="pf-mini pf-mini--check"><input type="checkbox" data-test="emergency-toggle" :checked="emergencyOn" @change="saveBoss({ emergencyUnlock: $event.target.checked })" /> Emergency unlock</label></span></span>
+              <button v-if="bossMode === 'strict'" type="button" class="pf-gp-link" data-test="gp-settings" :aria-expanded="gpOpen" @click="gpOpen = !gpOpen">Weekly game plan · {{ gpSummary }} ›</button>
+              <span v-if="gpOpen && bossMode === 'strict'" class="pf-mini-btns" data-test="gp-panel">
+                <label class="pf-mini">Day starts <input type="time" class="pf-mini" v-model="gpForm.dayStart" data-test="gp-daystart" aria-label="Day starts" /></label>
+                <select class="pf-mini" v-model.number="gpForm.reviewDow" data-test="gp-reviewdow" aria-label="Weekly review day"><option v-for="(d, i) in GP_WEEK" :key="d" :value="i">Review {{ d }}</option></select>
+                <input type="time" class="pf-mini" v-model="gpForm.reviewTime" data-test="gp-reviewtime" aria-label="Weekly review time" />
+                <label class="pf-mini">Min goal <input type="number" min="10" max="500" step="5" class="pf-mini pf-num" v-model.number="gpForm.minGoal" data-test="gp-mingoal" aria-label="Minimum daily goal" /></label>
+                <input type="text" maxlength="40" class="pf-mini" v-model="gpForm.friend" placeholder="Unlock friend's name" data-test="gp-friend" aria-label="Friend who approves early unlocks" />
+                <button type="button" class="pf-mini" data-test="gp-save" @click="saveGamePlan">Save</button>
+                <small class="pf-dl-sub" data-test="gp-msg" role="status">{{ gpMsg || '2 × 50 min focus + 10 min breaks from the day start; the day closes 8 h after it. Schedule changes wait for the weekly review.' }}</small>
+              </span></div>
           </section>
 
           <h2 class="pf-section">More</h2>
@@ -171,6 +181,7 @@
 </template>
 
 <script setup>
+import * as GP from '@/utils/gamePlan';
 import { lockIn, loadLockIn, setLockInEnabled, setWakeAutoLock, setPlanOpenTime } from '@/utils/lockIn';
 import { wakeLockNote } from '@/utils/wakeLock';
 import { readAutoFocus, writeAutoFocus } from '@/utils/focusAutoStart';
@@ -253,9 +264,23 @@ const onIcsImport = async (ev) => { const u = auth.currentUser; const f = ev.tar
 // B44 time blocking: users/{uid}.timeBlocks { start, end, days, focusMin }
 const tbOpen = ref(false); const tbBusy = ref(false); const tbSaved = ref(normBlocks(null)); const tbForm = ref({ ...normBlocks(null) });
 const tbSummary = computed(() => blocksSummary(tbSaved.value));
-const loadTimeBlocks = async () => { const u = auth.currentUser; if (!u) return; try { const snap = await getDoc(doc(db, 'users', u.uid)); tbSaved.value = normBlocks(snap.exists() ? snap.data().timeBlocks : null); { const d = snap.exists() ? snap.data() : {}; bossMode.value = d.bossMode === 'strict' ? 'strict' : 'simple'; emergencyOn.value = d.emergencyUnlock !== false; } tbForm.value = { ...tbSaved.value }; } catch (e) { /* defaults */ } };
+const loadTimeBlocks = async () => { const u = auth.currentUser; if (!u) return; try { const snap = await getDoc(doc(db, 'users', u.uid)); tbSaved.value = normBlocks(snap.exists() ? snap.data().timeBlocks : null); { const d = snap.exists() ? snap.data() : {}; bossMode.value = d.bossMode === 'strict' ? 'strict' : 'simple'; emergencyOn.value = d.emergencyUnlock !== false; gpHas.value = !!(d.gamePlan && d.gamePlan.userSet); gpPlan.value = GP.normPlan(d.gamePlan, d.onboarding && d.onboarding.wakeTime); gpView(); } tbForm.value = { ...tbSaved.value }; } catch (e) { /* defaults */ } };
 loadTimeBlocks();
 const bossMode = ref('simple'); const emergencyOn = ref(true);
+// Coach game plan settings (fixed week): schedule edits are queued and applied at the weekly review; the friend's name applies now.
+const GP_WEEK = GP.WEEK; const gpOpen = ref(false); const gpMsg = ref(''); const gpPlan = ref(GP.normPlan({})); const gpHas = ref(false);
+const gpForm = ref({ dayStart: '09:00', reviewDow: 0, reviewTime: '18:00', minGoal: 50, friend: '' });
+const gpView = () => { const p = { ...gpPlan.value, ...(gpPlan.value.pending || {}) }; gpForm.value = { dayStart: p.dayStart, reviewDow: p.reviewDow, reviewTime: p.reviewTime, minGoal: p.minGoal, friend: (gpPlan.value.friend && gpPlan.value.friend.name) || '' }; };
+const gpSummary = computed(() => `${gpPlan.value.dayStart}–${GP.addHours(gpPlan.value.dayStart, 8)} · review ${GP.WEEK[gpPlan.value.reviewDow]} ${gpPlan.value.reviewTime}${gpPlan.value.pending ? ' · change queued' : ''}`);
+const saveGamePlan = async () => { const u = auth.currentUser; if (!u) return;
+  const f = gpForm.value; const friend = String(f.friend || '').trim() ? { name: String(f.friend).trim().slice(0, 40) } : null;
+  const patch = {}; for (const k of GP.SCHEDULE_FIELDS) if (f[k] !== gpPlan.value[k]) patch[k] = f[k];
+  let next = { ...gpPlan.value, friend, userSet: true };
+  if (!gpHas.value) next = GP.normPlan({ ...next, ...patch, lastReview: next.lastReview, userSet: true }); // first setup by the user takes effect now
+  else if (Object.keys(patch).length) next = GP.queueEdit(next, patch);
+  try { await setDoc(doc(db, 'users', u.uid), { gamePlan: next }, { merge: true }); gpPlan.value = next; gpHas.value = true;
+    gpMsg.value = next.pending ? `Saved. Schedule change applies at your ${GP.WEEK[gpPlan.value.reviewDow]} ${gpPlan.value.reviewTime} review.` : 'Saved.'; }
+  catch (e) { gpMsg.value = "Couldn't save. Try again."; } };
 const saveBoss = async (f) => { const u = auth.currentUser; if (!u) return; if ('bossMode' in f) bossMode.value = f.bossMode; if ('emergencyUnlock' in f) emergencyOn.value = f.emergencyUnlock;
   try { await setDoc(doc(db, 'users', u.uid), f, { merge: true }); } catch (e) { console.warn('boss mode save', e && e.message); } };
 const saveTimeBlocks = async () => {
@@ -543,4 +568,6 @@ onMounted(() => { loadDayLengthHours().then((v) => { dayLen.value = v; }).catch(
 .pf-chev { transition: transform .15s ease; } .pf-chev--open { transform: rotate(90deg); }
 .pf-mini--on { border-color: var(--c-accent, #3C8CFF) !important; color: var(--c-text, #fff); }
 .pf-mini--check { display: inline-flex; align-items: center; gap: 4px; }
+.pf-gp-link { background: none; border: 0; padding: 4px 0 0; color: var(--c-accent-text, #5B9BFF); font: inherit; font-size: .8rem; cursor: pointer; text-align: left; }
+.pf-num { width: 4.5em; }
 </style>

@@ -172,7 +172,9 @@
                           <input type="number" min="1" max="1440" step="5" class="field-input est-custom" data-test="est-custom" placeholder="Custom"
                                  :value="ESTIMATE_CHIPS.includes(Number(task.estimateMin)) ? '' : (task.estimateMin || '')" @change="cleanEstimate($event.target.value) && $emit('patch', { estimateMin: cleanEstimate($event.target.value) })" />
                         </div>
-                        <small class="field-hint">{{ est.points }} points (auto from the estimate{{ estLocked ? ', locked' : '' }})</small></div>
+                        <small v-if="sizeMode" class="field-hint" data-test="size-edit">Size <button v-for="z in ['s', 'm', 'l']" :key="z" type="button" class="size-chip" :class="{ on: est.size === z }" :data-test="'size-' + z"
+                          :aria-pressed="est.size === z ? 'true' : 'false'" @click="$emit('patch', { size: z })">{{ z.toUpperCase() }} {{ SIZE_POINTS[z] }}</button> · {{ task.size ? 'set by you' : 'AI guess' }}, points on completion</small>
+                        <small v-else class="field-hint">{{ est.points }} points (auto from the estimate{{ estLocked ? ', locked' : '' }})</small></div>
                       <div class="edit-row">
                         <button type="button" class="adj-chip" :class="{ on: task.important }" data-test="edit-important" @click="$emit('toggle-important')">{{ task.important ? '★ Important' : '☆ Mark important' }}</button>
                         <button type="button" class="adj-chip" data-test="edit-reminder" @click="$emit('open-reminder')">⏰ {{ task.reminder?.date ? 'Change reminder' : 'Add reminder' }}</button>
@@ -242,6 +244,7 @@ const addToCalendar = async () => {
 };
 import { ref, watch, onBeforeUnmount, computed } from 'vue';
 import { categoryOf } from '@/utils/taskCategory';
+import { SIZE_POINTS, sizeModeOn } from '@/utils/gamePlan';
 import { STATUSES, taskKey, estimateOf, formatClock, formatDuration as formatMinutes, toMinutes } from '@/utils/taskPlanning';
 import { subtaskProgress, subtaskPercent } from '@/utils/subtasks';
 import { chipValues, fmtMin } from '@/utils/taskEstimate';
@@ -374,7 +377,8 @@ const hasExtras = computed(() => { const t = props.task; return !!(reminderVisib
 const extrasTitle = computed(() => [props.task.nextAction, props.task.notes].filter(Boolean).join(' · '));
 const schedText = computed(() => scheduleLabel(props.task));
 const schedLate = computed(() => !!props.task?.scheduledFor && scheduledOverdue(props.task, new Date()));
-const est = computed(() => chipValues(props.task));
+const est = computed(() => { sizeModeOn(); return chipValues(props.task); }); // sizeModeOn() is reactive (Coach game plan)
+const sizeMode = computed(() => sizeModeOn());
 const timerLocked = computed(() => timerStarted(props.task));
 const focusLocked = computed(() => props.task.focusLock === true && props.task.timerActive === true && props.task.completed !== true); // auto-started focus: play becomes the lock // estimate frozen once play was pressed
 const estLocked = computed(() => false); // estimate/timer stay editable during lock-in and after play (end time is shifted)
@@ -611,4 +615,6 @@ const onPressEnd = () => { if (pressTimer !== 'fired') clearTimeout(pressTimer);
 .task-extras > .task-next { max-width: 45%; overflow: hidden; text-overflow: ellipsis; }
 .task-rolled { color: #f59e0b; font-weight: 700; }
 .action-btn--on { background: var(--c-accent-soft); }
+.size-chip { margin: 0 2px; padding: 1px 7px; border-radius: 10px; border: 1px solid var(--c-border, #2a2a2e); background: none; color: inherit; font: inherit; font-size: .75rem; cursor: pointer; }
+.size-chip.on { border-color: var(--c-accent-text, #5B9BFF); color: var(--c-accent-text, #5B9BFF); }
 </style>

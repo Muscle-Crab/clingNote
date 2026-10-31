@@ -62,7 +62,11 @@ public class ClingLockPlugin: CAPPlugin, CAPBridgedPlugin {
         guard #available(iOS 16.0, *) else { call.resolve(["authorization": "unsupported", "locked": false, "selectionCount": 0]); return }
         let s = Self.loadSelection()
         let st = LockShared.defaults?.dictionary(forKey: LockShared.stateKey) ?? [:]
-        call.resolve(["authorization": Self.authString(), "locked": (st["locked"] as? Bool) ?? false, "until": st["until"] ?? 0,
+        // Game plan: remember that Screen Time was approved once, so a later revoke is detected on the next launch (JS books the penalty).
+        let auth = Self.authString()
+        if auth == "approved" { LockShared.defaults?.set(true, forKey: "cn.everApproved") }
+        let everApproved = LockShared.defaults?.bool(forKey: "cn.everApproved") ?? false
+        call.resolve(["authorization": auth, "everApproved": everApproved, "locked": (st["locked"] as? Bool) ?? false, "until": st["until"] ?? 0,
                       "monitoring": DeviceActivityCenter().activities.contains(.clingLock),
                       "selectionCount": s.applicationTokens.count + s.categoryTokens.count + s.webDomainTokens.count])
     }

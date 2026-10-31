@@ -2,6 +2,7 @@
 // The user's typed estimateMin is only an INPUT: it is never overwritten here. The result is stored as complexity / minutes / points.
 import { estimateTask } from './eightHour';
 import { localEstimateMinutes, applyAiEstimate } from './aiEstimate';
+import { sizeModeOn, sizePoints, sizeOf } from './gamePlan';
 
 const typed = (t) => { const n = Math.round(Number(t && t.estimateMin)); return Number.isFinite(n) && n > 0 ? n : 0; };
 export const estimateFor = (task = {}) => {
@@ -17,8 +18,9 @@ export const withEstimate = (task) => ({ ...task, ...estimateFor(task) });
 export const chipValues = (task = {}) => {
   const est = estimateFor(task);
   const minutes = typed(task) || (Number(task.minutes) > 0 ? Math.round(task.minutes) : est.minutes);
-  const points = Number(task.points) > 0 ? Math.round(task.points) : est.points;
-  return { minutes, points, complexity: Number(task.complexity) > 0 ? task.complexity : est.complexity, computed: !(Number(task.points) > 0) };
+  // Coach mode (game plan): points come from the task's size (S 10 / M 20 / L 40), not from time.
+  const points = sizeModeOn() ? sizePoints(task, minutes) : Number(task.points) > 0 ? Math.round(task.points) : est.points;
+  return { minutes, points, size: sizeOf(task, minutes), complexity: Number(task.complexity) > 0 ? task.complexity : est.complexity, computed: !(Number(task.points) > 0) };
 };
 export const fmtMin = (m) => (m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}m` : ''}` : `${m}m`);
 // Server AI answer for a task created with an automatic estimate -> patched task (minutes/complexity/points), or null when it must not change

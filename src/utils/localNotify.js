@@ -4,6 +4,7 @@
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { isNativeIOS } from '@/utils/platform';
 import { notifSound, voiceMutedNow } from '@/utils/notifSound';
+import { quietDefer } from '@/utils/gamePlan';
 
 // Stable 31-bit positive int id from a string key (plugin ids must be Int32).
 export const notifId = (key) => { let h = 0; const s = String(key); for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0; return (Math.abs(h) % 2147483646) + 1; };
@@ -55,8 +56,11 @@ const webSchedule = async (key, { title, body, at, on, route, type }) => {
 };
 export const _webTimerCount = () => webTimers.size; // tests
 
-export const scheduleLocal = async (key, { title, body, at, on, route, type }) => {
-  if (!at && !on) return false;
+// Coach-mode focus sessions hold one-shot notifications until the session ends (game plan item 2); 'gp' (break/close) and timers pass.
+export const holdForFocus = (at, type) => { if (!at || type === 'gp' || type === 'timer') return at; const ms = at instanceof Date ? at.getTime() : new Date(at).getTime(); const q = quietDefer(ms); return q !== ms ? new Date(q) : at; };
+export const scheduleLocal = async (key, { title, body, at: at0, on, route, type }) => {
+  if (!at0 && !on) return false;
+  const at = holdForFocus(at0, type);
   if (!isNativeIOS()) return webSchedule(key, { title, body, at, on, route, type });
   const when = at ? (at instanceof Date ? at : new Date(at)) : null;
   if (!on && (isNaN(when.getTime()) || when.getTime() <= Date.now())) return false;

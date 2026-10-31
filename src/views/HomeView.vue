@@ -38,9 +38,9 @@
                 <div v-if="disciplineWarning && !(strictOn && !bossHidden && (bossLines.length || verdictScreen))" class="disc-warning home-notice" :class="'disc-warning--' + disciplineWarning" role="alert">
         ⚠️ {{ disciplineWarning === '30m' ? '30 minutes' : '2 hours' }} until your {{ disciplineSettings.deadline }} deadline — {{ streakProgress }}/{{ DAILY_STREAK_MIN }} done
       </div>
-                <BossPanel v-if="strictOn && !bossHidden && (bossLines.length || verdictScreen)" class="home-notice" :lines="bossLines" :verdict="verdictScreen"
+                <BossPanel v-if="strictOn && !bossHidden && !gpQuiet && (bossLines.length || verdictScreen)" class="home-notice" :lines="bossLines" :verdict="verdictScreen"
                  @dismiss="bossHidden = true" @dismiss-line="idleNudge = null" @ack-verdict="dismissVerdict" @roll="bossRoll()" />
-                <MorningReport v-if="morningRecap && isViewingToday" class="home-notice" :recap="morningRecap" :strict="isStrictMode" :goal="strictGoal" :mood="todayMood" :name="firstNameForBoss" @mood="setMood" @goal="setGoal" @close="morningRecap = null" />
+                <MorningReport v-if="morningRecap && isViewingToday" class="home-notice" :recap="morningRecap" :strict="isStrictMode" :goal="strictGoal" :goal-why="gpOn ? gpGoalWhy : ''" :penalty-note="gpOn ? gpPenaltyNote : ''" :mood="todayMood" :name="firstNameForBoss" @mood="setMood" @goal="setGoal" @close="morningRecap = null" />
                 <LoadSummary v-if="isViewingToday" :load="todayLoad" :expanded="showSchedule" @toggle="showSchedule = !showSchedule" />
               </div>
               <div class="hero-menu-items" @click="menuOpen = false">
@@ -135,6 +135,9 @@
       <!-- ─── Task List ─── -->
       <section v-if="canViewSelectedDayTasks"
                class="task-section">
+        <GamePlanRow v-if="gpOn && isViewingToday" :text="gpText" :phase="gpPhase.phase" :review="gpReview" :leftovers="gpLeft" :tomorrow="gpTomorrow"
+                     :locked="hardLocked || gpGate" :gate="gpGate" :friend="(gp.friend && gp.friend.name) || ''" :unlock="gpUnlock" :penalty="gpPenaltyToday" :after-close="gpEarned.afterClose"
+                     @carry="gpCarry" @review="gpApplyReview" @ask="gpAsk" @share="gpShare" />
         <EmptyState v-if="dayTasks.length === 0" :show-add="true" :show-templates="isViewingToday && !!userId" @add="onAddClick" @templates="openTemplates" />
 
 
@@ -326,6 +329,9 @@ import CheckinRow from '@/components/home/CheckinRow.vue';
 import { checkinPatch, checkinPath, cleanCheckin } from '@/utils/checkin';
 import TaskListHeader from '@/components/home/TaskListHeader.vue';
 import RoutineStrip from '@/components/home/RoutineStrip.vue';
+import GamePlanRow from '@/components/home/GamePlanRow.vue';
+import * as GP from '@/utils/gamePlan';
+import { fnUrl } from '@/config/api';
 import { markRoutineDone, skipRoutineToday, canSkipToday, routineToday, routineWeek } from '@/utils/routine';
 import FabButtons from '@/components/home/FabButtons.vue';
 import CoachSpotlight from '@/components/onboarding/CoachSpotlight.vue';
@@ -529,7 +535,7 @@ const startCountdownWatcher = () => {
         }
         // 8-hour lock: a locked day can never lose a task, so an expired timer only stops in place (no carry to tomorrow).
         // Before: the carry spliced the task and saveSelectedDayTasks threw a LockError inside this interval -> "Unhandled:" overlay.
-        if (selectedDayLocked.value || isShutdown()) {
+        if (selectedDayLocked.value || isShutdown() || gpOn.value) { // game plan: nothing rolls over by itself (picked at close)
           selectedDayRoutine.value[i] = { ...task, timerActive: false, timerStartedAt: null, timerEndTime: null };
           await saveSelectedDayTasks().catch((e) => console.warn('timer stop not saved:', e));
         } else {
@@ -2802,7 +2808,9 @@ const totalPoints = computed(() => (selectedDayRoutine?.value || []).reduce((n, 
 watch(
     () => selectedDayRoutine.value,
     (tasks) => {
-      pointsAccumulated.value = (tasks || []).filter((task) => task.completed).reduce((n, t) => n + chipValues(t).points, 0); // real points, same as the card
+      // Coach game plan: size points (S10/M20/L40), nothing after the hard close, minus today's revoke penalty. Simple mode unchanged.
+      pointsAccumulated.value = gpOn.value && isViewingToday.value ? gpEarned.value.points
+        : (tasks || []).filter((task) => task.completed).reduce((n, t) => n + chipValues(t).points, 0); // real points, same as the card
     },
     { deep: true }
 );
@@ -3920,11 +3928,28 @@ const syncLockPenalties = async (remote) => {
 // ---- B44 strict boss mode (opt-in; simple = unchanged behaviour) ----
 const bossMode = ref('simple'); const emergencyOn = ref(true); const goalOverride = ref(null); const todayMood = ref('');
 const isStrictMode = computed(() => bossMode.value === 'strict');
-const loadBossPrefs = () => loadUserDoc().then((d) => { const day = localDateStr(); bossMode.value = normBossMode(d && d.bossMode); emergencyOn.value = emergencyAllowed(d);
+const gp = ref(GP.normPlan({})); const gpLog = ref({}); const gpPenalty = ref(null); const gpLoaded = ref(false);
+const gpOn = computed(() => isStrictMode.value);
+watch(gpOn, (on) => { GP.setSizeMode(on); if (!on) GP.setQuietWindows([]); }, { immediate: true });
+const gpLoad = (d) => {
+  gp.value = GP.normPlan(d && d.gamePlan, d && d.onboarding && d.onboarding.wakeTime);
+  gpLog.value = (d && d.gpLog) || {}; gpPenalty.value = (d && d.gpPenalty) || null; gpLoaded.value = true;
+  // First run: this week counts as reviewed, so the review first appears at the next review time.
+  if (gpOn.value && !(d && d.gamePlan && d.gamePlan.lastReview)) { gp.value = { ...gp.value, lastReview: GP.reviewKey(gp.value, Date.now()) }; gpSave(); }
+};
+const gpSave = () => saveBossField({ gamePlan: { ...gp.value } });
+const gpPhase = computed(() => GP.phaseAt(gp.value, nowTick.value));
+const gpEst = (t) => chipValues(t).minutes;
+const gpPenaltyToday = computed(() => (gpPenalty.value && gpPenalty.value.day === gpPhase.value.dayKey ? Number(gpPenalty.value.points) || 0 : 0));
+const gpEarned = computed(() => GP.earnedPoints(todayTasksForTarget.value, { closeMs: gpPhase.value.closeMs, estMinutes: gpEst, penalty: gpPenaltyToday.value }));
+watch(() => gpOn.value && isViewingToday.value && gpEarned.value.points, (v) => { if (v !== false) pointsAccumulated.value = v; });
+const gpGoal = computed(() => GP.dailyGoal({ history: GP.historyFrom(gpLog.value, gpPhase.value.dayKey), load: GP.plannedLoad(todayTasksForTarget.value, gpEst), min: gp.value.minGoal }));
+const gpGoalWhy = computed(() => { const g = gpGoal.value; return g.from === 'history' ? `90% of your 2-week median, capped at today's ${g.load} pts planned, never under ${g.min}.` : `80% of today's ${g.load} pts planned (needs 3 logged days for the 2-week median), never under ${g.min}.`; });
+const loadBossPrefs = () => loadUserDoc().then((d) => { const day = localDateStr(); bossMode.value = normBossMode(d && d.bossMode); emergencyOn.value = emergencyAllowed(d); gpLoad(d);
   goalOverride.value = d && d.pointsGoal && d.pointsGoal.day === day ? d.pointsGoal : null; todayMood.value = d && d.mood && d.mood.day === day ? d.mood.id : ''; }).catch(() => {});
 onMounted(loadBossPrefs);
 const effWakeAuto = computed(() => wakeAutoOn({ mode: bossMode.value, wakeAuto: lockIn.value.wakeAuto, dayKey: localDateStr(), offDates: offDates.value, skipDate: lockIn.value.skipDate }));
-const strictGoal = computed(() => goalFor(todayTasksForTarget.value, goalOverride.value));
+const strictGoal = computed(() => (gpOn.value ? (goalOverride.value && Number(goalOverride.value.value) > 0 ? Math.round(Number(goalOverride.value.value)) : gpGoal.value.goal) : goalFor(todayTasksForTarget.value, goalOverride.value)));
 const tasksDoneToday = computed(() => (todayTasksForTarget.value || []).filter((t) => t && t.completed).length);
 const STRICT_KEY = 'cn.strict.day'; // { day, goalAt, dayEndMs } (this device)
 const readStrictDay = () => { try { const v = JSON.parse(localStorage.getItem(STRICT_KEY) || 'null'); return v && v.day === localDateStr() ? v : { day: localDateStr(), goalAt: 0, dayEndMs: 0 }; } catch (e) { return { day: localDateStr(), goalAt: 0, dayEndMs: 0 }; } };
@@ -3940,8 +3965,12 @@ const strictPlan = (st) => {
   if (eh.running.value && eh.lock.value && eh.lock.value.endMs) sd.dayEndMs = eh.lock.value.endMs;
   if (!sd.goalAt && goal > 0 && earned >= goal) sd.goalAt = Date.now();
   writeStrictDay(sd);
-  const r = strictShield({ running: eh.running.value, dayEndMs: sd.dayEndMs, goal, earned, tasksDone: tasksDoneToday.value, goalAt: sd.goalAt, selectionCount: st.selectionCount || 0,
+  let r = strictShield({ running: eh.running.value, dayEndMs: sd.dayEndMs, goal, earned, tasksDone: tasksDoneToday.value, goalAt: sd.goalAt, selectionCount: st.selectionCount || 0,
     enabled: lockEnabled(), unlockedToday: lockUnlockedDay.value === localDateStr(), offDay: (offDates.value || []).includes(localDateStr()) });
+  if (gpOn.value) { // game plan: friend-approved unlock window wins; otherwise social apps stay locked until the morning checklist is done
+    if (gpUnlock.value.untilMs > Date.now()) r = { ...r, want: false, phase: 'friend' };
+    else if (!r.want && gpGate.value && lockEnabled() && (st.selectionCount || 0) > 0 && lockUnlockedDay.value !== localDateStr()) r = { ...r, want: true, untilMs: gpPhase.value.closeMs, phase: 'checklist' };
+  }
   strictState.value = r;
   if (sd.dayEndMs) { const n = dayEndNote({ earned, goal, tasksDone: tasksDoneToday.value }); const sig = JSON.stringify([sd.dayEndMs, n.title, r.unlockEndMs]);
     if (sig !== strictNoteSig) { strictNoteSig = sig;
@@ -3959,6 +3988,7 @@ const syncAppLock = async () => {
   if (st.locked && Number(st.until) > 0 && Number(st.until) <= Date.now()) { lockOn = null; await clingLock.stopLock(); clingLock.labeledApps(); return; }
   clingLock.labeledApps();
   if (!isViewingToday.value) return;
+  gpAuthCheck(st);
   const sp = isStrictMode.value ? strictPlan(st) : null;
   const endMs = sp ? sp.untilMs : eh.lock.value && eh.lock.value.endMs;
   const want = sp ? sp.want : shouldShield({ enabled: lockEnabled(), running: eh.running.value, endMs, selectionCount: st.selectionCount || 0,
@@ -4007,6 +4037,93 @@ const emergencyUnlock = async () => { if (!emergencyOn.value) return { summary: 
   const at = Date.now(); pen.push({ day, points: EMERGENCY_PENALTY, at, uid: userId.value || '' }); try { localStorage.setItem(PENALTY_KEY, JSON.stringify(pen.slice(-60))); } catch (e) { /* ignore */ }
   if (userId.value) { try { await setDoc(doc(db, 'streaks', userId.value), { lockPenalties: arrayUnion({ day, points: EMERGENCY_PENALTY, at }) }, { merge: true }); } catch (e) { console.warn('penalty sync', e && e.message); } }
   lockUnlockedDay.value = day; return { summary: `Unlocked. Penalty: ${EMERGENCY_PENALTY} extra points owed today.`, penalty: EMERGENCY_PENALTY }; };
+// ---- Coach game plan (strict mode): fixed week, focus block, breaks, hard close, size points, locking, close picker ----
+// Plan lives in users/{uid}.gamePlan; the per-day log in users/{uid}.gpLog['YYYY-MM-DD'] = { earned, goal, penalty }.
+const gpPenaltyNote = computed(() => { const p = gpPenalty.value; if (!p || !p.points) return ''; const ago = (Date.now() - (Number(p.at) || 0)) / 864e5; if (ago > 2) return '';
+  return `−${p.points} pts on ${p.day === gpPhase.value.dayKey ? 'today' : p.day}: Screen Time access for ClingNote was turned off. Turn it back on in Settings → Screen Time.`; });
+const gpQuiet = computed(() => gpOn.value && gpPhase.value.phase === 'focus'); // in-app quiet: the boss panel and nudges wait for the break
+const gpGate = computed(() => gpOn.value && routineItems.value.length > 0 && !GP.checklistDone(routineItems.value) && gpPhase.value.phase !== 'closed');
+const gpText = computed(() => (gpGate.value && gpPhase.value.phase !== 'focus' ? '🔒 Checklist first · ' : '') + GP.rowText(gpPhase.value, { earned: gpEarned.value.points, goal: strictGoal.value }));
+const gpReview = computed(() => (gpOn.value && gpLoaded.value && GP.reviewDue(gp.value, nowTick.value) ? GP.weekSummary(gpLog.value, gp.value, nowTick.value) : null));
+const gpLeft = computed(() => (gpPhase.value.phase === 'closed' ? GP.leftovers(todayTasksForTarget.value).map((t) => ({ key: taskKey(t), title: t.title || 'Untitled task' })) : []));
+const gpTomorrowIdx = computed(() => (days.findIndex((x) => x.day === getTodayId()) + 1) % days.length);
+const gpTomorrow = computed(() => (days[gpTomorrowIdx.value] && days[gpTomorrowIdx.value].day) || 'tomorrow');
+// Day log for history/weekly review (one merge write when the numbers change).
+let gpLogSig = '';
+watch(() => [gpOn.value, gpLoaded.value, isViewingToday.value, gpEarned.value.points, strictGoal.value, gpPenaltyToday.value], () => {
+  if (!gpOn.value || !gpLoaded.value || !isViewingToday.value || !userId.value) return;
+  const k = gpPhase.value.dayKey; const e = { earned: gpEarned.value.points, goal: strictGoal.value, ...(gpPenaltyToday.value ? { penalty: gpPenaltyToday.value } : {}) };
+  const sig = JSON.stringify([k, e]); if (sig === gpLogSig) return; gpLogSig = sig;
+  gpLog.value = { ...gpLog.value, [k]: e };
+  updateDoc(doc(db, 'users', userId.value), { [`gpLog.${k}`]: e }).catch(() => saveBossField({ gpLog: { [k]: e } }));
+});
+// Device notifications: break starts, midday pacing, hard close, weekly review. Focus sessions hold other local notifications (quiet windows).
+let gpNoteSig = '';
+watch(() => [gpOn.value, gpPhase.value.startMs, gp.value.reviewDow, gp.value.reviewTime, strictGoal.value, Math.floor(gpEarned.value.points / 10)], () => {
+  if (!gpOn.value) return;
+  const w = gpPhase.value; GP.setQuietWindows(GP.quietWindows(gp.value, w.startMs));
+  const sig = JSON.stringify([w.startMs, strictGoal.value, gpEarned.value.points, gp.value.reviewDow, gp.value.reviewTime]); if (sig === gpNoteSig) return; gpNoteSig = sig;
+  const now = Date.now(); const k = w.dayKey;
+  for (const s of GP.segments(gp.value, w.startMs)) if (s.kind === 'break' && s.startMs > now) { const n = GP.breakNote(s.n, gp.value.sessions); scheduleLocal(`gp:break:${k}:${s.n}`, { ...n, at: new Date(s.startMs), route: '/home', type: 'gp' }); }
+  const cp = GP.checkpointAt(w); if (cp > now) { const n = GP.pacingNote({ earned: gpEarned.value.points, goal: strictGoal.value }); scheduleLocal(`gp:pace:${k}`, { title: n.title, body: n.body, at: new Date(cp), route: '/home', type: 'gp' }); }
+  if (w.closeMs > now) scheduleLocal(`gp:close:${k}`, { title: 'Day closed', body: 'Nothing more counts today. Pick what goes to tomorrow; the rest carries no penalty.', at: new Date(w.closeMs), route: '/home', type: 'gp' });
+  const nextReview = GP.lastReviewAt(gp.value, now) + 7 * 864e5;
+  scheduleLocal(`gp:review:${GP.reviewKey(gp.value, nextReview)}`, { title: 'Weekly review', body: 'See your week and set next week’s plan.', at: new Date(nextReview), route: '/home', type: 'gp' });
+});
+// 7. Close picker: copies the picked leftovers to tomorrow (dedup by title) and takes them off today when today can still be edited.
+const gpCarry = async (keys) => {
+  const set = new Set(keys); const picked = todayTasksForTarget.value.filter((t) => set.has(taskKey(t))); if (!picked.length || !userId.value) return;
+  const target = gpTomorrow.value; const today = getTodayId();
+  try {
+    await trackWrite(mutateDay(target, (cur) => GP.carryOver(picked, cur, Date.now())));
+    try { const cur = await trackWrite(mutateDay(today, (c) => c.filter((t) => !set.has(taskKey(t))))); if (isViewingToday.value) selectedDayRoutine.value = cur; } catch (e) { /* locked day: the copy is on tomorrow, the original stays */ }
+    showRepeatToast(`${picked.length} moved to ${target}. No penalty for the rest.`);
+  } catch (e) { console.warn('gp carry', e && e.message); showRepeatToast("Couldn't move them. Try again."); }
+};
+const gpApplyReview = (acceptedIds = []) => {
+  const s = gpReview.value; let acc = {}; for (const p of (s && s.proposals) || []) if (acceptedIds.includes(p.id) && p.id !== 'queued') acc = { ...acc, ...p.patch };
+  if (!acceptedIds.includes('queued')) gp.value = { ...gp.value, pending: null };
+  gp.value = GP.applyReview(gp.value, Date.now(), acc); gpSave(); showRepeatToast('Next week is set. Same plan every day until the next review.');
+};
+// 6. Screen Time revoked (approved before, not now): -25 pts on today, shown in the row, the morning report and the weekly review.
+const GP_AUTH_KEY = 'cn.gp.auth';
+const gpAuthCheck = (st) => {
+  if (!gpOn.value || !st || !st.authorization) return;
+  let prev = ''; try { prev = localStorage.getItem(GP_AUTH_KEY) || ''; } catch (e) { /* ignore */ }
+  if (st.everApproved) prev = 'approved';
+  const day = gpPhase.value.dayKey; const r = GP.authCheck({ prev, now: st.authorization, day, bookedDay: gpPenalty.value && gpPenalty.value.day });
+  try { localStorage.setItem(GP_AUTH_KEY, st.authorization === 'approved' ? 'approved' : (r.revoked ? 'revoked' : prev)); } catch (e) { /* ignore */ }
+  if (r.penalty) { gpPenalty.value = { day, points: r.penalty, reason: 'screen-time-revoked', at: Date.now() }; saveBossField({ gpPenalty: gpPenalty.value }); }
+};
+// 6. Early unlock with a friend's OK: share a link; the friend approves on the website; then an 8 s countdown before the shield drops.
+const GP_UNLOCK_KEY = 'cn.gp.unlock';
+const gpUnlock = ref((() => { try { const v = JSON.parse(localStorage.getItem(GP_UNLOCK_KEY) || 'null'); return v && v.day === localDateStr() ? v : { status: '' }; } catch (e) { return { status: '' }; } })());
+const gpUnlockSet = (v) => { gpUnlock.value = { day: localDateStr(), ...v }; try { localStorage.setItem(GP_UNLOCK_KEY, JSON.stringify(gpUnlock.value)); } catch (e) { /* ignore */ } };
+const gpCall = async (body) => { const u = auth.currentUser; if (!u) throw new Error('Sign in first');
+  const r = await fetch(fnUrl('friend-unlock'), { method: 'POST', headers: { Authorization: `Bearer ${await u.getIdToken()}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error || 'Request failed'); return j; };
+const gpShare = async () => { const url = gpUnlock.value.url; if (!url) return;
+  const text = `Can you OK ${gpUnlock.value.minutes} min of my apps early? ${url}`;
+  try { if (navigator.share) { await navigator.share({ title: 'ClingNote unlock', text, url }); return; } } catch (e) { /* cancelled */ }
+  try { await navigator.clipboard.writeText(url); showRepeatToast('Link copied. Send it to your friend.'); } catch (e) { /* ignore */ } };
+const gpAsk = async (minutes) => {
+  try { const j = await gpCall({ action: 'request', friendName: gp.value.friend && gp.value.friend.name, minutes });
+    gpUnlockSet({ status: 'pending', token: j.token, url: j.url, minutes }); gpShare(); }
+  catch (e) { gpUnlockSet({ status: 'error', error: e.message }); }
+};
+let gpPollBusy = false;
+watch(() => Math.floor(nowTick.value / 5000), async () => {
+  const u = gpUnlock.value;
+  if (u.status === 'pending' && u.token && !gpPollBusy) { gpPollBusy = true;
+    try { const j = await gpCall({ action: 'status', token: u.token });
+      if (j.status === 'approved') gpUnlockSet({ ...u, status: 'counting', startMs: Date.now(), left: GP.FRICTION_SEC });
+      else if (j.status !== 'pending') gpUnlockSet({ ...u, status: j.status }); } catch (e) { /* retry next tick */ } finally { gpPollBusy = false; } }
+});
+watch(nowTick, async () => {
+  const u = gpUnlock.value; if (u.status !== 'counting') return;
+  const left = GP.countdown(u.startMs, Date.now()); if (left !== u.left) gpUnlock.value = { ...u, left };
+  if (left === 0) { gpUnlockSet({ ...u, status: 'open', left: 0, untilMs: Date.now() + u.minutes * 60000 }); if (lockAvailable()) { lockOn = null; await clingLock.stopLock(); } hardLocked.value = false; syncAppLock(); }
+});
 // Hard lock chosen at day start: pick apps once if needed, turn the lock on, the shield runs until the day ends (shouldShield/endMs).
 const startHardLock = async () => {
   try {
