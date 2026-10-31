@@ -1,4 +1,4 @@
-// Pointer-driven list reorder with continuous motion (replaces SortableJS/vuedraggable on the task list).
+// Pointer-driven list reorder with continuous motion. Pick-up: drag handle, or long-press (HOLD_MS, finger still) anywhere on a card (replaces SortableJS/vuedraggable on the task list).
 // - Dragged item follows the finger 1:1 via rAF-written translate3d (no CSS transition on it while dragging).
 // - Neighbours slide live with a transform transition; all geometry is measured ONCE at drag start, so the
 //   drag loop never reads layout.
@@ -9,10 +9,17 @@ import { prefersReducedMotion, EASE_OUT, lightHaptic } from './useTaskMotion';
 
 const SLIDE_MS = 400;
 const DROP_MS = 380;
+export const HOLD_MS = 400; // long-press anywhere on a card picks it up
+export const HOLD_TOL = 10; // px of finger drift allowed while holding; more = the user is scrolling
+// Elements that keep their own tap/press meaning (buttons, inputs, links); a hold that starts on them never drags.
+export const NO_HOLD = 'button, input, textarea, select, a, label, [contenteditable], .task-expand, .no-hold';
+// Pure: should a pending hold be dropped because the finger moved (= scroll)?
+export const holdMoved = (x0, y0, x, y, tol = HOLD_TOL) => Math.abs(x - x0) > tol || Math.abs(y - y0) > tol;
 
-export function useSmoothReorder({ listRef, handle = '.drag-handle', enabled = () => true, onStart, onCommit, onEnd }) {
+export function useSmoothReorder({ listRef, handle = '.drag-handle', enabled = () => true, onStart, onCommit, onEnd, holdMs = HOLD_MS }) {
   let st = null; // drag state
   let raf = 0;
+  let hold = null; // pending long-press { timer, x0, y0, el, id }
 
   const scroller = (el) => { for (let n = el.parentElement; n; n = n.parentElement) { const s = window.getComputedStyle(n); if (/(auto|scroll)/.test(s.overflowY) && n.scrollHeight > n.clientHeight) return n; } return document.scrollingElement || document.documentElement; };
 
@@ -49,13 +56,16 @@ export function useSmoothReorder({ listRef, handle = '.drag-handle', enabled = (
   };
   const schedule = () => { if (!raf) raf = window.requestAnimationFrame(frame); };
 
-  const onMove = (e) => { if (!st) return; st.py = e.clientY; e.preventDefault(); schedule(); };
+  const onMove = (e) => { if (!st) return; if (st.touchOnly && e.pointerType === 'touch') return; st.py = e.clientY; e.preventDefault(); schedule(); };
 
   // iOS WKWebView: pointer events alone don't stop the native scroll, which steals the gesture and fires
   // pointercancel. A non-passive touchmove preventDefault while dragging keeps the finger on the item.
-  const blockTouch = (e) => { if (st && e.cancelable) e.preventDefault(); };
+  // Also follow the finger from touchmove: after a long-press WebKit may already have sent pointercancel.
+  const blockTouch = (e) => { if (!st) return; if (e.cancelable) e.preventDefault(); const t = e.touches && e.touches[0]; if (t) { st.py = t.clientY; schedule(); } };
+  const touchEnd = () => { if (st) onUp(); };
   const cleanupListeners = () => {
     document.removeEventListener('touchmove', blockTouch, { passive: false });
+    document.removeEventListener('touchend', touchEnd); document.removeEventListener('touchcancel', touchEnd);
     window.removeEventListener('pointermove', onMove);
     window.removeEventListener('pointerup', onUp);
     window.removeEventListener('pointercancel', onUp);
@@ -73,8 +83,12 @@ export function useSmoothReorder({ listRef, handle = '.drag-handle', enabled = (
     onEnd?.(changed);
   };
 
-  function onUp() {
+  // A click that follows a drop must not open the card (tap = details sheet).
+  const swallowClick = () => { const f = (ev) => { ev.stopPropagation(); ev.preventDefault(); }; window.addEventListener('click', f, true); setTimeout(() => window.removeEventListener('click', f, true), 450); };
+  function onUp(e) {
     if (!st) return;
+    if (e && e.type === 'pointercancel' && st.touchOnly) return; // long-press drag on touch: WebKit cancels the pointer; touchend ends it
+    if (st.viaHold) swallowClick();
     cleanupListeners();
     if (raf) { window.cancelAnimationFrame(raf); raf = 0; }
     frame(); // apply the latest pointer position
@@ -94,12 +108,27 @@ export function useSmoothReorder({ listRef, handle = '.drag-handle', enabled = (
     setTimeout(end, DROP_MS + 80);
   }
 
+  const itemsOf = (list) => Array.from(list.children).filter((n) => n.nodeType === 1 && n.dataset.reorderKey);
+  const cancelHold = () => { if (!hold) return; clearTimeout(hold.timer); document.removeEventListener('touchmove', holdMove); window.removeEventListener('pointermove', holdMove); window.removeEventListener('pointerup', cancelHold); window.removeEventListener('pointercancel', holdCancel); document.removeEventListener('touchend', cancelHold); document.removeEventListener('scroll', cancelHold, true); hold = null; };
+  // Passive: while the hold is pending the page must scroll normally; moving past HOLD_TOL drops the hold.
+  function holdMove(e) { if (!hold) return; const t = e.touches ? e.touches[0] : e; if (!t) return; hold.y = t.clientY; if (holdMoved(hold.x0, hold.y0, t.clientX, t.clientY)) cancelHold(); }
+  function holdCancel() { if (hold && hold.touch) return; cancelHold(); } // touch: WebKit's own long-press recogniser may cancel the pointer; touchmove/touchend decide
   const onDown = (e) => {
-    if (st || e.button > 0 || !enabled()) return;
+    if (st || hold || e.button > 0 || !enabled()) return;
+    const list = listRef.value?.$el || listRef.value; if (!list) return;
     const h = e.target.closest && e.target.closest(handle);
-    const list = listRef.value?.$el || listRef.value;
-    if (!h || !list || !list.contains(h)) return;
-    const items = Array.from(list.children).filter((n) => n.nodeType === 1 && n.dataset.reorderKey);
+    if (h && list.contains(h)) { begin(e, list, h, false); return; }
+    // Long-press anywhere else on a card (not on its own buttons/inputs, not on section headers) = pick it up.
+    if (!e.target.closest || e.target.closest(NO_HOLD)) return;
+    const el = itemsOf(list).find((n) => n.contains(e.target));
+    if (!el || !el.classList.contains('task-card')) return;
+    const touch = e.pointerType === 'touch';
+    hold = { x0: e.clientX, y0: e.clientY, y: e.clientY, el, id: e.pointerId, touch, timer: setTimeout(() => { const hd = hold; cancelHold(); if (hd && enabled() && !st) begin({ clientY: hd.y, pointerId: hd.id, preventDefault() {} }, list, hd.el, true, hd.touch); }, holdMs) };
+    document.addEventListener('touchmove', holdMove, { passive: true }); window.addEventListener('pointermove', holdMove, { passive: true });
+    window.addEventListener('pointerup', cancelHold); window.addEventListener('pointercancel', holdCancel); document.addEventListener('touchend', cancelHold); document.addEventListener('scroll', cancelHold, true);
+  };
+  function begin(e, list, h, viaHold, touchOnly = false) {
+    const items = itemsOf(list);
     const el = items.find((n) => n.contains(h));
     if (!el) return;
     e.preventDefault();
@@ -108,20 +137,21 @@ export function useSmoothReorder({ listRef, handle = '.drag-handle', enabled = (
     const from = items.indexOf(el);
     const sc = scroller(list);
     const reduced = prefersReducedMotion();
-    st = { list, items, el, rects, gap, from, to: from, keys: items.map((n) => n.dataset.reorderKey), y0: e.clientY, py: e.clientY, dy: 0, sc, scroll0: sc.scrollTop, reduced };
+    st = { list, items, el, rects, gap, from, to: from, keys: items.map((n) => n.dataset.reorderKey), y0: e.clientY, py: e.clientY, dy: 0, sc, scroll0: sc.scrollTop, reduced, viaHold, touchOnly };
     list.classList.add('reorder-live');
     items.forEach((n) => { n.style.willChange = 'transform'; if (n !== el) { n.classList.add('reorder-shift'); n.style.transition = reduced ? 'none' : `transform ${SLIDE_MS}ms ${EASE_OUT}`; } });
     el.style.transition = 'none'; el.style.zIndex = '50'; el.classList.add('reorder-lift');
     try { h.setPointerCapture?.(e.pointerId); } catch (_) { /* ignore */ }
     document.addEventListener('touchmove', blockTouch, { passive: false });
+    document.addEventListener('touchend', touchEnd); document.addEventListener('touchcancel', touchEnd);
     window.addEventListener('pointermove', onMove, { passive: false });
     window.addEventListener('pointerup', onUp);
     window.addEventListener('pointercancel', onUp);
     lightHaptic();
     onStart?.();
     schedule();
-  };
+  }
 
-  onBeforeUnmount(() => { cleanupListeners(); if (raf) window.cancelAnimationFrame(raf); });
+  onBeforeUnmount(() => { cancelHold(); cleanupListeners(); if (raf) window.cancelAnimationFrame(raf); });
   return { onPointerDown: onDown };
 }

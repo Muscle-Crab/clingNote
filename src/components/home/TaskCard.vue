@@ -382,9 +382,9 @@ const sizeMode = computed(() => sizeModeOn());
 const timerLocked = computed(() => timerStarted(props.task));
 const focusLocked = computed(() => props.task.focusLock === true && props.task.timerActive === true && props.task.completed !== true); // auto-started focus: play becomes the lock // estimate frozen once play was pressed
 const estLocked = computed(() => false); // estimate/timer stay editable during lock-in and after play (end time is shifted)
-// Long-press (550 ms, finger kept still) on the card opens the editor.
+// Long-press on a reorderable card = pick it up and drag (useSmoothReorder, 400 ms). Only when reordering is off does a 550 ms hold open the editor.
 let pressTimer = null;
-const onPressStart = (e) => { if (e.target.closest('button, input, textarea, select, a, .task-expand, .drag-handle')) return; clearTimeout(pressTimer); pressTimer = setTimeout(() => { pressTimer = 'fired'; emit('edit'); }, 550); };
+const onPressStart = (e) => { if (!props.dragDisabled) return; if (e.target.closest('button, input, textarea, select, a, .task-expand, .drag-handle')) return; clearTimeout(pressTimer); pressTimer = setTimeout(() => { pressTimer = 'fired'; emit('edit'); }, 550); };
 const onPressEnd = () => { if (pressTimer !== 'fired') clearTimeout(pressTimer); };
 </script>
 
@@ -426,6 +426,8 @@ const onPressEnd = () => { if (pressTimer !== 'fired') clearTimeout(pressTimer);
 /* opacity makes each completed card its own stacking context: lift the card whose menu is open above its siblings */
 .task-card--menu { z-index: 30; }
 .drag-handle { user-select: none; -webkit-user-select: none; }
+/* long-press picks the card up: no iOS callout / text-selection loupe on the card body */
+.task-card { -webkit-touch-callout: none; }
 .task-card--important { border-left-color: var(--c-danger); }
 .task-left { display: flex; align-items: center; gap: var(--sp-2); padding-top: 2px; }
 .task-avatar { width: 16px; height: 24px; background: transparent !important; display: flex; align-items: center; justify-content: center; cursor: grab; color: var(--c-text-3); font-size: var(--fs-sm); flex-shrink: 0; }
