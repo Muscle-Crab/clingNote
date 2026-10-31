@@ -19,6 +19,8 @@ struct FocusActivityAttributes: ActivityAttributes {
         var locked: Bool? = nil
         /// Apps unlocked for this task (per-task app unlock, TaskAllow); nil/0 = none.
         var appsUnlocked: Int? = nil
+        /// Pomodoro phase caption ("Focus 2/4" / "Break 2/4", src/utils/pomodoro.js); nil = plain timer.
+        var phase: String? = nil
     }
     var title: String
     /// widgetTaskId of the focused task (src/utils/widgetSnapshot.js), carried by the Pause/Resume/Done intents.

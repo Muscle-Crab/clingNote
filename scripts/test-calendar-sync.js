@@ -17,7 +17,7 @@ const sched = [
 const dayLists = { Thu: [{ title: 'Write report', startTime: '14:00', createdAt: 'c1' }, { title: 'done', startTime: '10:00', completed: true, createdAt: 'c2' }, { title: 'untimed', createdAt: 'c3' }],
   Fri: [{ title: 'Call mom', startTime: '18:15', estimateMin: 20, createdAt: 'c4' }, { title: 'rep', type: 'recurring', startTime: '07:00', createdAt: 'c5' }],
   Sat: [{ title: 'Mat', scheduledId: 'm9', scheduledFor: '2026-10-24', startTime: '11:00', createdAt: 'c6' }] };
-const local = () => C.buildLocalEvents({ scheduled: sched, dayLists, weekDates, nowMs: now });
+const localAll = () => C.buildLocalEvents({ scheduled: sched, dayLists, weekDates, nowMs: now }); const local = () => localAll().filter((e) => !e.done);
 
 await t('buildLocalEvents: timed, open, in-window tasks only', () => {
   const ev = local(); const keys = ev.map((e) => e.key).sort();
@@ -54,7 +54,7 @@ await t('event deleted in Calendar is respected, then resumes when the task chan
   const loc = local().map((e) => (e.key === k ? { ...e, title: 'Dentist v2', sig: C.sigOf({ ...e, title: 'Dentist v2' }) } : e));
   const p3 = C.planSync(loc, rem, { links: p.links, suppressed: p.suppressed }); assert.strictEqual(p3.creates.length, 1); assert.ok(!p3.suppressed[k]);
 });
-await t('task completed in ClingNote removes its event; stray own events removed', () => {
+await t('task deleted in ClingNote removes its event; stray own events removed', () => {
   const { links, remote } = linked(); const loc = local().filter((e) => e.key !== 's-a1');
   remote.push({ id: 'ORPHAN', title: 'x', startMs: now, endMs: now + 1, url: C.EVENT_URL_PREFIX + 's-gone' });
   const p = C.planSync(loc, remote, { links }); assert.deepStrictEqual(p.removes.sort(), [links['s-a1'].id, 'ORPHAN'].sort());
@@ -83,12 +83,12 @@ await t('runCalendarSync end-to-end with fake device calendar', async () => {
     remove: async (id) => cal.delete(id), saveLocal: async (x) => { saved = x; data = { ...data, scheduled: x.scheduled, dayLists: x.dayLists }; }, makeId: () => 'new1', lockedDays: () => [],
     buildEntry: (f, id) => S.buildScheduledEntry({ title: f.title, estimateMin: f.minutes }, f.date, f.time, id) };
   let r = await C.runCalendarSync(io, {}, now); assert.strictEqual(r.summary.pushed, 4); assert.strictEqual(cal.size, 4);
-  r = await C.runCalendarSync(io, r.state, now); assert.deepStrictEqual(r.summary, { pushed: 0, updated: 0, removed: 0, pulled: 0, imported: 0, failed: 0 });
+  r = await C.runCalendarSync(io, r.state, now); assert.deepStrictEqual(r.summary, { pushed: 0, updated: 0, removed: 0, pulled: 0, imported: 0, failed: 0, merged: 0, linked: 0 });
   const ev = cal.get(r.state.links['s-a1'].id); ev.startMs += 2 * 3600000; ev.endMs += 2 * 3600000; // moved in Calendar
   cal.set('USER1', { id: 'USER1', title: 'Yoga', startMs: new Date(2026, 9, 26, 7, 0).getTime(), endMs: new Date(2026, 9, 26, 8, 0).getTime() });
   r = await C.runCalendarSync(io, r.state, now); assert.strictEqual(r.summary.pulled, 1); assert.strictEqual(r.summary.imported, 1);
   assert.strictEqual(data.scheduled.find((e) => e.id === 'a1').scheduledTime, '11:30'); assert.ok(data.scheduled.find((e) => e.id === 'new1' && e.title === 'Yoga'));
-  r = await C.runCalendarSync(io, r.state, now); assert.deepStrictEqual(r.summary, { pushed: 0, updated: 0, removed: 0, pulled: 0, imported: 0, failed: 0 }, 'converged');
+  r = await C.runCalendarSync(io, r.state, now); assert.deepStrictEqual(r.summary, { pushed: 0, updated: 0, removed: 0, pulled: 0, imported: 0, failed: 0, merged: 0, linked: 0 }, 'converged');
   assert.ok(saved);
 });
 await t('runCalendarSync: failed save links nothing (retried next run)', async () => {

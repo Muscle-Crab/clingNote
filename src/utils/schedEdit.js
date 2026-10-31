@@ -2,10 +2,10 @@
 // Model: one-time entries + recurring templates live in users/{uid}.scheduledTasks; occurrences are materialized
 // into the day list (weeklyRoutines) on their date, so each one is completed independently.
 // Every function is pure: (list, task, ...) -> { list, task } where task === null means "remove it from the day list".
-import { describeRecurrence, isValidDate, isValidTime, addDaysStr, buildScheduledEntry, buildRecurringTemplate, occursOn, instanceId, isTemplate, isMaterialized, makeScheduledId, AFTER, clampEveryDays, clampTimesPerWeek, flexTimes, ALL_DAYS } from './scheduling.js';
+import { describeRecurrence, isValidDate, isValidTime, addDaysStr, buildScheduledEntry, buildRecurringTemplate, occursOn, instanceId, isTemplate, isMaterialized, makeScheduledId, AFTER, INTERVAL, clampEveryDays, clampTimesPerWeek, flexTimes, ALL_DAYS } from './scheduling.js';
 
 export const XWEEK = 'xweek'; // picker-only value: "N times a week, any day" (stored as weekly + timesPerWeek, see scheduling.js)
-export const REPEATS = ['never', 'daily', 'weekly', XWEEK, 'monthly', AFTER];
+export const REPEATS = ['never', 'daily', 'weekly', XWEEK, 'monthly', AFTER, INTERVAL];
 const repeatOf = (r) => (flexTimes(r) ? XWEEK : r.freq);
 export const blankSchedule = (date = '') => ({ on: false, date, time: '', repeat: 'never', days: [], dayOfMonth: '', until: '', everyDays: 3, timesPerWeek: 3, remindAt: '' });
 const extraOf = (tpl) => ({ everyDays: tpl?.recurrence?.everyDays || 3, timesPerWeek: flexTimes(tpl?.recurrence) || 3, remindAt: tpl?.remindAt || '' });
@@ -31,6 +31,7 @@ export const validateSchedule = (s, minDate) => {
   if (s.repeat === 'weekly' && !(s.days || []).length) return 'Pick at least one weekday.';
   if (s.repeat === XWEEK && !clampTimesPerWeek(s.timesPerWeek)) return 'Pick 1–6 times a week.';
   if (s.repeat === 'monthly' && s.dayOfMonth && !(Number(s.dayOfMonth) >= 1 && Number(s.dayOfMonth) <= 31)) return 'Day of month must be 1–31.';
+  if (s.repeat === INTERVAL && !(Number(s.everyDays) >= 2 && Number(s.everyDays) <= 365)) return 'Repeat every 2–365 days.';
   if (s.repeat === AFTER && !(Number(s.everyDays) >= 1 && Number(s.everyDays) <= 365)) return 'Repeat every 1–365 days after you finish.';
   if (s.repeat !== 'never' && s.remindAt && !isValidTime(s.remindAt)) return 'Pick a valid reminder time.';
   if (s.repeat !== 'never' && s.until && (!isValidDate(s.until) || s.until < s.date)) return 'End date must be on or after the start date.';
@@ -45,7 +46,7 @@ export const sameRule = (tpl, s) => { const r = tpl?.recurrence; if (!r || repea
   if (s.repeat === XWEEK) return flexTimes(r) === clampTimesPerWeek(s.timesPerWeek);
   if (r.freq === 'weekly') return JSON.stringify([...(r.days || [])].sort()) === JSON.stringify([...(s.days || [])].map(Number).sort());
   if (r.freq === 'monthly') return Number(r.dayOfMonth) === Number(s.dayOfMonth || r.dayOfMonth);
-  if (r.freq === AFTER) return clampEveryDays(r.everyDays) === clampEveryDays(s.everyDays);
+  if (r.freq === AFTER || r.freq === INTERVAL) return clampEveryDays(r.everyDays) === clampEveryDays(s.everyDays);
   return true; };
 const withRemind = (tpl, s) => { const r = remindOf(s); const { remindAt, ...rest } = tpl; return r ? { ...rest, remindAt: r } : rest; };
 

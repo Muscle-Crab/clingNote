@@ -82,7 +82,7 @@ export const syncCalendarNow = async (uid, { pro = false, force = false } = {}) 
       const r = await runCalendarSync(ioFor(uid, st.calendarId, { pro }), st);
       const cur = loadSyncState(uid); if (!cur.enabled) return { ok: false, message: 'Calendar sync is off.' }; // turned off mid-run
       saveSyncState(uid, { ...cur, ...r.state, enabled: true, calendarId: st.calendarId });
-      const s = r.summary; const bits = [s.pushed && `${s.pushed} added`, s.updated && `${s.updated} updated`, s.removed && `${s.removed} removed`, (s.pulled + s.imported) && `${s.pulled + s.imported} from Calendar`].filter(Boolean);
+      const s = r.summary; const bits = [s.pushed && `${s.pushed} added`, s.updated && `${s.updated} updated`, s.removed && `${s.removed} removed`, (s.pulled + s.imported) && `${s.pulled + s.imported} from Calendar`, s.merged && `${s.merged} merged`].filter(Boolean);
       return { ok: !r.error, message: r.error ? 'Sync failed, will retry.' : bits.length ? `Synced: ${bits.join(', ')}.` : 'Up to date.', summary: s };
     } catch (e) { return { ok: false, message: 'Sync failed, will retry.' }; }
     finally { inflight = null; publish(uid); calSyncState.value = { ...calSyncState.value, busy: false }; }

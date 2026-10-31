@@ -139,6 +139,7 @@
                       <button @click="$emit('open-reminder')" class="action-btn" title="Reminder" aria-label="Add reminder">📅</button>
                       <button v-if="!task.completed" type="button" @click="$emit('alarm'); moreOpen = false" class="action-btn" data-coach="bell" data-test="alarm-btn" :class="{ 'action-btn--on': !!task.alarmAt }" :title="task.alarmAt ? 'Alarm set (tap to cancel)' : 'Boss alarm: rings until you start'" :aria-label="task.alarmAt ? 'Cancel alarm' : 'Set alarm'">{{ task.alarmAt ? '🔔' : '⏰' }}</button>
                       <button @click="$emit('transfer')" class="action-btn" title="Transfer" aria-label="Transfer to another day">🔄</button>
+                      <button v-if="!task.completed && !task.timerActive" type="button" @click="$emit('pomodoro'); moreOpen = false" class="action-btn" data-test="pomodoro-btn" title="Pomodoro: 25 min focus, 5 min break, 4 rounds" aria-label="Start pomodoro">🍅</button>
                       <button v-if="!task.completed" type="button" @click="$emit('breakdown'); moreOpen = false" class="action-btn" data-test="breakdown-btn" title="Break it down (AI first steps)" aria-label="Break it down">🪄</button>
                       <button @click="fileInput && fileInput.click()" class="action-btn" title="Attach file" aria-label="Attach file">📎</button>
                       <input type="file" ref="fileInput" accept="image/*,.pdf,.doc,.docx,.txt" @change="$emit('upload', $event)" class="hidden-input" />
@@ -268,7 +269,7 @@ const props = defineProps({
   allOccurrences: { type: Boolean, default: false },
   section: { type: String, default: '' }, // Home section this card is shown in (enables Move to ... in the ... menu)
 });
-const emit = defineEmits(['breakdown', 'skip-today', 'move-section', 'set-repeat', 'set-boss', 'toggle-expand', 'toggle-complete', 'open-detail', 'toggle-important', 'patch', 'subtask-patch',
+const emit = defineEmits(['breakdown', 'pomodoro', 'skip-today', 'move-section', 'set-repeat', 'set-boss', 'toggle-expand', 'toggle-complete', 'open-detail', 'toggle-important', 'patch', 'subtask-patch',
   'toggle-label', 'open-reminder', 'transfer', 'video', 'upload', 'timer', 'end-focus', 'wont-do', 'delete', 'schedule', 'toggle-repeat', 'alarm']);
 // 🔁 one-tap toggle (HomeView passes repeatInfo = { on, label, pending } covering both repeat models)
 const repeatPop = ref(false);

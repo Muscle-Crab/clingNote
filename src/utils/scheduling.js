@@ -164,6 +164,10 @@ export const rollForwardOf = (list, todayStr) => (list || []).filter((e) => isMa
 export const AFTER = 'afterCompletion';
 export const clampEveryDays = (n) => { const v = Math.round(Number(n)); return Number.isFinite(v) && v >= 1 ? Math.min(365, v) : 3; };
 export const isAfterCompletion = (tpl) => tpl?.recurrence?.freq === AFTER;
+// B44: fixed "every N days" (from the start date, whether or not you finished the last one): { freq: 'interval', everyDays: N } (N 2..365).
+// Older clients don't know 'interval' and show nothing for it (occursOn -> false), never a wrong day.
+export const INTERVAL = 'interval';
+export const isInterval = (tplOrRec) => { const r = tplOrRec && tplOrRec.recurrence ? tplOrRec.recurrence : tplOrRec; return !!r && r.freq === INTERVAL; };
 export const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 // Flexible weekly habit (B39): "N times a week, any day" = { freq: 'weekly', days: [0..6], timesPerWeek: N } (N 1..6).
 // Stored as a weekly-every-day rule on purpose: an older client that ignores timesPerWeek just shows it every day (safe degrade),
@@ -183,6 +187,7 @@ export const occursOn = (tpl, dateStr) => {
   if (r.freq === 'daily') return true;
   if (r.freq === 'weekly' && isFlexWeekly(r)) return (tpl.doneOn || []).includes(dateStr) || flexDoneInWeek(tpl, dateStr, true) < flexTimes(r);
   if (r.freq === 'weekly') return (r.days || []).includes(d.getDay());
+  if (r.freq === INTERVAL) { const n = clampEveryDays(r.everyDays); const s = tpl.startDate || dateStr; const k = Math.round((parse(dateStr) - parse(s)) / 86400000); return k >= 0 && k % n === 0; }
   if (r.freq === AFTER) return !!tpl.nextDate && dateStr === tpl.nextDate; // repeat-after-completion: only the pending occurrence
   if (r.freq === 'monthly') { const dom = Number(r.dayOfMonth) || parse(tpl.startDate || dateStr).getDate(); const last = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate(); return d.getDate() === Math.min(dom, last); }
   return false;
@@ -231,7 +236,7 @@ export const buildRecurringTemplate = (fields, startDate, recurrence, id = makeS
   if (r.freq === 'weekly' && tpw) { r.days = [...ALL_DAYS]; r.timesPerWeek = tpw; }
   else if (r.freq === 'weekly') { r.days = [...new Set((recurrence.days || []).map(Number))].filter((d) => d >= 0 && d <= 6).sort(); if (!r.days.length) r.days = [parse(startDate).getDay()]; }
   if (r.freq === 'monthly') r.dayOfMonth = Number(recurrence.dayOfMonth) || parse(startDate).getDate();
-  if (r.freq === AFTER) r.everyDays = clampEveryDays(recurrence.everyDays);
+  if (r.freq === AFTER || r.freq === INTERVAL) r.everyDays = clampEveryDays(recurrence.everyDays);
   if (isValidDate(recurrence.until) && recurrence.until >= startDate) r.until = recurrence.until;
   const { scheduledDate, remindAt, ...rest } = base;
   const out = { ...rest, startDate, recurrence: r, generated: [], skip: [] };
@@ -246,6 +251,7 @@ export const describeRecurrence = (r) => {
   if (r.freq === 'weekly') return `Every ${(r.days || []).map((d) => WEEKDAYS[d]).join(', ')}`;
   if (r.freq === 'monthly') return `Monthly on day ${r.dayOfMonth}`;
   if (r.freq === AFTER) { const n = clampEveryDays(r.everyDays); return n === 1 ? 'Every day after done' : `Every ${n} days after done`; }
+  if (r.freq === INTERVAL) { const n = clampEveryDays(r.everyDays); return n === 1 ? 'Every day' : `Every ${n} days`; }
   return '';
 };
 

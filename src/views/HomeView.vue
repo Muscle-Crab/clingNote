@@ -167,7 +167,7 @@
                   @patch="editTask(realIndex(task), task, $event)" @subtask-patch="onSubtaskPatch(realIndex(task), task, $event)"
                   @toggle-label="toggleLabelHighlight" @open-reminder="openModal('calendar', realIndex(task), task.title)" @transfer="openTransferModal(realIndex(task))"
                   @video="openYouTubeModal(realIndex(task))" @upload="handleUpload($event, realIndex(task))" @timer="openTaskTimerModal(realIndex(task))" @end-focus="endFocusEarly(realIndex(task))"
-                  @wont-do="openWontDoModal(realIndex(task))" @delete="deleteTask(realIndex(task))" @breakdown="openBreakdown(task)" @schedule="scheduleExistingTask(realIndex(task), task, $event)" @set-repeat="setTaskRepeat(task, $event)" :repeat-info="repeatStateOf(task)" @toggle-repeat="toggleTaskRepeat(task)"
+                  @wont-do="openWontDoModal(realIndex(task))" @delete="deleteTask(realIndex(task))" @breakdown="openBreakdown(task)" @pomodoro="startPomodoro(realIndex(task))" @schedule="scheduleExistingTask(realIndex(task), task, $event)" @set-repeat="setTaskRepeat(task, $event)" :repeat-info="repeatStateOf(task)" @toggle-repeat="toggleTaskRepeat(task)"
                   :can-skip="isViewingToday && !selectedDayLocked && canSkipToday(task, scheduledList)" @skip-today="skipTaskToday(task)"
               />
           </TaskSections>
@@ -191,7 +191,7 @@
                   @patch="editTask(realIndex(task), task, $event)" @subtask-patch="onSubtaskPatch(realIndex(task), task, $event)"
                   @toggle-label="toggleLabelHighlight" @open-reminder="openModal('calendar', realIndex(task), task.title)" @transfer="openTransferModal(realIndex(task))"
                   @video="openYouTubeModal(realIndex(task))" @upload="handleUpload($event, realIndex(task))" @timer="openTaskTimerModal(realIndex(task))"
-                  @wont-do="openWontDoModal(realIndex(task))" @delete="deleteTask(realIndex(task))" @breakdown="openBreakdown(task)" @schedule="scheduleExistingTask(realIndex(task), task, $event)" @set-repeat="setTaskRepeat(task, $event)" :repeat-info="repeatStateOf(task)" @toggle-repeat="toggleTaskRepeat(task)" />
+                  @wont-do="openWontDoModal(realIndex(task))" @delete="deleteTask(realIndex(task))" @breakdown="openBreakdown(task)" @pomodoro="startPomodoro(realIndex(task))" @schedule="scheduleExistingTask(realIndex(task), task, $event)" @set-repeat="setTaskRepeat(task, $event)" :repeat-info="repeatStateOf(task)" @toggle-repeat="toggleTaskRepeat(task)" />
             </div>
           </div>
 
@@ -360,10 +360,11 @@ import ShutdownPrompt from '@/components/home/ShutdownPrompt.vue';
 import TaskDetailModal from '@/components/home/TaskDetailModal.vue';
 import TimeStatsBar from '@/components/home/TimeStatsBar.vue';
 import TimerModal from '@/components/home/TimerModal.vue';
+import { startPomoPatch, nextPomoPatch, isPomo, POMO } from '@/utils/pomodoro';
 import TransferModal from '@/components/home/TransferModal.vue';
 import HolidayModal from '@/components/home/HolidayModal.vue';
 import BreakdownSheet from '@/components/home/BreakdownSheet.vue';
-import { scoreSteps, appendSteps, breakdownError } from '@/utils/breakdown';
+import { scoreSteps, appendSteps, breakdownError, findTaskIndex } from '@/utils/breakdown';
 import { clingAlarm, alarmPluginAvailable } from '@/native/clingAlarm';
 import { ALARM_SOUND, SNOOZE_MINUTES } from '@/utils/wakeAlarm';
 import { shouldAutoReplan, isOffDay, offLine, offRange, alarmAtFor, alarmLine, unlockAccepted, UNLOCK_WORD } from '@/utils/planPhase2';
@@ -441,6 +442,12 @@ const openTaskTimerModal = async (index) => {
   await startTimer();
 };
 
+// B44: 🍅 in the ⋯ menu: 25/5 ×4 pomodoro on this task (phases advance in the countdown watcher; Live Activity shows "Focus 2/4").
+const startPomodoro = async (index) => {
+  if (!selectedDayRoutine.value[index]) return;
+  selectedTimerTaskIndex.value = index; selectedTimerHours.value = 0; selectedTimerMinutes.value = POMO.work;
+  await startTimer({ pomo: true });
+};
 // ── 8-hour day: strict lock (UI guards; the data layer and Firestore rules enforce the same) ──
 const eh = useEightHour();
 const lockedDayName = computed(() => (eh.running.value && eh.lock.value ? eh.lock.value.dayName : ''));
@@ -499,6 +506,13 @@ const startCountdownWatcher = () => {
           task.timerEndTime &&
           new Date(task.timerEndTime).getTime() <= Date.now()
       ) {
+        const nextPhase = isPomo(task) ? nextPomoPatch(task, Date.now()) : null;
+        if (nextPhase) { // pomodoro: focus -> break -> focus ... instead of expiring
+          selectedDayRoutine.value[i] = { ...task, ...nextPhase };
+          sfx('timerStart'); try { scheduleTimerDone(selectedDayRoutine.value[i]); } catch (e) { /* best-effort */ }
+          await saveSelectedDayTasks().catch((e) => console.warn('pomodoro phase not saved:', e));
+          continue;
+        }
         // 8-hour lock: a locked day can never lose a task, so an expired timer only stops in place (no carry to tomorrow).
         // Before: the carry spliced the task and saveSelectedDayTasks threw a LockError inside this interval -> "Unhandled:" overlay.
         if (selectedDayLocked.value || isShutdown()) {
@@ -1128,7 +1142,8 @@ const startTimer = async (opts = {}) => {
     if (lk && lk !== selectedDayRoutine.value[selectedTimerTaskIndex.value]) { showNoteToast(focusLockMessage(lk), { error: true }); selectedTimerTaskIndex.value = null; return false; }
     if (lk) { selectedTimerTaskIndex.value = null; return false; } }
 
-  const totalMinutes =
+  const pomo = !!(opts && opts.pomo === true);
+  const totalMinutes = pomo ? POMO.work :
       (Number(selectedTimerHours.value) * 60) +
       Number(selectedTimerMinutes.value);
 
@@ -1149,6 +1164,8 @@ const startTimer = async (opts = {}) => {
     timerDurationMinutes: totalMinutes,
     timerPausedAt: null,
     focusLock: !!(opts && opts.lock === true), // auto-start (scheduled time / iOS Focus) locks the session
+    timerPomo: null,
+    ...(pomo ? startPomoPatch(now) : {}),
   };
 
   selectedDayRoutine.value[selectedTimerTaskIndex.value] = task;
@@ -2256,7 +2273,7 @@ const setTaskRepeat = async (task, dayNames, { quiet = false, lastRepeat = null 
         else if (has) next = l.map((t) => (taskKey(t) === key ? { ...t, ...patch } : t));
         else {
           const af = i !== selectedDayIndex.value ? activeFromForDay(i) : '';
-          const { timerActive, timerEnd, timerStart, timerStartedAt, timerEndTime, timerStoppedAt, timerDuration, timerRemaining, timerPausedAt, timerLockedMin, boss, ...base } = task; // a copy never inherits a running/stopped timer
+          const { timerActive, timerEnd, timerStart, timerStartedAt, timerEndTime, timerStoppedAt, timerDuration, timerRemaining, timerPausedAt, timerLockedMin, timerPomo, boss, ...base } = task; // a copy never inherits a running/stopped timer
           next = [...l, { ...base, ...patch, completed: false, completedAt: null, status: !base.status || base.status === 'done' ? 'todo' : base.status, activeFrom: af || '' }];
         }
         // legacy tasks carry no `status` (and UI copies can hold undefined fields): Firestore rejects undefined values client-side
@@ -3548,8 +3565,11 @@ const openBreakdown = (task) => { if (blockIfShut()) return; bd.value = { open: 
 const closeBreakdown = () => { bdSeq++; bd.value = { open: false, task: null, steps: [], loading: false, error: '' }; };
 const confirmBreakdown = async (chosen) => {
   const task = bd.value.task; closeBreakdown();
-  const idx = realIndex(task); if (idx < 0 || !chosen || !chosen.length) return;
-  await onSubtaskPatch(idx, task, { subtasks: appendSteps(subtasksOf(task), chosen) });
+  if (!chosen || !chosen.length) return;
+  const idx = findTaskIndex(selectedDayRoutine.value, task); // list may have been re-read while the AI was thinking
+  if (idx < 0) { showNoteToast('That task changed. Steps not added.', { error: true }); return; }
+  const cur = selectedDayRoutine.value[idx];
+  await onSubtaskPatch(idx, cur, { subtasks: appendSteps(subtasksOf(cur), chosen) });
 };
 
 // Subtasks: saved through the same patch path; optionally complete the parent when all are done
@@ -4090,7 +4110,7 @@ const assistantExecutor = createAssistantExecutor({
     return { moved }; },
   autoSchedule: (o) => autoScheduleToday(o), // shared with the sergeant Replan
   habit: async (name, a) => { const uid = userId.value; let list = loadHabits(uid);
-    if (name === 'add_habit') { list = addHabit(list, a.name); saveHabits(uid, list); return { habits: habitSummary(list) }; }
+    if (name === 'add_habit') { list = addHabit(list, a.name, a.schedule); saveHabits(uid, list); return { habits: habitSummary(list, localDateStr()) }; }
     if (name === 'log_habit') { const r = logHabit(list, a.name, localDateStr(), a.done); if (!r.habit) return { error: `No habit called ${a.name}. Add it first?` }; saveHabits(uid, r.list); return { habit: habitSummary([r.habit], localDateStr())[0] }; }
     return { habits: habitSummary(list, localDateStr()) }; },
   placeReminder: async ({ title, place, saveHere }) => { const KEYP = `cn.places.${userId.value}`; let places = {}; try { places = JSON.parse(localStorage.getItem(KEYP) || '{}') || {}; } catch (e) { /* ignore */ }
