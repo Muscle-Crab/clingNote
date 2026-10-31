@@ -10,6 +10,6 @@ export const IAP_PRODUCTS = {
 export const planIdForProduct = (productId) => Object.keys(IAP_PRODUCTS).find((k) => IAP_PRODUCTS[k] === productId) || null;
 export const IAP_URLS = {
   terms: 'https://clingnot.netlify.app/terms',
-  privacy: 'https://clingnot.netlify.app/privacy-policy',
+  privacy: 'https://clingnote.netlify.app/privacy-policy',
   manage: 'https://apps.apple.com/account/subscriptions',
 };
