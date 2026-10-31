@@ -123,6 +123,15 @@
             <div v-else class="pf-row pf-row--stack"><span class="pf-ico" aria-hidden="true">📆</span><span class="pf-row-title">Calendar<small class="pf-dl-sub" data-test="calendar-sync-sub">{{ calMsg || 'Two-way sync is in the iOS app. Here: export timed tasks as .ics, or import events.' }}</small>
               <span class="pf-mini-btns"><button type="button" class="pf-mini" data-test="ics-export" :disabled="calBusy" @click="onIcsExport">Export .ics</button><button type="button" class="pf-mini" data-test="ics-import" :disabled="calBusy" @click="icsInput && icsInput.click()">Import .ics</button></span></span>
               <input ref="icsInput" type="file" accept=".ics,text/calendar" class="pf-hidden-file" @change="onIcsImport" /></div>
+            <button type="button" class="pf-row pf-row--divided" data-test="timeblock-row" :aria-expanded="tbOpen" @click="tbOpen = !tbOpen"><span class="pf-ico" aria-hidden="true">🎯</span><span class="pf-row-title">Working hours<small class="pf-dl-sub">{{ tbSummary }}</small></span><span class="pf-chev" aria-hidden="true">{{ tbOpen ? '⌄' : '›' }}</span></button>
+            <div v-if="tbOpen" class="pf-xfer" data-test="timeblock-panel">
+              <span class="pf-mini-btns">
+                <input type="time" class="pf-mini" v-model="tbForm.start" aria-label="Work starts" data-test="work-start" />–<input type="time" class="pf-mini" v-model="tbForm.end" aria-label="Work ends" data-test="work-end" />
+                <select class="pf-mini" v-model.number="tbForm.focusMin" aria-label="Daily focus time" data-test="focus-min"><option v-for="m in FOCUS_CHOICES" :key="m" :value="m">{{ m ? 'Focus ' + durLabel(m) : 'No focus block' }}</option></select>
+                <button type="button" class="pf-mini" data-test="timeblock-save" :disabled="tbBusy" @click="saveTimeBlocks">Save</button>
+              </span>
+              <small class="pf-dl-sub">Mon–Fri. Focus time and lock-ins go to your ClingNote calendar as blocks around your other events (Calendar sync on).</small>
+            </div>
           </section>
 
           <h2 class="pf-section">More</h2>
@@ -217,7 +226,8 @@ import { dayLengthHours, setDayLengthHours, loadDayLengthHours } from '@/composa
 const rateApp = () => openWriteReview();
 // Appearance (F4), calendar sync / .ics (F1), task export/import (F3)
 import { appearance, setAppearance } from '@/composables/useAppearance';
-import { calSyncState, setCalendarSync, initCalendarSync, exportIcs, importIcs } from '@/composables/useCalendarSync';
+import { calSyncState, setCalendarSync, initCalendarSync, exportIcs, importIcs, syncCalendarNow } from '@/composables/useCalendarSync';
+import { normBlocks, blocksSummary, durLabel, FOCUS_CHOICES } from '@/utils/timeBlocks';
 import { exportTasks, importTasks } from '@/composables/useTaskBackup';
 import { readTextFile } from '@/utils/fileSave';
 const THEME_OPTS = [{ v: 'system', l: 'System' }, { v: 'light', l: 'Light' }, { v: 'dark', l: 'Dark' }];
@@ -234,6 +244,16 @@ const calSub = computed(() => {
 const onCalToggle = async (on) => { const u = auth.currentUser; if (!u) return; try { const r = await setCalendarSync(u.uid, on, { pro: userIsPro.value }); if (r && r.message) calSyncState.value = { ...calSyncState.value, message: r.message }; } catch (e) { calSyncState.value = { ...calSyncState.value, message: 'Calendar sync failed. Try again.' }; } };
 const onIcsExport = async () => { const u = auth.currentUser; if (!u) return; calBusy.value = true; try { const r = await exportIcs(u.uid); calMsg.value = r.result === 'failed' ? 'Could not save the file.' : `Exported ${r.count} timed task${r.count === 1 ? '' : 's'}.`; } catch (e) { calMsg.value = 'Export failed.'; } calBusy.value = false; };
 const onIcsImport = async (ev) => { const u = auth.currentUser; const f = ev.target.files && ev.target.files[0]; ev.target.value = ''; if (!u || !f) return; calBusy.value = true; try { const r = await importIcs(u.uid, await readTextFile(f), { pro: userIsPro.value }); calMsg.value = r.message; } catch (e) { calMsg.value = (e && e.message) || 'Import failed.'; } calBusy.value = false; };
+// B44 time blocking: users/{uid}.timeBlocks { start, end, days, focusMin }
+const tbOpen = ref(false); const tbBusy = ref(false); const tbSaved = ref(normBlocks(null)); const tbForm = ref({ ...normBlocks(null) });
+const tbSummary = computed(() => blocksSummary(tbSaved.value));
+const loadTimeBlocks = async () => { const u = auth.currentUser; if (!u) return; try { const snap = await getDoc(doc(db, 'users', u.uid)); tbSaved.value = normBlocks(snap.exists() ? snap.data().timeBlocks : null); tbForm.value = { ...tbSaved.value }; } catch (e) { /* defaults */ } };
+loadTimeBlocks();
+const saveTimeBlocks = async () => {
+  const u = auth.currentUser; if (!u) return; tbBusy.value = true;
+  try { const v = normBlocks(tbForm.value); await setDoc(doc(db, 'users', u.uid), { timeBlocks: v }, { merge: true }); tbSaved.value = v; tbForm.value = { ...v }; tbOpen.value = false; if (calSyncState.value.enabled) syncCalendarNow(u.uid, { pro: userIsPro.value, force: true }).catch(() => {}); }
+  catch (e) { console.warn('time blocks:', e); } finally { tbBusy.value = false; }
+};
 const xferOpen = ref(false); const xferBusy = ref(false); const xferMsg = ref(''); const xferInput = ref(null);
 const onExport = async (fmt) => { const u = auth.currentUser; if (!u) return; xferBusy.value = true; try { const r = await exportTasks(u.uid, fmt, { native: isNativeIOS() }); xferMsg.value = r.result === 'failed' ? 'Could not save the file.' : r.result === 'cancelled' ? '' : `Exported ${r.count} task${r.count === 1 ? '' : 's'} as ${fmt.toUpperCase()}.`; } catch (e) { xferMsg.value = 'Export failed.'; } xferBusy.value = false; };
 const onImport = async (ev) => { const u = auth.currentUser; const f = ev.target.files && ev.target.files[0]; ev.target.value = ''; if (!u || !f) return; xferBusy.value = true; try { const r = await importTasks(u.uid, await readTextFile(f), { pro: userIsPro.value }); xferMsg.value = r.message; } catch (e) { xferMsg.value = (e && e.message) || 'Import failed.'; } xferBusy.value = false; };

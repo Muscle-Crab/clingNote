@@ -32,3 +32,9 @@ Separate from the read-only Google feed above. `src/utils/calendarSync.js` syncs
 - No duplicates: an unlinked Calendar event with the same title + start as a task is linked to that task, not copied. Identical twin events are imported once.
 - On a locked day, the pull is skipped and nothing is pushed for that task until the next run.
 Tests: `scripts/test-calendar-sync.js`, `scripts/test-b44-calendar-2way.js`.
+
+## Build 44 additions (EventKit only, no Google OAuth)
+- **Repeating tasks**: each template occurrence in the sync window is written to the ClingNote calendar. If you delete one occurrence in Calendar, that day is skipped. If you move one, that day is moved (pullSkips/applySkips). Skipped days are suppressed, so they are not re-created.
+- **Busy times**: start/end times from your other device calendars (not the ClingNote calendar) are read on the device, only while sync is on. They show as one "Busy … · free …" row in the schedule picker. Titles are not read, and nothing is stored or uploaded.
+- **Working hours and focus blocks** (Settings → Working hours) are written as ClingNote calendar events on the next sync. The lock-in shows as a focus block.
+- **Location**: plain typed text kept with the task, plus a map link and a time-to-leave reminder computed from a travel time you pick. Device location is not used.

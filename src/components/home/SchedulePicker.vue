@@ -9,6 +9,7 @@
         <input type="date" class="sp-input" v-model="model.date" :min="minDate" aria-label="Date" data-test="sched-date" />
         <input type="time" class="sp-input" v-model="model.time" aria-label="Time (optional)" data-test="sched-time" />
       </div>
+      <button v-if="busyInfo.text" type="button" class="sp-busy" :class="{ clash: busyInfo.clash }" data-test="busy-row" :disabled="!busyInfo.suggest" :title="busyInfo.suggest ? 'Use the free time' : 'Busy in your other calendars'" @click="useFree"><i class="fas fa-calendar-minus" aria-hidden="true"></i> {{ busyInfo.text }}<span v-if="busyInfo.suggest" class="sp-busy-go"> · tap to use</span></button>
       <span class="sp-label">Repeat</span>
       <div class="sp-seg" role="radiogroup" aria-label="Repeat">
         <button v-for="o in OPTS" :key="o.v" type="button" role="radio" :aria-checked="String(segOn(o.v))" class="sp-seg-btn" :class="{ on: segOn(o.v) }" :data-test="'repeat-' + o.v" @click="setRepeat(o.v)">{{ o.l }}</button>
@@ -49,12 +50,29 @@
 </template>
 
 <script setup>
-import { computed } from 'vue';
+import { computed, ref, watch } from 'vue';
+import { busySummary } from '@/utils/busyTimes';
+import { busyAvailable, loadDeviceBusy } from '@/composables/useDeviceBusy';
+import { currentLock } from '@/utils/eightHourLock';
+import { auth } from '@/firebaseConfig';
 import { WEEKDAYS, describeRecurrence, fmtTime, formatScheduledDate, AFTER, INTERVAL } from '@/utils/scheduling';
 import { XWEEK } from '@/utils/schedEdit';
 
 const model = defineModel({ type: Object, required: true });
-const props = defineProps({ minDate: { type: String, default: '' } });
+const props = defineProps({ minDate: { type: String, default: '' }, minutes: { type: Number, default: 30 } });
+// B44: busy times from the other device calendars (times only, read-only) + an active lock-in, as one compact row.
+const busy = ref([]);
+const loadBusy = async () => {
+  const m = model.value; const uid = auth.currentUser?.uid;
+  if (!m.on || !m.date || !busyAvailable(uid)) { busy.value = []; return; }
+  const from = new Date(`${m.date}T00:00:00`).getTime(); const to = from + 86400000;
+  const list = [...(await loadDeviceBusy(uid, from, to))];
+  try { const l = currentLock(); if (l && l.endMs > from && l.startMs < to) list.push({ startMs: l.startMs, endMs: l.endMs }); } catch (e) { /* no lock */ }
+  busy.value = list;
+};
+watch(() => [model.value.on, model.value.date], loadBusy, { immediate: true });
+const busyInfo = computed(() => (model.value.on ? busySummary(busy.value, model.value.date, model.value.time, props.minutes) : { text: '' }));
+const useFree = () => { if (busyInfo.value.suggest) model.value.time = busyInfo.value.suggest; };
 const OPTS = [{ v: 'never', l: 'Never' }, { v: 'daily', l: 'Daily' }, { v: 'weekly', l: 'Weekly' }, { v: 'monthly', l: 'Monthly' }, { v: AFTER, l: 'Every N' }];
 const dayOf = (s) => (s ? new Date(`${s}T12:00:00`) : new Date());
 const dom = computed(() => dayOf(model.value.date).getDate());
@@ -75,6 +93,10 @@ const summary = computed(() => {
 </script>
 
 <style scoped>
+.sp-busy { all: unset; box-sizing: border-box; cursor: pointer; font-size: .74rem; color: var(--c-text-2, #a1a09b); display: block; }
+.sp-busy.clash { color: var(--c-warn, #e0a33a); }
+.sp-busy:disabled { cursor: default; }
+.sp-busy-go { text-decoration: underline; }
 .sp { display: flex; flex-direction: column; gap: .55rem; }
 .sp-switch-row { display: flex; align-items: center; justify-content: space-between; }
 .sp-label { font-size: .72rem; letter-spacing: .08em; text-transform: uppercase; color: var(--c-text-2, #a1a09b); }

@@ -1,4 +1,6 @@
 // Maps a task to a display category (label + icon tile colour) for the task row.
+// B44: an explicit work / home / health category (taskExtras.js, chips in the add sheet) always wins and fixes the colour.
+import { categoryById } from './taskExtras';
 const RULES = [
   { re: /shop|store|grocer|buy|market/i, icon: 'fa-shopping-cart', tone: 'blue' },
   { re: /work|report|publish|meeting|email|project|client|office/i, icon: 'fa-file-alt', tone: 'purple' },
@@ -14,6 +16,7 @@ const labelOf = (t) => {
   return (l || '').trim() || 'Personal';
 };
 export const categoryOf = (t = {}) => {
+  const c = categoryById(t && t.category); if (c) return { label: c.label, icon: c.icon, tone: c.tone, id: c.id };
   const label = labelOf(t);
   const hay = `${label} ${t.title || ''}`;
   const r = RULES.find((x) => x.re.test(label)) || RULES.find((x) => x.re.test(hay));

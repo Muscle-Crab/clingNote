@@ -28,6 +28,7 @@
         <p v-if="card.introText" class="bb-p bb-intro" data-test="bb-intro"><b>New here?</b> {{ card.introText }}</p>
         <p class="bb-p" data-test="bb-recap"><b>Yesterday:</b> {{ String(card.recap || '').replace(/^First, (how )?yesterday( went)?\.\s*/, '') }}</p>
         <p v-if="card.todayList.length" class="bb-p"><b>Today:</b> {{ card.todayList.join(' · ') }}</p>
+        <p v-if="card.goal" class="bb-p" data-test="bb-goal"><b>Goal:</b> {{ card.goal }} pts today</p>
         <p v-if="card.team" class="bb-p"><b>Team:</b> {{ card.team }}</p>
       </template>
       <p v-if="muted" class="bb-muted" data-test="bb-muted-banner">🔇 Voice is off. Tap 🔊 to hear your robot.</p>
@@ -38,6 +39,7 @@
 </template>
 
 <script setup>
+import { suggestPointsGoal, goalSpeech } from '@/utils/dailyReport';
 import BrandMark from '@/components/brand/BrandMark.vue';
 import { ref, watch, onMounted, onBeforeUnmount } from 'vue';
 import { useRoute } from 'vue-router';
@@ -107,9 +109,10 @@ async function run() {
         todayList: todayTasks.filter((t) => !t.completed).slice(0, 4).map((t) => t.title),
         team: people.length ? (late.length ? `${late.map((p) => `${p.ownerName} (${p.overdue} overdue)`).join(', ')}` : `All ${people.length} on track`) : '',
         recap: recapLine({ week }), plan: planLine({ streak, mode, people, todayTasks, deadline: ud.onboarding && ud.onboarding.deadline }) };
+      const pg = suggestPointsGoal(todayTasks); morning.goal = pg.goal; morning.goalLine = goalSpeech(pg);
       const hello = now.getHours() < 12 ? 'Good morning.' : now.getHours() < 18 ? 'Good afternoon.' : 'Good evening.';
       morning.introKey = needIntro ? introKey(mode) : ''; morning.introText = morning.introKey ? SCRIPTS[morning.introKey] : '';
-      morning.speech = `${hello} Here's your report. ${morning.recap} ${morning.plan}`;
+      morning.speech = `${hello} Here's your report. ${morning.recap} ${morning.plan} ${morning.goalLine}`;
       ls(kM, today); ls(`morningReport_${u.uid}`, today); // the Home text report is superseded by this card today
     }
     max = morning ? max : 1;

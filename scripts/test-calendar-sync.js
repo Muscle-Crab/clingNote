@@ -3,7 +3,7 @@ const path = require('path'); const fs = require('fs'); const os = require('os')
 process.env.TZ = 'America/New_York';
 (async () => {
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'calsync-'));
-for (const f of fs.readdirSync(path.join(__dirname, '../src/utils')).filter((x) => x.endsWith('.js'))) fs.writeFileSync(path.join(dir, f.replace(/\.js$/, '.mjs')), fs.readFileSync(path.join(__dirname, '../src/utils', f), 'utf8').replace(/from '\.\/([\w]+)'/g, "from './$1.mjs'").replace(/from '@\/utils\/([\w]+)'/g, "from './$1.mjs'"));
+for (const f of fs.readdirSync(path.join(__dirname, '../src/utils')).filter((x) => x.endsWith('.js'))) fs.writeFileSync(path.join(dir, f.replace(/\.js$/, '.mjs')), fs.readFileSync(path.join(__dirname, '../src/utils', f), 'utf8').replace(/from '\.\/([\w]+)(?:\.js)?'/g, "from './$1.mjs'").replace(/from '@\/utils\/([\w]+)'/g, "from './$1.mjs'"));
 const C = await import(path.join(dir, 'calendarSync.mjs')); const S = await import(path.join(dir, 'scheduling.mjs'));
 const assert = require('assert'); let n = 0; const t = async (name, fn) => { await fn(); n++; console.log('ok -', name); };
 const now = new Date(2026, 9, 22, 8, 0).getTime(); // Thu 22 Oct 2026 08:00 local

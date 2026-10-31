@@ -4,15 +4,16 @@
 // Writes are the ones the app already makes: users/{uid}.scheduledTasks (mutateScheduled) and weeklyRoutines day docs (merge),
 // never on a day under the 8-hour lock, never during shutdown, and calendar-created tasks respect the daily task limit.
 import { ref } from 'vue';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/firebaseConfig';
 import { loadDayTasks } from '@/composables/useDayPersistence';
 import { loadScheduled, mutateScheduled } from '@/composables/useScheduledTasks';
-import { isDayLocked, isShutdown } from '@/utils/eightHourLock';
+import { isDayLocked, isShutdown, currentLock } from '@/utils/eightHourLock';
+import { focusBlocks, lockBlock } from '@/utils/timeBlocks';
 import { countTasksForDay } from '@/utils/taskLimits';
 import { dailyTaskLimit } from '@/config/pricing';
 import { weekDates, buildScheduledEntry, makeScheduledId, isValidDate } from '@/utils/scheduling';
-import { runCalendarSync, applyPullUpdates, buildLocalEvents, parseIcs, EVENT_URL_PREFIX } from '@/utils/calendarSync';
+import { runCalendarSync, applyPullUpdates, applySkips, buildLocalEvents, parseIcs, EVENT_URL_PREFIX } from '@/utils/calendarSync';
 import { buildCalendar } from '@/utils/ics';
 import { saveTextFile } from '@/utils/fileSave';
 import { clingNative, nativeAvailable } from '@/native/clingNative';
@@ -32,10 +33,26 @@ const loadAll = async (uid) => {
   return { dayLists: Object.fromEntries(DAYS.map((d, i) => [d, lists[i]])), scheduled: await loadScheduled(uid) };
 };
 
+// B44 time blocking: focus blocks for the next 14 days (working hours from users/{uid}.timeBlocks) + the running lock-in.
+const blocksFor = async (uid, calendarId, local) => {
+  const out = []; const now = Date.now();
+  try {
+    const lb = lockBlock(currentLock(), now); if (lb) out.push(lb);
+    const u = await getDoc(doc(db, 'users', uid)); const tb = u.exists() ? u.data().timeBlocks : null;
+    if (tb && tb.focusMin) {
+      const today = new Date().toLocaleDateString('en-CA'); const to = now + 15 * 86400000;
+      const busy = ((await clingNative.busy(now, to, calendarId)) || {}).busy || [];
+      const taken = buildLocalEvents({ ...local, nowMs: now }).map((e) => ({ startMs: e.startMs, endMs: e.endMs }));
+      out.push(...focusBlocks({ settings: tb, fromDate: today, days: 14, busy, taken: lb ? [...taken, lb] : taken, nowMs: now }));
+    }
+  } catch (e) { /* blocks are optional */ }
+  return out;
+};
+
 const ioFor = (uid, calendarId, { pro = false } = {}) => {
   let snapshot = null;
   return {
-    loadLocal: async () => { snapshot = await loadAll(uid); return { ...snapshot, weekDates: weekDates(new Date()) }; },
+    loadLocal: async () => { snapshot = await loadAll(uid); const wd = weekDates(new Date()); return { ...snapshot, weekDates: wd, blocks: await blocksFor(uid, calendarId, { ...snapshot, weekDates: wd }) }; },
     list: async (fromMs, toMs) => { const r = await clingNative.calSyncList(calendarId, fromMs, toMs); if (r.error) throw new Error(r.error); return r.events || []; },
     upsert: async (ev, id) => { const r = await clingNative.calSyncUpsert({ calendarId, id: id || '', title: ev.title, startMs: ev.startMs, endMs: ev.endMs, notes: ev.notes || '', url: EVENT_URL_PREFIX + ev.key }); if (r.error) throw new Error(r.error); return r.id; },
     remove: async (id) => { const r = await clingNative.calSyncRemove(id); if (r.error) throw new Error(r.error); },
@@ -48,7 +65,7 @@ const ioFor = (uid, calendarId, { pro = false } = {}) => {
       if (e) snapshot.scheduled = [...snapshot.scheduled, e];
       return e;
     },
-    saveLocal: async ({ changedDays, scheduledChanged, pulls, created }) => {
+    saveLocal: async ({ changedDays, scheduledChanged, pulls, created, skips = [] }) => {
       const locked = DAYS.filter((d) => isDayLocked(d));
       for (const d of changedDays) { // re-read right before writing, then re-apply the calendar edits to the fresh list
         if (locked.includes(d)) continue;
@@ -58,7 +75,7 @@ const ioFor = (uid, calendarId, { pro = false } = {}) => {
       }
       if (scheduledChanged) {
         await mutateScheduled(uid, (list) => {
-          const r = applyPullUpdates(list, {}, pulls.filter((p) => p.key.startsWith('s-')));
+          const r = applyPullUpdates(applySkips(list, skips), {}, pulls.filter((p) => p.key.startsWith('s-')));
           const ids = new Set(r.scheduled.map((e) => e && e.id));
           return [...r.scheduled, ...created.filter((e) => !ids.has(e.id))].slice(0, 300);
         });

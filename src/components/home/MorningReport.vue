@@ -6,6 +6,7 @@
     </div>
     <p class="mr-big">Yesterday: <strong>{{ recap.done }}/{{ recap.min }}</strong> done <span v-if="recap.done >= recap.min">✅</span></p>
     <p>{{ recap.streakStatus }}</p>
+    <p v-if="recap.pointsGoal" data-test="mr-goal">🎯 Today's goal: <strong>{{ recap.pointsGoal.goal }} pts</strong> · {{ recap.pointsGoal.tasks }} task{{ recap.pointsGoal.tasks === 1 ? '' : 's' }}, {{ recap.pointsGoal.load }} pts planned</p>
     <p v-if="recap.slipped.length"><strong>Slipped:</strong> {{ recap.slipped.join(', ') }}</p>
     <div v-if="recap.pending.length"><strong>Waiting on:</strong>
       <ul class="mr-list"><li v-for="p in recap.pending" :key="p.title">{{ p.title }}<span v-if="p.on"> · {{ p.on }}</span><span v-if="p.days != null"> · {{ p.days }}d</span></li></ul>

@@ -2,6 +2,7 @@
 // scheduled tasks get at most SCHED_BUDGET of them (nearest first), the rest is left for manual reminders and timers.
 // One-shot `at` triggers per occurrence (not repeating triggers) so end dates, skips and edits are exact.
 import { isValidDate, isValidTime, isTemplate, isMaterialized, occurrencesBetween, addDaysStr, instanceId, fmtTime, isAfterCompletion } from './scheduling.js';
+import { extraPings } from './taskExtras.js';
 export const routineKey = (tplId, date) => `routine:${instanceId(tplId, date)}`;
 
 export const IOS_PENDING_LIMIT = 64;
@@ -14,11 +15,14 @@ export const timeKey = (t) => `time:${t.id || `${t.createdAt?.seconds ?? t.creat
 // list = users.scheduledTasks; todayTasks = today's day list (materialized occurrences); budget may be reduced by other pending ones.
 export const planNotifications = ({ list = [], todayTasks = [], todayStr, now = new Date(), budget = SCHED_BUDGET, horizonDays = 35 }) => {
   const out = new Map();
-  const add = (id, date, time, title) => {
+  // B44: extra "N before" reminders (task.remindOffsets) and a "Time to leave" ping (task.location + travelMin) per timed occurrence
+  const extras = (baseKey, when, task) => { if (task) for (const x of extraPings({ baseKey, whenMs: when.getTime(), task, nowMs: now.getTime() })) if (!out.has(x.key)) out.set(x.key, { ...x, at: new Date(x.at) }); };
+  const add = (id, date, time, title, task = null) => {
     if (!isValidDate(date) || !isValidTime(time)) return;
     const when = at(date, time);
     if (when.getTime() <= now.getTime() || out.has(id)) return;
     out.set(id, { key: schedKey(id), at: when, title: 'Task Reminder', body: `${title || 'Task'} at ${fmtTime(time)}` });
+    extras(schedKey(id), when, task);
   };
   const seen = new Set();
   // Per-series daily reminder time (tpl.remindAt) replaces the series' time-based ping; one 'routine:' ping per repeat day (sound: cn_task).
@@ -27,7 +31,7 @@ export const planNotifications = ({ list = [], todayTasks = [], todayStr, now = 
     if (!t?.scheduledFor || !t.scheduledId) return;
     seen.add(t.scheduledId);
     if (t.templateId && remindOf.has(t.templateId)) return;
-    if (!t.completed && t.status !== 'wontdo') add(t.scheduledId, t.scheduledFor, t.time, t.title);
+    if (!t.completed && t.status !== 'wontdo') add(t.scheduledId, t.scheduledFor, t.time, t.title, t);
   });
   // timed day tasks (today only; completed / won't-do / deleted / time cleared drop out of the plan -> cancelled by diffPlan)
   (todayTasks || []).forEach((t) => {
@@ -35,12 +39,13 @@ export const planNotifications = ({ list = [], todayTasks = [], todayStr, now = 
     const k = timeKey(t); const when = at(todayStr, t.startTime);
     if (!isValidDate(todayStr) || when.getTime() <= now.getTime() || out.has(k)) return;
     out.set(k, { key: k, at: when, title: 'ClingNote', body: `${t.title || 'Task'} at ${fmtTime(t.startTime)}`, kind: 'time' });
+    extras(k, when, t);
   });
   const items = list || [];
   const ids = new Set(items.map((e) => e?.id));
   items.forEach((e) => {
     if (!e || isTemplate(e) || seen.has(e.id) || isMaterialized(e) || (e.templateId && remindOf.has(e.templateId))) return;
-    add(e.id, e.scheduledDate, e.scheduledTime, e.title);
+    add(e.id, e.scheduledDate, e.scheduledTime, e.title, e);
   });
   remindOf.forEach((tpl) => {
     if (tpl.stopped) return;
@@ -58,7 +63,7 @@ export const planNotifications = ({ list = [], todayTasks = [], todayStr, now = 
     occurrencesBetween(tpl, todayStr, addDaysStr(todayStr, horizonDays), 120).forEach((d) => {
       const id = instanceId(tpl.id, d);
       if (seen.has(id) || ids.has(id) || gen.has(d)) return; // handled by the materialized task / instance entry
-      add(id, d, tpl.scheduledTime, tpl.title);
+      add(id, d, tpl.scheduledTime, tpl.title, tpl);
     });
   });
   return [...out.values()].sort((a, b) => a.at - b.at).slice(0, Math.max(0, budget));

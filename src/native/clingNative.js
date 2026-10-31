@@ -47,7 +47,8 @@ export const clingNative = {
   // App Tracking Transparency (src/utils/tracking.js). status: authorized | denied | restricted | notDetermined | unavailable
   trackingStatus: safe('ClingNative', Native, (p) => p.trackingStatus(), { status: 'unavailable' }),
   requestTracking: safe('ClingNative', Native, (p) => p.requestTracking(), { status: 'unavailable' }),
-  busy: safe('ClingNative', Native, (p, fromMs, toMs) => p.busy({ fromMs, toMs }), { busy: [] }),
+  // busy/free of the user's other device calendars (times only, never titles); excludeCalendarId = the ClingNote sync calendar
+  busy: safe('ClingNative', Native, (p, fromMs, toMs, excludeCalendarId = '') => p.busy({ fromMs, toMs, excludeCalendarId }), { busy: [] }),
   addEvent: safe('ClingNative', Native, (p, ev) => p.addEvent(ev), { id: '' }),
   currentLocation: safe('ClingNative', Native, (p) => p.currentLocation(), null),
   addGeofence: safe('ClingNative', Native, (p, g) => p.addGeofence(g), { id: '' }),

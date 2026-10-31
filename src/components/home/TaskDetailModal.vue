@@ -11,6 +11,7 @@
         <!-- At-a-glance facts (read-only; editing stays in the card editor) -->
         <p class="detail-facts" data-test="detail-facts">
           <span v-for="(f, i) in facts" :key="i" class="detail-fact">{{ f }}</span>
+          <a v-if="place" class="detail-fact detail-map" data-test="detail-map" :href="place.href" target="_blank" rel="noopener">📍 {{ place.text }}<template v-if="place.leave"> · Leave by {{ place.leave }}</template></a>
         </p>
         <p v-if="task.nextAction" class="detail-line">→ {{ task.nextAction }}</p>
         <p v-if="task.status === 'pending' && task.pendingOn" class="detail-line">⏳ Pending on {{ task.pendingOn }}</p>
@@ -101,6 +102,7 @@ import { formatShortDate, formatTime, extractYouTubeID, showReminder } from '@/u
 import { scheduleLabel } from '@/utils/scheduling';
 import SchedulePicker from './SchedulePicker.vue';
 import { categoryOf } from '@/utils/taskCategory';
+import { cleanOffsets, offsetLabel, cleanLocation, cleanTravel, leaveAt, mapLink } from '@/utils/taskExtras';
 import { estimateOf, formatClock, formatDuration, toMinutes } from '@/utils/taskPlanning';
 import { subtaskProgress } from '@/utils/subtasks';
 import { taskAppsRowLabel } from '@/utils/taskAppUnlock';
@@ -122,6 +124,13 @@ const dirty = computed(() => JSON.stringify(sched.value) !== JSON.stringify(orig
 const label = computed(() => scheduleLabel(props.task));
 const fileInput = ref(null);
 const sub = computed(() => subtaskProgress(props.task));
+// B44 place: Apple Maps link + time to leave (start - travel minutes)
+const place = computed(() => {
+  const t = props.task || {}; const loc = cleanLocation(t.location); if (!loc) return null;
+  const start = [t.startTime, t.scheduledTime, t.time].find((x) => /^\d\d:\d\d$/.test(x || '')) || '';
+  const lv = start ? leaveAt(start, cleanTravel(t.travelMin)) : '';
+  return { href: mapLink(loc), text: loc, leave: lv ? formatClock(toMinutes(lv)) : '' };
+});
 const facts = computed(() => {
   const t = props.task || {}; const out = [categoryOf(t).label];
   const m = estimateOf(t); if (t.startTime) out.push('🕒 ' + formatClock(toMinutes(t.startTime)) + (m ? ' – ' + formatClock(toMinutes(t.startTime) + m) : ''));
@@ -132,6 +141,7 @@ const facts = computed(() => {
   if ((t.repeatDays || []).length > 1 || t.type === 'recurring') out.push('🔁 Repeats');
   if (t.visibility === 'private') out.push('🔒 Private'); else if (t.anonymous === true) out.push('🕶️ Hidden from manager');
   if (t.carriedFrom) out.push('↪︎ Moved from yesterday');
+  { const o = cleanOffsets(t.remindOffsets); if (o.length) out.push('🔔 ' + o.map(offsetLabel).join(', ') + ' before'); }
   if (t.status && t.status !== 'todo') out.push(t.status[0].toUpperCase() + t.status.slice(1));
   return out;
 });
@@ -153,6 +163,7 @@ const save = (scope) => emit('save-schedule', { sched: clone(sched.value), scope
 .modal-footer.modal-footer { border-top: 0; padding: .5rem 1.25rem 1.25rem; }
 .modal-footer .btn-primary { width: 100%; min-height: 44px; border-radius: 12px; }
 .detail-title.detail-title { font-size: 1.3rem; line-height: 1.3; margin: 0 0 .4rem; word-break: break-word; }
+.detail-map { color: var(--c-accent, #a78bfa); text-decoration: underline; }
 .detail-facts { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 0 0 .6rem; font-size: .85rem; color: var(--c-text-2, #9a9891); }
 .detail-line { margin: 0 0 .35rem; font-size: .875rem; color: var(--c-text-2, #9a9891); }
 .detail-attach { display: flex; flex-wrap: wrap; gap: .5rem; margin: .75rem 0; }

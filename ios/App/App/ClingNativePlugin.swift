@@ -77,7 +77,11 @@ public class ClingNativePlugin: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDe
     @objc func busy(_ call: CAPPluginCall) {
         let from = Date(timeIntervalSince1970: (call.getDouble("fromMs") ?? Date().timeIntervalSince1970 * 1000) / 1000)
         let to = Date(timeIntervalSince1970: (call.getDouble("toMs") ?? from.timeIntervalSince1970 * 1000 + 86_400_000) / 1000)
-        let events = store.events(matching: store.predicateForEvents(withStart: from, end: to, calendars: nil))
+        // B44: read-only busy/free from the user's other calendars; the ClingNote calendar (our own task / focus events) is left out
+        let skip = call.getString("excludeCalendarId") ?? ""
+        let cals = store.calendars(for: .event).filter { $0.calendarIdentifier != skip && !(skip.isEmpty && $0.title == "ClingNote") }
+        if cals.isEmpty { call.resolve(["busy": []]); return }
+        let events = store.events(matching: store.predicateForEvents(withStart: from, end: to, calendars: cals))
             .filter { !$0.isAllDay && $0.availability != .free }
             .map { ["startMs": $0.startDate.timeIntervalSince1970 * 1000, "endMs": $0.endDate.timeIntervalSince1970 * 1000] } // no titles leave the device
         call.resolve(["busy": events])

@@ -8,12 +8,28 @@
       <form class="nt-form" @submit.prevent="$emit('submit')">
         <div class="modal-body">
           <div class="field-group">
-            <label class="field-label" for="nt-name">Task name</label>
-            <input id="nt-name" ref="titleInput" type="text" v-model="newTask.title" class="field-input" placeholder="What needs doing?" required />
+            <div class="label-row">
+              <label class="field-label" for="nt-name">Task name</label>
+              <span class="cat-chips" role="group" aria-label="Category">
+                <button v-for="c in CATEGORIES" :key="c.id" type="button" class="cat-chip" :class="['tone-' + c.tone, { on: newTask.category === c.id }]" :aria-pressed="String(newTask.category === c.id)" :data-test="'cat-' + c.id" :title="c.label" @click="newTask.category = newTask.category === c.id ? '' : c.id"><i :class="'fas ' + c.icon" aria-hidden="true"></i> {{ c.label }}</button>
+              </span>
+            </div>
+            <input id="nt-name" ref="titleInput" type="text" v-model="newTask.title" class="field-input" placeholder="What needs doing? Try “gym tomorrow at 6”" required />
+            <button v-if="hint" type="button" class="nl-hint" data-test="nl-hint" :disabled="hintBusy" @click="applyHint"><i class="fas fa-magic" aria-hidden="true"></i> {{ hintLabel }} <span class="nl-go">· tap to set</span></button>
           </div>
 
           <div class="field-group">
-            <label class="field-label">Reminder</label>
+            <div class="label-row">
+              <label class="field-label">Reminder</label>
+              <span class="rem-chips">
+                <button v-for="m in offsets" :key="m" type="button" class="rem-chip" data-test="rem-chip" :title="'Remove ' + offsetLabel(m) + ' before'" @click="removeOffset(m)">{{ offsetLabel(m) }} before ✕</button>
+                <select v-if="picking" class="rem-pick" data-test="rem-pick" aria-label="Remind before" @change="addOffset($event.target.value)">
+                  <option value="">before…</option>
+                  <option v-for="m in REMINDER_PRESETS.filter((x) => !offsets.includes(x))" :key="m" :value="m">{{ offsetLabel(m) }} before</option>
+                </select>
+                <button v-else-if="offsets.length < MAX_REMINDERS" type="button" class="rem-add" data-test="rem-add" aria-label="Add a reminder before the start" title="Remind me before (needs a start time)" @click="picking = true">+ before</button>
+              </span>
+            </div>
             <input type="datetime-local" v-model="newTask.reminder.datetime" class="field-input" />
           </div>
           <div class="field-group">
@@ -90,6 +106,15 @@
                 <input type="text" v-model="newTask.labels" class="field-input" placeholder="Work, Fitness, Health..." />
               </div>
               <div class="field-group">
+                <label class="field-label" for="nt-place">Place</label>
+                <div class="place-row">
+                  <input id="nt-place" type="text" v-model="newTask.location" class="field-input" maxlength="120" placeholder="Address or place (optional)" data-test="task-place" />
+                  <select v-model.number="newTask.travelMin" class="field-select travel-sel" aria-label="Travel time" title="Travel time, for a time-to-leave reminder" data-test="task-travel">
+                    <option v-for="m in TRAVEL_PRESETS" :key="m" :value="m">🚗 {{ m }} min</option>
+                  </select>
+                </div>
+              </div>
+              <div class="field-group">
                 <label class="field-label">Note</label>
                 <textarea v-model="newTask.notes" class="field-textarea" placeholder="Extra details..."></textarea>
               </div>
@@ -120,7 +145,9 @@
 
 <script setup>
 import SchedulePicker from './SchedulePicker.vue';
-import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue';
+import { CATEGORIES, REMINDER_PRESETS, MAX_REMINDERS, TRAVEL_PRESETS, offsetLabel, cleanOffsets } from '@/utils/taskExtras';
+import { localParse, hintText } from '@/utils/nlEntry';
 import { ACTIVE_CAP, STATUSES } from '@/utils/taskPlanning';
 import { getOrdinalSuffix } from '@/utils/dateTime';
 import { TASK_LIMITS, PRO_RAISES_LIMIT } from '@/config/pricing';
@@ -129,7 +156,8 @@ import { auth } from '@/firebaseConfig';
 const rcPro = () => rcProActive(auth.currentUser?.uid); // iOS: RevenueCat says Pro -> never show an upgrade prompt
 
 // newTask is the reactive form object owned by HomeView; the form edits it in place via v-model.
-defineProps({
+const props = defineProps({
+  parseEntry: { default: null }, // B44: AI-first plain-word parser from HomeView (local fallback inside)
   newTask: { type: Object, required: true },
   days: { type: Array, required: true },
   selectedDayRoutine: { type: Array, default: () => [] },
@@ -144,6 +172,23 @@ const showAdvanced = defineModel('showAdvanced');
 const today = new Date().toLocaleDateString('en-CA');
 defineEmits(['close', 'submit', 'add-anyway', 'upgrade']);
 const titleInput = ref(null);
+// B44 reminders before the start (chips) — stored as remindOffsets (minutes)
+const offsets = computed(() => cleanOffsets(props.newTask.remindOffsets));
+const picking = ref(false);
+const addOffset = (v) => { const n = Number(v); picking.value = false; if (n > 0) props.newTask.remindOffsets = cleanOffsets([...(props.newTask.remindOffsets || []), n]).slice(0, MAX_REMINDERS); };
+const removeOffset = (m) => { props.newTask.remindOffsets = offsets.value.filter((x) => x !== m); };
+// B44 plain words: instant on-device preview; tapping applies (AI refines it for Pro + consent, local otherwise)
+const hint = computed(() => localParse(props.newTask.title, new Date()));
+const hintLabel = computed(() => hintText(hint.value, today));
+const hintBusy = ref(false);
+const applyHint = async () => {
+  const text = props.newTask.title; let p = hint.value; hintBusy.value = true;
+  try { if (props.parseEntry) p = (await props.parseEntry(text)) || p; } catch (e) { /* local */ } finally { hintBusy.value = false; }
+  if (!p) return;
+  const nt = props.newTask; nt.title = p.title;
+  if (nt.sched) { nt.sched.on = true; nt.sched.date = p.date < today ? today : p.date; nt.sched.time = p.time || ''; }
+  else { nt.startTime = p.time || nt.startTime; if (p.date !== today) nt.dueDate = p.date; }
+};
 onMounted(() => nextTick(() => titleInput.value && titleInput.value.focus()));
 
 // Keep the sheet fixed in place on phones: lock page scroll while open and size/position it to the *visual* viewport,
@@ -165,6 +210,18 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+.label-row { display: flex; align-items: center; justify-content: space-between; gap: .4rem; flex-wrap: wrap; }
+.cat-chips, .rem-chips { display: inline-flex; gap: .3rem; flex-wrap: wrap; align-items: center; }
+.cat-chip, .rem-chip, .rem-add { all: unset; cursor: pointer; font-size: .68rem; padding: .1rem .4rem; border-radius: 999px; border: 1px solid var(--c-border, #2a2a2e); color: var(--c-text-2, #a1a09b); }
+.cat-chip.on.tone-purple { background: rgba(139, 92, 246, .25); color: #c4b5fd; border-color: #8b5cf6; }
+.cat-chip.on.tone-teal { background: rgba(20, 184, 166, .22); color: #5eead4; border-color: #14b8a6; }
+.cat-chip.on.tone-green { background: rgba(34, 197, 94, .22); color: #86efac; border-color: #22c55e; }
+.rem-pick { font-size: .7rem; background: transparent; color: inherit; border: 1px solid var(--c-border, #2a2a2e); border-radius: 6px; }
+.nl-hint { all: unset; box-sizing: border-box; cursor: pointer; display: block; margin-top: .3rem; font-size: .74rem; color: var(--c-accent, #a78bfa); }
+.nl-go { color: var(--c-text-3, #6b6a66); }
+.place-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .4rem; }
+.place-row .field-input { width: 100%; min-width: 0; }
+.place-row .travel-sel { width: auto; max-width: 8.5rem; }
 .field-input::placeholder, .field-textarea::placeholder { color: var(--c-text-3, #6b6a66); opacity: .7; font-style: italic; }
 .modal-backdrop {
   position: fixed;

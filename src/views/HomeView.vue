@@ -102,7 +102,7 @@
 
       <AddTaskModal v-if="modalOpen" :new-task="newTask" v-model:repeat-mode="repeatMode" v-model:show-advanced="showAdvanced"
                     :days="days" :selected-day-routine="selectedDayRoutine" :error="error" :cap-warning="capWarning" :limit-hit="limitHit"
-                    @close="closeModal" @submit="addNewTask" @add-anyway="addAnyway" @upgrade="goUpgradeForLimit" />
+                    :parse-entry="parseTypedEntry" @close="closeModal" @submit="addNewTask" @add-anyway="addAnyway" @upgrade="goUpgradeForLimit" />
 
 
       <YouTubeModal v-if="youtubeModalOpen" v-model:url="youtubeInput" @close="closeYouTubeModal" @save="saveYouTubeLink" />
@@ -392,6 +392,8 @@ const agentAdd = ref(false); // true while the assistant adds tasks: over-limit 
 import { ugcHidden, voiceInputBlocked, isNativeIOS } from '@/utils/platform';
 import { splitSpokenTasks, voiceCapability, UNDO_MS } from '@/utils/voiceSplit';
 import { interpretSpeech } from '@/utils/voiceInterpret';
+import { extrasFromForm } from '@/utils/taskExtras';
+import { parseEntry } from '@/utils/nlEntry';
 import { capBlockMessage } from '@/utils/taskCap';
 import { saveReminder } from '@/utils/reminders';
 import { startNativeSpeech, nativeSpeechAvailable } from '@/composables/useNativeSpeech';
@@ -1044,6 +1046,7 @@ const blankTask = () => ({
   dueDate: '', startTime: '', estimateMin: '', nextAction: '', status: 'todo', pendingOn: '',
   sched: blankSchedule(),
   reminder: { datetime: '', repeat: '' },
+  category: '', remindOffsets: [], location: '', travelMin: 15, // B44 extras (taskExtras.js)
 });
 const newTask = ref(blankTask());
 
@@ -1880,6 +1883,7 @@ const submitScheduledTask = async () => {
     estimateMin: Number(nt.estimateMin) || 0, nextAction: (nt.nextAction || '').trim(),
   };
   Object.assign(fields, estimateFor(fields)); // scheduled / recurring copies carry the estimate too
+  Object.assign(fields, extrasFromForm(nt)); // B44: category, extra reminders, place + travel
   const entry = sc.repeat !== 'never'
     ? buildRecurringTemplate({ ...fields, scheduledTime: sc.time, remindAt: sc.remindAt || '' }, sc.date, { freq: sc.repeat, days: sc.days, dayOfMonth: sc.dayOfMonth, until: sc.until, everyDays: sc.everyDays, timesPerWeek: sc.timesPerWeek })
     : buildScheduledEntry(fields, sc.date, sc.time);
@@ -2166,6 +2170,7 @@ const addNewTask = async () => {
     section: sectionForCreate({ start: newTask.value.startTime, section: newTask.value.section }), // Morning unless a time or the assistant says otherwise
     nextAction: (newTask.value.nextAction || '').trim()
   };
+  Object.assign(task, extrasFromForm(newTask.value)); // B44: category, extra reminders, place + travel
   Object.assign(task, estimateFor(task)); // heuristic complexity / minutes / points (estimateMin stays as typed; the server re-locks at countdown start)
   { const ap = _clampPts(newTask.value.aiPoints); if (ap) { task.points = ap; task.pointsSource = 'ai'; const cx = _clampCx(newTask.value.aiComplexity); if (cx) task.complexity = cx; } } // assistant: Gemini-rated points
 
@@ -2914,6 +2919,12 @@ const voiceAdded = ref([]); // [{ id, title, createdAt, dayName, undoUntil }]
 const voiceQueue = [];
 // Every finished phrase (web webkitSpeechRecognition or native SFSpeechRecognizer) is interpreted into items
 // (tasks / reminders / scheduled blocks) and shown on the confirm sheet; nothing is saved until the user confirms.
+// B44 plain-word entry in the add sheet: same AI gate as voice (Pro + AI consent already given), local parser otherwise.
+const parseTypedEntry = async (text) => {
+  const u = auth.currentUser; let ask = null;
+  try { if (u && rcProActive(u.uid) && await hasAiConsent()) ask = async (task, input) => ((await ensureAiConsent()) ? askAi(task, input) : null); } catch (e) { ask = null; }
+  return parseEntry(text, { ask });
+};
 const voiceItems = ref([]); const voiceBusy = ref(false); const voiceSource = ref('');
 const saveSpoken = async (text) => {
   pendingVoiceText = '';

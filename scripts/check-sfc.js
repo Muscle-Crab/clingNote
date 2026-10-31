@@ -9,7 +9,7 @@ const babelParser = require('@babel/parser');
 const traverse = require('@babel/traverse').default;
 
 // Undeclared identifiers in a script (typos / things left behind after moving code). Browser/JS globals are fine.
-const KNOWN_GLOBALS = new Set(['window', 'document', 'console', 'localStorage', 'Date', 'Intl', 'RegExp', 'Blob', 'File', 'URL', 'crypto', 'Uint8Array', 'Float32Array', 'TextEncoder', 'Math', 'Number', 'String', 'Object', 'Array', 'Promise', 'JSON',
+const KNOWN_GLOBALS = new Set(['window', 'encodeURIComponent', 'document', 'console', 'localStorage', 'Date', 'Intl', 'RegExp', 'Blob', 'File', 'URL', 'crypto', 'Uint8Array', 'Float32Array', 'TextEncoder', 'Math', 'Number', 'String', 'Object', 'Array', 'Promise', 'JSON',
   'Boolean', 'Error', 'Set', 'Map', 'parseInt', 'parseFloat', 'isNaN', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'alert', 'confirm',
   'process', 'require', 'SpeechSynthesisUtterance', 'undefined', 'NaN', 'Infinity', 'navigator', 'Notification', 'Audio', 'FileReader', 'URL', 'fetch', 'event',
   'defineProps', 'defineEmits', 'defineExpose', 'defineModel', 'withDefaults']);
