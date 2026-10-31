@@ -44,6 +44,16 @@ jobs:
         run: |
           # An unsigned archive carries no entitlements, so the exported app lost Sign in with Apple + Push (Apple error 1000). Ad-hoc sign with App.entitlements so export re-signs WITH them.
           APP="$RUNNER_TEMP/App.xcarchive/Products/Applications/App.app"
+          # SPM binary xcframeworks (Firebase/GoogleAppMeasurement/GoogleAdsOnDeviceConversion) are STATIC and already linked into App;
+          # Xcode still copies them into Frameworks/, where an unsigned static archive fails App Store validation. Drop static ones, ad-hoc sign dynamic ones.
+          if [ -d "$APP/Frameworks" ]; then
+            for FW in "$APP"/Frameworks/*.framework; do
+              [ -d "$FW" ] || continue
+              BIN="$FW/$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$FW/Info.plist" 2>/dev/null || basename "$FW" .framework)"
+              if file "$BIN" | grep -q "ar archive"; then echo "Removing static $FW"; rm -rf "$FW"
+              else codesign --force --sign - "$FW"; fi
+            done
+          fi
           # Inside-out: the home-screen widget extension first (App Group entitlement), then the app.
           WIDGET="$APP/PlugIns/ClingNoteWidget.appex"
           if [ -d "$WIDGET" ]; then
