@@ -27,7 +27,7 @@
 
     <h2 class="text-xl font-semibold mt-5 mb-2">3. Data Sharing and Disclosure</h2>
     <p class="mb-4">
-      We do not sell your personal information and we do not share it with third parties for advertising. We share data only with the service providers that help us run ClingNote (Firebase/Google, OneSignal, OpenAI, RevenueCat, and Stripe on the web), or if required by law.
+      We do not sell your personal information and we do not share it with third parties for advertising. We share data only with the service providers that help us run ClingNote (Firebase/Google, OneSignal, OpenAI, Google Gemini, RevenueCat, TikTok for install measurement if you allow tracking, and Stripe on the web), or if required by law.
     </p>
     <ul class="list-disc pl-6 mb-4">
       <li><strong>Firebase (Google):</strong> authentication, database and file storage.</li>
@@ -41,8 +41,9 @@
 
     <h2 class="text-xl font-semibold mt-5 mb-2">4. Analytics and Tracking</h2>
     <ul class="list-disc pl-6 mb-4">
-      <li><strong>No tracking:</strong> we do not track you across other companies' apps and websites, we do not use advertising identifiers, and we do not show third-party ads. The iPhone app does not ask for "tracking" permission because it does not track.</li>
-      <li><strong>Analytics:</strong> the ClingNote <em>website</em> uses Google (Firebase) Analytics to measure aggregate usage such as page visits. The iPhone app does not include analytics.</li>
+      <li><strong>Tracking (iPhone app, only with your permission):</strong> after sign-up the iPhone app asks for Apple's "Allow tracking" permission. If you allow it, your device's advertising identifier (IDFA) and basic app events (install, open) are shared with TikTok (TikTok App Events SDK) and Google (Firebase Analytics) so we can measure which ads brought you to ClingNote. If you choose "Ask App Not to Track", the advertising identifier is never read or shared. You can change this any time in iOS Settings &gt; Privacy &amp; Security &gt; Tracking. We do not show third-party ads.</li>
+      <li><strong>Analytics:</strong> the ClingNote website and the iPhone app use Google (Firebase) Analytics to measure aggregate usage such as screens opened and installs. Analytics are not used to build advertising profiles.</li>
+      <li><strong>Location (optional):</strong> if you set a reminder for a place, the iPhone app reads your location to save that place and remind you when you arrive. Saved places and location checks stay on your device and are not sent to us.</li>
     </ul>
 
     <h2 class="text-xl font-semibold mt-5 mb-2">5. Data Storage, Security and Retention</h2>
@@ -79,7 +80,7 @@
       If you have questions or concerns, visit our <router-link to="/support" class="text-blue-600 hover:underline" data-test="privacy-support">Support page</router-link> or email us at <a :href="`mailto:${SUPPORT_EMAIL}`" class="text-blue-600 hover:underline">{{ SUPPORT_EMAIL }}</a>.
     </p>
 
-    <p class="text-sm text-gray-500 mt-8">Last updated: October 23, 2026</p>
+    <p class="text-sm text-gray-500 mt-8">Last updated: October 31, 2026</p>
   </div>
 </template>
 

@@ -33,9 +33,9 @@ t('Recovery Tracker + admin About are web-only; nav hides them on iOS; disclaime
   const a = rd('src/views/addiction.vue'); assert(/data-test="recovery-disclaimer"/.test(a) && /not medical advice/i.test(a) && /988/.test(a) && /1-800-662-4357/.test(a));
   assert(/<option value="Porn">Adult content<\/option>/.test(a)); assert(!/>Porn</.test(a) && !/porn-related/.test(a));
 });
-t('privacy policy covers retention, DOB/gender, avatar/photos, analytics, no tracking, recovery tracker, deletion and uses ClingNote', () => {
+t('privacy policy covers retention, DOB/gender, avatar/photos, analytics, ATT tracking disclosure (TikTok/IDFA, build 44+), location, recovery tracker, deletion and uses ClingNote', () => {
   const p = rd('src/views/privacy-policy.vue');
-  ['Retention', 'date of birth', 'gender', 'profile picture', 'Analytics', 'No tracking', 'Recovery Tracker', 'OneSignal', 'RevenueCat', 'Delete Account', 'comments, replies and reactions'].forEach((k) => assert(p.includes(k), k));
+  ['Retention', 'date of birth', 'gender', 'profile picture', 'Analytics', 'only with your permission', 'TikTok', 'IDFA', 'Ask App Not to Track', 'Location (optional)', 'Recovery Tracker', 'OneSignal', 'RevenueCat', 'Delete Account', 'comments, replies and reactions'].forEach((k) => assert(p.includes(k), k));
   assert(!/\bClingNot\b/.test(p), 'brand is ClingNote');
 });
 t('landing page skipped on native; landing video is not bundled in the iOS build and not loaded on native', () => {
