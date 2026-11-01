@@ -1,8 +1,9 @@
+import { fnUrl } from '@/config/api';
 // Provider-agnostic checkout client. Backend: netlify/functions/create-checkout.js
 export async function startCheckout({ planId, user }) {
   try {
     const token = user?.getIdToken ? await user.getIdToken() : '';
-    const res = await fetch('/.netlify/functions/create-checkout', {
+    const res = await fetch(fnUrl('create-checkout'), {
       method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({ planId }),
     });

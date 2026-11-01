@@ -1,41 +1,41 @@
 <template>
-  <div class="modal-backdrop">
-    <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="nt-title" @keydown.esc="$emit('close')">
+  <div class="modal-backdrop nt-backdrop" :style="vvStyle" @touchmove.self.prevent>
+    <div class="modal-box nt-sheet" role="dialog" aria-modal="true" aria-labelledby="nt-title" @keydown.esc="$emit('close')">
       <div class="modal-header">
         <h2 id="nt-title" class="modal-title">✦ New task</h2>
         <button type="button" @click="$emit('close')" class="modal-close" aria-label="Close">✕</button>
       </div>
-      <form @submit.prevent="$emit('submit')">
+      <form class="nt-form" @submit.prevent="$emit('submit')">
         <div class="modal-body">
           <div class="field-group">
-            <label class="field-label" for="nt-name">Task name</label>
-            <input id="nt-name" ref="titleInput" type="text" v-model="newTask.title" class="field-input" placeholder="What needs doing?" required />
+            <div class="label-row">
+              <label class="field-label" for="nt-name">Task name</label>
+              <span class="cat-chips" role="group" aria-label="Category">
+                <button v-for="c in CATEGORIES" :key="c.id" type="button" class="cat-chip" :class="['tone-' + c.tone, { on: newTask.category === c.id }]" :aria-pressed="String(newTask.category === c.id)" :data-test="'cat-' + c.id" :title="c.label" @click="newTask.category = newTask.category === c.id ? '' : c.id"><i :class="'fas ' + c.icon" aria-hidden="true"></i> {{ c.label }}</button>
+              </span>
+            </div>
+            <input id="nt-name" ref="titleInput" type="text" v-model="newTask.title" class="field-input" placeholder="What needs doing? Try “gym tomorrow at 6”" required />
+            <button v-if="hint" type="button" class="nl-hint" data-test="nl-hint" :disabled="hintBusy" @click="applyHint"><i class="fas fa-magic" aria-hidden="true"></i> {{ hintLabel }} <span class="nl-go">· tap to set</span></button>
           </div>
 
           <div class="field-group">
-            <label class="field-label">Reminder</label>
+            <div class="label-row">
+              <label class="field-label">Reminder</label>
+              <span class="rem-chips">
+                <button v-for="m in offsets" :key="m" type="button" class="rem-chip" data-test="rem-chip" :title="'Remove ' + offsetLabel(m) + ' before'" @click="removeOffset(m)">{{ offsetLabel(m) }} before ✕</button>
+                <select v-if="picking" class="rem-pick" data-test="rem-pick" aria-label="Remind before" @change="addOffset($event.target.value)">
+                  <option value="">before…</option>
+                  <option v-for="m in REMINDER_PRESETS.filter((x) => !offsets.includes(x))" :key="m" :value="m">{{ offsetLabel(m) }} before</option>
+                </select>
+                <button v-else-if="offsets.length < MAX_REMINDERS" type="button" class="rem-add" data-test="rem-add" aria-label="Add a reminder before the start" title="Remind me before (needs a start time)" @click="picking = true">+ before</button>
+              </span>
+            </div>
             <input type="datetime-local" v-model="newTask.reminder.datetime" class="field-input" />
           </div>
           <div class="field-group">
-            <label class="field-label" for="nt-sched-date">Schedule for later</label>
-            <div class="field-grid">
-              <input id="nt-sched-date" type="date" v-model="newTask.scheduleDate" :min="tomorrow" class="field-input" aria-label="Schedule date" />
-              <input type="time" v-model="newTask.scheduleTime" class="field-input" :disabled="!newTask.scheduleDate" aria-label="Schedule time (optional)" />
-            </div>
-            <div v-if="newTask.scheduleDate" class="field-grid">
-              <select v-model="newTask.scheduleRepeat" class="field-select" aria-label="Repeat scheduled task">
-                <option value="">Doesn't repeat</option>
-                <option value="weekly">Weekly on…</option>
-                <option value="daily">Every day</option>
-                <option value="monthly">Monthly (same day)</option>
-              </select>
-            </div>
-            <div v-if="newTask.scheduleDate && newTask.scheduleRepeat === 'weekly'" class="sched-weekdays" role="group" aria-label="Repeat on weekdays">
-              <label v-for="(w, i) in WEEKDAYS" :key="w" class="sched-wd"><input type="checkbox" :value="i" v-model="newTask.scheduleDays" /> {{ w }}</label>
-            </div>
-            <p v-if="newTask.scheduleDate" class="field-hint">Hidden everywhere until the week of {{ newTask.scheduleDate }}; shows from that Monday with a due badge.<template v-if="newTask.scheduleRepeat"> Each occurrence is its own task.</template></p>
+            <SchedulePicker v-if="newTask.sched" v-model="newTask.sched" :min-date="today" />
           </div>
-          <div class="field-group">
+          <div v-if="!newTask.sched?.on" class="field-group">
             <label class="field-label" for="nt-repeat">Repeat</label>
             <select id="nt-repeat" v-model="repeatMode" class="field-select">
               <option value="daily">Daily</option>
@@ -69,10 +69,6 @@
             <div class="field-group">
               <label class="field-label" for="nt-start">Start time</label>
               <input id="nt-start" type="time" v-model="newTask.startTime" class="field-input" />
-            </div>
-            <div class="field-group">
-              <label class="field-label" for="nt-est">Estimate (min)</label>
-              <input id="nt-est" type="number" min="0" step="5" v-model="newTask.estimateMin" class="field-input" placeholder="e.g. 30" />
             </div>
           </div>
           <div class="field-group">
@@ -110,8 +106,21 @@
                 <input type="text" v-model="newTask.labels" class="field-input" placeholder="Work, Fitness, Health..." />
               </div>
               <div class="field-group">
+                <label class="field-label" for="nt-place">Place</label>
+                <div class="place-row">
+                  <input id="nt-place" type="text" v-model="newTask.location" class="field-input" maxlength="120" placeholder="Address or place (optional)" data-test="task-place" />
+                  <select v-model.number="newTask.travelMin" class="field-select travel-sel" aria-label="Travel time" title="Travel time, for a time-to-leave reminder" data-test="task-travel">
+                    <option v-for="m in TRAVEL_PRESETS" :key="m" :value="m">🚗 {{ m }} min</option>
+                  </select>
+                </div>
+              </div>
+              <div class="field-group">
                 <label class="field-label">Note</label>
                 <textarea v-model="newTask.notes" class="field-textarea" placeholder="Extra details..."></textarea>
+              </div>
+              <div class="field-group anon-row" data-test="anon-toggle">
+                <div class="anon-text"><span class="field-label">🔒 Hide name from manager</span><small>Your manager sees the time, status &amp; points, not the name or notes</small></div>
+                <button type="button" role="switch" class="anon-switch" :class="{ on: newTask.anonymous }" :aria-checked="newTask.anonymous ? 'true' : 'false'" aria-label="Hide name from manager" @click="newTask.anonymous = !newTask.anonymous"><span></span></button>
               </div>
             </div>
           </transition>
@@ -120,14 +129,9 @@
           <div v-if="limitHit" class="cap-warning limit-hit" role="alert" data-test="task-limit">
             <strong>You've hit today's limit of {{ limitHit.limit }} tasks.</strong>
             <template v-if="limitHit.pro"> That's the Pro maximum for one day. Finish or move something first.</template>
-            <template v-else> Free accounts get {{ limitHit.limit }} tasks per day. Pro raises it to {{ proLimit }}.
-              <button type="button" class="btn-secondary cap-override" data-test="limit-upgrade" @click="$emit('upgrade')">Upgrade to Pro</button>
+            <template v-else> Free accounts get {{ limitHit.limit }} tasks per day.<template v-if="proRaises"> Pro raises it to {{ proLimit }}.</template>
+              <button v-if="!rcPro()" type="button" class="btn-secondary cap-override" data-test="limit-upgrade" @click="$emit('upgrade')">Upgrade to Pro</button>
             </template>
-          </div>
-          <div v-if="capWarning" class="cap-warning" role="alert">
-            <strong>You already have {{ ACTIVE_CAP }} active tasks today.</strong>
-            A shorter list gets finished more often. Move something, or add this one anyway.
-            <button type="button" class="btn-secondary cap-override" @click="$emit('add-anyway')">Add anyway</button>
           </div>
         </div>
         <div class="modal-footer">
@@ -140,14 +144,20 @@
 </template>
 
 <script setup>
-import { ref, onMounted, nextTick } from 'vue';
+import SchedulePicker from './SchedulePicker.vue';
+import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue';
+import { CATEGORIES, REMINDER_PRESETS, MAX_REMINDERS, TRAVEL_PRESETS, offsetLabel, cleanOffsets } from '@/utils/taskExtras';
+import { localParse, hintText } from '@/utils/nlEntry';
 import { ACTIVE_CAP, STATUSES } from '@/utils/taskPlanning';
-import { WEEKDAYS } from '@/utils/scheduling';
 import { getOrdinalSuffix } from '@/utils/dateTime';
-import { TASK_LIMITS } from '@/config/pricing';
+import { TASK_LIMITS, PRO_RAISES_LIMIT } from '@/config/pricing';
+import { rcProActive } from '@/composables/usePro';
+import { auth } from '@/firebaseConfig';
+const rcPro = () => rcProActive(auth.currentUser?.uid); // iOS: RevenueCat says Pro -> never show an upgrade prompt
 
 // newTask is the reactive form object owned by HomeView; the form edits it in place via v-model.
-defineProps({
+const props = defineProps({
+  parseEntry: { default: null }, // B44: AI-first plain-word parser from HomeView (local fallback inside)
   newTask: { type: Object, required: true },
   days: { type: Array, required: true },
   selectedDayRoutine: { type: Array, default: () => [] },
@@ -156,15 +166,62 @@ defineProps({
   limitHit: { type: Object, default: null },
 });
 const proLimit = TASK_LIMITS.pro;
+const proRaises = PRO_RAISES_LIMIT;
 const repeatMode = defineModel('repeatMode');
 const showAdvanced = defineModel('showAdvanced');
-const tomorrow = (() => { const d = new Date(); d.setDate(d.getDate() + 1); return d.toLocaleDateString('en-CA'); })();
+const today = new Date().toLocaleDateString('en-CA');
 defineEmits(['close', 'submit', 'add-anyway', 'upgrade']);
 const titleInput = ref(null);
+// B44 reminders before the start (chips) — stored as remindOffsets (minutes)
+const offsets = computed(() => cleanOffsets(props.newTask.remindOffsets));
+const picking = ref(false);
+const addOffset = (v) => { const n = Number(v); picking.value = false; if (n > 0) props.newTask.remindOffsets = cleanOffsets([...(props.newTask.remindOffsets || []), n]).slice(0, MAX_REMINDERS); };
+const removeOffset = (m) => { props.newTask.remindOffsets = offsets.value.filter((x) => x !== m); };
+// B44 plain words: instant on-device preview; tapping applies (AI refines it for Pro + consent, local otherwise)
+const hint = computed(() => localParse(props.newTask.title, new Date()));
+const hintLabel = computed(() => hintText(hint.value, today));
+const hintBusy = ref(false);
+const applyHint = async () => {
+  const text = props.newTask.title; let p = hint.value; hintBusy.value = true;
+  try { if (props.parseEntry) p = (await props.parseEntry(text)) || p; } catch (e) { /* local */ } finally { hintBusy.value = false; }
+  if (!p) return;
+  const nt = props.newTask; nt.title = p.title;
+  if (nt.sched) { nt.sched.on = true; nt.sched.date = p.date < today ? today : p.date; nt.sched.time = p.time || ''; }
+  else { nt.startTime = p.time || nt.startTime; if (p.date !== today) nt.dueDate = p.date; }
+};
 onMounted(() => nextTick(() => titleInput.value && titleInput.value.focus()));
+
+// Keep the sheet fixed in place on phones: lock page scroll while open and size/position it to the *visual* viewport,
+// so the on-screen keyboard shrinks the sheet (its body scrolls) instead of pushing or dragging it around.
+const vvStyle = ref({});
+const syncVv = () => {
+  const vv = window.visualViewport;
+  vvStyle.value = vv ? { top: `${Math.round(vv.offsetTop)}px`, height: `${Math.round(vv.height)}px`, bottom: 'auto' } : {};
+};
+onMounted(() => {
+  document.documentElement.classList.add('nt-modal-open'); document.body.classList.add('nt-modal-open');
+  syncVv();
+  if (window.visualViewport) { window.visualViewport.addEventListener('resize', syncVv); window.visualViewport.addEventListener('scroll', syncVv); }
+});
+onBeforeUnmount(() => {
+  document.documentElement.classList.remove('nt-modal-open'); document.body.classList.remove('nt-modal-open');
+  if (window.visualViewport) { window.visualViewport.removeEventListener('resize', syncVv); window.visualViewport.removeEventListener('scroll', syncVv); }
+});
 </script>
 
 <style scoped>
+.label-row { display: flex; align-items: center; justify-content: space-between; gap: .4rem; flex-wrap: wrap; }
+.cat-chips, .rem-chips { display: inline-flex; gap: .3rem; flex-wrap: wrap; align-items: center; }
+.cat-chip, .rem-chip, .rem-add { all: unset; cursor: pointer; font-size: .68rem; padding: .1rem .4rem; border-radius: 999px; border: 1px solid var(--c-border, #2a2a2e); color: var(--c-text-2, #a1a09b); }
+.cat-chip.on.tone-purple { background: rgba(139, 92, 246, .25); color: #c4b5fd; border-color: #8b5cf6; }
+.cat-chip.on.tone-teal { background: rgba(20, 184, 166, .22); color: #5eead4; border-color: #14b8a6; }
+.cat-chip.on.tone-green { background: rgba(34, 197, 94, .22); color: #86efac; border-color: #22c55e; }
+.rem-pick { font-size: .7rem; background: transparent; color: inherit; border: 1px solid var(--c-border, #2a2a2e); border-radius: 6px; }
+.nl-hint { all: unset; box-sizing: border-box; cursor: pointer; display: block; margin-top: .3rem; font-size: .74rem; color: var(--c-accent, #a78bfa); }
+.nl-go { color: var(--c-text-3, #6b6a66); }
+.place-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .4rem; }
+.place-row .field-input { width: 100%; min-width: 0; }
+.place-row .travel-sel { width: auto; max-width: 8.5rem; }
 .field-input::placeholder, .field-textarea::placeholder { color: var(--c-text-3, #6b6a66); opacity: .7; font-style: italic; }
 .modal-backdrop {
   position: fixed;
@@ -300,4 +357,33 @@ onMounted(() => nextTick(() => titleInput.value && titleInput.value.focus()));
 .field-hint { margin: 4px 0 0; font-size: var(--fs-xs); color: var(--c-text-3); }
 .sched-weekdays { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .sched-wd { font-size: var(--fs-xs, .8rem); display: flex; gap: 3px; align-items: center; }
+
+/* ── Fixed, keyboard-safe sheet: header/footer stay put, only the body scrolls ── */
+.nt-backdrop { position: fixed; inset: 0; height: 100dvh; box-sizing: border-box; overscroll-behavior: contain; touch-action: none; -webkit-tap-highlight-color: transparent; }
+.nt-sheet { overflow: hidden; max-height: 100%; min-height: 0; touch-action: auto; overscroll-behavior: contain; transform: none; }
+.nt-form { display: flex; flex-direction: column; min-height: 0; flex: 1 1 auto; }
+.nt-sheet .modal-header, .nt-sheet .modal-footer { flex: 0 0 auto; }
+.nt-sheet .modal-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; -webkit-overflow-scrolling: touch; }
+.nt-sheet .modal-footer { padding-bottom: calc(var(--sp-4, 16px) + env(safe-area-inset-bottom)); }
+.nt-sheet .field-input, .nt-sheet .field-select, .nt-sheet .field-textarea { scroll-margin: 16px; }
+@media (max-width: 600px) {
+  .nt-backdrop { padding: 0; align-items: flex-end; }
+  .nt-sheet { width: 100%; max-width: 100%; max-height: min(92%, 100dvh); border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+  .nt-sheet .field-input, .nt-sheet .field-select, .nt-sheet .field-textarea { font-size: 16px; } /* no iOS focus-zoom (which shifts the page) */
+}
+.anon-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.anon-text { display: flex; flex-direction: column; gap: 2px; }
+.anon-text small { font-size: 11px; color: var(--c-text-2, #A9B4CC); }
+.anon-switch { flex: none; width: 44px; height: 26px; border-radius: 999px; border: 1px solid var(--c-border, #2A3C66); background: rgba(255,255,255,.06); position: relative; padding: 0; cursor: pointer; transition: background .15s; }
+.anon-switch span { position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; border-radius: 50%; background: #cfd8cf; transition: transform .15s; }
+.anon-switch.on { background: #2f7a4f; border-color: #3c9a64; }
+.anon-switch.on span { transform: translateX(18px); background: #fff; }
+</style>
+
+<style>
+/* Page scroll lock while the New task sheet is open (unscoped: targets html/body/app root). */
+html.nt-modal-open, body.nt-modal-open { overflow: hidden !important; overscroll-behavior: none; }
+body.nt-modal-open .app-root { overflow: hidden; overscroll-behavior: none; }
+.app-root .nt-sheet.nt-sheet.nt-sheet { animation: ntFade .18s ease-out; transform: none; }
+@keyframes ntFade { from { opacity: 0; } }
 </style>

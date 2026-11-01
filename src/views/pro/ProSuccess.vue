@@ -20,12 +20,12 @@
       </div>
     </div>
 
-    <p class="ps-p" v-if="state === 'confirmed'">Strict Boss, AI coach and your private calendar feed are unlocked. Go crush today.</p>
+    <p class="ps-p" v-if="state === 'confirmed'">Strict Coach mode, the AI coach and your private calendar feed are unlocked. Go crush today.</p>
     <p class="ps-p" v-else-if="state === 'pending'">Hang tight — we're confirming your payment with Stripe. This usually takes a few seconds.</p>
     <p class="ps-p" v-else>Your payment went through, but confirmation is taking longer than usual. Pro will switch on automatically within a minute or two — no need to pay again.</p>
 
     <ul class="ps-perks" v-if="state === 'confirmed'">
-      <li>🔥 Strict Boss mode</li><li>🤖 AI workout &amp; meal coach</li><li>📆 Calendar feed</li>
+      <li>🔥 Strict Coach mode</li><li>🤖 AI workout &amp; meal coach</li><li>📆 Calendar feed</li>
     </ul>
 
     <button class="ps-cta" data-test="go-home" @click="goHome">Go to Home</button>
@@ -40,7 +40,7 @@ import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '@/firebaseConfig';
 import { isPro } from '@/utils/pro';
 import { planById, fmt } from '@/config/pricing';
-import { clearProCache } from '@/composables/usePro';
+import { clearProCache, withRcPro } from '@/composables/usePro';
 
 const route = useRoute(); const router = useRouter();
 const state = ref('pending'); // pending | confirmed | timeout
@@ -50,7 +50,7 @@ let timer = null, stopped = false;
 
 const planId = computed(() => docPlan.value || (typeof route.query.plan === 'string' ? route.query.plan : null));
 const planInfo = computed(() => (planId.value ? planById(planId.value) : null));
-const planLabel = computed(() => (planInfo.value ? `ClingNot Pro · ${planInfo.value.label}` : 'ClingNot Pro'));
+const planLabel = computed(() => (planInfo.value ? `ClingNote Pro · ${planInfo.value.label}` : 'ClingNote Pro'));
 const priceText = computed(() => { const p = planInfo.value; if (!p) return '';
   if (p.period === 'once') return `${fmt(p.price)} once`;
   return p.trialDays ? `${p.trialDays}-day free trial, then ${fmt(p.price)}/${p.period}` : `${fmt(p.price)}/${p.period}`; });
@@ -59,7 +59,7 @@ async function check() {
   const u = auth.currentUser; if (!u) return false;
   try { const s = await getDoc(doc(db, 'users', u.uid)); const d = s.exists() ? s.data() : null;
     if (d?.plan) docPlan.value = d.plan;
-    return isPro(d);
+    return isPro(withRcPro(u.uid, d));
   } catch (e) { console.error('pro poll', e.message); return false; }
 }
 async function poll() {

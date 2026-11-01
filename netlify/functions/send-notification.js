@@ -6,7 +6,7 @@ const { buildPayload, verifyUser, sendOneSignal } = require('./lib/notify');
 
 const json = (statusCode, body) => ({ statusCode, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 
-exports.handler = async (event, ctx, deps = {}) => {
+const rawHandler = async (event, ctx, deps = {}) => {
   if (event.httpMethod !== 'POST') return json(405, { error: 'Method not allowed' });
   try {
     const uid = await verifyUser(event.headers, deps.verify);
@@ -19,3 +19,5 @@ exports.handler = async (event, ctx, deps = {}) => {
     return json(e.status || 500, { error: e.message });
   }
 };
+const { withCors } = require('./lib/cors');
+exports.handler = withCors(rawHandler);

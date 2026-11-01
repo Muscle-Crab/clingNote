@@ -48,7 +48,7 @@ onMounted(() => onAuthStateChanged(auth, async (u) => {
 .log-head h1 { font-size: 1.4rem; font-weight: 700; margin: 0; }
 .log-back { color: var(--c-text-3, #64748b); text-decoration: none; }
 .log-filter { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; }
-.log-filter button { padding: 4px 10px; border-radius: 999px; border: 1px solid var(--c-border, #e2e8f0); font-size: .8rem; }
+.log-filter button { padding: 0 14px; min-height: 44px; border-radius: 999px; border: 1px solid var(--c-border, #e2e8f0); font-size: .8rem; }
 .log-filter button.on { background: var(--c-primary, #6366f1); color: #fff; border-color: transparent; }
 .log-list { list-style: none; padding: 0; }
 .log-list li { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; padding: 10px; border-bottom: 1px solid var(--c-border, #e2e8f0); }

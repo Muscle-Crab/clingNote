@@ -1,6 +1,6 @@
 # TikTok gate (iPhone Shortcuts)
 
-ClingNot can't block other apps from the web. What it can do is put itself in front of TikTok every time you open it,
+ClingNote can't block other apps from the web. What it can do is put itself in front of TikTok every time you open it,
 using an iOS Shortcuts **Personal Automation**. You then see either:
 
 - **Locked: N/5 tasks left** with a countdown to your Discipline Mode deadline (and a "Do a task" button), or
@@ -20,13 +20,13 @@ Every open while locked is written to your Procrastination log.
 7. Tap the URL field and enter exactly: `https://clingnot.netlify.app/gate?app=tiktok`
 8. Tap **Done**.
 
-Make sure you're signed in to ClingNot in Safari (the gate needs your account). Optional: add ClingNot to your
+Make sure you're signed in to ClingNote in Safari (the gate needs your account). Optional: add ClingNote to your
 Home Screen from Safari's share sheet.
 
 ## Limits (be honest with yourself)
 
 - **This is not a real block.** A website can't stop another app. TikTok still opens behind Safari; you can switch back.
-- The break timer is advisory: when it ends ClingNot shows "Back to work" but can't close TikTok.
+- The break timer is advisory: when it ends ClingNote shows "Back to work" but can't close TikTok.
 - The automation can be turned off in Shortcuts at any time. For a hard limit, combine it with
   **Screen Time → App Limits** (Settings → Screen Time → App Limits → Add Limit → TikTok) and let someone else set the passcode.
 - Android: use an automation app (e.g. Tasker / MacroDroid "App launched" → open URL) — same limits apply.

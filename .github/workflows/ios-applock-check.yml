@@ -1,0 +1,28 @@
+# COMPILE CHECK ONLY for app lock (Family Controls). Unsigned Release archive of App + ClingNoteWidget + ClingLockMonitor + ClingShieldConfig.
+# No signing, no export, no TestFlight upload. Manual (workflow_dispatch) or push to ci/applock-check.
+name: ios-applock-check
+on:
+  workflow_dispatch: {}
+  push: { branches: [ci/applock-check] }
+jobs:
+  archive:
+    runs-on: macos-15
+    timeout-minutes: 45
+    env: { DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run build:ios
+      - run: npx cap sync ios
+      - run: python3 scripts/ios-patch-onesignal.py
+      - name: Unsigned archive (no upload)
+        working-directory: ios/App
+        run: |
+          set -o pipefail
+          xcodebuild -project App.xcodeproj -scheme App -configuration Release -destination 'generic/platform=iOS' \
+            -archivePath $RUNNER_TEMP/App.xcarchive CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" archive 2>&1 | tee $RUNNER_TEMP/build.log | grep -E "error:|BUILD|ARCHIVE" || true
+          APP=$RUNNER_TEMP/App.xcarchive/Products/Applications/App.app
+          for E in ClingNoteWidget ClingLockMonitor ClingShieldConfig; do test -d $APP/PlugIns/$E.appex && echo "$E embedded OK"; done
+          test -d $APP/PlugIns/ClingLockMonitor.appex && test -d $APP/PlugIns/ClingShieldConfig.appex

@@ -4,7 +4,8 @@
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/firebaseConfig';
 import { loadDayTasks } from '@/composables/useDayPersistence';
-import { materializeDue, pruneMaterialized, expandRecurring, rollForwardOf } from '@/utils/scheduling';
+import { isDayLocked, isShutdown, assertNotShut } from '@/utils/eightHourLock';
+import { materializeDue, pruneMaterialized, expandRecurring, rollForwardOf, rollAfterOf, toTodayTask } from '@/utils/scheduling';
 
 const ref = (userId) => doc(db, 'users', userId);
 const writeDay = (userId, dayName, tasks) => setDoc(doc(db, 'weeklyRoutines', `${userId}_${dayName}`), { tasks, updatedAt: serverTimestamp() });
@@ -17,6 +18,7 @@ export const loadScheduled = async (userId) => {
 
 // Read-modify-write with a fresh read; fn(list) returns the new list.
 export const mutateScheduled = async (userId, fn) => {
+  assertNotShut(); // 8-hour hard stop: no scheduling until the next wake time
   const next = fn(await loadScheduled(userId));
   await save(userId, next);
   return next;
@@ -26,13 +28,15 @@ export const mutateScheduled = async (userId, fn) => {
 // Also: expands recurring templates for this week, and rolls unfinished scheduled tasks forward to today until their date.
 // Order: write day docs first, then the scheduled list; a failed second step is healed next run via scheduledId.
 export const materializeDueForToday = async (userId, dayName, todayStr, dayNameOf = null) => {
+  if (isDayLocked(dayName) || isShutdown()) return { added: 0, scheduled: await loadScheduled(userId) }; // 8-hour lock: today's list cannot grow while the window runs (retried on the next load)
   const { list: expanded, added: generated } = expandRecurring(await loadScheduled(userId), todayStr);
   let scheduled = expanded;
   let todayTasks = await loadDayTasks(userId, dayName);
   let todayChanged = false;
   let listChanged = generated.length > 0;
   if (dayNameOf) {
-    for (const e of rollForwardOf(scheduled, todayStr)) {
+    const afterIds = new Set(rollAfterOf(scheduled, todayStr).map((e) => e.id));
+    for (const e of [...rollForwardOf(scheduled, todayStr), ...rollAfterOf(scheduled, todayStr)]) {
       const fromName = dayNameOf(e.materializedDate);
       let stop = false;
       if (fromName && fromName !== dayName) {
@@ -42,7 +46,10 @@ export const materializeDueForToday = async (userId, dayName, todayStr, dayNameO
           if (!todayTasks.some((x) => x.scheduledId === e.id)) { todayTasks = [...todayTasks, t]; todayChanged = true; }
           await writeDay(userId, dayName, todayTasks);
           await writeDay(userId, fromName, fromTasks.filter((x) => x.scheduledId !== e.id));
-        } else if (!todayTasks.some((x) => x.scheduledId === e.id)) stop = true; // completed or deleted: stop tracking
+        } else if (!todayTasks.some((x) => x.scheduledId === e.id)) {
+          if (afterIds.has(e.id) && !t) { todayTasks = [...todayTasks, toTodayTask(e, todayStr, new Date().toISOString())]; todayChanged = true; await writeDay(userId, dayName, todayTasks); } // after-completion: never lost until done
+          else stop = true; // completed or deleted: stop tracking
+        }
       }
       scheduled = scheduled.map((x) => (x.id === e.id ? (stop ? { ...x, done: true } : { ...x, materializedDate: todayStr }) : x));
       listChanged = true;

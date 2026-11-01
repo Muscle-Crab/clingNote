@@ -1,5 +1,5 @@
-// Strict Boss Mode (on top of Discipline Mode). Pure helpers, no Firestore.
-// Tone rule: tough on the work, never on the person. No insults, slurs or identity remarks.
+// Strict Coach mode (internally still "strictBoss": stable ids/keys). On top of Discipline Mode. Pure helpers, no Firestore.
+// Robot coach tone: warm, firm on the work, never on the person. No insults, slurs or identity remarks.
 import { deadlineAt } from './discipline';
 
 export const IDLE_MINUTES = 30;
@@ -10,22 +10,22 @@ const seedPick = (arr, seed = '') => arr[[...String(seed)].reduce((a, c) => a + 
 
 export const LINES = {
   morning: [
-    'Morning. {min} tasks by {deadline}. No negotiations. Start with the hardest one.',
-    'Orders for today: {min} tasks done before {deadline}. Clock starts now.',
-    'New day, same standard. {min} tasks, {deadline} deadline. Move.',
+    "Morning! Today's goal is {min} tasks by {deadline}. Let's start with the hardest one.",
+    "Here's the plan for today. {min} tasks done before {deadline}. Let's get going.",
+    "New day. Same goal. {min} tasks by {deadline}. You've got this.",
   ],
   midday: [
-    'It\'s past noon and you have {done} done. That\'s not a pace, that\'s a stall. Pick one and finish it.',
-    'Midday check: {done}/{min}. I expected more by now. Close one task in the next 30 minutes.',
+    "It's past noon, and you've got {done} done. Let's pick one and finish it.",
+    "Quick midday check. You're at {done} of {min}. Can you close one in the next thirty minutes?",
   ],
   evening: [
-    'Warning: {left} left until {deadline} and you\'re at {done}/{min}. This is where the day is won or lost.',
-    'Evening report: {done}/{min}. {left} remaining. No new plans. Finish what\'s open.',
+    "Heads up. {left} left until {deadline}, and you're at {done} of {min}. This is where the day gets won.",
+    "Evening check-in. {done} of {min} done, {left} to go. No new plans. Let's finish what's open.",
   ],
-  passed: ['Verdict: PASSED. You did what you said you would. Same again tomorrow.', 'PASSED. Standard met. Don\'t celebrate too long.'],
-  failed: ['Verdict: FAILED. {done}/{min}. No excuses logged will change that. Tomorrow you start earlier.', 'FAILED. You knew the target. Reset, plan tonight, deliver tomorrow.'],
-  idle: ['{open} tasks open and nothing\'s moved in {idle} minutes. Pick one. Start a timer. Now.', 'Focus check: {idle} minutes idle with {open} open. One task, start it.'],
-  watching: ['Overdue: the boss is watching. Clear "{title}" before you add anything new.'],
+  passed: ["You passed today. You did what you said you would. Let's do it again tomorrow.", "Passed. You hit the goal. Enjoy it, then rest up."],
+  failed: ["Not today. {done} of {min} done. That's okay, we'll start earlier tomorrow.", "Missed it today. You knew the goal. Let's plan tonight, and deliver tomorrow."],
+  idle: ["You've got {open} tasks open, and nothing's moved in {idle} minutes. Pick one and start a timer.", "Focus check. {idle} minutes idle, with {open} open. Let's start one."],
+  watching: ['"{title}" is overdue. Let\'s clear it before you add anything new.'],
 };
 
 export const fill = (tpl, v = {}) => tpl.replace(/\{(\w+)\}/g, (_, k) => (v[k] ?? ''));

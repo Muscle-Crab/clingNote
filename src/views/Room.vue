@@ -8,7 +8,7 @@
       <Skeleton :loading="loading" v-if="loading"/>
 
       <div v-else class="md:grid grid-cols-1 md:grid-cols-3 gap-8 items-start">
-        <div class="flex space-x-4">
+        <div class="flex flex-wrap gap-2">
           <!-- Facebook -->
           <button
               @click="shareOnFacebook"
@@ -98,25 +98,26 @@
               </h2>
 
               <!-- Video Tutorial -->
-              <div class="w-full mb-6 rounded-lg shadow-lg">
-                <video
-                    src="@/assets/video.mp4"
+              <div v-if="demoVideo" class="w-full mb-6 rounded-lg shadow-lg">
+                <video disablepictureinpicture playsinline
+                    :src="demoVideo"
                     controls
                     autoplay
+                    muted
                     class="w-full h-full object-cover"
                 ></video>
               </div>
 
               <!-- Steps -->
               <ol class="list-decimal list-inside space-y-4 text-gray-300 text-lg">
-                <li>
+                <li v-if="!isIOSApp">
                   <span class="font-semibold">Bookmark this page to your home screen:</span>
                   <ul class="list-disc list-inside ml-4">
                     <li>On iPhone/iPad (Safari): Tap the "Share" icon, then select "Add to Home Screen."</li>
                     <li>On Android (Chrome): Tap the three-dot menu, then select "Add to Home Screen."</li>
                   </ul>
                 </li>
-                <li>
+                <li v-if="!isIOSApp">
                   <span class="font-semibold">Open the app from the home screen:</span> Tap the bookmark you just added.
                 </li>
                 <li>
@@ -163,7 +164,7 @@
               </a>
               <div v-if="post.mediaUrl" class="flex justify-center">
                 <template v-if="isVideoUrl(post.mediaUrl)">
-                  <video class="max-w-full max-h-80 rounded-lg object-contain" autoplay muted controls playsinline>
+                  <video class="max-w-full max-h-80 rounded-lg object-contain" autoplay muted controls playsinline disablepictureinpicture>
                     <source :src="post.mediaUrl" type="video/mp4">
                     Your browser does not support the video tag.
                   </video>
@@ -175,10 +176,10 @@
               </div>
 
 
-              <a v-if="post.url?.includes('youtube.com')" :href="post.url" target="_blank">
+              <a v-if="post.url?.includes('youtube.com')" :href="post.url" target="_blank" rel="noopener">
                 <iframe width="100%" height="200" :src="'https://www.youtube.com/embed/' + extractYouTubeId(post.url)" frameborder="0" allowfullscreen></iframe>
               </a>
-              <a v-else-if="post.url?.includes('tiktok.com')" :href="post.url" target="_blank">
+              <a v-else-if="post.url?.includes('tiktok.com')" :href="post.url" target="_blank" rel="noopener">
                 <iframe width="100%" height="200" :src="'https://www.tiktok.com/embed/v2/' + extractTikTokId(post.url)" frameborder="0" allowfullscreen></iframe>
               </a>
 
@@ -344,7 +345,7 @@
                 </button>
               </div>
               <div v-else-if="mediaType === 'video' && videoUrl" class="relative">
-                <video :src="videoUrl" controls class="w-32 h-32 rounded-lg"></video>
+                <video :src="videoUrl" controls playsinline disablepictureinpicture class="w-32 h-32 rounded-lg"></video>
                 <!-- Close Button -->
                 <button
                     @click="removeVideo"
@@ -366,32 +367,11 @@
       </div>
     </div>
 
-    <!-- Bottom Navigation Bar -->
-    <div class="fixed bottom-0 left-0 right-0 bg-gray-800 dark:bg-gray-900 shadow-lg py-2 flex justify-around">
-      <button  class="flex flex-col items-center text-gray-400 dark:text-gray-300 hover:text-indigo-400 dark:hover:text-indigo-500">
-        <i class="fa fa-home w-6 h-6"></i>
-        <router-link to="/"><span class="text-xs">Home</span>
-        </router-link>
-      </button>
-      <button class="flex flex-col items-center text-gray-400 dark:text-gray-300 hover:text-indigo-400 dark:hover:text-indigo-500">
-        <i class="fa fa-search w-6 h-6"></i>
-        <a href="#target-section" class="text-xs">Search</a>
-      </button>
-      <button class="flex flex-col items-center text-gray-400 dark:text-gray-300 hover:text-indigo-400 dark:hover:text-indigo-500">
-        <i class="fa fa-bell w-6 h-6"></i>
-        <span class="text-xs">Notifications</span>
-      </button>
-      <button  class="flex flex-col items-center text-gray-400 dark:text-gray-300 hover:text-indigo-400 dark:hover:text-indigo-500">
-        <i class="fa fa-user w-6 h-6"></i>
-        <router-link :to="'/profile/' + ids"><span class="text-xs">Profile</span></router-link>
-      </button>
-    </div>
-
-
+    <!-- (old gray bottom bar removed: the app-wide 4-tab bar is shown here instead) -->
 
     <!-- Floating Action Button -->
     <div>
-      <button v-if="currentUser" @click="showCreatePostModal()" class="fixed bottom-16 right-4 bg-indigo-600 text-white p-4 rounded-full shadow-lg animate-jump">
+      <button v-if="currentUser" @click="showCreatePostModal()" class="fixed right-4 text-white rounded-full shadow-lg animate-jump room-create" data-test="room-create">
 <!--        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">-->
 <!--          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>-->
 <!--        </svg>-->
@@ -414,7 +394,10 @@
 </template>
 
 <script setup>
+import { speak as speakOne } from '@/composables/useSpeech';
 import { sendBroadcast } from '@/composables/useNotifications';
+import { isNativeIOS } from '@/utils/platform';
+const isIOSApp = isNativeIOS(); // the 'Add to Home Screen' steps are web-only
 import { ref, onMounted, computed, watch} from 'vue';
 import { db, auth, storage } from '@/firebaseConfig';
 import Skeleton from "@/components/Skeleton.vue";
@@ -423,6 +406,8 @@ import { useRoute } from 'vue-router';
 import { ref as storageRef, uploadBytes, getDownloadURL, uploadBytesResumable } from "firebase/storage";
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
+import { demoVideo } from '@/utils/landingMedia';
+import { openExternal } from '@/utils/openExternal';
 const audioRef = ref(null);
 const previewUrl = ref('');
 const fileToUpload = ref(null);
@@ -778,14 +763,7 @@ const addComment = async (post) => {
   }
 };
 
-const speakText = (username, message) => {
-  if ('speechSynthesis' in window) {
-    const utterance = new SpeechSynthesisUtterance(`${username} says: ${message}`);
-    window.speechSynthesis.speak(utterance);
-  } else {
-    console.warn('Text-to-speech not supported in this browser.');
-  }
-};
+const speakText = (username, message) => { speakOne(`${username} says: ${message}`); };
 
 const getParticipantAvatar = (userId) => {
   const user = users.value.find(user => user.id === userId);
@@ -968,7 +946,7 @@ function isVideoUrl(url) {
 
 const uploadFile = async (file) => {
   if (!file) return null;
-  const storageReference = storageRef(storage, `uploads/${file.name}`);
+  const storageReference = storageRef(storage, `uploads/${currentUser.value?.uid || 'anon'}_${Date.now()}_${file.name}`);
   const uploadTask = uploadBytesResumable(storageReference, file);
 
   return new Promise((resolve, reject) => {
@@ -1014,17 +992,17 @@ const currentUrl = window.location.href; // Use the current page URL or replace 
 // Share functions for each platform
 const shareOnFacebook = () => {
   const facebookUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(currentUrl)}`;
-  window.open(facebookUrl, '_blank', 'width=600,height=400');
+  openExternal(facebookUrl, 'width=600,height=400');
 };
 
 const shareOnTwitter = () => {
   const twitterUrl = `https://twitter.com/intent/tweet?url=${encodeURIComponent(currentUrl)}&text=Check this out!`;
-  window.open(twitterUrl, '_blank', 'width=600,height=400');
+  openExternal(twitterUrl, 'width=600,height=400');
 };
 
 const shareOnWhatsApp = () => {
   const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(`Check this out: ${currentUrl}`)}`;
-  window.open(whatsappUrl, '_blank');
+  openExternal(whatsappUrl);
 };
 const copyToClipboard = () => {
   const url = window.location.href; // Get the current page URL
@@ -1054,4 +1032,5 @@ const copyToClipboard = () => {
 .animate-jump {
   animation: jump 2.5s ease-in-out infinite;
 }
+.room-create { bottom: calc(var(--tabbar-h, 64px) + 16px + env(safe-area-inset-bottom)); min-height: 52px; padding: 0 22px; font-weight: 700; background: linear-gradient(180deg, #3D8BFF, #2563EB); z-index: 60; }
 </style>

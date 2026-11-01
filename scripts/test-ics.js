@@ -18,6 +18,19 @@ await t('feed events: scheduled, recurring RRULE, due-dated, skips completed/ins
   assert.deepEqual(ev.map((e) => e.title), ['Report', 'Trash', 'Taxes']); assert.equal(ev[1].rrule, 'FREQ=WEEKLY;BYDAY=TU');
   assert.equal(I.rruleFor({ freq: 'monthly', dayOfMonth: 31 }), 'FREQ=MONTHLY;BYMONTHDAY=31');
 });
+await t('iOS shell export: share a File, fall back to copy; web still downloads', async () => {
+  const task = { title: 'Call mom', scheduledFor: '2026-10-30', startTime: '09:30' };
+  class F { constructor(parts, name, o) { this.parts = parts; this.name = name; this.type = o.type; } }
+  const shared = []; const nav = { share: async (d) => { shared.push(d); }, canShare: () => true, clipboard: { writeText: async (x) => { nav.copied = x; } } };
+  assert.equal(await I.downloadTaskIcs(task, '2026-10-21', { native: true, env: { navigator: nav, File: F } }), 'shared');
+  assert.equal(shared[0].files[0].name, 'Call mom.ics'); assert.equal(shared[0].files[0].type, 'text/calendar'); assert.match(shared[0].files[0].parts[0], /BEGIN:VCALENDAR/);
+  nav.canShare = () => false; assert.equal(await I.downloadTaskIcs(task, '2026-10-21', { native: true, env: { navigator: nav, File: F } }), 'copied'); assert.match(nav.copied, /Call mom · 2026-10-30 · 09:30/);
+  nav.canShare = () => true; nav.share = async () => { throw Object.assign(new Error('x'), { name: 'AbortError' }); };
+  assert.equal(await I.downloadTaskIcs(task, '2026-10-21', { native: true, env: { navigator: nav, File: F } }), 'cancelled', 'user closing the sheet is not an error');
+  assert.equal(await I.downloadTaskIcs(task, '2026-10-21', { native: true, env: { navigator: { share: async () => { throw new Error('boom'); } }, File: F } }), 'failed', 'no share + no clipboard -> reported, not thrown');
+  let clicked = 0; const a = { click: () => { clicked++; }, remove() {} }; const doc = { createElement: () => a, body: { appendChild() {} } };
+  assert.equal(await I.downloadTaskIcs(task, '2026-10-21', { env: { document: doc, URL: { createObjectURL: () => 'blob:x', revokeObjectURL() {} } } }), 'downloaded'); assert.equal(clicked, 1); assert.equal(a.download, 'Call mom.ics');
+});
 await t('single task .ics', () => { const c = I.taskIcs({ title: 'Call', scheduledFor: '2026-10-30', startTime: '09:30', createdAt: '2026-10-21T10:00:00.000Z' }, '2026-10-21', now); assert.match(c, /DTSTART:20261030T093000/); assert.match(I.taskIcs({ title: 'X' }, '2026-10-21', now), /DTSTART;VALUE=DATE:20261021/); });
 await t('token format', () => { assert.ok(I.isValidToken('a'.repeat(48))); assert.ok(!I.isValidToken('../x')); assert.ok(!I.isValidToken('A'.repeat(48))); });
 await t('feed function: valid token -> calendar, unknown/revoked/bad -> 404', async () => {

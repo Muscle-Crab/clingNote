@@ -1,0 +1,214 @@
+// Run: node scripts/test-manager-pal.js — Manager & Pal function with an in-memory Firestore fake (ZZTEST data only, no network).
+const assert = require('assert');
+process.env.ONESIGNAL_APP_ID = 'zztest-app';
+const M = require('../netlify/functions/lib/managerPal');
+const { rawHandler, handler } = require('../netlify/functions/manager-pal');
+const t = async (name, fn) => { await fn(); console.log('ok -', name); };
+
+// Minimal Firestore fake: doc/collection/add/get/set/delete/orderBy/limit/batch/runTransaction.
+const makeDb = () => {
+  const store = new Map(); let auto = 0;
+  const snap = (path) => { const v = store.get(path); return { exists: store.has(path), id: path.split('/').pop(), ref: docRef(path), data: () => v }; };
+  const docRef = (path) => ({ path, get: async () => snap(path), set: async (v, o) => { store.set(path, o && o.merge ? { ...(store.get(path) || {}), ...v } : { ...v }); }, delete: async () => { store.delete(path); }, collection: (c) => col(`${path}/${c}`) });
+  const col = (path, ord, lim, wh) => ({
+    where: (f, op, v) => col(path, ord, lim, [...(wh || []), [f, v]]),
+    add: async (v) => { const id = `id${++auto}`; store.set(`${path}/${id}`, v); return { id }; },
+    orderBy: (f, dir) => col(path, [f, dir], lim, wh), limit: (n) => col(path, ord, n, wh),
+    get: async () => { let docs = [...store.keys()].filter((k) => k.startsWith(path + '/') && k.split('/').length === path.split('/').length + 1)
+        .map(snap).filter((d) => !wh || wh.every(([f, v]) => d.data()[f] === v));
+            if (ord) docs.sort((a, b) => (+a.data()[ord[0]] - +b.data()[ord[0]]) * (ord[1] === 'desc' ? -1 : 1)); if (lim) docs = docs.slice(0, lim); return { docs, empty: !docs.length }; },
+  });
+  return { store, doc: docRef, collection: (p) => col(p),
+    batch: () => { const ops = []; return { delete: (r) => ops.push(r), commit: async () => { for (const r of ops) await r.delete(); } }; },
+    runTransaction: async (fn) => fn({ get: (r) => r.get(), set: (r, v, o) => r.set(v, o) }) };
+};
+const NOW = new Date(2026, 9, 23, 20, 0); // Friday
+let tick = 0; const sent = []; const deps = (db) => ({ db, now: () => new Date(NOW.getTime() + (++tick)), verify: async (tok) => ({ uid: tok.replace('idtok-', '') }), sendPush: async (p) => sent.push(p) });
+const asUser = (db, uid, body) => rawHandler({ httpMethod: 'POST', headers: { authorization: `Bearer idtok-${uid}` }, body: JSON.stringify(body) }, {}, deps(db));
+const asManager = (db, body) => rawHandler({ httpMethod: 'POST', headers: {}, body: JSON.stringify(body) }, {}, deps(db));
+const view = (db, token) => rawHandler({ httpMethod: 'GET', headers: {}, queryStringParameters: { token } }, {}, deps(db));
+const J = (r) => JSON.parse(r.body);
+
+(async () => {
+  await t('helpers: token shape, hash, pairId, code alphabet, overdue', () => {
+    const tok = M.newToken(); assert(M.validTokenShape(tok)); assert.strictEqual(M.hashToken(tok).length, 64); assert.notStrictEqual(M.newToken(), tok);
+    assert.strictEqual(M.pairId('b', 'a'), 'a_b'); assert.strictEqual(M.pairId('a', 'b'), 'a_b');
+    assert(/^[A-HJ-NP-Z2-9]{8}$/.test(M.newPalCode()));
+    assert(M.isOverdue({ title: 'x' }, 'Monday', NOW)); assert(!M.isOverdue({ title: 'x', completed: true }, 'Monday', NOW));
+    assert(!M.isOverdue({ title: 'x' }, 'Saturday', NOW)); assert(M.isOverdue({ title: 'x', reminder: { date: '2026-10-23', time: '09:00' } }, 'Friday', NOW));
+  });
+  const db = makeDb();
+  db.store.set('publicProfiles/zztestU', { name: 'ZZTEST Tacanda' }); db.store.set('publicProfiles/zztestP', { name: 'ZZTEST Pal' });
+  db.store.set('weeklyRoutines/zztestU_Monday', { tasks: [{ id: 't1', title: 'ZZTEST late', notes: 'private' }, { id: 't2', title: 'ZZTEST done', completed: true }] });
+  db.store.set('weeklyRoutines/zztestU_Sat', { tasks: [{ id: 't3', title: 'ZZTEST later' }] });
+  let token;
+  await t('owner creates link; only the sha256 hash is stored', async () => {
+    const r = await asUser(db, 'zztestU', { action: 'createManagerLink', name: 'Mom' }); assert.strictEqual(r.statusCode, 200); token = J(r).token;
+    assert(!JSON.stringify([...db.store.values()]).includes(token)); assert.strictEqual(db.store.get(`managerLinks/${M.hashToken(token)}`).uid, 'zztestU');
+  });
+  await t('manager view: read-only tasks, overdue first, no private fields', async () => {
+    const r = await view(db, token); assert.strictEqual(r.statusCode, 200); const d = J(r);
+    assert.strictEqual(d.ownerName, 'ZZTEST Tacanda'); assert.strictEqual(d.managerName, 'Mom');
+    assert.deepStrictEqual(d.tasks.map((x) => x.key), ['t1', 't3', 't2']); assert(d.tasks[0].overdue); assert(!r.body.includes('private'));
+    assert.strictEqual(r.headers['Cache-Control'], 'no-store');
+  });
+  await t('bad / guessed tokens get 404', async () => {
+    assert.strictEqual((await view(db, 'nope')).statusCode, 404); assert.strictEqual((await view(db, M.newToken())).statusCode, 404);
+  });
+  await t('nudge a task + DM: lands in the owner inbox, push sent to owner only', async () => {
+    let r = await asManager(db, { token, action: 'nudge', taskKey: 't1', preset: 'remind' }); assert.strictEqual(r.statusCode, 200);
+    r = await asManager(db, { token, action: 'dm', text: 'ZZTEST hi sweetie' }); assert.strictEqual(r.statusCode, 200);
+    const inbox = [...db.store.entries()].filter(([k]) => k.startsWith('users/zztestU/managerChat/')).map(([, v]) => v);
+    assert.strictEqual(inbox.length, 2); assert.strictEqual(inbox[0].taskTitle, 'ZZTEST late'); assert(inbox.every((x) => x.from === 'manager' && x.read === false));
+    assert.strictEqual(sent.length, 2); assert.deepStrictEqual(sent[0].include_aliases.external_id, ['zztestU']);
+    assert.strictEqual((await asManager(db, { token, action: 'nudge', taskKey: 'nope' })).statusCode, 404);
+    assert.strictEqual((await asManager(db, { token, action: 'deleteTask' })).statusCode, 400);
+  });
+  await t('owner replies; manager sees the thread', async () => {
+    assert.strictEqual((await asUser(db, 'zztestU', { action: 'reply', text: 'ZZTEST on it' })).statusCode, 200);
+    const d = J(await view(db, token)); assert.deepStrictEqual(d.chat.map((c) => c.from), ['manager', 'manager', 'user']);
+  });
+  await t('hourly write cap', async () => {
+    db.store.set('managers/zztestU', { ...db.store.get('managers/zztestU'), writes: { hour: Math.floor(NOW.getTime() / 3600000), n: 40 } });
+    assert.strictEqual((await asManager(db, { token, action: 'dm', text: 'x' })).statusCode, 429);
+  });
+  await t('rotate + revoke kill the old link', async () => {
+    const t2 = J(await asUser(db, 'zztestU', { action: 'createManagerLink' })).token;
+    assert.strictEqual((await view(db, token)).statusCode, 404); const v2 = await view(db, t2); assert.strictEqual(J(v2).managerName, 'Mom');
+    await asUser(db, 'zztestU', { action: 'revokeManager' }); assert.strictEqual((await view(db, t2)).statusCode, 404);
+  });
+  await t('pal invite -> accept -> remove (either side), code single-use, no self-pairing', async () => {
+    const { code } = J(await asUser(db, 'zztestU', { action: 'createPalCode' }));
+    assert.strictEqual((await asUser(db, 'zztestU', { action: 'acceptPal', code })).statusCode, 400);
+    const r = J(await asUser(db, 'zztestP', { action: 'acceptPal', code: code.toLowerCase() })); assert.strictEqual(r.palUid, 'zztestU');
+    const pair = db.store.get('pals/zztestP_zztestU'); assert.deepStrictEqual(pair.members, ['zztestP', 'zztestU']);
+    assert.strictEqual((await asUser(db, 'zztestX', { action: 'acceptPal', code })).statusCode, 404);
+    db.store.set('pals/zztestP_zztestU/messages/m1', { from: 'zztestP', text: 'hi' });
+    assert.strictEqual((await asUser(db, 'zztestX', { action: 'removePal', palUid: 'zztestU' })).statusCode, 404);
+    assert.strictEqual((await asUser(db, 'zztestU', { action: 'removePal', palUid: 'zztestP' })).statusCode, 200);
+    assert(!db.store.has('pals/zztestP_zztestU') && !db.store.has('pals/zztestP_zztestU/messages/m1'));
+  });
+  await t('expired code rejected; bad auth 401; CORS wrapped', async () => {
+    db.store.set('palInvites/ZZTESTAB', { uid: 'zztestU', expiresAt: new Date(NOW.getTime() - 1) });
+    assert.strictEqual((await asUser(db, 'zztestP', { action: 'acceptPal', code: 'ZZTESTAB' })).statusCode, 404);
+    const r = await rawHandler({ httpMethod: 'POST', headers: { authorization: 'Bearer x' }, body: '{}' }, {}, { db, verify: async () => { throw new Error('bad'); } }); assert.strictEqual(r.statusCode, 401);
+    assert.strictEqual((await handler({ httpMethod: 'OPTIONS', headers: { origin: 'capacitor://localhost' } })).statusCode, 204);
+  });
+  await t('manager account: connect via link, list with badges, view, act, disconnect', async () => {
+    const db = makeDb();
+    const { token } = J(await asUser(db, 'zztestO', { action: 'createManagerLink', name: 'Mom' }));
+    db.store.set('publicProfiles/zztestO', { name: 'Alex ZZTEST' }); db.store.set('publicProfiles/zztestM', { name: 'Sam ZZTEST' });
+    db.store.set('weeklyRoutines/zztestO_Monday', { tasks: [{ id: 'a', title: 'ZZTEST old', completed: false }, { id: 'h', title: 'ZZTEST privatetask', completed: false, visibility: 'private' }] });
+    assert.strictEqual((await asUser(db, 'zztestO', { action: 'connectManager', token })).statusCode, 400);
+    assert.strictEqual((await asUser(db, 'zztestM', { action: 'managerView', ownerUid: 'zztestO' })).statusCode, 404);
+    const c = J(await asUser(db, 'zztestM', { action: 'connectManager', token })); assert.strictEqual(c.ownerUid, 'zztestO');
+    assert.strictEqual(db.store.get('managerConnections/zztestO_zztestM').managerName, 'Sam ZZTEST');
+    await asUser(db, 'zztestO', { action: 'reply', text: 'hi boss' });
+    let l = J(await asUser(db, 'zztestM', { action: 'managerList' })).people; assert.strictEqual(l.length, 1); assert.strictEqual(l[0].overdue, 1); assert.strictEqual(l[0].unread, 1);
+    const v = J(await asUser(db, 'zztestM', { action: 'managerView', ownerUid: 'zztestO' })); assert.strictEqual(v.ownerName, 'Alex ZZTEST');
+    assert.deepStrictEqual(v.tasks.map((x) => x.title), ['ZZTEST old']); assert(!JSON.stringify(v).includes('privatetask'));
+    assert.strictEqual(J(await view(db, token)).tasks.length, 1);
+    assert.strictEqual((await asUser(db, 'zztestM', { action: 'managerAct', ownerUid: 'zztestO', act: 'nudge', taskKey: 'h' })).statusCode, 404);
+    l = J(await asUser(db, 'zztestM', { action: 'managerList' })).people; assert.strictEqual(l[0].unread, 0);
+    assert.strictEqual((await asUser(db, 'zztestM', { action: 'managerAct', ownerUid: 'zztestO', act: 'dm', text: 'go!' })).statusCode, 200);
+    assert.strictEqual((await asUser(db, 'zztestX', { action: 'managerAct', ownerUid: 'zztestO', act: 'dm', text: 'x' })).statusCode, 404);
+    assert.strictEqual((await asUser(db, 'zztestO', { action: 'disconnectManager', managerUid: 'zztestM' })).statusCode, 200);
+    assert.strictEqual((await asUser(db, 'zztestM', { action: 'managerView', ownerUid: 'zztestO' })).statusCode, 404);
+  });
+  await t('pal task view via function: private tasks stripped, non-pals 403', async () => {
+    const db = makeDb();
+    db.store.set('pals/zztestA_zztestB', { members: ['zztestA', 'zztestB'] });
+    db.store.set('weeklyRoutines/zztestB_Tuesday', { tasks: [{ id: 'x', title: 'ZZTEST visible' }, { id: 'y', title: 'ZZTEST private', visibility: 'private' }] });
+    const r = J(await asUser(db, 'zztestA', { action: 'palTasks', palUid: 'zztestB' })); assert.deepStrictEqual(r.tasks.map((x) => x.title), ['ZZTEST visible']);
+    assert.strictEqual((await asUser(db, 'zztestC', { action: 'palTasks', palUid: 'zztestB' })).statusCode, 403);
+  });
+  await t('report: owner/manager/link/pal reports stored server-side, only for received messages', async () => {
+    const db = makeDb();
+    const { token } = J(await asUser(db, 'zztestO', { action: 'createManagerLink', name: 'Mom' }));
+    await asUser(db, 'zztestM', { action: 'connectManager', token });
+    await asUser(db, 'zztestM', { action: 'managerAct', ownerUid: 'zztestO', act: 'dm', text: 'ZZTEST mean msg' });
+    await asManager(db, { token, action: 'dm', text: 'ZZTEST link msg' });
+    await asUser(db, 'zztestO', { action: 'reply', text: 'ZZTEST owner msg' });
+    const chat = [...db.store.entries()].filter(([k]) => k.startsWith('users/zztestO/managerChat/')).map(([k, v]) => ({ id: k.split('/').pop(), ...v }));
+    const mgrMsg = chat.find((c) => c.text === 'ZZTEST mean msg'); const linkMsg = chat.find((c) => c.text === 'ZZTEST link msg'); const ownMsg = chat.find((c) => c.text === 'ZZTEST owner msg');
+    assert.strictEqual(mgrMsg.managerUid, 'zztestM'); assert(!linkMsg.managerUid);
+    assert.strictEqual(J(await asUser(db, 'zztestO', { action: 'report', scope: 'manager', messageId: mgrMsg.id, reason: 'harassment' })).ok, true);
+    assert.strictEqual((await asUser(db, 'zztestO', { action: 'report', scope: 'manager', messageId: ownMsg.id })).statusCode, 400);
+    assert.strictEqual((await asUser(db, 'zztestO', { action: 'report', scope: 'manager', messageId: 'nope' })).statusCode, 404);
+    assert.strictEqual((await asUser(db, 'zztestM', { action: 'report', scope: 'manager', ownerUid: 'zztestO', messageId: ownMsg.id, reason: 'spam' })).statusCode, 200);
+    assert.strictEqual((await asUser(db, 'zztestX', { action: 'report', scope: 'manager', ownerUid: 'zztestO', messageId: ownMsg.id })).statusCode, 404);
+    assert.strictEqual((await asManager(db, { token, action: 'report', messageId: ownMsg.id, reason: 'bogus' })).statusCode, 200);
+    assert.strictEqual((await asManager(db, { token, action: 'report', messageId: mgrMsg.id })).statusCode, 400);
+    const reps = [...db.store.entries()].filter(([k]) => k.startsWith('reports/')).map(([, v]) => v);
+    assert.strictEqual(reps.length, 3);
+    const r1 = reps.find((r) => r.reporterUid === 'zztestO'); assert.strictEqual(r1.authorUid, 'zztestM'); assert.strictEqual(r1.text, 'ZZTEST mean msg'); assert.strictEqual(r1.status, 'open');
+    assert.strictEqual(reps.find((r) => r.reporterKind === 'link').reason, 'other');
+    db.store.set('pals/zztestA_zztestB', { members: ['zztestA', 'zztestB'] });
+    db.store.set('pals/zztestA_zztestB/messages/m1', { from: 'zztestB', text: 'ZZTEST pal msg' });
+    db.store.set('pals/zztestA_zztestB/messages/m2', { from: 'zztestA', text: 'ZZTEST mine' });
+    assert.strictEqual((await asUser(db, 'zztestA', { action: 'report', scope: 'pal', palUid: 'zztestB', messageId: 'm1' })).statusCode, 200);
+    assert.strictEqual((await asUser(db, 'zztestA', { action: 'report', scope: 'pal', palUid: 'zztestB', messageId: 'm2' })).statusCode, 400);
+    assert.strictEqual((await asUser(db, 'zztestC', { action: 'report', scope: 'pal', palUid: 'zztestB', messageId: 'm1' })).statusCode, 404);
+  });
+  await t('block: disconnects, kills link, and blocked pairs cannot reconnect by link or code', async () => {
+    const db = makeDb();
+    let { token } = J(await asUser(db, 'zztestO', { action: 'createManagerLink', name: 'Mom' }));
+    await asUser(db, 'zztestM', { action: 'connectManager', token });
+    assert.strictEqual((await asUser(db, 'zztestO', { action: 'block', managerUid: 'zztestM' })).statusCode, 200);
+    assert(!db.store.has('managerConnections/zztestO_zztestM')); assert(db.store.has('blocks/zztestO_zztestM'));
+    assert.strictEqual((await view(db, token)).statusCode, 404, 'old link turned off');
+    assert.strictEqual((await asUser(db, 'zztestM', { action: 'managerAct', ownerUid: 'zztestO', act: 'dm', text: 'x' })).statusCode, 404);
+    ({ token } = J(await asUser(db, 'zztestO', { action: 'createManagerLink', name: 'New' })));
+    assert.strictEqual((await asUser(db, 'zztestM', { action: 'connectManager', token })).statusCode, 403);
+    assert.strictEqual((await asUser(db, 'zztestN', { action: 'connectManager', token })).statusCode, 200, 'others still can');
+    assert.strictEqual((await asUser(db, 'zztestN', { action: 'block', ownerUid: 'zztestO' })).statusCode, 200);
+    assert(!db.store.has('managerConnections/zztestO_zztestN'));
+    ({ token } = J(await asUser(db, 'zztestO', { action: 'createManagerLink', name: 'Again' })));
+    assert.strictEqual((await asUser(db, 'zztestN', { action: 'connectManager', token })).statusCode, 403, 'manager-side block holds too');
+    const { code } = J(await asUser(db, 'zztestA', { action: 'createPalCode' }));
+    await asUser(db, 'zztestB', { action: 'acceptPal', code });
+    db.store.set('pals/zztestA_zztestB/messages/m1', { from: 'zztestB', text: 'ZZTEST' });
+    assert.strictEqual((await asUser(db, 'zztestA', { action: 'block', palUid: 'zztestB' })).statusCode, 200);
+    assert(!db.store.has('pals/zztestA_zztestB')); assert(!db.store.has('pals/zztestA_zztestB/messages/m1'));
+    const c2 = J(await asUser(db, 'zztestB', { action: 'createPalCode' })).code;
+    assert.strictEqual((await asUser(db, 'zztestA', { action: 'acceptPal', code: c2 })).statusCode, 403);
+    const c3 = J(await asUser(db, 'zztestA', { action: 'createPalCode' })).code;
+    assert.strictEqual((await asUser(db, 'zztestB', { action: 'acceptPal', code: c3 })).statusCode, 403);
+    assert.strictEqual((await asUser(db, 'zztestA', { action: 'block' })).statusCode, 400);
+  });
+  await t('rules: pal/manager collections present, manager writes server-only', () => {
+    const rules = require('fs').readFileSync(require('path').join(__dirname, '../firestore.rules'), 'utf8');
+    for (const s of ['match /managers/{uid}', 'match /managerLinks/{hash} { allow read, write: if false; }', 'match /palInvites/{code} { allow read, write: if false; }', 'match /users/{uid}/managerChat/{msgId}', 'match /pals/{pairId}', 'match /messages/{msgId}', 'match /managerConnections/{connId}', 'match /reports/{reportId} { allow read, write: if false; }', 'match /blocks/{blockId}']) assert(rules.includes(s), s);
+    assert(!/isPalOf\(routineId|isManagerOf\(routineId/.test(rules), 'viewers must not read task docs directly');
+  });
+
+  await t('manager award: eligibility, once per day, coins + badge in server-only stats, push routes to Home', async () => {
+    assert.deepStrictEqual(M.parseAward({ bonus: 7 }), null); assert.deepStrictEqual(M.parseAward({ bonus: 25, badge: 'nope', note: 'x'.repeat(200) }).note.length <= 80, true);
+    assert.deepStrictEqual(M.parseAward({ badge: 'mvp' }), { bonus: 0, badge: 'mvp', note: '' });
+    assert.strictEqual(M.awardEligibility({ todayTasks: [], lock: null, dayKey: 'd' }).ok, false);
+    assert.strictEqual(M.awardEligibility({ todayTasks: [{ completed: true }], lock: null, dayKey: 'd' }).ok, true);
+    assert.strictEqual(M.awardEligibility({ todayTasks: [{ completed: false }], lock: { dayKey: 'd', target: 50, earned: 50 }, dayKey: 'd' }).goalMet, true);
+    const db = makeDb(); sent.length = 0;
+    db.store.set('publicProfiles/zztestO', { name: 'Alex ZZTEST' }); db.store.set('publicProfiles/zztestM', { name: 'Sam ZZTEST' });
+    db.store.set('eightHour/zztestO', { plan: { wakeTime: '07:00', taskCount: 1, tz: 'America/New_York' }, stats: { coins: 5 } });
+    db.store.set('weeklyRoutines/zztestO_Fri', { tasks: [{ id: 'a', title: 'ZZTEST fri', completed: false }] });
+    const token = J(await asUser(db, 'zztestO', { action: 'createManagerLink' })).token;
+    J(await asUser(db, 'zztestM', { action: 'connectManager', token }));
+    let v = J(await asUser(db, 'zztestM', { action: 'managerView', ownerUid: 'zztestO' }));
+    assert.strictEqual(v.award.eligible, false);
+    assert.strictEqual((await asUser(db, 'zztestM', { action: 'managerAward', ownerUid: 'zztestO', bonus: 25 })).statusCode, 409);
+    db.store.set('weeklyRoutines/zztestO_Fri', { tasks: [{ id: 'a', title: 'ZZTEST fri', completed: true }] });
+    v = J(await asUser(db, 'zztestM', { action: 'managerView', ownerUid: 'zztestO' })); assert.strictEqual(v.award.eligible, true); assert.strictEqual(v.award.awardedToday, false);
+    assert.strictEqual((await asUser(db, 'zztestX', { action: 'managerAward', ownerUid: 'zztestO', bonus: 25 })).statusCode, 404);
+    assert.strictEqual((await asUser(db, 'zztestM', { action: 'managerAward', ownerUid: 'zztestO' })).statusCode, 400);
+    const before = sent.length;
+    assert.strictEqual((await asUser(db, 'zztestM', { action: 'managerAward', ownerUid: 'zztestO', bonus: 25, badge: 'mvp', note: 'Great ZZTEST day' })).statusCode, 200);
+    const st = db.store.get('eightHour/zztestO').stats;
+    assert.strictEqual(st.coins, 30); assert.strictEqual(st.awards[0].badge, 'mvp'); assert.strictEqual(st.awards[0].from, 'Sam ZZTEST'); assert.strictEqual(st.pendingAward.note, 'Great ZZTEST day');
+    assert.strictEqual(db.store.get('eightHour/zztestO').plan.tz, 'America/New_York', 'award merge keeps the plan');
+    assert.strictEqual(sent.length, before + 1, 'one stubbed push (no real send)'); assert(/\/home\?n=award/.test(JSON.stringify(sent[sent.length - 1])));
+    assert.strictEqual((await asUser(db, 'zztestM', { action: 'managerAward', ownerUid: 'zztestO', bonus: 10 })).statusCode, 409, 'once per member per day');
+    assert.strictEqual(db.store.get('eightHour/zztestO').stats.coins, 30);
+    v = J(await asUser(db, 'zztestM', { action: 'managerView', ownerUid: 'zztestO' })); assert.strictEqual(v.award.awardedToday, true);
+  });
+})().catch((e) => { console.error(e); process.exit(1); });

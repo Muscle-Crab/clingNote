@@ -9,10 +9,10 @@
           <span class="streak-icon-wrap">{{ getStreakIcon(streak) }}</span>
         </div>
         <div class="streak-info">
-          <p class="streak-count">🔥 <span>{{ streak }}</span> day streak</p>
-          <p v-if="streakStatus === 'at-risk'" class="streak-sub streak-at-risk">⚠️ {{ streak ? 'Streak at risk' : 'Building today' }} — {{ streakProgress }}/{{ streakMin }} today<span v-if="bestStreak"> · Best {{ bestStreak }}</span></p>
-          <p v-else-if="streak === 0" class="streak-sub streak-none">Complete {{ streakMin }} tasks to start your streak<span v-if="bestStreak"> · Best {{ bestStreak }}</span></p>
-          <p v-else class="streak-sub">{{ motivationalMessage }}<span v-if="bestStreak"> · Best {{ bestStreak }}</span></p>
+          <p class="streak-count">🔥 <span>{{ Math.min(streak, 5) }}/5</span> day streak</p>
+          <p v-if="streakStatus === 'at-risk'" class="streak-sub streak-at-risk">⚠️ {{ streak ? 'Streak at risk' : 'Building today' }} — {{ streakProgress }}/{{ streakMin }} today<span v-if="bestStreak"> · Best {{ Math.min(bestStreak, 5) }}/5</span></p>
+          <p v-else-if="streak === 0" class="streak-sub streak-none">Complete {{ streakMin }} tasks to start your streak<span v-if="bestStreak"> · Best {{ Math.min(bestStreak, 5) }}/5</span></p>
+          <p v-else class="streak-sub">{{ motivationalMessage }}<span v-if="bestStreak"> · Best {{ Math.min(bestStreak, 5) }}/5</span></p>
         </div>
       </div>
 

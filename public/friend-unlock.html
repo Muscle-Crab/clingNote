@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><meta name="referrer" content="no-referrer">
+<title>Unlock request · ClingNote</title>
+<style>[hidden]{display:none!important}
+body{margin:0;font-family:-apple-system,system-ui,sans-serif;background:#0B0E14;color:#E6E9EF;display:flex;min-height:100vh;align-items:center;justify-content:center}
+main{max-width:360px;padding:24px;text-align:center}h1{font-size:20px;margin:8px 0}p{color:#B4BCCB;line-height:1.45}
+.row{display:flex;gap:10px;justify-content:center;margin-top:18px}button{font:inherit;font-weight:600;border:0;border-radius:12px;padding:12px 18px;cursor:pointer}
+#approve{background:#3C8CFF;color:#fff}#deny{background:#1A1E28;color:#E6E9EF;border:1px solid #252B38}button:disabled{opacity:.5}
+</style></head>
+<body><main>
+<div aria-hidden="true" style="font-size:40px">🔒</div>
+<h1 id="title">Loading…</h1><p id="msg"></p>
+<div class="row" id="btns" hidden><button id="deny" data-test="fu-deny">Keep it locked</button><button id="approve" data-test="fu-approve">Approve</button></div>
+</main>
+<script>
+(function () {
+  var t = new URLSearchParams(location.search).get('t') || ''; var FN = '/.netlify/functions/friend-unlock';
+  var $ = function (id) { return document.getElementById(id); };
+  var show = function (v) {
+    var who = v.ownerName || 'Your friend';
+    if (v.status === 'pending') { $('title').textContent = who + ' wants to unlock their apps early'; $('msg').textContent = 'They asked for ' + v.minutes + ' minutes before finishing their plan.' + (v.reason ? ' Reason: “' + v.reason + '”' : '') + ' You are their accountability friend.'; $('btns').hidden = false; }
+    else { $('btns').hidden = true; $('title').textContent = { approved: 'Approved', denied: 'Kept locked', expired: 'This request expired', replaced: 'This request was replaced' }[v.status] || 'Done';
+      $('msg').textContent = v.status === 'approved' ? who + ' gets ' + v.minutes + ' minutes. Thanks for keeping them honest.' : v.status === 'denied' ? who + "'s apps stay locked. Thanks for keeping them honest." : 'Nothing to do here.'; }
+    document.body.dataset.status = v.status;
+  };
+  var fail = function () { $('btns').hidden = true; $('title').textContent = 'Link not found'; $('msg').textContent = 'This unlock link is not valid.'; document.body.dataset.status = 'error'; };
+  fetch(FN + '?token=' + encodeURIComponent(t)).then(function (r) { if (!r.ok) throw 0; return r.json(); }).then(show).catch(fail);
+  var decide = function (action) { $('approve').disabled = $('deny').disabled = true;
+    fetch(FN, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: t, action: action }) })
+      .then(function (r) { return r.json(); }).then(function () { return fetch(FN + '?token=' + encodeURIComponent(t)).then(function (r) { return r.json(); }); }).then(show).catch(fail); };
+  $('approve').onclick = function () { decide('approve'); }; $('deny').onclick = function () { decide('deny'); };
+})();
+</script></body></html>

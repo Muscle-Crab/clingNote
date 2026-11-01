@@ -1,0 +1,46 @@
+# TEST ONLY for the home-screen widget (feat/ios-widget). Simulator build + widget screenshots.
+# No signing, no archive export, no TestFlight upload, no App Store version. Safe to delete.
+name: ios-widget-test
+on:
+  workflow_dispatch: {}
+  push: { branches: [feat/ios-widget, ci/sim-check-2026-10-27] }
+jobs:
+  sim:
+    runs-on: macos-15
+    timeout-minutes: 45
+    env: { DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run build:ios
+      - run: npx cap sync ios
+      - run: python3 scripts/ios-patch-onesignal.py
+      - name: Simulator build (app + widget extension)
+        working-directory: ios/App
+        run: |
+          set -o pipefail
+          xcodebuild -project App.xcodeproj -scheme App -configuration Debug -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' -derivedDataPath $RUNNER_TEMP/dd \
+            CODE_SIGNING_ALLOWED=NO build 2>&1 | tee $RUNNER_TEMP/build.log | grep -E "error:|warning: .*Widget|BUILD|Ld .*ClingNoteWidget" || true
+          test -d $RUNNER_TEMP/dd/Build/Products/Debug-iphonesimulator/App.app/PlugIns/ClingNoteWidget.appex && echo "Widget appex embedded OK"
+      - name: Render widget screenshots (small/medium/large)
+        continue-on-error: true
+        run: |
+          mkdir -p shots
+          sed 's/^@main$//' ios/App/ClingNoteWidget/ClingNoteWidget.swift > $RUNNER_TEMP/W.swift
+          SDK=$(xcrun --sdk iphonesimulator --show-sdk-path)
+          xcrun --sdk iphonesimulator swiftc -parse-as-library -target arm64-apple-ios17.0-simulator -sdk "$SDK" \
+            ios/App/ClingNoteWidget/CompleteTaskIntent.swift $RUNNER_TEMP/W.swift scripts/widget-snapshots/render.swift -o $RUNNER_TEMP/render
+          UDID=$(xcrun simctl list devices available -j | python3 -c "import json,sys;d=json.load(sys.stdin)['devices'];print([x['udid'] for k,v in d.items() if 'iOS' in k for x in v if 'iPhone' in x['name']][-1])")
+          xcrun simctl boot $UDID || true
+          xcrun simctl spawn $UDID $RUNNER_TEMP/render "$PWD/shots"
+          ls -la shots
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: widget-test
+          path: |
+            shots/
+            ${{ runner.temp }}/build.log

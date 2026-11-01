@@ -1,0 +1,232 @@
+{
+ "ob_welcome": {
+  "sig": "fb72bf35c97464c6",
+  "engine": "elevenlabs",
+  "text": "Hey, welcome to ClingNote! I'm your robot coach. Let's do a quick setup first. Once you're in, your first report walks you through everything."
+ },
+ "ob_welcome_manager": {
+  "sig": "39c0ad79d0ab8992",
+  "engine": "elevenlabs",
+  "text": "Hey, welcome to ClingNote! Someone picked you as their manager. Nice. Let's do a quick setup, and then I'll connect you straight to them."
+ },
+ "ob_age": {
+  "sig": "af19f126ebad5607",
+  "engine": "elevenlabs",
+  "text": "Quick one. How old are you? Just the number. You need to be thirteen or older to use ClingNote."
+ },
+ "ob_goals": {
+  "sig": "722c975e406ae8c8",
+  "engine": "elevenlabs",
+  "text": "So, what do you want to nail? Work, fitness, study, habits? Pick everything that fits, and I'll tune things to match."
+ },
+ "ob_schedule": {
+  "sig": "4c6db02248bbf60c",
+  "engine": "elevenlabs",
+  "text": "Here's your rhythm. Your eight-hour day starts at the time you pick, and once it starts, it's locked in. Set when tasks are due, and when you go to bed. I'll nudge you to start, and to wrap up on time."
+ },
+ "ob_strictness": {
+  "sig": "d1b17389e8aa2582",
+  "engine": "elevenlabs",
+  "text": "How hard should I push you? Chill means gentle reminders. Firm adds deadline warnings and a daily report. Strict means no excuses, and breaks are earned. It's your call."
+ },
+ "ob_notifications": {
+  "sig": "7014b6dd26526ff4",
+  "engine": "elevenlabs",
+  "text": "Last thing. Let me reach you. Start-of-day prompts, deadline warnings, and pings from your manager. No spam, I promise."
+ },
+ "ob_paywall": {
+  "sig": "a1c50f272926b94c",
+  "engine": "elevenlabs",
+  "text": "Want everything I can do? Pro unlocks it all. Or skip it for now. Either way, let's get to work."
+ },
+ "br_intro": {
+  "sig": "70d3c9652dc9ee6d",
+  "engine": "elevenlabs",
+  "text": "Before your report, here's how this works. You write the to-dos, and I help make sure they get done. Add tasks for each day, schedule them, or set them to repeat. Finish five a day to keep your streak alive. Start a timer to stay honest. Mark a task Private, and only you'll see it. Public tasks can be seen by your manager or your pals, and they can ping you. Want me tougher? Turn on Discipline mode. Every morning, I'll tell you how yesterday went, and what's on today. Okay, here we go."
+ },
+ "br_intro_manager": {
+  "sig": "bc08d1a5eb40f01a",
+  "engine": "elevenlabs",
+  "text": "Before your report, here's how this works. In Manager mode, everyone you manage shows up by name. A red badge means someone's overdue. Tap a name to see their day, hit Ping to nudge them, or send a message. You'll only see their public tasks. And you still get your own list, streak, and timers in User mode. Every morning, I'll tell you how yesterday went, what's on today, and who on your team could use a push. Okay, here we go."
+ },
+ "mi_1": {
+  "sig": "38131bf767f1ab2d",
+  "engine": "elevenlabs",
+  "text": "You're in Manager mode. This is your crew. Everyone you manage shows up right here, by name."
+ },
+ "mi_2": {
+  "sig": "fc5c7f23aba6d7bb",
+  "engine": "elevenlabs",
+  "text": "Keep an eye on the badges. Red means overdue. Blue means new messages. Tap a name to see their week."
+ },
+ "mi_3": {
+  "sig": "8334a3c4cb433fa1",
+  "engine": "elevenlabs",
+  "text": "You'll only see what they share. Every task is Private or Public. Public shows up here, and private stays private."
+ },
+ "mi_4": {
+  "sig": "eb1df8663368797a",
+  "engine": "elevenlabs",
+  "text": "Something slipping? Hit Ping. Want to talk? Open Messages and send them a note. A little encouragement goes a long way."
+ },
+ "mi_5": {
+  "sig": "705fe370ac3de080",
+  "engine": "elevenlabs",
+  "text": "Pals are a bit different. Swap an eight-character code, and you keep each other accountable, side by side."
+ },
+ "mi_6": {
+  "sig": "e56bcaa8b7cc0aa7",
+  "engine": "elevenlabs",
+  "text": "Your own list never goes away. Switch to User mode anytime for your tasks, streak, timers, and your robot coach. Pro unlocks the lot. Now go manage."
+ },
+ "p_10f741aa": {
+  "sig": "5c6dda9977641e75",
+  "engine": "elevenlabs",
+  "text": "No streak yet. Today's a good day to start one."
+ },
+ "p_ebe61244": {
+  "sig": "5d6c56a157a143df",
+  "engine": "elevenlabs",
+  "text": "Your day hasn't started yet. Tap start when you're ready to go."
+ },
+ "p_c496d966": {
+  "sig": "ffcc9188b46f65a9",
+  "engine": "elevenlabs",
+  "text": "The clock isn't running yet. Let's start your day."
+ },
+ "p_b294ef37": {
+  "sig": "38831a11bdfcd9ac",
+  "engine": "elevenlabs",
+  "text": "That's a wrap for today. Get some rest, and I'll see you tomorrow."
+ },
+ "p_b4cc8db3": {
+  "sig": "4fbb3f65b828eeb0",
+  "engine": "elevenlabs",
+  "text": "Your list is empty. Add a few tasks, and let's get moving."
+ },
+ "p_ad2bbf6f": {
+  "sig": "af42e65ecc4b6a4b",
+  "engine": "elevenlabs",
+  "text": "Everything's done. Nice work today."
+ },
+ "p_b63605fc": {
+  "sig": "7cee8d5691440cd9",
+  "engine": "elevenlabs",
+  "text": "That's all of them. Take a breather, you earned it."
+ },
+ "p_a060931d": {
+  "sig": "3ecf6d01584a1f58",
+  "engine": "elevenlabs",
+  "text": "Clean sweep. I'm proud of you."
+ },
+ "p_13a534e2": {
+  "sig": "270b2ccef2a4ac46",
+  "engine": "elevenlabs",
+  "text": "Nice. On to the next one."
+ },
+ "p_ec4df413": {
+  "sig": "f4a8fe1b61310cc0",
+  "engine": "elevenlabs",
+  "text": "Done. Great job."
+ },
+ "p_f80ee109": {
+  "sig": "7c53218a89798b6a",
+  "engine": "elevenlabs",
+  "text": "That's how it's done."
+ },
+ "p_598dc030": {
+  "sig": "05fbbafe892de007",
+  "engine": "elevenlabs",
+  "text": "Checked off. Keep going."
+ },
+ "p_2e138674": {
+  "sig": "138530e0e0f28f22",
+  "engine": "elevenlabs",
+  "text": "One down. Nice."
+ },
+ "p_9f177219": {
+  "sig": "bb1c25e2fecc9d40",
+  "engine": "elevenlabs",
+  "text": "Good work. What's next?"
+ },
+ "p_47a85a8b": {
+  "sig": "3b5e0630b099ccb9",
+  "engine": "elevenlabs",
+  "text": "That was the last one. Great job today."
+ },
+ "p_124d5ded": {
+  "sig": "1734af7b9dc04da5",
+  "engine": "elevenlabs",
+  "text": "All done. You crushed it today."
+ },
+ "p_c959987d": {
+  "sig": "4fd80687a00898e5",
+  "engine": "elevenlabs",
+  "text": "Nice work. Keep that momentum going."
+ },
+ "p_e4a8a8a1": {
+  "sig": "0783f7372220eddf",
+  "engine": "elevenlabs",
+  "text": "Streak secured for today. Proud of you. Let's keep it going."
+ },
+ "p_4aff6d18": {
+  "sig": "242c750ca9276120",
+  "engine": "elevenlabs",
+  "text": "You hit your daily streak. That's real discipline."
+ },
+ "p_210f6f18": {
+  "sig": "b60eba983336f3b8",
+  "engine": "elevenlabs",
+  "text": "Your streak reset yesterday. That's okay. Today we start a new one."
+ },
+ "p_926b0c03": {
+  "sig": "0bca00bd280a4e85",
+  "engine": "elevenlabs",
+  "text": "The streak's gone, but today's a fresh start. Let's earn it back."
+ },
+ "p_82f28d8d": {
+  "sig": "572ca513a6c7ad44",
+  "engine": "elevenlabs",
+  "text": "That's everything! Great work. The rest of the day is yours."
+ },
+ "p_ed6d7e89": {
+  "sig": "350e9ccf487cabb2",
+  "engine": "elevenlabs",
+  "text": "Got it. That one's important."
+ },
+ "p_f15961f2": {
+  "sig": "8e29294d98f50a63",
+  "engine": "elevenlabs",
+  "text": "Okay, it's not marked important anymore."
+ },
+ "p_db421f01": {
+  "sig": "9cbc827699b0402d",
+  "engine": "elevenlabs",
+  "text": "Nice work. Another clean day."
+ },
+ "p_66c4a73b": {
+  "sig": "0a1f4b71f168590c",
+  "engine": "elevenlabs",
+  "text": "One slip isn't the end of your progress. Your clean days still count. Note what triggered it, adjust your plan, and start again today. No shame. Just data."
+ },
+ "p_d5221c10": {
+  "sig": "c1f088366ea6e46a",
+  "engine": "elevenlabs",
+  "text": "Nice! Your manager just sent you a bonus."
+ },
+ "p_25bf5721": {
+  "sig": "10518603ddec8aca",
+  "engine": "elevenlabs",
+  "text": "You missed the goal, but your shield saved the streak. Let's make tomorrow count."
+ },
+ "p_5683bed8": {
+  "sig": "c2217f7cecdb541e",
+  "engine": "elevenlabs",
+  "text": "You missed the goal, and the streak reset. That's okay. Tomorrow we hit it."
+ },
+ "p_674b81e2": {
+  "sig": "9a554ab2babb4449",
+  "engine": "elevenlabs",
+  "text": "Voice is on."
+ }
+}

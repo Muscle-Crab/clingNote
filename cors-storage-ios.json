@@ -1,0 +1,8 @@
+[
+  {
+    "origin": ["capacitor://localhost", "https://localhost", "clingnot://localhost", "https://clingnot.netlify.app", "https://clingnote.netlify.app", "http://localhost:8081"],
+    "method": ["GET", "POST", "PUT", "DELETE", "HEAD"],
+    "responseHeader": ["Content-Type", "Authorization", "x-goog-resumable", "x-goog-meta-firebasestorageDownloadTokens"],
+    "maxAgeSeconds": 3600
+  }
+]

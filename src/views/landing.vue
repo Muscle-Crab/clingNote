@@ -1,12 +1,12 @@
 <template>
   <!-- Hero Section -->
-  <section class="bg-gray-900 bg-cover bg-center bg-no-repeat bg-blend-multiply" style="background-image: url('https://flowbite.s3.amazonaws.com/docs/jumbotron/conference.jpg')">
-    <div class="max-w-screen-xl px-4 py-20 mx-auto text-center">
+  <section class="bg-gray-900 bg-cover bg-center bg-no-repeat bg-blend-multiply" :style="heroStyle">
+    <div class="max-w-screen-xl px-4 pt-8 pb-14 md:py-20 mx-auto text-center">
       <h1 class="text-3xl md:text-5xl font-extrabold text-white leading-tight mb-4">
-        One App for Tasks, Assignments, Workouts & Groceries
+        ClingNote: Daily Task Planner for Tasks, Routines & Habits
       </h1>
       <p class="text-base md:text-lg text-gray-300 max-w-2xl mx-auto mb-6">
-        Whether you’re knocking out homework 📚, hitting the gym 💪, planning meals 🛒, or tackling your to-dos ✅ — this all-in-one productivity app helps you stay consistent every day.
+        Whether you’re knocking out homework 📚, hitting the gym 💪, planning meals 🛒, or tackling your to-dos ✅ — this all-in-one productivity app for task management, routine tracking, habit streaks and focus (app lock) helps you stay consistent every day.
       </p>
       <div class="mt-8">
         <router-link
@@ -17,9 +17,9 @@
         </router-link>
       </div>
       <!-- Video -->
-      <div class="max-w-3xl mx-auto aspect-video rounded-xl overflow-hidden shadow-xl">
+      <div v-if="demoVideo" class="max-w-3xl mx-auto aspect-video rounded-xl overflow-hidden shadow-xl">
         <video
-            src="@/assets/video.mp4"
+            :src="demoVideo"
             autoplay
             muted
             playsinline
@@ -37,7 +37,7 @@
         Powerful Features
       </h2>
       <p class="text-gray-600 text-base mb-6">
-        Designed to support your routine, every single day.
+        A daily task planner and routine tracker designed to support your habits and streaks, every single day.
       </p>
 
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-left">
@@ -57,7 +57,9 @@
 
 
 <script setup>
-const features = [
+import { voiceInputBlocked } from '@/utils/platform';
+import { demoVideo, heroStyle } from '@/utils/landingMedia';
+const allFeatures = [
   {
     title: "🎙️ Voice-Controlled Task Creation",
     description: "Add tasks hands-free using voice input, live transcription, and waveform animation."
@@ -135,6 +137,7 @@ const features = [
     description: "Beautiful and responsive interface with full light/dark mode support."
   }
 ];
+const features = voiceInputBlocked() ? allFeatures.filter((f) => !/Voice/i.test(f.title)) : allFeatures; // no voice claims inside the iOS app (WKWebView has no speech recognition)
 
 </script>
 

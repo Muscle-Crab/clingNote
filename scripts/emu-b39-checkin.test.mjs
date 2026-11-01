@@ -1,0 +1,23 @@
+// Run: Firestore emulator on 127.0.0.1:8089, then `node scripts/emu-b39-checkin.test.mjs` (needs @firebase/rules-unit-testing; own demo project, ZZTEST uids only).
+import { initializeTestEnvironment, assertSucceeds, assertFails } from '@firebase/rules-unit-testing';
+import { doc, setDoc, getDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
+import fs from 'fs';
+const env = await initializeTestEnvironment({ projectId: 'demo-zztest-b39', firestore: { host: '127.0.0.1', port: 8089, rules: fs.readFileSync(process.argv[2] || new URL('../firestore.rules', import.meta.url), 'utf8') } });
+const U = 'ZZTESTcheckin1'; const db = env.authenticatedContext(U).firestore(); const other = env.authenticatedContext('ZZTESTother').firestore(); const anon = env.unauthenticatedContext().firestore();
+const r = (d, date = '2026-10-30') => doc(d, 'users', U, 'dailyCheckins', date);
+const res = []; const step = async (n, f) => { try { await f(); res.push('PASS ' + n); } catch (e) { res.push('FAIL ' + n + ' ' + e.message); } };
+await env.clearFirestore();
+await step('owner mood create (merge)', () => assertSucceeds(setDoc(r(db), { mood: 4, date: '2026-10-30', at: serverTimestamp() }, { merge: true })));
+await step('owner energy merge', () => assertSucceeds(setDoc(r(db), { energy: 'high', date: '2026-10-30', at: serverTimestamp() }, { merge: true })));
+await step('owner read', async () => { const s = await assertSucceeds(getDoc(r(db))); if (s.data().mood !== 4 || s.data().energy !== 'high') throw new Error('data'); });
+await step('other read denied', () => assertFails(getDoc(r(other))));
+await step('other write denied', () => assertFails(setDoc(r(other), { mood: 1 }, { merge: true })));
+await step('anon read denied', () => assertFails(getDoc(r(anon))));
+await step('mood 6 denied', () => assertFails(setDoc(r(db), { mood: 6 }, { merge: true })));
+await step('mood string denied', () => assertFails(setDoc(r(db), { mood: '3' }, { merge: true })));
+await step('energy bad denied', () => assertFails(setDoc(r(db), { energy: 'max' }, { merge: true })));
+await step('extra key denied', () => assertFails(setDoc(r(db), { mood: 3, note: 'x' }, { merge: true })));
+await step('bad doc id denied', () => assertFails(setDoc(r(db, 'today'), { mood: 3 })));
+await step('date mismatch denied', () => assertFails(setDoc(r(db, '2026-10-29'), { mood: 3, date: '2026-10-30' })));
+await step('owner delete', () => assertSucceeds(deleteDoc(r(db))));
+await env.cleanup(); console.log(res.join('\n')); process.exit(res.some((x) => x.startsWith('FAIL')) ? 1 : 0);

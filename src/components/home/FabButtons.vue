@@ -1,6 +1,6 @@
 <template>
-  <div class="fab-group">
-    <router-link
+  <div class="fab-group" :class="{ 'fab-group--voice-only': !showAdd }">
+    <router-link v-if="showAdd"
         :to="userId ? '#' : '/login'"
         @click.native.prevent="userId && $emit('add')"
         class="fab fab-add"
@@ -12,21 +12,48 @@
       <span>Add Task</span>
     </router-link>
 
-    <button @click="$emit('voice')" class="fab fab-voice" :class="{ 'fab-voice--listening': listening }" title="Voice input">
-      <span v-if="listening" class="fab-pulse"></span>
-      <svg xmlns="http://www.w3.org/2000/svg" class="fab-icon" viewBox="0 0 24 24" fill="currentColor">
-        <path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2Z"/>
-      </svg>
+    <button type="button" class="fab fab-voice fab-assistant" :class="{ 'fab-voice--listening': assistantLive }" data-test="assistant-bubble" data-coach="sergeant"
+        title="Assistant (hold for choices)" aria-label="Assistant. Tap to open, press and hold for choices" :aria-expanded="menuOpen ? 'true' : 'false'"
+        @pointerdown="lp.down" @pointermove="lp.move" @pointerup="lp.up" @pointercancel="lp.cancel" @touchstart.prevent="lp.touchstart" @contextmenu.prevent @selectstart.prevent @dragstart.prevent @click="onClick">
+      <RobotAvatar class="fab-robot" :live="assistantLive" />
     </button>
+    <!-- Sergeant long-press menu: only exists while open (no permanent UI); anchored to the robot it came from. -->
+    <div v-if="menuOpen" ref="menuEl" class="sg-menu" role="menu" aria-label="Robot choices" data-test="sergeant-menu" @keydown.esc="close">
+      <button v-for="a in SERGEANT_ACTIONS" :key="a.id" type="button" role="menuitem" class="sg-item" :data-coach="'sg-' + a.id" :data-test="'sg-' + a.id" @click="choose(a.id)">
+        <span class="sg-ic" aria-hidden="true">{{ a.icon }}</span><span class="sg-txt"><b>{{ a.label }}</b><small>{{ a.hint }}</small></span>
+      </button>
+      <button v-if="locked" type="button" role="menuitem" class="sg-item" data-coach="sg-unlock" data-test="sg-unlock" @click="choose('unlock')"><span class="sg-ic" aria-hidden="true">🔓</span><span class="sg-txt"><b>Emergency unlock</b><small>Costs points</small></span></button>
+      <button type="button" role="menuitem" class="sg-item sg-talk" data-test="sg-talk" @click="talk"><span class="sg-ic" aria-hidden="true">🎙️</span><span class="sg-txt"><b>Talk to me</b></span></button>
+    </div>
   </div>
 </template>
 
 <script setup>
+import { ref, watch, nextTick, onBeforeUnmount } from 'vue';
+import RobotAvatar from './RobotAvatar.vue';
+import { SERGEANT_ACTIONS, HOLD_MS } from '@/utils/sergeantMenu';
+import { createLongPress } from '@/utils/longPress';
+// Bottom-left floating assistant button (replaces the old standalone mic FAB). Tap = open; long-press = open listening.
 defineProps({
+  locked: { type: Boolean, default: false }, // hard lock on: menu shows Emergency unlock
   userId: { type: String, default: null },
-  listening: { type: Boolean, default: false },
+  assistantLive: { type: Boolean, default: false },
+  showAdd: { type: Boolean, default: true },
 });
-defineEmits(['add', 'voice']);
+const emit = defineEmits(['add', 'assistant', 'sergeant', 'menu-open']);
+// Tap = open the assistant. Press and hold = the sergeant menu (What's next · Replan · I'm off · Make critical · Talk).
+const menuOpen = ref(false); const menuEl = ref(null);
+let t = null; let longed = false;
+const close = () => { menuOpen.value = false; };
+const choose = (id) => { menuOpen.value = false; emit('sergeant', id); };
+const talk = () => { menuOpen.value = false; emit('assistant', true); };
+const onDocDown = (e) => { if (menuEl.value && !menuEl.value.contains(e.target) && !e.target.closest('[data-coach="sergeant"], .coach-skip')) menuOpen.value = false; };
+watch(menuOpen, (o) => { document.removeEventListener('pointerdown', onDocDown, true); if (o) { document.addEventListener('pointerdown', onDocDown, true); emit('menu-open'); nextTick(() => menuEl.value && menuEl.value.querySelector('button') && menuEl.value.querySelector('button').focus({ preventScroll: true })); } });
+onBeforeUnmount(() => document.removeEventListener('pointerdown', onDocDown, true));
+// Press-and-hold: shared helper (pointer capture + movement tolerance; pointerleave no longer cancels, see utils/longPress.js).
+const lp = createLongPress({ ms: HOLD_MS, onTap: () => emit('assistant', false), onLong: () => { menuOpen.value = true; } });
+onBeforeUnmount(() => lp.dispose());
+const onClick = () => { if (lp.isGhostClick()) { lp.dispose(); return; } emit('assistant', false); };
 </script>
 
 <style scoped>
@@ -42,4 +69,17 @@ defineEmits(['add', 'voice']);
 .fab-icon { width: 22px; height: 22px; z-index: 1; position: relative; }
 .fab-pulse { position: absolute; inset: -2px; border-radius: 14px; background: rgba(61, 220, 151, .25); animation: ping 1s cubic-bezier(0, 0, .2, 1) infinite; }
 @keyframes ping { 75% { transform: scale(1.3); opacity: 0; } }
+.fab-assistant { touch-action: none; -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.fab-assistant { padding: 3px; overflow: visible; }
+.fab-robot { width: 46px; height: 46px; }
+/* sergeant menu: big plain text, large tap targets (older users); sits above the robot, gone when closed */
+.sg-menu { position: fixed; left: max(12px, calc((100vw - 540px) / 2 + 12px)); max-width: calc(100vw - 24px); bottom: calc(96px + env(safe-area-inset-bottom)); z-index: 101; min-width: 250px; display: flex; flex-direction: column; gap: 4px; padding: 8px; background: var(--c-surface-2); border: 1px solid var(--c-border); border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,.45); }
+.sg-item { display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 6px 12px; background: transparent; border: 0; border-radius: 12px; color: var(--c-text); text-align: left; cursor: pointer; }
+.sg-item:hover, .sg-item:focus-visible { background: var(--c-surface); outline: none; }
+.sg-ic { font-size: 24px; width: 30px; text-align: center; }
+.sg-txt { display: flex; flex-direction: column; }
+.sg-txt b { font-size: 19px; line-height: 1.2; }
+.sg-txt small { font-size: 15px; color: var(--c-text-2); }
+.sg-talk { border-top: 1px solid var(--c-border); border-radius: 0 0 12px 12px; }
+.fab-assistant.fab-voice--listening { box-shadow: 0 0 0 2px #4aa8ff, 0 0 14px 2px rgba(74, 168, 255, .65); }
 </style>

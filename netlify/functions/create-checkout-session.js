@@ -1,7 +1,8 @@
+const { withCors } = require('./lib/cors');
 require('dotenv').config();
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY) // Replace with your Stripe test key
 
-exports.handler = async (event) => {
+const rawHandler = async (event) => {
     try {
         const { userId } = JSON.parse(event.body);
 
@@ -39,4 +40,4 @@ exports.handler = async (event) => {
         };
     }
 };
-
+exports.handler = withCors(rawHandler);

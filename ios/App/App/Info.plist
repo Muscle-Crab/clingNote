@@ -1,0 +1,154 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>ClingNote reads when you're busy so it can schedule tasks into your free time, and can add task blocks to your calendar if you turn that on.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>ClingNote reads when you're busy so it can schedule tasks into your free time, and can add task blocks to your calendar if you turn that on.</string>
+	<key>NSCalendarsWriteOnlyAccessUsageDescription</key>
+	<string>ClingNote can add your scheduled task blocks to your calendar.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>ClingNote uses your location only for reminders you set for a place, like "when I get to the store".</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>ClingNote uses your location only for reminders you set for a place, like "when I get to the store", even when the app is closed.</string>
+	<key>NSAlarmKitUsageDescription</key>
+	<string>ClingNote rings your wake-up alarm at the time you choose, even when your iPhone is on silent or in a Focus.</string>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>ClingNote uses the microphone so you can add tasks, reminders and scheduled blocks by voice.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>ClingNote turns what you say into tasks, reminders and scheduled blocks. Recognition runs on your iPhone when supported.</string>
+	<key>CAPACITOR_DEBUG</key>
+	<string>$(CAPACITOR_DEBUG)</string>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleDisplayName</key>
+	<string>ClingNote</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>google</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.168239327702-ajjtim56djmf04mrulb28lh2197knu99</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>app.clingnote.ios.widget</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>clingnote</string>
+			</array>
+		</dict>
+	</array>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>ClingNote uses the camera only when you choose to scan a pal's QR code or take a photo for a profile picture, a task attachment, a meal photo or a post.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>ClingNote accesses your photo library only when you choose a picture for your profile, a task attachment, a meal photo or a post.</string>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+		<key>UISceneConfigurations</key>
+		<dict>
+			<key>UIWindowSceneSessionRoleApplication</key>
+			<array>
+				<dict>
+					<key>UISceneConfigurationName</key>
+					<string>Default Configuration</string>
+					<key>UISceneDelegateClassName</key>
+					<string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
+					<key>UISceneStoryboardFile</key>
+					<string>Main</string>
+				</dict>
+			</array>
+		</dict>
+	</dict>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+		<string>remote-notification</string>
+	</array>
+	<key>UILaunchStoryboardName</key>
+	<string>LaunchScreen</string>
+	<key>UIMainStoryboardFile</key>
+	<string>Main</string>
+	<key>UIRequiredDeviceCapabilities</key>
+	<array>
+		<string>arm64</string>
+	</array>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UISupportedInterfaceOrientations~ipad</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UIViewControllerBasedStatusBarAppearance</key>
+	<true/>
+	<key>OneSignal_suppress_launch_urls</key>
+	<true/>
+	<!-- TikTok App Events SDK. Values come from build settings TIKTOK_APP_ID / TIKTOK_ACCESS_TOKEN (empty by default = SDK not started).
+	     CI passes them via xcodebuild args (repo variable TIKTOK_APP_ID, secret TIKTOK_ACCESS_TOKEN). Never commit real values. -->
+	<key>TikTokAppStoreID</key>
+	<string>6826148686</string>
+	<key>TikTokAppID</key>
+	<string>$(TIKTOK_APP_ID)</string>
+	<key>TikTokAccessToken</key>
+	<string>$(TIKTOK_ACCESS_TOKEN)</string>
+	<!-- Firebase Analytics (native only, for Google Ads App campaign / YouTube first_open). FirebaseAnalyticsIdentitySupport is linked; the SDK only
+	     reads the IDFA when ATTrackingManager status is .authorized (prompt shown after onboarding, see InstallAttribution.requestTracking). -->
+	<key>FIREBASE_ANALYTICS_COLLECTION_ENABLED</key>
+	<true/>
+	<key>GOOGLE_ANALYTICS_ADID_COLLECTION_ENABLED</key>
+	<true/>
+	<key>GOOGLE_ANALYTICS_IDFV_COLLECTION_ENABLED</key>
+	<true/>
+	<!-- App Tracking Transparency prompt text (asked once, after onboarding on the first Home visit; never on cold launch). -->
+	<key>NSUserTrackingUsageDescription</key>
+	<string>ClingNote uses this to see which ads brought you to the app.</string>
+	<!-- Reddit first-open ping (InstallAttribution.redditPingEnabled). OFF until the reddit-install Netlify function is deployed. -->
+	<key>ClingRedditPingEnabled</key>
+	<false/>
+	<!-- SKAdNetwork IDs for TikTok/ByteDance (22mmun2rn5 = TikTok, 238da6jt44 = Pangle). Only matter when this app shows ads; harmless otherwise. -->
+	<key>SKAdNetworkItems</key>
+	<array>
+		<dict>
+			<key>SKAdNetworkIdentifier</key>
+			<string>238da6jt44.skadnetwork</string>
+		</dict>
+		<dict>
+			<key>SKAdNetworkIdentifier</key>
+			<string>22mmun2rn5.skadnetwork</string>
+		</dict>
+	</array>
+</dict>
+</plist>

@@ -3,7 +3,7 @@
     <div class="celebration-inner">
       <div class="celebration-emoji">🎉</div>
       <h1 class="celebration-title">All done!</h1>
-      <p class="celebration-streak">🔥 <span>{{ streak }}</span> day streak</p>
+      <p class="celebration-streak">🔥 <span>{{ Math.min(streak, 5) }}/5</span> day streak</p>
       <p class="celebration-sub">Every task complete. Take a breath — you earned it.</p>
       <button @click="$emit('close')" class="btn-primary btn-lg">Continue</button>
     </div>
@@ -11,8 +11,12 @@
 </template>
 
 <script setup>
+import { onMounted } from 'vue';
+import { syncAchievements } from '@/composables/useAchievements';
 defineProps({ streak: { type: Number, default: 0 } });
 defineEmits(['close']);
+// All tasks done: offer the one-tap Perfect Day share (merged with any streak tier / badge earned now).
+onMounted(() => { syncAchievements({ perfect: true }).catch(() => {}); });
 </script>
 
 <style scoped>

@@ -8,6 +8,7 @@ export const isPro = (userDoc) => {
   return !exp || exp > new Date();
 };
 // unlimitedRoutines is listed but NOT enforced anywhere yet (task-count limits pending decision).
-export const PRO_FEATURES = ['aiCoach', 'strictBoss', 'calendarFeed', 'unlimitedRoutines'];
+// community: Community tab/page, posts, leaderboard/matchups (routes with meta.proFeature = 'community').
+export const PRO_FEATURES = ['aiCoach', 'strictBoss', 'calendarFeed', 'unlimitedRoutines', 'community'];
 // Usage later: if (!canUse(userDoc, 'aiCoach')) router.push('/paywall')
 export const canUse = (userDoc, feature) => !ENFORCE_PAYWALL || !PRO_FEATURES.includes(feature) || isPro(userDoc);

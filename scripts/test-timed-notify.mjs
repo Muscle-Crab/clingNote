@@ -1,0 +1,20 @@
+// Timed day tasks ping the phone at their start time; complete / delete / edit / reschedule re-plan (diffPlan cancels).
+import assert from 'assert';
+const S = await import('../src/utils/schedNotify.js');
+const N = await import('../src/utils/notifTap.js').catch(() => null);
+let pass = 0; const ok = (c, m) => { assert.ok(c, m); pass++; };
+const now = new Date(2026, 9, 26, 10, 0); const todayStr = '2026-10-26';
+const store = { title: 'Go to the store', createdAt: 1, startTime: '18:00' };
+const plan = (todayTasks) => S.planNotifications({ list: [], todayTasks, todayStr, now });
+const p1 = plan([store, { title: 'No time', createdAt: 2 }, { title: 'Past', createdAt: 3, startTime: '09:00' }]);
+ok(p1.length === 1 && p1[0].key === S.timeKey(store) && p1[0].at.getHours() === 18 && /6:00 PM|18:00/.test(p1[0].body), 'one ping at 6 PM');
+ok(p1[0].kind === 'time', 'kind=time (foreground voice)');
+const k = S.timeKey(store);
+ok(S.diffPlan([k], plan([{ ...store, completed: true }])).cancel.includes(k), 'completed -> cancelled');
+ok(S.diffPlan([k], plan([])).cancel.includes(k), 'deleted -> cancelled');
+ok(S.diffPlan([k], plan([{ ...store, status: 'wontdo' }])).cancel.includes(k), "won't do -> cancelled");
+const moved = plan([{ ...store, startTime: '19:30' }]);
+ok(moved[0].key === k && moved[0].at.getHours() === 19 && moved[0].at.getMinutes() === 30, 'rescheduled -> same key, new time (re-scheduled)');
+ok(S.diffPlan([k], plan([{ ...store, startTime: '' }])).cancel.includes(k), 'time cleared -> cancelled');
+ok(plan([{ ...store, scheduledFor: todayStr, scheduledId: 'x', time: '18:00' }]).every((n) => n.key !== k), 'scheduled copies not double-pinged');
+console.log(`test-timed-notify: ${pass} passed`);
