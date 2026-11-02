@@ -26,7 +26,7 @@
             <p class="hero-date">{{ currentDate }}</p>
             <h1 class="hero-title">{{ heroTitleParts.lead }}<span class="hero-accent">{{ heroTitleParts.accent }}</span></h1>
             <p class="hero-sub">{{ daysLeftInYear }} days left this year</p>
-            <button type="button" class="bg-pill" data-test="open-background-pill" aria-label="Background: animation and music" @click="showBackground = true">🎧 Background<span class="bg-pill-sub">picture · snow · rain · music</span></button>
+            <button type="button" class="bg-pill" data-test="open-background-pill" aria-label="Background: animation and music" @click="gatePro(_proRouter, 'background') && (showBackground = true)">🎧 Background<span class="bg-pill-sub">picture · snow · rain · music</span></button>
           </div>
           <div ref="heroMenuEl" class="hero-menu">
             <button type="button" class="hero-menu-btn" :aria-label="noticeCount ? noticeCount + ' updates and day menu' : 'Day menu'" :aria-expanded="menuOpen ? 'true' : 'false'" @click="menuOpen = !menuOpen">
@@ -40,7 +40,7 @@
       </div>
                 <BossPanel v-if="strictOn && !bossHidden && !gpQuiet && (bossLines.length || verdictScreen)" class="home-notice" :lines="bossLines" :verdict="verdictScreen"
                  @dismiss="bossHidden = true" @dismiss-line="idleNudge = null" @ack-verdict="dismissVerdict" @roll="bossRoll()" />
-                <MorningReport v-if="morningRecap && isViewingToday" class="home-notice" :recap="morningRecap" :strict="isStrictMode" :goal="strictGoal" :goal-why="gpOn ? gpGoalWhy : ''" :penalty-note="gpOn ? gpPenaltyNote : ''" :mood="todayMood" :name="firstNameForBoss" @mood="setMood" @goal="setGoal" @close="morningRecap = null" />
+                <MorningReport v-if="proNow && morningRecap && isViewingToday" class="home-notice" :recap="morningRecap" :strict="isStrictMode" :goal="strictGoal" :goal-why="gpOn ? gpGoalWhy : ''" :penalty-note="gpOn ? gpPenaltyNote : ''" :mood="todayMood" :name="firstNameForBoss" @mood="setMood" @goal="setGoal" @close="morningRecap = null" />
                 <LoadSummary v-if="isViewingToday" :load="todayLoad" :expanded="showSchedule" @toggle="showSchedule = !showSchedule" />
               </div>
               <div class="hero-menu-items" @click="menuOpen = false">
@@ -49,7 +49,7 @@
               <router-link to="/upcoming" class="hero-menu-item">📅 Upcoming</router-link>
               <router-link v-if="!hideUgc" to="/rankings" class="hero-menu-item">🏆 Rankings</router-link>
               <router-link to="/discipline" class="hero-menu-item">⚔️ Discipline Mode</router-link>
-              <button type="button" class="hero-menu-item" data-test="open-background" @click="showBackground = true">🎧 Background</button>
+              <button type="button" class="hero-menu-item" data-test="open-background" @click="gatePro(_proRouter, 'background') && (showBackground = true)">🎧 Background<small v-if="!proNow"> 🔒</small></button>
               <button type="button" class="hero-menu-item" @click="showSchedule = !showSchedule">🗓 {{ showSchedule ? 'Hide' : 'Show' }} schedule</button>
               </div>
             </div>
@@ -59,12 +59,12 @@
         <DayTabs :days="tabDays" :selected-index="selectedDayIndex" :scheduled-counts="scheduledCounts" @select="handleDayTabClick" />
 
         <WakeAlarmPrompt v-if="isViewingToday" />
-        <EightHourCard v-if="lockInToday || eh.lock.value" :tasks="ehTasks" :start-error="ehStartError" @retry="syncAfterAuth" @start="openDayPrompt" />
+        <EightHourCard v-if="lockInToday || eh.lock.value" :tasks="ehTasks" :start-error="ehStartError" @retry="syncAfterAuth" @start="openDayPrompt" :locked="!proNow && !eh.lock.value" @pro="gatePro(_proRouter, 'lockIn')" />
         <PlanDaySheet v-if="planOpen" :tasks="dayTasks" :busy="planBusy" :error="planError" @previewed="onPlanPreviewed" @confirm="onPlanConfirm" @close="planOpen = false" />
         <DayTemplatesSheet v-if="tplOpen" :templates="dayTemplates" :task-count="templateItemCount" :busy="tplBusy" :error="tplError" :note="tplNote" @apply="applyDayTemplate" @save="saveDayTemplate" @remove="removeDayTemplate" @close="tplOpen = false" />
         <DayStartPrompt v-if="dayPromptOpen" :initial-hours="eh.hoursPref.value" :now-ms="eh.nowMs" :tz="eh.plan.value?.tz || ''" :busy="ehBusy" :error="ehStartError" :tasks="todayTasksForTarget" :stats="eh.stats.value" :earned="pointsAccumulated || 0" @confirm="confirmDayStart" @skip="skipLockIn" :can-lock="lockAvailable()"><template #checkin><CheckinRow :value="checkin" @pick="saveCheckin" /></template></DayStartPrompt>
 
-        <ProgressBar :percentage="calculateCompletionPercentage()" :milestones="milestones" :done="completedTaskCount || 0" :total="dayTasks.length"
+        <ProgressBar :locked="!proNow" @pro="gatePro(_proRouter, 'points')" :percentage="calculateCompletionPercentage()" :milestones="milestones" :done="completedTaskCount || 0" :total="dayTasks.length"
                      :streak="streak" :streak-status="streakStatus" :streak-progress="streakProgress" :streak-min="DAILY_STREAK_MIN" :freezes="streakFreezes" :points="pointsAccumulated || 0" :target="isViewingToday ? dayRequiredPts : 0" :off-today="isViewingToday && offToday" :uid="userId || ''" :hold="!!rewardScreen || !!lossScreen" />
 
       </section>
@@ -269,7 +269,7 @@ import { pickTimerIntent } from '@/utils/siriIntents';
 import { askAi } from '@/composables/useAi';
 import { ensureAiConsent, hasAiConsent } from '@/composables/useAiConsent';
 import { useRouter as _useRouter, onBeforeRouteLeave } from 'vue-router';
-import { requirePro, loadUserDoc, rcProActive } from '@/composables/usePro';
+import { requirePro, loadUserDoc, rcProActive, proNow, gatePro } from '@/composables/usePro';
 import { isPro as isProUser } from '@/utils/pro';
 import { checkDailyLimit } from '@/utils/taskLimits';
 import { defaultTransferDay, transferFits, MAX_TASKS_PER_DAY } from '@/utils/transfer';
@@ -984,7 +984,7 @@ const onPlanConfirm = async (p) => {
 const templateItemCount = computed(() => { const r = makeTemplate('x', dayTasks.value); return r.ok ? r.template.items.length : 0; });
 const { templates: dayTemplates, load: loadDayTemplates, save: storeDayTemplate, remove: dropDayTemplate } = useDayTemplates();
 const tplOpen = ref(false); const tplBusy = ref(false); const tplError = ref(''); const tplNote = ref('');
-const openTemplates = async () => { sfx('open'); if (!isViewingToday.value) { selectedDayIndex.value = todayIdx.value; await fetchSelectedDayRoutine(); } tplError.value = ''; tplNote.value = ''; tplOpen.value = true; loadDayTemplates(userId.value); };
+const openTemplates = async () => { if (!gatePro(_proRouter, 'templates')) return; sfx('open'); if (!isViewingToday.value) { selectedDayIndex.value = todayIdx.value; await fetchSelectedDayRoutine(); } tplError.value = ''; tplNote.value = ''; tplOpen.value = true; loadDayTemplates(userId.value); };
 const saveDayTemplate = async ({ name, withTimes }) => {
   const r = makeTemplate(name, dayTasks.value, { withTimes }); if (!r.ok) { tplError.value = r.error; return; }
   tplBusy.value = true; tplError.value = '';
@@ -1163,6 +1163,7 @@ const selectedTimerDuration = ref(5); // default to 5 minutes
 
 const startTimer = async (opts = {}) => {
   if (blockIfShut()) return false;
+  if (!opts.auto && !gatePro(_proRouter, 'timer')) { showTimerModal.value = false; return false; }
   if (selectedTimerTaskIndex.value === null) return;
   { const lk = lockedFocus(selectedDayRoutine.value || []); // auto-started focus: no other timer until it ends / is ended early
     if (lk && lk !== selectedDayRoutine.value[selectedTimerTaskIndex.value]) { showNoteToast(focusLockMessage(lk), { error: true }); selectedTimerTaskIndex.value = null; return false; }
@@ -1998,6 +1999,7 @@ const loadCheckin = async () => {
   try { const snap = await getDoc(doc(db, ...path)); if (snap.exists() && checkinKey === key) checkin.value = cleanCheckin(snap.data()); } catch (e) { console.warn('checkin load', e); }
 };
 const saveCheckin = async (kind, value) => {
+  if (!gatePro(_proRouter, 'checkin')) return;
   const date = getTodayId(); const patch = checkinPatch(checkin.value, kind, value, date); const path = checkinPath(userId.value, date);
   if (!patch || !path) return;
   checkin.value = { ...checkin.value, ...patch };
@@ -3072,6 +3074,7 @@ const finishVoiceInput = () => {
   if (!voiceFinishing) { if (all) saveSpoken(all); else voiceError.value = "Didn't catch anything. Try again."; }
 };
 const startVoiceInput = () => {
+  if (!gatePro(_proRouter, 'voice')) return;
   voiceAddFailed = false; voiceCommitted = ''; voiceFinishing = false;
   voiceAdded.value = [];
   voiceOpen.value = true; // always show the modal, even when recognition is unavailable
@@ -3611,7 +3614,7 @@ const runBreakdown = async () => {
     bd.value = { ...bd.value, loading: false, steps, error: steps.length ? '' : breakdownError({}) };
   } catch (e) { if (seq === bdSeq && bd.value.open) bd.value = { ...bd.value, loading: false, error: breakdownError(e) }; }
 };
-const openBreakdown = (task) => { if (blockIfShut()) return; bd.value = { open: true, task, steps: [], loading: true, error: '' }; runBreakdown(); };
+const openBreakdown = (task) => { if (blockIfShut()) return; if (!gatePro(_proRouter, 'breakdown')) return; bd.value = { open: true, task, steps: [], loading: true, error: '' }; runBreakdown(); };
 const closeBreakdown = () => { bdSeq++; bd.value = { open: false, task: null, steps: [], loading: false, error: '' }; };
 const confirmBreakdown = async (chosen) => {
   const task = bd.value.task; closeBreakdown();
@@ -3705,7 +3708,7 @@ const dayPromptOpen = ref(false);
 const ehBusy = ref(false);
 // no plan yet => no dayKey: an empty skipDate must not read as "skipped today" (that blocked Start Day for planless web users)
 const lockInToday = computed(() => lockIn.value.enabled && !(lockIn.value.skipDate && lockIn.value.skipDate === (eh.phaseInfo.value.dayKey || '')));
-const openDayPrompt = () => { if (lockInToday.value && eh.phase.value === 'ready' && !eh.phaseInfo.value.scheduled && !eh.lock.value && isToday(selectedDayIndex.value)) { ehStartError.value = ''; dayPromptOpen.value = true; } };
+const openDayPrompt = () => { if (!gatePro(_proRouter, 'lockIn')) return; if (lockInToday.value && eh.phase.value === 'ready' && !eh.phaseInfo.value.scheduled && !eh.lock.value && isToday(selectedDayIndex.value)) { ehStartError.value = ''; dayPromptOpen.value = true; } };
 // B44 wake-up auto-lock: iOS already locked the apps at the wake time, so on open the day's server lock is created from that time
 // (no prompt, no Confirm). Once per day key; a refusal (e.g. window over) falls back to the normal prompt.
 let wakeReconciled = '';
@@ -3939,7 +3942,7 @@ const syncLockPenalties = async (remote) => {
 const bossMode = ref('simple'); const emergencyOn = ref(true); const goalOverride = ref(null); const todayMood = ref('');
 const isStrictMode = computed(() => bossMode.value === 'strict');
 const gp = ref(GP.normPlan({})); const gpBreak = ref(null); const gpBreakLog = ref([]); const gpLog = ref({}); const gpPenalty = ref(null); const gpLoaded = ref(false);
-const gpOn = computed(() => isStrictMode.value);
+const gpOn = computed(() => isStrictMode.value && strictAllowed.value); // game plan, points penalties and breaks are Pro
 watch(gpOn, (on) => { GP.setSizeMode(on); if (!on) GP.setQuietWindows([]); }, { immediate: true });
 const gpLoad = (d) => {
   gp.value = GP.normPlan(d && d.gamePlan, d && d.onboarding && d.onboarding.wakeTime);
@@ -4341,6 +4344,7 @@ let recheckResumeHandle = null;
 onBeforeUnmount(() => { clearInterval(streakTick); clearTimeout(recheckTimer); document.removeEventListener('visibilitychange', onRecheckVisible); window.removeEventListener('focus', onRecheckResume); window.removeEventListener('cn:app-resume', onRecheckResume); try { recheckResumeHandle && recheckResumeHandle.remove(); } catch (e) { /* */ } });
 watch(dayRequiredPts, (n) => { if (isViewingToday.value && isNativeIOS()) import('@/utils/widgetSync').then((m) => m.setWidgetDayTarget(n)).catch(() => {}); }, { immediate: true });
 const openAssistant = (listen = false) => {
+  if (!gatePro(_proRouter, 'ask')) return;
   sfx('open');
   if (userId.value) loadAssistant(userId.value);
   if (!isViewingToday.value && todayIdx.value >= 0) selectedDayIndex.value = todayIdx.value; // the assistant works on today's list
@@ -4576,6 +4580,7 @@ const onSergeantReplan = async (open, onUndo) => {
   return r;
 };
 const onSergeant = async (id) => {
+  if (!gatePro(_proRouter, 'ask')) return;
   coachSignal('sg-' + id);
   if (blockIfShut()) return;
   const open = (selectedDayRoutine.value || []).filter((t) => !t.completed && t.status !== 'wontdo');

@@ -101,13 +101,14 @@ await t('admin email check', () => { assert.ok(C.isAdminEmail('DS7513635@gmail.c
 // prepared Netlify function (fake admin db)
 await t('community-notify: auth, ownership, block + pref skip, push via FCM sender', async () => {
   const fn = require('../netlify/functions/community-notify.js');
-  const data = { 'communityPosts/p1': { uid: 'author', name: 'Ann', title: 'Day 5' }, 'users/f2/blocks/author': {}, 'users/f3/community/prefs': { notif: { post: false } }, 'users/f1': { fcmTokens: ['tok1'] } };
+  const data = { 'communityPosts/p1': { uid: 'author', name: 'Ann', title: 'Day 5' }, 'users/f2/blocks/author': {}, 'users/f3/community/prefs': { notif: { post: false } }, 'users/f1': { fcmTokens: ['tok1'] }, 'users/author': { isPro: true }, 'users/intruder': { isPro: true } };
   const follows = [{ from: 'f1', to: 'author' }, { from: 'f2', to: 'author' }, { from: 'f3', to: 'author' }, { from: 'author', to: 'author' }];
   const db = { doc: (p) => ({ get: async () => ({ exists: p in data, data: () => data[p] }), update: async () => {} }), collection: () => ({ where: () => ({ limit: () => ({ get: async () => ({ docs: follows.map((f) => ({ data: () => f })) }) }) }) }) };
   const sent = []; const messaging = { sendEachForMulticast: async (m) => { sent.push(m); return { successCount: m.tokens.length, failureCount: 0, responses: m.tokens.map(() => ({ success: true })) }; } };
   const deps = (u) => ({ verify: async () => ({ uid: u }), db, messaging, FieldValue: { arrayRemove: () => null } });
   const ev = (b) => ({ httpMethod: 'POST', headers: { authorization: 'Bearer x' }, body: JSON.stringify(b) });
   assert.equal((await fn.rawHandler({ httpMethod: 'GET', headers: {} }, {}, deps('author'))).statusCode, 405);
+  assert.equal((await fn.rawHandler(ev({ postId: 'p1' }), {}, deps('zztest-free'))).statusCode, 402); // community is Pro
   assert.equal((await fn.rawHandler(ev({}), {}, deps('author'))).statusCode, 400);
   assert.equal((await fn.rawHandler(ev({ postId: 'p1' }), {}, deps('intruder'))).statusCode, 403);
   const r = await fn.rawHandler(ev({ postId: 'p1' }), {}, deps('author')); const b = JSON.parse(r.body);

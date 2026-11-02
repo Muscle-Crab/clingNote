@@ -24,11 +24,15 @@ let n = 0; const t = async (name, fn) => { await fn(); n++; console.log('ok -', 
   });
   const db = makeDb(); db.store.set('publicProfiles/zztest-owner', { name: 'ZZTEST Owner' });
   let tok;
+  await t('free (non-Pro) user cannot request a friend unlock -> 402', async () => {
+    assert.strictEqual((await asUser(db, 'zztest-owner', { action: 'request', friendName: 'ZZTEST Sam', minutes: 10 })).statusCode, 402);
+  });
+  db.store.set('users/zztest-owner', { isPro: true });
   await t('request is refused while the optional friend approval is off (default)', async () => {
     assert.strictEqual((await asUser(db, 'zztest-owner', { action: 'request', friendName: 'ZZTEST Sam', minutes: 10 })).statusCode, 403);
     assert(![...db.store.keys()].some((k) => k.startsWith('unlockRequests/')));
   });
-  db.store.set('users/zztest-owner', { gamePlan: { friendUnlock: true } });
+  db.store.set('users/zztest-owner', { isPro: true, gamePlan: { friendUnlock: true } });
   await t('request needs sign-in and a friend; stores only the hash', async () => {
     assert.strictEqual((await pub(db, { action: 'request', friendName: 'Sam' })).statusCode, 401);
     assert.strictEqual((await asUser(db, 'zztest-owner', { action: 'request', friendName: '' })).statusCode, 400);

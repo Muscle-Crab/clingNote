@@ -7,7 +7,7 @@ const TZ = 'America/New_York'; const at = (iso) => Date.parse(iso); const H = 36
 class Ts { constructor(ms) { this.ms = ms; } toMillis() { return this.ms; } }
 const plain = (o) => o && typeof o === 'object' && Object.getPrototypeOf(o) === Object.prototype;
 const merge = (a, b) => { const o = { ...a }; for (const k of Object.keys(b)) o[k] = plain(b[k]) && plain(o[k]) ? merge(o[k], b[k]) : b[k]; return o; };
-const mkDb = (seed0 = {}) => { const store = { 'users/u1': { lockInEnabled: true }, ...seed0 };
+const mkDb = (seed0 = {}) => { const store = { 'users/u1': { isPro: true, lockInEnabled: true }, ...seed0 };
   const ref = (path) => ({ path, get: async () => ({ exists: path in store, data: () => store[path] }), set: async (d, opt) => { store[path] = opt && opt.merge && store[path] ? merge(store[path], d) : d; } });
   return { store, doc: ref, runTransaction: async (fn) => fn({ get: (r) => r.get(), set: (r, d, o) => r.set(d, o) }) };
 };

@@ -7,7 +7,7 @@
     <p v-if="view !== 'error' && view !== 'loading' && eh.st.data && eh.st.data.offline" class="eh-muted" data-test="eh-offline">Offline mode: the countdown lock starts once the server is reachable. <button class="eh-btn" @click="$emit('retry')">Retry</button></p>
     <!-- no plan yet: one compact row (wake time + the min/max task range for the chosen hours), then it is locked when the day starts -->
     <template v-else-if="view === 'setup'">
-      <div class="eh-line"><b class="eh-title">⏱ Set your day</b><button class="eh-btn eh-btn--primary" :disabled="busy || !wake" @click="save" data-test="eh-save">Lock in</button></div>
+      <div class="eh-line"><b class="eh-title">⏱ Set your day</b><button class="eh-btn eh-btn--primary" :disabled="busy || !wake" @click="locked ? $emit('pro') : save()" data-test="eh-save">{{ locked ? 'Lock in 🔒' : 'Lock in' }}</button></div>
       <div class="eh-ctrl">
         <label class="eh-mini">Wake <input type="time" v-model="wake" data-test="eh-wake" /></label>
         <span class="eh-fine" data-test="eh-range">{{ rangeLine }}</span>
@@ -20,7 +20,7 @@
       <p v-if="stats.warning && !(eh.st.data && eh.st.data.offline)" class="eh-note eh-alert--boss" data-test="eh-alert">⚠️ {{ stats.warning }}</p>
       <div class="eh-line">
         <p class="eh-big" data-test="eh-starts">{{ phase === 'before' ? 'Starts ' + fmtWake : 'Ready' }}<small> · Ends {{ ends }}</small></p>
-        <button v-if="phase === 'ready' && inRange" class="eh-btn eh-btn--primary" data-test="eh-start" @click="$emit('start')">Start</button>
+        <button v-if="phase === 'ready' && inRange" class="eh-btn eh-btn--primary" data-test="eh-start" @click="$emit(locked ? 'pro' : 'start')">{{ locked ? 'Start 🔒' : 'Start' }}</button>
         <span v-else class="eh-badge">Not started</span>
       </div>
       <!-- ONE compact line: the min/max range for the chosen hours + what is on the list (no stepper, no "plan N instead") -->
@@ -82,8 +82,8 @@ import { paceOf, topAlert, badgeLabel, levelOf } from '@/utils/pressure';
 import { progressOf, countableIndexes, fmtWakeLabel, hoursLabel, taskRange } from '@/utils/eightHour';
 
 // tasks = today's stored task array (all of it; hidden recurring copies are excluded by progressOf/countable logic)
-const props = defineProps({ tasks: { type: Array, default: () => [] }, startError: { type: String, default: '' } });
-defineEmits(['retry', 'start']);
+const props = defineProps({ tasks: { type: Array, default: () => [] }, startError: { type: String, default: '' }, locked: { type: Boolean, default: false } });
+defineEmits(['retry', 'start', 'pro']);
 const eh = useEightHour();
 const { phase, plan, lock, stats, reward, countdown } = eh;
 const starts = computed(() => eh.startsLabel.value);
