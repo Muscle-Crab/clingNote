@@ -55,7 +55,7 @@ t('wiring: strictShield 2 h, server settle, eh shutdown, native cancel', () => {
   const sd = src('src/utils/strictDay.js'); assert(/MISS_GRACE_MS = 2 \* 3600000/.test(sd) && /phase: 'missed'/.test(sd) && !/untilMs: midnight, phase: 'missed'/.test(sd));
   const fn = src('netlify/functions/eight-hour-day.js'); assert(/sessionGrace\(countable\(pruneStale/.test(fn) && /graceUntilMs: grace\.untilMs/.test(fn) && /graceUntilMs: Number\(l\.graceUntilMs\)/.test(fn));
   assert(/opensAtMs: l\.graceUntilMs/.test(src('src/composables/useEightHour.js')));
-  const h = src('src/views/HomeView.vue'); assert(/grace\.want && free/.test(h) && /ehs\.missed && ehs\.opensAtMs/.test(h) && /cancelScheduledLock\(\{ key: g\.key \}\)/.test(h));
+  const h = src('src/views/HomeView.vue'); assert(/grace\.want && free/.test(h) && /ehs\.missed && !allTasksDone\.value && ehs\.opensAtMs/.test(h) && /cancelScheduledLock\(\{ key: g\.key \}\)/.test(h));
   const sw = src('ios/App/App/ClingLockPlugin.swift'); assert(/name: "cancelScheduledLock"/.test(sw) && /stopMonitoring\(\[ScheduledLocks\.name\(key\)\]\)/.test(sw));
   assert(/name: "clearBreakOffer"/.test(sw) && /\(o\["v"\] as\? Int\) == 2/.test(sw) && /guard close > nowMs/.test(sw));
 });

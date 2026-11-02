@@ -405,7 +405,15 @@ public class ClingLockPlugin: CAPPlugin, CAPBridgedPlugin {
         guard #available(iOS 16.0, *) else { call.resolve(["cancelled": false]); return }
         let key = (call.getString("key") ?? "").filter { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" }
         guard !key.isEmpty else { call.resolve(["cancelled": false]); return }
-        var m = ScheduledLocks.all(); m[key] = nil; ScheduledLocks.save(m)
+        var m = ScheduledLocks.all(); let e = m[key]; m[key] = nil; ScheduledLocks.save(m)
+        // A block that already started raised the shield and set the lock state to its end; with its entry gone, the monitor's
+        // intervalDidEnd sees untilMs 0 and leaves the shield up. Lift it here unless a longer lock (own .clingLock) still runs.
+        let now = Date().timeIntervalSince1970 * 1000
+        if let e = e, e.count == 2, e[0] <= now, now < e[1] {
+            let st = LockShared.defaults?.dictionary(forKey: LockShared.stateKey) ?? [:]
+            let curUntil = (st["until"] as? Double) ?? Double((st["until"] as? Int) ?? 0)
+            if curUntil <= e[1] + 60_000 { LockShared.defaults?.set(["locked": false, "until": 0], forKey: LockShared.stateKey); Self.clearShield() }
+        }
         DeviceActivityCenter().stopMonitoring([ScheduledLocks.name(key)])
         call.resolve(["cancelled": true])
     }

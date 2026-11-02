@@ -19,12 +19,12 @@ t('missed: locked until shutdown + 2 h, then open; met unlocks as before', () =>
   assert.equal(S.strictShield({ ...common, now: dayEnd + 2 * H + 1000, goal: 60, earned: 10 }).want, false); assert.notEqual(S.strictShield({ ...common, now: dayEnd + H, goal: 60, earned: 60, tasksDone: 3, goalAt: base }).phase, 'missed'); });
 t('goal met: window banked (ready, still locked) until the user starts it', () => {
   const at = base + 3 * H; const r = S.strictShield({ ...common, now: at + 60 * 60000, goal: 50, earned: 50, tasksDone: 4, goalAt: at });
-  assert.equal(r.phase, 'ready'); assert.equal(r.want, true); assert.equal(r.windowMin, 50); assert.equal(r.untilMs, S.endOfDay(at)); });
-t('user-started window unlocks, then relocks to midnight', () => {
+  assert.equal(r.phase, 'ready'); assert.equal(r.want, true); assert.equal(r.windowMin, 50); assert.equal(r.untilMs, dayEnd); }); // fix/unlock-at-end: banked lock ends at the day end, not midnight
+t('user-started window unlocks, then relocks until the day end', () => {
   const at = base + 3 * H; const a = S.strictShield({ ...common, now: at + 10 * 60000, goal: 50, earned: 50, tasksDone: 4, goalAt: base, claimedAt: at });
   assert.equal(a.phase, 'earned'); assert.equal(a.want, false); assert.equal(a.unlockEndMs, at + 50 * 60000);
   const b = S.strictShield({ ...common, now: at + 51 * 60000, goal: 50, earned: 50, tasksDone: 4, goalAt: base, claimedAt: at });
-  assert.equal(b.phase, 'relocked'); assert.equal(b.want, true); assert.equal(b.untilMs, S.endOfDay(at)); });
+  assert.equal(b.phase, 'relocked'); assert.equal(b.want, true); assert.equal(b.untilMs, dayEnd); assert.equal(S.strictShield({ ...common, now: dayEnd + 1000, goal: 50, earned: 50, tasksDone: 4, goalAt: base, claimedAt: at }).want, false); });
 t('missed goal by end time: locked 2 more hours', () => { const r = S.strictShield({ ...common, running: false, now: dayEnd + 60000, goal: 60, earned: 30 }); assert.equal(r.phase, 'missed'); assert.equal(r.untilMs, dayEnd + 2 * 3600000); });
 t('emergency unlock / off day / no apps -> off', () => { for (const x of [{ unlockedToday: true }, { offDay: true }, { selectionCount: 0 }, { enabled: false }]) assert.equal(S.strictShield({ ...common, now: base + H, goal: 60, ...x }).phase, 'off'); });
 t('off day detection + wake auto-start', () => {

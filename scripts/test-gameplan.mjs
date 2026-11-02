@@ -154,7 +154,7 @@ t('wiring: earned break (take-break action, shield lift, relock on expiry/launch
   assert(/GP\.breakActive\(gpBreak\.value, Date\.now\(\)\) && gpBreakOk\(\)\) r = \{ \.\.\.r, want: false, phase: 'break' \}/.test(h));
   assert(/st = await gpBreakRelock\(st\)/.test(h) && /clingLock\.scheduleLock\(\{ startMs: b\.endMs, untilMs: prior\.until/.test(h));
   assert(/at: new Date\(s\.endMs\)/.test(h) && !/s\.kind === 'break'/.test(h));
-  assert(/claimedAt: sd\.claimedAt/.test(h) && /@claim-screen="claimScreenTime"/.test(h));
+  assert(/claimedAt: sd\.claimedAt|: sd\.claimedAt\) \|\| 0/.test(h) && /@claim-screen="claimScreenTime"/.test(h));
 });
 t('row text per phase', () => {
   const g = G.normPlan({ dayStart: '09:00' });

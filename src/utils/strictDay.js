@@ -40,10 +40,11 @@ export const endOfDay = (nowMs) => { const d = new Date(nowMs); return new Date(
 // phases: 'locked' (working toward the goal), 'ready' (goal met, window banked, user has not started it), 'earned' (unlock window running), 'relocked' (window used up),
 //         'missed' (end time passed without the goal: locked until midnight), 'off' (no session / emergency unlocked / no apps).
 export const MISS_GRACE_MS = 2 * 3600000;
-export const strictShield = ({ running = false, dayEndMs = 0, now = Date.now(), goal = 0, earned = 0, tasksDone = 0, goalAt = 0, claimedAt = 0, selectionCount = 0, enabled = true, unlockedToday = false, offDay = false, tuning = STRICT_TUNING } = {}) => {
+export const strictShield = ({ running = false, dayEndMs = 0, now = Date.now(), goal = 0, earned = 0, tasksDone = 0, goalAt = 0, claimedAt = 0, selectionCount = 0, enabled = true, unlockedToday = false, offDay = false, allDone = false, tuning = STRICT_TUNING } = {}) => {
   const midnight = endOfDay(now); const off = { want: false, untilMs: 0, phase: 'off', windowMin: 0, unlockEndMs: 0 };
   if (!enabled || selectionCount <= 0 || unlockedToday || offDay || !dayEndMs) return off;
-  const met = goal > 0 && earned >= goal;
+  // Every task finished counts as met even when the floor goal (minGoal) or a penalty keeps the points short of it.
+  const met = (goal > 0 && earned >= goal) || !!allDone;
   if (!met) {
     // Missed shutdown rule: locked until shutdown + 2 h (MISS_GRACE_MS), then the native monitor unlocks in the background.
     // While the goal is still open the lock already runs to that time, so a missed shutdown never drops the shield.
@@ -52,10 +53,14 @@ export const strictShield = ({ running = false, dayEndMs = 0, now = Date.now(), 
     return graceEnd - now > 60000 ? { ...off, want: true, untilMs: graceEnd, phase: 'missed' } : off;
   }
   const windowMin = earnedWindowMin({ earned, goal, tasksDone }, tuning);
-  if (!claimedAt) return midnight - now > 60000 ? { want: true, untilMs: midnight, phase: 'ready', windowMin, unlockEndMs: 0 } : { ...off, windowMin };
+  // Goal met and the day's time is over: everything opens (build 48 kept 'ready'/'relocked' locked until midnight).
+  // Before the end the banked window works as before, but the native lock ends at the day end, so iOS lifts it on its own.
+  if (now >= dayEndMs) return { ...off, phase: 'done', windowMin, unlockEndMs: claimedAt ? claimedAt + windowMin * 60000 : 0 };
+  const lockEnd = Math.min(midnight, dayEndMs);
+  if (!claimedAt) return lockEnd - now > 60000 ? { want: true, untilMs: lockEnd, phase: 'ready', windowMin, unlockEndMs: 0 } : { ...off, windowMin };
   const unlockEndMs = claimedAt + windowMin * 60000;
   if (now < unlockEndMs) return { want: false, untilMs: 0, phase: 'earned', windowMin, unlockEndMs };
-  return midnight - now > 60000 ? { want: true, untilMs: midnight, phase: 'relocked', windowMin, unlockEndMs } : { ...off, windowMin, unlockEndMs };
+  return lockEnd - now > 60000 ? { want: true, untilMs: lockEnd, phase: 'relocked', windowMin, unlockEndMs } : { ...off, windowMin, unlockEndMs };
 };
 
 export const fmtMin = (m) => { const v = Math.max(0, Math.round(m)); return v >= 60 ? `${Math.floor(v / 60)}h${v % 60 ? ` ${v % 60}m` : ''}` : `${v}m`; };

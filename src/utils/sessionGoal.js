@@ -22,10 +22,11 @@ export const countsToward = (t) => !!t && t.status !== 'pending' && t.status !==
 export const sessionOfTask = (t, sessions = 2) => (sessions === 1 ? 1 : SESSION1_SECTIONS.includes(sectionOf(t)) ? 1 : 2);
 export const doneAtMs = (t) => { const v = t && t.completedAt; if (!v) return NaN; if (typeof v === 'number') return v;
   if (v.seconds) return v.seconds * 1000; if (v._seconds) return v._seconds * 1000; if (typeof v.toMillis === 'function') return v.toMillis(); return Date.parse(v); };
-// The session's goal: target = sum of its tasks' points; earned = points of its tasks completed inside [startMs, endMs).
-export const sessionGoal = (tasks, { n, sessions = 2, startMs, endMs }, pointsOf = taskPoints) => {
+// The session's goal: target = sum of its tasks' points; earned = points of its tasks completed before endMs (a task finished early,
+// before the session or the eight-hour day started, still counts; no completedAt = counts). Only completions after the end miss.
+export const sessionGoal = (tasks, { n, sessions = 2, endMs }, pointsOf = taskPoints) => {
   let target = 0; let earned = 0; let done = 0; let total = 0;
   for (const t of tasks || []) { if (!countsToward(t) || sessionOfTask(t, sessions) !== n) continue; const p = pointsOf(t); target += p; total += 1;
-    if (t.completed) { const at = doneAtMs(t); if (Number.isFinite(at) && at >= startMs && at < endMs) { earned += p; done += 1; } } }
+    if (t.completed) { const at = doneAtMs(t); if (!Number.isFinite(at) || at < endMs) { earned += p; done += 1; } } }
   return { n, target, earned, done, total, met: earned >= target };
 };

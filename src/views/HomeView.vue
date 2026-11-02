@@ -4050,12 +4050,18 @@ onMounted(loadBossPrefs);
 const effWakeAuto = computed(() => wakeAutoOn({ mode: bossMode.value, wakeAuto: lockIn.value.wakeAuto, dayKey: localDateStr(), offDates: offDates.value, skipDate: lockIn.value.skipDate }));
 const strictGoal = computed(() => (gpOn.value ? (goalOverride.value && Number(goalOverride.value.value) > 0 ? Math.round(Number(goalOverride.value.value)) : gpGoal.value.goal) : goalFor(todayTasksForTarget.value, goalOverride.value)));
 const tasksDoneToday = computed(() => (todayTasksForTarget.value || []).filter((t) => t && t.completed).length);
+// Every countable task of today finished (pending / won't do don't count): unlock rule at the end, whatever the goal floor or penalties say.
+const allTasksDone = computed(() => { const l = (todayTasksForTarget.value || []).filter((t) => t && t.status !== 'pending' && t.status !== 'wontdo'); return l.length > 0 && l.every((t) => t.completed); });
 const STRICT_KEY = 'cn.strict.day'; // { day, goalAt, claimedAt, dayEndMs } (this device)
 const readStrictDay = () => { try { const v = JSON.parse(localStorage.getItem(STRICT_KEY) || 'null'); return v && v.day === localDateStr() ? v : { day: localDateStr(), goalAt: 0, dayEndMs: 0 }; } catch (e) { return { day: localDateStr(), goalAt: 0, dayEndMs: 0 }; } };
 const writeStrictDay = (v) => { try { localStorage.setItem(STRICT_KEY, JSON.stringify(v)); } catch (e) { /* ignore */ } };
 const strictState = ref(null);
 const strictReadyMin = ref(0); // goal met: earned screen time banked until the user starts it
-const claimScreenTime = () => { const sd = readStrictDay(); if (sd.claimedAt || !strictReadyMin.value) return; writeStrictDay({ ...sd, claimedAt: Date.now() }); strictReadyMin.value = 0; syncAppLock(); };
+// Coach sessions bank their own window (claimedAtBy[session]): a window claimed in the morning must not leave the afternoon 'relocked'.
+const claimScreenTime = () => { const sd = readStrictDay(); if (!strictReadyMin.value) return; const ss = gpOn.value ? liveSession(gpSessions.value, Date.now()) : null;
+  if (ss) { const sk = `${ss.dayKey}s${ss.n}`; const by = sd.claimedAtBy || {}; if (by[sk]) return; writeStrictDay({ ...sd, claimedAtBy: { ...by, [sk]: Date.now() } }); }
+  else { if (sd.claimedAt) return; writeStrictDay({ ...sd, claimedAt: Date.now() }); }
+  strictReadyMin.value = 0; syncAppLock(); };
 const firstNameForBoss = computed(() => String((auth.currentUser && auth.currentUser.displayName) || '').split(' ')[0]);
 const saveBossField = async (fields) => { if (!userId.value) return; try { await setDoc(doc(db, 'users', userId.value), fields, { merge: true }); } catch (e) { console.warn('boss pref', e && e.message); } };
 const setMood = (id) => { todayMood.value = id; saveBossField({ mood: { day: localDateStr(), id } }); showRepeatToast(moodReply(id, strictGoal.value)); };
@@ -4071,12 +4077,13 @@ const strictPlan = (st) => {
   const goalAt = ss ? sd.goalAtBy[sk] || 0 : sd.goalAt;
   if (!goalAt && goal > 0 && earned >= goal) { if (ss) sd.goalAtBy[sk] = Date.now(); else sd.goalAt = Date.now(); }
   writeStrictDay(sd);
-  let r = strictShield({ running: eh.running.value, dayEndMs: sd.dayEndMs, goal, earned, tasksDone: tasksDoneToday.value, goalAt: ss ? sd.goalAtBy[sk] || 0 : sd.goalAt, claimedAt: sd.claimedAt || 0, selectionCount: st.selectionCount || 0,
+  const allDone = ss ? ss.total > 0 && ss.done >= ss.total : allTasksDone.value;
+  let r = strictShield({ running: eh.running.value, dayEndMs: sd.dayEndMs, goal, earned, tasksDone: tasksDoneToday.value, goalAt: ss ? sd.goalAtBy[sk] || 0 : sd.goalAt, claimedAt: (ss ? (sd.claimedAtBy || {})[sk] : sd.claimedAt) || 0, selectionCount: st.selectionCount || 0, allDone,
     enabled: lockEnabled(), unlockedToday: lockUnlockedDay.value === localDateStr(), offDay: (offDates.value || []).includes(localDateStr()) });
   if (gpOn.value) { // game plan: optional friend-approved unlock window wins (only when enabled); otherwise social apps stay locked until the morning checklist is done
     const grace = gpGrace(); const free = lockEnabled() && (st.selectionCount || 0) > 0 && lockUnlockedDay.value !== localDateStr();
     if (gp.value.friendUnlock && gpUnlock.value.untilMs > Date.now()) r = { ...r, want: false, phase: 'friend' };
-    else if (grace.want && free) r = { ...r, want: true, untilMs: Math.max(grace.untilMs, r.want ? r.untilMs : 0), phase: 'missed', session: grace };
+    else if (grace.want && free && !allTasksDone.value) r = { ...r, want: true, untilMs: Math.max(grace.untilMs, r.want ? r.untilMs : 0), phase: 'missed', session: grace };
     else if (GP.breakActive(gpBreak.value, Date.now()) && gpBreakOk()) r = { ...r, want: false, phase: 'break' };
     else if (!r.want && gpGate.value && lockEnabled() && (st.selectionCount || 0) > 0 && lockUnlockedDay.value !== localDateStr()) r = { ...r, want: true, untilMs: gpPhase.value.closeMs, phase: 'checklist' };
   }
@@ -4095,7 +4102,8 @@ const gpGraceSchedule = async () => {
   for (const s of SP.sessionsOf(gp.value, todayTasksForTarget.value || [], Date.now(), { estMinutes: gpEst })) {
     const g = SP.graceSchedule(s, Date.now());
     if (g.want && !gpGraceKeys.has(g.key)) { gpGraceKeys.add(g.key); const r = await clingLock.scheduleLock(g); if (!r || r.monitor !== 'ok') gpGraceKeys.delete(g.key); }
-    else if (!g.want && s.met && s.endMs > Date.now()) { gpGraceKeys.delete(g.key); await clingLock.cancelScheduledLock({ key: g.key }); }
+    // Met (also after the end, e.g. finished from the widget with the app closed, or on a cold start): drop the 2 h block, running or not.
+    else if (!g.want && s.met && g.untilMs > Date.now()) { gpGraceKeys.delete(g.key); await clingLock.cancelScheduledLock({ key: g.key }); }
   }
 };
 const lockEnabled = () => { try { return localStorage.getItem(LOCK_PREF) === '1'; } catch (e) { return false; } };
@@ -4118,7 +4126,7 @@ const syncAppLock = async () => {
     unlockedToday: lockUnlockedDay.value === localDateStr() });
   // Server session settle (eight-hour state): a missed session keeps apps locked until its graceUntilMs (end + 2 h).
   const ehs = eh.shutdown && eh.shutdown.value;
-  if (ehs && ehs.missed && ehs.opensAtMs - Date.now() > 60000 && lockEnabled() && (st.selectionCount || 0) > 0 && lockUnlockedDay.value !== localDateStr() && !(sp && sp.phase === 'friend')) {
+  if (ehs && ehs.missed && !allTasksDone.value && ehs.opensAtMs - Date.now() > 60000 && lockEnabled() && (st.selectionCount || 0) > 0 && lockUnlockedDay.value !== localDateStr() && !(sp && sp.phase === 'friend')) {
     want = true; endMs = Math.max(ehs.opensAtMs, sp && sp.want ? sp.untilMs : 0); }
   gpGraceSchedule();
   const fEnd = sp && sp.phase === 'break' ? 0 : focusShieldEnd({ dayWant: !!want, enabled: lockEnabled(), selectionCount: st.selectionCount || 0, locked: lockedFocus(selectedDayRoutine.value || []) });
