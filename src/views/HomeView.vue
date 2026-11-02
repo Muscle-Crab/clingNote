@@ -3967,7 +3967,11 @@ const gpBreakSave = (b) => { gpBreak.value = b; try { localStorage.setItem(GP_BR
 // Numbered breaks (GP.BREAK_RULES): progress today = done/total tasks + points + breaks already taken (gpBreak.n or the log).
 // Per-session points: each session has its own target (sum of its tasks' points) and counts only points earned inside it.
 const gpSessions = computed(() => (gpOn.value ? SP.sessionsOf(gp.value, todayTasksForTarget.value || [], nowTick.value, { estMinutes: gpEst }) : []));
-const gpSession = computed(() => (gpSessions.value.length ? SP.currentSession(gpSessions.value, nowTick.value) : null));
+// The session that judges points now: inside the day's session windows and with tasks of its own. A session with no tasks
+// (target 0) or a late session run after the close (e.g. session 2 started from the shutdown at 9 PM) falls back to the day bar,
+// so an empty session never reads as "goal met" (no shield drop) and late points still show.
+const liveSession = (list, nowMs) => { if (!list.length || nowMs >= list[list.length - 1].endMs) return null; const s = SP.currentSession(list, nowMs); return s && s.target > 0 ? s : null; };
+const gpSession = computed(() => liveSession(gpSessions.value, nowTick.value));
 const gpGrace = () => (gpOn.value && gpProgKnown.value ? SP.graceLock(SP.sessionsOf(gp.value, todayTasksForTarget.value || [], Date.now(), { estMinutes: gpEst }), Date.now()) : { want: false, untilMs: 0 });
 const gpProg = computed(() => { const l = todayTasksForTarget.value || []; return { done: l.filter((t) => t && t.completed).length, total: l.length, points: gpSession.value ? gpSession.value.earned : gpEarned.value.points,
   taken: GP.breaksOn(gpBreakLog.value, GP.dayWindow(gp.value).dayKey).count }; });
@@ -4058,7 +4062,7 @@ let strictNoteSig = '';
 const strictPlan = (st) => {
   const sd = readStrictDay();
   // Coach mode: the shield judges the CURRENT session (its own target and in-session points, same math as the server), not the whole day.
-  const ss = gpOn.value && gpSessions.value.length ? SP.currentSession(gpSessions.value, Date.now()) : null;
+  const ss = gpOn.value ? liveSession(gpSessions.value, Date.now()) : null;
   const earned = ss ? ss.earned : pointsAccumulated.value || 0; const goal = ss ? ss.target : strictGoal.value;
   if (eh.running.value && eh.lock.value && eh.lock.value.endMs) sd.dayEndMs = eh.lock.value.endMs;
   const sk = ss ? `${ss.dayKey}s${ss.n}` : ''; if (ss) sd.goalAtBy = sd.goalAtBy || {};

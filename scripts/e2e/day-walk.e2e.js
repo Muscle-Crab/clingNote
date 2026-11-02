@@ -125,10 +125,10 @@ const closeRow = async (p) => { if ((await p.locator('[data-test=gp-toggle]').ge
   const s1Start = ((await ehDoc(uid)).lock || {}).startMs;
   await p.click('[data-test=eh-next-session]').catch(() => {}); await waitFor(async () => { const l = (await ehDoc(uid)).lock || {}; return l.index === 1 && l.startMs !== s1Start; });
   d = await ehDoc(uid); const wake2 = atNY(8, 0, 1);
-  step('9 session 2 from the shutdown (runs past the close, ends by the next wake)', d.lock.index === 1 && d.lock.endMs > atNY(16) && d.lock.endMs <= wake2 && (await fake()).locked, JSON.stringify({ s: new Date(d.lock.startMs).toISOString(), e: new Date(d.lock.endMs).toISOString(), wake2: new Date(wake2).toISOString() }));
+  step('9 session 2 from the shutdown (runs past the close, ends by the next wake)', d.lock.index === 1 && d.lock.endMs > atNY(16) && d.lock.endMs <= wake2 && (await fake()).locked, JSON.stringify({ i: d.lock.index, locked: (await fake()).locked, s: new Date(d.lock.startMs).toISOString(), e: new Date(d.lock.endMs).toISOString(), wake2: new Date(wake2).toISOString() }));
 
   // 8) late phase on Home, a task finished now still counts
-  await setClock(atNY(22, 0)); await home();
+  await setClock(atNY(22, 0)); await home(); await shot(p, '12a-home-late-full');
   await p.locator('[data-test=task-check]').nth(0).click({ timeout: 5000 }).catch(() => {}); await sleep(2500);
   const r8 = await row(p); const ph8 = await p.locator('[data-test=gp-row]').getAttribute('data-phase').catch(() => ''); await shot(p, '12-home-late-phase', '[data-test=gp-row]');
   step('10 late phase line (Session 2 · Xh left, points still count: 80)', ph8 === 'late' && /^Session 2 · \d+h \d+m left · 80\//.test(r8), `${ph8} ${r8}`);
