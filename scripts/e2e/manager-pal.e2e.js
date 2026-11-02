@@ -14,7 +14,7 @@ const WEEK = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'
 
 async function seedUser(email, name) {
   const u = await admin.auth().createUser({ email, password: 'zztest-pass-123', displayName: name });
-  await db.doc(`users/${u.uid}`).set({ uid: u.uid, name, email, onboardingComplete: true, paywallSeenAt: new Date(), isPro: false, plan: 'free' });
+  await db.doc(`users/${u.uid}`).set({ uid: u.uid, name, email, onboardingComplete: true, paywallSeenAt: new Date(), isPro: true, plan: 'lifetime' });
   await db.doc(`publicProfiles/${u.uid}`).set({ name });
   return u.uid;
 }
