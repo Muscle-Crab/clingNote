@@ -390,7 +390,7 @@ import { loadHabits, saveHabits, addHabit, logHabit, habitSummary } from '@/util
 import { autoSchedule } from '@/utils/autoSchedule';
 import { clingLock, clingNative, lockAvailable, nativeAvailable } from '@/native/clingNative';
 import { maybeAskTracking } from '@/utils/tracking';
-import { planLock, resumePending, untilFor, fmtDuration, joinNames, withTimeout, describeUnlock } from '@/utils/appLockNames';
+import { planLock, resumePending, untilFor, fmtDuration, joinNames, withTimeout, describeUnlock, describeLock } from '@/utils/appLockNames';
 import { planTaskUnlock } from '@/utils/taskAppUnlock';
 import LockGuideSheet from '@/components/home/LockGuideSheet.vue';
 import { normBossMode, emergencyAllowed, goalFor, strictShield, wakeAutoOn, dayEndNote, moodReply } from '@/utils/strictDay';
@@ -4275,9 +4275,7 @@ const runLockPlan = async (action, plan, pending) => {
   if (action === 'lock') {
     const a0 = await clingLock.requestAuthorization(); if (a0.status !== 'approved') return { error: 'Screen Time permission was not given.' };
     const r = await clingLock.lockApps(plan.labels, until); lockAppsCache.value = r.apps || lockAppsCache.value;
-    if (r.error) return { error: r.error === 'not_authorized' ? 'Screen Time permission was not given.' : r.error };
-    const locked = r.locked || [];
-    return { locked, summary: locked.length ? `Locked ${joinNames(locked)} ${fmtDuration(until)}.` : 'Nothing was locked.', ...(plan.stillMissing && plan.stillMissing.length ? { not_picked: plan.stillMissing } : {}), ...(plan.unknown && plan.unknown.length ? { not_found: plan.unknown } : {}) };
+    return describeLock({ plan, r, until });
   }
   const before = lockAppsCache.value.slice(); const overall = await clingLock.status().catch(() => ({}));
   const r = plan.labels.length || plan.all ? await clingLock.unlockApps(plan.all ? ['*'] : plan.labels) : { unlocked: [] }; lockAppsCache.value = r.apps || lockAppsCache.value;

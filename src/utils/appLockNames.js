@@ -98,3 +98,17 @@ export const describeUnlock = ({ plan = {}, before = [], unlocked = [], overall 
   out.summary = parts.join(' ');
   return out;
 };
+
+// Truthful lock result. r: native lockApps reply {locked, apps, error, warnings}. A lock counts only when native reports the
+// label locked AND (when it sends the app list) that app is marked locked; anything else is returned as an error so the
+// assistant can never confirm a lock that did not happen ("Nothing was locked." used to come back as a success).
+export const describeLock = ({ plan = {}, r = {}, until = 0, now = Date.now() } = {}) => {
+  if (r.error) return { error: r.error === 'not_authorized' ? 'Screen Time permission was not given. Allow it in the ClingNote app and try again.' : String(r.error) };
+  const state = Array.isArray(r.apps) ? new Map(r.apps.map((x) => [String(x.label || '').toLowerCase(), !!x.locked])) : null;
+  const locked = (r.locked || []).filter((l) => !state || state.get(String(l).toLowerCase()) !== false);
+  const want = plan.labels || [];
+  const failed = want.filter((l) => !locked.some((x) => String(x).toLowerCase() === String(l).toLowerCase()));
+  const extra = { ...(plan.stillMissing && plan.stillMissing.length ? { not_picked: plan.stillMissing } : {}), ...(plan.unknown && plan.unknown.length ? { not_found: plan.unknown } : {}), ...(r.warnings && r.warnings.length ? { warnings: r.warnings } : {}) };
+  if (!locked.length) return { error: `Nothing was locked${failed.length ? ` (${joinNames(failed)} could not be locked; pick ${failed.length > 1 ? 'them' : 'it'} again in the app list)` : ''}.`, ...extra };
+  return { locked, summary: `Locked ${joinNames(locked)} ${fmtDuration(until, now)}.${failed.length ? ` ${joinNames(failed)} could not be locked.` : ''}`, ...(failed.length ? { failed } : {}), ...extra };
+};
