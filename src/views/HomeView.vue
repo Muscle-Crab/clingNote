@@ -137,7 +137,7 @@
                class="task-section">
         <GamePlanRow v-if="gpOn && isViewingToday" :text="gpText" :phase="gpPhase.phase" :review="gpReview" :leftovers="gpLeft" :tomorrow="gpTomorrow"
                      :locked="hardLocked || gpGate" :gate="gpGate" :friend="(gp.friend && gp.friend.name) || ''" :friend-on="gp.friendUnlock" :unlock="gpUnlock" :penalty="gpPenaltyToday" :after-close="gpEarned.afterClose"
-                     :break-bank="gpBank" :break-min="GP.BREAK_TIERS.capMin" :history="gpHistory" :break-on="gpPhase.phase === 'break'" :screen-ready="strictReadyMin" :ready="gpReady"
+                     :break-bank="gpBank" :break-min="gpBreakStatus.min || 15" :gift="gpGift" :history="gpHistory" :break-on="gpPhase.phase === 'break'" :screen-ready="strictReadyMin" :ready="gpReady"
                      @carry="gpCarry" @review="gpApplyReview" @ask="gpAsk" @share="gpShare" @take-break="gpTakeBreak" @end-break="gpEndBreak" @claim-screen="claimScreenTime" />
         <EmptyState v-if="dayTasks.length === 0" :show-add="true" :show-templates="isViewingToday && !!userId" @add="onAddClick" @templates="openTemplates" />
 
@@ -3959,7 +3959,14 @@ const GP_BREAK_KEY = 'cn.gp.break';
 const gpBreakPick = (remote) => { const k = GP.dayWindow(gp.value).dayKey; let loc = null; try { loc = JSON.parse(localStorage.getItem(GP_BREAK_KEY) || 'null'); } catch (e) { /* ignore */ }
   const a = GP.normBreak(remote, k); const b = GP.normBreak(loc, k); return (b.used > a.used || (b.used === a.used && b.relocked && !a.relocked)) ? b : a; };
 const gpBreakSave = (b) => { gpBreak.value = b; try { localStorage.setItem(GP_BREAK_KEY, JSON.stringify(b)); } catch (e) { /* ignore */ } saveBossField({ gpBreak: b }); };
-const gpBank = computed(() => (gpOn.value ? GP.breakBank(gp.value, gpBreak.value, nowTick.value, gpEarned.value.points).balance : 0));
+// Numbered breaks (GP.BREAK_RULES): progress today = done/total tasks + points + breaks already taken (gpBreak.n or the log).
+const gpProg = computed(() => { const l = todayTasksForTarget.value || []; return { done: l.filter((t) => t && t.completed).length, total: l.length, points: gpEarned.value.points,
+  taken: GP.breaksOn(gpBreakLog.value, GP.dayWindow(gp.value).dayKey).count }; });
+const gpBankFull = computed(() => (gpOn.value ? GP.breakBank(gp.value, gpBreak.value, nowTick.value, gpProg.value) : { balance: 0, status: GP.breakStatus({ ...gpProg.value, dayHours: gp.value.closeHours }) }));
+const gpBank = computed(() => gpBankFull.value.balance);
+const gpBreakStatus = computed(() => gpBankFull.value.status);
+// The 🎁 on the game plan line: a break can be taken now (unlocked, none running, day not closed). The checklist never blocks it.
+const gpGift = computed(() => gpBank.value > 0 && !['break', 'closed'].includes(gpPhase.value.phase));
 // Break history (users/{uid}.gpBreakLog; the shutdown recap reads the local copy cn.gp.breakLog).
 const gpLogLocal = () => { try { localStorage.setItem('cn.gp.breakLog', JSON.stringify(gpBreakLog.value)); } catch (e) { /* ignore */ } };
 const gpLogAdd = (entries) => { let l = gpBreakLog.value; for (const e of entries) l = GP.addBreakLog(l, e); gpBreakLog.value = l; gpLogLocal(); saveBossField({ gpBreakLog: l }); };
@@ -3973,7 +3980,7 @@ const localYMDOf = (ms) => { const d = new Date(ms); return `${d.getFullYear()}-
 const gpTakeBreak = async () => {
   const now = Date.now(); let prior = null;
   if (lockAvailable()) { const st = await clingLock.status(); prior = { locked: !!st.locked && !(Number(st.until) > 0 && Number(st.until) <= now), until: Number(st.until) || 0, label: st.label || '' }; }
-  const b = GP.takeBreak(gp.value, gpBreak.value, now, prior, gpEarned.value.points); if (!b) return;
+  const b = GP.takeBreak(gp.value, gpBreak.value, now, prior, gpProg.value); if (!b) return;
   gpBreakSave(b); hardLocked.value = false; nowTick.value = Date.now(); gpLogAdd([b.last]);
   if (lockAvailable()) {
     // Lift EVERY shield (lock-in + per-app locks) for exactly the break; ClingLockMonitor re-locks at the end, app closed or not,
@@ -4118,21 +4125,21 @@ const gpQuiet = computed(() => gpOn.value && gpPhase.value.phase === 'focus'); /
 const gpGate = computed(() => gpOn.value && routineItems.value.length > 0 && !GP.checklistDone(routineItems.value) && gpPhase.value.phase !== 'closed');
 const gpText = computed(() => (gpGate.value && !['focus', 'break', 'late'].includes(gpPhase.value.phase) ? '🔒 Checklist first · ' : '') + GP.rowText(gpPhase.value, { earned: gpEarned.value.points, goal: strictGoal.value })
 );
-// Points break alert: once per tier per day ("You hit 50 points — break time if you want it"). Optional: it only banks minutes;
-// nothing unlocks until the user taps Take break (Home line, or the notification's Take break action on iOS).
+// Break unlocked alert: once per break number per day ("Break 1 unlocked: 15 min"). Optional: nothing unlocks until the user
+// taps the 🎁 / Take break (Home line, or the notification's Take break action on iOS).
 const GP_TIER_KEY = 'cn.gp.tierAlert';
-watch(() => gpOn.value && gpLoaded.value && isViewingToday.value && gpEarned.value.points, (pts) => {
-  if (pts === false) return; const k = gpPhase.value.dayKey; if (gpPhase.value.phase === 'closed') return;
-  let stored = null; try { stored = JSON.parse(localStorage.getItem(GP_TIER_KEY) || 'null'); } catch (e) { /* ignore */ }
-  const n = alertTier(stored, k, GP.pointsTier(pts, gp.value.breakEvery)); if (!n) return;
+watch(() => gpOn.value && gpLoaded.value && isViewingToday.value && `${gpBreakStatus.value.n}:${gpBreakStatus.value.ok}:${gpEarned.value.points}`, (key) => {
+  if (key === false) return; const k = gpPhase.value.dayKey; if (gpPhase.value.phase === 'closed') return;
+  const st = gpBreakStatus.value; let stored = null; try { stored = JSON.parse(localStorage.getItem(GP_TIER_KEY) || 'null'); } catch (e) { /* ignore */ }
+  const n = alertTier(stored, k, GP.breakToAlert(st)); if (!n) return;
   try { localStorage.setItem(GP_TIER_KEY, JSON.stringify({ day: k, n })); } catch (e) { /* ignore */ }
-  const note = GP.tierAlertText(n, gp.value.breakEvery); const minutes = Math.min(GP.BREAK_TIERS.capMin, gpBank.value || GP.pointsBreakMin(pts, gp.value.breakEvery));
-  if (lockAvailable()) clingLock.offerBreak({ minutes, points: pts, title: note.title, body: note.body, day: k, closeMs: gpPhase.value.closeMs });
+  const note = GP.breakAlertText(st); const pts = gpEarned.value.points;
+  if (lockAvailable()) clingLock.offerBreak({ minutes: st.min, points: pts, title: note.title, body: note.body, day: k, closeMs: gpPhase.value.closeMs });
   else scheduleLocal(`gp:tier:${k}:${n}`, { title: note.title, body: note.body, at: new Date(Date.now() + 1000), route: '/home', type: 'gp' });
 });
-// Ready span (never truncated): banked minutes + the distance to the next points tier ("28 pts to 20m break"); the points themselves are in the main text.
-const gpReady = computed(() => { const ph = gpPhase.value.phase; if (ph === 'closed') return '';
-  return [gpBank.value > 0 && ph !== 'break' ? `${gpBank.value}m ready` : '', GP.nextTierText(gpEarned.value.points, gp.value.breakEvery)].filter(Boolean).map((x) => `· ${x}`).join(' '); }); // always visible, own span (never ellipsized)
+// Ready span (never truncated): "15m break ready" or what is missing ("3 tasks to 15m break"); the points are in the main text.
+const gpReady = computed(() => { const ph = gpPhase.value.phase; if (ph === 'closed' || ph === 'break') return '';
+  return `· ${gpBreakStatus.value.text}`; }); // always visible, own span (never ellipsized)
 const gpReview = computed(() => (gpOn.value && gpLoaded.value && GP.reviewDue(gp.value, nowTick.value) ? GP.weekSummary(gpLog.value, gp.value, nowTick.value) : null));
 const gpLeft = computed(() => (gpPhase.value.phase === 'closed' ? GP.leftovers(todayTasksForTarget.value).map((t) => ({ key: taskKey(t), title: t.title || 'Untitled task' })) : []));
 const gpTomorrowIdx = computed(() => (days.findIndex((x) => x.day === getTodayId()) + 1) % days.length);
