@@ -109,6 +109,8 @@ if (require.main === module) (async () => {
   await popup.click('#sign-in');
   // a brand-new account goes through the NORMAL onboarding
   await mgr.waitForURL(/\/onboarding/, { timeout: 30000 });
+  // Paywall guard: manager / pals are Pro (manager-pal 402s a free caller), so the new manager buys Pro here (lifetime, merged into the doc)
+  { const mu = (await admin.auth().getUserByEmail('zztest-manager@example.com')).uid; await db.doc(`users/${mu}`).set({ isPro: true, plan: 'lifetime' }, { merge: true }); }
   ok('new manager account is sent to normal onboarding', true);
   await shot(mgr, 'pal_e2e_2_onboarding.png');
   for (let i = 0; i < 12 && mgr.url().includes('/onboarding'); i++) {

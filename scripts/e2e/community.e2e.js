@@ -123,6 +123,8 @@ async function seedUser(email, name) {
   await q.waitForSelector('.drama', { timeout: 15000 }).catch(() => {});
   ok('pop-up waits while the app streak celebration is showing', !(await q.$('[data-test=ach-prompt]')) || !(await q.$('.drama')));
   for (let i = 0; i < 10 && await q.$('.drama'); i++) { await q.locator('.drama button').last().click().catch(() => {}); await sleep(500); }
+  // Pro users get the morning report (boss briefing) on open: close it first, like a user would
+  for (let i = 0; i < 6; i++) { const x = q.locator('[data-test=boss-briefing] .bb-x'); if (!(await x.count())) { await sleep(500); continue; } await x.first().click().catch(() => {}); await sleep(600); break; }
   await q.waitForSelector('[data-test=ach-prompt]', { timeout: 20000 }); await sleep(600);
   const txt = await q.textContent('[data-test=ach-prompt]');
   ok('streak pop-up combines tiers 3 + 7 (uncapped run from counted dates)', /7-day streak/.test(txt) && /3-day streak/.test(txt));
