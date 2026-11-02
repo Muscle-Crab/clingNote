@@ -150,7 +150,7 @@ t('7 close picker: nothing automatic; picked copies dedupe by title, reset compl
 t('wiring: earned break (take-break action, shield lift, relock on expiry/launch, native re-shield, earned note)', () => {
   const h = src('src/views/HomeView.vue'); const r = src('src/components/home/GamePlanRow.vue');
   assert(/@take-break="gpTakeBreak"/.test(h) && /data-test="gp-take-break"/.test(r) && /data-test="gp-ready"/.test(r));
-  assert(/GP\.breakActive\(gpBreak\.value, Date\.now\(\)\)\) r = \{ \.\.\.r, want: false, phase: 'break' \}/.test(h));
+  assert(/GP\.breakActive\(gpBreak\.value, Date\.now\(\)\) && gpBreakOk\(\)\) r = \{ \.\.\.r, want: false, phase: 'break' \}/.test(h));
   assert(/st = await gpBreakRelock\(st\)/.test(h) && /clingLock\.scheduleLock\(\{ startMs: b\.endMs, untilMs: prior\.until/.test(h));
   assert(/at: new Date\(s\.endMs\)/.test(h) && !/s\.kind === 'break'/.test(h));
   assert(/claimedAt: sd\.claimedAt/.test(h) && /@claim-screen="claimScreenTime"/.test(h));

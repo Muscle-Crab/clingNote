@@ -26,6 +26,8 @@ export const clingLock = {
     try { const r = await Lock.scheduleLock({ startMs, untilMs, key: String(key) }); return { monitor: 'ok', ...r }; }
     catch (e) { return { monitor: `failed: ${String((e && e.message) || e)}` }; }
   },
+  // Cancel a scheduleLock block by key (session met before its end -> no 2 h miss lock).
+  cancelScheduledLock: safe('ClingLock', Lock, (p, a) => p.cancelScheduledLock({ key: String((a && a.key) || '') }), { cancelled: false }),
   // per-app locks by user-confirmed label (src/utils/appLockNames.js resolves spoken names to these labels)
   labeledApps: safe('ClingLock', Lock, (p) => p.labeledApps(), { apps: [] }),
   pickNamedApps: safe('ClingLock', Lock, (p, suggest = []) => p.pickNamedApps({ suggest }), { saved: false, apps: [] }),
@@ -41,6 +43,7 @@ export const clingLock = {
   endBreak: safe('ClingLock', Lock, (p) => p.endBreak({}), { ended: false }),
   breakState: safe('ClingLock', Lock, (p) => p.breakState({}), { live: false, untilMs: 0, taken: [] }),
   offerBreak: safe('ClingLock', Lock, (p, o) => p.offerBreak(o || {}), { posted: false }),
+  clearBreakOffer: safe('ClingLock', Lock, (p) => p.clearBreakOffer({}), { cleared: false }),
   // Lock-end alert level: off | subtle | standard | loud (default) | maximum. Omit level to read.
   setShieldFriend: safe('ClingLock', Lock, (p, on) => p.setShieldFriend({ on: !!on }), { on: false }),
   setLockEndAlert: safe('ClingLock', Lock, (p, level) => p.setLockEndAlert(level ? { level } : {}), { level: 'loud' }),

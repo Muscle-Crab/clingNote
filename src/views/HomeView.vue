@@ -332,6 +332,7 @@ import TaskListHeader from '@/components/home/TaskListHeader.vue';
 import RoutineStrip from '@/components/home/RoutineStrip.vue';
 import GamePlanRow from '@/components/home/GamePlanRow.vue';
 import * as GP from '@/utils/gamePlan';
+import * as SP from '@/utils/sessionPoints';
 import { applyTaken, holdLockAction, alertTier, recapAt } from '@/utils/breakUnlock';
 import { fnUrl } from '@/config/api';
 import { markRoutineDone, skipRoutineToday, canSkipToday, routineToday, routineWeek } from '@/utils/routine';
@@ -3957,14 +3958,28 @@ const gpPhase = computed(() => GP.phaseAt(gp.value, nowTick.value, gpBreak.value
 // State lives on users/{uid}.gpBreak and this device (cn.gp.break) so a restart after expiry still relocks.
 const GP_BREAK_KEY = 'cn.gp.break';
 const gpBreakPick = (remote) => { const k = GP.dayWindow(gp.value).dayKey; let loc = null; try { loc = JSON.parse(localStorage.getItem(GP_BREAK_KEY) || 'null'); } catch (e) { /* ignore */ }
-  const a = GP.normBreak(remote, k); const b = GP.normBreak(loc, k); return (b.used > a.used || (b.used === a.used && b.relocked && !a.relocked)) ? b : a; };
-const gpBreakSave = (b) => { gpBreak.value = b; try { localStorage.setItem(GP_BREAK_KEY, JSON.stringify(b)); } catch (e) { /* ignore */ } saveBossField({ gpBreak: b }); };
+  const a = GP.normBreak(remote, k); const b = GP.normBreak(loc && userId.value && loc.uid === userId.value ? loc : null, k); return (b.used > a.used || (b.used === a.used && b.relocked && !a.relocked)) ? b : a; };
+// The device copy carries the uid: a break saved before login (or by another account on this phone) is never picked up.
+const gpBreakSave = (b) => { gpBreak.value = b; try { localStorage.setItem(GP_BREAK_KEY, JSON.stringify({ ...b, uid: userId.value || '' })); } catch (e) { /* ignore */ } saveBossField({ gpBreak: b }); };
 // Numbered breaks (GP.BREAK_RULES): progress today = done/total tasks + points + breaks already taken (gpBreak.n or the log).
-const gpProg = computed(() => { const l = todayTasksForTarget.value || []; return { done: l.filter((t) => t && t.completed).length, total: l.length, points: gpEarned.value.points,
+// Per-session points: each session has its own target (sum of its tasks' points) and counts only points earned inside it.
+const gpSessions = computed(() => (gpOn.value ? SP.sessionsOf(gp.value, todayTasksForTarget.value || [], nowTick.value, { estMinutes: gpEst }) : []));
+const gpSession = computed(() => (gpSessions.value.length ? SP.currentSession(gpSessions.value, nowTick.value) : null));
+const gpGrace = () => (gpOn.value && gpProgKnown.value ? SP.graceLock(SP.sessionsOf(gp.value, todayTasksForTarget.value || [], Date.now(), { estMinutes: gpEst }), Date.now()) : { want: false, untilMs: 0 });
+const gpProg = computed(() => { const l = todayTasksForTarget.value || []; return { done: l.filter((t) => t && t.completed).length, total: l.length, points: gpSession.value ? gpSession.value.earned : gpEarned.value.points,
   taken: GP.breaksOn(gpBreakLog.value, GP.dayWindow(gp.value).dayKey).count }; });
 const gpBankFull = computed(() => (gpOn.value ? GP.breakBank(gp.value, gpBreak.value, nowTick.value, gpProg.value) : { balance: 0, status: GP.breakStatus({ ...gpProg.value, dayHours: gp.value.closeHours }) }));
 const gpBank = computed(() => gpBankFull.value.balance);
 const gpBreakStatus = computed(() => gpBankFull.value.status);
+// Eligibility guard (login, cold start, resume, notification Take break while closed): progress is only judged once today's
+// tasks and the plan are loaded; a running break that is not earned under BREAK_RULES is ended at once and the shield restored.
+const gpProgKnown = computed(() => gpOn.value && gpLoaded.value && isViewingToday.value && !isLoading.value);
+const gpBreakOk = (b = gpBreak.value, now = Date.now()) => !gpProgKnown.value || GP.breakEarned(gp.value, b, now, gpProg.value);
+const gpVoidBreak = async () => {
+  const b = gpBreak.value; const now = Date.now(); if (!gpProgKnown.value || !GP.breakActive(b, now) || gpBreakOk(b, now)) return false;
+  if (lockAvailable()) await clingLock.endBreak(); else cancelLocal(`gp:breakend:${b.day}:${b.used}`);
+  gpBreakSave({ ...b, endMs: now, voided: true }); nowTick.value = now; return true;
+};
 // The 🎁 on the game plan line: a break can be taken now (unlocked, none running, day not closed). The checklist never blocks it.
 const gpGift = computed(() => gpBank.value > 0 && !['break', 'closed'].includes(gpPhase.value.phase));
 // Break history (users/{uid}.gpBreakLog; the shutdown recap reads the local copy cn.gp.breakLog).
@@ -4045,8 +4060,10 @@ const strictPlan = (st) => {
   let r = strictShield({ running: eh.running.value, dayEndMs: sd.dayEndMs, goal, earned, tasksDone: tasksDoneToday.value, goalAt: sd.goalAt, claimedAt: sd.claimedAt || 0, selectionCount: st.selectionCount || 0,
     enabled: lockEnabled(), unlockedToday: lockUnlockedDay.value === localDateStr(), offDay: (offDates.value || []).includes(localDateStr()) });
   if (gpOn.value) { // game plan: optional friend-approved unlock window wins (only when enabled); otherwise social apps stay locked until the morning checklist is done
+    const grace = gpGrace(); const free = lockEnabled() && (st.selectionCount || 0) > 0 && lockUnlockedDay.value !== localDateStr();
     if (gp.value.friendUnlock && gpUnlock.value.untilMs > Date.now()) r = { ...r, want: false, phase: 'friend' };
-    else if (GP.breakActive(gpBreak.value, Date.now())) r = { ...r, want: false, phase: 'break' };
+    else if (grace.want && free) r = { ...r, want: true, untilMs: Math.max(grace.untilMs, r.want ? r.untilMs : 0), phase: 'missed', session: grace };
+    else if (GP.breakActive(gpBreak.value, Date.now()) && gpBreakOk()) r = { ...r, want: false, phase: 'break' };
     else if (!r.want && gpGate.value && lockEnabled() && (st.selectionCount || 0) > 0 && lockUnlockedDay.value !== localDateStr()) r = { ...r, want: true, untilMs: gpPhase.value.closeMs, phase: 'checklist' };
   }
   strictState.value = r; strictReadyMin.value = r.phase === 'ready' ? r.windowMin : 0;
@@ -4056,24 +4073,40 @@ const strictPlan = (st) => {
       if (r.unlockEndMs > Date.now()) scheduleLocal(`strict:relock:${sd.day}`, { title: 'Earned time is up', body: 'Your screen time window ended, so your apps are locked again.', at: new Date(r.unlockEndMs), route: '/home', type: 'strict' }); } }
   return r;
 };
+// Background half of the session shutdown rule: while a session is short of its target, iOS holds a scheduled lock for
+// [session end, end + 2 h] (DeviceActivity, works with the app closed); once the session is met, that schedule is cancelled.
+const gpGraceKeys = new Set();
+const gpGraceSchedule = async () => {
+  if (!gpOn.value || !gpProgKnown.value || !lockEnabled()) return;
+  for (const s of SP.sessionsOf(gp.value, todayTasksForTarget.value || [], Date.now(), { estMinutes: gpEst })) {
+    const g = SP.graceSchedule(s, Date.now());
+    if (g.want && !gpGraceKeys.has(g.key)) { gpGraceKeys.add(g.key); const r = await clingLock.scheduleLock(g); if (!r || r.monitor !== 'ok') gpGraceKeys.delete(g.key); }
+    else if (!g.want && s.met && s.endMs > Date.now()) { gpGraceKeys.delete(g.key); await clingLock.cancelScheduledLock({ key: g.key }); }
+  }
+};
 const lockEnabled = () => { try { return localStorage.getItem(LOCK_PREF) === '1'; } catch (e) { return false; } };
 let lockOn = null;
 const hardLocked = ref(false); // shield up now: the sergeant menu shows Emergency unlock
 const syncAppLock = async () => {
   if (!lockAvailable()) return;
   let st = await clingLock.status();
-  if (gpOn.value && gpLoaded.value) { await gpBreakReconcile(); st = await gpBreakRelock(st); }
-  if (holdLockAction(gpBreak.value, Date.now())) { hardLocked.value = false; return; } // native break live: shields are off, lock state kept for the re-lock
+  if (gpOn.value && gpLoaded.value) { await gpBreakReconcile(); if (await gpVoidBreak()) st = await clingLock.status(); st = await gpBreakRelock(st); }
+  if (holdLockAction(gpBreak.value, Date.now()) && gpBreakOk()) { hardLocked.value = false; return; } // native break live: shields are off, lock state kept for the re-lock
   // Expired shield / app locks are cleared on open or foreground whichever day is shown (labeledApps drops expired entries natively).
   if (st.locked && Number(st.until) > 0 && Number(st.until) <= Date.now()) { lockOn = null; await clingLock.stopLock(); clingLock.labeledApps(); return; }
   clingLock.labeledApps();
   if (!isViewingToday.value) return;
   gpAuthCheck(st);
   const sp = isStrictMode.value ? strictPlan(st) : null;
-  const endMs = sp ? sp.untilMs : eh.lock.value && eh.lock.value.endMs;
-  const want = sp ? sp.want : shouldShield({ enabled: lockEnabled(), running: eh.running.value, endMs, selectionCount: st.selectionCount || 0,
+  let endMs = sp ? sp.untilMs : eh.lock.value && eh.lock.value.endMs;
+  let want = sp ? sp.want : shouldShield({ enabled: lockEnabled(), running: eh.running.value, endMs, selectionCount: st.selectionCount || 0,
     earned: pointsAccumulated.value || 0, required: dayRequiredPts.value || 0, openTasks: (selectedDayRoutine.value || []).filter((t) => t && !t.completed && t.status !== 'wontdo').length,
     unlockedToday: lockUnlockedDay.value === localDateStr() });
+  // Server session settle (eight-hour state): a missed session keeps apps locked until its graceUntilMs (end + 2 h).
+  const ehs = eh.shutdown && eh.shutdown.value;
+  if (ehs && ehs.missed && ehs.opensAtMs - Date.now() > 60000 && lockEnabled() && (st.selectionCount || 0) > 0 && lockUnlockedDay.value !== localDateStr() && !(sp && sp.phase === 'friend')) {
+    want = true; endMs = Math.max(ehs.opensAtMs, sp && sp.want ? sp.untilMs : 0); }
+  gpGraceSchedule();
   const fEnd = sp && sp.phase === 'break' ? 0 : focusShieldEnd({ dayWant: !!want, enabled: lockEnabled(), selectionCount: st.selectionCount || 0, locked: lockedFocus(selectedDayRoutine.value || []) });
   const act = lockAction({ want: !!(want || fEnd), endMs: fEnd || endMs, st });
   hardLocked.value = !!(want || fEnd);
@@ -4123,7 +4156,7 @@ const gpPenaltyNote = computed(() => { const p = gpPenalty.value; if (!p || !p.p
   return `−${p.points} pts on ${p.day === gpPhase.value.dayKey ? 'today' : p.day}: Screen Time access for ClingNote was turned off. Turn it back on in Settings → Screen Time.`; });
 const gpQuiet = computed(() => gpOn.value && gpPhase.value.phase === 'focus'); // in-app quiet: the boss panel and nudges wait for the break
 const gpGate = computed(() => gpOn.value && routineItems.value.length > 0 && !GP.checklistDone(routineItems.value) && gpPhase.value.phase !== 'closed');
-const gpText = computed(() => (gpGate.value && !['focus', 'break', 'late'].includes(gpPhase.value.phase) ? '🔒 Checklist first · ' : '') + GP.rowText(gpPhase.value, { earned: gpEarned.value.points, goal: strictGoal.value })
+const gpText = computed(() => (gpGate.value && !['focus', 'break', 'late'].includes(gpPhase.value.phase) ? '🔒 Checklist first · ' : '') + GP.rowText(gpPhase.value, { earned: gpEarned.value.points, goal: strictGoal.value, label: gpSession.value ? SP.sessionLabel(gpSession.value, gp.value.sessions) : '' })
 );
 // Break unlocked alert: once per break number per day ("Break 1 unlocked: 15 min"). Optional: nothing unlocks until the user
 // taps the 🎁 / Take break (Home line, or the notification's Take break action on iOS).
@@ -4134,9 +4167,13 @@ watch(() => gpOn.value && gpLoaded.value && isViewingToday.value && `${gpBreakSt
   const n = alertTier(stored, k, GP.breakToAlert(st)); if (!n) return;
   try { localStorage.setItem(GP_TIER_KEY, JSON.stringify({ day: k, n })); } catch (e) { /* ignore */ }
   const note = GP.breakAlertText(st); const pts = gpEarned.value.points;
-  if (lockAvailable()) clingLock.offerBreak({ minutes: st.min, points: pts, title: note.title, body: note.body, day: k, closeMs: gpPhase.value.closeMs });
+  if (lockAvailable()) clingLock.offerBreak({ v: GP.BREAK_RULES_VERSION, n: st.n, minutes: st.min, points: pts, title: note.title, body: note.body, day: k, closeMs: gpPhase.value.closeMs });
   else scheduleLocal(`gp:tier:${k}:${n}`, { title: note.title, body: note.body, at: new Date(Date.now() + 1000), route: '/home', type: 'gp' });
 });
+// Not (or no longer) earned: withdraw any posted Take break offer so the lock-screen action cannot start a break.
+watch(() => gpProgKnown.value && !gpBreakStatus.value.ok, (v) => { if (v && lockAvailable()) clingLock.clearBreakOffer(); }, { immediate: true });
+// A running break that stops being earned (or was never earned: stale, legacy, pre-login, closed-app action) ends now.
+watch(() => gpProgKnown.value && GP.breakActive(gpBreak.value, nowTick.value) && !gpBreakOk(gpBreak.value, nowTick.value), (v) => { if (v) syncAppLock(); });
 // Ready span (never truncated): "15m break ready" or what is missing ("3 tasks to 15m break"); the points are in the main text.
 const gpReady = computed(() => { const ph = gpPhase.value.phase; if (ph === 'closed' || ph === 'break') return '';
   return `· ${gpBreakStatus.value.text}`; }); // always visible, own span (never ellipsized)

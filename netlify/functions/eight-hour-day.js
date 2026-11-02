@@ -25,6 +25,7 @@ const stableIdOf = (t) => (t && (t.id != null && t.id !== '' ? `id:${t.id}` : `k
 // Points earned on the locked set. Each lock slot n belongs to the task stored at lock.indexes[n] when the day started; match it by its
 // stable id (lock.ids[n]) so reorders/inserts after Start Day can't shift points onto another task, falling back to lock.indexes[n]
 // for locks written before ids existed. Never tasks[n] (that was the bug: slot n is not array position n).
+const { sessionGrace } = require('./lib/sessionGrace');
 const lockedEarned = (lock, tasks) => {
   const list = tasks || []; const byId = new Map(); list.forEach((t) => { const k = stableIdOf(t); if (k && !byId.has(k)) byId.set(k, t); });
   let earned = 0, done = 0;
@@ -34,6 +35,12 @@ const lockedEarned = (lock, tasks) => {
     if (t && t.completed) { earned += Number(p) || 0; done += 1; }
   });
   return { earned, done };
+};
+// The block's locked tasks with their locked points (same id/index matching as lockedEarned).
+const lockedRows = (lock, tasks) => {
+  const list = tasks || []; const byId = new Map(); list.forEach((t) => { const k = stableIdOf(t); if (k && !byId.has(k)) byId.set(k, t); });
+  return (lock.points || []).map((p, n) => { const id = lock.ids && lock.ids[n]; const idx = lock.indexes ? lock.indexes[n] : undefined;
+    return { t: id && byId.has(id) ? byId.get(id) : (idx != null ? list[idx] : undefined), points: p }; });
 };
 
 // Tasks that count toward the day: the visible ones (recurring copies with a later activeFrom are hidden today).
@@ -70,7 +77,7 @@ const aiRefine = async (items, stats, { fetch: f, apiKey }) => {
 };
 
 const publicLock = (l) => (l ? { hours: core.clampHours(l.hours), dayKey: l.dayKey, dayName: l.dayName, tz: l.tz, wakeTime: l.wakeTime, startMs: l.startMs, endMs: l.endMs, taskCount: l.taskCount, plannedCount: l.plannedCount,
-  points: l.points, totalPoints: l.totalPoints, target: l.target, targetSource: l.targetSource, estimateSource: l.estimateSource, earned: l.earned || 0, done: l.done || 0, settled: !!l.settled,
+  points: l.points, totalPoints: l.totalPoints, target: l.target, targetSource: l.targetSource, estimateSource: l.estimateSource, earned: l.earned || 0, done: l.done || 0, settled: !!l.settled, session: l.session || null, graceUntilMs: Number(l.graceUntilMs) || 0,
   index: core.blockIndex(l), scheduled: !!l.scheduled, pending: core.pendingOf(l).map((b) => ({ dayKey: b.dayKey, index: b.index, startMs: b.startMs, endMs: b.endMs, hours: b.hours })) } : null);
 // What firestore.rules read: startAt/endAt bound the edit lock, shutUntil the read-only hard stop (= endMs while a later block is pending).
 const lockWrite = (ctx, lock) => ({ ...lock, startAt: ctx.ts(lock.startMs), endAt: ctx.ts(lock.endMs), shutUntil: ctx.ts(core.rulesShutUntilMs(lock)) });
@@ -79,7 +86,7 @@ const lockWrite = (ctx, lock) => ({ ...lock, startAt: ctx.ts(lock.startMs), endA
 const settleIfOver = async (ctx, doc, now) => {
   const lock = doc.lock;
   if (!lock || lock.settled || now < lock.endMs) return doc;
-  let earned = lock.earned || 0;
+  let earned = lock.earned || 0; let grace = null;
   try { // last full recount, only when the day doc was last written inside the window (updatedAt is a server timestamp, so completions cannot be back-dated)
     const dsnap = await ctx.db.doc(`weeklyRoutines/${ctx.uid}_${lock.dayName}`).get();
     const d = dsnap.exists ? dsnap.data() : null;
@@ -89,8 +96,11 @@ const settleIfOver = async (ctx, doc, now) => {
       const full = lockedEarned(lock, tasks).earned;
       earned = Math.max(earned, full);
     }
+    // Per-session shutdown rule: the session's own tasks/points, completions inside its window only. Missed -> apps stay locked 2 h.
+    if (d) { const ud = await userDoc(ctx); const sessions = Number(ud.gamePlan && ud.gamePlan.sessions) === 1 ? 1 : 2;
+      grace = sessionGrace(lockedRows(lock, d.tasks || []), { n: Math.min(core.blockIndex(lock) + 1, sessions), sessions, startMs: lock.startMs, endMs: lock.endMs }); }
   } catch (e) { /* keep the server-time progress value */ }
-  const settledLock = { ...lock, earned, settled: true };
+  const settledLock = { ...lock, earned, settled: true, ...(grace ? { session: grace, graceUntilMs: grace.untilMs } : {}) };
   const idx = core.blockIndex(lock);
   // The streak/target settle once per day, on the day's FIRST block. Later blocks (evening mode) and empty scheduled blocks only write a history row.
   const counts = idx === 0 && !(lock.scheduled && !(lock.taskCount > 0)); // legacy locks (no index/taskCount) still settle

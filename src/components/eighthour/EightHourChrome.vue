@@ -15,7 +15,7 @@
       <h2 id="ehs-t">Your {{ hoursText }} hours are up.</h2>
       <p v-if="nextOk">Session 1 is done. Start your {{ s2Name }} now, or come back tomorrow at <b data-test="eh-shut-until">{{ shut.untilLabel }}</b>.</p>
       <p v-else>ClingNote is shut for today. Come back tomorrow at <b data-test="eh-shut-until">{{ shut.untilLabel }}</b>.</p>
-      <p class="ehs-res" :class="shut.met ? 'ok' : 'miss'" data-test="eh-shut-result">{{ shut.met ? 'Goal met' : 'Goal missed' }} · {{ shut.earned }}/{{ shut.target }} pts</p>
+      <p class="ehs-res" :class="shut.met ? 'ok' : 'miss'" data-test="eh-shut-result">{{ shut.missed ? `Missed ${shut.target} pts: apps open at ${shut.opensAtLabel}` : `${shut.met ? 'Goal met' : 'Goal missed'} · ${shut.earned}/${shut.target} pts` }}</p>
       <p v-if="recap" class="ehs-recap" data-test="eh-shut-recap">{{ recap }}</p>
       <button v-if="nextOk" type="button" class="ehs-row" data-test="eh-next-session" :disabled="eh.st.busy" @click="doNextSession">Start {{ s2Name }} <span aria-hidden="true">›</span></button>
       <!-- Evening mode: one compact row; tapping it reveals time + hours inline. A scheduled block can't be cancelled or shortened. -->

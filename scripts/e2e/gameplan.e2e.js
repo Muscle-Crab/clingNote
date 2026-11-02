@@ -123,7 +123,7 @@ const lastSunday = () => { const d = new Date(); d.setDate(d.getDate() - d.getDa
     const p = await page(br);
     await p.context().addInitScript(() => { localStorage.setItem('cn.appLock.on', '1'); const K = 'zz.fakelock'; const rd = () => JSON.parse(localStorage.getItem(K) || '{"locked":false,"until":0,"label":"","scheduled":[]}'); const wr = (v) => localStorage.setItem(K, JSON.stringify(v));
       window.__clingLockFake = { status: async () => ({ authorization: 'approved', selectionCount: 3, monitoring: rd().locked, ...rd() }), startLock: async ({ untilMs, label }) => { wr({ ...rd(), locked: true, until: untilMs, label }); return { locked: true, monitor: 'ok' }; },
-        stopLock: async () => { wr({ ...rd(), locked: false, until: 0, label: '' }); return { locked: false }; }, scheduleLock: async (o) => { const v = rd(); v.scheduled.push(o); wr(v); return { monitor: 'ok' }; }, labeledApps: async () => ({ apps: [] }) }; });
+        stopLock: async () => { wr({ ...rd(), locked: false, until: 0, label: '' }); return { locked: false }; }, scheduleLock: async (o) => { const v = rd(); v.scheduled.push(o); wr(v); return { monitor: 'ok' }; }, labeledApps: async () => ({ apps: [] }), clearBreakOffer: async () => ({ cleared: true }), cancelScheduledLock: async (o) => { const v = rd(); v.cancelled = [...(v.cancelled || []), o.key]; wr(v); return { cancelled: true }; } }; });
     const fake = () => p.evaluate(() => JSON.parse(localStorage.getItem('zz.fakelock') || '{}'));
     await login(p, email); await home(p);
     ok('break: balance always visible in the slim line (muted, no box)', /· 10m ready/.test(await rowText(p)) && await p.locator('[data-test=gp-row]').count() === 1, await rowText(p));

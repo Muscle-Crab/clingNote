@@ -175,7 +175,10 @@ export const useEightHour = () => {
     if (!l || !core.isShut(l, now)) return null;
     const lastEnd = Math.max(l.endMs, ...core.pendingOf(l).map((b) => b.endMs));
     const until = core.shutUntilMs({ ...l, endMs: lastEnd });
-    return { untilMs: until, untilLabel: core.fmtClock(until, l.tz || deviceTz()), earned: l.earned || 0, target: l.target || 0, done: l.done || 0, total: l.taskCount || 0, met: (l.target || 0) > 0 && (l.earned || 0) >= l.target };
+    return { untilMs: until, untilLabel: core.fmtClock(until, l.tz || deviceTz()), earned: l.earned || 0, target: l.target || 0, done: l.done || 0, total: l.taskCount || 0, met: (l.target || 0) > 0 && (l.earned || 0) >= l.target,
+      // Per-session rule (server settle): the session's own target/earned; missed -> apps open at end + 2 h.
+      ...(l.session ? { session: l.session, met: !!l.session.met, earned: l.session.earned, target: l.session.target, missed: !l.session.met && l.graceUntilMs > 0,
+        opensAtMs: l.graceUntilMs || 0, opensAtLabel: l.graceUntilMs ? core.fmtClock(l.graceUntilMs, l.tz || deviceTz()) : '' } : {}) };
   });
   // Next scheduled block (evening mode), shown as "Next 6:00 PM" while the app is open in the gap.
   const nextBlock = computed(() => {

@@ -118,6 +118,17 @@ export const takeBreak = (gp, b, nowMs = Date.now(), prior = null, prog = {}) =>
   const endMs = Math.min(nowMs + min * MIN, w.closeMs);
   return { ...cur, n: bank.status.n, used: cur.used + min, startMs: nowMs, endMs, prior: prior || null, relocked: false, last: { at: nowMs, min, points: Math.round(Number(prog && prog.points) || 0) } };
 };
+// Is a running break earned under BREAK_RULES? Checked on login, app start/resume and every lock sync, so a stale or legacy
+// record (no n: banked minutes from the old rules), one saved before login, or one started from the notification while the
+// app was closed never keeps apps open unless today's tasks AND points meet break n's threshold. Not running -> true.
+export const BREAK_RULES_VERSION = 2;
+export const breakEarned = (gp, b, nowMs = Date.now(), prog = {}, r = BREAK_RULES) => {
+  if (!breakActive(b, nowMs)) return true;
+  const n = Number(b.n) || 0; const def = r.breaks[n - 1]; if (n < 1 || !def || n > breaksPerDay(gp && gp.closeHours, r)) return false;
+  if (b.day && b.day !== dayWindow(gp, nowMs).dayKey) return false;
+  if (Number(b.endMs) - Number(b.startMs) > def.min * MIN + 60000) return false;
+  return breakStatus({ taken: n - 1, done: prog && prog.done, total: prog && prog.total, points: prog && prog.points, dayHours: gp && gp.closeHours }, r).ok;
+};
 // Break history (users/{uid}.gpBreakLog, newest last, 60 kept): { at, min, points }.
 export const addBreakLog = (log, entry, keep = 60) => [...(Array.isArray(log) ? log : []), entry].filter((e) => e && e.at > 0 && e.min > 0).slice(-keep);
 export const fmtBreakLog = (log, locale) => (Array.isArray(log) ? log : []).slice().reverse().map((e) => { const d = new Date(e.at);
@@ -231,8 +242,8 @@ export const carryOver = (picked = [], tomorrowTasks = [], stamp = Date.now()) =
 export const nextDayName = (dayKey) => { const [y, m, d] = dayKey.split('-').map(Number); return WEEK[new Date(y, m - 1, d + 1).getDay()]; };
 
 // Compact Home row text.
-export const rowText = (ph, { earned = 0, goal = 0, bank = 0 } = {}) => {
-  const pts = `${earned}/${goal} pts` + (bank > 0 && ph.phase !== 'closed' && ph.phase !== 'break' ? ` · ${bank}m break ready` : '');
+export const rowText = (ph, { earned = 0, goal = 0, bank = 0, label = '' } = {}) => {
+  const pts = (label || `${earned}/${goal} pts`) + (bank > 0 && ph.phase !== 'closed' && ph.phase !== 'break' ? ` · ${bank}m break ready` : '');
   if (ph.phase === 'before') return `Day starts in ${ph.leftMin >= 60 ? `${Math.floor(ph.leftMin / 60)}h ${ph.leftMin % 60}m` : `${ph.leftMin}m`} · ${pts}`;
   if (ph.phase === 'focus') return `Focus ${ph.n}/${ph.of || 2} · ${ph.leftMin}m left · notifications held · ${pts}`;
   if (ph.phase === 'break') return `Break · ${ph.left || `${ph.leftMin}m`} left · apps open · ${pts}`;
