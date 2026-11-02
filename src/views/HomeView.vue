@@ -4184,7 +4184,7 @@ const gpReady = computed(() => { const ph = gpPhase.value.phase; if (ph === 'clo
   return `· ${gpBreakStatus.value.text}`; }); // always visible, own span (never ellipsized)
 const gpReview = computed(() => (gpOn.value && gpLoaded.value && GP.reviewDue(gp.value, nowTick.value) ? GP.weekSummary(gpLog.value, gp.value, nowTick.value) : null));
 const gpLeft = computed(() => (gpPhase.value.phase === 'closed' ? GP.leftovers(todayTasksForTarget.value).map((t) => ({ key: taskKey(t), title: t.title || 'Untitled task' })) : []));
-const gpTomorrowIdx = computed(() => (days.findIndex((x) => x.day === getTodayId()) + 1) % days.length);
+const gpTomorrowIdx = computed(() => (nowTick.value, (new Date().getDay() + 1) % days.length)); // days[] is Sun..Sat by name (getTodayId() is a YMD, never a day name)
 const gpTomorrow = computed(() => (days[gpTomorrowIdx.value] && days[gpTomorrowIdx.value].day) || 'tomorrow');
 // Day log for history/weekly review (one merge write when the numbers change).
 let gpLogSig = '';
@@ -4215,7 +4215,7 @@ watch(() => [gpOn.value, gpPhase.value.startMs, gp.value.reviewDow, gp.value.rev
 // 7. Close picker: copies the picked leftovers to tomorrow (dedup by title) and takes them off today when today can still be edited.
 const gpCarry = async (keys) => {
   const set = new Set(keys); const picked = todayTasksForTarget.value.filter((t) => set.has(taskKey(t))); if (!picked.length || !userId.value) return;
-  const target = gpTomorrow.value; const today = getTodayId();
+  const target = gpTomorrow.value; const today = days[new Date().getDay()].day;
   try {
     await trackWrite(mutateDay(target, (cur) => GP.carryOver(picked, cur, Date.now())));
     try { const cur = await trackWrite(mutateDay(today, (c) => c.filter((t) => !set.has(taskKey(t))))); if (isViewingToday.value) selectedDayRoutine.value = cur; } catch (e) { /* locked day: the copy is on tomorrow, the original stays */ }

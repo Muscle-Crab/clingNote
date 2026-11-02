@@ -92,11 +92,10 @@ const planState = computed(() => planWindowState({ nowMs: (shut.value, eh.nowMs(
 const planningNow = computed(() => !!(planWin.active && planState.value.open && planWin.eveningKey === planState.value.eveningKey));
 const openPlanning = () => { planWin.eveningKey = planState.value.eveningKey; planWin.active = true; markPlanSeen(planState.value.eveningKey); if (route.name !== 'home') router.push({ name: 'home' }).catch(() => {}); };
 const closePlanning = () => { planWin.active = false; };
-// While session 2 can still start, keep the shutdown card (it has its own "Plan tomorrow" row) instead of auto-opening planning over it.
-watch(() => [uid.value, planState.value.open, planState.value.eveningKey, !!eh.session.value?.canStart], () => {
+// Planning opens at its normal time even during the 2 h missed lock or while session 2 could still start: it happens inside ClingNote and unlocks no apps.
+watch(() => [uid.value, planState.value.open, planState.value.eveningKey], () => {
   const s = planState.value;
   if (!s.open) { if (planWin.active) planWin.active = false; return; } // midnight (or wake): hard close
-  if (eh.session.value?.canStart) { if (planWin.active) planWin.active = false; return; }
   if (uid.value && shouldAutoOpen({ open: s.open, eveningKey: s.eveningKey, seenKey: readPlanSeen() })) openPlanning();
 }, { immediate: true });
 const onPill = () => { if (planningNow.value) closePlanning(); else goCard(); };

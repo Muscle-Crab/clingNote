@@ -95,11 +95,14 @@ const lastSunday = () => { const d = new Date(); d.setDate(d.getDate() - d.getDa
       ok('focus: coach banner is quiet during focus', await p.locator('[data-test=boss-panel]').count() === 0);
       ok('focus: one row only (no new card)', await p.locator('[data-test=gp-row]').count() === 1);
       await db.doc(`users/${uid}`).set(fresh(ago(55)), { merge: true }); await home(p);
-      ok('break: no automatic break after focus 1; 10m earned and shown in the slim line', (await p.locator('[data-test=gp-row]').getAttribute('data-phase')) === 'work' && /10m ready/.test(await rowText(p)), await rowText(p));
+      // break rule (GP.BREAK_RULES): break 1 = 15 min once ceil(35% of 3) = 2 tasks are done AND 50 pts; ending focus 1 earns nothing by itself
+      ok('break: no automatic break after focus 1; slim line shows what is missing for the 15m break, no gift yet', (await p.locator('[data-test=gp-row]').getAttribute('data-phase')) === 'work' && /· 2 tasks \+ 50 pts to 15m break/.test(await rowText(p)) && await p.locator('[data-test=gp-gift]').count() === 0, await rowText(p));
       await shot(p, 'home-break', '[data-test=gp-row]');
       await db.doc(`users/${uid}`).set(fresh(ago(65)), { merge: true }); await home(p);
-      ok('focus: Focus 2/2 after the break', /Focus 2\/2/.test(await rowText(p)), await rowText(p));
-      await db.doc(`users/${uid}`).set(fresh(ago(180)), { merge: true }); await home(p);
+      ok('focus: no break slot inserted, still working after focus 1', (await p.locator('[data-test=gp-row]').getAttribute('data-phase')) === 'work' && !/Focus 2\/2|Break/.test(await rowText(p)), await rowText(p));
+      await db.doc(`users/${uid}`).set(fresh(ago(245)), { merge: true }); await home(p);
+      ok('focus: Focus 2/2 half-way to the close', /Focus 2\/2/.test(await rowText(p)) && (await p.locator('[data-test=gp-row]').getAttribute('data-phase')) === 'focus', await rowText(p));
+      await db.doc(`users/${uid}`).set(fresh(ago(300)), { merge: true }); await home(p);
       ok('work: after both focus sessions the row shows the work phase', (await p.locator('[data-test=gp-row]').getAttribute('data-phase')) === 'work', await rowText(p));
       // sizes: AI guess from the estimate, user can change it
       await p.locator('.task-title', { hasText: 'ZZTEST Quick email' }).first().click(); await sleep(900);
@@ -119,33 +122,33 @@ const lastSunday = () => { const d = new Date(); d.setDate(d.getDate() - d.getDa
 
   if (ON('break') && AFTER) { const email = 'zztest.gp.break@example.com'; // earned break: banked, user-started, lifts the (fake) shield, relocks to the prior state
     const routine = { scheduledTasks: { tasks: [{ id: 'zzB', title: 'ZZTEST Morning stretch', userId: '', status: 'todo', priority: 'low', labels: [], notes: '', scheduledTime: '', startDate: ymd(), recurrence: { freq: 'daily' }, generated: [], skip: [] }] } };
-    const uid = await seedUser(email, 'ZZTEST GP Break', [mk('Task', 1)], { ...fresh(ago(55)), ...routine });
+    const uid = await seedUser(email, 'ZZTEST GP Break', [mk('Task', 1), mk('Done A', 2, { completed: true, completedAt: Date.now() - 20 * 60000, size: 'l' }), mk('Done B', 3, { completed: true, completedAt: Date.now() - 10 * 60000, size: 'l' })], { ...fresh(ago(55)), ...routine }); // 2/3 tasks + 80 pts: break 1 (15m) earned
     const p = await page(br);
     await p.context().addInitScript(() => { localStorage.setItem('cn.appLock.on', '1'); const K = 'zz.fakelock'; const rd = () => JSON.parse(localStorage.getItem(K) || '{"locked":false,"until":0,"label":"","scheduled":[]}'); const wr = (v) => localStorage.setItem(K, JSON.stringify(v));
       window.__clingLockFake = { status: async () => ({ authorization: 'approved', selectionCount: 3, monitoring: rd().locked, ...rd() }), startLock: async ({ untilMs, label }) => { wr({ ...rd(), locked: true, until: untilMs, label }); return { locked: true, monitor: 'ok' }; },
         stopLock: async () => { wr({ ...rd(), locked: false, until: 0, label: '' }); return { locked: false }; }, scheduleLock: async (o) => { const v = rd(); v.scheduled.push(o); wr(v); return { monitor: 'ok' }; }, labeledApps: async () => ({ apps: [] }), clearBreakOffer: async () => ({ cleared: true }), cancelScheduledLock: async (o) => { const v = rd(); v.cancelled = [...(v.cancelled || []), o.key]; wr(v); return { cancelled: true }; } }; });
     const fake = () => p.evaluate(() => JSON.parse(localStorage.getItem('zz.fakelock') || '{}'));
     await login(p, email); await home(p);
-    ok('break: balance always visible in the slim line (muted, no box)', /· 10m ready/.test(await rowText(p)) && await p.locator('[data-test=gp-row]').count() === 1, await rowText(p));
+    ok('break: balance always visible in the slim line (muted, no box)', /· 15m break ready/.test(await rowText(p)) && await p.locator('[data-test=gp-gift]').count() === 1 && await p.locator('[data-test=gp-row]').count() === 1, await rowText(p));
     ok('break: shield up before the break (checklist lock)', await waitFor(async () => (await fake()).locked), JSON.stringify(await fake()));
     const prior = await fake();
     await shot(p, 'home-break-ready', '[data-test=gp-row]');
-    await openRow(p); ok('break: one compact Take break (10m) action in the details', (await p.locator('[data-test=gp-take-break]').innerText()).trim() === 'Take break (10m)');
+    await openRow(p); ok('break: one compact Take break (15m) action in the details', (await p.locator('[data-test=gp-take-break]').innerText()).trim() === 'Take break (15m)');
     await p.click('[data-test=gp-take-break]');
     ok('break: taking it lifts the shield', await waitFor(async () => !(await fake()).locked), JSON.stringify(await fake()));
     ok('break: running countdown in the slim line', (await p.locator('[data-test=gp-row]').getAttribute('data-phase')) === 'break' && /Break · \d+:\d\d left/.test(await rowText(p)), await rowText(p));
     const b1 = (await user(uid)).gpBreak || {};
-    ok('break: stored end time = start + 10 min, prior shield saved, 10 min used', b1.endMs - b1.startMs === 600000 && b1.used === 10 && b1.prior && b1.prior.locked && b1.prior.until === prior.until, JSON.stringify(b1));
+    ok('break: stored end time = start + 15 min, prior shield saved, 15 min used', b1.endMs - b1.startMs === 900000 && b1.used === 15 && b1.prior && b1.prior.locked && b1.prior.until === prior.until, JSON.stringify(b1));
     ok('break: native re-shield scheduled from break end to the prior lock end', (await fake()).scheduled.some((x) => x.startMs === b1.endMs && x.untilMs === prior.until), JSON.stringify((await fake()).scheduled));
     await p.click('[data-test=gp-toggle]'); await sleep(300); await shot(p, 'home-break-running', '[data-test=gp-row]');
     await sleep(65000); // a minute tick during the break must not relock
     ok('break: stays unlocked while the break runs', !(await fake()).locked, JSON.stringify(await fake()));
     await p.evaluate(() => window.__gpBreakEnd(Date.now() + 1500));
     ok('break: on expiry relocks to exactly the prior state', await waitFor(async () => { const f = await fake(); return f.locked && f.until === prior.until && f.label === prior.label; }), JSON.stringify([await fake(), prior]));
-    ok('break: balance used up, no stacking', !/m ready/.test(await rowText(p)) && (await p.locator('[data-test=gp-row]').getAttribute('data-phase')) !== 'break', await rowText(p));
+    ok('break: balance used up, no stacking', !/break ready/.test(await rowText(p)) && await p.locator('[data-test=gp-gift]').count() === 0 && (await p.locator('[data-test=gp-row]').getAttribute('data-phase')) !== 'break', await rowText(p));
     await shot(p, 'home-break-relocked', '[data-test=gp-row]');
     // restart after expiry: shield down (e.g. app killed mid-break), break ended while closed -> relock on launch
-    const end = Date.now() - 60000; const stale = { day: b1.day, used: 10, startMs: end - 600000, endMs: end, prior, relocked: false };
+    const end = Date.now() - 60000; const stale = { day: b1.day, used: 15, startMs: end - 900000, endMs: end, prior, relocked: false };
     await db.doc(`users/${uid}`).set({ gpBreak: stale }, { merge: true });
     await p.evaluate((v) => { localStorage.setItem('cn.gp.break', JSON.stringify(v)); localStorage.setItem('zz.fakelock', JSON.stringify({ locked: false, until: 0, label: '', scheduled: [] })); }, stale);
     await home(p);
