@@ -42,6 +42,8 @@ public class ClingLockPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "endBreak", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "breakState", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "offerBreak", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "clearBreakOffer", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "cancelScheduledLock", returnType: CAPPluginReturnPromise),
     ]
 
     @objc func requestAuthorization(_ call: CAPPluginCall) {
@@ -391,11 +393,27 @@ public class ClingLockPlugin: CAPPlugin, CAPBridgedPlugin {
         call.resolve(["live": BreakState.isLive(), "untilMs": BreakState.until(), "taken": taken])
     }
     /// Points tier reached: post the "You hit N points" alert with a Take break action (works from the lock screen / app closed).
+    /// Thresholds no longer met (tasks un-done, new day): drop the stored offer and its alert so its action can't start a break.
+    @objc func clearBreakOffer(_ call: CAPPluginCall) {
+        LockShared.defaults?.removeObject(forKey: BreakState.offerKey)
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["cn.break.offer"])
+        UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: ["cn.break.offer"])
+        call.resolve(["cleared": true])
+    }
+    /// Session met before its end: cancel the scheduled 2 h miss lock (scheduleLock key).
+    @objc func cancelScheduledLock(_ call: CAPPluginCall) {
+        guard #available(iOS 16.0, *) else { call.resolve(["cancelled": false]); return }
+        let key = (call.getString("key") ?? "").filter { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" }
+        guard !key.isEmpty else { call.resolve(["cancelled": false]); return }
+        var m = ScheduledLocks.all(); m[key] = nil; ScheduledLocks.save(m)
+        DeviceActivityCenter().stopMonitoring([ScheduledLocks.name(key)])
+        call.resolve(["cancelled": true])
+    }
     @objc func offerBreak(_ call: CAPPluginCall) {
         guard #available(iOS 16.0, *) else { call.resolve(["posted": false]); return }
         let minutes = call.getInt("minutes") ?? 0; let points = call.getInt("points") ?? 0
         guard minutes > 0 else { call.resolve(["posted": false]); return }
-        LockShared.defaults?.set(["minutes": minutes, "points": points, "day": call.getString("day") ?? "", "closeMs": call.getDouble("closeMs") ?? 0], forKey: BreakState.offerKey)
+        LockShared.defaults?.set(["minutes": minutes, "points": points, "day": call.getString("day") ?? "", "closeMs": call.getDouble("closeMs") ?? 0, "v": call.getInt("v") ?? 0, "n": call.getInt("n") ?? 0], forKey: BreakState.offerKey)
         ClingBreakNotify.registerCategory()
         let c = UNMutableNotificationContent()
         c.title = call.getString("title") ?? "You hit \(points) points"; c.body = call.getString("body") ?? "Break time if you want it."
@@ -506,9 +524,13 @@ final class ClingBreakNotify: NSObject, UNUserNotificationCenterDelegate {
     }
     /// Pure rule: the action starts min(offered, 30, minutes to the close); nothing without an offer or while a break is live.
     static func actionMinutes(offer: [String: Any]?, nowMs: Double, live: Bool) -> Int {
-        guard !live, let o = offer, let m = o["minutes"] as? Int, m > 0 else { return 0 }
+        // Only offers made under the tasks + points rules (v 2), for today, before the close.
+        guard !live, let o = offer, let m = o["minutes"] as? Int, m > 0, (o["v"] as? Int) == 2 else { return 0 }
         let close = (o["closeMs"] as? Double) ?? 0
-        let left = close > 0 ? Int((close - nowMs) / 60000) : m
+        guard close > nowMs else { return 0 }
+        let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"; f.locale = Locale(identifier: "en_US_POSIX")
+        guard (o["day"] as? String) == f.string(from: Date(timeIntervalSince1970: nowMs / 1000)) else { return 0 }
+        let left = Int((close - nowMs) / 60000)
         return max(0, min(m, 30, left))
     }
     func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse, withCompletionHandler done: @escaping () -> Void) {

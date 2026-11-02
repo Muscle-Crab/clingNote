@@ -1,13 +1,17 @@
 <template>
   <!-- Coach game plan: ONE compact tappable row (same look as the routine row). Expands inline for the close picker, weekly review and (optional) friend unlock. -->
   <div class="gp" data-test="gp-row" :data-phase="phase">
+    <div class="gp-head">
     <button type="button" class="gp-row" data-test="gp-toggle" :aria-expanded="open ? 'true' : 'false'" @click="open = !open">
       <span class="gp-title" data-test="gp-text"><span class="gp-main">{{ text }}</span><span v-if="ready" class="gp-ready" data-test="gp-ready">&nbsp;{{ ready }}</span></span>
       <span v-if="attn" class="gp-dot" data-test="gp-attn" aria-label="Needs you"></span>
       <span class="gp-chev" aria-hidden="true">{{ open ? '‹' : '›' }}</span>
     </button>
+    <!-- Break available: a small 🎁 right on the line (no box); one tap starts the break. Shown whenever a break can be taken, checklist or not. -->
+    <button v-if="gift" type="button" class="gp-gift" data-test="gp-gift" :aria-label="`Take your ${Math.min(breakBank, breakMin)} minute break`" :title="`Take break (${Math.min(breakBank, breakMin)}m)`" @click.stop="$emit('take-break')">🎁</button>
+    </div>
     <div v-if="open" class="gp-body">
-      <p v-if="gate" class="gp-line" data-test="gp-gate">🔒 Social apps stay locked until your morning checklist is done.</p>
+      <p v-if="gate" class="gp-line" data-test="gp-gate">🔒 Social apps stay locked until your morning checklist is done.<template v-if="gift"> An earned break still opens them.</template></p>
       <p v-if="penalty" class="gp-line gp-warn" data-test="gp-penalty">−{{ penalty }} pts today: Screen Time access was turned off.</p>
       <p v-if="breakBank > 0 && !breakOn && phase !== 'closed'" class="gp-line" data-test="gp-break-line">Earned break, yours to take when you want. Opens your apps, never costs points. <button type="button" class="gp-chip" data-test="gp-take-break" @click="$emit('take-break')">Take break ({{ Math.min(breakBank, breakMin) }}m)</button></p>
       <p v-if="breakOn" class="gp-line" data-test="gp-break-on">Break running: all apps open, they lock again on their own. <button type="button" class="gp-chip" data-test="gp-end-break" @click="$emit('end-break')">End break now</button></p>
@@ -51,7 +55,7 @@ const props = defineProps({
   leftovers: { type: Array, default: () => [] }, tomorrow: { type: String, default: 'tomorrow' }, locked: { type: Boolean, default: false },
   gate: { type: Boolean, default: false }, friend: { type: String, default: '' }, friendOn: { type: Boolean, default: false }, unlock: { type: Object, default: () => ({ status: '' }) },
   penalty: { type: Number, default: 0 }, afterClose: { type: Number, default: 0 }, minutes: { type: Array, default: () => [10, 20, 30] },
-  breakBank: { type: Number, default: 0 }, breakMin: { type: Number, default: 10 }, breakOn: { type: Boolean, default: false }, screenReady: { type: Number, default: 0 }, ready: { type: String, default: '' }, history: { type: Array, default: () => [] },
+  breakBank: { type: Number, default: 0 }, breakMin: { type: Number, default: 10 }, breakOn: { type: Boolean, default: false }, gift: { type: Boolean, default: false }, screenReady: { type: Number, default: 0 }, ready: { type: String, default: '' }, history: { type: Array, default: () => [] },
 });
 defineEmits(['carry', 'review', 'ask', 'share', 'take-break', 'end-break', 'claim-screen']);
 const open = ref(false); const picked = ref([]); const accepted = ref([]); const histOpen = ref(false);
@@ -64,6 +68,10 @@ const attn = computed(() => !!props.review || (props.phase === 'closed' && props
 .gp-row { width: 100%; display: flex; align-items: center; gap: 6px; min-height: 22px; padding: 0 2px; background: none; border: 0; color: var(--c-text-3, #7d7c78); font: inherit; font-size: .7rem; cursor: pointer; text-align: left; }
 .gp-link { display: block; width: 100%; text-align: left; background: none; border: 0; padding: 0; font: inherit; color: inherit; cursor: pointer; } .gp-hist { opacity: .8; }
 .gp-title { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; white-space: nowrap; } .gp-main { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; } .gp-ready { flex-shrink: 0; } /* the points never get cut: the break balance wraps to its own line when the row is full */
+.gp-head { display: flex; align-items: center; gap: 2px; } .gp-head .gp-row { flex: 1; min-width: 0; }
+.gp-gift { flex-shrink: 0; min-width: 22px; min-height: 22px; padding: 0 2px; background: none; border: 0; font-size: .8rem; line-height: 1; cursor: pointer; border-radius: 50%; animation: gp-glow 1.6s ease-in-out 3; }
+@keyframes gp-glow { 0%, 100% { filter: none; transform: scale(1); } 50% { filter: drop-shadow(0 0 4px rgba(255, 196, 80, .9)); transform: scale(1.12); } }
+@media (prefers-reduced-motion: reduce) { .gp-gift { animation: none; } }
 .gp-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--c-accent-text, #5B9BFF); }
 .gp-chev { font-size: .7rem; opacity: .7; }
 .gp-body { padding: 2px 2px 4px; font-size: .72rem; color: var(--c-text-2, #a1a09b); display: grid; gap: 6px; }

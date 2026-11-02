@@ -54,6 +54,7 @@
 		C1A0E40000000000000000011 /* ClingShieldConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A0E40000000000000000001 /* ClingShieldConfig.swift */; };
 		C1A0E40000000000000000012 /* LockShared.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A0E1000000000000000004 /* LockShared.swift */; };
 		C1A0E40000000000000000013 /* ClingShieldConfig.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = C1A0E40000000000000000004 /* ClingShieldConfig.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		D7E1F0A0B0C0D0E0F0A1B2C4 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = D7E1F0A0B0C0D0E0F0A1B2C3 /* PrivacyInfo.xcprivacy */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -104,6 +105,7 @@
 		C1A0E40000000000000000002 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		C1A0E40000000000000000003 /* ClingShieldConfig.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ClingShieldConfig.entitlements; sourceTree = "<group>"; };
 		C1A0E40000000000000000004 /* ClingShieldConfig.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ClingShieldConfig.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		D7E1F0A0B0C0D0E0F0A1B2C3 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXContainerItemProxy section */
@@ -244,6 +246,7 @@
 			isa = PBXGroup;
 			children = (
 				C1A0E0000000000000000003 /* ClingNoteWidget.swift */,
+				D7E1F0A0B0C0D0E0F0A1B2C3 /* PrivacyInfo.xcprivacy */,
 				C1A0E0000000000000000018 /* CompleteTaskIntent.swift */,
 				C1A0E000000000000000001A /* MatchupWidget.swift */,
 				C1A0E1000000000000000006 /* FocusLiveActivity.swift */,
@@ -432,6 +435,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D7E1F0A0B0C0D0E0F0A1B2C4 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

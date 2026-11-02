@@ -4,6 +4,7 @@ const here = path.dirname(fileURLToPath(import.meta.url)); const root = path.joi
 const src = (f) => fs.readFileSync(path.join(root, f), 'utf8');
 fs.writeFileSync(path.join(dir, 'vue.mjs'), 'export const ref = (value) => ({ value });\n');
 fs.writeFileSync(path.join(dir, 'gp.mjs'), src('src/utils/gamePlan.js').replace("from 'vue'", "from './vue.mjs'"));
+fs.writeFileSync(path.join(dir, 'sessionGoal.js'), src('src/utils/sessionGoal.js')); fs.writeFileSync(path.join(dir, 'aiEstimate.js'), src('src/utils/aiEstimate.js')); fs.writeFileSync(path.join(dir, 'taskSections.js'), src('src/utils/taskSections.js'));
 const G = await import(path.join(dir, 'gp.mjs'));
 let n = 0; const t = (name, fn) => { try { fn(); n++; console.log('ok ', name); } catch (e) { console.error('FAIL', name); throw e; } };
 const at = (d, h, m = 0) => new Date(2026, 10, d, h, m).getTime(); // Nov 2026, box-local
@@ -48,24 +49,23 @@ t('2+3 focus 50 / break 10 / focus 50 / break 10 from the day start', () => {
   assert(/Focus 1\/1/.test(G.rowText(G.phaseAt(g1, at(2, 9, 10)), {})));
   const n = G.breakNote(1); assert(/break earned/.test(n.title) && !/start/i.test(n.title) && /never cost points/.test(n.body));
 });
-t('earned breaks: banked, user-started, no stacking past earned, capped at close, relock to prior', () => {
-  const g = G.normPlan({ dayStart: '09:00' }); const day = G.dayWindow(g, at(2, 9)).dayKey;
-  assert.strictEqual(G.breakBank(g, null, at(2, 9, 10)).balance, 0);
-  assert.strictEqual(G.breakBank(g, null, at(2, 9, 55)).balance, 10);
-  assert.strictEqual(G.breakBank(g, null, at(2, 12)).balance, 10); assert.strictEqual(G.breakBank(g, null, at(2, 14)).balance, 20); // both sessions
+t('earned breaks: user-started, rule-gated, no stacking, capped at close, relock to prior', () => {
+  const g = G.normPlan({ dayStart: '09:00' }); const day = G.dayWindow(g, at(2, 9)).dayKey; const ok1 = { done: 7, total: 20, points: 60 };
+  assert.strictEqual(G.breakBank(g, null, at(2, 14)).balance, 0); // finished sessions no longer bank minutes
+  assert.strictEqual(G.breakBank(g, null, at(2, 9, 10), ok1).balance, 15);
   assert(/10m break ready/.test(G.rowText(G.phaseAt(g, at(2, 9, 55)), { earned: 0, goal: 130, bank: 10 })));
   const prior = { locked: true, until: at(2, 17), label: 'ClingNote lock-in' };
-  const b = G.takeBreak(g, null, at(2, 9, 55), prior); assert.strictEqual(b.used, 10); assert.strictEqual(b.endMs, at(2, 10, 5)); assert.deepStrictEqual(b.prior, prior);
-  assert.strictEqual(G.phaseAt(g, at(2, 10, 0), b).phase, 'break'); assert(/Break · 5:00 left/.test(G.rowText(G.phaseAt(g, at(2, 10, 0), b), {})));
-  assert.strictEqual(G.breakBank(g, b, at(2, 10, 0)).balance, 0);
-  assert.strictEqual(G.takeBreak(g, b, at(2, 10, 6)), null); // no stacking: used it up
+  const b = G.takeBreak(g, null, at(2, 9, 55), prior, ok1); assert.strictEqual(b.used, 15); assert.strictEqual(b.n, 1); assert.strictEqual(b.endMs, at(2, 10, 10)); assert.deepStrictEqual(b.prior, prior);
+  assert.strictEqual(G.phaseAt(g, at(2, 10, 0), b).phase, 'break'); assert(/Break · 10:00 left/.test(G.rowText(G.phaseAt(g, at(2, 10, 0), b), {})));
+  assert.strictEqual(G.breakBank(g, b, at(2, 10, 0), ok1).balance, 0);
+  assert.strictEqual(G.takeBreak(g, b, at(2, 10, 11), ok1), null); // no stacking: break 2 needs 15 tasks + 150 pts
   assert.strictEqual(G.relockPlan(b, at(2, 10, 0)), null);
-  assert.deepStrictEqual(G.relockPlan(b, at(2, 10, 5)), { untilMs: at(2, 17), label: 'ClingNote lock-in' });
+  assert.deepStrictEqual(G.relockPlan(b, at(2, 10, 10)), { untilMs: at(2, 17), label: 'ClingNote lock-in' });
   assert.strictEqual(G.relockPlan({ ...b, relocked: true }, at(2, 11)), null);
   assert.deepStrictEqual(G.relockPlan({ ...b, prior: { locked: false } }, at(2, 11)), { untilMs: 0, label: '' });
-  const late = G.takeBreak(g, null, at(2, 16, 55)); assert.strictEqual(late.endMs, at(2, 17)); assert.strictEqual(late.used, 5); // close caps it
-  assert.strictEqual(G.takeBreak(g, null, at(2, 17, 1)), null);
-  assert.strictEqual(G.normBreak({ ...b, day: 'old' }, day).used, 0);
+  const late = G.takeBreak(g, null, at(2, 16, 55), null, ok1); assert.strictEqual(late.endMs, at(2, 17)); assert.strictEqual(late.used, 5); // close caps it
+  assert.strictEqual(G.takeBreak(g, null, at(2, 17, 1), null, ok1), null);
+  assert.strictEqual(G.normBreak({ ...b, day: 'old' }, day).used, 0); assert.strictEqual(G.normBreak({ ...b, day: 'old' }, day).n, 0);
 });
 t('2 notifications inside focus are held to the session end (gp/timer pass)', () => {
   G.setQuietWindows([[at(2, 9), at(2, 9, 50)]]); assert.strictEqual(G.quietDefer(at(2, 9, 20)), at(2, 9, 50)); assert.strictEqual(G.quietDefer(at(2, 9, 55)), at(2, 9, 55)); G.setQuietWindows([]);
@@ -100,21 +100,37 @@ t('5 daily goal = max(min, min(round5(90% median 14d), planned load)); new users
   const log = {}; for (let i = 1; i <= 20; i++) log[`2026-10-${String(i).padStart(2, '0')}`] = { earned: i }; log['2026-10-21'] = { earned: 999 };
   const h = G.historyFrom(log, '2026-10-21'); assert.strictEqual(h.length, 14); assert.strictEqual(h[0], 7); assert(!h.includes(999));
 });
-t('points breaks: tiers 50/100/150 -> 10/20/30 min total, capped, banked, alert once per tier', () => {
-  assert.deepStrictEqual([0, 49, 50, 99, 100, 149, 150, 400].map((p) => G.pointsBreakMin(p)), [0, 0, 10, 10, 20, 20, 30, 30]);
-  assert.strictEqual(G.pointsBreakMin(60, 30), 20); assert.strictEqual(G.normPlan({ breakEvery: 30 }).breakEvery, 30); assert.strictEqual(G.normPlan({ breakEvery: 3 }).breakEvery, 50);
-  assert.strictEqual(G.nextTierText(72), '28 pts to 20m break'); assert.strictEqual(G.nextTierText(10), '40 pts to 10m break'); assert.strictEqual(G.nextTierText(160), '30m break max');
-  assert.strictEqual(G.tierToAlert(55, 0), 1); assert.strictEqual(G.tierToAlert(70, 1), 0); assert.strictEqual(G.tierToAlert(155, 1), 3); assert.strictEqual(G.tierToAlert(500, 3), 0);
-  assert(/You hit 50 points/.test(G.tierAlertText(1).title) && /never costs points/.test(G.tierAlertText(1).body));
-  const g = G.normPlan({ dayStart: '09:00' });
-  assert.strictEqual(G.breakBank(g, null, at(2, 9, 10), 100).balance, 20); // no double count: 100 pts = 20 total
-  const b = G.takeBreak(g, null, at(2, 9, 10), null, 100); assert.strictEqual(b.used, 20); assert.strictEqual(b.endMs, at(2, 9, 30)); assert.deepStrictEqual(b.last, { at: at(2, 9, 10), min: 20, points: 100 });
-  assert.strictEqual(G.breakBank(g, { ...b, startMs: 0, endMs: 0 }, at(2, 9, 40), 150).balance, 10); // 150 pts: 30 total - 20 used
-  const big = G.takeBreak(g, null, at(2, 14), null, 200); assert.strictEqual(big.used, 30); // 20 session + 30 points = 50, one break capped at 30
+t('numbered breaks: 15m at 35% tasks + 50 pts, 30m at 75% + 150 pts, cap max(1, round(h/4)), alert once per break', () => {
+  assert.deepStrictEqual(G.BREAK_RULES.breaks.map((x) => [x.n, x.min, x.taskShare, x.points]), [[1, 15, 0.35, 50], [2, 30, 0.75, 150]]);
+  assert.deepStrictEqual([G.breakNeed(1, 20).tasks, G.breakNeed(2, 20).tasks], [7, 15]); // 20 tasks: 7 then 15
+  assert.deepStrictEqual([G.breakNeed(1, 10).tasks, G.breakNeed(2, 10).tasks, G.breakNeed(1, 1).tasks, G.breakNeed(1, 0).tasks], [4, 8, 1, 1]);
+  assert.deepStrictEqual([2, 4, 5, 6, 8, 10, 12].map((h) => G.breaksPerDay(h)), [1, 1, 1, 2, 2, 2, 2]);
+  const S = (o) => G.breakStatus({ total: 20, dayHours: 8, ...o });
+  assert.strictEqual(S({ done: 4, points: 80 }).text, '3 tasks to 15m break');
+  assert.strictEqual(S({ done: 7, points: 30 }).text, '20 pts to 15m break');
+  assert.strictEqual(S({ done: 6, points: 30 }).text, '1 task + 20 pts to 15m break');
+  const s1 = S({ done: 7, points: 50 }); assert.strictEqual(s1.ok, true); assert.strictEqual(s1.min, 15); assert.strictEqual(s1.text, '15m break ready');
+  assert.strictEqual(S({ taken: 1, done: 13, points: 130 }).text, '2 tasks + 20 pts to 30m break');
+  const s2 = S({ taken: 1, done: 15, points: 150 }); assert.strictEqual(s2.ok, true); assert.strictEqual(s2.min, 30);
+  assert.strictEqual(S({ taken: 2, done: 20, points: 400 }).text, 'All 2 breaks taken');
+  // short days: a 4h day gets break 1 only
+  const short = (o) => G.breakStatus({ total: 20, dayHours: 4, ...o });
+  assert.strictEqual(short({ done: 7, points: 50 }).ok, true); const s4 = short({ taken: 1, done: 20, points: 500 }); assert.strictEqual(s4.ok, false); assert.strictEqual(s4.text, 'Break taken today');
+  assert.strictEqual(G.breakStatus({ total: 20, dayHours: 2, taken: 1, done: 20, points: 500 }).ok, false);
+  assert.strictEqual(G.breakToAlert(s1, 0), 1); assert.strictEqual(G.breakToAlert(s1, 1), 0); assert.strictEqual(G.breakToAlert(S({ done: 4, points: 80 }), 0), 0); assert.strictEqual(G.breakToAlert(s2, 1), 2);
+  assert(/Break 1 unlocked: 15 min/.test(G.breakAlertText(s1).title) && /never costs points/.test(G.breakAlertText(s1).body));
+  const g = G.normPlan({ dayStart: '09:00' }); const g4 = { ...G.normPlan({ dayStart: '09:00' }), closeHours: 4 };
+  const b = G.takeBreak(g, null, at(2, 9, 10), null, { done: 7, total: 20, points: 100 }); assert.strictEqual(b.used, 15); assert.strictEqual(b.endMs, at(2, 9, 25)); assert.deepStrictEqual(b.last, { at: at(2, 9, 10), min: 15, points: 100 });
+  const done = { ...b, startMs: 0, endMs: 0 };
+  assert.strictEqual(G.breakBank(g, done, at(2, 9, 40), { done: 14, total: 20, points: 200 }).balance, 0);
+  const b2 = G.takeBreak(g, done, at(2, 9, 40), null, { done: 15, total: 20, points: 150 }); assert.strictEqual(b2.used, 45); assert.strictEqual(b2.n, 2); assert.strictEqual(b2.last.min, 30);
+  assert.strictEqual(G.takeBreak(g, { ...b2, startMs: 0, endMs: 0 }, at(2, 11), null, { done: 20, total: 20, points: 500 }), null); // day cap 2
+  assert.strictEqual(G.takeBreak(g4, { ...done, day: G.dayWindow(g4, at(2, 9)).dayKey }, at(2, 9, 40), null, { done: 20, total: 20, points: 500 }), null); // 4h day: break 1 only
+  assert.strictEqual(G.breakBank(g, null, at(2, 9, 40), { done: 20, total: 20, points: 500, taken: 1 }).status.n, 2); // log count counts as taken
   const log = G.addBreakLog(G.addBreakLog([], b.last), { at: 0, min: 5 }); assert.strictEqual(log.length, 1);
-  assert.deepStrictEqual(G.breaksOn(log, G.dayWindow(g, at(2, 9)).dayKey), { count: 1, min: 20 });
+  assert.deepStrictEqual(G.breaksOn(log, G.dayWindow(g, at(2, 9)).dayKey), { count: 1, min: 15 });
   assert.strictEqual(G.recapText({ points: 120, sessionsDone: 2, sessions: 2, breaks: 1, breakMin: 20 }), '120 pts · 2 of 2 sessions · 1 break (20 min)');
-  assert.strictEqual(G.fmtBreakLog(log, 'en-US')[0].min, 20);
+  assert.strictEqual(G.fmtBreakLog(log, 'en-US')[0].min, 15);
   assert.strictEqual(typeof G.pacingNote, 'undefined'); // midday pacing removed
 });
 t('6 checklist gate, revoke detection + penalty once a day, friction countdown', () => {
@@ -135,7 +151,7 @@ t('7 close picker: nothing automatic; picked copies dedupe by title, reset compl
 t('wiring: earned break (take-break action, shield lift, relock on expiry/launch, native re-shield, earned note)', () => {
   const h = src('src/views/HomeView.vue'); const r = src('src/components/home/GamePlanRow.vue');
   assert(/@take-break="gpTakeBreak"/.test(h) && /data-test="gp-take-break"/.test(r) && /data-test="gp-ready"/.test(r));
-  assert(/GP\.breakActive\(gpBreak\.value, Date\.now\(\)\)\) r = \{ \.\.\.r, want: false, phase: 'break' \}/.test(h));
+  assert(/GP\.breakActive\(gpBreak\.value, Date\.now\(\)\) && gpBreakOk\(\)\) r = \{ \.\.\.r, want: false, phase: 'break' \}/.test(h));
   assert(/st = await gpBreakRelock\(st\)/.test(h) && /clingLock\.scheduleLock\(\{ startMs: b\.endMs, untilMs: prior\.until/.test(h));
   assert(/at: new Date\(s\.endMs\)/.test(h) && !/s\.kind === 'break'/.test(h));
   assert(/claimedAt: sd\.claimedAt/.test(h) && /@claim-screen="claimScreenTime"/.test(h));
@@ -149,7 +165,7 @@ t('wiring: Home row, Coach-only, earned/close, gate, carry, review, ask; Profile
   const h = src('src/views/HomeView.vue'); assert(/<GamePlanRow v-if="gpOn && isViewingToday"/.test(h)); assert(/const gpOn = computed\(\(\) => isStrictMode\.value\)/.test(h));
   assert(/GP\.setSizeMode\(on\)/.test(h)); assert(/gpEarned\.value\.points/.test(h)); assert(/phase: 'checklist'/.test(h)); assert(/gpAuthCheck\(st\)/.test(h)); assert(/isShutdown\(\) \|\| gpOn\.value/.test(h));
   assert(/fnUrl\('friend-unlock'\)/.test(h)); assert(/GP\.countdown/.test(h)); assert(/!gpQuiet/.test(h));
-  const p = src('src/views/Profile.vue'); assert(/data-test="gp-settings"/.test(p)); assert(/GP\.queueEdit/.test(p));
+  const p = src('src/views/Profile.vue'); assert(/'gp-settings'/.test(p)); assert(/GP\.queueEdit/.test(p));
   const c = src('src/components/home/TaskCard.vue'); assert(/data-test="size-edit"/.test(c));
   assert.equal(G.sizeOf({ points: 20 }), 'm'); assert.equal(G.sizeOf({ points: 10 }), 's'); assert.equal(G.sizeOf({ points: 60 }), 'l'); assert.equal(G.sizeOf({ points: 60, estimateMin: 10 }), 's'); assert.equal(G.sizeOf({ size: 'l', points: 10 }), 'l');
   const m = src('src/components/home/MorningReport.vue'); assert(/mr-penalty/.test(m) && /mr-goal-why/.test(m));

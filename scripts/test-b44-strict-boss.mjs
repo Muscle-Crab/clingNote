@@ -14,7 +14,9 @@ t('window 0 below goal', () => assert.equal(S.earnedWindowMin({ earned: 49, goal
 t('window formula', () => { assert.equal(S.earnedWindowMin({ earned: 50, goal: 50, tasksDone: 4 }), 50); assert.equal(S.earnedWindowMin({ earned: 100, goal: 50, tasksDone: 6 }), 90); });
 t('window clamped + tunable', () => { assert.equal(S.earnedWindowMin({ earned: 500, goal: 50, tasksDone: 100 }), 180); assert.equal(S.earnedWindowMin({ earned: 50, goal: 50 }, { ...S.STRICT_TUNING, baseMin: 5 }), 15); });
 t('window grows with points and tasks', () => { assert.ok(S.earnedWindowMin({ earned: 80, goal: 50, tasksDone: 3 }) > S.earnedWindowMin({ earned: 50, goal: 50, tasksDone: 3 })); assert.ok(S.earnedWindowMin({ earned: 50, goal: 50, tasksDone: 8 }) > S.earnedWindowMin({ earned: 50, goal: 50, tasksDone: 2 })); });
-t('locked while working toward goal', () => { const r = S.strictShield({ ...common, now: base + H, goal: 60, earned: 10 }); assert.equal(r.phase, 'locked'); assert.equal(r.want, true); assert.equal(r.untilMs, dayEnd); });
+t('locked while working toward goal', () => { const r = S.strictShield({ ...common, now: base + H, goal: 60, earned: 10 }); assert.equal(r.phase, 'locked'); assert.equal(r.want, true); assert.equal(r.untilMs, dayEnd + S.MISS_GRACE_MS); }); // 2 h miss grace already in the native lock
+t('missed: locked until shutdown + 2 h, then open; met unlocks as before', () => { const m = S.strictShield({ ...common, now: dayEnd + H, goal: 60, earned: 10 }); assert.equal(m.phase, 'missed'); assert.equal(m.untilMs, dayEnd + 2 * H);
+  assert.equal(S.strictShield({ ...common, now: dayEnd + 2 * H + 1000, goal: 60, earned: 10 }).want, false); assert.notEqual(S.strictShield({ ...common, now: dayEnd + H, goal: 60, earned: 60, tasksDone: 3, goalAt: base }).phase, 'missed'); });
 t('goal met: window banked (ready, still locked) until the user starts it', () => {
   const at = base + 3 * H; const r = S.strictShield({ ...common, now: at + 60 * 60000, goal: 50, earned: 50, tasksDone: 4, goalAt: at });
   assert.equal(r.phase, 'ready'); assert.equal(r.want, true); assert.equal(r.windowMin, 50); assert.equal(r.untilMs, S.endOfDay(at)); });
@@ -23,13 +25,13 @@ t('user-started window unlocks, then relocks to midnight', () => {
   assert.equal(a.phase, 'earned'); assert.equal(a.want, false); assert.equal(a.unlockEndMs, at + 50 * 60000);
   const b = S.strictShield({ ...common, now: at + 51 * 60000, goal: 50, earned: 50, tasksDone: 4, goalAt: base, claimedAt: at });
   assert.equal(b.phase, 'relocked'); assert.equal(b.want, true); assert.equal(b.untilMs, S.endOfDay(at)); });
-t('missed goal by end time: locked rest of day', () => { const r = S.strictShield({ ...common, running: false, now: dayEnd + 60000, goal: 60, earned: 30 }); assert.equal(r.phase, 'missed'); assert.equal(r.untilMs, S.endOfDay(dayEnd)); });
+t('missed goal by end time: locked 2 more hours', () => { const r = S.strictShield({ ...common, running: false, now: dayEnd + 60000, goal: 60, earned: 30 }); assert.equal(r.phase, 'missed'); assert.equal(r.untilMs, dayEnd + 2 * 3600000); });
 t('emergency unlock / off day / no apps -> off', () => { for (const x of [{ unlockedToday: true }, { offDay: true }, { selectionCount: 0 }, { enabled: false }]) assert.equal(S.strictShield({ ...common, now: base + H, goal: 60, ...x }).phase, 'off'); });
 t('off day detection + wake auto-start', () => {
   assert.equal(S.isOffDay('2026-10-31', { offDates: ['2026-10-31'] }), true); assert.equal(S.isOffDay('2026-10-31', { skipDate: '2026-10-31' }), true);
   assert.equal(S.wakeAutoOn({ mode: 'strict', wakeAuto: false, dayKey: '2026-10-30', offDates: ['2026-10-31'] }), true);
   assert.equal(S.wakeAutoOn({ mode: 'strict', wakeAuto: true, dayKey: '2026-10-31', offDates: ['2026-10-31'] }), false);
   assert.equal(S.wakeAutoOn({ mode: 'simple', wakeAuto: false, dayKey: '2026-10-30' }), false); });
-t('day-end note', () => { const a = S.dayEndNote({ earned: 100, goal: 50, tasksDone: 6 }); assert.match(a.title, /100\/50/); assert.match(a.body, /1h 30m of screen time/); assert.match(S.dayEndNote({ earned: 10, goal: 50 }).body, /locked until midnight/); });
+t('day-end note', () => { const a = S.dayEndNote({ earned: 100, goal: 50, tasksDone: 6 }); assert.match(a.title, /100\/50/); assert.match(a.body, /1h 30m of screen time/); assert.match(S.dayEndNote({ earned: 10, goal: 50 }).body, /locked for 2 more hours/); });
 t('greeting + mood', () => { assert.equal(S.wakeGreeting('Sam', 7), 'Good morning, Sam. How are you feeling?'); assert.match(S.moodReply('low', 70), /70 points/); assert.equal(S.MOODS.length, 4); });
 console.log(`${n} b44 strict-boss tests passed`);

@@ -15,7 +15,7 @@
       <h2 id="ehs-t">Your {{ hoursText }} hours are up.</h2>
       <p v-if="nextOk">Session 1 is done. Start your {{ s2Name }} now, or come back tomorrow at <b data-test="eh-shut-until">{{ shut.untilLabel }}</b>.</p>
       <p v-else>ClingNote is shut for today. Come back tomorrow at <b data-test="eh-shut-until">{{ shut.untilLabel }}</b>.</p>
-      <p class="ehs-res" :class="shut.met ? 'ok' : 'miss'" data-test="eh-shut-result">{{ shut.met ? 'Goal met' : 'Goal missed' }} · {{ shut.earned }}/{{ shut.target }} pts</p>
+      <p class="ehs-res" :class="shut.met ? 'ok' : 'miss'" data-test="eh-shut-result">{{ shut.missed ? `Missed ${shut.target} pts: apps open at ${shut.opensAtLabel}` : `${shut.met ? 'Goal met' : 'Goal missed'} · ${shut.earned}/${shut.target} pts` }}</p>
       <p v-if="recap" class="ehs-recap" data-test="eh-shut-recap">{{ recap }}</p>
       <button v-if="nextOk" type="button" class="ehs-row" data-test="eh-next-session" :disabled="eh.st.busy" @click="doNextSession">Start {{ s2Name }} <span aria-hidden="true">›</span></button>
       <!-- Evening mode: one compact row; tapping it reveals time + hours inline. A scheduled block can't be cancelled or shortened. -->
@@ -92,11 +92,10 @@ const planState = computed(() => planWindowState({ nowMs: (shut.value, eh.nowMs(
 const planningNow = computed(() => !!(planWin.active && planState.value.open && planWin.eveningKey === planState.value.eveningKey));
 const openPlanning = () => { planWin.eveningKey = planState.value.eveningKey; planWin.active = true; markPlanSeen(planState.value.eveningKey); if (route.name !== 'home') router.push({ name: 'home' }).catch(() => {}); };
 const closePlanning = () => { planWin.active = false; };
-// While session 2 can still start, keep the shutdown card (it has its own "Plan tomorrow" row) instead of auto-opening planning over it.
-watch(() => [uid.value, planState.value.open, planState.value.eveningKey, !!eh.session.value?.canStart], () => {
+// Planning opens at its normal time even during the 2 h missed lock or while session 2 could still start: it happens inside ClingNote and unlocks no apps.
+watch(() => [uid.value, planState.value.open, planState.value.eveningKey], () => {
   const s = planState.value;
   if (!s.open) { if (planWin.active) planWin.active = false; return; } // midnight (or wake): hard close
-  if (eh.session.value?.canStart) { if (planWin.active) planWin.active = false; return; }
   if (uid.value && shouldAutoOpen({ open: s.open, eveningKey: s.eveningKey, seenKey: readPlanSeen() })) openPlanning();
 }, { immediate: true });
 const onPill = () => { if (planningNow.value) closePlanning(); else goCard(); };

@@ -135,22 +135,27 @@
               </span>
               <small class="pf-dl-sub">Mon–Fri. Focus time and lock-ins go to your ClingNote calendar as blocks around your other events (Calendar sync on).</small>
             </div>
-            <div class="pf-row pf-row--divided pf-row--stack" data-test="boss-mode-row"><span class="pf-ico" aria-hidden="true">🤖</span><span class="pf-row-title">Coach mode<small class="pf-dl-sub" data-test="boss-mode-sub">{{ bossMode === 'strict' ? 'Strict: auto-start at wake, earn screen time by hitting your points goal.' : 'Simple: you start the day, apps unlock when the goal is met.' }}</small>
-              <span class="pf-mini-btns"><button v-for="m in ['simple', 'strict']" :key="m" type="button" class="pf-mini" :class="{ 'pf-mini--on': bossMode === m }" :aria-pressed="bossMode === m" :data-test="`boss-${m}`" @click="saveBoss({ bossMode: m })">{{ m === 'strict' ? 'Strict' : 'Simple' }}</button>
-                <label class="pf-mini pf-mini--check"><input type="checkbox" data-test="emergency-toggle" :checked="emergencyOn" @change="saveBoss({ emergencyUnlock: $event.target.checked })" /> Emergency unlock</label></span></span>
-              <button v-if="bossMode === 'strict'" type="button" class="pf-gp-link" data-test="gp-settings" :aria-expanded="gpOpen" @click="gpOpen = !gpOpen">Weekly game plan · {{ gpSummary }} ›</button>
-              <span v-if="gpOpen && bossMode === 'strict'" class="pf-mini-btns" data-test="gp-panel">
-                <label class="pf-mini">Day starts <input type="time" class="pf-mini" v-model="gpForm.dayStart" data-test="gp-daystart" aria-label="Day starts" /></label>
-                <select class="pf-mini" v-model.number="gpForm.reviewDow" data-test="gp-reviewdow" aria-label="Weekly review day"><option v-for="(d, i) in GP_WEEK" :key="d" :value="i">Review {{ d }}</option></select>
-                <input type="time" class="pf-mini" v-model="gpForm.reviewTime" data-test="gp-reviewtime" aria-label="Weekly review time" />
-                <select class="pf-mini" v-model.number="gpForm.sessions" data-test="gp-sessions" aria-label="Focus sessions per day"><option :value="1">1 session</option><option :value="2">2 sessions</option></select>
-                <label class="pf-mini">Break every <input type="number" min="25" max="200" step="5" class="pf-mini pf-num" v-model.number="gpForm.breakEvery" data-test="gp-breakevery" aria-label="Points per break alert" /> pts</label>
-                <label class="pf-mini">Min goal <input type="number" min="10" max="500" step="5" class="pf-mini pf-num" v-model.number="gpForm.minGoal" data-test="gp-mingoal" aria-label="Minimum daily goal" /></label>
-                <label class="pf-mini pf-mini--check"><input type="checkbox" :checked="gpPlan.friendUnlock" data-test="gp-friend-toggle" @change="saveFriendUnlock($event.target.checked)" /> Friend approval to unlock</label>
-                <input v-if="gpPlan.friendUnlock" type="text" maxlength="40" class="pf-mini" v-model="gpForm.friend" placeholder="Unlock friend's name" data-test="gp-friend" aria-label="Friend who approves early unlocks" />
-                <button type="button" class="pf-mini" data-test="gp-save" @click="saveGamePlan">Save</button>
-                <small class="pf-dl-sub" data-test="gp-msg" role="status">{{ gpMsg || `Morning focus at the day start${gpForm.sessions === 1 ? '' : ', afternoon focus 4 h later'}; the day closes 8 h after the start. Every ${gpForm.breakEvery || 50} pts banks a break (10, 20, 30 min max). Sessions and break alerts apply now; schedule changes wait for the weekly review.` }}</small>
-              </span></div>
+            <div class="pf-row--divided pf-coach" data-test="boss-mode-row">
+              <component :is="bossMode === 'strict' ? 'button' : 'div'" :type="bossMode === 'strict' ? 'button' : undefined" class="pf-row pf-coach-head" :data-test="bossMode === 'strict' ? 'gp-settings' : null" :aria-expanded="bossMode === 'strict' ? gpOpen : null" @click="bossMode === 'strict' && (gpOpen = !gpOpen)">
+                <span class="pf-ico" aria-hidden="true">🤖</span>
+                <span class="pf-row-title">Coach mode<small class="pf-dl-sub" data-test="boss-mode-sub">{{ bossMode === 'strict' ? 'Strict: auto-start at wake, earn screen time by hitting your points goal.' : 'Simple: you start the day, apps unlock when the goal is met.' }}</small><small v-if="bossMode === 'strict'" class="pf-dl-sub" data-test="gp-summary">Weekly game plan · {{ gpSummary }}</small></span>
+                <span v-if="bossMode === 'strict'" class="pf-chev" :class="{ 'pf-chev--open': gpOpen }" aria-hidden="true">›</span>
+              </component>
+              <div class="pf-coach-ctl">
+                <span class="pf-seg pf-seg--inline" role="group" aria-label="Coach mode"><button v-for="m in ['simple', 'strict']" :key="m" type="button" class="pf-seg-btn" :class="{ 'pf-seg-btn--on': bossMode === m, 'pf-mini--on': bossMode === m }" :aria-pressed="bossMode === m" :data-test="`boss-${m}`" @click="saveBoss({ bossMode: m })">{{ m === 'strict' ? 'Strict' : 'Simple' }}</button></span>
+                <label class="pf-mini--check pf-coach-check"><input type="checkbox" data-test="emergency-toggle" :checked="emergencyOn" @change="saveBoss({ emergencyUnlock: $event.target.checked })" /> Emergency unlock</label>
+              </div>
+              <div v-if="gpOpen && bossMode === 'strict'" class="pf-coach-panel" data-test="gp-panel">
+                <label class="pf-coach-f">Day starts <input type="time" class="pf-mini" v-model="gpForm.dayStart" data-test="gp-daystart" aria-label="Day starts" /></label>
+                <label class="pf-coach-f">Weekly review <span class="pf-coach-pair"><select class="pf-mini" v-model.number="gpForm.reviewDow" data-test="gp-reviewdow" aria-label="Weekly review day"><option v-for="(d, i) in GP_WEEK" :key="d" :value="i">{{ d }}</option></select><input type="time" class="pf-mini" v-model="gpForm.reviewTime" data-test="gp-reviewtime" aria-label="Weekly review time" /></span></label>
+                <label class="pf-coach-f">Focus sessions <select class="pf-mini" v-model.number="gpForm.sessions" data-test="gp-sessions" aria-label="Focus sessions per day"><option :value="1">1 session</option><option :value="2">2 sessions</option></select></label>
+                <label class="pf-coach-f">Min daily goal <span class="pf-coach-pair"><input type="number" min="10" max="500" step="5" class="pf-mini pf-num" v-model.number="gpForm.minGoal" data-test="gp-mingoal" aria-label="Minimum daily goal" /> pts</span></label>
+                <label class="pf-coach-f pf-coach-check"><span><input type="checkbox" :checked="gpPlan.friendUnlock" data-test="gp-friend-toggle" @change="saveFriendUnlock($event.target.checked)" /> Friend approval to unlock</span></label>
+                <input v-if="gpPlan.friendUnlock" type="text" maxlength="40" class="pf-mini pf-coach-wide" v-model="gpForm.friend" placeholder="Unlock friend's name" data-test="gp-friend" aria-label="Friend who approves early unlocks" />
+                <small class="pf-dl-sub" data-test="gp-msg" role="status">{{ gpMsg || gpHelp }}</small>
+                <button type="button" class="pf-mini pf-coach-wide" data-test="gp-save" @click="saveGamePlan">Save</button>
+              </div>
+            </div>
           </section>
 
           <h2 class="pf-section">More</h2>
@@ -291,7 +296,14 @@ const bossMode = ref('simple'); const emergencyOn = ref(true);
 const GP_WEEK = GP.WEEK; const gpOpen = ref(false); const gpMsg = ref(''); const gpPlan = ref(GP.normPlan({})); const gpHas = ref(false);
 const gpForm = ref({ dayStart: '09:00', sessions: 2, breakEvery: 50, reviewDow: 0, reviewTime: '18:00', minGoal: 50, friend: '' });
 const gpView = () => { const p = { ...gpPlan.value, ...(gpPlan.value.pending || {}) }; gpForm.value = { dayStart: p.dayStart, sessions: gpPlan.value.sessions === 1 ? 1 : 2, breakEvery: gpPlan.value.breakEvery || 50, reviewDow: p.reviewDow, reviewTime: p.reviewTime, minGoal: p.minGoal, friend: (gpPlan.value.friend && gpPlan.value.friend.name) || '' }; };
-const gpSummary = computed(() => `${gpPlan.value.dayStart}–${GP.addHours(gpPlan.value.dayStart, 8)} · ${gpPlan.value.sessions === 1 ? '1 session' : '2 sessions'} · break every ${gpPlan.value.breakEvery || 50} pts · review ${GP.WEEK[gpPlan.value.reviewDow]} ${gpPlan.value.reviewTime}${gpPlan.value.pending ? ' · change queued' : ''}`);
+// Summary + help follow the current rules: breaks are earned by tasks + points (GP.BREAK_RULES), each session has its own points bar.
+const gpClock = (hhmm) => { const [h, m] = String(hhmm || '00:00').split(':').map(Number); return `${h % 12 || 12}${m ? `:${String(m).padStart(2, '0')}` : ''} ${h < 12 ? 'AM' : 'PM'}`; };
+const gpBreaks = () => GP.BREAK_RULES.breaks.slice(0, GP.breaksPerDay(8)).map((b) => `${b.min}m`).join(' + ');
+const gpSummary = computed(() => `${gpPlan.value.dayStart}–${GP.addHours(gpPlan.value.dayStart, 8)} · ${gpPlan.value.sessions === 1 ? '1 session' : '2 sessions'} · breaks ${gpBreaks()} · review ${GP.WEEK[gpPlan.value.reviewDow]} ${gpClock(gpPlan.value.reviewTime)}${gpPlan.value.pending ? ' · change queued' : ''}`);
+const gpHelp = computed(() => { const [b1, b2] = GP.BREAK_RULES.breaks;
+  return `${gpForm.value.sessions === 1 ? 'One session; the day closes 8 h after the start.' : 'Morning session = your Morning tasks, afternoon session = the rest; each has its own points bar and only counts points earned in it.'} `
+    + `Break 1: ${b1.min} min after ${Math.round(b1.taskShare * 100)}% of tasks + ${b1.points} pts. Break 2: ${b2.min} min after ${Math.round(b2.taskShare * 100)}% + ${b2.points} pts. `
+    + 'Miss a session\'s points and apps stay locked 2 h after it ends. Schedule changes wait for the weekly review.'; });
 const saveGamePlan = async () => { const u = auth.currentUser; if (!u) return;
   const f = gpForm.value; const friend = String(f.friend || '').trim() ? { name: String(f.friend).trim().slice(0, 40) } : null;
   const patch = {}; for (const k of GP.SCHEDULE_FIELDS) if (f[k] !== gpPlan.value[k]) patch[k] = f[k];
@@ -593,6 +605,17 @@ onMounted(() => { loadDayLengthHours().then((v) => { dayLen.value = v; }).catch(
 .pf-chev { transition: transform .15s ease; } .pf-chev--open { transform: rotate(90deg); }
 .pf-mini--on { border-color: var(--c-accent, #3C8CFF) !important; color: var(--c-text, #fff); }
 .pf-mini--check { display: inline-flex; align-items: center; gap: 4px; }
+.pf-coach { display: flex; flex-direction: column; padding-bottom: 12px; }
+.pf-coach-head { align-items: flex-start; padding: 12px 0 4px; } .pf-coach-head .pf-row-title { min-width: 0; } .pf-coach-head .pf-chev { align-self: center; transition: transform .15s; }
+.pf-chev--open { transform: rotate(90deg); }
+.pf-coach-ctl { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding-left: 50px; }
+.pf-seg--inline { display: inline-flex; margin-top: 0; } .pf-seg--inline .pf-seg-btn { flex: 0 0 auto; min-height: 32px; padding: 0 14px; font-size: 13px; }
+.pf-coach-check { display: inline-flex; align-items: center; gap: 6px; font: 600 13px/1.2 var(--font); color: var(--c-text-2); }
+.pf-coach-panel { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; padding-left: 50px; }
+.pf-coach-f { display: flex; align-items: center; justify-content: space-between; gap: 10px; font: 600 14px/1.2 var(--font); color: var(--c-text); }
+.pf-coach-pair { display: inline-flex; align-items: center; gap: 6px; }
+.pf-coach-wide { width: 100%; box-sizing: border-box; }
+.pf-coach-panel .pf-mini { min-width: 0; box-sizing: border-box; padding: 0 10px; } .pf-coach-panel input[type=time].pf-mini { width: 144px; padding: 0 8px; } .pf-coach-panel select.pf-mini { max-width: 132px; } .pf-coach-panel .pf-num { width: 72px; }
 .pf-gp-link { background: none; border: 0; padding: 4px 0 0; color: var(--c-accent-text, #5B9BFF); font: inherit; font-size: .8rem; cursor: pointer; text-align: left; }
 .pf-num { width: 4.5em; }
 </style>

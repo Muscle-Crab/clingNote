@@ -14,7 +14,7 @@ export const applyTaken = (b, taken, dayKey, ymdOf) => {
     const at = Number(t && t.at) || 0; const min = Math.round(Number(t && t.min) || 0); if (!(at > 0 && min > 0)) continue;
     log.push({ at, min, points: Math.round(Number(t.points) || 0) });
     if (ymdOf(at) !== dayKey) continue;
-    cur = { ...cur, day: dayKey, used: (Number(cur.used) || 0) + min, startMs: at, endMs: Number(t.until) || at + min * 60000, native: 'break', relocked: false, prior: null };
+    cur = { ...cur, day: dayKey, n: (Number(cur.n) || 0) + 1, used: (Number(cur.used) || 0) + min, startMs: at, endMs: Number(t.until) || at + min * 60000, native: 'break', relocked: false, prior: null };
   }
   return { b: cur, log };
 };

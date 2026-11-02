@@ -63,8 +63,8 @@ t('Home wiring: Take break -> startBreak (no stopLock), end early -> endBreak, s
   const h = rd('src/views/HomeView.vue');
   const tb = h.slice(h.indexOf('const gpTakeBreak'), h.indexOf('const gpHistory'));
   assert(/clingLock\.startBreak\(b\.endMs, b\.last\.min\)[^]*?if \(r && r\.started\) \{ gpBreakSave\(\{ \.\.\.b, native: 'break' \}\); return; \}/.test(tb));
-  assert(/holdLockAction\(gpBreak\.value, Date\.now\(\)\)\) \{ hardLocked\.value = false; return; \}/.test(h));
-  assert(/clingLock\.endBreak\(\)/.test(h)); assert(/clingLock\.offerBreak\(/.test(h)); assert(/alertTier\(stored, k, GP\.pointsTier/.test(h));
+  assert(/holdLockAction\(gpBreak\.value, Date\.now\(\)\) && gpBreakOk\(\)\) \{ hardLocked\.value = false; return; \}/.test(h));
+  assert(/clingLock\.endBreak\(\)/.test(h)); assert(/clingLock\.offerBreak\(/.test(h)); assert(/alertTier\(stored, k, GP\.breakToAlert/.test(h));
   assert(!/gp:pace:\$\{k\}`, \{/.test(h), 'midday pacing note no longer scheduled');
   assert(/scheduleLocal\(`gp:close:\$\{k\}`, \{ title: 'Day done', body: `\$\{GP\.recapText/.test(h), 'existing close note extended with the recap');
 });

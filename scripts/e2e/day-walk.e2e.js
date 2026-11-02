@@ -45,7 +45,7 @@ const closeRow = async (p) => { if ((await p.locator('[data-test=gp-toggle]').ge
     window.__clingLockFake = { status: async () => ({ authorization: 'approved', selectionCount: 3, monitoring: rd().locked, ...rd() }),
       startLock: async ({ untilMs, label }) => { wr({ ...rd(), locked: true, until: untilMs, label }); return { locked: true, monitor: 'ok' }; },
       stopLock: async () => { wr({ ...rd(), locked: false, until: 0, label: '' }); return { locked: false }; },
-      scheduleLock: async (o) => { const v = rd(); v.scheduled.push(o); wr(v); return { monitor: 'ok' }; }, labeledApps: async () => ({ apps: [] }),
+      scheduleLock: async (o) => { const v = rd(); v.scheduled.push(o); wr(v); return { monitor: 'ok' }; }, labeledApps: async () => ({ apps: [] }), clearBreakOffer: async () => ({ cleared: true }), cancelScheduledLock: async (o) => { const v = rd(); v.cancelled = [...(v.cancelled || []), o.key]; wr(v); return { cancelled: true }; },
       offerBreak: async (o) => { const v = rd(); v.offers.push(o); wr(v); return { posted: true }; },
       startBreak: async ({ untilMs, minutes }) => { const v = rd(); v.breaks.push({ untilMs, minutes }); v.preBreak = { locked: v.locked, until: v.until }; v.locked = false; wr(v); return { started: true }; },
       endBreak: async () => { const v = rd(); if (v.preBreak && v.preBreak.locked) { v.locked = true; v.until = v.preBreak.until; } wr(v); return { ended: true }; },
