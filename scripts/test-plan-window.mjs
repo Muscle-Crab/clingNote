@@ -63,8 +63,8 @@ t('completionOnlyChange: only completion fields may differ', () => {
 });
 t('pill: planning state', () => { const p = C.pillState({ shut: true, planning: true }); assert.equal(p.main, 'Planning tomorrow'); assert.equal(C.pillState({ shut: true, untilLabel: '7 AM' }).main, 'Shut'); });
 t('rules: shut day frozen except in-place, other days writable', () => {
-  const r = src('firestore.rules'); assert.ok(/function eightHourShutDay\(uid, dayName\)/.test(r));
-  assert.ok((r.match(/!eightHourShutDay\(/g) || []).length >= 3); assert.ok(/lockedDayUnchanged\(\)/.test(r));
+  const r = src('firestore.rules'); assert.ok(/function dayFrozen\(lk, dayName\)[\s\S]*?shutUntil/.test(r));
+  assert.ok((r.match(/!dayFrozen\(eightHourLock\(/g) || []).length >= 3); assert.ok(/lockedDayUnchanged\(\)/.test(r));
 });
 t('wiring: settings row + chrome + home', () => {
   const pf = src('src/views/Profile.vue'); assert.ok(pf.includes('data-test="plan-time"') && pf.includes('setPlanOpenTime'));

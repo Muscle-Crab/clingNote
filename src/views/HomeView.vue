@@ -1192,9 +1192,16 @@ const startTimer = async (opts = {}) => {
     ...(pomo ? startPomoPatch(now) : {}),
   };
 
-  selectedDayRoutine.value[selectedTimerTaskIndex.value] = task;
+  const at = selectedTimerTaskIndex.value, before = selectedDayRoutine.value[at];
+  selectedDayRoutine.value[at] = task;
 
-  await saveSelectedDayTasks();
+  // A rejected save used to escape unhandled: the card showed running, then the next refresh put back the stored (stopped) copy, so the
+  // timer looked like it started and stopped at once. Roll back on purpose and say why.
+  try { await saveSelectedDayTasks(); } catch (e) {
+    if (selectedDayRoutine.value[at] === task) selectedDayRoutine.value[at] = before;
+    if (!lockMessage(e)) { console.error('start timer:', e); showNoteToast('Could not start the timer. Check your connection and try again.', { error: true }); }
+    return false;
+  }
   sfx('timerStart');
   scheduleTimerDone(task); // iOS: on-device notification at end time (JS timers stop when backgrounded)
 

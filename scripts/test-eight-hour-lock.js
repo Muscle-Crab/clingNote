@@ -105,18 +105,17 @@ lockMod.setLockSource(() => ({ lock: { dayName: 'Fri', startMs: start, endMs: en
   await t('rules: weeklyRoutines create/delete refused and updates constrained while locked', () => {
     const m = rules.match(/match \/weeklyRoutines\/\{routineId\}\s*\{[\s\S]*?\n    \}/); assert.ok(m, 'weeklyRoutines block');
     const b = m[0];
-    assert.ok(/allow create:[^;]*!eightHourLocked\(/.test(b)); assert.ok(/allow delete:[^;]*!eightHourLocked\(/.test(b));
-    assert.ok(/allow update:[^;]*eightHourLocked\([^;]*lockedDayUnchanged\(\)/.test(b));
+    assert.ok(/allow create:[^;]*!dayFrozen\(eightHourLock\(/.test(b)); assert.ok(/allow delete:[^;]*!dayFrozen\(eightHourLock\(/.test(b));
+    assert.ok(/allow update:[^;]*!dayFrozen\(eightHourLock\([^;]*\|\| lockedDayUnchanged\(\)/.test(b));
   });
   await t('rules: lock helper checks day name and request.time against the server window', () => {
-    const f = rules.match(/function eightHourLocked[\s\S]*?\n  \}/)[0];
-    assert.ok(/exists\(/.test(f) && /dayName/.test(f) && /startAt/.test(f) && /endAt/.test(f) && /request\.time/.test(f));
+    const f = rules.match(/function eightHourLock\([\s\S]*?function dayFrozen[\s\S]*?\n    \}/)[0];
+    assert.ok(/exists\(/.test(f) && /dayName/.test(f) && /startAt/.test(f) && /endAt/.test(f) && /shutUntil/.test(f) && /request\.time/.test(f));
   });
   await t('rules: every locked field is compared, all 10 slots plus the size', () => {
-    const same = rules.match(/function lockedTaskSame[\s\S]*?\n  \}/)[0];
-    for (const f of core.LOCKED_FIELDS) assert.ok(new RegExp(`get\\('${f}'`).test(same), `field ${f} compared`);
-    const day = rules.match(/function lockedDayUnchanged[\s\S]*?\n  \}/)[0];
-    assert.ok(/size\(\)/.test(day)); for (let i = 0; i < core.LOCK_IDENTITY_SLOTS; i++) assert.ok(day.includes(`lockedSlotSame(o, n, ${i})`), `slot ${i}`);
+    const day = rules.match(/function lockedDayUnchanged[\s\S]*?function lockedSlots\(o, n, k\)[\s\S]*?\n    \}/)[0];
+    const keys = `hasAny([${core.LOCKED_FIELDS.map((f) => `'${f}'`).join(', ')}])`;
+    assert.ok(/size\(\)/.test(day)); for (let i = 0; i < core.LOCK_IDENTITY_SLOTS; i++) assert.ok(day.includes(`!n[${i}].diff(o[${i}]).affectedKeys().${keys}`), `slot ${i}`);
     assert.ok(core.MAX_TASKS_PER_DAY <= core.LOCK_IDENTITY_SLOTS, 'slots cover the task cap');
   });
   await t('rules: eightHour doc and history are owner-read, never client-written', () => {
