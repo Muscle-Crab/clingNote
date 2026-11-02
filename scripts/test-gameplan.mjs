@@ -4,6 +4,7 @@ const here = path.dirname(fileURLToPath(import.meta.url)); const root = path.joi
 const src = (f) => fs.readFileSync(path.join(root, f), 'utf8');
 fs.writeFileSync(path.join(dir, 'vue.mjs'), 'export const ref = (value) => ({ value });\n');
 fs.writeFileSync(path.join(dir, 'gp.mjs'), src('src/utils/gamePlan.js').replace("from 'vue'", "from './vue.mjs'"));
+fs.writeFileSync(path.join(dir, 'sessionGoal.js'), src('src/utils/sessionGoal.js')); fs.writeFileSync(path.join(dir, 'aiEstimate.js'), src('src/utils/aiEstimate.js')); fs.writeFileSync(path.join(dir, 'taskSections.js'), src('src/utils/taskSections.js'));
 const G = await import(path.join(dir, 'gp.mjs'));
 let n = 0; const t = (name, fn) => { try { fn(); n++; console.log('ok ', name); } catch (e) { console.error('FAIL', name); throw e; } };
 const at = (d, h, m = 0) => new Date(2026, 10, d, h, m).getTime(); // Nov 2026, box-local

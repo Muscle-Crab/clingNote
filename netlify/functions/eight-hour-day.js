@@ -36,12 +36,6 @@ const lockedEarned = (lock, tasks) => {
   });
   return { earned, done };
 };
-// The block's locked tasks with their locked points (same id/index matching as lockedEarned).
-const lockedRows = (lock, tasks) => {
-  const list = tasks || []; const byId = new Map(); list.forEach((t) => { const k = stableIdOf(t); if (k && !byId.has(k)) byId.set(k, t); });
-  return (lock.points || []).map((p, n) => { const id = lock.ids && lock.ids[n]; const idx = lock.indexes ? lock.indexes[n] : undefined;
-    return { t: id && byId.has(id) ? byId.get(id) : (idx != null ? list[idx] : undefined), points: p }; });
-};
 
 // Tasks that count toward the day: the visible ones (recurring copies with a later activeFrom are hidden today).
 const pruneStale = (tasks, tz, dayKey) => tasks.filter((t) => { if (!t || t.type !== 'one-time' || !t.completed || !t.completedAt) return true;
@@ -98,7 +92,7 @@ const settleIfOver = async (ctx, doc, now) => {
     }
     // Per-session shutdown rule: the session's own tasks/points, completions inside its window only. Missed -> apps stay locked 2 h.
     if (d) { const ud = await userDoc(ctx); const sessions = Number(ud.gamePlan && ud.gamePlan.sessions) === 1 ? 1 : 2;
-      grace = sessionGrace(lockedRows(lock, d.tasks || []), { n: Math.min(core.blockIndex(lock) + 1, sessions), sessions, startMs: lock.startMs, endMs: lock.endMs }); }
+      grace = sessionGrace(countable(pruneStale(d.tasks || [], lock.tz || 'UTC', lock.dayKey), lock.dayKey).map((r) => r.t), { n: Math.min(core.blockIndex(lock) + 1, sessions), sessions, startMs: lock.startMs, endMs: lock.endMs }); }
   } catch (e) { /* keep the server-time progress value */ }
   const settledLock = { ...lock, earned, settled: true, ...(grace ? { session: grace, graceUntilMs: grace.untilMs } : {}) };
   const idx = core.blockIndex(lock);

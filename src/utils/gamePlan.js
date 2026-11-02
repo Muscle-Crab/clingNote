@@ -170,16 +170,9 @@ export const breakNote = (n, sessions = 2, min = 10) => ({ title: n < sessions ?
   body: `Take it whenever you want from the game plan line on Home; it opens your apps for ${min} min. Breaks never cost points.` });
 
 // ---- 5. points: per finished task, by size, never by time ----
-export const SIZE_POINTS = { s: 10, m: 20, l: 40 };
+import { SIZE_POINTS, sizeFromMinutes, sizeFromPoints, sizeOf, sizePoints } from './sessionGoal.js';
+export { SIZE_POINTS, sizeFromMinutes, sizeFromPoints, sizeOf, sizePoints };
 export const SIZE_LABEL = { s: 'Small', m: 'Medium', l: 'Large' };
-export const sizeFromMinutes = (min) => { const m = Number(min) || 0; return m <= 0 ? 'm' : m <= 25 ? 's' : m <= 75 ? 'm' : 'l'; };
-// Stored size (user-picked or AI) wins; otherwise estimated from the task's minutes (typed, AI or the title estimator).
-export const sizeFromPoints = (p) => (p <= 15 ? 's' : p <= 30 ? 'm' : 'l');
-// Order: picked size > typed minutes > stored minutes > stored points (legacy/AI) > title estimate.
-export const sizeOf = (task = {}, estMinutes = 0) => { const t = task || {}; if (SIZE_POINTS[t.size]) return t.size;
-  const m = Number(t.estimateMin) || Number(t.minutes); if (m > 0) return sizeFromMinutes(m);
-  if (Number(t.points) > 0) return sizeFromPoints(Number(t.points)); return sizeFromMinutes(estMinutes); };
-export const sizePoints = (task, estMinutes) => SIZE_POINTS[sizeOf(task, estMinutes)];
 const sizeMode = ref(false); // reactive so cards re-score when Coach mode loads; on in Coach (strict) mode: chips + earned points use size points
 export const setSizeMode = (on) => { sizeMode.value = !!on; };
 export const sizeModeOn = () => sizeMode.value;

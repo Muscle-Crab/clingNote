@@ -4053,11 +4053,16 @@ const setMood = (id) => { todayMood.value = id; saveBossField({ mood: { day: loc
 const setGoal = (v) => { goalOverride.value = { day: localDateStr(), value: Number(v) }; saveBossField({ pointsGoal: { day: localDateStr(), value: strictGoal.value } }); };
 let strictNoteSig = '';
 const strictPlan = (st) => {
-  const sd = readStrictDay(); const earned = pointsAccumulated.value || 0; const goal = strictGoal.value;
+  const sd = readStrictDay();
+  // Coach mode: the shield judges the CURRENT session (its own target and in-session points, same math as the server), not the whole day.
+  const ss = gpOn.value && gpSessions.value.length ? SP.currentSession(gpSessions.value, Date.now()) : null;
+  const earned = ss ? ss.earned : pointsAccumulated.value || 0; const goal = ss ? ss.target : strictGoal.value;
   if (eh.running.value && eh.lock.value && eh.lock.value.endMs) sd.dayEndMs = eh.lock.value.endMs;
-  if (!sd.goalAt && goal > 0 && earned >= goal) sd.goalAt = Date.now();
+  const sk = ss ? `${ss.dayKey}s${ss.n}` : ''; if (ss) sd.goalAtBy = sd.goalAtBy || {};
+  const goalAt = ss ? sd.goalAtBy[sk] || 0 : sd.goalAt;
+  if (!goalAt && goal > 0 && earned >= goal) { if (ss) sd.goalAtBy[sk] = Date.now(); else sd.goalAt = Date.now(); }
   writeStrictDay(sd);
-  let r = strictShield({ running: eh.running.value, dayEndMs: sd.dayEndMs, goal, earned, tasksDone: tasksDoneToday.value, goalAt: sd.goalAt, claimedAt: sd.claimedAt || 0, selectionCount: st.selectionCount || 0,
+  let r = strictShield({ running: eh.running.value, dayEndMs: sd.dayEndMs, goal, earned, tasksDone: tasksDoneToday.value, goalAt: ss ? sd.goalAtBy[sk] || 0 : sd.goalAt, claimedAt: sd.claimedAt || 0, selectionCount: st.selectionCount || 0,
     enabled: lockEnabled(), unlockedToday: lockUnlockedDay.value === localDateStr(), offDay: (offDates.value || []).includes(localDateStr()) });
   if (gpOn.value) { // game plan: optional friend-approved unlock window wins (only when enabled); otherwise social apps stay locked until the morning checklist is done
     const grace = gpGrace(); const free = lockEnabled() && (st.selectionCount || 0) > 0 && lockUnlockedDay.value !== localDateStr();

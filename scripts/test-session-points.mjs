@@ -5,6 +5,7 @@ const src = (f) => fs.readFileSync(path.join(root, f), 'utf8');
 fs.writeFileSync(path.join(dir, 'vue.mjs'), 'export const ref = (value) => ({ value });\n');
 fs.writeFileSync(path.join(dir, 'gamePlan.js'), src('src/utils/gamePlan.js').replace("from 'vue'", "from './vue.mjs'"));
 fs.writeFileSync(path.join(dir, 'taskSections.js'), src('src/utils/taskSections.js'));
+fs.writeFileSync(path.join(dir, 'sessionGoal.js'), src('src/utils/sessionGoal.js')); fs.writeFileSync(path.join(dir, 'aiEstimate.js'), src('src/utils/aiEstimate.js'));
 fs.writeFileSync(path.join(dir, 'sessionPoints.mjs'), src('src/utils/sessionPoints.js'));
 fs.writeFileSync(path.join(dir, 'package.json'), '{"type":"module"}');
 const G = await import(path.join(dir, 'gamePlan.js')); const S = await import(path.join(dir, 'sessionPoints.mjs'));
@@ -38,7 +39,7 @@ for (const [m1, m2] of [[true, true], [true, false], [false, true], [false, fals
   assert.strictEqual(g(at(17, 1)).want, false);
   // server mirror agrees per block
   [1, 2].forEach((k) => { const s = S.sessionsOf(gp, tasks, at(16))[k - 1];
-    const r = srv.sessionGrace(tasks.map((x) => ({ t: x, points: G.sizePoints(x) })), { n: k, startMs: s.startMs, endMs: s.endMs });
+    const r = srv.sessionGrace(tasks, { n: k, startMs: s.startMs, endMs: s.endMs });
     assert.strictEqual(r.met, k === 1 ? m1 : m2); assert.strictEqual(r.untilMs, r.met ? 0 : s.endMs + 2 * H); assert.strictEqual(r.target, s.target); });
 });
 t('cold start inside the window: grace computed from tasks + clock alone (no stored state)', () => {
@@ -52,7 +53,7 @@ t('shutdown line text', () => { assert.strictEqual(S.graceText({ met: false, tar
   assert(/Missed \$\{shut\.target\} pts: apps open at \$\{shut\.opensAtLabel\}/.test(src('src/components/eighthour/EightHourChrome.vue'))); });
 t('wiring: strictShield 2 h, server settle, eh shutdown, native cancel', () => {
   const sd = src('src/utils/strictDay.js'); assert(/MISS_GRACE_MS = 2 \* 3600000/.test(sd) && /phase: 'missed'/.test(sd) && !/untilMs: midnight, phase: 'missed'/.test(sd));
-  const fn = src('netlify/functions/eight-hour-day.js'); assert(/sessionGrace\(lockedRows\(lock/.test(fn) && /graceUntilMs: grace\.untilMs/.test(fn) && /graceUntilMs: Number\(l\.graceUntilMs\)/.test(fn));
+  const fn = src('netlify/functions/eight-hour-day.js'); assert(/sessionGrace\(countable\(pruneStale/.test(fn) && /graceUntilMs: grace\.untilMs/.test(fn) && /graceUntilMs: Number\(l\.graceUntilMs\)/.test(fn));
   assert(/opensAtMs: l\.graceUntilMs/.test(src('src/composables/useEightHour.js')));
   const h = src('src/views/HomeView.vue'); assert(/grace\.want && free/.test(h) && /ehs\.missed && ehs\.opensAtMs/.test(h) && /cancelScheduledLock\(\{ key: g\.key \}\)/.test(h));
   const sw = src('ios/App/App/ClingLockPlugin.swift'); assert(/name: "cancelScheduledLock"/.test(sw) && /stopMonitoring\(\[ScheduledLocks\.name\(key\)\]\)/.test(sw));
