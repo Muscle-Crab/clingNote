@@ -63,7 +63,7 @@ const attn = computed(() => !!props.review || (props.phase === 'closed' && props
 .gp { margin: 0 0 4px; opacity: .6; } .gp:focus-within, .gp:hover { opacity: .85; }
 .gp-row { width: 100%; display: flex; align-items: center; gap: 6px; min-height: 22px; padding: 0 2px; background: none; border: 0; color: var(--c-text-3, #7d7c78); font: inherit; font-size: .7rem; cursor: pointer; text-align: left; }
 .gp-link { display: block; width: 100%; text-align: left; background: none; border: 0; padding: 0; font: inherit; color: inherit; cursor: pointer; } .gp-hist { opacity: .8; }
-.gp-title { flex: 1; min-width: 0; display: flex; white-space: nowrap; } .gp-main { min-width: 0; overflow: hidden; text-overflow: ellipsis; } .gp-ready { flex-shrink: 0; } /* earned break balance never truncates */
+.gp-title { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; white-space: nowrap; } .gp-main { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; } .gp-ready { flex-shrink: 0; } /* the points never get cut: the break balance wraps to its own line when the row is full */
 .gp-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--c-accent-text, #5B9BFF); }
 .gp-chev { font-size: .7rem; opacity: .7; }
 .gp-body { padding: 2px 2px 4px; font-size: .72rem; color: var(--c-text-2, #a1a09b); display: grid; gap: 6px; }

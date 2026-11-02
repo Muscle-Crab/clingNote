@@ -13,11 +13,11 @@
     <div class="ehs-card">
       <div class="ehs-icon" aria-hidden="true">🌙</div>
       <h2 id="ehs-t">Your {{ hoursText }} hours are up.</h2>
-      <p v-if="nextOk">Session 1 is done. Start your afternoon session now, or come back tomorrow at <b data-test="eh-shut-until">{{ shut.untilLabel }}</b>.</p>
+      <p v-if="nextOk">Session 1 is done. Start your {{ s2Name }} now, or come back tomorrow at <b data-test="eh-shut-until">{{ shut.untilLabel }}</b>.</p>
       <p v-else>ClingNote is shut for today. Come back tomorrow at <b data-test="eh-shut-until">{{ shut.untilLabel }}</b>.</p>
       <p class="ehs-res" :class="shut.met ? 'ok' : 'miss'" data-test="eh-shut-result">{{ shut.met ? 'Goal met' : 'Goal missed' }} · {{ shut.earned }}/{{ shut.target }} pts</p>
       <p v-if="recap" class="ehs-recap" data-test="eh-shut-recap">{{ recap }}</p>
-      <button v-if="nextOk" type="button" class="ehs-row" data-test="eh-next-session" :disabled="eh.st.busy" @click="doNextSession">Start afternoon session <span aria-hidden="true">›</span></button>
+      <button v-if="nextOk" type="button" class="ehs-row" data-test="eh-next-session" :disabled="eh.st.busy" @click="doNextSession">Start {{ s2Name }} <span aria-hidden="true">›</span></button>
       <!-- Evening mode: one compact row; tapping it reveals time + hours inline. A scheduled block can't be cancelled or shortened. -->
       <button v-if="schedOk && !sch.open" type="button" class="ehs-row" data-test="eh-sched-open" @click="openSched">Schedule next lock-in <span aria-hidden="true">›</span></button>
       <form v-else-if="schedOk" class="ehs-sched" data-test="eh-sched" @submit.prevent="doSchedule">
@@ -92,9 +92,11 @@ const planState = computed(() => planWindowState({ nowMs: (shut.value, eh.nowMs(
 const planningNow = computed(() => !!(planWin.active && planState.value.open && planWin.eveningKey === planState.value.eveningKey));
 const openPlanning = () => { planWin.eveningKey = planState.value.eveningKey; planWin.active = true; markPlanSeen(planState.value.eveningKey); if (route.name !== 'home') router.push({ name: 'home' }).catch(() => {}); };
 const closePlanning = () => { planWin.active = false; };
-watch(() => [uid.value, planState.value.open, planState.value.eveningKey], () => {
+// While session 2 can still start, keep the shutdown card (it has its own "Plan tomorrow" row) instead of auto-opening planning over it.
+watch(() => [uid.value, planState.value.open, planState.value.eveningKey, !!eh.session.value?.canStart], () => {
   const s = planState.value;
   if (!s.open) { if (planWin.active) planWin.active = false; return; } // midnight (or wake): hard close
+  if (eh.session.value?.canStart) { if (planWin.active) planWin.active = false; return; }
   if (uid.value && shouldAutoOpen({ open: s.open, eveningKey: s.eveningKey, seenKey: readPlanSeen() })) openPlanning();
 }, { immediate: true });
 const onPill = () => { if (planningNow.value) closePlanning(); else goCard(); };
@@ -107,6 +109,8 @@ watch(() => shut.value && eh.lock.value && `${eh.lock.value.dayKey}|${lockIn.val
 }, { immediate: true });
 // ── evening mode: schedule the next lock-in from the hard stop ──
 // Focus sessions (1 or 2, game plan): with 2, session 2 starts from here once session 1 has ended (server decides: session.canStart).
+// Session 2 name by the time of day: 'afternoon session' before 5 PM, 'evening session' after (it then runs until the next day start).
+const s2Name = computed(() => { const h = new Date(eh.nowMs ? eh.nowMs() : Date.now()).getHours(); return h >= 17 || h < 4 ? 'evening session' : 'afternoon session'; });
 const nextOk = computed(() => !!(eh.session.value && eh.session.value.canStart && !eh.st.data?.offline));
 const doNextSession = async () => { sch.err = ''; try { await eh.startNextSession(); } catch (e) { sch.err = e.message || 'Could not start the session'; } };
 // Day recap line: sessions done of chosen, breaks taken today (from the local break log; Home keeps it in sync with the account).
