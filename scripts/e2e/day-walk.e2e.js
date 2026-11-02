@@ -125,6 +125,7 @@ const closeRow = async (p) => { if ((await p.locator('[data-test=gp-toggle]').ge
   const s1Start = ((await ehDoc(uid)).lock || {}).startMs;
   await p.click('[data-test=eh-next-session]').catch(() => {}); await waitFor(async () => { const l = (await ehDoc(uid)).lock || {}; return l.index === 1 && l.startMs !== s1Start; });
   d = await ehDoc(uid); const wake2 = atNY(8, 0, 1);
+  for (let i = 0; i < 10 && !(await fake()).locked; i++) await sleep(500); // native lock follows the new session without a reload
   step('9 session 2 from the shutdown (runs past the close, ends by the next wake)', d.lock.index === 1 && d.lock.endMs > atNY(16) && d.lock.endMs <= wake2 && (await fake()).locked, JSON.stringify({ i: d.lock.index, locked: (await fake()).locked, s: new Date(d.lock.startMs).toISOString(), e: new Date(d.lock.endMs).toISOString(), wake2: new Date(wake2).toISOString() }));
 
   // 8) late phase on Home, a task finished now still counts

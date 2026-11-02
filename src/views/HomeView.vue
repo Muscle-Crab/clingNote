@@ -480,7 +480,9 @@ const blockIfLocked = (dayIdx = selectedDayIndex.value) => {
 // at the rollover and belongs to tomorrow; no streak/boss/lock-in credit tonight).
 const planningTomorrowTab = computed(() => !!(planWin.active && isShutdown() && days[selectedDayIndex.value]?.day === planTomorrowDayName()));
 const goTomorrowTab = () => { const i = days.findIndex((d) => d.day === planTomorrowDayName()); if (i >= 0 && selectedDayIndex.value !== i) selectDate(i); };
-watch(() => planWin.active, (on) => { if (on) goTomorrowTab(); });
+// Planning lands on tomorrow's tab; closing it (pill back to the shutdown card) returns to today, so the shutdown card,
+// a session started from it and its app lock all act on today (syncAppLock only runs for the day shown).
+watch(() => planWin.active, (on) => { if (on) { goTomorrowTab(); return; } const t = days.findIndex((d) => d.day === planTomorrowDayName()); if (selectedDayIndex.value === t && todayIdx.value >= 0 && todayIdx.value !== t) selectDate(todayIdx.value); });
 onMounted(() => { if (planWin.active) setTimeout(goTomorrowTab, 0); });
 const blockIfShut = (dayIdx = selectedDayIndex.value) => { if (!isShutdown() || canPlanDay(days[dayIdx]?.day)) return false; sfx('error'); alert(shutMessage()); return true; };
 const lockMessage = (e) => { if (isLockError(e)) { sfx('error'); alert(e.message); return true; } return false; };
@@ -4156,6 +4158,8 @@ const scheduleLaterLocks = async (st) => {
   }
 };
 watch(() => [eh.running.value, eh.pendingBlocks.value.length, pointsAccumulated.value, dayRequiredPts.value, streakProgress.value, lockUnlockedDay.value, bossMode.value, strictGoal.value, Math.floor(nowTick.value / 60000)], () => { syncAppLock(); });
+// A new session lock (e.g. session 2 started from the shutdown card) or a settled shutdown: re-sync once its doc has landed.
+watch(() => { const l = eh.lock.value || {}; const sh = eh.shutdown && eh.shutdown.value; return `${l.index}:${l.startMs}:${l.endMs}:${sh ? sh.opensAtMs || 1 : 0}`; }, () => { syncAppLock(); });
 onMounted(() => { setTimeout(syncAppLock, 1200); });
 // Emergency unlock (assistant tool + sergeant menu): stops the shield for today and books the point penalty.
 const emergencyUnlock = async () => { if (!emergencyOn.value) return { summary: 'Emergency unlock is turned off in Settings.', penalty: 0, refused: true }; await clingLock.stopLock(); hardLocked.value = false; const day = localDateStr(); let pen = []; try { pen = JSON.parse(localStorage.getItem(PENALTY_KEY) || '[]'); } catch (e) { /* ignore */ }
