@@ -2,6 +2,7 @@
 #if CLING_APP_LOCK
 // Shared by the app and the Screen Time extensions (ClingLockMonitor, ClingShieldConfig).
 import Foundation
+import UserNotifications
 #if canImport(ManagedSettings)
 import ManagedSettings
 import DeviceActivity
@@ -73,6 +74,7 @@ enum AppLocks {
     static func saveLocked(_ l: [String: Double]) { LockShared.defaults?.set(l, forKey: lockedKey) }
     /// Drops expired entries, then shields exactly the still-locked tokens.
     static func apply(now: Double = Date().timeIntervalSince1970 * 1000) {
+        if BreakState.isLive(now: now) { store.shield.applications = nil; return } // earned break: every app open until it ends
         var l = locked(); l = l.filter { $0.value == 0 || $0.value > now }; saveLocked(l)
         let tokens = Set(apps().filter { l[$0.id] != nil }.map { $0.token }).subtracting(TaskAllow.allowed(now: now))
         store.shield.applications = tokens.isEmpty ? nil : tokens
@@ -147,6 +149,7 @@ enum TaskAllow {
 enum LockIn {
     static func shield() {
         let store = ManagedSettingsStore(named: .clingLock)
+        if BreakState.isLive() { store.shield.applications = nil; store.shield.applicationCategories = nil; store.shield.webDomains = nil; return }
         guard let d = LockShared.defaults?.data(forKey: LockShared.selectionTokensKey),
               let sel = try? JSONDecoder().decode(LockSelectionTokens.self, from: d) else { return }
         let allow = TaskAllow.allowed()
@@ -198,5 +201,61 @@ enum WakeLock {
         guard let c = config(), let s = Calendar.current.date(bySettingHour: c.hour, minute: c.minute, second: 0, of: now) else { return nil }
         let start = s.timeIntervalSince1970 * 1000
         return (start, start + Double(clampMinutes(c.minutes)) * 60_000)
+    }
+}
+
+/// Earned break (game plan): lifts EVERY ClingNote shield (lock-in store .clingLock and per-app store .clingApps) for exactly the
+/// break, without touching the lock state. The re-lock is a DeviceActivity schedule ("clingBreak") whose intervalDidEnd in
+/// ClingLockMonitor clears the break and re-applies the same shields, so it works with the app closed or killed. Started only by
+/// the user (Home "Take break" or the notification's Take break action), never automatically. Pure rule mirrored in src/utils/breakUnlock.js.
+@available(iOS 16.0, *)
+extension DeviceActivityName { static let clingBreak = Self("clingBreak") }
+@available(iOS 16.0, *)
+enum BreakState {
+    static let key = "lock.break"            // ["until": ms, "startMs": ms, "minutes": Int]
+    static let takenKey = "lock.breakTaken"  // [[at, min, until, points]] taken from the notification while the app was closed (JS drains)
+    static let offerKey = "lock.breakOffer"  // ["minutes": Int, "points": Int, "day": "yyyy-MM-dd"] what the alert's action may start
+    static let endNoteId = "cn.break.end"
+    static let category = "CLING_BREAK"
+    static let takeAction = "TAKE_BREAK"
+    static func until() -> Double { let d = LockShared.defaults?.dictionary(forKey: key) ?? [:]; return (d["until"] as? Double) ?? Double((d["until"] as? Int) ?? 0) }
+    /// Pure: a break is live while its end is in the future.
+    static func isLive(until u: Double, nowMs: Double) -> Bool { u > nowMs }
+    static func isLive(now: Double = Date().timeIntervalSince1970 * 1000) -> Bool { isLive(until: until(), nowMs: now) }
+    /// Pure: the DeviceActivity window for a break ending at untilMs (iOS needs >= 15 min, so the start is backdated).
+    static func windowStartMs(untilMs: Double, nowMs: Double) -> Double { min(nowMs - 60000, untilMs - 15 * 60000) }
+    /// Starts the break: record it, schedule the re-lock, lift all shields, schedule "Break's over". Returns nil on success.
+    static func begin(untilMs: Double, minutes: Int) -> String? {
+        let now = Date().timeIntervalSince1970 * 1000
+        guard untilMs - now > 30000 else { return "too short" }
+        let until = Date(timeIntervalSince1970: untilMs / 1000)
+        let start = Date(timeIntervalSince1970: windowStartMs(untilMs: untilMs, nowMs: now) / 1000)
+        LockShared.defaults?.set(["until": untilMs, "startMs": now, "minutes": minutes], forKey: key)
+        do {
+            DeviceActivityCenter().stopMonitoring([.clingBreak])
+            try DeviceActivityCenter().startMonitoring(.clingBreak, during: DeviceActivitySchedule(intervalStart: AppLocks.comps(start), intervalEnd: AppLocks.comps(until), repeats: false))
+        } catch {
+            clear(); return "monitor failed: \(error)" // nothing would re-lock: refuse rather than leave apps open
+        }
+        TaskAllow.reapply(); AppLocks.apply() // both stores see the live break -> cleared
+        scheduleEndNote(untilMs: untilMs)
+        return nil
+    }
+    /// Break ended (monitor at the end, or the user ended it early): clear, stop the schedule, cancel the note if early, re-shield.
+    static func end(early: Bool) {
+        clear(); DeviceActivityCenter().stopMonitoring([.clingBreak])
+        if early { UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [endNoteId]) }
+        TaskAllow.reapply()
+    }
+    static func clear() { LockShared.defaults?.removeObject(forKey: key) }
+    static func scheduleEndNote(untilMs: Double) {
+        let c = UNMutableNotificationContent()
+        c.title = "Break's over"; c.body = "Your apps are locked again, same as before the break."; c.sound = .default
+        let secs = max(1, (untilMs - Date().timeIntervalSince1970 * 1000) / 1000)
+        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: endNoteId, content: c, trigger: UNTimeIntervalNotificationTrigger(timeInterval: secs, repeats: false)))
+    }
+    static func recordTaken(at: Double, minutes: Int, until: Double, points: Int) {
+        var a = (LockShared.defaults?.array(forKey: takenKey) as? [[String: Double]]) ?? []
+        a.append(["at": at, "min": Double(minutes), "until": until, "points": Double(points)]); LockShared.defaults?.set(Array(a.suffix(20)), forKey: takenKey)
     }
 }

@@ -29,50 +29,44 @@ service cloud.firestore {
     function eightHourPath(uid) {
       return /databases/$(database)/documents/eightHour/$(uid);
     }
-    function eightHourLocked(uid, dayName) {
-      return exists(eightHourPath(uid))
-        && get(eightHourPath(uid)).data.get('lock', null) != null
-        && get(eightHourPath(uid)).data.lock.get('dayName', '') == dayName
-        && get(eightHourPath(uid)).data.lock.startAt <= request.time
-        && get(eightHourPath(uid)).data.lock.endAt > request.time;
+    // The day doc is frozen (in place only) while the window runs (startAt <= now < endAt) and, for the lock's weekday, during the hard
+    // stop after it (endAt <= now < shutUntil, written by the function). Other day docs stay writable during the shutdown so completions on
+    // any day and tomorrow's planning window work; the window's local-time bounds are enforced by the app (rules have no user time zone).
+    // One get() and one pass: the old separate locked/shut helpers re-read the doc many times and, together with the slot checks, pushed
+    // big days past Firestore's 1000-expression limit (every locked-day write was then denied and the app reverted the change).
+    function eightHourLock(uid) {
+      return exists(eightHourPath(uid)) ? get(eightHourPath(uid)).data.get('lock', {}) : {};
     }
-    // Hard stop: after a started 8-hour day ends, task docs stay read-only until the next wake time (lock.shutUntil, written by the function).
-    function eightHourShut(uid) {
-      return exists(eightHourPath(uid))
-        && get(eightHourPath(uid)).data.get('lock', null) != null
-        && get(eightHourPath(uid)).data.lock.get('shutUntil', null) != null
-        && get(eightHourPath(uid)).data.lock.endAt <= request.time
-        && get(eightHourPath(uid)).data.lock.shutUntil > request.time;
+    function dayFrozen(lk, dayName) {
+      return lk != null && lk.get('dayName', '') == dayName && lk.get('startAt', null) != null && lk.get('endAt', null) != null
+        && lk.startAt <= request.time
+        && (lk.endAt > request.time || (lk.get('shutUntil', null) != null && lk.shutUntil > request.time));
     }
-    // The shut day itself (the lock's weekday doc): while shut it behaves like a locked day (in place only: completions yes, no delete /
-    // swap / re-point). Other day docs stay writable during the shutdown so completions on any day and tomorrow's planning window work;
-    // the window's local-time bounds (plan time .. midnight) are enforced by the app (rules have no user time zone).
-    function eightHourShutDay(uid, dayName) {
-      return eightHourShut(uid) && get(eightHourPath(uid)).data.lock.get('dayName', '') == dayName;
-    }
-    function lockedTaskSame(a, b) {
-      // edits allowed while locked; slot identity (createdAt) and server-set points must not change (blocks delete/reorder)
-      return a.get('createdAt', null) == b.get('createdAt', null)
-        && a.get('points', null) == b.get('points', null);
-    }
-    function lockedSlotSame(o, n, i) {
-      return i >= o.size() || lockedTaskSame(o[i], n[i]);
-    }
+    // Slots 0..49 compared in size-gated blocks (rules cannot loop). Only the slots that exist are evaluated: comparing all 50 slots on every
+    // write ran past Firestore's 1000-expression limit with ~11+ tasks, so EVERY locked-day write (complete, timer) was denied.
     function lockedDayUnchanged() {
       let o = resource.data.get('tasks', []);
       let n = request.resource.data.get('tasks', []);
       // adds allowed (append only), deletes blocked: every existing slot must be unchanged
-      return n.size() >= o.size()
-        && lockedSlotSame(o, n, 0) && lockedSlotSame(o, n, 1) && lockedSlotSame(o, n, 2) && lockedSlotSame(o, n, 3) && lockedSlotSame(o, n, 4)
-        && lockedSlotSame(o, n, 5) && lockedSlotSame(o, n, 6) && lockedSlotSame(o, n, 7) && lockedSlotSame(o, n, 8) && lockedSlotSame(o, n, 9)
-        && lockedSlotSame(o, n, 10) && lockedSlotSame(o, n, 11) && lockedSlotSame(o, n, 12) && lockedSlotSame(o, n, 13) && lockedSlotSame(o, n, 14)
-        && lockedSlotSame(o, n, 15) && lockedSlotSame(o, n, 16) && lockedSlotSame(o, n, 17) && lockedSlotSame(o, n, 18) && lockedSlotSame(o, n, 19)
-        && lockedSlotSame(o, n, 20) && lockedSlotSame(o, n, 21) && lockedSlotSame(o, n, 22) && lockedSlotSame(o, n, 23) && lockedSlotSame(o, n, 24)
-        && lockedSlotSame(o, n, 25) && lockedSlotSame(o, n, 26) && lockedSlotSame(o, n, 27) && lockedSlotSame(o, n, 28) && lockedSlotSame(o, n, 29)
-        && lockedSlotSame(o, n, 30) && lockedSlotSame(o, n, 31) && lockedSlotSame(o, n, 32) && lockedSlotSame(o, n, 33) && lockedSlotSame(o, n, 34)
-        && lockedSlotSame(o, n, 35) && lockedSlotSame(o, n, 36) && lockedSlotSame(o, n, 37) && lockedSlotSame(o, n, 38) && lockedSlotSame(o, n, 39)
-        && lockedSlotSame(o, n, 40) && lockedSlotSame(o, n, 41) && lockedSlotSame(o, n, 42) && lockedSlotSame(o, n, 43) && lockedSlotSame(o, n, 44)
-        && lockedSlotSame(o, n, 45) && lockedSlotSame(o, n, 46) && lockedSlotSame(o, n, 47) && lockedSlotSame(o, n, 48) && lockedSlotSame(o, n, 49);
+      return n.size() >= o.size() && o.size() <= 50 && lockedSlots(o, n, o.size());
+    }
+    function lockedSlots0(o, n, k) {
+      return k <= 0 || (k >= 10 ? (!n[0].diff(o[0]).affectedKeys().hasAny(['createdAt', 'points']) && !n[1].diff(o[1]).affectedKeys().hasAny(['createdAt', 'points']) && !n[2].diff(o[2]).affectedKeys().hasAny(['createdAt', 'points']) && !n[3].diff(o[3]).affectedKeys().hasAny(['createdAt', 'points']) && !n[4].diff(o[4]).affectedKeys().hasAny(['createdAt', 'points']) && !n[5].diff(o[5]).affectedKeys().hasAny(['createdAt', 'points']) && !n[6].diff(o[6]).affectedKeys().hasAny(['createdAt', 'points']) && !n[7].diff(o[7]).affectedKeys().hasAny(['createdAt', 'points']) && !n[8].diff(o[8]).affectedKeys().hasAny(['createdAt', 'points']) && !n[9].diff(o[9]).affectedKeys().hasAny(['createdAt', 'points'])) : (!n[0].diff(o[0]).affectedKeys().hasAny(['createdAt', 'points']) && (k <= 1 || !n[1].diff(o[1]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 2 || !n[2].diff(o[2]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 3 || !n[3].diff(o[3]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 4 || !n[4].diff(o[4]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 5 || !n[5].diff(o[5]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 6 || !n[6].diff(o[6]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 7 || !n[7].diff(o[7]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 8 || !n[8].diff(o[8]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 9 || !n[9].diff(o[9]).affectedKeys().hasAny(['createdAt', 'points']))));
+    }
+    function lockedSlots1(o, n, k) {
+      return k <= 10 || (k >= 20 ? (!n[10].diff(o[10]).affectedKeys().hasAny(['createdAt', 'points']) && !n[11].diff(o[11]).affectedKeys().hasAny(['createdAt', 'points']) && !n[12].diff(o[12]).affectedKeys().hasAny(['createdAt', 'points']) && !n[13].diff(o[13]).affectedKeys().hasAny(['createdAt', 'points']) && !n[14].diff(o[14]).affectedKeys().hasAny(['createdAt', 'points']) && !n[15].diff(o[15]).affectedKeys().hasAny(['createdAt', 'points']) && !n[16].diff(o[16]).affectedKeys().hasAny(['createdAt', 'points']) && !n[17].diff(o[17]).affectedKeys().hasAny(['createdAt', 'points']) && !n[18].diff(o[18]).affectedKeys().hasAny(['createdAt', 'points']) && !n[19].diff(o[19]).affectedKeys().hasAny(['createdAt', 'points'])) : (!n[10].diff(o[10]).affectedKeys().hasAny(['createdAt', 'points']) && (k <= 11 || !n[11].diff(o[11]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 12 || !n[12].diff(o[12]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 13 || !n[13].diff(o[13]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 14 || !n[14].diff(o[14]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 15 || !n[15].diff(o[15]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 16 || !n[16].diff(o[16]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 17 || !n[17].diff(o[17]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 18 || !n[18].diff(o[18]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 19 || !n[19].diff(o[19]).affectedKeys().hasAny(['createdAt', 'points']))));
+    }
+    function lockedSlots2(o, n, k) {
+      return k <= 20 || (k >= 30 ? (!n[20].diff(o[20]).affectedKeys().hasAny(['createdAt', 'points']) && !n[21].diff(o[21]).affectedKeys().hasAny(['createdAt', 'points']) && !n[22].diff(o[22]).affectedKeys().hasAny(['createdAt', 'points']) && !n[23].diff(o[23]).affectedKeys().hasAny(['createdAt', 'points']) && !n[24].diff(o[24]).affectedKeys().hasAny(['createdAt', 'points']) && !n[25].diff(o[25]).affectedKeys().hasAny(['createdAt', 'points']) && !n[26].diff(o[26]).affectedKeys().hasAny(['createdAt', 'points']) && !n[27].diff(o[27]).affectedKeys().hasAny(['createdAt', 'points']) && !n[28].diff(o[28]).affectedKeys().hasAny(['createdAt', 'points']) && !n[29].diff(o[29]).affectedKeys().hasAny(['createdAt', 'points'])) : (!n[20].diff(o[20]).affectedKeys().hasAny(['createdAt', 'points']) && (k <= 21 || !n[21].diff(o[21]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 22 || !n[22].diff(o[22]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 23 || !n[23].diff(o[23]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 24 || !n[24].diff(o[24]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 25 || !n[25].diff(o[25]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 26 || !n[26].diff(o[26]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 27 || !n[27].diff(o[27]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 28 || !n[28].diff(o[28]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 29 || !n[29].diff(o[29]).affectedKeys().hasAny(['createdAt', 'points']))));
+    }
+    function lockedSlots3(o, n, k) {
+      return k <= 30 || (k >= 40 ? (!n[30].diff(o[30]).affectedKeys().hasAny(['createdAt', 'points']) && !n[31].diff(o[31]).affectedKeys().hasAny(['createdAt', 'points']) && !n[32].diff(o[32]).affectedKeys().hasAny(['createdAt', 'points']) && !n[33].diff(o[33]).affectedKeys().hasAny(['createdAt', 'points']) && !n[34].diff(o[34]).affectedKeys().hasAny(['createdAt', 'points']) && !n[35].diff(o[35]).affectedKeys().hasAny(['createdAt', 'points']) && !n[36].diff(o[36]).affectedKeys().hasAny(['createdAt', 'points']) && !n[37].diff(o[37]).affectedKeys().hasAny(['createdAt', 'points']) && !n[38].diff(o[38]).affectedKeys().hasAny(['createdAt', 'points']) && !n[39].diff(o[39]).affectedKeys().hasAny(['createdAt', 'points'])) : (!n[30].diff(o[30]).affectedKeys().hasAny(['createdAt', 'points']) && (k <= 31 || !n[31].diff(o[31]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 32 || !n[32].diff(o[32]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 33 || !n[33].diff(o[33]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 34 || !n[34].diff(o[34]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 35 || !n[35].diff(o[35]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 36 || !n[36].diff(o[36]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 37 || !n[37].diff(o[37]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 38 || !n[38].diff(o[38]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 39 || !n[39].diff(o[39]).affectedKeys().hasAny(['createdAt', 'points']))));
+    }
+    function lockedSlots4(o, n, k) {
+      return k <= 40 || (k >= 50 ? (!n[40].diff(o[40]).affectedKeys().hasAny(['createdAt', 'points']) && !n[41].diff(o[41]).affectedKeys().hasAny(['createdAt', 'points']) && !n[42].diff(o[42]).affectedKeys().hasAny(['createdAt', 'points']) && !n[43].diff(o[43]).affectedKeys().hasAny(['createdAt', 'points']) && !n[44].diff(o[44]).affectedKeys().hasAny(['createdAt', 'points']) && !n[45].diff(o[45]).affectedKeys().hasAny(['createdAt', 'points']) && !n[46].diff(o[46]).affectedKeys().hasAny(['createdAt', 'points']) && !n[47].diff(o[47]).affectedKeys().hasAny(['createdAt', 'points']) && !n[48].diff(o[48]).affectedKeys().hasAny(['createdAt', 'points']) && !n[49].diff(o[49]).affectedKeys().hasAny(['createdAt', 'points'])) : (!n[40].diff(o[40]).affectedKeys().hasAny(['createdAt', 'points']) && (k <= 41 || !n[41].diff(o[41]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 42 || !n[42].diff(o[42]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 43 || !n[43].diff(o[43]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 44 || !n[44].diff(o[44]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 45 || !n[45].diff(o[45]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 46 || !n[46].diff(o[46]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 47 || !n[47].diff(o[47]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 48 || !n[48].diff(o[48]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 49 || !n[49].diff(o[49]).affectedKeys().hasAny(['createdAt', 'points']))));
+    }
+    function lockedSlots(o, n, k) {
+      return lockedSlots0(o, n, k) && lockedSlots1(o, n, k) && lockedSlots2(o, n, k) && lockedSlots3(o, n, k) && lockedSlots4(o, n, k);
     }
 
     // Fields only the server (Stripe webhook / AI function, admin SDK) may change
@@ -180,13 +174,13 @@ service cloud.firestore {
     // Weekly Routines - routineId format: {userId}_{dayName}
     // While the owner's 8-hour window is running (eightHour/{uid}.lock, written only by the eight-hour-day function), today's day doc is LOCKED:
     // adds (append only) and edits are allowed, but the first 50 slots (= MAX_TASKS_PER_DAY) keep createdAt/points (no delete / swap / reorder / re-point).
-    // Completing tasks, timers, notes and subtasks stay editable. Rules cannot loop, so slots 0..49 are compared explicitly (the app caps a day at 50 tasks; lockedSlotSame short-circuits past the real size).
+    // Completing tasks, timers, notes and subtasks stay editable. Rules cannot loop, so slots 0..49 are compared explicitly (the app caps a day at 50 tasks; lockedSlots0..4 only evaluate the slots that exist, keeping a full 50-task day under the 1000-expression limit).
     match /weeklyRoutines/{routineId} {
       allow read: if isAuthenticated() && (request.auth.uid == routineId.split('_')[0]);  // pals/managers see tasks only via the manager-pal function (private tasks stripped)
-      allow create: if isAuthenticated() && request.auth.uid == routineId.split('_')[0] && !eightHourLocked(routineId.split('_')[0], routineId.split('_')[1]) && !eightHourShutDay(routineId.split('_')[0], routineId.split('_')[1]);
+      allow create: if isAuthenticated() && request.auth.uid == routineId.split('_')[0] && !dayFrozen(eightHourLock(routineId.split('_')[0]), routineId.split('_')[1]);
       allow update: if isAuthenticated() && request.auth.uid == routineId.split('_')[0]
-        && ((!eightHourLocked(routineId.split('_')[0], routineId.split('_')[1]) && !eightHourShutDay(routineId.split('_')[0], routineId.split('_')[1])) || lockedDayUnchanged());
-      allow delete: if isAuthenticated() && request.auth.uid == routineId.split('_')[0] && !eightHourLocked(routineId.split('_')[0], routineId.split('_')[1]) && !eightHourShutDay(routineId.split('_')[0], routineId.split('_')[1]);
+        && (!dayFrozen(eightHourLock(routineId.split('_')[0]), routineId.split('_')[1]) || lockedDayUnchanged());
+      allow delete: if isAuthenticated() && request.auth.uid == routineId.split('_')[0] && !dayFrozen(eightHourLock(routineId.split('_')[0]), routineId.split('_')[1]);
     }
 
     // 8-hour day state (plan, lock, stats): readable by the owner, written ONLY by the Netlify function (admin SDK bypasses rules).

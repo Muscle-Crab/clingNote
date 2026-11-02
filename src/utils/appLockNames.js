@@ -7,7 +7,7 @@ export const ALIASES = {
   instagram: ['ig', 'insta', 'gram', 'reels'], facebook: ['fb', 'meta'], snapchat: ['snap', 'sc'], twitter: ['x', 'twitter x', 'x twitter'],
   reddit: ['r', 'reddit app'], netflix: ['nf'], whatsapp: ['whats app', 'wa'], discord: ['dc'], twitch: [], pinterest: ['pin'],
   threads: [], linkedin: ['linked in'], messenger: ['fb messenger'], 'prime video': ['prime', 'amazon prime'], 'disney+': ['disney plus', 'disney'],
-  roblox: [], fortnite: [], spotify: [], safari: [], chrome: ['google chrome'], telegram: ['tg'], bereal: ['be real'], hulu: [], 'hbo max': ['max', 'hbo'],
+  roblox: [], fortnite: [], pubg: ['pubg mobile', 'pubgm', 'pubg m', 'battlegrounds', 'battle grounds', 'pubg battlegrounds'], spotify: [], safari: [], chrome: ['google chrome'], telegram: ['tg'], bereal: ['be real'], hulu: [], 'hbo max': ['max', 'hbo'],
 };
 export const norm = (s) => String(s || '').toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/\bapp\b/g, ' ').replace(/[^a-z0-9+]+/g, ' ').trim();
 const squash = (s) => norm(s).replace(/ /g, '');
@@ -36,7 +36,7 @@ export const resolveApps = (names = [], labels = []) => {
   return out;
 };
 // Pretty display name for a not-yet-picked app (used to prefill the naming row): "yt" -> "YouTube"
-const PRETTY = { youtube: 'YouTube', tiktok: 'TikTok', instagram: 'Instagram', facebook: 'Facebook', snapchat: 'Snapchat', twitter: 'X', reddit: 'Reddit', netflix: 'Netflix', whatsapp: 'WhatsApp', discord: 'Discord', linkedin: 'LinkedIn', bereal: 'BeReal' };
+const PRETTY = { youtube: 'YouTube', tiktok: 'TikTok', instagram: 'Instagram', facebook: 'Facebook', snapchat: 'Snapchat', twitter: 'X', reddit: 'Reddit', netflix: 'Netflix', whatsapp: 'WhatsApp', discord: 'Discord', linkedin: 'LinkedIn', bereal: 'BeReal', pubg: 'PUBG Mobile' };
 export const prettyName = (s) => { const c = canonical(s); if (PRETTY[c]) return PRETTY[c]; const t = String(s || '').trim(); return t.replace(/\b\w/g, (m) => m.toUpperCase()); };
 // minutes (number) or until_unlock -> untilMs (0 = until unlocked). Clamped 1 min .. 24 h.
 export const untilFor = ({ minutes, until_unlock: uu } = {}, now = Date.now()) => {
@@ -97,4 +97,18 @@ export const describeUnlock = ({ plan = {}, before = [], unlocked = [], overall 
   if (taskAllow && taskAllow.count) { out.task_unlock = taskAllow; parts.push(`The ${taskAllow.count} app${taskAllow.count === 1 ? '' : 's'} picked for "${taskAllow.title}" ${taskAllow.count === 1 ? 'is' : 'are'} unlocked while its timer runs.`); }
   out.summary = parts.join(' ');
   return out;
+};
+
+// Truthful lock result. r: native lockApps reply {locked, apps, error, warnings}. A lock counts only when native reports the
+// label locked AND (when it sends the app list) that app is marked locked; anything else is returned as an error so the
+// assistant can never confirm a lock that did not happen ("Nothing was locked." used to come back as a success).
+export const describeLock = ({ plan = {}, r = {}, until = 0, now = Date.now() } = {}) => {
+  if (r.error) return { error: r.error === 'not_authorized' ? 'Screen Time permission was not given. Allow it in the ClingNote app and try again.' : String(r.error) };
+  const state = Array.isArray(r.apps) ? new Map(r.apps.map((x) => [String(x.label || '').toLowerCase(), !!x.locked])) : null;
+  const locked = (r.locked || []).filter((l) => !state || state.get(String(l).toLowerCase()) !== false);
+  const want = plan.labels || [];
+  const failed = want.filter((l) => !locked.some((x) => String(x).toLowerCase() === String(l).toLowerCase()));
+  const extra = { ...(plan.stillMissing && plan.stillMissing.length ? { not_picked: plan.stillMissing } : {}), ...(plan.unknown && plan.unknown.length ? { not_found: plan.unknown } : {}), ...(r.warnings && r.warnings.length ? { warnings: r.warnings } : {}) };
+  if (!locked.length) return { error: `Nothing was locked${failed.length ? ` (${joinNames(failed)} could not be locked; pick ${failed.length > 1 ? 'them' : 'it'} again in the app list)` : ''}.`, ...extra };
+  return { locked, summary: `Locked ${joinNames(locked)} ${fmtDuration(until, now)}.${failed.length ? ` ${joinNames(failed)} could not be locked.` : ''}`, ...(failed.length ? { failed } : {}), ...extra };
 };

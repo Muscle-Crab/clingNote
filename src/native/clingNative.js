@@ -36,6 +36,11 @@ export const clingLock = {
   taskApps: safe('ClingLock', Lock, (p, taskId = '') => p.taskApps({ taskId }), { count: 0, active: null }),
   allowTaskApps: safe('ClingLock', Lock, (p, taskId, untilMs) => p.allowTaskApps({ taskId, untilMs }), { allowed: 0 }),
   endTaskApps: safe('ClingLock', Lock, (p, taskId) => p.endTaskApps(taskId ? { taskId } : {}), { ended: false }),
+  // Earned break: lifts every shield until untilMs; ClingLockMonitor re-locks at the end (app closed too). offerBreak posts the points alert with a background Take break action.
+  startBreak: safe('ClingLock', Lock, (p, untilMs, minutes) => p.startBreak({ untilMs, minutes }), { started: false }),
+  endBreak: safe('ClingLock', Lock, (p) => p.endBreak({}), { ended: false }),
+  breakState: safe('ClingLock', Lock, (p) => p.breakState({}), { live: false, untilMs: 0, taken: [] }),
+  offerBreak: safe('ClingLock', Lock, (p, o) => p.offerBreak(o || {}), { posted: false }),
   // Lock-end alert level: off | subtle | standard | loud (default) | maximum. Omit level to read.
   setShieldFriend: safe('ClingLock', Lock, (p, on) => p.setShieldFriend({ on: !!on }), { on: false }),
   setLockEndAlert: safe('ClingLock', Lock, (p, level) => p.setLockEndAlert(level ? { level } : {}), { level: 'loud' }),

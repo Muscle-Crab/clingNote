@@ -28,7 +28,7 @@ const lockOf = (db) => db.store['eightHour/u1'].lock;
   eq([pb.ok, pb.blocks[0].index, pb.blocks[0].dayKey, pb.blocks[0].endMs - pb.blocks[0].startMs], [true, 1, '2026-10-23', 3 * H]);
   eq(core.planBlocks({ requests: [{ time: '17:03', hours: 1 }], tz: TZ, nowMs: now0 }).ok, false, '17:03 tomorrow is past the 18h horizon');
   eq(core.planBlocks({ requests: [{ time: '18:00', hours: 3 }, { time: '20:00', hours: 1 }], tz: TZ, nowMs: now0 }).error, 'That overlaps another lock-in block.');
-  eq(core.planBlocks({ requests: [{ time: '18:00', hours: 1 }, { time: '19:00', hours: 1 }, { time: '20:00', hours: 1 }, { time: '21:00', hours: 1 }], tz: TZ, nowMs: now0 }).error, 'At most 3 lock-in blocks per day.');
+  eq(core.planBlocks({ requests: [{ time: '18:00', hours: 1 }, { time: '19:00', hours: 1 }, { time: '20:00', hours: 1 }, { time: '21:00', hours: 1 }], tz: TZ, nowMs: now0 }).error, 'At most 2 lock-in blocks per day.');
   const L0 = { dayKey: '2026-10-23', wakeTime: '07:00', tz: TZ, startMs: at('2026-10-23T11:00:00Z'), endMs: at('2026-10-23T21:00:00Z'), hours: 10 };
   const Lp = { ...L0, pending: [{ dayKey: '2026-10-23', index: 1, startMs: at('2026-10-23T23:00:00Z'), endMs: at('2026-10-24T02:00:00Z'), hours: 3 }] };
   eq(core.isShut(L0, now0 + 1000), true, 'single lock: shut after the end (unchanged)');

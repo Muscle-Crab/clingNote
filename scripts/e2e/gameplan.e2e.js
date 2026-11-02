@@ -95,7 +95,7 @@ const lastSunday = () => { const d = new Date(); d.setDate(d.getDate() - d.getDa
       ok('focus: coach banner is quiet during focus', await p.locator('[data-test=boss-panel]').count() === 0);
       ok('focus: one row only (no new card)', await p.locator('[data-test=gp-row]').count() === 1);
       await db.doc(`users/${uid}`).set(fresh(ago(55)), { merge: true }); await home(p);
-      ok('break: no automatic break after focus 1; 10m earned and shown in the slim line', (await p.locator('[data-test=gp-row]').getAttribute('data-phase')) === 'work' && /10m break ready/.test(await rowText(p)), await rowText(p));
+      ok('break: no automatic break after focus 1; 10m earned and shown in the slim line', (await p.locator('[data-test=gp-row]').getAttribute('data-phase')) === 'work' && /10m ready/.test(await rowText(p)), await rowText(p));
       await shot(p, 'home-break', '[data-test=gp-row]');
       await db.doc(`users/${uid}`).set(fresh(ago(65)), { merge: true }); await home(p);
       ok('focus: Focus 2/2 after the break', /Focus 2\/2/.test(await rowText(p)), await rowText(p));
@@ -126,7 +126,7 @@ const lastSunday = () => { const d = new Date(); d.setDate(d.getDate() - d.getDa
         stopLock: async () => { wr({ ...rd(), locked: false, until: 0, label: '' }); return { locked: false }; }, scheduleLock: async (o) => { const v = rd(); v.scheduled.push(o); wr(v); return { monitor: 'ok' }; }, labeledApps: async () => ({ apps: [] }) }; });
     const fake = () => p.evaluate(() => JSON.parse(localStorage.getItem('zz.fakelock') || '{}'));
     await login(p, email); await home(p);
-    ok('break: balance always visible in the slim line (muted, no box)', /· 10m break ready/.test(await rowText(p)) && await p.locator('[data-test=gp-row]').count() === 1, await rowText(p));
+    ok('break: balance always visible in the slim line (muted, no box)', /· 10m ready/.test(await rowText(p)) && await p.locator('[data-test=gp-row]').count() === 1, await rowText(p));
     ok('break: shield up before the break (checklist lock)', await waitFor(async () => (await fake()).locked), JSON.stringify(await fake()));
     const prior = await fake();
     await shot(p, 'home-break-ready', '[data-test=gp-row]');
@@ -142,7 +142,7 @@ const lastSunday = () => { const d = new Date(); d.setDate(d.getDate() - d.getDa
     ok('break: stays unlocked while the break runs', !(await fake()).locked, JSON.stringify(await fake()));
     await p.evaluate(() => window.__gpBreakEnd(Date.now() + 1500));
     ok('break: on expiry relocks to exactly the prior state', await waitFor(async () => { const f = await fake(); return f.locked && f.until === prior.until && f.label === prior.label; }), JSON.stringify([await fake(), prior]));
-    ok('break: balance used up, no stacking', !/break ready/.test(await rowText(p)) && (await p.locator('[data-test=gp-row]').getAttribute('data-phase')) !== 'break', await rowText(p));
+    ok('break: balance used up, no stacking', !/m ready/.test(await rowText(p)) && (await p.locator('[data-test=gp-row]').getAttribute('data-phase')) !== 'break', await rowText(p));
     await shot(p, 'home-break-relocked', '[data-test=gp-row]');
     // restart after expiry: shield down (e.g. app killed mid-break), break ended while closed -> relock on launch
     const end = Date.now() - 60000; const stale = { day: b1.day, used: 10, startMs: end - 600000, endMs: end, prior, relocked: false };

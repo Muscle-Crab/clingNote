@@ -122,6 +122,8 @@ export const startNow = async (hours, blocks, opts = {}) => {
 };
 // Evening mode: fix later lock-in block(s) [{ time: 'HH:MM', hours }]. Server-only (no offline fallback: a schedule must be server-checked).
 export const scheduleNext = async (blocks) => { st.busy = true; try { const d = await call('schedule', { blocks }); apply(d); return d; } finally { st.busy = false; } };
+// Afternoon focus session (game plan sessions = 2): starts block 1 NOW from the shutdown. Server-checked (once a day, before the close).
+export const startNextSession = async (hours) => { st.busy = true; try { const d = await call('nextSession', hours ? { hours } : {}); apply(d); return d; } finally { st.busy = false; } };
 export const reportProgress = async () => { try { apply(await call('progress')); } catch (e) { /* server recounts at the end of the window anyway */ } };
 
 // After sign-up / sign-in: fetch the server state and, if the account has no plan yet, save the wake time picked in onboarding.
@@ -182,7 +184,8 @@ export const useEightHour = () => {
     return { ...b, startLabel: core.fmtClock(b.startMs, tz), endLabel: core.fmtClock(b.endMs, tz) };
   });
   const pendingBlocks = computed(() => core.pendingOf(lockRaw.value).filter((b) => b.endMs > (tick.value, nowMs())));
-  return { st, dayHours, nextBlock, pendingBlocks, scheduleNext, warning, hoursPref, data, plan, lock, phase, phaseInfo, running, remainingMs, countdown, endsLabel, startsLabel, stats, shutdown, reward: computed(() => st.data?.reward || ''),
+  const session = computed(() => st.data?.session || null);
+  return { st, dayHours, nextBlock, pendingBlocks, scheduleNext, startNextSession, session, warning, hoursPref, data, plan, lock, phase, phaseInfo, running, remainingMs, countdown, endsLabel, startsLabel, stats, shutdown, reward: computed(() => st.data?.reward || ''),
     refresh, savePlan, startNow, reportProgress, nowMs };
 };
 

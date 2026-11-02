@@ -39,16 +39,20 @@ t('2+3 focus 50 / break 10 / focus 50 / break 10 from the day start', () => {
   assert.strictEqual(G.phaseAt(g, at(2, 8, 30)).phase, 'before');
   const f1 = G.phaseAt(g, at(2, 9, 10)); assert.strictEqual(f1.phase, 'focus'); assert.strictEqual(f1.n, 1); assert.strictEqual(f1.leftMin, 40);
   assert.strictEqual(G.phaseAt(g, at(2, 9, 55)).phase, 'work'); // no automatic break
-  assert.strictEqual(G.phaseAt(g, at(2, 10, 5)).phase, 'focus'); assert.strictEqual(G.phaseAt(g, at(2, 10, 5)).n, 2);
-  assert.strictEqual(G.phaseAt(g, at(2, 10, 55)).phase, 'work'); assert.strictEqual(G.phaseAt(g, at(2, 11, 0)).phase, 'work');
-  assert.deepStrictEqual(G.quietWindows(g, at(2, 9)), [[at(2, 9), at(2, 9, 50)], [at(2, 10), at(2, 10, 50)]]);
+  assert.strictEqual(G.phaseAt(g, at(2, 10, 5)).phase, 'work'); assert.strictEqual(G.phaseAt(g, at(2, 12, 0)).phase, 'work'); // no midday slot
+  assert.strictEqual(G.phaseAt(g, at(2, 13, 5)).phase, 'focus'); assert.strictEqual(G.phaseAt(g, at(2, 13, 5)).n, 2); // afternoon
+  assert.strictEqual(G.phaseAt(g, at(2, 13, 55)).phase, 'work');
+  assert.deepStrictEqual(G.quietWindows(g, at(2, 9)), [[at(2, 9), at(2, 9, 50)], [at(2, 13), at(2, 13, 50)]]);
+  const g1 = G.normPlan({ dayStart: '09:00', sessions: 1 }); assert.strictEqual(G.segments(g1, at(2, 9)).length, 1); assert.strictEqual(G.phaseAt(g1, at(2, 13, 5)).phase, 'work');
+  assert.strictEqual(G.normPlan({ sessions: 3 }).sessions, 2); assert.strictEqual(G.normPlan({}).sessions, 2); assert.strictEqual(G.segments(G.normPlan({ sessions: 5 }), at(2, 9)).length, 2);
+  assert(/Focus 1\/1/.test(G.rowText(G.phaseAt(g1, at(2, 9, 10)), {})));
   const n = G.breakNote(1); assert(/break earned/.test(n.title) && !/start/i.test(n.title) && /never cost points/.test(n.body));
 });
 t('earned breaks: banked, user-started, no stacking past earned, capped at close, relock to prior', () => {
   const g = G.normPlan({ dayStart: '09:00' }); const day = G.dayWindow(g, at(2, 9)).dayKey;
   assert.strictEqual(G.breakBank(g, null, at(2, 9, 10)).balance, 0);
   assert.strictEqual(G.breakBank(g, null, at(2, 9, 55)).balance, 10);
-  assert.strictEqual(G.breakBank(g, null, at(2, 12)).balance, 20); // used later, both sessions
+  assert.strictEqual(G.breakBank(g, null, at(2, 12)).balance, 10); assert.strictEqual(G.breakBank(g, null, at(2, 14)).balance, 20); // both sessions
   assert(/10m break ready/.test(G.rowText(G.phaseAt(g, at(2, 9, 55)), { earned: 0, goal: 130, bank: 10 })));
   const prior = { locked: true, until: at(2, 17), label: 'ClingNote lock-in' };
   const b = G.takeBreak(g, null, at(2, 9, 55), prior); assert.strictEqual(b.used, 10); assert.strictEqual(b.endMs, at(2, 10, 5)); assert.deepStrictEqual(b.prior, prior);
@@ -96,9 +100,22 @@ t('5 daily goal = max(min, min(round5(90% median 14d), planned load)); new users
   const log = {}; for (let i = 1; i <= 20; i++) log[`2026-10-${String(i).padStart(2, '0')}`] = { earned: i }; log['2026-10-21'] = { earned: 999 };
   const h = G.historyFrom(log, '2026-10-21'); assert.strictEqual(h.length, 14); assert.strictEqual(h[0], 7); assert(!h.includes(999));
 });
-t('5 midday pacing checkpoint at the half-way point', () => {
-  const w = G.dayWindow(G.normPlan({ dayStart: '09:00' }), at(2, 10)); assert.strictEqual(G.checkpointAt(w), at(2, 13));
-  assert(G.pacingNote({ earned: 70, goal: 130 }).ahead); assert(!G.pacingNote({ earned: 20, goal: 130 }).ahead); assert(/goal already hit/.test(G.pacingNote({ earned: 140, goal: 130 }).title));
+t('points breaks: tiers 50/100/150 -> 10/20/30 min total, capped, banked, alert once per tier', () => {
+  assert.deepStrictEqual([0, 49, 50, 99, 100, 149, 150, 400].map((p) => G.pointsBreakMin(p)), [0, 0, 10, 10, 20, 20, 30, 30]);
+  assert.strictEqual(G.pointsBreakMin(60, 30), 20); assert.strictEqual(G.normPlan({ breakEvery: 30 }).breakEvery, 30); assert.strictEqual(G.normPlan({ breakEvery: 3 }).breakEvery, 50);
+  assert.strictEqual(G.nextTierText(72), '28 pts to 20m break'); assert.strictEqual(G.nextTierText(10), '40 pts to 10m break'); assert.strictEqual(G.nextTierText(160), '30m break max');
+  assert.strictEqual(G.tierToAlert(55, 0), 1); assert.strictEqual(G.tierToAlert(70, 1), 0); assert.strictEqual(G.tierToAlert(155, 1), 3); assert.strictEqual(G.tierToAlert(500, 3), 0);
+  assert(/You hit 50 points/.test(G.tierAlertText(1).title) && /never costs points/.test(G.tierAlertText(1).body));
+  const g = G.normPlan({ dayStart: '09:00' });
+  assert.strictEqual(G.breakBank(g, null, at(2, 9, 10), 100).balance, 20); // no double count: 100 pts = 20 total
+  const b = G.takeBreak(g, null, at(2, 9, 10), null, 100); assert.strictEqual(b.used, 20); assert.strictEqual(b.endMs, at(2, 9, 30)); assert.deepStrictEqual(b.last, { at: at(2, 9, 10), min: 20, points: 100 });
+  assert.strictEqual(G.breakBank(g, { ...b, startMs: 0, endMs: 0 }, at(2, 9, 40), 150).balance, 10); // 150 pts: 30 total - 20 used
+  const big = G.takeBreak(g, null, at(2, 14), null, 200); assert.strictEqual(big.used, 30); // 20 session + 30 points = 50, one break capped at 30
+  const log = G.addBreakLog(G.addBreakLog([], b.last), { at: 0, min: 5 }); assert.strictEqual(log.length, 1);
+  assert.deepStrictEqual(G.breaksOn(log, G.dayWindow(g, at(2, 9)).dayKey), { count: 1, min: 20 });
+  assert.strictEqual(G.recapText({ points: 120, sessionsDone: 2, sessions: 2, breaks: 1, breakMin: 20 }), '120 pts · 2 of 2 sessions · 1 break (20 min)');
+  assert.strictEqual(G.fmtBreakLog(log, 'en-US')[0].min, 20);
+  assert.strictEqual(typeof G.pacingNote, 'undefined'); // midday pacing removed
 });
 t('6 checklist gate, revoke detection + penalty once a day, friction countdown', () => {
   assert(!G.checklistDone([{ done: true }, { done: false }])); assert(G.checklistDone([{ done: true }])); assert(G.checklistDone([]));
@@ -139,3 +156,15 @@ t('wiring: Home row, Coach-only, earned/close, gate, carry, review, ask; Profile
   const sw = src('ios/App/App/ClingLockPlugin.swift'); assert(/everApproved/.test(sw)); const sh = src('ios/App/ClingShieldConfig/ClingShieldConfig.swift'); assert(/clingShieldFriend/.test(sh) && /Ask your friend/.test(sh) && /Open ClingNote to see your plan/.test(sh), 'shield friend line follows the toggle'); assert(/setShieldFriend/.test(sw) && /clingShieldFriend/.test(sw));
 });
 console.log(`\ngameplan: ${n} ok`);
+
+// Evening session past the hard close runs to the next day start: phase 'late', the day window's close moves to its end.
+{
+  const GPm = G;
+  const g = G.normPlan({ dayStart: '07:00', closeHours: 8, sessions: 2 });
+  const base = new Date(2026, 9, 23, 7, 0).getTime(); const late = { startMs: base + 10 * 3600000, endMs: base + 24 * 3600000 };
+  const ph = GPm.phaseAt(g, base + 18 * 3600000, null, late); // 1 AM next calendar day
+  if (ph.phase !== 'late' || ph.closeMs !== late.endMs) throw new Error('late phase ' + JSON.stringify(ph));
+  if (!/^Session 2 · 6h 0m left/.test(GPm.rowText(ph, { earned: 40, goal: 100 }))) throw new Error('late row');
+  if (GPm.phaseAt(g, late.endMs + 1000, null, late).phase === 'late') throw new Error('late after wake');
+  console.log('gameplan late session: ok');
+}

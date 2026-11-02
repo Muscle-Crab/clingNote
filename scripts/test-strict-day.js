@@ -50,8 +50,8 @@ t('HomeView/useScheduledTasks/useEightHour wiring for the hard stop', () => {
   const fn = read('netlify/functions/eight-hour-day.js'); assert(/shutUntil: ctx\.ts\(core\.shutUntilMs/.test(fn) && /core\.isShut\(/.test(fn));
 });
 t('rules: shut day blocks weeklyRoutines writes (server time)', () => {
-  const r = read('firestore.rules'); assert(/function eightHourShut\(uid\)/.test(r));
-  assert(/function eightHourShutDay\(uid, dayName\)/.test(r)); assert(((r.match(/!eightHourShutDay\(/g) || []).length) >= 3);
+  const r = read('firestore.rules'); assert(/function eightHourLock\(uid\)/.test(r));
+  assert(/function dayFrozen\(lk, dayName\)[\s\S]*?shutUntil > request\.time/.test(r)); assert(((r.match(/!dayFrozen\(eightHourLock\(/g) || []).length) >= 3);
 });
 
 t('settleDay: met => xp/coins/shield/badge; missed => coin penalty, shield saves streak at >=50%, warning after 3', () => {

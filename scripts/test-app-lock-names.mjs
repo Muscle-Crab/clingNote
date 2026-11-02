@@ -52,3 +52,13 @@ console.log(`app-lock names: ${n} passed`);
   d = describeUnlock({ plan: { labels: ['YouTube'] }, before: [{ label: 'YouTube', locked: true }], unlocked: ['YouTube'], overall: { locked: true } });
   ok(/Unlocked YouTube/.test(d.summary) && d.still_blocked_by === 'lock_in', 'named unlocked but lock-in still on -> says so'); }
 console.log('describeUnlock ok');
+// Dalton: Instagram + PUBG Mobile. Spoken names resolve to whatever label the user confirmed; the naming row prefills the real names.
+{ const L2 = ['Instagram', 'PUBG MOBILE'];
+  for (const [said, want] of [['insta', 'Instagram'], ['IG', 'Instagram'], ['reels', 'Instagram'], ['pubg', 'PUBG MOBILE'], ['PUBG Mobile', 'PUBG MOBILE'], ['battlegrounds', 'PUBG MOBILE'], ['pubgm', 'PUBG MOBILE']])
+    ok(resolveApps([said], L2).matched.join() === want, `${said} -> ${want}`);
+  ok(resolveApps(['instagram and pubg'], L2).matched.length === 2, 'both in one request');
+  ok(resolveApps(['pubg'], ['Pubg']).matched.join() === 'Pubg', 'short label also matches');
+  ok(prettyName('pubg') === 'PUBG Mobile' && prettyName('insta') === 'Instagram', 'prefill names');
+  const ob = (await import('fs')).readFileSync(new URL('../src/views/OnboardingView.vue', import.meta.url), 'utf8');
+  ok(/Instagram under Social/.test(ob) && /PUBG Mobile under Games/.test(ob), 'onboarding explains where the picker lists them'); }
+console.log('instagram/pubg ok');

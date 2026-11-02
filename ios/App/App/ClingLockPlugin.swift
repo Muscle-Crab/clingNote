@@ -2,6 +2,7 @@
 #if CLING_APP_LOCK
 import Foundation
 import Capacitor
+import UserNotifications
 import SwiftUI
 #if canImport(FamilyControls)
 import FamilyControls
@@ -37,6 +38,10 @@ public class ClingLockPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "cancelWakeLock", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setWakeSkip", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "wakeLockStatus", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "startBreak", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "endBreak", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "breakState", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "offerBreak", returnType: CAPPluginReturnPromise),
     ]
 
     @objc func requestAuthorization(_ call: CAPPluginCall) {
@@ -72,15 +77,26 @@ public class ClingLockPlugin: CAPPlugin, CAPBridgedPlugin {
                       "selectionCount": s.applicationTokens.count + s.categoryTokens.count + s.webDomainTokens.count])
     }
 
+    /// Same rule as lockActive() in src/utils/lockedAppsRow.js: shield state says locked and its end (0 = open) is in the future.
+    static func lockIsActive(nowMs: Double = Date().timeIntervalSince1970 * 1000) -> Bool {
+        let st = LockShared.defaults?.dictionary(forKey: LockShared.stateKey) ?? [:]
+        guard (st["locked"] as? Bool) == true else { return false }
+        let until = (st["until"] as? Double) ?? Double((st["until"] as? Int) ?? 0)
+        return until <= 0 || until > nowMs
+    }
+
     @objc func pickApps(_ call: CAPPluginCall) {
         guard #available(iOS 16.0, *) else { call.reject("iOS 16 required"); return }
         DispatchQueue.main.async {
             let model = PickerModel(selection: Self.loadSelection())
             var host: UIViewController?
             let view = PickerView(model: model) { save in
-                if save, let data = try? PropertyListEncoder().encode(model.selection) { LockShared.defaults?.set(data, forKey: LockShared.selectionKey); Self.saveSelectionTokens(model.selection) }
+                // During a lock the list can only grow: a deselect must not unlock anything until the lock ends
+                // (reopening a locked app goes only through the per-task unlock). Mirrors src/utils/lockedAppsRow.js.
+                var s = model.selection
+                if save && Self.lockIsActive() { let old = Self.loadSelection(); s.applicationTokens.formUnion(old.applicationTokens); s.categoryTokens.formUnion(old.categoryTokens); s.webDomainTokens.formUnion(old.webDomainTokens) }
+                if save, let data = try? PropertyListEncoder().encode(s) { LockShared.defaults?.set(data, forKey: LockShared.selectionKey); Self.saveSelectionTokens(s) }
                 host?.dismiss(animated: true)
-                let s = model.selection
                 call.resolve(["saved": save, "apps": s.applicationTokens.count, "categories": s.categoryTokens.count, "sites": s.webDomainTokens.count])
             }
             host = UIHostingController(rootView: view)
@@ -351,6 +367,43 @@ public class ClingLockPlugin: CAPPlugin, CAPBridgedPlugin {
         call.resolve(["ended": true])
     }
 
+    // ---- earned breaks (BreakState in Shared/LockShared.swift) ----
+    override public func load() { if #available(iOS 16.0, *) { DispatchQueue.main.async { ClingBreakNotify.install() } } } // after Capacitor's router
+    /// Take break (Home): lift every shield until untilMs; the monitor re-locks at the end even if the app is closed.
+    @objc func startBreak(_ call: CAPPluginCall) {
+        guard #available(iOS 16.0, *) else { call.resolve(["started": false]); return }
+        let untilMs = call.getDouble("untilMs") ?? 0; let minutes = call.getInt("minutes") ?? Int(((untilMs - Date().timeIntervalSince1970 * 1000) / 60000).rounded())
+        if let err = BreakState.begin(untilMs: untilMs, minutes: minutes) { call.resolve(["started": false, "monitor": err]); return }
+        LockShared.defaults?.removeObject(forKey: BreakState.offerKey)
+        call.resolve(["started": true, "untilMs": untilMs, "monitor": "ok"])
+    }
+    /// End a break early: re-lock now and cancel "Break's over".
+    @objc func endBreak(_ call: CAPPluginCall) {
+        guard #available(iOS 16.0, *) else { call.resolve(["ended": false]); return }
+        let live = BreakState.isLive(); BreakState.end(early: live); call.resolve(["ended": live])
+    }
+    /// Current break + breaks taken from the notification while the app was closed (drained: JS books them once).
+    @objc func breakState(_ call: CAPPluginCall) {
+        guard #available(iOS 16.0, *) else { call.resolve(["live": false, "untilMs": 0, "taken": []]); return }
+        let taken = (LockShared.defaults?.array(forKey: BreakState.takenKey) as? [[String: Double]]) ?? []
+        LockShared.defaults?.removeObject(forKey: BreakState.takenKey)
+        if BreakState.until() > 0 && !BreakState.isLive() { BreakState.end(early: false) } // missed monitor callback: re-lock now
+        call.resolve(["live": BreakState.isLive(), "untilMs": BreakState.until(), "taken": taken])
+    }
+    /// Points tier reached: post the "You hit N points" alert with a Take break action (works from the lock screen / app closed).
+    @objc func offerBreak(_ call: CAPPluginCall) {
+        guard #available(iOS 16.0, *) else { call.resolve(["posted": false]); return }
+        let minutes = call.getInt("minutes") ?? 0; let points = call.getInt("points") ?? 0
+        guard minutes > 0 else { call.resolve(["posted": false]); return }
+        LockShared.defaults?.set(["minutes": minutes, "points": points, "day": call.getString("day") ?? "", "closeMs": call.getDouble("closeMs") ?? 0], forKey: BreakState.offerKey)
+        ClingBreakNotify.registerCategory()
+        let c = UNMutableNotificationContent()
+        c.title = call.getString("title") ?? "You hit \(points) points"; c.body = call.getString("body") ?? "Break time if you want it."
+        c.categoryIdentifier = BreakState.category; c.sound = .default; c.userInfo = ["minutes": minutes, "points": points]
+        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "cn.break.offer", content: c, trigger: nil))
+        call.resolve(["posted": true])
+    }
+
     @available(iOS 16.0, *)
     static func applyShield() {
         saveSelectionTokens(loadSelection()); LockIn.shield() // minus the running task's allowed apps (TaskAllow)
@@ -430,6 +483,51 @@ struct NamedPickerView: View {
             let name = pending.isEmpty ? "" : pending.removeFirst()
             return LabeledApp(id: UUID().uuidString, label: name, token: t)
         }.sorted { ($0.label.isEmpty ? 1 : 0, $0.label) < ($1.label.isEmpty ? 1 : 0, $1.label) }
+    }
+}
+
+/// Notification action "Take break" (background, no app UI): starts the offered break natively (shields off + monitor re-lock +
+/// "Break's over"), so it works from the lock screen with the app closed. Every other notification is forwarded to the delegate
+/// that was installed before (Capacitor's router), so local-notification taps keep working.
+@available(iOS 16.0, *)
+final class ClingBreakNotify: NSObject, UNUserNotificationCenterDelegate {
+    static let shared = ClingBreakNotify()
+    weak var forward: UNUserNotificationCenterDelegate?
+    static func registerCategory() {
+        let take = UNNotificationAction(identifier: BreakState.takeAction, title: "Take break", options: []) // [] = background action
+        let cat = UNNotificationCategory(identifier: BreakState.category, actions: [take], intentIdentifiers: [], options: [])
+        let c = UNUserNotificationCenter.current()
+        c.getNotificationCategories { cur in c.setNotificationCategories(cur.filter { $0.identifier != BreakState.category }.union([cat])) }
+    }
+    static func install() {
+        let c = UNUserNotificationCenter.current()
+        if let d = c.delegate, !(d === shared) { shared.forward = d }
+        c.delegate = shared; registerCategory()
+    }
+    /// Pure rule: the action starts min(offered, 30, minutes to the close); nothing without an offer or while a break is live.
+    static func actionMinutes(offer: [String: Any]?, nowMs: Double, live: Bool) -> Int {
+        guard !live, let o = offer, let m = o["minutes"] as? Int, m > 0 else { return 0 }
+        let close = (o["closeMs"] as? Double) ?? 0
+        let left = close > 0 ? Int((close - nowMs) / 60000) : m
+        return max(0, min(m, 30, left))
+    }
+    func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse, withCompletionHandler done: @escaping () -> Void) {
+        guard response.actionIdentifier == BreakState.takeAction else {
+            if let f = forward, f.responds(to: #selector(UNUserNotificationCenterDelegate.userNotificationCenter(_:didReceive:withCompletionHandler:))) { f.userNotificationCenter?(center, didReceive: response, withCompletionHandler: done) } else { done() }
+            return
+        }
+        let now = Date().timeIntervalSince1970 * 1000
+        let offer = LockShared.defaults?.dictionary(forKey: BreakState.offerKey)
+        let m = Self.actionMinutes(offer: offer, nowMs: now, live: BreakState.isLive(now: now))
+        if m > 0, BreakState.begin(untilMs: now + Double(m) * 60000, minutes: m) == nil {
+            LockShared.defaults?.removeObject(forKey: BreakState.offerKey) // one offer = one break
+            BreakState.recordTaken(at: now, minutes: m, until: now + Double(m) * 60000, points: (offer?["points"] as? Int) ?? 0)
+        }
+        done()
+    }
+    func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler done: @escaping (UNNotificationPresentationOptions) -> Void) {
+        if let f = forward, f.responds(to: #selector(UNUserNotificationCenterDelegate.userNotificationCenter(_:willPresent:withCompletionHandler:))) { f.userNotificationCenter?(center, willPresent: notification, withCompletionHandler: done) }
+        else { done([.banner, .sound, .list]) }
     }
 }
 
