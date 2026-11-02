@@ -5,6 +5,7 @@
 // PREPARED ONLY: not called by the client yet. Production step: deploy with the site + wire a call after createPost.
 // Native iOS push additionally needs APNs/FCM native tokens (see lib/nativePush / docs); no new keys are added here.
 const { getAdmin } = require('./lib/firebaseAdmin');
+const { assertPro } = require('./lib/requirePro');
 const { verifyUser } = require('./lib/notify');
 const { sendToUser } = require('./lib/fcm');
 const json = (statusCode, body) => ({ statusCode, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -28,6 +29,7 @@ const rawHandler = async (event, ctx, deps = {}) => {
   try {
     const verify = deps.verify || ((t) => getAdmin().auth().verifyIdToken(t));
     const uid = await verifyUser(event.headers, verify);
+    await assertPro(deps.db || getAdmin().firestore(), uid); // Paywall: Pro feature
     let body; try { body = JSON.parse(event.body || '{}'); } catch (e) { return json(400, { error: 'Bad JSON' }); }
     const postId = typeof body.postId === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(body.postId) ? body.postId : null;
     if (!postId) return json(400, { error: 'postId required' });

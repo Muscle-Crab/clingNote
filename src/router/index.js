@@ -70,7 +70,7 @@ const routes = [
     path: '/discipline',
     name: 'discipline',
     component: () => import('../views/DisciplineView.vue'),
-    meta: { requiresAuth: true }
+    meta: { proFeature: 'discipline', requiresAuth: true }
   },
   {
     path: '/gate',
@@ -82,19 +82,19 @@ const routes = [
     path: '/discipline/log',
     name: 'procrastination-log',
     component: () => import('../views/ProcrastinationLog.vue'),
-    meta: { requiresAuth: true }
+    meta: { proFeature: 'discipline', requiresAuth: true }
   },
   {
     path: '/upcoming',
     name: 'upcoming',
     component: () => import('../views/UpcomingView.vue'),
-    meta: { requiresAuth: true }
+    meta: { proFeature: 'calendar', requiresAuth: true }
   },
   {
     path: '/addiction',
     name: 'addiction',
     component: Addiction,
-    meta: { webOnly: true } // Recovery Tracker is not shipped in the iOS app (sensitive health-adjacent self-tracking; see docs/ios-app-review-notes.md)
+    meta: { proFeature: 'recovery', webOnly: true } // Recovery Tracker is not shipped in the iOS app (sensitive health-adjacent self-tracking; see docs/ios-app-review-notes.md)
   },
   {
     path: '/about',
@@ -131,7 +131,7 @@ const routes = [
     path: '/pals',
     name: 'pals',
     component: () => import('../views/PalsView.vue'),
-    meta: { requiresAuth: true }
+    meta: { proFeature: 'friends', requiresAuth: true }
   },
   {
     // Login-free manager view: the unguessable token in the URL is the only credential (revocable; see netlify/functions/manager-pal.js).
@@ -145,14 +145,14 @@ const routes = [
     path: '/manage',
     name: 'manager-home',
     component: () => import('../views/ManagerHomeView.vue'),
-    meta: { requiresAuth: true }
+    meta: { proFeature: 'friends', requiresAuth: true }
   },
   {
     // Signed-in manager's view of one person (tasks + pings + DMs), served by the manager-pal function.
     path: '/manage/:ownerUid',
     name: 'manager-person',
     component: () => import('../views/ManagerView.vue'),
-    meta: { requiresAuth: true, bare: true }
+    meta: { proFeature: 'friends', requiresAuth: true, bare: true }
   },
   ...(process.env.NODE_ENV === 'development' ? [{ path: '/__mock/pals', component: () => import('../views/PalsMockView.vue'), meta: { bare: false } }] : []),
   {

@@ -1,7 +1,7 @@
 <template>
   <nav class="tb" aria-label="Main" data-test="tabbar">
     <router-link v-for="t in tabs" :key="t.name" :to="t.to" class="tb-tab" :class="{ 'tb-tab--on': t.active }" :aria-current="t.active ? 'page' : null" :data-test="'tab-' + t.name">
-      <svg viewBox="0 0 24 24" aria-hidden="true" v-html="t.icon"></svg><span>{{ t.label }}</span>
+      <svg viewBox="0 0 24 24" aria-hidden="true" v-html="t.icon"></svg><span>{{ t.label }}<small v-if="t.pro && !proNow" class="tb-lock" aria-label="Pro" data-test="tab-lock"> 🔒</small></span>
     </router-link>
   </nav>
 </template>
@@ -9,6 +9,8 @@
 <script setup>
 import { computed } from 'vue';
 import { useRoute } from 'vue-router';
+import { proNow, loadUserDoc } from '@/composables/usePro';
+loadUserDoc().catch(() => {});
 const props = defineProps({ uid: { type: String, default: null } });
 const route = useRoute();
 const I = {
@@ -19,8 +21,8 @@ const I = {
 };
 const tabs = computed(() => [
   { name: 'home', label: 'Home', to: '/home', icon: I.home, active: route.name === 'home' },
-  { name: 'upcoming', label: 'Upcoming', to: '/upcoming', icon: I.upcoming, active: route.name === 'upcoming' },
-  { name: 'community', label: 'Community', to: '/community', icon: I.community, active: route.name === 'community' },
+  { name: 'upcoming', label: 'Upcoming', to: '/upcoming', icon: I.upcoming, pro: true, active: route.name === 'upcoming' },
+  { name: 'community', label: 'Community', to: '/community', icon: I.community, pro: true, active: route.name === 'community' },
   { name: 'profile', label: 'Profile', to: props.uid ? '/profile/' + props.uid : '/login', icon: I.profile, active: route.name === 'Profile' && route.params.userId === props.uid },
 ]);
 </script>
@@ -31,6 +33,7 @@ const tabs = computed(() => [
 .tb-tab { flex: 1; min-height: 52px; min-width: 44px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: #8B97B8; font: 600 11px/1.1 Inter, ui-sans-serif, system-ui, sans-serif; text-decoration: none; border-radius: 12px; }
 .tb-tab svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
 .tb-tab--on { color: #fff; }
+.tb-lock { font-size: .75em; opacity: .7; }
 .tb-tab--on svg { color: #3C8CFF; filter: drop-shadow(0 0 6px rgba(60, 140, 255, .55)); }
 .tb-tab:active { transform: scale(.96); }
 </style>

@@ -7,8 +7,9 @@ export const isPro = (userDoc) => {
   const e = userDoc.proExpiresAt; const exp = e?.toDate ? e.toDate() : e ? new Date(e) : null;
   return !exp || exp > new Date();
 };
-// unlimitedRoutines is listed but NOT enforced anywhere yet (task-count limits pending decision).
-// community: Community tab/page, posts, leaderboard/matchups (routes with meta.proFeature = 'community').
-export const PRO_FEATURES = ['aiCoach', 'strictBoss', 'calendarFeed', 'unlimitedRoutines', 'community'];
-// Usage later: if (!canUse(userDoc, 'aiCoach')) router.push('/paywall')
-export const canUse = (userDoc, feature) => !ENFORCE_PAYWALL || !PRO_FEATURES.includes(feature) || isPro(userDoc);
+// Paywall guard: FREE = the basics of a task list. Everything else is ClingNote Pro (RevenueCat entitlement 'pro':
+// clingnote_pro_monthly / _yearly / _lifetime). canUse() is default-deny: any feature name not in FREE_FEATURES needs Pro.
+export const FREE_FEATURES = Object.freeze(['tasks', 'editTask', 'completeTask', 'startDay', 'settings', 'account', 'onboarding', 'paywall']);
+export const PRO_FEATURES = Object.freeze(['aiCoach', 'ask', 'voice', 'breakdown', 'strictBoss', 'points', 'calendarFeed', 'calendar', 'community', 'friends',
+  'lockIn', 'appLock', 'focus', 'timer', 'breaks', 'templates', 'background', 'checkin', 'widget', 'routines', 'unlimitedRoutines', 'discipline', 'recovery']);
+export const canUse = (userDoc, feature) => !ENFORCE_PAYWALL || FREE_FEATURES.includes(feature) || isPro(userDoc);

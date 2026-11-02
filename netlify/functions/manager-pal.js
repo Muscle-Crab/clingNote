@@ -22,6 +22,7 @@
 //       users/{uid}/managerChat/{id} {kind:'nudge'|'dm', from:'manager'|'user', text, taskKey?, taskTitle?, createdAt, read}
 //       palInvites/{CODE} {uid,name,expiresAt}  pals/{pairId} {members:[a,b], names:{}, createdAt}
 const { getAdmin } = require('./lib/firebaseAdmin');
+const { assertPro } = require('./lib/requirePro');
 const { verifyUser, buildPayload, sendOneSignal } = require('./lib/notify');
 const { notifSound } = require('../../src/utils/notifSound.js');
 const { withCors } = require('./lib/cors');
@@ -307,6 +308,7 @@ const userHandler = async (event, db, deps, now, uid) => {
   }
 };
 
+const FREE_PAL_ACTIONS = ['disconnectManager', 'removePal', 'revokeManager', 'block', 'report'];
 const rawHandler = async (event, ctx, deps = {}) => {
   try {
     const db = deps.db || getAdmin().firestore();
@@ -315,6 +317,9 @@ const rawHandler = async (event, ctx, deps = {}) => {
     const hasAuth = /^Bearer /.test((event.headers || {}).authorization || (event.headers || {}).Authorization || '');
     if (!hasAuth) return await managerHandler(event, db, deps, now);
     const uid = await verifyUser(event.headers, deps.verify);
+    // Paywall: friends / pals / manager are Pro. Leaving, blocking and reporting stay free (safety + a lapsed user can disconnect).
+    const act = (() => { try { return JSON.parse(event.body || '{}').action; } catch (e) { return ''; } })();
+    if (!FREE_PAL_ACTIONS.includes(act)) await assertPro(db, uid);
     return await userHandler(event, db, deps, now, uid);
   } catch (e) { return json(e.status || 500, { error: e.status ? e.message : 'Error' }); }
 };

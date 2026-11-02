@@ -6,25 +6,26 @@ const snap = sr.load('utils/widgetSnapshot.js');
 
 const makeDb = (docs) => ({
   writes: 0,
-  doc(path) { return { path }; },
+  doc(path) { return { path, get: async () => ({ exists: path in docs, data: () => docs[path] }) }; },
   async runTransaction(fn) {
     const db = this;
     return fn({ get: async (ref) => ({ exists: ref.path in docs, data: () => docs[ref.path] }), update: (ref, v) => { db.writes++; docs[ref.path] = { ...docs[ref.path], ...v }; } });
   },
 });
-const verify = async (t) => { if (t === 'tokA') return { uid: 'A' }; if (t === 'tokB') return { uid: 'B' }; throw new Error('bad'); };
+const verify = async (t) => { if (t === 'tokA') return { uid: 'A' }; if (t === 'tokF') return { uid: 'F' }; if (t === 'tokB') return { uid: 'B' }; throw new Error('bad'); };
 const ev = (body, tok) => ({ httpMethod: 'POST', headers: tok ? { authorization: `Bearer ${tok}` } : {}, body: JSON.stringify(body) });
 
 (async () => {
   for (const t of [{ id: 'abc_1' }, { createdAt: '2026-10-24T10:00:00Z', title: 'ZZTEST write' }, { createdAt: 5, title: 'é ü' }, {}]) assert.strictEqual(widgetTaskId(t), snap.widgetTaskId(t));
   const task = { createdAt: '2026-10-24T10:00:00Z', title: 'ZZTEST write', points: 15 };
   const id = widgetTaskId(task);
-  const docs = { 'weeklyRoutines/A_Sat': { tasks: [{ title: 'other', createdAt: 'x' }, task] } };
+  const docs = { 'users/A': { isPro: true }, 'users/B': { isPro: true }, 'users/F': { isPro: false }, 'weeklyRoutines/A_Sat': { tasks: [{ title: 'other', createdAt: 'x' }, task] } };
   const db = makeDb(docs); const deps = { verify, db, now: () => Date.parse('2026-10-24T12:00:00Z') };
   let r = await rawHandler(ev({ taskId: id, day: 'Sat', done: true }), {}, deps);
   assert.strictEqual(r.statusCode, 401);
   r = await rawHandler(ev({ taskId: id, day: 'Sat', done: true }, 'nope'), {}, deps);
   assert.strictEqual(r.statusCode, 401);
+  r = await rawHandler(ev({ taskId: id, day: 'Sat', done: true }, 'tokF'), {}, deps); assert.strictEqual(r.statusCode, 402); // widget is Pro
   r = await rawHandler(ev({ taskId: id, day: 'Sat', done: true }, 'tokB'), {}, deps); // wrong owner
   assert.strictEqual(r.statusCode, 404);
   r = await rawHandler(ev({ taskId: id, day: 'Funday', done: true }, 'tokA'), {}, deps); assert.strictEqual(r.statusCode, 400);

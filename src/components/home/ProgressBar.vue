@@ -45,7 +45,8 @@
         <span class="streak-fx-num" :style="{ transform: `scale(${0.7 + streakFx.fill * 0.6})` }">{{ Math.round(streakFx.num) }}</span>
         <span class="streak-fx-label" data-test="streak-rank-label">{{ fxRank.name.toUpperCase() }} · DAY STREAK</span>
       </div>
-      <p class="foot-item foot-item--pts"><span class="coin" aria-hidden="true">★</span><strong data-test="day-pts" :class="{ 'num-bump': bump.pts }">{{ target > 0 ? dayPtsLabel(Math.round(shownPts), target) : `${Math.round(shownPts)} pts` }}</strong></p>
+      <p v-if="locked" class="foot-item foot-item--pts" data-test="pts-locked" role="button" tabindex="0" @click="$emit('pro')"><span class="coin" aria-hidden="true">★</span><strong>Points 🔒</strong></p>
+      <p v-else class="foot-item foot-item--pts"><span class="coin" aria-hidden="true">★</span><strong data-test="day-pts" :class="{ 'num-bump': bump.pts }">{{ target > 0 ? dayPtsLabel(Math.round(shownPts), target) : `${Math.round(shownPts)} pts` }}</strong></p>
     </div>
   </div>
 </template>
@@ -64,7 +65,9 @@ import stage1 from '@/assets/stages/stage-1-leafy.jpg';
 import stage2 from '@/assets/stages/stage-2-tree.jpg';
 import stage3 from '@/assets/stages/stage-3-pine.jpg';
 import stage4 from '@/assets/stages/stage-4-peak.jpg';
+defineEmits(['pro']);
 const props = defineProps({
+  locked: { type: Boolean, default: false }, // free user: points are ClingNote Pro
   percentage: { type: Number, default: 0 },
   milestones: { type: Array, required: true },
   done: { type: Number, default: 0 },

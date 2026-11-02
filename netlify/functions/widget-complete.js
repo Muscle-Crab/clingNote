@@ -7,6 +7,7 @@
 // widgetEffectsPending=true. Points, streak, boss sounds/notifications, the daily report and one-time-task removal depend on in-app state
 // (discipline gate, 8-hour lock, credits), so the app runs its own completion path for that task once on next open (widgetQueue 'effects').
 // Idempotent: an already-completed task returns 200 { already: true } and is not touched.
+const { assertPro } = require('./lib/requirePro');
 const { verifyUser } = require('./lib/notify');
 const { getAdmin } = require('./lib/firebaseAdmin');
 const { withCors } = require('./lib/cors');
@@ -28,6 +29,7 @@ const rawHandler = async (event, _ctx, deps = {}) => {
   if (event.httpMethod !== 'POST') return json(405, { error: 'Method not allowed' });
   try {
     const uid = await verifyUser(event.headers, deps.verify || ((t) => getAdmin().auth().verifyIdToken(t)));
+    await assertPro(deps.db || getAdmin().firestore(), uid); // Paywall: Pro feature
     let body; try { body = JSON.parse(event.body || '{}'); } catch (e) { return json(400, { error: 'Bad JSON' }); }
     const { taskId, day, done } = body || {};
     if (typeof taskId !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(taskId)) return json(400, { error: 'Bad taskId' });

@@ -7,6 +7,7 @@
 //   GET  ?token=...                          -> { ownerName, friendName, minutes, reason, status }
 //   POST { token, action:'approve'|'deny' }  -> { status }    (once; pending + not expired only)
 const { getAdmin } = require('./lib/firebaseAdmin');
+const { assertPro } = require('./lib/requirePro');
 const { verifyUser } = require('./lib/notify');
 const { withCors } = require('./lib/cors');
 const F = require('./lib/friendUnlock');
@@ -40,6 +41,7 @@ const rawHandler = async (event = {}, ctx, deps = {}) => {
     }
     const uid = await verifyUser(event.headers || {}, deps.verify);
     if (action === 'request') {
+      await assertPro(db, uid); // Paywall: app locking is Pro
       const friendName = F.clip(body.friendName, 40); if (!friendName) throw err(400, 'Pick a friend first');
       const u = await db.doc(`users/${uid}`).get();
       if (!(u.exists && u.data().gamePlan && u.data().gamePlan.friendUnlock === true)) throw err(403, 'Friend approval is off. Turn it on in Settings → Coach mode.'); // optional feature, default off

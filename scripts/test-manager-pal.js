@@ -6,8 +6,8 @@ const { rawHandler, handler } = require('../netlify/functions/manager-pal');
 const t = async (name, fn) => { await fn(); console.log('ok -', name); };
 
 // Minimal Firestore fake: doc/collection/add/get/set/delete/orderBy/limit/batch/runTransaction.
-const makeDb = () => {
-  const store = new Map(); let auto = 0;
+const makeDb = (pro = true) => {
+  const store = new Map(pro ? ['A', 'B', 'C', 'M', 'N', 'O', 'P', 'U', 'X'].map((c) => [`users/zztest${c}`, { isPro: true }]) : []); let auto = 0;
   const snap = (path) => { const v = store.get(path); return { exists: store.has(path), id: path.split('/').pop(), ref: docRef(path), data: () => v }; };
   const docRef = (path) => ({ path, get: async () => snap(path), set: async (v, o) => { store.set(path, o && o.merge ? { ...(store.get(path) || {}), ...v } : { ...v }); }, delete: async () => { store.delete(path); }, collection: (c) => col(`${path}/${c}`) });
   const col = (path, ord, lim, wh) => ({
@@ -36,6 +36,11 @@ const J = (r) => JSON.parse(r.body);
     assert(/^[A-HJ-NP-Z2-9]{8}$/.test(M.newPalCode()));
     assert(M.isOverdue({ title: 'x' }, 'Monday', NOW)); assert(!M.isOverdue({ title: 'x', completed: true }, 'Monday', NOW));
     assert(!M.isOverdue({ title: 'x' }, 'Saturday', NOW)); assert(M.isOverdue({ title: 'x', reminder: { date: '2026-10-23', time: '09:00' } }, 'Friday', NOW));
+  });
+  await t('paywall: a free user is refused Pro friend actions (402) but can still leave, block and report', async () => {
+    const fdb = makeDb(false);
+    for (const action of ['createManagerLink', 'createPalCode', 'acceptPal', 'managerList']) assert.strictEqual((await asUser(fdb, 'zztestU', { action, name: 'Mom', code: 'ABCDEFGH' })).statusCode, 402, action);
+    for (const action of ['removePal', 'block', 'report', 'disconnectManager']) assert.notStrictEqual((await asUser(fdb, 'zztestU', { action, palUid: 'zztestP', uid: 'zztestP' })).statusCode, 402, action);
   });
   const db = makeDb();
   db.store.set('publicProfiles/zztestU', { name: 'ZZTEST Tacanda' }); db.store.set('publicProfiles/zztestP', { name: 'ZZTEST Pal' });

@@ -5,6 +5,7 @@
 // Needs ELEVENLABS_API_KEY in the Netlify env (never committed, never logged). Without it: 503 -> app falls back to MP3s.
 const crypto = require('crypto');
 const { getAdmin } = require('./lib/firebaseAdmin');
+const { assertPro } = require('./lib/requirePro');
 const { verifyUser } = require('./lib/notify');
 const V = require('./lib/voice');
 
@@ -24,6 +25,7 @@ const rawHandler = async (event, ctx, deps = {}) => {
     const env = deps.env || process.env;
     const verify = deps.verify || ((t) => getAdmin().auth().verifyIdToken(t));
     const uid = await verifyUser(event.headers, verify);
+    await assertPro(deps.db || getAdmin().firestore(), uid); // Paywall: Pro feature
     let body = {}; try { body = JSON.parse(event.body || '{}'); } catch (e) { return json(400, { error: 'Bad JSON' }); }
     const text = norm(body.text);
     if (!text) return json(400, { error: 'No text' });

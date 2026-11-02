@@ -20,4 +20,6 @@ const requirePro = async (event, deps = {}) => {
   if (!(await userIsPro(db, uid))) throw Object.assign(new Error('Pro required'), { status: 402 });
   return uid;
 };
-module.exports = { requirePro, isProDoc, userIsPro };
+// For handlers that already verified the uid: throws 402 unless Pro.
+const assertPro = async (db, uid) => { if (!(await userIsPro(db, uid))) throw Object.assign(new Error('Pro required'), { status: 402, extra: { pro: false } }); };
+module.exports = { requirePro, isProDoc, userIsPro, assertPro };

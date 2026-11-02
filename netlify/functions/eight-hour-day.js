@@ -12,6 +12,7 @@
 // refine complexity/minutes per task and nudge the target ratio upward. Everything that needs the key is marked "REQUIRES SERVER AI" below.
 // The model never writes points or targets directly: its numbers are clamped and run through the same formulas.
 const core = require('./lib/eightHourCore');
+const { assertPro } = require('./lib/requirePro');
 const { verifyUser } = require('./lib/notify');
 const { getAdmin } = require('./lib/firebaseAdmin');
 
@@ -344,6 +345,8 @@ const rawHandler = async (event, _ctx, deps = {}) => {
     const fn = actions[body.action];
     if (!fn) return json(400, { error: 'Unknown action' });
     const db = deps.db || getAdmin().firestore();
+    // Paywall: lock-in / sessions / breaks are Pro. 'state' stays open so a free (or lapsed) user's Home still loads and an old lock settles.
+    if (body.action !== 'state') await assertPro(db, uid);
     const ctx = { uid, db, now: deps.now ? deps.now() : Date.now(), // SERVER clock only: the client clock is never trusted
       ts: deps.ts || defaultTs, serverTime: deps.serverTime || (() => getAdmin().firestore.FieldValue.serverTimestamp()), fetch: deps.fetch || (typeof fetch === 'function' ? fetch : null),
       apiKey: 'apiKey' in deps ? deps.apiKey : process.env.OPENAI_API_KEY };
