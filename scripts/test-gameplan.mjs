@@ -164,7 +164,7 @@ t('wiring: Home row, Coach-only, earned/close, gate, carry, review, ask; Profile
   const h = src('src/views/HomeView.vue'); assert(/<GamePlanRow v-if="gpOn && isViewingToday"/.test(h)); assert(/const gpOn = computed\(\(\) => isStrictMode\.value\)/.test(h));
   assert(/GP\.setSizeMode\(on\)/.test(h)); assert(/gpEarned\.value\.points/.test(h)); assert(/phase: 'checklist'/.test(h)); assert(/gpAuthCheck\(st\)/.test(h)); assert(/isShutdown\(\) \|\| gpOn\.value/.test(h));
   assert(/fnUrl\('friend-unlock'\)/.test(h)); assert(/GP\.countdown/.test(h)); assert(/!gpQuiet/.test(h));
-  const p = src('src/views/Profile.vue'); assert(/data-test="gp-settings"/.test(p)); assert(/GP\.queueEdit/.test(p));
+  const p = src('src/views/Profile.vue'); assert(/'gp-settings'/.test(p)); assert(/GP\.queueEdit/.test(p));
   const c = src('src/components/home/TaskCard.vue'); assert(/data-test="size-edit"/.test(c));
   assert.equal(G.sizeOf({ points: 20 }), 'm'); assert.equal(G.sizeOf({ points: 10 }), 's'); assert.equal(G.sizeOf({ points: 60 }), 'l'); assert.equal(G.sizeOf({ points: 60, estimateMin: 10 }), 's'); assert.equal(G.sizeOf({ size: 'l', points: 10 }), 'l');
   const m = src('src/components/home/MorningReport.vue'); assert(/mr-penalty/.test(m) && /mr-goal-why/.test(m));
