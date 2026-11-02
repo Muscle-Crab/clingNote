@@ -3,7 +3,9 @@
 <!-- ClingNote privacy manifest. Keep in sync with the App Privacy answers in App Store Connect and with src/views/privacy-policy.vue.
      Build 44: ATT prompt after onboarding; NSPrivacyTracking true. When authorized, Firebase Analytics (+IdentitySupport) and the TikTok App Events SDK
      (ships its own manifest) send the IDFA with install/open events for ad attribution (= tracking): Device ID + Product Interaction are Used for Tracking.
-     NSPrivacyTrackingDomains left empty on purpose: listing the SDK hosts would make iOS block their non-IDFA (SKAN/IDFV) traffic when ATT is denied.
+     Build 47: NSPrivacyTrackingDomains lists the hosts that receive the IDFA when ATT is authorized (Apple ITMS-91064 on build 46 rejected
+     tracking=true with an empty list): app-analytics-services-att.com (GoogleAppMeasurement's ATT-only endpoint; non-ATT traffic uses
+     app-analytics-services.com, not listed) and analytics.us.tiktok.com (TikTok App Events SDK). iOS blocks these when ATT is not authorized.
      Reddit first-open ping is disabled in this build (Info.plist ClingRedditPingEnabled=false).
      Third-party SDKs (Capacitor, OneSignal, RevenueCat, TikTokBusinessSDK, FirebaseAnalytics/GoogleAppMeasurement) ship their own manifests. -->
 <plist version="1.0">
@@ -11,7 +13,10 @@
 	<key>NSPrivacyTracking</key>
 	<true/>
 	<key>NSPrivacyTrackingDomains</key>
-	<array/>
+	<array>
+		<string>app-analytics-services-att.com</string>
+		<string>analytics.us.tiktok.com</string>
+	</array>
 	<key>NSPrivacyCollectedDataTypes</key>
 	<array>
 		<dict>

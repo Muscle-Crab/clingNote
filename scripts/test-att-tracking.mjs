@@ -77,6 +77,7 @@ await t('plugin exposes trackingStatus/requestTracking', async () => {
 });
 await t('privacy manifest: tracking true, DeviceID + ProductInteraction used for tracking / 3rd-party ads', async () => {
   const p = rd('ios/App/App/PrivacyInfo.xcprivacy'); assert(/NSPrivacyTracking<\/key>\s*<true\/>/.test(p));
+  assert(/NSPrivacyTrackingDomains<\/key>\s*<array>\s*<string>/.test(p), 'ITMS-91064: tracking=true needs at least one tracking domain');
   for (const ty of ['DeviceID', 'ProductInteraction']) { const b = p.slice(p.indexOf(`DataType${ty}<`)); const blk = b.slice(0, b.indexOf('</dict>'));
     assert(/Tracking<\/key>\s*<true\/>/.test(blk), ty); assert(/PurposeThirdPartyAdvertising/.test(blk), ty); }
 });
