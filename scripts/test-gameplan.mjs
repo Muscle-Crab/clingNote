@@ -156,3 +156,15 @@ t('wiring: Home row, Coach-only, earned/close, gate, carry, review, ask; Profile
   const sw = src('ios/App/App/ClingLockPlugin.swift'); assert(/everApproved/.test(sw)); const sh = src('ios/App/ClingShieldConfig/ClingShieldConfig.swift'); assert(/clingShieldFriend/.test(sh) && /Ask your friend/.test(sh) && /Open ClingNote to see your plan/.test(sh), 'shield friend line follows the toggle'); assert(/setShieldFriend/.test(sw) && /clingShieldFriend/.test(sw));
 });
 console.log(`\ngameplan: ${n} ok`);
+
+// Evening session past the hard close runs to the next day start: phase 'late', the day window's close moves to its end.
+{
+  const GPm = G;
+  const g = G.normPlan({ dayStart: '07:00', closeHours: 8, sessions: 2 });
+  const base = new Date(2026, 9, 23, 7, 0).getTime(); const late = { startMs: base + 10 * 3600000, endMs: base + 24 * 3600000 };
+  const ph = GPm.phaseAt(g, base + 18 * 3600000, null, late); // 1 AM next calendar day
+  if (ph.phase !== 'late' || ph.closeMs !== late.endMs) throw new Error('late phase ' + JSON.stringify(ph));
+  if (!/^Session 2 · 6h 0m left/.test(GPm.rowText(ph, { earned: 40, goal: 100 }))) throw new Error('late row');
+  if (GPm.phaseAt(g, late.endMs + 1000, null, late).phase === 'late') throw new Error('late after wake');
+  console.log('gameplan late session: ok');
+}

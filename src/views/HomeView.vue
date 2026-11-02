@@ -3950,7 +3950,8 @@ const gpLoad = (d) => {
   if (gpOn.value && !(d && d.gamePlan && d.gamePlan.lastReview)) { gp.value = { ...gp.value, lastReview: GP.reviewKey(gp.value, Date.now()) }; gpSave(); }
 };
 const gpSave = () => saveBossField({ gamePlan: { ...gp.value } });
-const gpPhase = computed(() => GP.phaseAt(gp.value, nowTick.value, gpBreak.value));
+const gpLate = computed(() => { const l = eh.lock.value; return l && (l.index || 0) >= 1 && !l.settled ? { startMs: l.startMs, endMs: l.endMs } : null; });
+const gpPhase = computed(() => GP.phaseAt(gp.value, nowTick.value, gpBreak.value, gpLate.value));
 // Earned breaks: each finished focus session banks gp.breakMin; the user takes it from the slim line ("Take break"),
 // which lifts the shield for exactly that long, then restores the shield that was up before (same apps, same until).
 // State lives on users/{uid}.gpBreak and this device (cn.gp.break) so a restart after expiry still relocks.
@@ -4115,7 +4116,7 @@ const gpPenaltyNote = computed(() => { const p = gpPenalty.value; if (!p || !p.p
   return `−${p.points} pts on ${p.day === gpPhase.value.dayKey ? 'today' : p.day}: Screen Time access for ClingNote was turned off. Turn it back on in Settings → Screen Time.`; });
 const gpQuiet = computed(() => gpOn.value && gpPhase.value.phase === 'focus'); // in-app quiet: the boss panel and nudges wait for the break
 const gpGate = computed(() => gpOn.value && routineItems.value.length > 0 && !GP.checklistDone(routineItems.value) && gpPhase.value.phase !== 'closed');
-const gpText = computed(() => (gpGate.value && !['focus', 'break'].includes(gpPhase.value.phase) ? '🔒 Checklist first · ' : '') + GP.rowText(gpPhase.value, { earned: gpEarned.value.points, goal: strictGoal.value })
+const gpText = computed(() => (gpGate.value && !['focus', 'break', 'late'].includes(gpPhase.value.phase) ? '🔒 Checklist first · ' : '') + GP.rowText(gpPhase.value, { earned: gpEarned.value.points, goal: strictGoal.value })
 );
 // Points break alert: once per tier per day ("You hit 50 points — break time if you want it"). Optional: it only banks minutes;
 // nothing unlocks until the user taps Take break (Home line, or the notification's Take break action on iOS).

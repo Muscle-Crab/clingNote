@@ -26,7 +26,7 @@ t('points alert fires once per tier per day', () => {
   assert.strictEqual(alertTier({ day: 'd', n: 1 }, 'd', 2), 2); assert.strictEqual(alertTier({ day: 'old', n: 3 }, 'd', 1), 1); assert.strictEqual(alertTier(null, 'd', 0), 0);
 });
 t('day-end recap fires at the earlier of the hard close and the last chosen session end', () => {
-  assert.strictEqual(recapAt({ closeMs: 100, lastSessionEndMs: 80 }), 80); assert.strictEqual(recapAt({ closeMs: 100, lastSessionEndMs: 0 }), 100); assert.strictEqual(recapAt({ closeMs: 100, lastSessionEndMs: 120 }), 100);
+  assert.strictEqual(recapAt({ closeMs: 100, lastSessionEndMs: 80 }), 80); assert.strictEqual(recapAt({ closeMs: 100, lastSessionEndMs: 0 }), 100); assert.strictEqual(recapAt({ closeMs: 100, lastSessionEndMs: 120 }), 120); // evening session past the close: recap waits for it
 });
 t('native: break lifts BOTH stores, never changes lock state, monitor re-locks at intervalDidEnd', () => {
   const sh = rd('ios/App/Shared/LockShared.swift'); const mon = rd('ios/App/ClingLockMonitor/ClingLockMonitor.swift');

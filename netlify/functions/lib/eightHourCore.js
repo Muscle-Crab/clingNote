@@ -100,7 +100,7 @@ const planBlocks = ({ requests, tz, nowMs, existing = [], notBefore = 0 }) => {
 
 // ── focus sessions (game plan): 1 or 2 per day, morning (block 0) + afternoon (block 1, started by the user from the shutdown) ──
 // The afternoon session can start only: sessions === 2, today's block 0 has ended, no later block exists/is pending, and at least
-// SESSION_MIN_LEFT_MS before the hard close. After block 1 (or the close) nothing more can start.
+// SESSION_MIN_LEFT_MS before the NEXT day start (see nextDayStartMs; the hard close does not end it). After block 1 nothing more can start.
 const SESSION_MIN_LEFT_MS = 30 * 60000;
 const sessionCloseMs = (lock, gamePlan) => {
   if (!lock || !Number.isFinite(lock.startMs)) return 0;
@@ -109,16 +109,24 @@ const sessionCloseMs = (lock, gamePlan) => {
   if (w && lock.dayKey) { const st = wakeInstant(lock.dayKey, w, tz); if (Number.isFinite(st)) return st + closeH * 3600000; }
   return lock.startMs + 12 * 3600000;
 };
-const nextSessionState = ({ lock, sessions = 2, gamePlan = null, nowMs }) => {
+// Session 2 is not bound to the hard close: an unstarted or running evening (second) session finishes at the NEXT day start (when the
+// user wakes up), never a fixed clock time. Next day start = the earlier of tomorrow's wake time (plan) and tomorrow's game-plan day
+// start, so the new day's morning block (which begins at the wake time) can never overlap it.
+const nextDayStartMs = (lock, gamePlan, wakeTime) => {
+  if (!lock || !lock.dayKey) return 0; const tz = validTz(lock.tz) ? lock.tz : 'UTC'; const nk = nextDayKey(lock.dayKey);
+  const cands = [wakeTime || lock.wakeTime, gamePlan && gamePlan.dayStart].map(parseWake).filter(Boolean).map((w) => wakeInstant(nk, w, tz)).filter(Number.isFinite);
+  return cands.length ? Math.min(...cands) : lock.startMs + 24 * 3600000;
+};
+const nextSessionState = ({ lock, sessions = 2, gamePlan = null, nowMs, wakeTime = null }) => {
   const of = Number(sessions) === 1 ? 1 : 2;
   if (!lock || lock.placeholder || !lock.dayKey) return { ok: false, reason: 'none', of, done: 0 };
   const idx = blockIndex(lock); const done = nowMs >= lock.endMs ? idx + 1 : idx;
   if (nowMs < lock.endMs) return { ok: false, reason: 'running', of, done };
   if (of < 2 || idx >= 1) return { ok: false, reason: 'done', of, done };
   if (pendingOf(lock).length) return { ok: false, reason: 'scheduled', of, done };
-  const closeMs = sessionCloseMs(lock, gamePlan);
-  if (!(closeMs - nowMs >= SESSION_MIN_LEFT_MS)) return { ok: false, reason: 'closed', of, done, closeMs };
-  return { ok: true, of, done, closeMs };
+  const closeMs = sessionCloseMs(lock, gamePlan); const untilMs = nextDayStartMs(lock, gamePlan, wakeTime);
+  if (!(untilMs - nowMs >= SESSION_MIN_LEFT_MS)) return { ok: false, reason: 'closed', of, done, closeMs, untilMs };
+  return { ok: true, of, done, closeMs, untilMs };
 };
 
 // ── the 8-hour window state machine ──
@@ -296,6 +304,6 @@ module.exports = {
   countdownParts, fmtCountdown, fmtClock, fmtWakeLabel,
   complexityFromMinutes, complexityFromText, pointsFor, estimateTask, levelRatio, dailyTarget,
   lockedChangeAllowed, nextDayKey, shutUntilMs, isShut, rulesShutUntilMs,
-  SESSION_MIN_LEFT_MS, sessionCloseMs, nextSessionState,
+  SESSION_MIN_LEFT_MS, sessionCloseMs, nextDayStartMs, nextSessionState,
   BLOCK_HOURS, MAX_BLOCKS_PER_DAY, SCHEDULE_LEAD_MS, SCHEDULE_HORIZON_MS, clampBlockHours, sessionKey, blockIndex, pendingOf, nextPending, nextAt, planBlocks, countableIndexes, progressOf, defaultStats, settleDay, rewardsForDay, penaltyForMiss, badgeFor, MAX_SHIELDS, SHIELD_MIN_RATIO, failureNotice, rewardFor,
 };

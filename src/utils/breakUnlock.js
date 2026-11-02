@@ -23,4 +23,5 @@ export const applyTaken = (b, taken, dayKey, ymdOf) => {
 export const alertTier = (stored, dayKey, tier) => { const n = stored && stored.day === dayKey ? Number(stored.n) || 0 : 0; return tier > n ? tier : 0; };
 
 // When the day-end recap fires: the earlier of the hard close and the end of the last chosen session (if it is already known).
-export const recapAt = ({ closeMs, lastSessionEndMs = 0 }) => (lastSessionEndMs > 0 && lastSessionEndMs < closeMs ? lastSessionEndMs : closeMs);
+// The last session may end after the hard close (an evening session runs until the next day start): the recap waits for it.
+export const recapAt = ({ closeMs, lastSessionEndMs = 0 }) => (lastSessionEndMs > 0 ? lastSessionEndMs : closeMs);

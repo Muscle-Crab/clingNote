@@ -123,8 +123,14 @@ export const relockPlan = (b, nowMs = Date.now()) => {
   const p = b.prior; return p && p.locked && Number(p.until) > nowMs ? { untilMs: Number(p.until), label: p.label || '' } : { untilMs: 0, label: '' };
 };
 export const fmtLeft = (ms) => { const s = Math.max(0, Math.ceil(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
-// -> { phase: 'before'|'focus'|'break'|'work'|'closed', n, endsMs, leftMin }   (break only while a user-started break runs)
-export const phaseAt = (gp, nowMs = Date.now(), brk = null) => {
+// -> { phase: 'before'|'focus'|'break'|'work'|'late'|'closed', n, endsMs, leftMin }   (break only while a user-started break runs)
+// late = { startMs, endMs } of a running evening (second) session: it may run past the hard close until the next day start (wake).
+// While it runs the day stays open (phase 'late'; points still count up to its end) and the next day only begins once it is over.
+export const phaseAt = (gp, nowMs = Date.now(), brk = null, late = null) => {
+  if (late && late.endMs > nowMs && nowMs >= late.startMs) { const lw = dayWindow(gp, late.startMs);
+    if (nowMs >= lw.closeMs) { const w = { ...lw, closeMs: late.endMs };
+      if (breakActive(brk, nowMs)) return { phase: 'break', n: 0, endsMs: brk.endMs, leftMin: Math.ceil((brk.endMs - nowMs) / MIN), left: fmtLeft(brk.endMs - nowMs), ...w };
+      return { phase: 'late', n: 2, of: 2, endsMs: late.endMs, leftMin: Math.ceil((late.endMs - nowMs) / MIN), ...w }; } }
   const w = dayWindow(gp, nowMs);
   if (nowMs < w.startMs) return { phase: 'before', n: 0, endsMs: w.startMs, leftMin: Math.ceil((w.startMs - nowMs) / MIN), ...w };
   if (nowMs >= w.closeMs) return { phase: 'closed', n: 0, endsMs: 0, leftMin: 0, ...w };
@@ -221,6 +227,7 @@ export const rowText = (ph, { earned = 0, goal = 0, bank = 0 } = {}) => {
   if (ph.phase === 'before') return `Day starts in ${ph.leftMin >= 60 ? `${Math.floor(ph.leftMin / 60)}h ${ph.leftMin % 60}m` : `${ph.leftMin}m`} · ${pts}`;
   if (ph.phase === 'focus') return `Focus ${ph.n}/${ph.of || 2} · ${ph.leftMin}m left · notifications held · ${pts}`;
   if (ph.phase === 'break') return `Break · ${ph.left || `${ph.leftMin}m`} left · apps open · ${pts}`;
+  if (ph.phase === 'late') return `Session 2 · ${ph.leftMin >= 60 ? `${Math.floor(ph.leftMin / 60)}h ${ph.leftMin % 60}m` : `${ph.leftMin}m`} left · ${pts}`;
   if (ph.phase === 'work') return `Working · closes in ${Math.floor(ph.leftMin / 60)}h ${ph.leftMin % 60}m · ${pts}`;
   return `Closed · ${pts} · pick tomorrow's tasks`;
 };
