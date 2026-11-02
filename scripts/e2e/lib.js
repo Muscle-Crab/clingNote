@@ -19,7 +19,7 @@ async function seedUser(email, name, extra = {}) {
   try { const o = await admin.auth().getUserByEmail(email); await admin.auth().deleteUser(o.uid); } catch (e) { /* none */ }
   const u = await admin.auth().createUser({ email, password: 'zztest-pass-123', displayName: name });
   if (u.uid === FORBIDDEN) throw new Error('forbidden uid');
-  await db.doc(`users/${u.uid}`).set({ uid: u.uid, name, email, onboardingComplete: true, paywallSeenAt: new Date(), isPro: false, plan: 'free', ...extra });
+  await db.doc(`users/${u.uid}`).set({ uid: u.uid, name, email, onboardingComplete: true, paywallSeenAt: new Date(), isPro: true, plan: 'lifetime', ...extra });
   await db.doc(`publicProfiles/${u.uid}`).set({ name });
   return u.uid;
 }

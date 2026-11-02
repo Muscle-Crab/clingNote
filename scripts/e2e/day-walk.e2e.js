@@ -97,7 +97,7 @@ const closeRow = async (p) => { if ((await p.locator('[data-test=gp-toggle]').ge
   const offers = (await fake()).offers || [];
   step('4 points break alert fires at 50 (once)', offers.length === 1 && offers[0].points >= 50, JSON.stringify(offers));
   const r4 = await row(p); await shot(p, '06-home-points-line', '[data-test=gp-row]');
-  step('5 Home points line (points never cut, break balance + next tier)', /60\/\d+ pts/.test(r4) && /\d+m ready/.test(r4) && /40 pts to 20m break/.test(r4), r4);
+  step('5 Home points line (points never cut, break 1 status: 15m break ready)', /60\/\d+ pts/.test(r4) && /· 15m break ready/.test(r4) && await p.locator('[data-test=gp-gift]').count() === 1, r4);
 
   // 5) take a break: unlock, re-lock
   await openRow(p); await shot(p, '07-break-ready-open', '[data-test=gp-row]');
@@ -117,8 +117,11 @@ const closeRow = async (p) => { if ((await p.locator('[data-test=gp-toggle]').ge
   d = await ehDoc(uid); await setClock(d.lock.endMs + 60000); await home(); await sleep(1500);
   const noonTxt = await p.locator('[data-test=eh-next-session]').innerText().catch(() => ''); await shot(p, '10-shutdown-noon');
   await setClock(atNY(21, 0)); await home(); await sleep(1500);
+  // 9 PM is past the default 8 PM plan time: planning opens by itself over the shutdown card (in-app only, apps stay locked); the pill goes back to the card
+  const planAuto = !(await p.locator('[data-test=eh-shutdown]').count()) && await p.locator('[data-test=eh-pill]').count() === 1;
+  await p.click('[data-test=eh-pill]').catch(() => {}); await sleep(1200);
   const eveTxt = await p.locator('[data-test=eh-next-session]').innerText().catch(() => ''); await shot(p, '11-shutdown-evening');
-  step('8 shutdown wording by time (afternoon at noon, evening at 9 PM)', /afternoon/.test(noonTxt) && /evening/.test(eveTxt), `noon="${noonTxt}" eve="${eveTxt}"`);
+  step('8 shutdown wording by time (afternoon at noon; 9 PM: planning auto-opens, pill back to the card says evening)', /afternoon/.test(noonTxt) && planAuto && /evening/.test(eveTxt), `noon="${noonTxt}" planAuto=${planAuto} eve="${eveTxt}"`);
   const s1Start = ((await ehDoc(uid)).lock || {}).startMs;
   await p.click('[data-test=eh-next-session]').catch(() => {}); await waitFor(async () => { const l = (await ehDoc(uid)).lock || {}; return l.index === 1 && l.startMs !== s1Start; });
   d = await ehDoc(uid); const wake2 = atNY(8, 0, 1);
