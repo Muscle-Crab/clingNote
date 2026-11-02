@@ -22,7 +22,7 @@ const WEEK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   await ctx.addInitScript(() => { localStorage.setItem('clingnote.tutorialSeen.v1', '1'); localStorage.setItem('cn_community_eula_v1', '1'); });
   await ctx.route('**/.netlify/functions/**', (r) => r.fulfill({ status: 200, json: {} }));
   const p = await ctx.newPage(); p.on('dialog', (d) => d.accept());
-  const dismiss = async () => { for (let i = 0; i < 4; i++) { const b = p.locator('.drama button, button:has-text("Not now"), button:has-text("Maybe later"), button:has-text("Skip")'); if (await b.count()) { await b.first().click({ timeout: 2000 }).catch(() => {}); await sleep(400); } } };
+  const dismiss = async () => { for (let i = 0; i < 4; i++) { const b = p.locator('[data-test=boss-briefing] .bb-x, .drama button, button:has-text("Not now"), button:has-text("Maybe later"), button:has-text("Skip")'); if (await b.count()) { await b.first().click({ timeout: 2000 }).catch(() => {}); await sleep(400); } } };
   await emailLogin(p, 'zztest-cards@example.com'); await p.goto(B + '/home', { waitUntil: 'load' }); await sleep(3500); await dismiss();
   { const sd = p.getByRole('button', { name: /Start Day/ }); if (await sd.count()) { await sd.first().click(); await sleep(1500); } } const cards = p.locator('.task-card'); await p.evaluate(() => { const c = document.querySelector('.task-card'); window.scrollBy(0, c.getBoundingClientRect().top - 90); }); await sleep(600);
   const hs = []; for (const c of await cards.all()) hs.push(Math.round((await c.boundingBox()).height));
