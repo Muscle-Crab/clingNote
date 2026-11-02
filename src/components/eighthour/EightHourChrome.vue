@@ -13,8 +13,11 @@
     <div class="ehs-card">
       <div class="ehs-icon" aria-hidden="true">🌙</div>
       <h2 id="ehs-t">Your {{ hoursText }} hours are up.</h2>
-      <p>ClingNote is shut for today. Come back tomorrow at <b data-test="eh-shut-until">{{ shut.untilLabel }}</b>.</p>
+      <p v-if="nextOk">Session 1 is done. Start your afternoon session now, or come back tomorrow at <b data-test="eh-shut-until">{{ shut.untilLabel }}</b>.</p>
+      <p v-else>ClingNote is shut for today. Come back tomorrow at <b data-test="eh-shut-until">{{ shut.untilLabel }}</b>.</p>
       <p class="ehs-res" :class="shut.met ? 'ok' : 'miss'" data-test="eh-shut-result">{{ shut.met ? 'Goal met' : 'Goal missed' }} · {{ shut.earned }}/{{ shut.target }} pts</p>
+      <p v-if="recap" class="ehs-recap" data-test="eh-shut-recap">{{ recap }}</p>
+      <button v-if="nextOk" type="button" class="ehs-row" data-test="eh-next-session" :disabled="eh.st.busy" @click="doNextSession">Start afternoon session <span aria-hidden="true">›</span></button>
       <!-- Evening mode: one compact row; tapping it reveals time + hours inline. A scheduled block can't be cancelled or shortened. -->
       <button v-if="schedOk && !sch.open" type="button" class="ehs-row" data-test="eh-sched-open" @click="openSched">Schedule next lock-in <span aria-hidden="true">›</span></button>
       <form v-else-if="schedOk" class="ehs-sched" data-test="eh-sched" @submit.prevent="doSchedule">
@@ -45,6 +48,7 @@ import { auth } from '@/firebaseConfig';
 import { useEightHour } from '@/composables/useEightHour';
 import { paceOf, pendingCelebration } from '@/utils/pressure';
 import { localYMD } from '@/utils/localDate';
+import { recapText, breaksOn } from '@/utils/gamePlan';
 import { pillState, SHUT_ROUTES, PILL_ROUTES, SEEN_KEY } from '@/utils/eightHourChrome';
 import { speak } from '@/composables/useSpeech';
 import { hoursLabel, WARN_MINUTES, BLOCK_HOUR_OPTIONS } from '@/utils/eightHour';
@@ -102,6 +106,13 @@ watch(() => shut.value && eh.lock.value && `${eh.lock.value.dayKey}|${lockIn.val
   scheduleLocal(`planwin:${eh.lock.value.dayKey}`, { title: 'Plan tomorrow', body: 'Your planning window is open until midnight.', at: d, route: '/home', type: 'planwin' }).catch(() => {});
 }, { immediate: true });
 // ── evening mode: schedule the next lock-in from the hard stop ──
+// Focus sessions (1 or 2, game plan): with 2, session 2 starts from here once session 1 has ended (server decides: session.canStart).
+const nextOk = computed(() => !!(eh.session.value && eh.session.value.canStart && !eh.st.data?.offline));
+const doNextSession = async () => { sch.err = ''; try { await eh.startNextSession(); } catch (e) { sch.err = e.message || 'Could not start the session'; } };
+// Day recap line: sessions done of chosen, breaks taken today (from the local break log; Home keeps it in sync with the account).
+const recap = computed(() => { const s = eh.session.value; if (!shut.value || !s || nextOk.value) return '';
+  let log = []; try { log = JSON.parse(localStorage.getItem('cn.gp.breakLog') || '[]'); } catch (e) { /* none */ }
+  const b = breaksOn(log, eh.lock.value?.dayKey || localYMD()); return recapText({ points: shut.value.earned, sessionsDone: s.done, sessions: s.of, breaks: b.count, breakMin: b.min }); });
 const schedOk = computed(() => !!(lockIn.value.enabled && eh.plan.value && !eh.st.data?.offline));
 const sch = reactive({ open: false, time: '18:00', hours: 3, err: '' });
 const openSched = () => { sch.open = true; sch.err = ''; };
@@ -164,6 +175,7 @@ watch(() => eh.lock.value && eh.running.value && `${eh.lock.value.dayKey}|${eh.l
 .ehs-card { max-width: 360px; text-align: center; color: #e6e9ef; }
 .ehs-icon { font-size: 40px; } .ehs-card h2 { font-size: 22px; font-weight: 800; margin: 8px 0; } .ehs-card p { opacity: .85; margin: 6px 0; }
 .ehs-res { font-weight: 700; } .ehs-res.ok { color: #3cb46e; } .ehs-res.miss { color: #e05a5a; }
+.ehs-recap { font-size: 13px; opacity: .8; margin-top: -4px; }
 .ehs-row { margin-top: 14px; background: none; border: 0; color: #9fb7e0; font: 600 14px/1.2 system-ui, -apple-system, sans-serif; padding: 10px 6px; min-height: 44px; cursor: pointer; }
 .ehs-sched { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px; margin-top: 14px; }
 .ehs-sched input, .ehs-sched select { height: 40px; border-radius: 10px; border: 1px solid rgba(159,183,224,.35); background: rgba(255,255,255,.06); color: #e6e9ef; padding: 0 10px; font: 600 15px system-ui, -apple-system, sans-serif; color-scheme: dark; }

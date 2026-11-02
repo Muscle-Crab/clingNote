@@ -7,7 +7,7 @@ import { ref } from 'vue';
 // 7 at close the user picks which leftovers go to tomorrow (nothing rolls over by itself, no penalty)
 // 8 shift-relative: everything anchors to the user's day start (an evening shift may close after midnight)
 
-export const GP_DEFAULTS = { dayStart: '09:00', focusMin: 50, sessions: 2, breakMin: 10, closeHours: 8, reviewDow: 0, reviewTime: '18:00', minGoal: 50, friend: null, friendUnlock: false };
+export const GP_DEFAULTS = { dayStart: '09:00', focusMin: 50, sessions: 2, breakMin: 10, breakEvery: 50, closeHours: 8, reviewDow: 0, reviewTime: '18:00', minGoal: 50, friend: null, friendUnlock: false };
 const HHMM = /^([01]\d|2[0-3]):([0-5]\d)$/;
 export const validHHMM = (s) => HHMM.test(String(s || ''));
 const toMin = (s) => Number(s.slice(0, 2)) * 60 + Number(s.slice(3));
@@ -22,6 +22,8 @@ export const normPlan = (gp = {}, wakeTime = '') => {
   out.dayStart = validHHMM(g.dayStart) ? g.dayStart : (validHHMM(wakeTime) ? wakeTime : GP_DEFAULTS.dayStart);
   out.reviewDow = Number.isInteger(g.reviewDow) && g.reviewDow >= 0 && g.reviewDow <= 6 ? g.reviewDow : GP_DEFAULTS.reviewDow;
   out.reviewTime = validHHMM(g.reviewTime) ? g.reviewTime : GP_DEFAULTS.reviewTime;
+  out.sessions = Number(g.sessions) === 1 ? 1 : 2; // user picks 1 or 2 (morning, + afternoon); no midday/third slot
+  out.breakEvery = Number(g.breakEvery) >= 25 ? Math.min(200, round5(Number(g.breakEvery))) : GP_DEFAULTS.breakEvery;
   out.minGoal = Number(g.minGoal) >= 10 ? Math.min(500, round5(Number(g.minGoal))) : GP_DEFAULTS.minGoal;
   out.friendUnlock = g.friendUnlock === true; // optional, default OFF
   out.friend = g.friend && g.friend.name ? { name: String(g.friend.name).slice(0, 40) } : null;
@@ -68,28 +70,53 @@ export const dayWindow = (gp, nowMs = Date.now()) => {
 
 // ---- 2 + 3. focus block: focus 50 · (10 min slot) · focus 50 from the day start. Breaks are NOT automatic: ----
 // finishing a focus session earns gp.breakMin minutes into a banked balance; the user starts a break when they choose.
+// Two slots at most: focus 1 in the morning (day start), focus 2 in the afternoon (half-way to the close). sessions = 1 -> morning only.
 export const segments = (gp, startMs) => {
-  const out = []; let at = startMs;
-  for (let i = 1; i <= gp.sessions; i++) { out.push({ kind: 'focus', n: i, startMs: at, endMs: at + gp.focusMin * MIN }); at += (gp.focusMin + gp.breakMin) * MIN; }
-  return out;
+  const span = (gp.closeHours || 8) * HOUR; const n = gp.sessions === 1 ? 1 : 2;
+  return [{ kind: 'focus', n: 1, startMs, endMs: startMs + gp.focusMin * MIN }, { kind: 'focus', n: 2, startMs: startMs + span / 2, endMs: startMs + span / 2 + gp.focusMin * MIN }].slice(0, n);
 };
+// ---- points breaks (optional, banked, never auto-start, never lock, never cost points) ----
+// Tiers by the day's points: every `breakEvery` (default 50) pts = +10 min, one cap of 30 min. The tier is a running TOTAL, not
+// a new grant per crossing: at 100 pts you have earned 20 min from points in all (10 at 50 + 10 more at 100), never 10 + 20.
+export const BREAK_TIERS = Object.freeze({ every: 50, minPerTier: 10, capMin: 30 });
+export const pointsBreakMin = (points, every = BREAK_TIERS.every, t = BREAK_TIERS) => Math.min(t.capMin, Math.floor(Math.max(0, Number(points) || 0) / (every || t.every)) * t.minPerTier);
+export const pointsTier = (points, every = BREAK_TIERS.every, t = BREAK_TIERS) => pointsBreakMin(points, every, t) / t.minPerTier;
+// Home line (compact, the row already shows the points): "28 pts to 20m break" (72 pts, tier 2 next) or "30m break max" at the cap.
+export const nextTierText = (points, every = BREAK_TIERS.every, t = BREAK_TIERS) => {
+  const p = Math.max(0, Math.round(Number(points) || 0)); const cur = pointsBreakMin(p, every, t);
+  if (cur >= t.capMin) return `${t.capMin}m break max`;
+  const next = (Math.floor(p / every) + 1) * every; return `${next - p} pts to ${cur + t.minPerTier}m break`;
+};
+// Alert once per tier crossed: returns the highest new tier (> alerted) or 0.
+export const tierToAlert = (points, alerted = 0, every = BREAK_TIERS.every, t = BREAK_TIERS) => { const n = pointsTier(points, every, t); return n > (Number(alerted) || 0) ? n : 0; };
+export const tierAlertText = (n, every = BREAK_TIERS.every, t = BREAK_TIERS) => ({ title: `You hit ${n * every} points`, body: `Break time if you want it: ${Math.min(t.capMin, n * t.minPerTier)} min banked. Take it from the game plan line on Home. It never costs points.` });
 // Per-day break state users/{uid}.gpBreak = { day, used (min), startMs, endMs, prior: { locked, until, label } | null, relocked }.
 export const normBreak = (b, dayKey) => (b && b.day === dayKey ? { day: dayKey, used: Math.max(0, Number(b.used) || 0), startMs: Number(b.startMs) || 0, endMs: Number(b.endMs) || 0, prior: b.prior || null, relocked: b.relocked === true } : { day: dayKey, used: 0, startMs: 0, endMs: 0, prior: null, relocked: false });
 export const breakActive = (b, nowMs) => !!(b && b.startMs && nowMs >= b.startMs && nowMs < b.endMs);
 // Banked balance: earned (breakMin per finished focus session) minus used; never more than the time left before the hard close.
-export const breakBank = (gp, b, nowMs = Date.now()) => {
+// earned = session minutes (breakMin per finished focus session) + the points tier total; balance = earned - used, capped at
+// BREAK_TIERS.capMin per break and by the time left before the hard close.
+export const breakBank = (gp, b, nowMs = Date.now(), points = 0) => {
   const w = dayWindow(gp, nowMs); const done = nowMs < w.startMs ? 0 : segments(gp, w.startMs).filter((s) => s.endMs <= nowMs).length;
-  const earned = done * gp.breakMin; const used = b && b.day === w.dayKey ? Number(b.used) || 0 : 0;
+  const earned = done * gp.breakMin + pointsBreakMin(points, gp.breakEvery); const used = b && b.day === w.dayKey ? Number(b.used) || 0 : 0;
   const toClose = Math.max(0, Math.floor((w.closeMs - nowMs) / MIN));
   return { earned, used, balance: breakActive(b, nowMs) ? 0 : Math.max(0, Math.min(earned - used, toClose)) };
 };
-// User taps "Take break": uses up to breakMin of the balance (never past the hard close). prior = shield state to restore after.
-export const takeBreak = (gp, b, nowMs = Date.now(), prior = null) => {
-  const w = dayWindow(gp, nowMs); const cur = normBreak(b, w.dayKey); const bank = breakBank(gp, cur, nowMs);
-  const min = Math.min(gp.breakMin, bank.balance); if (min <= 0 || nowMs >= w.closeMs) return null;
+// User taps "Take break": uses the whole balance, at most one 30-min cap (never past the hard close). prior = shield state to restore after.
+export const takeBreak = (gp, b, nowMs = Date.now(), prior = null, points = 0) => {
+  const w = dayWindow(gp, nowMs); const cur = normBreak(b, w.dayKey); const bank = breakBank(gp, cur, nowMs, points);
+  const min = Math.min(BREAK_TIERS.capMin, bank.balance); if (min <= 0 || nowMs >= w.closeMs) return null;
   const endMs = Math.min(nowMs + min * MIN, w.closeMs);
-  return { ...cur, used: cur.used + min, startMs: nowMs, endMs, prior: prior || null, relocked: false };
+  return { ...cur, used: cur.used + min, startMs: nowMs, endMs, prior: prior || null, relocked: false, last: { at: nowMs, min, points: Math.round(Number(points) || 0) } };
 };
+// Break history (users/{uid}.gpBreakLog, newest last, 60 kept): { at, min, points }.
+export const addBreakLog = (log, entry, keep = 60) => [...(Array.isArray(log) ? log : []), entry].filter((e) => e && e.at > 0 && e.min > 0).slice(-keep);
+export const fmtBreakLog = (log, locale) => (Array.isArray(log) ? log : []).slice().reverse().map((e) => { const d = new Date(e.at);
+  return { key: String(e.at), date: d.toLocaleDateString(locale, { month: 'short', day: 'numeric' }), time: d.toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' }), min: e.min, points: e.points || 0 }; });
+// Day recap (shutdown screen line + the day-end notification). breaksToday from the log for dayKey.
+export const recapText = ({ points = 0, sessionsDone = 0, sessions = 2, breaks = 0, breakMin = 0 } = {}) =>
+  `${points} pts · ${Math.min(sessionsDone, sessions)} of ${sessions} session${sessions === 1 ? '' : 's'} · ${breaks} break${breaks === 1 ? '' : 's'} (${breakMin} min)`;
+export const breaksOn = (log, dayKey) => { const l = (Array.isArray(log) ? log : []).filter((e) => e && ymd(e.at) === dayKey); return { count: l.length, min: l.reduce((a, e) => a + (Number(e.min) || 0), 0) }; };
 // After a break: restore exactly the shield that was up before it (if that lock is still meant to run).
 export const relockPlan = (b, nowMs = Date.now()) => {
   if (!b || !b.endMs || nowMs < b.endMs || b.relocked) return null;
@@ -103,7 +130,7 @@ export const phaseAt = (gp, nowMs = Date.now(), brk = null) => {
   if (nowMs >= w.closeMs) return { phase: 'closed', n: 0, endsMs: 0, leftMin: 0, ...w };
   if (breakActive(brk, nowMs)) return { phase: 'break', n: 0, endsMs: brk.endMs, leftMin: Math.ceil((brk.endMs - nowMs) / MIN), left: fmtLeft(brk.endMs - nowMs), ...w };
   const s = segments(gp, w.startMs).find((x) => nowMs >= x.startMs && nowMs < x.endMs);
-  if (s) return { phase: s.kind, n: s.n, endsMs: s.endMs, leftMin: Math.ceil((s.endMs - nowMs) / MIN), ...w };
+  if (s) return { phase: s.kind, n: s.n, of: gp.sessions === 1 ? 1 : 2, endsMs: s.endMs, leftMin: Math.ceil((s.endMs - nowMs) / MIN), ...w };
   return { phase: 'work', n: 0, endsMs: w.closeMs, leftMin: Math.ceil((w.closeMs - nowMs) / MIN), ...w };
 };
 // Notification quiet: a local notification due inside a focus session is held until that session ends (then the break).
@@ -151,15 +178,6 @@ export const dailyGoal = ({ history = [], load = 0, min = GP_DEFAULTS.minGoal } 
 };
 // Day log (users/{uid}.gpLog = { 'YYYY-MM-DD': { earned, goal } }) -> trailing completed points (oldest first), excluding today.
 export const historyFrom = (log = {}, todayKey = '') => Object.keys(log || {}).filter((k) => k < todayKey).sort().slice(-HISTORY_DAYS).map((k) => Number(log[k] && log[k].earned) || 0);
-// Midday pacing checkpoint (halfway to close).
-export const checkpointAt = (w) => w.startMs + (w.closeMs - w.startMs) / 2;
-export const pacingNote = ({ earned = 0, goal = 0 }) => {
-  const half = round5(goal / 2);
-  if (earned >= goal) return { title: `Midday: goal already hit (${earned}/${goal})`, body: 'Anything else today is a bonus. Close is still close.', ahead: true };
-  if (earned >= half) return { title: `Midday: on pace, ${earned}/${goal} pts`, body: `${goal - earned} pts to go before close.`, ahead: true };
-  return { title: `Midday: ${earned}/${goal} pts`, body: `${half - earned} pts behind pace. Pick one medium task (20) next.`, ahead: false };
-};
-
 // ---- weekly review ----
 export const weekSummary = (log = {}, gp, nowMs = Date.now()) => {
   const end = lastReviewAt(gp, nowMs); const days = [];
@@ -201,7 +219,7 @@ export const nextDayName = (dayKey) => { const [y, m, d] = dayKey.split('-').map
 export const rowText = (ph, { earned = 0, goal = 0, bank = 0 } = {}) => {
   const pts = `${earned}/${goal} pts` + (bank > 0 && ph.phase !== 'closed' && ph.phase !== 'break' ? ` · ${bank}m break ready` : '');
   if (ph.phase === 'before') return `Day starts in ${ph.leftMin >= 60 ? `${Math.floor(ph.leftMin / 60)}h ${ph.leftMin % 60}m` : `${ph.leftMin}m`} · ${pts}`;
-  if (ph.phase === 'focus') return `Focus ${ph.n}/2 · ${ph.leftMin}m left · notifications held · ${pts}`;
+  if (ph.phase === 'focus') return `Focus ${ph.n}/${ph.of || 2} · ${ph.leftMin}m left · notifications held · ${pts}`;
   if (ph.phase === 'break') return `Break · ${ph.left || `${ph.leftMin}m`} left · apps open · ${pts}`;
   if (ph.phase === 'work') return `Working · closes in ${Math.floor(ph.leftMin / 60)}h ${ph.leftMin % 60}m · ${pts}`;
   return `Closed · ${pts} · pick tomorrow's tasks`;

@@ -10,6 +10,9 @@
       <p v-if="gate" class="gp-line" data-test="gp-gate">🔒 Social apps stay locked until your morning checklist is done.</p>
       <p v-if="penalty" class="gp-line gp-warn" data-test="gp-penalty">−{{ penalty }} pts today: Screen Time access was turned off.</p>
       <p v-if="breakBank > 0 && !breakOn && phase !== 'closed'" class="gp-line" data-test="gp-break-line">Earned break, yours to take when you want. Opens your apps, never costs points. <button type="button" class="gp-chip" data-test="gp-take-break" @click="$emit('take-break')">Take break ({{ Math.min(breakBank, breakMin) }}m)</button></p>
+      <p v-if="breakOn" class="gp-line" data-test="gp-break-on">Break running: all apps open, they lock again on their own. <button type="button" class="gp-chip" data-test="gp-end-break" @click="$emit('end-break')">End break now</button></p>
+      <button v-if="history.length" type="button" class="gp-line gp-link" data-test="gp-history-open" :aria-expanded="histOpen ? 'true' : 'false'" @click="histOpen = !histOpen">Break history ({{ history.length }}) {{ histOpen ? '‹' : '›' }}</button>
+      <template v-if="histOpen"><p v-for="h in history" :key="h.key" class="gp-line gp-hist" data-test="gp-history-item">{{ h.date }} {{ h.time }} · {{ h.min }} min · at {{ h.points }} pts</p></template>
       <p v-if="screenReady > 0" class="gp-line" data-test="gp-screen-line">Goal hit: {{ screenReady }}m screen time earned. <button type="button" class="gp-chip" data-test="gp-claim-screen" @click="$emit('claim-screen')">Start screen time ({{ screenReady }}m)</button></p>
       <p v-if="afterClose" class="gp-line" data-test="gp-after">+{{ afterClose }} pts finished after close are not counted.</p>
 
@@ -48,10 +51,10 @@ const props = defineProps({
   leftovers: { type: Array, default: () => [] }, tomorrow: { type: String, default: 'tomorrow' }, locked: { type: Boolean, default: false },
   gate: { type: Boolean, default: false }, friend: { type: String, default: '' }, friendOn: { type: Boolean, default: false }, unlock: { type: Object, default: () => ({ status: '' }) },
   penalty: { type: Number, default: 0 }, afterClose: { type: Number, default: 0 }, minutes: { type: Array, default: () => [10, 20, 30] },
-  breakBank: { type: Number, default: 0 }, breakMin: { type: Number, default: 10 }, breakOn: { type: Boolean, default: false }, screenReady: { type: Number, default: 0 }, ready: { type: String, default: '' },
+  breakBank: { type: Number, default: 0 }, breakMin: { type: Number, default: 10 }, breakOn: { type: Boolean, default: false }, screenReady: { type: Number, default: 0 }, ready: { type: String, default: '' }, history: { type: Array, default: () => [] },
 });
-defineEmits(['carry', 'review', 'ask', 'share', 'take-break', 'claim-screen']);
-const open = ref(false); const picked = ref([]); const accepted = ref([]);
+defineEmits(['carry', 'review', 'ask', 'share', 'take-break', 'end-break', 'claim-screen']);
+const open = ref(false); const picked = ref([]); const accepted = ref([]); const histOpen = ref(false);
 const left = computed(() => props.leftovers);
 const attn = computed(() => !!props.review || (props.phase === 'closed' && props.leftovers.length > 0) || (props.friendOn && props.unlock.status === 'approved'));
 </script>
@@ -59,6 +62,7 @@ const attn = computed(() => !!props.review || (props.phase === 'closed' && props
 <style scoped>
 .gp { margin: 0 0 4px; opacity: .6; } .gp:focus-within, .gp:hover { opacity: .85; }
 .gp-row { width: 100%; display: flex; align-items: center; gap: 6px; min-height: 22px; padding: 0 2px; background: none; border: 0; color: var(--c-text-3, #7d7c78); font: inherit; font-size: .7rem; cursor: pointer; text-align: left; }
+.gp-link { display: block; width: 100%; text-align: left; background: none; border: 0; padding: 0; font: inherit; color: inherit; cursor: pointer; } .gp-hist { opacity: .8; }
 .gp-title { flex: 1; min-width: 0; display: flex; white-space: nowrap; } .gp-main { min-width: 0; overflow: hidden; text-overflow: ellipsis; } .gp-ready { flex-shrink: 0; } /* earned break balance never truncates */
 .gp-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--c-accent-text, #5B9BFF); }
 .gp-chev { font-size: .7rem; opacity: .7; }

@@ -59,7 +59,7 @@ const wakeInstant = (dayKey, wake, tz) => {
 // lock.pending = later blocks [{ dayKey, index, startMs, endMs, hours }] fixed BEFORE they start (never shortened or removed).
 // Finished blocks are archived in doc.sessions keyed by sessionKey(dayKey, index).
 const BLOCK_HOURS = Object.freeze({ min: 1, max: 12, step: 0.5 });
-const MAX_BLOCKS_PER_DAY = 3;
+const MAX_BLOCKS_PER_DAY = 2; // morning + afternoon; no midday / third slot
 const SCHEDULE_LEAD_MS = 5 * 60000;           // a block must be set at least 5 minutes before it starts
 const SCHEDULE_HORIZON_MS = 18 * 3600000;     // and start within the next 18 hours
 const clampBlockHours = (h) => { const n = Number(h); if (!Number.isFinite(n)) return null; return Math.min(BLOCK_HOURS.max, Math.max(BLOCK_HOURS.min, Math.round(n / BLOCK_HOURS.step) * BLOCK_HOURS.step)); };
@@ -96,6 +96,29 @@ const planBlocks = ({ requests, tz, nowMs, existing = [], notBefore = 0 }) => {
     fixed.push(b); out.push(b);
   }
   return { ok: true, blocks: out };
+};
+
+// ── focus sessions (game plan): 1 or 2 per day, morning (block 0) + afternoon (block 1, started by the user from the shutdown) ──
+// The afternoon session can start only: sessions === 2, today's block 0 has ended, no later block exists/is pending, and at least
+// SESSION_MIN_LEFT_MS before the hard close. After block 1 (or the close) nothing more can start.
+const SESSION_MIN_LEFT_MS = 30 * 60000;
+const sessionCloseMs = (lock, gamePlan) => {
+  if (!lock || !Number.isFinite(lock.startMs)) return 0;
+  const g = gamePlan || {}; const w = parseWake(g.dayStart); const tz = validTz(lock.tz) ? lock.tz : 'UTC';
+  const closeH = Number(g.closeHours) > 0 ? Number(g.closeHours) : 8;
+  if (w && lock.dayKey) { const st = wakeInstant(lock.dayKey, w, tz); if (Number.isFinite(st)) return st + closeH * 3600000; }
+  return lock.startMs + 12 * 3600000;
+};
+const nextSessionState = ({ lock, sessions = 2, gamePlan = null, nowMs }) => {
+  const of = Number(sessions) === 1 ? 1 : 2;
+  if (!lock || lock.placeholder || !lock.dayKey) return { ok: false, reason: 'none', of, done: 0 };
+  const idx = blockIndex(lock); const done = nowMs >= lock.endMs ? idx + 1 : idx;
+  if (nowMs < lock.endMs) return { ok: false, reason: 'running', of, done };
+  if (of < 2 || idx >= 1) return { ok: false, reason: 'done', of, done };
+  if (pendingOf(lock).length) return { ok: false, reason: 'scheduled', of, done };
+  const closeMs = sessionCloseMs(lock, gamePlan);
+  if (!(closeMs - nowMs >= SESSION_MIN_LEFT_MS)) return { ok: false, reason: 'closed', of, done, closeMs };
+  return { ok: true, of, done, closeMs };
 };
 
 // ── the 8-hour window state machine ──
@@ -273,5 +296,6 @@ module.exports = {
   countdownParts, fmtCountdown, fmtClock, fmtWakeLabel,
   complexityFromMinutes, complexityFromText, pointsFor, estimateTask, levelRatio, dailyTarget,
   lockedChangeAllowed, nextDayKey, shutUntilMs, isShut, rulesShutUntilMs,
+  SESSION_MIN_LEFT_MS, sessionCloseMs, nextSessionState,
   BLOCK_HOURS, MAX_BLOCKS_PER_DAY, SCHEDULE_LEAD_MS, SCHEDULE_HORIZON_MS, clampBlockHours, sessionKey, blockIndex, pendingOf, nextPending, nextAt, planBlocks, countableIndexes, progressOf, defaultStats, settleDay, rewardsForDay, penaltyForMiss, badgeFor, MAX_SHIELDS, SHIELD_MIN_RATIO, failureNotice, rewardFor,
 };

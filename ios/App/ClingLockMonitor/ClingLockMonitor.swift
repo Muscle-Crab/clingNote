@@ -40,6 +40,7 @@ class ClingLockMonitor: DeviceActivityMonitor {
         UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: WakeLock.startedIdentifier, content: c, trigger: nil))
     }
     private func applyLockShield() {
+        if BreakState.isLive() { return } // a scheduled/wake block starting during a break shields at the break end (intervalDidEnd .clingBreak)
         if LockShared.defaults?.data(forKey: LockShared.selectionTokensKey) != nil { LockIn.shield(); return } // minus task-allowed apps
         guard let data = LockShared.defaults?.data(forKey: LockShared.selectionKey),
               let s = try? PropertyListDecoder().decode(FamilyActivitySelection.self, from: data) else { return }
@@ -49,6 +50,10 @@ class ClingLockMonitor: DeviceActivityMonitor {
     }
     override func intervalDidEnd(for activity: DeviceActivityName) {
         super.intervalDidEnd(for: activity)
+        if activity == .clingBreak { // earned break over: re-lock every shield (app may be closed). "Break's over" was scheduled at start.
+            if !LockEndAlertGate.isRealEnd(untilMs: BreakState.until(), nowMs: Date().timeIntervalSince1970 * 1000) { return } // restart artifact / ended early
+            BreakState.end(early: false); return
+        }
         if activity == .clingTask { // per-task app unlock window ended (works when the app was killed)
             let until = TaskAllow.active()?.until ?? 0
             if !LockEndAlertGate.isRealEnd(untilMs: until, nowMs: Date().timeIntervalSince1970 * 1000) { return } // restart / already ended by the app

@@ -14,6 +14,10 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
             try AVAudioSession.sharedInstance().setActive(true)
         } catch { NSLog("ClingNote audio session setup failed: \(error)") }
         InstallAttribution.start()
+        #if CLING_APP_LOCK
+        // Background "Take break" notification action: the scene (and webview) may not launch, so the delegate is native.
+        if #available(iOS 16.0, *) { ClingBreakNotify.install() }
+        #endif
         return true
     }
 

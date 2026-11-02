@@ -143,11 +143,13 @@
                 <label class="pf-mini">Day starts <input type="time" class="pf-mini" v-model="gpForm.dayStart" data-test="gp-daystart" aria-label="Day starts" /></label>
                 <select class="pf-mini" v-model.number="gpForm.reviewDow" data-test="gp-reviewdow" aria-label="Weekly review day"><option v-for="(d, i) in GP_WEEK" :key="d" :value="i">Review {{ d }}</option></select>
                 <input type="time" class="pf-mini" v-model="gpForm.reviewTime" data-test="gp-reviewtime" aria-label="Weekly review time" />
+                <select class="pf-mini" v-model.number="gpForm.sessions" data-test="gp-sessions" aria-label="Focus sessions per day"><option :value="1">1 session</option><option :value="2">2 sessions</option></select>
+                <label class="pf-mini">Break every <input type="number" min="25" max="200" step="5" class="pf-mini pf-num" v-model.number="gpForm.breakEvery" data-test="gp-breakevery" aria-label="Points per break alert" /> pts</label>
                 <label class="pf-mini">Min goal <input type="number" min="10" max="500" step="5" class="pf-mini pf-num" v-model.number="gpForm.minGoal" data-test="gp-mingoal" aria-label="Minimum daily goal" /></label>
                 <label class="pf-mini pf-mini--check"><input type="checkbox" :checked="gpPlan.friendUnlock" data-test="gp-friend-toggle" @change="saveFriendUnlock($event.target.checked)" /> Friend approval to unlock</label>
                 <input v-if="gpPlan.friendUnlock" type="text" maxlength="40" class="pf-mini" v-model="gpForm.friend" placeholder="Unlock friend's name" data-test="gp-friend" aria-label="Friend who approves early unlocks" />
                 <button type="button" class="pf-mini" data-test="gp-save" @click="saveGamePlan">Save</button>
-                <small class="pf-dl-sub" data-test="gp-msg" role="status">{{ gpMsg || '2 × 50 min focus + 10 min breaks from the day start; the day closes 8 h after it. Schedule changes wait for the weekly review.' }}</small>
+                <small class="pf-dl-sub" data-test="gp-msg" role="status">{{ gpMsg || `Morning focus at the day start${gpForm.sessions === 1 ? '' : ', afternoon focus 4 h later'}; the day closes 8 h after the start. Every ${gpForm.breakEvery || 50} pts banks a break (10, 20, 30 min max). Sessions and break alerts apply now; schedule changes wait for the weekly review.` }}</small>
               </span></div>
           </section>
 
@@ -287,13 +289,14 @@ loadTimeBlocks();
 const bossMode = ref('simple'); const emergencyOn = ref(true);
 // Coach game plan settings (fixed week): schedule edits are queued and applied at the weekly review; the optional friend-approval toggle and friend's name apply now.
 const GP_WEEK = GP.WEEK; const gpOpen = ref(false); const gpMsg = ref(''); const gpPlan = ref(GP.normPlan({})); const gpHas = ref(false);
-const gpForm = ref({ dayStart: '09:00', reviewDow: 0, reviewTime: '18:00', minGoal: 50, friend: '' });
-const gpView = () => { const p = { ...gpPlan.value, ...(gpPlan.value.pending || {}) }; gpForm.value = { dayStart: p.dayStart, reviewDow: p.reviewDow, reviewTime: p.reviewTime, minGoal: p.minGoal, friend: (gpPlan.value.friend && gpPlan.value.friend.name) || '' }; };
-const gpSummary = computed(() => `${gpPlan.value.dayStart}–${GP.addHours(gpPlan.value.dayStart, 8)} · review ${GP.WEEK[gpPlan.value.reviewDow]} ${gpPlan.value.reviewTime}${gpPlan.value.pending ? ' · change queued' : ''}`);
+const gpForm = ref({ dayStart: '09:00', sessions: 2, breakEvery: 50, reviewDow: 0, reviewTime: '18:00', minGoal: 50, friend: '' });
+const gpView = () => { const p = { ...gpPlan.value, ...(gpPlan.value.pending || {}) }; gpForm.value = { dayStart: p.dayStart, sessions: gpPlan.value.sessions === 1 ? 1 : 2, breakEvery: gpPlan.value.breakEvery || 50, reviewDow: p.reviewDow, reviewTime: p.reviewTime, minGoal: p.minGoal, friend: (gpPlan.value.friend && gpPlan.value.friend.name) || '' }; };
+const gpSummary = computed(() => `${gpPlan.value.dayStart}–${GP.addHours(gpPlan.value.dayStart, 8)} · ${gpPlan.value.sessions === 1 ? '1 session' : '2 sessions'} · break every ${gpPlan.value.breakEvery || 50} pts · review ${GP.WEEK[gpPlan.value.reviewDow]} ${gpPlan.value.reviewTime}${gpPlan.value.pending ? ' · change queued' : ''}`);
 const saveGamePlan = async () => { const u = auth.currentUser; if (!u) return;
   const f = gpForm.value; const friend = String(f.friend || '').trim() ? { name: String(f.friend).trim().slice(0, 40) } : null;
   const patch = {}; for (const k of GP.SCHEDULE_FIELDS) if (f[k] !== gpPlan.value[k]) patch[k] = f[k];
-  let next = { ...gpPlan.value, friend, userSet: true };
+  // Sessions per day (1 or 2) and the points-break step apply right away (not queued to the review): raising 1 -> 2 opens the afternoon session today.
+  let next = { ...gpPlan.value, friend, userSet: true, sessions: Number(f.sessions) === 1 ? 1 : 2, breakEvery: GP.normPlan({ breakEvery: f.breakEvery }).breakEvery };
   if (!gpHas.value) next = GP.normPlan({ ...next, ...patch, lastReview: next.lastReview, userSet: true }); // first setup by the user takes effect now
   else if (Object.keys(patch).length) next = GP.queueEdit(next, patch);
   try { await setDoc(doc(db, 'users', u.uid), { gamePlan: next }, { merge: true }); gpPlan.value = next; gpHas.value = true;

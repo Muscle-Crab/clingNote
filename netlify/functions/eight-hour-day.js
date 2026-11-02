@@ -113,8 +113,12 @@ const view = (doc, now) => {
   return { now, phase: ph.phase, window: ph.phase === 'none' ? null : { startMs: ph.startMs || null, endMs: ph.endMs || null, wakeMs: ph.wakeMs || null, dayKey: ph.dayKey || null, missed: !!ph.missed, nextStartMs: ph.nextStartMs || null, nextEndMs: ph.nextEndMs || null },
     plan: doc.plan ? { wakeTime: doc.plan.wakeTime, tz: doc.plan.tz, taskCount: doc.plan.taskCount } : null,
     lock: ph.phase === 'running' || ph.phase === 'gap' || (doc.lock && (doc.lock.dayKey === ph.dayKey || core.isShut(doc.lock, now))) ? publicLock(doc.lock) : null, // kept while the hard stop runs (until the next wake time)
-    stats: { ...core.defaultStats(), ...(doc.stats || {}) }, reward: core.rewardFor((doc.stats || {}).streak || 0) };
+    stats: { ...core.defaultStats(), ...(doc.stats || {}) }, reward: core.rewardFor((doc.stats || {}).streak || 0),
+    ...(doc._session ? { session: doc._session } : {}) };
 };
+// Focus sessions (1 or 2, users/{uid}.gamePlan.sessions): may the afternoon session start now? Attached to every state view.
+const withSession = (doc, ud, now) => { const g = (ud && ud.gamePlan) || {}; const r = core.nextSessionState({ lock: doc.lock, sessions: g.sessions, gamePlan: g, nowMs: now });
+  return { ...doc, _session: { canStart: r.ok, reason: r.reason || '', of: r.of, done: r.done, closeMs: r.closeMs || 0 } }; };
 
 // Lock one block. index 0 = the day's main block: snapshot every countable task, reset completions, enforce the task range (strict).
 // index > 0 (a later block the same day): lock only the still-open tasks, keep completions, no minimum (0 open tasks = an empty block that
@@ -210,7 +214,24 @@ const actions = {
     let doc = await loadDoc(ctx);
     doc = await settleIfOver(ctx, doc, ctx.now);
     doc = await autoStart(ctx, doc);
-    return view(doc, ctx.now);
+    return view(withSession(doc, await userDoc(ctx), ctx.now), ctx.now);
+  },
+
+  // Afternoon focus session: start block 1 NOW from the shutdown (sessions === 2 only, once, before the hard close).
+  // body.hours: its length (clamped like a block); it never runs past the close. Server clock + server-side checks only.
+  async nextSession(ctx, body = {}) {
+    let doc = await loadDoc(ctx);
+    doc = await settleIfOver(ctx, doc, ctx.now);
+    doc = await autoStart(ctx, doc);
+    const ud = await userDoc(ctx);
+    if (ud.lockInEnabled !== true) throw fail(403, 'Lock-in is off. Turn it on in Settings to use the countdown lock.', { code: 'lock-in-off' });
+    const g = ud.gamePlan || {}; const lock = doc.lock;
+    const r = core.nextSessionState({ lock, sessions: g.sessions, gamePlan: g, nowMs: ctx.now });
+    if (!r.ok) throw fail(409, r.reason === 'done' ? 'All of today\'s focus sessions are done.' : r.reason === 'closed' ? 'Today is closed: no more sessions.' : r.reason === 'running' ? 'Your session is still running.' : 'No session to start.', { code: r.reason });
+    const hours = core.clampBlockHours(body.hours == null ? lock.hours : body.hours) || 1;
+    const startMs = ctx.now; const endMs = Math.min(startMs + hours * 3600000, r.closeMs);
+    const out = await beginBlock(ctx, doc, { hours: Math.round(((endMs - startMs) / 3600000) * 100) / 100, startMs, endMs, dayKey: lock.dayKey, index: 1, pending: [], strict: false, scheduled: false, apiKey: null });
+    return { ...out, session: { canStart: false, reason: 'running', of: 2, done: 1, closeMs: r.closeMs } };
   },
 
   // Set/update wake time + planned task count. Refused while the window runs; the wake time is also frozen once it has passed today (the countdown is about to begin).
