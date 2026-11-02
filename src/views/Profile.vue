@@ -85,6 +85,7 @@
           <section v-if="isOwn" class="pf-card pf-card--flush" data-test="lock-in-setting">
             <label class="pf-row"><span class="pf-ico" aria-hidden="true">🔒</span><span class="pf-row-title">Lock-in<small class="pf-dl-sub">8-hour lock: a timed day that shuts the app at the end. Off by default; you can skip it on any day.</small></span>
               <input type="checkbox" role="switch" class="pf-switch" data-test="lock-in-toggle" :checked="lockIn.enabled" :disabled="!lockIn.loaded" @change="onLockInToggle($event.target.checked)" /></label>
+            <button type="button" class="pf-row pf-row--divided" data-test="locked-apps-row" :disabled="lockedApps.disabled || lockedAppsBusy" :aria-disabled="lockedApps.disabled" @click="onPickLockedApps"><span class="pf-ico" aria-hidden="true">📵</span><span class="pf-row-title">Locked apps<small class="pf-dl-sub" data-test="locked-apps-sub">{{ lockedApps.sub }}</small></span><span v-if="!lockedApps.disabled" class="pf-chev" aria-hidden="true">›</span></button>
             <label v-if="lockIn.enabled" class="pf-row pf-row--divided" data-test="wake-lock-row"><span class="pf-ico" aria-hidden="true">🌅</span><span class="pf-row-title">Lock at wake-up<small class="pf-dl-sub" data-test="wake-lock-sub">{{ wakeLockSub }}</small></span>
               <input type="checkbox" role="switch" class="pf-switch" data-test="wake-lock-toggle" :checked="lockIn.wakeAuto" :disabled="!lockIn.loaded || (!lockIn.wakeAuto && !!wakeLockBlock)" @change="onWakeLockToggle($event.target.checked)" /></label>
             <label v-if="lockIn.enabled" class="pf-row pf-row--divided" data-test="lock-end-alert-row"><span class="pf-ico" aria-hidden="true">📣</span><span class="pf-row-title">Lock-end alert<small class="pf-dl-sub">How hard ClingNote alerts you when a lock ends</small></span>
@@ -200,6 +201,20 @@ const onAutoFocus = (on) => { writeAutoFocus(localStorage, on); autoFocus.value 
 // B44 "Lock at wake-up": the picked apps lock at the wake time for the day length, even with ClingNote closed. Needs Screen Time + apps.
 const lockSt = ref({ authorization: 'unsupported', selectionCount: 0 });
 if (lockAvailable()) clingLock.status().then((r) => { if (r) lockSt.value = r; }).catch(() => {});
+// Settings "Locked apps": same flow as the assistant's pick_apps (HomeView). Disabled during any lock (src/utils/lockedAppsRow.js).
+const lockedApps = computed(() => lockedAppsRow({ native: lockAvailable(), status: lockSt.value }));
+const lockedAppsBusy = ref(false);
+const onPickLockedApps = async () => {
+  if (lockedAppsBusy.value) return; lockedAppsBusy.value = true;
+  try {
+    const st = await clingLock.status().catch(() => null); if (st) lockSt.value = st;
+    if (lockedAppsRow({ native: lockAvailable(), status: lockSt.value }).disabled) return; // a lock started since the last read
+    const a0 = await clingLock.requestAuthorization(); if (a0.status !== 'approved') return;
+    const r = await clingLock.pickApps();
+    if (r && r.saved) { try { localStorage.setItem(LOCK_PREF, '1'); } catch (e) { /* ignore */ } window.dispatchEvent(new Event('cling:applock-changed')); }
+    const s2 = await clingLock.status().catch(() => null); if (s2) lockSt.value = s2;
+  } finally { lockedAppsBusy.value = false; }
+};
 const wakeLockBlock = computed(() => wakeLockNote({ native: lockAvailable(), authorized: lockSt.value.authorization === 'approved', selectionCount: lockSt.value.selectionCount || 0, wakeTime: '00:00' } /* the wake time itself is checked on Home */));
 const wakeLockSub = computed(() => wakeLockBlock.value || 'Your picked apps lock at your wake time for your day length, even when ClingNote is closed. Skip lock-in today still works.');
 const onPlanTime = async (t) => { const u = auth.currentUser; if (!u) return; try { await setPlanOpenTime(u.uid, t); } catch (e) { console.warn('plan time:', e); loadLockIn(true).catch(() => {}); } };
@@ -212,6 +227,8 @@ const lockEndAlert = ref((() => { try { return localStorage.getItem(LOCK_END_KEY
 if (lockAvailable()) clingLock.setLockEndAlert().then((r) => { if (r && r.level) lockEndAlert.value = r.level; }).catch(() => {});
 const onLockEndAlert = (v) => { lockEndAlert.value = v; try { localStorage.setItem(LOCK_END_KEY, v); } catch (e) { /* ignore */ } if (lockAvailable()) clingLock.setLockEndAlert(v).catch(() => {}); };
 import { clingLock, lockAvailable } from '@/native/clingNative';
+import { lockedAppsRow } from '@/utils/lockedAppsRow';
+import { LOCK_PREF } from '@/utils/appLock';
 import PushSettings from '@/components/PushSettings.vue';
 import DeleteAccount from '@/components/DeleteAccount.vue';
 import { syncPublicProfile } from '@/composables/usePublicProfile';
@@ -535,6 +552,7 @@ onMounted(() => { loadDayLengthHours().then((v) => { dayLen.value = v; }).catch(
 .pf-wa-note { margin: 0 0 12px; font-size: 12px; color: var(--c-text-3, #9aa3b5); }
 .pf-switch { width: 22px; height: 22px; margin-left: auto; accent-color: #4aa8ff; flex: none; }
 .pf-row { display: flex; align-items: center; gap: 14px; width: 100%; min-height: 56px; padding: 8px 0; background: none; border: 0; color: var(--c-text); cursor: pointer; text-decoration: none; }
+.pf-row:disabled { cursor: default; opacity: 0.6; }
 .pf-row--divided { border-top: 1px solid var(--c-border); }
 .pf-row--auto { font-size: 16px; font-weight: 600; }
 .pf-row--auto::after { content: "›"; margin-left: auto; color: var(--c-text-3); font-size: 22px; line-height: 1; }

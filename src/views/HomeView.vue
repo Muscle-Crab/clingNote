@@ -3981,6 +3981,8 @@ const gpBreakRelock = async (st) => {
 };
 watch(() => gpBreak.value && gpBreak.value.endMs && !gpBreak.value.relocked && nowTick.value >= gpBreak.value.endMs, (v) => { if (v) syncAppLock(); });
 watch(gpLoaded, (v) => { if (v) syncAppLock(); });
+const onAppLockChanged = () => syncAppLock(); // Settings "Locked apps" saved a new selection
+onMounted(() => window.addEventListener('cling:applock-changed', onAppLockChanged)); onBeforeUnmount(() => window.removeEventListener('cling:applock-changed', onAppLockChanged));
 if (process.env.VUE_APP_FIREBASE_EMULATORS === '1') window.__gpBreakEnd = (ms) => { if (gpBreak.value) gpBreakSave({ ...gpBreak.value, endMs: ms }); }; // local e2e hook only
 const gpEst = (t) => chipValues(t).minutes;
 const gpPenaltyToday = computed(() => (gpPenalty.value && gpPenalty.value.day === gpPhase.value.dayKey ? Number(gpPenalty.value.points) || 0 : 0));

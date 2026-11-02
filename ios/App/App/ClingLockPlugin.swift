@@ -72,15 +72,26 @@ public class ClingLockPlugin: CAPPlugin, CAPBridgedPlugin {
                       "selectionCount": s.applicationTokens.count + s.categoryTokens.count + s.webDomainTokens.count])
     }
 
+    /// Same rule as lockActive() in src/utils/lockedAppsRow.js: shield state says locked and its end (0 = open) is in the future.
+    static func lockIsActive(nowMs: Double = Date().timeIntervalSince1970 * 1000) -> Bool {
+        let st = LockShared.defaults?.dictionary(forKey: LockShared.stateKey) ?? [:]
+        guard (st["locked"] as? Bool) == true else { return false }
+        let until = (st["until"] as? Double) ?? Double((st["until"] as? Int) ?? 0)
+        return until <= 0 || until > nowMs
+    }
+
     @objc func pickApps(_ call: CAPPluginCall) {
         guard #available(iOS 16.0, *) else { call.reject("iOS 16 required"); return }
         DispatchQueue.main.async {
             let model = PickerModel(selection: Self.loadSelection())
             var host: UIViewController?
             let view = PickerView(model: model) { save in
-                if save, let data = try? PropertyListEncoder().encode(model.selection) { LockShared.defaults?.set(data, forKey: LockShared.selectionKey); Self.saveSelectionTokens(model.selection) }
+                // During a lock the list can only grow: a deselect must not unlock anything until the lock ends
+                // (reopening a locked app goes only through the per-task unlock). Mirrors src/utils/lockedAppsRow.js.
+                var s = model.selection
+                if save && Self.lockIsActive() { let old = Self.loadSelection(); s.applicationTokens.formUnion(old.applicationTokens); s.categoryTokens.formUnion(old.categoryTokens); s.webDomainTokens.formUnion(old.webDomainTokens) }
+                if save, let data = try? PropertyListEncoder().encode(s) { LockShared.defaults?.set(data, forKey: LockShared.selectionKey); Self.saveSelectionTokens(s) }
                 host?.dismiss(animated: true)
-                let s = model.selection
                 call.resolve(["saved": save, "apps": s.applicationTokens.count, "categories": s.categoryTokens.count, "sites": s.webDomainTokens.count])
             }
             host = UIHostingController(rootView: view)

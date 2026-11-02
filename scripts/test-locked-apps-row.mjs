@@ -1,0 +1,21 @@
+// Settings "Locked apps" row: lock-mode rule (no unlocking from Settings while a lock or lock-in is active).
+import assert from 'assert'; import fs from 'fs';
+import { lockedAppsRow, lockActive } from '../src/utils/lockedAppsRow.js';
+const now = 1e12; let n = 0; const ok = (c, m) => { assert.ok(c, m); n++; };
+ok(lockedAppsRow({ native: false }).disabled, 'web: disabled');
+let r = lockedAppsRow({ native: true, status: { selectionCount: 3 }, now }); ok(!r.disabled && r.sub === '3 selected', r.sub);
+ok(lockedAppsRow({ native: true, status: { selectionCount: 0 }, now }).sub === 'Pick the apps ClingNote locks', 'empty sub');
+r = lockedAppsRow({ native: true, status: { locked: true, until: now + 60000, selectionCount: 3 }, now }); ok(r.disabled && r.locked && /after your lock ends/.test(r.sub) && /per-task/.test(r.sub), 'timed lock disables');
+ok(lockedAppsRow({ native: true, status: { locked: true, until: 0 }, now }).disabled, 'open-ended lock disables');
+ok(!lockedAppsRow({ native: true, status: { locked: true, until: now - 1 }, now }).disabled, 'expired lock: enabled');
+ok(!lockActive({ locked: false, until: now + 9e6 }, now), 'not locked');
+const pv = fs.readFileSync(new URL('../src/views/Profile.vue', import.meta.url), 'utf8');
+ok(/data-test="locked-apps-row"[^>]*:disabled="lockedApps\.disabled/.test(pv), 'row bound to disabled');
+ok(/onPickLockedApps[\s\S]{0,400}clingLock\.status\(\)[\s\S]{0,300}\.disabled\) return[\s\S]{0,200}requestAuthorization\(\)[\s\S]{0,120}pickApps\(\)/.test(pv), 're-checks lock before opening picker');
+ok(!/pf-card[^"]*"[^>]*locked-apps/.test(pv), 'no new card');
+const sw = fs.readFileSync(new URL('../ios/App/App/ClingLockPlugin.swift', import.meta.url), 'utf8');
+ok(/if save && Self\.lockIsActive\(\) \{[^}]*applicationTokens\.formUnion\(old\.applicationTokens\)[^}]*categoryTokens\.formUnion[^}]*webDomainTokens\.formUnion/.test(sw), 'native merges (add-only) while locked');
+ok(/encode\(s\)/.test(sw), 'native saves merged selection');
+const hv = fs.readFileSync(new URL('../src/views/HomeView.vue', import.meta.url), 'utf8');
+ok(/addEventListener\('cling:applock-changed'/.test(hv), 'home re-syncs after Settings save');
+console.log(`test-locked-apps-row: ${n} passed`);
