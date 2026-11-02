@@ -71,7 +71,7 @@
       <section v-else-if="STEPS[step] === 'applock'" class="ob-sec" data-test="ob-applock">
         <div class="ob-bell">🔒</div>
         <p class="ob-k">Step {{ stepNo('applock') }}</p><h1 class="ob-h">Lock your <span>distractions</span></h1>
-        <p class="ob-p">Pick apps to block while you're locked in. They unlock when your tasks or points goal are done, or when your hours end. Optional, and you can change it later.</p>
+        <p class="ob-p">Pick apps to block while you're locked in. They unlock when your tasks or points goal are done, or when your hours end. Optional, and you can change it later. Only apps on this iPhone are listed: find Instagram under Social and PUBG Mobile under Games, or search for them.</p>
         <p v-if="a.appLock" class="ob-p">{{ a.appLock }}</p>
       </section>
 

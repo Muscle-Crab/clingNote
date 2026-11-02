@@ -7,7 +7,7 @@ export const ALIASES = {
   instagram: ['ig', 'insta', 'gram', 'reels'], facebook: ['fb', 'meta'], snapchat: ['snap', 'sc'], twitter: ['x', 'twitter x', 'x twitter'],
   reddit: ['r', 'reddit app'], netflix: ['nf'], whatsapp: ['whats app', 'wa'], discord: ['dc'], twitch: [], pinterest: ['pin'],
   threads: [], linkedin: ['linked in'], messenger: ['fb messenger'], 'prime video': ['prime', 'amazon prime'], 'disney+': ['disney plus', 'disney'],
-  roblox: [], fortnite: [], spotify: [], safari: [], chrome: ['google chrome'], telegram: ['tg'], bereal: ['be real'], hulu: [], 'hbo max': ['max', 'hbo'],
+  roblox: [], fortnite: [], pubg: ['pubg mobile', 'pubgm', 'pubg m', 'battlegrounds', 'battle grounds', 'pubg battlegrounds'], spotify: [], safari: [], chrome: ['google chrome'], telegram: ['tg'], bereal: ['be real'], hulu: [], 'hbo max': ['max', 'hbo'],
 };
 export const norm = (s) => String(s || '').toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/\bapp\b/g, ' ').replace(/[^a-z0-9+]+/g, ' ').trim();
 const squash = (s) => norm(s).replace(/ /g, '');
@@ -36,7 +36,7 @@ export const resolveApps = (names = [], labels = []) => {
   return out;
 };
 // Pretty display name for a not-yet-picked app (used to prefill the naming row): "yt" -> "YouTube"
-const PRETTY = { youtube: 'YouTube', tiktok: 'TikTok', instagram: 'Instagram', facebook: 'Facebook', snapchat: 'Snapchat', twitter: 'X', reddit: 'Reddit', netflix: 'Netflix', whatsapp: 'WhatsApp', discord: 'Discord', linkedin: 'LinkedIn', bereal: 'BeReal' };
+const PRETTY = { youtube: 'YouTube', tiktok: 'TikTok', instagram: 'Instagram', facebook: 'Facebook', snapchat: 'Snapchat', twitter: 'X', reddit: 'Reddit', netflix: 'Netflix', whatsapp: 'WhatsApp', discord: 'Discord', linkedin: 'LinkedIn', bereal: 'BeReal', pubg: 'PUBG Mobile' };
 export const prettyName = (s) => { const c = canonical(s); if (PRETTY[c]) return PRETTY[c]; const t = String(s || '').trim(); return t.replace(/\b\w/g, (m) => m.toUpperCase()); };
 // minutes (number) or until_unlock -> untilMs (0 = until unlocked). Clamped 1 min .. 24 h.
 export const untilFor = ({ minutes, until_unlock: uu } = {}, now = Date.now()) => {
