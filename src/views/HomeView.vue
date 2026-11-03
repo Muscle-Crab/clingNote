@@ -359,7 +359,7 @@ import { lockIn, loadLockIn, skipLockInToday } from '@/utils/lockIn';
 import { wakeLockPlan, shouldReconcileWake } from '@/utils/wakeLock';
 import { homeDay } from '@/utils/homeDay';
 import DayStartPrompt from '@/components/eighthour/DayStartPrompt.vue';
-import { debtShield } from '@/utils/appLockDebt';
+import { debtShield, debtHoldPlan } from '@/utils/appLockDebt';
 import { sessionGoal } from '@/utils/sessionGoal';
 import { useEightHour, clearDebtLocal, syncAfterAuth, setDayLengthHours, loadDayLengthHours, promptSeenFor, markPromptSeen } from '@/composables/useEightHour';
 import { countableIndexes, taskRange, hoursLabel } from '@/utils/eightHour';
@@ -4094,26 +4094,24 @@ const strictPlan = (st) => {
       if (r.unlockEndMs > Date.now()) scheduleLocal(`strict:relock:${sd.day}`, { title: 'Earned time is up', body: 'Your screen time window ended, so your apps are locked again.', at: new Date(r.unlockEndMs), route: '/home', type: 'strict' }); } }
   return r;
 };
-// Background half of the session shutdown rule: while a session is short of its target, iOS holds a scheduled lock for
-// [session end, end + 2 h] (DeviceActivity, works with the app closed); once the session is met, that schedule is cancelled.
-const gpGraceKeys = new Set();
-const gpGraceSchedule = async () => {
-  if (!gpOn.value || !gpProgKnown.value || !lockEnabled()) return;
-  for (const s of SP.sessionsOf(gp.value, todayTasksForTarget.value || [], Date.now(), { estMinutes: gpEst })) {
-    const g = SP.graceSchedule(s, Date.now());
-    if (g.want && !gpGraceKeys.has(g.key)) { gpGraceKeys.add(g.key); const r = await clingLock.scheduleLock(g); if (!r || r.monitor !== 'ok') gpGraceKeys.delete(g.key); }
-    // Met (also after the end, e.g. finished from the widget with the app closed, or on a cold start): drop the 2 h block, running or not.
-    else if (!g.want && s.met && g.untilMs > Date.now()) { gpGraceKeys.delete(g.key); await clingLock.cancelScheduledLock({ key: g.key }); }
-  }
+// Native half of the missed-goal lock, for every user (not just Coach): iOS holds the shield past a short session's end with the app
+// closed or force-quit (DebtHold, DeviceActivity "clingDebt"), and only a later session reaching its goal clears it (debtHoldPlan).
+let holdSig = '';
+const syncDebtHold = async (st, friend, onBreak) => {
+  const p = debtHoldPlan({ debt: eh.appLockDebt.value, known: !!eh.debtKnown.value, live: liveDebtSession(), now: Date.now(), enabled: lockEnabled(), selectionCount: st.selectionCount || 0,
+    unlockedToday: lockUnlockedDay.value === localDateStr(), friend, onBreak });
+  const sig = JSON.stringify(p); if (sig === holdSig) return; holdSig = sig;
+  if (p.action === 'arm') { const r = await clingLock.armDebtHold(p); if (!r || r.monitor !== 'ok') { holdSig = ''; console.warn('[clingLock] armDebtHold', r && r.monitor); } }
+  else if (p.action === 'clear') await clingLock.clearDebtHold();
 };
 // The running session's own goal for the missed-goal lock (same math + tasks as the server's sessionGrace).
 const liveDebtSession = () => { const l = eh.lock.value; if (!eh.running.value || !l || !l.startMs) return null;
   const sessions = Number(gp.value && gp.value.sessions) === 1 ? 1 : 2; const g = sessionGoal(todayTasksForTarget.value || [], { n: Math.min((Number(l.index) || 0) + 1, sessions), sessions, endMs: l.endMs });
-  return { startMs: l.startMs, target: g.target, earned: g.earned }; };
-// Debt paid: drop every background "missed" lock iOS still holds (scheduled by gpGraceSchedule below while a session ran short).
-const gpGraceCancelAll = (sessionKey = '') => { const day = String(sessionKey).split('#')[0].replace(/-/g, '');
-  if (day) for (const n of [1, 2]) gpGraceKeys.add(`grace${day}s${n}`); // keys are deterministic, so this also covers a cold start
-  for (const key of gpGraceKeys) clingLock.cancelScheduledLock({ key }).catch(() => {}); gpGraceKeys.clear(); };
+  return { sessionKey: `${l.dayKey}#${Number(l.index) || 0}`, startMs: l.startMs, endMs: l.endMs, target: g.target, earned: g.earned }; };
+// Debt paid: drop the native hold, plus any legacy Coach-mode "grace{day}s{n}" scheduled lock left by an older build.
+const debtPaidNative = (sessionKey = '') => { const day = String(sessionKey).split('#')[0].replace(/-/g, '');
+  holdSig = ''; clingLock.clearDebtHold().catch(() => {});
+  if (day) for (const n of [1, 2]) clingLock.cancelScheduledLock({ key: `grace${day}s${n}` }).catch(() => {}); };
 const lockEnabled = () => { try { return localStorage.getItem(LOCK_PREF) === '1'; } catch (e) { return false; } };
 let lockOn = null;
 const hardLocked = ref(false); // shield up now: the sergeant menu shows Emergency unlock
@@ -4137,9 +4135,9 @@ const syncAppLock = async () => {
   // at once, before the server round trip; the server clears it on that progress call. No clock time, no streak / points change.
   const debt = debtShield({ debt: eh.appLockDebt.value, now: Date.now(), session: liveDebtSession(), enabled: lockEnabled(), selectionCount: st.selectionCount || 0,
     unlockedToday: lockUnlockedDay.value === localDateStr(), friend: !!(sp && sp.phase === 'friend'), onBreak: !!(sp && sp.phase === 'break') });
-  if (debt.cleared) { clearDebtLocal(debt.sessionKey); gpGraceCancelAll(debt.sessionKey); eh.reportProgress(); }
+  if (debt.cleared) { clearDebtLocal(debt.sessionKey); debtPaidNative(debt.sessionKey); eh.reportProgress(); }
   else if (debt.want) { want = true; endMs = Math.max(debt.untilMs, sp && sp.want ? sp.untilMs : 0); }
-  gpGraceSchedule();
+  await syncDebtHold(st, !!(sp && sp.phase === 'friend'), !!(sp && sp.phase === 'break'));
   const fEnd = sp && sp.phase === 'break' ? 0 : focusShieldEnd({ dayWant: !!want, enabled: lockEnabled(), selectionCount: st.selectionCount || 0, locked: lockedFocus(selectedDayRoutine.value || []) });
   const act = lockAction({ want: !!(want || fEnd), endMs: fEnd || endMs, st });
   hardLocked.value = !!(want || fEnd);

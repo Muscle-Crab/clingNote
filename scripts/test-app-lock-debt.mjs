@@ -90,4 +90,34 @@ const finish = (db, i) => { Object.assign(day(db).tasks[i], { completed: true, c
   ok(/const liveDebtSession[\s\S]{0,400}sessionGoal\(todayTasksForTarget\.value/.test(hv), 'client goal = server sessionGoal math');
   ok(/missed: false, opensAtMs: 0/.test(ue) && /cacheDebt\(d\)/.test(ue) && /appLockDebt,/.test(ue), 'useEightHour caches + exposes the debt');
   ok(ch.includes("'Goal missed'") && ch.includes('Start new session'), 'existing UI text'); }
+
+// ---- native hold plan (all users, app closed / force-quit) ----
+{ const cap = core.DEBT_CAP_MS; const d = { sessionKey: '2026-10-23#0', target: 60, earned: 20, sinceMs: 1000 }; const on = { enabled: true, selectionCount: 2, now: 5000 };
+  const short = { sessionKey: '2026-10-23#1', startMs: 3000, endMs: 5000 + 3 * H, target: 40, earned: 10 };
+  eq(C.holdKey('2026-10-23#0'), 'debt_2026-10-23_0', 'native-safe key');
+  eq(C.debtHoldPlan({ ...on, debt: d }), { action: 'arm', key: 'debt_2026-10-23_0', startMs: 1000, untilMs: 1000 + cap }, 'unpaid miss: hold now (start in the past)');
+  eq(C.debtHoldPlan({ ...on, debt: null, live: short }), { action: 'arm', key: 'debt_2026-10-23_1', startMs: short.endMs, untilMs: short.endMs + cap }, 'short running session: pre-armed for its end (force-quit safe)');
+  eq(C.debtHoldPlan({ ...on, debt: d, live: short }).key, 'debt_2026-10-23_0', 'an unpaid miss keeps holding through a short later session');
+  eq(C.debtHoldPlan({ ...on, debt: d, live: { ...short, earned: 40 } }), { action: 'clear' }, 'later session reached its goal: native hold cleared');
+  eq(C.debtHoldPlan({ ...on, debt: null, live: { ...short, earned: 40 } }), { action: 'clear' }, 'met before the end: pre-armed hold dropped');
+  eq(C.debtHoldPlan({ ...on, debt: null, live: null, known: false }), { action: 'none' }, 'cold start / offline: never drop a hold the server may still confirm');
+  eq(C.debtHoldPlan({ ...on, debt: null, live: null, known: true }), { action: 'clear' }, 'server says no miss: stale pre-armed hold dropped');
+  for (const x of [{ enabled: false }, { selectionCount: 0 }, { unlockedToday: true }]) eq(C.debtHoldPlan({ ...on, ...x, debt: d }).action, 'clear', JSON.stringify(x));
+  for (const x of [{ friend: true }, { onBreak: true }]) eq(C.debtHoldPlan({ ...on, ...x, debt: d }).action, 'none', `${JSON.stringify(x)}: temporary, hold stays armed`);
+  eq(C.debtHoldPlan({ ...on, debt: d, now: 1000 + cap + 1 }).action, 'none', 'past the safety cap: nothing to hold');
+  eq(C.debtHoldPlan({ ...on, debt: null, live: { ...short, endMs: on.now + 30000 } }).action, 'none', 'under a minute left: too late to pre-arm'); }
+
+// ---- native code paths (Capacitor plugin + DeviceActivityMonitor extension) ----
+{ const pl = src('ios/App/App/ClingLockPlugin.swift'); const ex = src('ios/App/ClingLockMonitor/ClingLockMonitor.swift'); const sh = src('ios/App/Shared/LockShared.swift'); const js = src('src/native/clingNative.js'); const hv = src('src/views/HomeView.vue');
+  for (const m of ['armDebtHold', 'clearDebtHold', 'debtHoldStatus']) ok(pl.includes(`CAPPluginMethod(name: "${m}"`) && pl.includes(`@objc func ${m}(`) && js.includes(`${m}:`), `plugin method ${m}`);
+  ok(/enum DebtHold[\s\S]*static let activity = DeviceActivityName\("clingDebt"\)/.test(sh) && /func keepShieldIfHeld/.test(sh), 'shared DebtHold (App Group, both targets)');
+  ok(/DebtHold\.save\(key: key[\s\S]{0,500}startMonitoring\(DebtHold\.activity/.test(pl), 'arm: entry saved before the schedule starts');
+  ok(/func clearDebtHold[\s\S]{0,400}DebtHold\.clear\(\)[\s\S]{0,120}stopMonitoring\(\[DebtHold\.activity\]\)[\s\S]{0,900}clearShield\(\)/.test(pl), 'clear: entry, schedule, shield');
+  ok(/activity == DebtHold\.activity \{ \/\/ missed-goal hold begins[\s\S]{0,900}applyLockShield\(\)/.test(ex), 'extension raises the shield at the hold start (app closed)');
+  const endIdx = ex.indexOf('guard activity == .clingLock else { return }\n        // iOS also calls'); const tail = ex.slice(endIdx);
+  ok(tail.indexOf('DebtHold.keepShieldIfHeld()') > 0 && tail.indexOf('DebtHold.keepShieldIfHeld()') < tail.indexOf('notifyLockEnded()'), 'session lock end keeps the shield while a hold is active');
+  ok((ex.match(/if DebtHold\.keepShieldIfHeld\(\) \{/g) || []).length >= 3, 'scheduled-block and wake-lock ends also keep it');
+  ok(/activity == DebtHold\.activity \{ \/\/ only the 14-day safety cap[\s\S]{0,600}isRealEnd/.test(ex), 'hold end: only a real cap end lifts it');
+  ok(/const syncDebtHold[\s\S]{0,1200}clingLock\.armDebtHold\(p\)[\s\S]{0,300}clingLock\.clearDebtHold\(\)/.test(hv) && /await syncDebtHold\(st/.test(hv) && !/gpOn\.value[^\n]*syncDebtHold/.test(hv), 'HomeView syncs the hold for every user (no Coach gate)');
+  ok(!/gpGraceSchedule/.test(hv) && /debtPaidNative\(debt\.sessionKey\)/.test(hv), 'Coach-only grace schedule gone; paid debt clears natively'); }
 console.log(`app lock debt: ${pass} checks passed`);

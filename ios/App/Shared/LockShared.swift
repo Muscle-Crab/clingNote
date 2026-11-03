@@ -35,6 +35,36 @@ extension ManagedSettingsStore.Name { static let clingLock = Self("clingLock") }
 @available(iOS 16.0, *)
 extension DeviceActivityName { static let clingLock = Self("clingLock") }
 
+/// Missed-goal app lock (appLockDebt), native half. One hold at a time: App Group entry { key, startMs, untilMs } + its own
+/// DeviceActivity ("clingDebt", startMs -> untilMs = the 14-day safety cap). The app arms it while a session runs short of its goal
+/// (startMs = that session's end) or once a miss is known (startMs in the past), for every user, so the shield goes up / stays up at
+/// the session end even when ClingNote is closed or force-quit. Only the app clears it (clearDebtHold), when a later session reaches
+/// its goal; every other lock end in the extension leaves the shield up while a hold is active.
+@available(iOS 16.0, *)
+enum DebtHold {
+    static let storeKey = "clingnote.debtHold.v1"
+    static let activity = DeviceActivityName("clingDebt")
+    static func entry() -> (key: String, startMs: Double, untilMs: Double)? {
+        guard let d = LockShared.defaults?.dictionary(forKey: storeKey), let k = d["key"] as? String, !k.isEmpty else { return nil }
+        let num = { (x: Any?) -> Double in (x as? Double) ?? Double((x as? Int) ?? 0) }
+        return (k, num(d["startMs"]), num(d["untilMs"]))
+    }
+    static func save(key: String, startMs: Double, untilMs: Double) { LockShared.defaults?.set(["key": key, "startMs": startMs, "untilMs": untilMs], forKey: storeKey) }
+    static func clear() { LockShared.defaults?.removeObject(forKey: storeKey) }
+    /// Active = started (minute slack, iOS fires interval starts up to a minute early/late) and before the safety cap.
+    static func isActive(nowMs: Double = Date().timeIntervalSince1970 * 1000) -> Bool {
+        guard let e = entry() else { return false }
+        return holds(startMs: e.startMs, untilMs: e.untilMs, nowMs: nowMs)
+    }
+    static func holds(startMs: Double, untilMs: Double, nowMs: Double) -> Bool { startMs > 0 && startMs <= nowMs + 90_000 && nowMs < untilMs }
+    /// A lock ending now: keep the shield and point the lock state at the hold's end instead of lifting it.
+    static func keepShieldIfHeld(nowMs: Double = Date().timeIntervalSince1970 * 1000) -> Bool {
+        guard let e = entry(), holds(startMs: e.startMs, untilMs: e.untilMs, nowMs: nowMs) else { return false }
+        LockShared.defaults?.set(["locked": true, "until": e.untilMs, "label": "ClingNote lock-in"], forKey: LockShared.stateKey)
+        return true
+    }
+}
+
 /// Evening mode: later lock-in blocks scheduled ahead of time, one DeviceActivity each ("clingLockAt.<key>"), so the shield goes up at
 /// the block start even when ClingNote is closed. App Group map key -> [startMs, untilMs]. A block shorter than 15 min is never scheduled
 /// (DeviceActivity minimum interval); iOS starts/ends intervals at minute granularity and may deliver them late.

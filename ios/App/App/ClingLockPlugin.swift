@@ -44,6 +44,9 @@ public class ClingLockPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "offerBreak", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "clearBreakOffer", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "cancelScheduledLock", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "armDebtHold", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "clearDebtHold", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "debtHoldStatus", returnType: CAPPluginReturnPromise),
     ]
 
     @objc func requestAuthorization(_ call: CAPPluginCall) {
@@ -416,6 +419,58 @@ public class ClingLockPlugin: CAPPlugin, CAPBridgedPlugin {
         }
         DeviceActivityCenter().stopMonitoring([ScheduledLocks.name(key)])
         call.resolve(["cancelled": true])
+    }
+    /// Missed-goal hold { key, startMs, untilMs }: startMs = the short session's end (future: armed ahead so a force-quit app still
+    /// locks at the end) or a past miss (shield goes up now). Same key while monitored = no-op; a new key replaces the hold.
+    @objc func armDebtHold(_ call: CAPPluginCall) {
+        guard #available(iOS 16.0, *) else { call.resolve(["armed": false, "monitor": "unsupported"]); return }
+        let key = (call.getString("key") ?? "").filter { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" }
+        let startMs = call.getDouble("startMs") ?? 0, untilMs = call.getDouble("untilMs") ?? 0
+        let nowMs = Date().timeIntervalSince1970 * 1000
+        guard !key.isEmpty, startMs > 0, untilMs > nowMs + 60_000 else { call.reject("key, startMs and a future untilMs required"); return }
+        if let e = DebtHold.entry(), e.key == key, e.untilMs == untilMs, DeviceActivityCenter().activities.contains(DebtHold.activity) {
+            if DebtHold.isActive(nowMs: nowMs) { Self.applyShield() } // re-assert (e.g. after the app lifted it for a break)
+            call.resolve(["armed": true, "monitor": "ok", "existing": true]); return
+        }
+        LockShared.installLockEndSound()
+        // DeviceActivity: >= 15 min interval; a start in the past fires intervalDidStart right away (same trick as startLock).
+        let until = Date(timeIntervalSince1970: untilMs / 1000)
+        let startDate = min(max(Date(timeIntervalSince1970: startMs / 1000), Date().addingTimeInterval(-60)), until.addingTimeInterval(-15 * 60))
+        DebtHold.save(key: key, startMs: startMs, untilMs: untilMs) // before stop/start: a restart-triggered intervalDidEnd sees a future end
+        do {
+            DeviceActivityCenter().stopMonitoring([DebtHold.activity])
+            try DeviceActivityCenter().startMonitoring(DebtHold.activity, during: DeviceActivitySchedule(intervalStart: AppLocks.comps(startDate), intervalEnd: AppLocks.comps(until), repeats: false))
+            if startMs <= nowMs {
+                Self.applyShield()
+                let st = LockShared.defaults?.dictionary(forKey: LockShared.stateKey) ?? [:]
+                let curUntil = (st["until"] as? Double) ?? Double((st["until"] as? Int) ?? 0)
+                LockShared.defaults?.set(["locked": true, "until": max(untilMs, curUntil), "label": "ClingNote lock-in"], forKey: LockShared.stateKey)
+            }
+            call.resolve(["armed": true, "monitor": "ok"])
+        } catch {
+            DebtHold.clear()
+            call.resolve(["armed": false, "monitor": "failed: \(error)"])
+        }
+    }
+    /// A later session reached its goal (or the lock was turned off): drop the hold and lift the shield unless another lock still runs.
+    @objc func clearDebtHold(_ call: CAPPluginCall) {
+        guard #available(iOS 16.0, *) else { call.resolve(["cleared": false]); return }
+        let had = DebtHold.entry(); let nowMs = Date().timeIntervalSince1970 * 1000
+        DebtHold.clear() // before stop: the extension's intervalDidEnd sees no hold
+        DeviceActivityCenter().stopMonitoring([DebtHold.activity])
+        if let e = had, DebtHold.holds(startMs: e.startMs, untilMs: e.untilMs, nowMs: nowMs) {
+            let st = LockShared.defaults?.dictionary(forKey: LockShared.stateKey) ?? [:]
+            let curUntil = (st["until"] as? Double) ?? Double((st["until"] as? Int) ?? 0)
+            let other = DeviceActivityCenter().activities.contains(.clingLock) && curUntil > nowMs && curUntil < e.untilMs - 60_000
+            if !other { LockShared.defaults?.set(["locked": false, "until": 0], forKey: LockShared.stateKey); Self.clearShield() }
+        }
+        call.resolve(["cleared": had != nil])
+    }
+    @objc func debtHoldStatus(_ call: CAPPluginCall) {
+        guard #available(iOS 16.0, *) else { call.resolve(["armed": false]); return }
+        let e = DebtHold.entry()
+        call.resolve(["armed": e != nil, "key": e?.key ?? "", "startMs": e?.startMs ?? 0, "untilMs": e?.untilMs ?? 0, "active": DebtHold.isActive(),
+                      "monitoring": DeviceActivityCenter().activities.contains(DebtHold.activity)])
     }
     @objc func offerBreak(_ call: CAPPluginCall) {
         guard #available(iOS 16.0, *) else { call.resolve(["posted": false]); return }

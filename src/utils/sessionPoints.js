@@ -25,12 +25,7 @@ export const graceLock = (list, nowMs = Date.now(), r = SESSION_RULES) => {
   const s = (list || []).filter((x) => x.endMs > x.startMs && !x.met && x.target > 0 && nowMs >= x.endMs && nowMs < x.endMs + r.graceMs).pop();
   return s ? { want: true, untilMs: s.endMs + r.graceMs, n: s.n, target: s.target, earned: s.earned } : { want: false, untilMs: 0 };
 };
-// Background: while a session runs short of its target, iOS gets a scheduled lock from its end; met -> cancel it.
-// The missed-goal app lock has no clock end (a later session's goal lifts it), so the background hold runs to the same safety cap
-// as the server debt (DEBT_HOLD_MS = 14 days); the app cancels it as soon as the debt is paid.
-export const DEBT_HOLD_MS = 14 * 24 * 3600000;
-export const graceSchedule = (s, nowMs = Date.now(), r = SESSION_RULES, holdMs = DEBT_HOLD_MS) => ({ key: `grace${String(s.dayKey).replace(/-/g, '')}s${s.n}`,
-  want: s.endMs > s.startMs && !s.met && s.target > 0 && s.endMs - nowMs > 60000, startMs: s.endMs, untilMs: s.endMs + holdMs });
+// Background hold after a short session: native DebtHold, planned by debtHoldPlan (src/utils/appLockDebt.js), for every user.
 export const sessionLabel = (s, sessions = 2, r = SESSION_RULES) => (sessions === 1 ? `${s.earned}/${s.target} pts` : `${r.names[s.n - 1]} ${s.earned}/${s.target} pts`);
 const clock = (ms) => new Date(ms).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 // Shutdown screen result line: "Missed 215 pts: apps open at 7:27 PM" / "Goal met · 220/215 pts".

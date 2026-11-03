@@ -23,8 +23,8 @@ t('met before the end: banked lock ends AT the day end, not midnight (iOS lifts 
   const b = S.strictShield({ ...common, claimedAt: at(15), now: at(16, 30) }); assert.equal(b.phase, 'relocked'); assert.equal(b.untilMs, dayEnd); });
 t('all tasks done counts as met even under the 50-pt floor goal / a penalty', () => {
   const r = S.strictShield({ ...common, goal: 50, earned: 20, allDone: true, now: dayEnd + 60000 }); assert.equal(r.want, false); assert.notEqual(r.phase, 'missed');
-  assert.equal(S.strictShield({ ...common, goal: 50, earned: 20, now: dayEnd + 60000 }).phase, 'missed'); }); // not all done: miss rule unchanged
-t('missed rule unchanged: end + 2 h, then off', () => { assert.equal(S.strictShield({ ...common, earned: 10, now: dayEnd + H }).untilMs, dayEnd + 2 * H); assert.equal(S.strictShield({ ...common, earned: 10, now: dayEnd + 2 * H + 1000 }).want, false); });
+  assert.equal(S.strictShield({ ...common, goal: 50, earned: 20, now: dayEnd + 60000 }).want, false); }); // not all done: no timed strict lock (appLockDebt holds it)
+t('no strict 2 h missed lock: off right after the end', () => { assert.equal(S.strictShield({ ...common, earned: 10, now: dayEnd + H }).want, false); assert.equal(S.strictShield({ ...common, earned: 10, now: dayEnd - H }).untilMs, dayEnd); });
 
 // --- per-session goal (2 h missed lock): the comparison that triggered it wrongly
 const gp = { dayStart: '09:00', closeHours: 8, sessions: 2 }; const ms = (h, m) => ({ seconds: at(h, m) / 1000 });
@@ -38,7 +38,7 @@ t('server settle agrees (eight-hour-day session grace): met -> no grace', () => 
   for (const s of l) { const r = srv.sessionGrace(tasks, { n: s.n, startMs: s.startMs, endMs: s.endMs }); assert.equal(r.met, true); assert.equal(r.untilMs, 0); } });
 t('a task finished AFTER its session end still misses (rule kept)', () => { const late = [{ title: 'Late', section: 'morning', estimateMin: 45, completed: true, completedAt: ms(13, 30) }];
   const [s1] = SP.sessionsOf(gp, late, at(14)); assert.equal(s1.met, false); assert.equal(SP.graceLock([s1], at(14)).want, true); });
-t('grace schedule cancelled once met even after the session end (cold start / widget)', () => { const [s1] = SP.sessionsOf(gp, tasks, at(14)); const g = SP.graceSchedule(s1, at(14)); assert.equal(g.want, false); assert(g.untilMs > at(14)); });
+t('met session (cold start / widget): no Coach grace schedule any more, native DebtHold plan instead', () => { const [s1] = SP.sessionsOf(gp, tasks, at(14)); assert(s1); assert.equal(SP.graceSchedule, undefined); });
 
 // --- cold start: native still says locked (until midnight, or a running grace block) -> the app stops it
 t('cold start after the end: lockAction stops the leftover lock', () => {
@@ -70,6 +70,6 @@ t('native: cold start sync stops a leftover midnight lock', () => { const N = mk
 const hv = src('src/views/HomeView.vue'); const pl = src('ios/App/App/ClingLockPlugin.swift');
 t('wiring: allDone passed, per-session claim, missed-goal lock via appLockDebt (no 2 h grace), cancel after end, native cancel lifts', () => {
   assert(/strictShield\(\{[^\n]*allDone/.test(hv)); assert(hv.includes('claimedAtBy')); assert(!hv.includes('grace.want && free')); assert(!hv.includes('ehs.missed'));
-  assert(hv.includes('debtShield({ debt: eh.appLockDebt.value')); assert(hv.includes('s.met && g.untilMs > Date.now()'));
+  assert(hv.includes('debtShield({ debt: eh.appLockDebt.value')); assert(hv.includes('debtHoldPlan({ debt: eh.appLockDebt.value'));
   assert(/func cancelScheduledLock[\s\S]{0,1400}clearShield\(\)/.test(pl)); });
 console.log(`unlock-at-end: ${n} passed`);

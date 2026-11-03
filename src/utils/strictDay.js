@@ -38,19 +38,17 @@ export const endOfDay = (nowMs) => { const d = new Date(nowMs); return new Date(
 // goalAt = when today's goal was first reached (ms, 0 = not yet). claimedAt = when the user tapped "Start screen time" (0 = not yet):
 // the earned window is never auto-started; it is banked ('ready', still locked) until the user starts it. Returns { want, untilMs, phase, windowMin, unlockEndMs }.
 // phases: 'locked' (working toward the goal), 'ready' (goal met, window banked, user has not started it), 'earned' (unlock window running), 'relocked' (window used up),
-//         'missed' (end time passed without the goal: locked until midnight), 'off' (no session / emergency unlocked / no apps).
-export const MISS_GRACE_MS = 2 * 3600000;
+//         'off' (no session / end time passed without the goal / emergency unlocked / no apps).
+// A missed goal has no clock-time lock here any more (the old 'missed' end + 2 h phase is gone): the missed-goal app lock
+// (appLockDebt, server + native DebtHold) keeps the picked apps locked until a later session reaches its goal.
 export const strictShield = ({ running = false, dayEndMs = 0, now = Date.now(), goal = 0, earned = 0, tasksDone = 0, goalAt = 0, claimedAt = 0, selectionCount = 0, enabled = true, unlockedToday = false, offDay = false, allDone = false, tuning = STRICT_TUNING } = {}) => {
   const midnight = endOfDay(now); const off = { want: false, untilMs: 0, phase: 'off', windowMin: 0, unlockEndMs: 0 };
   if (!enabled || selectionCount <= 0 || unlockedToday || offDay || !dayEndMs) return off;
   // Every task finished counts as met even when the floor goal (minGoal) or a penalty keeps the points short of it.
   const met = (goal > 0 && earned >= goal) || !!allDone;
   if (!met) {
-    // Missed shutdown rule: locked until shutdown + 2 h (MISS_GRACE_MS), then the native monitor unlocks in the background.
-    // While the goal is still open the lock already runs to that time, so a missed shutdown never drops the shield.
-    const graceEnd = dayEndMs + MISS_GRACE_MS;
-    if (now < dayEndMs) return running ? { ...off, want: true, untilMs: graceEnd, phase: 'locked' } : off;
-    return graceEnd - now > 60000 ? { ...off, want: true, untilMs: graceEnd, phase: 'missed' } : off;
+    // Working toward the goal: locked to the end time. After it, a miss is handled by appLockDebt (no timed strict lock).
+    return now < dayEndMs && running ? { ...off, want: true, untilMs: dayEndMs, phase: 'locked' } : off;
   }
   const windowMin = earnedWindowMin({ earned, goal, tasksDone }, tuning);
   // Goal met and the day's time is over: everything opens (build 48 kept 'ready'/'relocked' locked until midnight).

@@ -27,6 +27,14 @@ export const clingLock = {
     catch (e) { return { monitor: `failed: ${String((e && e.message) || e)}` }; }
   },
   // Cancel a scheduleLock block by key (session met before its end -> no 2 h miss lock).
+  // Missed-goal hold (native DebtHold): keeps the picked apps shielded past a short session's end with the app closed / force-quit.
+  armDebtHold: async ({ key, startMs, untilMs }) => {
+    if (!avail('ClingLock')) return { monitor: 'unavailable' };
+    try { const r = await Lock.armDebtHold({ key: String(key), startMs, untilMs }); return { monitor: 'ok', ...r }; }
+    catch (e) { return { monitor: `failed: ${String((e && e.message) || e)}` }; }
+  },
+  clearDebtHold: safe('ClingLock', Lock, (p) => p.clearDebtHold(), { cleared: false }),
+  debtHoldStatus: safe('ClingLock', Lock, (p) => p.debtHoldStatus(), { armed: false }),
   cancelScheduledLock: safe('ClingLock', Lock, (p, a) => p.cancelScheduledLock({ key: String((a && a.key) || '') }), { cancelled: false }),
   // per-app locks by user-confirmed label (src/utils/appLockNames.js resolves spoken names to these labels)
   labeledApps: safe('ClingLock', Lock, (p) => p.labeledApps(), { apps: [] }),

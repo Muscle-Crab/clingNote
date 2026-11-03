@@ -18,6 +18,14 @@ class ClingLockMonitor: DeviceActivityMonitor {
             applyLockShield(); return
         }
         if activity == WakeLock.activity { startWakeLock(); return }
+        if activity == DebtHold.activity { // missed-goal hold begins (the session ended short): shield up, app open or not
+            let now = Date().timeIntervalSince1970 * 1000
+            guard let e = DebtHold.entry(), now < e.untilMs else { return }
+            let st = LockShared.defaults?.dictionary(forKey: LockShared.stateKey) ?? [:]
+            let curUntil = (st["until"] as? Double) ?? Double((st["until"] as? Int) ?? 0)
+            LockShared.defaults?.set(["locked": true, "until": max(e.untilMs, curUntil), "label": "ClingNote lock-in"], forKey: LockShared.stateKey)
+            applyLockShield(); return
+        }
         guard activity == .clingLock else { return }
         applyLockShield()
     }
@@ -68,11 +76,23 @@ class ClingLockMonitor: DeviceActivityMonitor {
             DeviceActivityCenter().stopMonitoring([activity]) // free the slot (schedules count toward the system limit)
             notifyLockEnded(); return
         }
+        if activity == DebtHold.activity { // only the 14-day safety cap ends a hold here; a met goal clears it from the app
+            guard let e = DebtHold.entry() else { return } // cleared by the app (clearDebtHold): it already lifted the shield
+            if !LockEndAlertGate.isRealEnd(untilMs: e.untilMs, nowMs: Date().timeIntervalSince1970 * 1000) { return } // restart / re-arm artifact
+            DebtHold.clear(); DeviceActivityCenter().stopMonitoring([activity])
+            let st = LockShared.defaults?.dictionary(forKey: LockShared.stateKey) ?? [:]
+            let curUntil = (st["until"] as? Double) ?? Double((st["until"] as? Int) ?? 0)
+            if curUntil > e.untilMs + 60_000 { return }
+            store.shield.applications = nil; store.shield.applicationCategories = nil; store.shield.webDomains = nil
+            LockShared.defaults?.set(["locked": false, "until": 0], forKey: LockShared.stateKey)
+            notifyLockEnded(); return
+        }
         if activity == WakeLock.activity { // wake-up lock window ended (the daily schedule stays for tomorrow)
             let st = LockShared.defaults?.dictionary(forKey: LockShared.stateKey) ?? [:]
             guard (st["label"] as? String) == WakeLock.label else { return } // not ours (skipped, or another lock took over)
             let untilMs = (st["until"] as? Double) ?? Double((st["until"] as? Int) ?? 0)
             if !LockEndAlertGate.isRealEnd(untilMs: untilMs, nowMs: Date().timeIntervalSince1970 * 1000) { return } // re-schedule artifact
+            if DebtHold.keepShieldIfHeld() { return } // missed goal: apps stay locked
             store.shield.applications = nil; store.shield.applicationCategories = nil; store.shield.webDomains = nil
             LockShared.defaults?.set(["locked": false, "until": 0], forKey: LockShared.stateKey)
             notifyLockEnded(); return
@@ -85,6 +105,7 @@ class ClingLockMonitor: DeviceActivityMonitor {
             let st = LockShared.defaults?.dictionary(forKey: LockShared.stateKey) ?? [:]
             let curUntil = (st["until"] as? Double) ?? Double((st["until"] as? Int) ?? 0)
             if curUntil > untilMs + 60_000 { return } // a longer lock (app's own .clingLock) is still running: keep the shield
+            if DebtHold.keepShieldIfHeld() { return } // missed goal: apps stay locked
             store.shield.applications = nil; store.shield.applicationCategories = nil; store.shield.webDomains = nil
             LockShared.defaults?.set(["locked": false, "until": 0], forKey: LockShared.stateKey)
             notifyLockEnded(); return
@@ -100,6 +121,9 @@ class ClingLockMonitor: DeviceActivityMonitor {
             store.shield.applications = nil; store.shield.applicationCategories = nil; store.shield.webDomains = nil
             return // stopped by the app (stopLock): no alert
         }
+        // Session over short of its goal (hold armed for this end, or an older miss still unpaid): keep the shield, even with the
+        // app force-quit. The hold's own interval (clingDebt) may start a moment after this end fires; holds() has minute slack.
+        if DebtHold.keepShieldIfHeld() { DeviceActivityCenter().stopMonitoring([.clingLock]); return }
         store.shield.applications = nil; store.shield.applicationCategories = nil; store.shield.webDomains = nil
         AppLocks.cleanupExpired() // clingApps store: drop expired per-app locks and their schedules, keep still-active ones
         DeviceActivityCenter().stopMonitoring([.clingLock])

@@ -29,3 +29,23 @@ export const debtShield = ({ debt, now = Date.now(), session = null, enabled, se
   if (!enabled || !(selectionCount > 0) || unlockedToday || friend || onBreak) return { want: false, cleared: false, untilMs: 0 };
   return { want: true, cleared: false, untilMs: core.debtUntilMs(debt) };
 };
+
+// Native hold (iOS DebtHold / DeviceActivity "clingDebt"): what the app should tell iOS so the shields stay up with ClingNote closed or
+// force-quit, for every user. debt = merged appLockDebt; live = the running session { sessionKey, startMs, endMs, target, earned } or null.
+//  arm   : an unpaid miss (startMs = its end, already past: shield now), or a running session still short of its goal (startMs = its
+//          end: iOS raises / keeps the shield at the end on its own). untilMs = the 14-day safety cap.
+//  clear : a later session reached its goal, the lock is off / no apps picked / emergency unlocked today.
+//  clear also: the server (known) has no miss and no session runs (a hold pre-armed for a session met with the app closed).
+//  none  : nothing to hold, or a temporary exception (friend unlock, break) - the hold stays armed, the app keeps the shield down.
+export const holdKey = (sessionKey) => `debt_${String(sessionKey || '').replace(/[^A-Za-z0-9_-]/g, '_')}`;
+export const debtHoldPlan = ({ debt, live = null, known = false, now = Date.now(), enabled, selectionCount = 0, unlockedToday = false, friend = false, onBreak = false }) => {
+  if (!enabled || !(selectionCount > 0) || unlockedToday) return { action: 'clear' };
+  const d = core.debtActive(debt, now) ? debt : null;
+  const liveMet = !!(live && live.target > 0 && live.earned >= live.target);
+  if (d && !(live && core.debtCleared(d, live))) return friend || onBreak ? { action: 'none' } : { action: 'arm', key: holdKey(d.sessionKey), startMs: d.sinceMs, untilMs: core.debtUntilMs(d) };
+  if (live && live.target > 0 && !liveMet && live.endMs > now + 60000) return { action: 'arm', key: holdKey(live.sessionKey), startMs: live.endMs, untilMs: live.endMs + core.DEBT_CAP_MS };
+  if (d || liveMet) return { action: 'clear' };
+  // No miss on the server and no short session running: a hold pre-armed for a session that was met with the app closed is stale.
+  // Only once the server's answer is in (known), so a cold start / offline open never drops a hold for a miss it can't see yet.
+  return known && !live ? { action: 'clear' } : { action: 'none' };
+};

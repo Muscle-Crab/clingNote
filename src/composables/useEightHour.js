@@ -191,8 +191,9 @@ export const useEightHour = () => {
   });
   const pendingBlocks = computed(() => core.pendingOf(lockRaw.value).filter((b) => b.endMs > (tick.value, nowMs())));
   const session = computed(() => st.data?.session || null);
-  const appLockDebt = computed(() => (debtRev.value, mergeDebt({ server: st.data && st.data.appLockDebt, serverKnown: !!(st.loaded && st.data && !st.data.offline && st.uid === curUid() && Object.prototype.hasOwnProperty.call(st.data, 'appLockDebt')), cache: readDebtCache(curUid()) })));
-  return { st, appLockDebt, dayHours, nextBlock, pendingBlocks, scheduleNext, startNextSession, session, warning, hoursPref, data, plan, lock, phase, phaseInfo, running, remainingMs, countdown, endsLabel, startsLabel, stats, shutdown, reward: computed(() => st.data?.reward || ''),
+  const debtKnown = computed(() => !!(st.loaded && st.data && !st.data.offline && st.uid === curUid() && Object.prototype.hasOwnProperty.call(st.data, 'appLockDebt')));
+  const appLockDebt = computed(() => (debtRev.value, mergeDebt({ server: st.data && st.data.appLockDebt, serverKnown: debtKnown.value, cache: readDebtCache(curUid()) })));
+  return { st, appLockDebt, debtKnown, dayHours, nextBlock, pendingBlocks, scheduleNext, startNextSession, session, warning, hoursPref, data, plan, lock, phase, phaseInfo, running, remainingMs, countdown, endsLabel, startsLabel, stats, shutdown, reward: computed(() => st.data?.reward || ''),
     refresh, savePlan, startNow, reportProgress, nowMs };
 };
 
