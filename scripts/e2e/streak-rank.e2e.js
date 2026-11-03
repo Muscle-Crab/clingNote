@@ -76,15 +76,15 @@ const streakCount = async (p) => (await p.locator('[data-test=streak-count]').te
     await sleep(1500); ok(`streak ${n}: overlay settles, count shows ${n}/5`, (await streakCount(p)).startsWith(`${n}/5`), await streakCount(p));
     ok(`streak ${n}: no page errors`, p.errs.length === 0, p.errs.join(' | ')); await p.context().close();
   }
-  // 2) automatic recheck: 5 tasks done after Start Day + 1 before; no tap -> streak goes 2 -> 3 on its own; the early task is not counted
+  // 2) automatic recheck: 8 tasks done after Start Day + 1 before; no tap -> streak goes 2 -> 3 on its own; the early task is not counted
   if (on('recheck')) { const email = 'zztest.b41.recheck@example.com'; const uid = await seedUser(email, 'ZZTEST Recheck');
-    await seedDay(uid, { doneAfter: 5, doneBefore: 1, open: 1 });
+    await seedDay(uid, { doneAfter: 8, doneBefore: 1, open: 1 });
     await pinDeadline(uid);
     await db.doc(`streaks/${uid}`).set({ streak: 2, bestStreak: 2, lastCompletionDate: yday, counted: [yday] });
     const p = await page(br); await login(p, email); await openHome(p); await sleep(6000); await dismiss(p);
     const st = (await db.doc(`streaks/${uid}`).get()).data();
-    ok('recheck (no tap): 5 done after Start Day counts the day', st.streak === 3 && st.lastCompletionDate === ymd(), JSON.stringify({ s: st.streak, l: st.lastCompletionDate }));
-    ok('recheck: task done before Start Day not counted', (st.dayDone || []).length === 5, String((st.dayDone || []).length));
+    ok('recheck (no tap): 8 done (DAILY_STREAK_MIN) after Start Day counts the day', st.streak === 3 && st.lastCompletionDate === ymd(), JSON.stringify({ s: st.streak, l: st.lastCompletionDate }));
+    ok('recheck: task done before Start Day not counted', (st.dayDone || []).length === 8, String((st.dayDone || []).length));
     await sleep(2500); ok('recheck: card shows 3/5', (await streakCount(p)).startsWith('3/5'), await streakCount(p)); await p.context().close(); }
   // 3) only 4 after Start Day (+2 before): stays uncounted
   if (on('early')) { const email = 'zztest.b41.early@example.com'; const uid = await seedUser(email, 'ZZTEST Early');
@@ -95,7 +95,7 @@ const streakCount = async (p) => (await p.locator('[data-test=streak-count]').te
     const st = (await db.doc(`streaks/${uid}`).get()).data(); ok('recheck: 4 after + 2 before Start Day does not count', st.lastCompletionDate === yday && (st.dayDone || []).length === 4, JSON.stringify({ l: st.lastCompletionDate, d: (st.dayDone || []).length })); await p.context().close(); }
   // 4) Discipline gate: boss set, not cleared -> not counted; boss cleared elsewhere -> visibility/resume recheck counts it (no tap)
   if (on('gate')) { const email = 'zztest.b41.gate@example.com'; const uid = await seedUser(email, 'ZZTEST Gate');
-    await seedDay(uid, { doneAfter: 5, open: 1, boss: true });
+    await seedDay(uid, { doneAfter: 8, open: 1, boss: true });
     await db.doc(`userSettings/${uid}`).set({ discipline: { enabled: true, deadline: '23:59' } }, { merge: true });
     await db.doc(`discipline/${uid}`).set({ bossDate: ymd(), bossTitle: 'ZZTEST open 0', bossClearedDate: null }, { merge: true });
     await db.doc(`streaks/${uid}`).set({ streak: 2, bestStreak: 2, lastCompletionDate: yday, counted: [yday] });
@@ -107,7 +107,7 @@ const streakCount = async (p) => (await p.locator('[data-test=streak-count]').te
     await p.context().close(); }
   // 5) periodic: same as 4 but no event; wait for the 45 s timer
   if (on('timer')) { const email = 'zztest.b41.timer@example.com'; const uid = await seedUser(email, 'ZZTEST Timer');
-    await seedDay(uid, { doneAfter: 5, open: 1, boss: true });
+    await seedDay(uid, { doneAfter: 8, open: 1, boss: true });
     await db.doc(`userSettings/${uid}`).set({ discipline: { enabled: true, deadline: '23:59' } }, { merge: true });
     await db.doc(`discipline/${uid}`).set({ bossDate: ymd(), bossTitle: 'ZZTEST open 0', bossClearedDate: null }, { merge: true });
     await db.doc(`streaks/${uid}`).set({ streak: 1, bestStreak: 1, lastCompletionDate: yday, counted: [yday] });
