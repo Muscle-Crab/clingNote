@@ -55,7 +55,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { groupByDate, formatScheduledDate, scheduleLabel } from '@/utils/scheduling';
 import { scheduleOfEntry } from '@/utils/schedEdit';
 import SchedulePicker from './SchedulePicker.vue';
@@ -66,12 +66,14 @@ const props = defineProps({
   todayStr: { type: String, default: '' },
   error: { type: String, default: '' },
   series: { type: Array, default: () => [] }, // recurring templates
+  startOpen: { type: Boolean, default: false }, // future day tab with tasks for that date: show them without a tap
 });
 const emit = defineEmits(['move-today', 'update', 'delete', 'edit']);
 const edit = ref(scheduleOfEntry(null));
 const saveEdit = (t, scope) => { emit('edit', { id: t.id, sched: { ...edit.value }, scope }); menuId.value = null; };
 
-const open = ref(false);
+const open = ref(props.startOpen);
+watch(() => props.startOpen, (v) => { if (v) open.value = true; });
 const menuId = ref(null);
 const editDate = ref('');
 const editTime = ref('');

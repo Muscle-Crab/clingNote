@@ -215,7 +215,7 @@
 
       <TimeStatsBar v-if="isViewingToday" :stats="timeStats" :ended="!!daySession.ended" :suggest="suggestShutdown && !shutdownDismissed" @wrap-up="openShutdown" />
 
-      <ScheduledList v-if="userId" :tasks="futureScheduled" :today-str="todayStr" :error="scheduledError" :series="templatesOf(scheduledList)" @edit="editScheduledEntry"
+      <ScheduledList v-if="userId" :tasks="isViewingToday ? futureScheduled : futureScheduled.filter((e) => e.scheduledDate === viewTabDate)" :start-open="!isViewingToday && futureScheduled.some((e) => e.scheduledDate === viewTabDate)" :today-str="todayStr" :error="scheduledError" :series="templatesOf(scheduledList)" @edit="editScheduledEntry"
                      @move-today="moveScheduledToToday" @update="updateScheduledDate" @delete="deleteScheduled" />
 
       <FabButtons :show-add="false" :user-id="userId" :assistant-live="askOpen" @add="onAddClick" @assistant="openAssistant" @sergeant="onSergeant" @menu-open="coachSignal('menu-open')" :locked="hardLocked" />
@@ -2152,7 +2152,10 @@ const addNewTask = async () => {
   }
 
   // A one-time task with a future due date belongs to that date, not to today's day doc (route it through the scheduler).
-  { const fut = !newTask.value.sched?.on && newTask.value.type !== 'recurring' && !(newTask.value.selectedDays || []).length ? deferredDateFor(newTask.value.dueDate, getTodayId()) : '';
+  // Rolling tabs: a one-off added on a future tab belongs to that tab's real date (scheduler), not to the reused weekday doc.
+  // A past due date is clamped to today (it would otherwise land on a date that never comes again).
+  if (isValidDate(newTask.value.dueDate) && newTask.value.dueDate < getTodayId()) newTask.value = { ...newTask.value, dueDate: '' };
+  { const fut = !newTask.value.sched?.on && newTask.value.type !== 'recurring' && !(newTask.value.selectedDays || []).length ? deferredDateFor(newTask.value.dueDate || (isViewingToday.value ? '' : viewTabDate.value), getTodayId()) : '';
     if (fut) newTask.value = { ...newTask.value, sched: { ...blankSchedule(fut), on: true, date: fut, time: newTask.value.startTime || '' } }; }
   limitHit.value = null;
   try {
@@ -2211,6 +2214,7 @@ const addNewTask = async () => {
     status: newTask.value.status || 'todo',
     pendingOn: newTask.value.status === 'pending' ? (newTask.value.pendingOn || '').trim() : '',
     dueDate: newTask.value.dueDate || '',
+    forDate: isViewingToday.value ? getTodayId() : (viewTabDate.value || ''), // the tab's real date: a later week never shows it as a leftover
     startTime: newTask.value.startTime || '',
     estimateMin: Number(newTask.value.estimateMin) || 0,
     section: sectionForCreate({ start: newTask.value.startTime, section: newTask.value.section }), // Morning unless a time or the assistant says otherwise
