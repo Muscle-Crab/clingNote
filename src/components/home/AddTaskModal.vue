@@ -232,7 +232,7 @@ onBeforeUnmount(() => {
 .cat-chip.on.tone-teal { background: rgba(20, 184, 166, .22); color: #5eead4; border-color: #14b8a6; }
 .cat-chip.on.tone-green { background: rgba(34, 197, 94, .22); color: #86efac; border-color: #22c55e; }
 .rem-pick { font-size: .7rem; background: transparent; color: inherit; border: 1px solid var(--c-border, #2a2a2e); border-radius: 6px; }
-.nt-date-chip { position: relative; }
+.nl-hint.nt-date-chip { position: relative; display: inline-block; }
 .nt-date-input { position: absolute; inset: 0; opacity: 0; width: 100%; cursor: pointer; }
 .nl-hint { all: unset; box-sizing: border-box; cursor: pointer; display: block; margin-top: .3rem; font-size: .74rem; color: var(--c-accent, #a78bfa); }
 .nl-go { color: var(--c-text-3, #6b6a66); }
