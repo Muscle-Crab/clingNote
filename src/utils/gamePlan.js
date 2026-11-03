@@ -146,6 +146,14 @@ export const fmtLeft = (ms) => { const s = Math.max(0, Math.ceil(ms / 1000)); re
 // -> { phase: 'before'|'focus'|'break'|'work'|'late'|'closed', n, endsMs, leftMin }   (break only while a user-started break runs)
 // late = { startMs, endMs } of a running evening (second) session: it may run past the hard close until the next day start (wake).
 // While it runs the day stays open (phase 'late'; points still count up to its end) and the next day only begins once it is over.
+// The eight-hour day the user actually started (server lock { startMs, endMs, index }) runs as a late window when it is a
+// second session (index >= 1) or when it started at/after the plan's hard close (a single session started late), so its
+// completions are not "after close".
+export const lateWindow = (gp, lock) => { if (!lock || lock.settled || !(Number(lock.endMs) > Number(lock.startMs))) return null;
+  const startMs = Number(lock.startMs); const endMs = Number(lock.endMs);
+  return (lock.index || 0) >= 1 || startMs >= dayWindow(gp, startMs).closeMs ? { startMs, endMs } : null; };
+// Points close: the plan's hard close, extended to the end of a running eight-hour day the user started (never earlier).
+export const pointsCloseMs = (closeMs, lock) => { const e = lock && !lock.settled ? Number(lock.endMs) || 0 : 0; return closeMs ? Math.max(closeMs, e) : closeMs; };
 export const phaseAt = (gp, nowMs = Date.now(), brk = null, late = null) => {
   if (late && late.endMs > nowMs && nowMs >= late.startMs) { const lw = dayWindow(gp, late.startMs);
     if (nowMs >= lw.closeMs) { const w = { ...lw, closeMs: late.endMs };

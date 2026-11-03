@@ -3956,7 +3956,7 @@ const gpLoad = (d) => {
   if (gpOn.value && !(d && d.gamePlan && d.gamePlan.lastReview)) { gp.value = { ...gp.value, lastReview: GP.reviewKey(gp.value, Date.now()) }; gpSave(); }
 };
 const gpSave = () => saveBossField({ gamePlan: { ...gp.value } });
-const gpLate = computed(() => { const l = eh.lock.value; return l && (l.index || 0) >= 1 && !l.settled ? { startMs: l.startMs, endMs: l.endMs } : null; });
+const gpLate = computed(() => GP.lateWindow(gp.value, eh.lock.value)); // session 2, or a single session started after the plan's close
 const gpPhase = computed(() => GP.phaseAt(gp.value, nowTick.value, gpBreak.value, gpLate.value));
 // Earned breaks: each finished focus session banks gp.breakMin; the user takes it from the slim line ("Take break"),
 // which lifts the shield for exactly that long, then restores the shield that was up before (same apps, same until).
@@ -4040,7 +4040,7 @@ onMounted(() => window.addEventListener('cling:applock-changed', onAppLockChange
 if (process.env.VUE_APP_FIREBASE_EMULATORS === '1') window.__gpBreakEnd = (ms) => { if (gpBreak.value) gpBreakSave({ ...gpBreak.value, endMs: ms }); }; // local e2e hook only
 const gpEst = (t) => chipValues(t).minutes;
 const gpPenaltyToday = computed(() => (gpPenalty.value && gpPenalty.value.day === gpPhase.value.dayKey ? Number(gpPenalty.value.points) || 0 : 0));
-const gpEarned = computed(() => GP.earnedPoints(todayTasksForTarget.value, { closeMs: gpPhase.value.closeMs, estMinutes: gpEst, penalty: gpPenaltyToday.value }));
+const gpEarned = computed(() => GP.earnedPoints(todayTasksForTarget.value, { closeMs: GP.pointsCloseMs(gpPhase.value.closeMs, eh.running.value ? eh.lock.value : null), estMinutes: gpEst, penalty: gpPenaltyToday.value }));
 watch(() => gpOn.value && isViewingToday.value && gpEarned.value.points, (v) => { if (v !== false) pointsAccumulated.value = v; });
 const gpGoal = computed(() => GP.dailyGoal({ history: GP.historyFrom(gpLog.value, gpPhase.value.dayKey), load: GP.plannedLoad(todayTasksForTarget.value, gpEst), min: gp.value.minGoal }));
 const gpGoalWhy = computed(() => { const g = gpGoal.value; return g.from === 'history' ? `90% of your 2-week median, capped at today's ${g.load} pts planned, never under ${g.min}.` : `80% of today's ${g.load} pts planned (needs 3 logged days for the 2-week median), never under ${g.min}.`; });
