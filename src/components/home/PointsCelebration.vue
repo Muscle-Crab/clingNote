@@ -6,7 +6,7 @@
       <div v-if="item.kind === 'vault' && item.apps && item.apps.length" class="pc-vault" data-test="vault-pop" aria-hidden="true">
         <span class="pc-door"><span v-for="k in 3" :key="k" class="pc-spoke" :style="{ transform: `rotate(${k * 60}deg)` }"></span><img v-if="item.robot" class="pc-robot" :src="item.robot" alt="" /></span>
         <span v-for="(a, i) in item.apps.slice(0, 6)" :key="a.id" class="pc-app" data-test="vault-pop-app" :style="pop(i, Math.min(item.apps.length, 6))">
-          <span class="pc-ico">{{ initial(a.label) }}</span><span class="pc-name">{{ a.label }}</span>
+          <span v-if="socialIcon(a.label)" class="pc-ico pc-ico--brand" data-test="vault-pop-brand" :style="{ background: socialIcon(a.label).bg }"><svg viewBox="0 0 24 24" width="26" height="26" v-html="socialIcon(a.label).svg"></svg></span><span v-else class="pc-ico">{{ initial(a.label) }}</span><span class="pc-name">{{ a.label }}</span>
         </span>
       </div>
       <p class="pc-title">{{ item.title }}</p>
@@ -20,6 +20,7 @@
   </div>
 </template>
 <script setup>
+import { socialIcon } from '@/utils/socialIcons';
 // Full-screen celebration: a task completion (animated count-up of the points just earned + session N/8 cheer) or a vault app unlock.
 import { ref, onMounted, onBeforeUnmount } from 'vue';
 const props = defineProps({ item: { type: Object, required: true } });
@@ -28,8 +29,8 @@ const shown = ref(0); let raf = 0; let t = 0;
 const dot = (i) => ({ transform: `rotate(${i * 20}deg) translateY(-${90 + (i % 3) * 25}px)`, background: ['#facc15', '#60a5fa', '#34d399', '#f472b6'][i % 4] });
 const initial = (l) => (String(l || '?').trim()[0] || '?').toUpperCase();
 // Fan above the door: app i of n lands at angle a, staggered spring (same layout as the native VaultUnlockView.spot).
-const pop = (i, n) => { const spread = Math.min(n - 1, 4) * 0.36; const a = -Math.PI / 2 + (n > 1 ? -spread / 2 + (spread * i) / (n - 1) : 0);
-  return { '--x': `${Math.round(Math.cos(a) * 92)}px`, '--y': `${Math.round(Math.sin(a) * 92) + 18}px`, animationDelay: `${0.45 + i * 0.18}s` }; };
+const pop = (i, n) => { const spread = Math.min(n - 1, 4) * 0.5; /* wide enough that 5 icons + names don't overlap */ const a = -Math.PI / 2 + (n > 1 ? -spread / 2 + (spread * i) / (n - 1) : 0);
+  return { '--x': `${Math.round(Math.cos(a) * 108)}px`, '--y': `${Math.round(Math.sin(a) * 108) + 18}px`, animationDelay: `${0.45 + i * 0.18}s` }; };
 onMounted(() => { const to = Number(props.item.points) || 0; const t0 = window.performance.now(); const dur = 700;
   const step = (now) => { const k = Math.min(1, (now - t0) / dur); shown.value = Math.round(to * (1 - Math.pow(1 - k, 3))); if (k < 1) raf = window.requestAnimationFrame(step); };
   raf = window.requestAnimationFrame(step); t = setTimeout(() => emit('close'), props.item.ms || 1800); });
@@ -53,6 +54,7 @@ onBeforeUnmount(() => { window.cancelAnimationFrame(raf); clearTimeout(t); });
 .pc-robot { position: relative; width: 38px; height: 38px; object-fit: contain; }
 .pc-app { position: absolute; left: 50%; bottom: 20px; width: 64px; margin-left: -32px; display: flex; flex-direction: column; align-items: center; gap: 3px; opacity: 0; animation: pcOut 0.6s cubic-bezier(.2,1.7,.4,1) both; }
 .pc-ico { width: 40px; height: 40px; border-radius: 11px; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 20px; color: #0f172a; background: linear-gradient(160deg, #facc15, #f59e0b); box-shadow: 0 0 14px rgba(250, 204, 21, 0.55); }
+.pc-ico--brand { box-shadow: 0 0 14px rgba(255, 255, 255, 0.25); }
 .pc-name { font-size: 11px; font-weight: 700; max-width: 64px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @keyframes pcDoor { from { transform: rotate(0) scale(1); } to { transform: rotate(200deg) scale(0.85); } }
 @keyframes pcOut { 0% { opacity: 0; transform: translate(0, 0) scale(0.2) rotate(-30deg); } 100% { opacity: 1; transform: translate(var(--x), var(--y)) scale(1) rotate(0); } }

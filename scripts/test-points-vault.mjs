@@ -58,3 +58,11 @@ t('native overlay: plugin method registered, real icons via Label(token), no web
 const src = (await import('node:fs')).readFileSync(new URL('../src/utils/pointsVault.js', import.meta.url), 'utf8');
 t('no hardcoded app names in the logic', () => { assert.ok(!/pubg|instagram|youtube|tiktok/i.test(src)); });
 console.log(`points vault: ${n} passed`);
+
+// Vault pop-out web fallback: main social platforms get brand-colored SVG tiles; unknown apps keep the letter tile.
+{
+  const { socialIcon } = await import('../src/utils/socialIcons.js');
+  for (const l of ['Instagram', 'TikTok', 'X', 'YouTube', 'Facebook', 'twitter']) { const s = socialIcon(l); if (!s || !s.bg || !/<(path|rect|circle)/.test(s.svg)) throw new Error('brand icon ' + l); }
+  if (socialIcon('Duolingo') !== null) throw new Error('unknown app should fall back to letter tile');
+  console.log('ok   vault pop-out social brand icons');
+}
