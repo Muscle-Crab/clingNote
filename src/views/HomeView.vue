@@ -374,7 +374,8 @@ import { vaultView, startPlan, stopWindows, priceApps, newUnlocks, unlockCelebra
 import robotPng from '@/assets/assistant-robot@2x.png';
 import PointsCelebration from '@/components/home/PointsCelebration.vue';
 import { sessionGoal, overtimeStamp, overtimeInfo } from '@/utils/sessionGoal';
-import { durationMs as ringDurationMs, overtimeMs as ringOvertimeMs } from '@/utils/timerRing';
+import { durationMs as ringDurationMs, overtimeMs as ringOvertimeMs, elapsedMs as ringElapsedMs } from '@/utils/timerRing';
+import { topicKey, recordActual, setEstimateHistory, estimateHistory } from '@/utils/personalEstimate';
 import { useEightHour, clearDebtLocal, syncAfterAuth, setDayLengthHours, loadDayLengthHours, promptSeenFor, markPromptSeen } from '@/composables/useEightHour';
 import { countableIndexes, taskRange, hoursLabel, validSessionHours } from '@/utils/eightHour';
 import { estimateFor, chipValues, withAiEstimate } from '@/utils/taskEstimate';
@@ -1354,6 +1355,7 @@ const toggleTaskCompletion = async (index) => {
 
     task.completedAt = completedNow;
     Object.assign(task, task.timerEndTime ? overtimeStamp(ringDurationMs(task), ringOvertimeMs(task, Date.parse(completedNow))) : overtimeStamp(0)); // overtime penalty input
+    if (task.timerEndTime) recordEstimateActual(task, ringElapsedMs(task, Date.parse(completedNow)) / 60000); // personalized estimates
     task.completedFor = (!isToday(selectedDayIndex.value) && isShutdown() && days[selectedDayIndex.value]?.day === planTomorrowDayName()) ? localYMDOffset(1) : null; // early (planning window) -> tomorrow's
     task.timerActive = false;
     task.timerStoppedAt = completedNow;
@@ -2437,6 +2439,14 @@ const updateCreditsInFirestore = async () => {
 };
 
 watch(userCredits, updateCreditsInFirestore);
+// Personalized estimates: actual minutes per topic on users/{uid}.estHistory (last 20 per key, outliers ignored).
+const recordEstimateActual = (task, actualMin) => {
+  const key = topicKey(task.title); const before = estimateHistory();
+  const next = recordActual(before, key, actualMin, chipValues(task).minutes);
+  if (next === before || !userId.value) return;
+  setEstimateHistory(next);
+  updateDoc(doc(db, 'users', userId.value), { [`estHistory.${key}`]: next[key] }).catch(() => saveBossField({ estHistory: { [key]: next[key] } }));
+};
 const fetchUserCredits = async () => {
   if (!userId.value) return;
 
@@ -2446,6 +2456,7 @@ const fetchUserCredits = async () => {
     const userDocSnapshot = await getDoc(userDocRef);
     if (userDocSnapshot.exists()) {
       userCredits.value = userDocSnapshot.data().credits || 0;
+      setEstimateHistory(userDocSnapshot.data().estHistory); // personalized estimates (utils/personalEstimate.js)
       console.log('User credits loaded:', userCredits.value);
     }
   } catch (error) {

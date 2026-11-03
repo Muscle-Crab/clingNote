@@ -3,11 +3,13 @@
 import { estimateTask } from './eightHour';
 import { localEstimateMinutes, applyAiEstimate } from './aiEstimate';
 import { sizeModeOn, sizePoints, sizeOf } from './gamePlan';
+import { personalFor } from './personalEstimate';
 
 const typed = (t) => { const n = Math.round(Number(t && t.estimateMin)); return Number.isFinite(n) && n > 0 ? n : 0; };
 export const estimateFor = (task = {}) => {
   // No typed estimate -> the instant local estimator (title hints + dictionary) supplies the minutes; a server AI may override later.
   const auto = typed(task) ? null : localEstimateMinutes(task);
+  if (auto) auto.minutes = personalFor(task.title, auto.minutes); // blended with the user's own past times for this topic
   const e = estimateTask({ title: task.title || '', notes: task.notes || '', priority: task.priority || '', estimateMin: typed(task) || auto.minutes });
   return { complexity: e.complexity, minutes: e.minutes, points: e.points, estimateSource: auto ? auto.source : 'user' };
 };
@@ -27,7 +29,8 @@ export const fmtMin = (m) => (m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? ` ${m 
 // (typed estimate, assistant-rated points, already AI, unusable answer, or no real change).
 export const withAiEstimate = (task, minutes) => {
   if (!task || task.estimateSource === 'ai' || task.estimateSource === 'user' || task.pointsSource === 'ai') return null;
-  const a = applyAiEstimate(task, minutes);
+  const a0 = applyAiEstimate(task, minutes);
+  const a = a0 === task ? a0 : { ...a0, minutes: personalFor(a0.title, a0.minutes) };
   if (a === task || a.minutes === task.minutes) return null;
   const e = estimateTask({ title: a.title || '', notes: a.notes || '', priority: a.priority || '', estimateMin: a.minutes });
   return { ...a, complexity: e.complexity, minutes: e.minutes, points: e.points, estimateSource: 'ai' };
