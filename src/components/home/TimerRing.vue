@@ -43,11 +43,11 @@ const over = computed(() => { const o = overtimeMs(props.task, now.value); retur
 </script>
 
 <style scoped>
-.timer-ring { display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; vertical-align: middle; }
+.timer-ring { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 2px 4px; flex-shrink: 1; min-width: 0; max-width: 100%; vertical-align: middle; }
 .timer-ring-track { stroke: var(--c-border, rgba(127, 127, 127, 0.25)); }
 .timer-ring-text { font-size: var(--fs-sm, 12px); font-weight: 700; font-variant-numeric: tabular-nums; }
 .timer-ring-over { font-weight: 600; opacity: 0.65; }
-.timer-ring-warn { font-size: var(--fs-xs, 11px); font-weight: 800; color: #f97316; }
+.timer-ring-warn { flex-basis: 100%; font-size: var(--fs-xs, 11px); font-weight: 800; color: #f97316; line-height: 1.3; overflow-wrap: anywhere; } /* own line under the ring: never runs under the play button */
 .timer-ring--paused .timer-ring-arc, .timer-ring--paused .timer-ring-text { opacity: 0.6; }
 .timer-ring--done .timer-ring-track { stroke: hsl(0 78% 48% / 0.35); }
 @media (prefers-color-scheme: dark) { .timer-ring-track { stroke: var(--c-border, rgba(255, 255, 255, 0.16)); } }
