@@ -84,6 +84,18 @@ Return ONLY JSON: {"steps":[{"title":"...","minutes":5}]}`;
     const user = notes ? `Task: ${title}\nNotes: ${notes}` : `Task: ${title}`;
     return { costsCredit: false, ask: true, body: { model: 'gpt-4o-mini', temperature: 0.4, max_tokens: 400, response_format: { type: 'json_object' }, messages: [{ role: 'system', content: sys }, { role: 'user', content: user }] } };
   }
+  if (task === 'vault_why') {
+    // Onboarding vault step: one short, friendly sentence per locked app explaining its points price. The numbers come from the
+    // client (formula in src/utils/pointsVault.js); the model only words them and must not invent or change any number.
+    const apps = (Array.isArray(input.apps) ? input.apps : []).slice(0, 12).map((a) => ({ id: clip(a && a.id, 80), label: clip(a && a.label, 40) || 'this app',
+      hoursPerWeek: int(a && a.hoursPerWeek, 0, 200, 0), price: int(a && a.price, 0, 600, 0), tasks: int(a && a.tasks, 0, 60, 0), estimate: !!(a && a.estimate), boss: !!(a && a.boss) })).filter((a) => a.id);
+    if (!apps.length) throw Object.assign(new Error('No apps'), { status: 400 });
+    const sys = `You explain an app's unlock price in a productivity app. For each app write ONE sentence (max 30 words), warm and motivating, second person.
+Use exactly the given numbers (hoursPerWeek, price in points, tasks); never invent or change numbers. If estimate is true, say it is an estimate (typical usage) that updates after a few days. If boss is true, mention it is their biggest time sink so it costs 1.5x.
+Example: "You spend about 9 hours a week on TikTok, so it costs 110 points, about 6 tasks."
+Return ONLY JSON: {"lines":{"<id>":"<sentence>"}}`;
+    return { costsCredit: false, ask: true, body: { model: 'gpt-4o-mini', temperature: 0.4, max_tokens: 600, response_format: { type: 'json_object' }, messages: [{ role: 'system', content: sys }, { role: 'user', content: JSON.stringify(apps) }] } };
+  }
   throw Object.assign(new Error('Unknown task'), { status: 400 });
 };
 

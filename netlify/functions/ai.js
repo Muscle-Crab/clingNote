@@ -115,6 +115,24 @@ const handleAgent = async (event, body, deps) => {
   }
 };
 
+// task 'vault_why' (onboarding vault step): any signed-in user, at most once a day per user (users/{uid}.vaultWhyDay), no ask quota used.
+// Reply { lines: { [appId]: sentence } }; the client falls back to its own template (pointsVault.priceWhy) on any error.
+const handleVaultWhy = async (event, body, deps) => {
+  const uid = await verifyUser(event.headers, deps.verify || ((t) => getAdmin().auth().verifyIdToken(t)));
+  const req = buildRequest('vault_why', body.input || {});
+  if (!process.env.OPENAI_API_KEY && !process.env.GEMINI_API_KEY) return json(500, { error: 'Server not configured' });
+  const db = deps.db || getAdmin().firestore(); const day = new Date().toISOString().slice(0, 10); const ref = db.doc(`users/${uid}`);
+  const snap = await ref.get(); if (snap.exists && snap.data().vaultWhyDay === day) return json(429, { error: 'Already explained today' });
+  await ref.set({ vaultWhyDay: day }, { merge: true });
+  try {
+    const out = await callChat(req.body, { fetch: deps.fetch, prefer: 'openai' });
+    let data = out.content; if (typeof data === 'string') { const m = /\{[\s\S]*\}/.exec(data); try { data = JSON.parse(m ? m[0] : data); } catch (e) { data = null; } }
+    const lines = {}; Object.entries((data && data.lines) || {}).forEach(([k, v]) => { if (typeof v === 'string' && v.trim()) lines[String(k).slice(0, 80)] = v.trim().slice(0, 240); });
+    if (!Object.keys(lines).length) return json(502, { error: 'AI reply unusable' });
+    return json(200, { lines });
+  } catch (e) { return json(e.status === 500 ? 500 : 502, { error: e.status === 500 ? 'Server not configured' : 'AI request failed' }); }
+};
+
 const rawHandler = async (event, ctx, deps = {}) => {
   if (event.httpMethod !== 'POST') return json(405, { error: 'Method not allowed' });
   try {
@@ -122,6 +140,7 @@ const rawHandler = async (event, ctx, deps = {}) => {
     if (body && body.task === 'ask') return await handleAsk(event, body, deps);
     if (body && body.task === 'agent') return await handleAgent(event, body, deps);
     if (body && body.task === 'breakdown') return await handleBreakdown(event, body, deps);
+    if (body && body.task === 'vault_why') return await handleVaultWhy(event, body, deps);
     const uid = await requirePro(event, { verify: deps.verify, db: deps.db }); // 401 / 402 unless Pro
     if (!process.env.OPENAI_API_KEY && !process.env.GEMINI_API_KEY) return json(500, { error: 'Server not configured' });
     const req = buildRequest(body.task, body.input);

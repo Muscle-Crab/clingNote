@@ -90,10 +90,19 @@
         <p v-if="a.appLock" class="ob-p">{{ a.appLock }}</p>
       </section>
 
+      <!-- Right after the app picker: the chosen apps locked in the vault, priced/ordered by utils/pointsVault.js (same list as Home's vault row). -->
+      <section v-else-if="STEPS[step] === 'vault'" class="ob-sec" data-test="ob-vault">
+        <div class="ob-bell">🔐</div>
+        <p class="ob-k">Step {{ stepNo('vault') }}</p><h1 class="ob-h">Your apps are in <span>the vault</span></h1>
+        <p class="ob-p">Earn points to unlock these. Cheapest opens first; 10 pts = 5 min of app time.</p>
+        <div class="gp-body gp-vbody ob-vault" data-test="ob-vault-list"><VaultApps :items="vaultItems" detail :why="vaultWhy" /></div>
+        <p v-if="!vaultItems.length" class="ob-p" data-test="ob-vault-empty">Your picked apps will show here with their prices.</p>
+      </section>
+
       <div class="ob-foot">
         <button class="ob-cta" :disabled="(STEPS[step] === 'goals' && !a.goals.length) || (STEPS[step] === 'age' && ageState !== 'ok') || (STEPS[step] === 'alarm' && (alarmBusy || !alarmTime))" @click="next">{{ ctaLabel }}</button>
         <button v-if="STEPS[step] === 'alarm'" class="ob-later" data-test="ob-alarm-later" @click="a.wakeAlarm = 'later'; go(step + 1)">Not now</button>
-        <button v-if="STEPS[step] === 'applock'" class="ob-later" @click="a.appLock = 'later'; go(step + 1)">Not now</button>
+        <button v-if="STEPS[step] === 'applock'" class="ob-later" @click="a.appLock = 'later'; go(step + 2)">Not now</button>
         <button v-if="STEPS[step] === 'notifications'" class="ob-later" @click="a.notifications = 'later'; go(step + 1)">Not now</button>
       </div>
     </template>
@@ -122,9 +131,14 @@ import { defaultAlarmTime, DEFAULT_ALARM_TIME } from '@/utils/wakeAlarm';
 import { clearProCache } from '@/composables/usePro';
 import { fmtWakeLabel } from '@/utils/eightHour';
 import RobotCoach from '@/components/robot/RobotCoach.vue';
+import { typicalMin } from '@/utils/typicalUsage';
+import VaultApps from '@/components/vault/VaultApps.vue';
+import { askAiQuiet } from '@/composables/useAi';
+import { vaultView } from '@/utils/pointsVault';
+import { localDateStr } from '@/utils/streak';
 
 // 'alarm' (iOS app only): optional wake-up alarm opt-in right after the day-start step. index STEPS.length = paywall
-const STEPS = ['welcome', 'whatsnew', 'age', 'goals', 'schedule', ...(isNativeIOS() ? ['alarm'] : []), 'strictness', 'notifications', ...(lockAvailable() ? ['applock'] : [])];
+const STEPS = ['welcome', 'whatsnew', 'age', 'goals', 'schedule', ...(isNativeIOS() ? ['alarm'] : []), 'strictness', 'notifications', ...(lockAvailable() ? ['applock', 'vault'] : [])];
 const stepNo = (id) => STEPS.indexOf(id) - 1; // "Step N" counter: welcome + age are not numbered
 const GOALS = [
   { id: 'work', e: '💼', l: 'Crush work tasks' }, { id: 'fitness', e: '💪', l: 'Work out consistently' },
@@ -157,6 +171,14 @@ const wakeLabel = computed(() => fmtWakeLabel(eh.plan.value?.wakeTime || a.wakeT
 watch(step, (n) => { if (n === STEPS.length) { const u = auth.currentUser; if (u) { markPaywallSeenLocal(u.uid); saveUserFields(u.uid, { paywallSeenAt: new Date() }).catch(() => {}); } } }, { immediate: true });
 const firstName = computed(() => (name.value || 'there').split(' ')[0]);
 const ctaLabel = computed(() => ({ welcome: "Let's go", whatsnew: 'Nice, continue', alarm: 'Yes, turn it on', notifications: 'Turn on notifications', applock: 'Choose apps to block' }[STEPS[step.value]] || 'Continue'));
+// Vault step: the apps just picked, with 0 pts earned = all locked, cheapest first (prices from on-device usage, same as Home).
+const vaultItems = ref([]); const vaultWhy = ref(null);
+// AI wording of each price (server task 'vault_why'); only when AI consent was already given (never prompts here). Any failure keeps the template line.
+const explainVault = async (items) => { if (!items.length) return;
+  const apps = items.map((r) => ({ id: r.id, label: r.label, hoursPerWeek: Math.max(1, Math.round(r.min * 7 / 60)), price: r.price, tasks: r.tasks, estimate: !!r.noData, boss: !!r.boss }));
+  const d = await askAiQuiet('vault_why', { apps }); if (d && d.lines) vaultWhy.value = d.lines; };
+const loadVault = async () => { try { const u = await clingLock.vaultUsage(); vaultItems.value = vaultView({ apps: (u && u.apps) || [], days: (u && u.days) || {}, todayYmd: localDateStr(), points: 0, typical: typicalMin }).items; explainVault(vaultItems.value); } catch (e) { vaultItems.value = []; } };
+watch(step, (n) => { if (STEPS[n] === 'vault' && !vaultItems.value.length) loadVault(); }, { immediate: true });
 const toggle = (id) => { const i = a.goals.indexOf(id); i < 0 ? a.goals.push(id) : a.goals.splice(i, 1); };
 
 onMounted(async () => {
@@ -190,6 +212,7 @@ async function next() {
     const auth0 = await clingLock.requestAuthorization();
     if (auth0.status === 'approved') { const r = await clingLock.pickApps(); if (r.saved && (r.apps + r.categories + r.sites) > 0) { try { localStorage.setItem(LOCK_PREF, '1'); } catch (e) { /* ignore */ } a.appLock = 'on'; } else a.appLock = 'none'; }
     else a.appLock = auth0.status || 'denied';
+    if (a.appLock === 'on') await loadVault(); else return go(step.value + 2); // no apps chosen: no vault step
   }
   go(step.value + 1);
 }
@@ -210,6 +233,7 @@ async function finish() { await persist({ onboardingComplete: true, onboardingCo
 .ob-k { margin: 8px 0 0; font-size: 12px; font-weight: 600; letter-spacing: .16em; text-transform: uppercase; color: #5E9BFF; }
 .ob-h { margin: 4px 0 10px; font-size: 30px; line-height: 36px; font-weight: 800; letter-spacing: -.02em; color: #fff; } .ob-h span { color: #3D8BFF; }
 .ob-p { color: #A9B4CC; line-height: 1.55; margin: 0 0 18px; }
+.ob-vault { display: grid; gap: 8px; margin: 0 0 18px; color: #A9B4CC; font-size: .95rem; text-align: left; }
 .ob-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .ob-opt, .ob-row { text-align: left; font: inherit; color: inherit; cursor: pointer; border-radius: 16px; border: 1.5px solid #2A3C66; background: linear-gradient(180deg, rgba(18,32,63,.92), rgba(12,22,48,.92)); padding: 14px; font-weight: 600; font-size: 14px; }
 .ob-opt .em { display: block; font-size: 24px; margin-bottom: 6px; }

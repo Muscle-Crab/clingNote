@@ -371,6 +371,7 @@ import DayStartPrompt from '@/components/eighthour/DayStartPrompt.vue';
 import { sessionApps } from '@/utils/sessionApps';
 import { debtShield, debtHoldPlan, turnOffBlocked, TURN_OFF_BLOCKED_MSG } from '@/utils/appLockDebt';
 import { vaultView, startPlan, stopWindows, priceApps, newUnlocks, unlockCelebration, webFallback } from '@/utils/pointsVault';
+import { typicalMin } from '@/utils/typicalUsage';
 import robotPng from '@/assets/assistant-robot@2x.png';
 import PointsCelebration from '@/components/home/PointsCelebration.vue';
 import { sessionGoal, overtimeStamp, overtimeInfo, overtimePoints } from '@/utils/sessionGoal';
@@ -4252,7 +4253,7 @@ const syncVault = async () => {
     const u = await clingLock.vaultUsage(); if (u && !u.error) { vaultData.value = { days: u.days || {}, apps: u.apps || [] };
       // Prices are computed once per day (new apps picked later in the day get priced and appended).
       const have = dayLoad(VAULT_PRICE_KEY) || []; const missing = (u.apps || []).filter((a) => !have.some((h) => h.id === a.id));
-      if (!have.length || missing.length) { const add = priceApps(have.length ? missing : u.apps || [], u.days || {}, localDateStr()); const list = [...have, ...add].sort((a, b) => a.price - b.price); daySave(VAULT_PRICE_KEY, list); vaultPriced.value = list; } }
+      if (!have.length || missing.length) { const add = priceApps(have.length ? missing : u.apps || [], u.days || {}, localDateStr(), typicalMin); const list = [...have, ...add].sort((a, b) => a.price - b.price); daySave(VAULT_PRICE_KEY, list); vaultPriced.value = list; } }
     const st = await clingLock.vaultState();
     const v = gpVault.value; const live = st && st.live;
     // Debt / gate lost while app time runs: close at once (time already used stays used, the rest is kept).

@@ -66,3 +66,19 @@ console.log(`points vault: ${n} passed`);
   if (socialIcon('Duolingo') !== null) throw new Error('unknown app should fall back to letter tile');
   console.log('ok   vault pop-out social brand icons');
 }
+{ // onboarding vault step: typical estimates with no history, weekly text, price explanation, AI prompt
+  const { typicalMin } = await import('../src/utils/typicalUsage.js');
+  const r = V.priceApps([{ id: 'a', label: 'TikTok' }, { id: 'b', label: 'Instagram' }, { id: 'c', label: 'App' }], {}, '2026-11-03', typicalMin);
+  assert.equal(V.priceApps([{ id: 'a', label: 'TikTok' }], {}, '2026-11-03')[0].min, V.NO_DATA_MIN);
+  const tk = r.find((x) => x.id === 'a'); assert.equal(tk.min, 90); assert.ok(tk.boss && tk.noData); assert.equal(tk.price, Math.min(600, V.round5(V.priceOf(90) * 1.5)));
+  assert.equal(r.find((x) => x.id === 'c').min, V.NO_DATA_MIN);
+  assert.match(V.weeklyText(tk), /^~11 h\/week \(estimate, updates after a few days\)$/);
+  assert.match(V.priceWhy(r.find((x) => x.id === 'c')), /on this app \(an estimate/);
+  const d = { '2026-11-01': { a: 120, b: 30 }, '2026-11-02': { a: 90, b: 30 } }; const r2 = V.priceApps([{ id: 'a', label: 'TikTok' }, { id: 'b', label: 'Instagram' }], d, '2026-11-03');
+  const ig = r2.find((x) => x.id === 'b'); assert.equal(ig.price, 90); assert.equal(V.weeklyText(ig), '~4 h/week'); assert.equal(V.priceWhy(ig), 'You spend about 4 hours a week on Instagram, so it costs 90 points, about 5 tasks.');
+  const { createRequire } = await import('node:module'); const { buildRequest } = createRequire(import.meta.url)('../netlify/functions/lib/aiPrompts.js');
+  const q = buildRequest('vault_why', { apps: [{ id: 'a', label: 'TikTok', hoursPerWeek: 11, price: 315, tasks: 16, estimate: true, boss: true }] });
+  assert.ok(q.body.messages[1].content.includes('"price":315') && /estimate/.test(q.body.messages[0].content));
+  assert.throws(() => buildRequest('vault_why', { apps: [] }));
+  console.log('ok   onboarding vault step: estimates, weekly text, price why, AI prompt');
+}
