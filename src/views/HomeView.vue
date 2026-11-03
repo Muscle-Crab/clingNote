@@ -975,6 +975,11 @@ const openModal = (type = 'task', index = null, title = '') => {
     selectedTaskTitle.value = title || "Task Reminder";
     isModalOpen.value = true;
   } else {
+    // Date chip: prefill with the selected tab's real date (rolling tabs); today's tab leaves it empty (= today), as before.
+    if (type === 'task' && !isViewingToday.value && selectedDayDate.value > getTodayId()) {
+      if (!newTask.value.dueDate) newTask.value.dueDate = selectedDayDate.value;
+      if (newTask.value.sched && !newTask.value.sched.on) newTask.value.sched.date = selectedDayDate.value;
+    }
     modalOpen.value = true;
     prefetchGate();
   }
