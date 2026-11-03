@@ -22,11 +22,16 @@ export const countsToward = (t) => !!t && t.status !== 'pending' && t.status !==
 export const sessionOfTask = (t, sessions = 2) => (sessions === 1 ? 1 : SESSION1_SECTIONS.includes(sectionOf(t)) ? 1 : 2);
 export const doneAtMs = (t) => { const v = t && t.completedAt; if (!v) return NaN; if (typeof v === 'number') return v;
   if (v.seconds) return v.seconds * 1000; if (v._seconds) return v._seconds * 1000; if (typeof v.toMillis === 'function') return v.toMillis(); return Date.parse(v); };
-// The session's goal: target = sum of its tasks' points; earned = points of its tasks completed before endMs (a task finished early,
-// before the session or the eight-hour day started, still counts; no completedAt = counts). Only completions after the end miss.
-export const sessionGoal = (tasks, { n, sessions = 2, endMs }, pointsOf = taskPoints) => {
+// The session's goal: target = sum of its tasks' points; earned = points of its tasks completed inside the session,
+// startMs <= completedAt < endMs (startMs = the eight-hour session's own start, so a task finished in an EARLIER session of the day
+// does not pre-satisfy a new one; no startMs = no lower bound; no completedAt = counts).
+// goal (> 0) = the session's frozen points goal (lock.target, set at Start): the session then counts every countable task completed
+// inside [startMs, endMs) (points earned after Start), not the Coach section split. met = earned >= goal (core.sessionMet).
+export const sessionGoal = (tasks, { n, sessions = 2, startMs = 0, endMs, goal = 0 } = {}, pointsOf = taskPoints) => {
+  const from = Number(startMs) > 0 ? Number(startMs) : -Infinity; const frozen = Number(goal) > 0;
   let target = 0; let earned = 0; let done = 0; let total = 0;
-  for (const t of tasks || []) { if (!countsToward(t) || sessionOfTask(t, sessions) !== n) continue; const p = pointsOf(t); target += p; total += 1;
-    if (t.completed) { const at = doneAtMs(t); if (!Number.isFinite(at) || at < endMs) { earned += p; done += 1; } } }
-  return { n, target, earned, done, total, met: earned >= target };
+  for (const t of tasks || []) { if (!countsToward(t) || (!frozen && sessionOfTask(t, sessions) !== n)) continue; const p = pointsOf(t); target += p; total += 1;
+    if (t.completed) { const at = doneAtMs(t); if (!Number.isFinite(at) || (at >= from && at < endMs)) { earned += p; done += 1; } } }
+  if (frozen) target = Number(goal);
+  return { n, target, earned, done, total, met: target <= 0 || earned >= target /* = core.sessionMet (copied into tests' temp dirs: no core import) */ };
 };

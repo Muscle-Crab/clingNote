@@ -113,10 +113,11 @@ export const savePlan = async ({ wakeTime, taskCount }) => {
 };
 // Starts a session NOW for `hours`, any time of day (the start prompt's Confirm). End = confirm time + hours.
 // No clock gate: after a session ends a new one can start right away (the server numbers it dayKey#1, #2, ...).
-export const startNow = async (hours, blocks) => {
-  const h = core.clampHours(hours == null ? hoursPref.value : hours);
+// hours: whole hours 5..12 (validated on the server). opts.apps = the app counts picked for this session.
+export const startNow = async (hours, blocks, opts = {}) => {
+  const h = core.validSessionHours(hours) ? Number(hours) : core.validSessionHours(hoursPref.value) ? Number(hoursPref.value) : core.SESSION_HOURS.min + 3;
   st.busy = true;
-  try { const d = await call('start', { hours: h, ...(Array.isArray(blocks) && blocks.length ? { blocks } : {}) }); apply(d); return d; }
+  try { const d = await call('start', { hours: h, ...(Array.isArray(blocks) && blocks.length ? { blocks } : {}), ...(opts && opts.apps ? { apps: opts.apps } : {}) }); apply(d); return d; }
   catch (e) {
     if (!isUnavailable(e) || e.status === 401) throw e;
     const plan = st.data?.plan || readCachedPlan(); const tz = plan?.tz || deviceTz(); const now = nowMs();

@@ -41,7 +41,7 @@ export const holdKey = (sessionKey) => `debt_${String(sessionKey || '').replace(
 export const debtHoldPlan = ({ debt, live = null, known = false, now = Date.now(), enabled, selectionCount = 0, unlockedToday = false, friend = false, onBreak = false }) => {
   if (!enabled || !(selectionCount > 0) || unlockedToday) return { action: 'clear' };
   const d = core.debtActive(debt, now) ? debt : null;
-  const liveMet = !!(live && live.target > 0 && live.earned >= live.target);
+  const liveMet = !!(live && core.sessionMet(live));
   if (d && !(live && core.debtCleared(d, live))) return friend || onBreak ? { action: 'none' } : { action: 'arm', key: holdKey(d.sessionKey), startMs: d.sinceMs, untilMs: core.debtUntilMs(d) };
   if (live && live.target > 0 && !liveMet && live.endMs > now + 60000) return { action: 'arm', key: holdKey(live.sessionKey), startMs: live.endMs, untilMs: live.endMs + core.DEBT_CAP_MS };
   if (d || liveMet) return { action: 'clear' };

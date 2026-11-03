@@ -31,11 +31,11 @@ const gp = { dayStart: '09:00', closeHours: 8, sessions: 2 }; const ms = (h, m) 
 const tasks = [{ title: 'Morning email', section: 'morning', estimateMin: 45, completed: true, completedAt: ms(8, 30) }, // before the day started
   { title: 'Write report', section: 'afternoon', estimateMin: 45, completed: true, completedAt: ms(10, 0) }, // session-2 task finished in session 1
   { title: 'Call', section: 'afternoon', estimateMin: 20, completed: true }]; // no completedAt
-t('tasks finished early / before the day / without completedAt count: both sessions met', () => {
-  const l = SP.sessionsOf(gp, tasks, at(18)); assert.deepEqual(l.map((s) => s.met), [true, true], JSON.stringify(l));
-  assert.equal(SP.graceLock(l, at(14)).want, false); assert.equal(SP.graceLock(l, at(18)).want, false); });
-t('server settle agrees (eight-hour-day session grace): met -> no grace', () => { const l = SP.sessionsOf(gp, tasks, at(18));
-  for (const s of l) { const r = srv.sessionGrace(tasks, { n: s.n, startMs: s.startMs, endMs: s.endMs }); assert.equal(r.met, true); assert.equal(r.untilMs, 0); } });
+t('fix/session-lock: a completion before the session start does NOT count (session 1 missed); in-window ones do', () => {
+  const l = SP.sessionsOf(gp, tasks, at(18)); assert.deepEqual(l.map((s) => s.met), [false, true], JSON.stringify(l));
+  assert.equal(SP.graceLock(l, at(14)).want, true, 'missed session 1 stays locked'); assert.equal(SP.graceLock(l, at(18)).want, false); });
+t('server settle agrees (eight-hour-day session grace)', () => { const l = SP.sessionsOf(gp, tasks, at(18));
+  for (const s of l) { const r = srv.sessionGrace(tasks, { n: s.n, startMs: s.sinceMs, endMs: s.endMs }); assert.equal(r.met, s.met); assert.equal(r.earned, s.earned); } });
 t('a task finished AFTER its session end still misses (rule kept)', () => { const late = [{ title: 'Late', section: 'morning', estimateMin: 45, completed: true, completedAt: ms(13, 30) }];
   const [s1] = SP.sessionsOf(gp, late, at(14)); assert.equal(s1.met, false); assert.equal(SP.graceLock([s1], at(14)).want, true); });
 t('met session (cold start / widget): no Coach grace schedule any more, native DebtHold plan instead', () => { const [s1] = SP.sessionsOf(gp, tasks, at(14)); assert(s1); assert.equal(SP.graceSchedule, undefined); });

@@ -62,7 +62,7 @@
         <EightHourCard v-if="lockInToday || eh.lock.value" :tasks="ehTasks" :start-error="ehStartError" @retry="syncAfterAuth" @start="openDayPrompt" :locked="!proNow && !eh.lock.value" @pro="gatePro(_proRouter, 'lockIn')" />
         <PlanDaySheet v-if="planOpen" :tasks="dayTasks" :busy="planBusy" :error="planError" @previewed="onPlanPreviewed" @confirm="onPlanConfirm" @close="planOpen = false" />
         <DayTemplatesSheet v-if="tplOpen" :templates="dayTemplates" :task-count="templateItemCount" :busy="tplBusy" :error="tplError" :note="tplNote" @apply="applyDayTemplate" @save="saveDayTemplate" @remove="removeDayTemplate" @close="tplOpen = false" />
-        <DayStartPrompt v-if="dayPromptOpen" :initial-hours="eh.hoursPref.value" :now-ms="eh.nowMs" :tz="eh.plan.value?.tz || ''" :busy="ehBusy" :error="ehStartError" :tasks="todayTasksForTarget" :stats="eh.stats.value" :earned="pointsAccumulated || 0" @confirm="confirmDayStart" @skip="skipLockIn" :can-lock="lockAvailable()"><template #checkin><CheckinRow :value="checkin" @pick="saveCheckin" /></template></DayStartPrompt>
+        <DayStartPrompt v-if="dayPromptOpen" :initial-hours="eh.hoursPref.value" :now-ms="eh.nowMs" :tz="eh.plan.value?.tz || ''" :busy="ehBusy" :error="ehStartError" :tasks="todayTasksForTarget" :stats="eh.stats.value" :earned="pointsAccumulated || 0" @confirm="confirmDayStart" @skip="skipLockIn" :can-lock="lockAvailable()" :apps="sessionAppsPick" @pick-apps="pickSessionApps"><template #checkin><CheckinRow :value="checkin" @pick="saveCheckin" /></template></DayStartPrompt>
 
         <ProgressBar :locked="!proNow" @pro="gatePro(_proRouter, 'points')" :percentage="calculateCompletionPercentage()" :milestones="milestones" :done="completedTaskCount || 0" :total="dayTasks.length"
                      :streak="streak" :streak-status="streakStatus" :streak-progress="streakProgress" :streak-min="DAILY_STREAK_MIN" :freezes="streakFreezes" :points="pointsAccumulated || 0" :target="isViewingToday ? dayRequiredPts : 0" :off-today="isViewingToday && offToday" :uid="userId || ''" :hold="!!rewardScreen || !!lossScreen" />
@@ -359,10 +359,11 @@ import { lockIn, loadLockIn, skipLockInToday } from '@/utils/lockIn';
 import { wakeLockPlan, shouldReconcileWake } from '@/utils/wakeLock';
 import { homeDay } from '@/utils/homeDay';
 import DayStartPrompt from '@/components/eighthour/DayStartPrompt.vue';
+import { sessionApps } from '@/utils/sessionApps';
 import { debtShield, debtHoldPlan } from '@/utils/appLockDebt';
 import { sessionGoal } from '@/utils/sessionGoal';
 import { useEightHour, clearDebtLocal, syncAfterAuth, setDayLengthHours, loadDayLengthHours, promptSeenFor, markPromptSeen } from '@/composables/useEightHour';
-import { countableIndexes, taskRange, hoursLabel } from '@/utils/eightHour';
+import { countableIndexes, taskRange, hoursLabel, validSessionHours } from '@/utils/eightHour';
 import { estimateFor, chipValues, withAiEstimate } from '@/utils/taskEstimate';
 import { requestAiEstimate } from '@/utils/aiEstimate';
 import { patchTouchesLocked } from '@/utils/eightHourLock';
@@ -3733,6 +3734,15 @@ const maybeShowDayPrompt = async () => {
   if (!dk || promptSeenFor() === dk) return; // once per day; the card's Start button reopens it
   markPromptSeen(dk); openDayPrompt();
 };
+// Step 2 of a new session: the native picker, pre-filled with the last session's apps (App Group "lock.selection.lastUsed", else the
+// global selection, else empty). Saving makes it the shield's selection; Begin then records it as the new last-used one.
+const sessionAppsPick = ref(null);
+const pickSessionApps = async () => {
+  try { if (!lockAvailable()) return; const a0 = await clingLock.requestAuthorization(); if (a0.status !== 'approved') { ehStartError.value = 'Screen Time permission was not given.'; return; }
+    const r = await clingLock.pickApps({ session: true }); if (r && r.saved) sessionAppsPick.value = sessionApps(r);
+    else if (!sessionAppsPick.value) { const st = await clingLock.status(); sessionAppsPick.value = st.selectionCount > 0 ? { apps: st.selectionCount, categories: 0, sites: 0 } : null; }
+  } catch (e) { console.warn('session apps', e && e.message); }
+};
 const confirmDayStart = async (hours, opts = {}) => {
   if (ehStarting) return;
   if (!lockInToday.value) { ehStartError.value = lockIn.value.enabled ? 'Lock-in is skipped for today.' : 'Lock-in is off. Turn it on in Settings (Profile > Preferences).'; return; }
@@ -3743,9 +3753,11 @@ const confirmDayStart = async (hours, opts = {}) => {
     // Compat with a server that still requires plan.taskCount === list size: sync it to what is stored first (allowed in the ready phase).
     { const plan = eh.plan.value; const n = countableIndexes(selectedDayRoutine.value || [], eh.phaseInfo.value.dayKey || '').length; const r = taskRange(hours);
       if (plan && n >= 1 && n <= r.max && plan.taskCount !== n) await eh.savePlan({ wakeTime: plan.wakeTime, taskCount: n }).catch((e) => console.warn('plan sync:', e && e.message)); }
-    await eh.startNow(hours, opts.blocks); // evening mode: optional later blocks today (split day), fixed now
+    if (!validSessionHours(hours)) { ehStartError.value = 'Pick 5 to 12 whole hours.'; return; }
+    await eh.startNow(hours, opts.blocks, { apps: opts.lock ? sessionAppsPick.value : null }); // evening mode: optional later blocks today (split day), fixed now
     dayPromptOpen.value = false;
-    if (opts.lock) await startHardLock();
+    // Begin = the shield goes up NOW on the picked apps (startLock applies at once); sessionBegin stores them as the last-used selection.
+    if (opts.lock) await startHardLock({ sessionBegin: true });
     await ensureLegacyDayStarted().catch((e) => console.warn('day session:', e));
     await fetchSelectedDayRoutine();
   } catch (e) { { const r = taskRange(hours); ehStartError.value = (e.code === 'no-tasks' || e.code === 'too-few') ? `Add at least ${r.min} task${r.min === 1 ? '' : 's'} for ${hoursLabel(r.hours)} hours, then confirm.` : e.code === 'too-many' ? `At most ${r.max} tasks for ${hoursLabel(r.hours)} hours. Remove some, then confirm.` : (e.message || 'Could not start the countdown'); } }
@@ -4061,7 +4073,7 @@ const strictState = ref(null);
 const strictReadyMin = ref(0); // goal met: earned screen time banked until the user starts it
 // Coach sessions bank their own window (claimedAtBy[session]): a window claimed in the morning must not leave the afternoon 'relocked'.
 const claimScreenTime = () => { const sd = readStrictDay(); if (!strictReadyMin.value) return; const ss = gpOn.value ? liveSession(gpSessions.value, Date.now()) : null;
-  if (ss) { const sk = `${ss.dayKey}s${ss.n}`; const by = sd.claimedAtBy || {}; if (by[sk]) return; writeStrictDay({ ...sd, claimedAtBy: { ...by, [sk]: Date.now() } }); }
+  if (ss || liveDebtSession()) { const sk = strictSessionKey(ss); const by = sd.claimedAtBy || {}; if (by[sk]) return; writeStrictDay({ ...sd, claimedAtBy: { ...by, [sk]: Date.now() } }); }
   else { if (sd.claimedAt) return; writeStrictDay({ ...sd, claimedAt: Date.now() }); }
   strictReadyMin.value = 0; syncAppLock(); };
 const firstNameForBoss = computed(() => String((auth.currentUser && auth.currentUser.displayName) || '').split(' ')[0]);
@@ -4072,15 +4084,16 @@ let strictNoteSig = '';
 const strictPlan = (st) => {
   const sd = readStrictDay();
   // Coach mode: the shield judges the CURRENT session (its own target and in-session points, same math as the server), not the whole day.
-  const ss = gpOn.value ? liveSession(gpSessions.value, Date.now()) : null;
-  const earned = ss ? ss.earned : pointsAccumulated.value || 0; const goal = ss ? ss.target : strictGoal.value;
+  // A running session with a frozen goal (every mode): its own goal and the points earned after its Start, keyed by session.
+  const ss = gpOn.value ? liveSession(gpSessions.value, Date.now()) : null; const ls = liveDebtSession(); const frozen = !!(ls && ls.frozen);
+  const earned = frozen ? ls.earned : ss ? ss.earned : pointsAccumulated.value || 0; const goal = frozen ? ls.target : ss ? ss.target : strictGoal.value;
   if (eh.running.value && eh.lock.value && eh.lock.value.endMs) sd.dayEndMs = eh.lock.value.endMs;
-  const sk = ss ? `${ss.dayKey}s${ss.n}` : ''; if (ss) sd.goalAtBy = sd.goalAtBy || {};
-  const goalAt = ss ? sd.goalAtBy[sk] || 0 : sd.goalAt;
-  if (!goalAt && goal > 0 && earned >= goal) { if (ss) sd.goalAtBy[sk] = Date.now(); else sd.goalAt = Date.now(); }
+  const keyed = !!(ss || ls); const sk = keyed ? strictSessionKey(ss) : ''; if (keyed) sd.goalAtBy = sd.goalAtBy || {};
+  const goalAt = keyed ? sd.goalAtBy[sk] || 0 : sd.goalAt;
+  if (!goalAt && goal > 0 && earned >= goal) { if (keyed) sd.goalAtBy[sk] = Date.now(); else sd.goalAt = Date.now(); }
   writeStrictDay(sd);
-  const allDone = ss ? ss.total > 0 && ss.done >= ss.total : allTasksDone.value;
-  let r = strictShield({ running: eh.running.value, dayEndMs: sd.dayEndMs, goal, earned, tasksDone: tasksDoneToday.value, goalAt: ss ? sd.goalAtBy[sk] || 0 : sd.goalAt, claimedAt: (ss ? (sd.claimedAtBy || {})[sk] : sd.claimedAt) || 0, selectionCount: st.selectionCount || 0, allDone,
+  const allDone = frozen ? false : ss ? ss.total > 0 && ss.done >= ss.total : allTasksDone.value;
+  let r = strictShield({ running: eh.running.value, dayEndMs: sd.dayEndMs, goal, earned, tasksDone: tasksDoneToday.value, goalAt: keyed ? sd.goalAtBy[sk] || 0 : sd.goalAt, claimedAt: (keyed ? (sd.claimedAtBy || {})[sk] : sd.claimedAt) || 0, selectionCount: st.selectionCount || 0, allDone,
     enabled: lockEnabled(), unlockedToday: lockUnlockedDay.value === localDateStr(), offDay: (offDates.value || []).includes(localDateStr()) });
   if (gpOn.value) { // game plan: optional friend-approved unlock window wins (only when enabled); otherwise social apps stay locked until the morning checklist is done
     if (gp.value.friendUnlock && gpUnlock.value.untilMs > Date.now()) r = { ...r, want: false, phase: 'friend' };
@@ -4105,9 +4118,13 @@ const syncDebtHold = async (st, friend, onBreak) => {
   else if (p.action === 'clear') await clingLock.clearDebtHold();
 };
 // The running session's own goal for the missed-goal lock (same math + tasks as the server's sessionGrace).
+// Only points earned after the session's Start count; a lock with a frozen goal record (l.goal) is judged on lock.target.
 const liveDebtSession = () => { const l = eh.lock.value; if (!eh.running.value || !l || !l.startMs) return null;
-  const sessions = Number(gp.value && gp.value.sessions) === 1 ? 1 : 2; const g = sessionGoal(todayTasksForTarget.value || [], { n: Math.min((Number(l.index) || 0) + 1, sessions), sessions, endMs: l.endMs });
-  return { sessionKey: `${l.dayKey}#${Number(l.index) || 0}`, startMs: l.startMs, endMs: l.endMs, target: g.target, earned: g.earned }; };
+  const sessions = Number(gp.value && gp.value.sessions) === 1 ? 1 : 2; const frozen = !!(l.goal && Number(l.target) > 0);
+  const g = sessionGoal(todayTasksForTarget.value || [], { n: Math.min((Number(l.index) || 0) + 1, sessions), sessions, startMs: l.startMs, endMs: l.endMs, goal: frozen ? Number(l.target) : 0 });
+  return { sessionKey: `${l.dayKey}#${Number(l.index) || 0}`, startMs: l.startMs, endMs: l.endMs, target: g.target, earned: g.earned, done: g.done, frozen }; };
+// Per-session key for the local goal / claim stamps: `${dayKey}#${index}` (the session), plus `s${n}` for a Coach window inside it.
+const strictSessionKey = (ss) => { const l = eh.lock.value; const base = l && l.dayKey ? `${l.dayKey}#${Number(l.index) || 0}` : (ss ? ss.dayKey : localDateStr()); return ss ? `${base}s${ss.n}` : base; };
 // Debt paid: drop the native hold, plus any legacy Coach-mode "grace{day}s{n}" scheduled lock left by an older build.
 const debtPaidNative = (sessionKey = '') => { const day = String(sessionKey).split('#')[0].replace(/-/g, '');
   holdSig = ''; clingLock.clearDebtHold().catch(() => {});
@@ -4121,14 +4138,17 @@ const syncAppLock = async () => {
   if (gpOn.value && gpLoaded.value) { await gpBreakReconcile(); if (await gpVoidBreak()) st = await clingLock.status(); st = await gpBreakRelock(st); }
   if (holdLockAction(gpBreak.value, Date.now()) && gpBreakOk()) { hardLocked.value = false; return; } // native break live: shields are off, lock state kept for the re-lock
   // Expired shield / app locks are cleared on open or foreground whichever day is shown (labeledApps drops expired entries natively).
-  if (st.locked && Number(st.until) > 0 && Number(st.until) <= Date.now()) { lockOn = null; await clingLock.stopLock(); clingLock.labeledApps(); return; }
+  // ...then carry on in the same sync (refreshed status), so a new session's shield goes up now instead of on the next open.
+  if (st.locked && Number(st.until) > 0 && Number(st.until) <= Date.now()) { lockOn = null; await clingLock.stopLock(); clingLock.labeledApps(); st = await clingLock.status(); }
   clingLock.labeledApps();
   if (!isViewingToday.value) return;
   gpAuthCheck(st);
   const sp = isStrictMode.value ? strictPlan(st) : null;
   let endMs = sp ? sp.untilMs : eh.lock.value && eh.lock.value.endMs;
+  // Simple mode: the running session's own goal and the points earned after its Start (not the day's points or open tasks).
+  const ls = liveDebtSession();
   let want = sp ? sp.want : shouldShield({ enabled: lockEnabled(), running: eh.running.value, endMs, selectionCount: st.selectionCount || 0,
-    earned: pointsAccumulated.value || 0, required: dayRequiredPts.value || 0, openTasks: (selectedDayRoutine.value || []).filter((t) => t && !t.completed && t.status !== 'wontdo').length,
+    earned: ls ? ls.earned : 0, required: ls ? ls.target : 0, openTasks: 1,
     unlockedToday: lockUnlockedDay.value === localDateStr() });
   // Missed-goal app lock (eightHour/{uid}.appLockDebt, server clock + device cache): a session that ended short of its points goal
   // keeps the picked apps locked after it ends. A LATER session reaching its own goal (same sessionGoal math as the server) lifts it
@@ -4296,12 +4316,13 @@ watch(nowTick, async () => {
   if (left === 0) { gpUnlockSet({ ...u, status: 'open', left: 0, untilMs: Date.now() + u.minutes * 60000 }); if (lockAvailable()) { lockOn = null; await clingLock.stopLock(); } hardLocked.value = false; syncAppLock(); }
 });
 // Hard lock chosen at day start: pick apps once if needed, turn the lock on, the shield runs until the day ends (shouldShield/endMs).
-const startHardLock = async () => {
+const startHardLock = async (o = {}) => {
   try {
     if (!lockAvailable()) return;
     const a0 = await clingLock.requestAuthorization(); if (a0.status !== 'approved') { showNoteToast('Screen Time permission was not given, so apps stay unlocked.', { error: true }); return; }
     const st = await clingLock.status(); if (!(st.selectionCount > 0)) { const r = await clingLock.pickApps(); if (!r.saved) return; }
     try { localStorage.setItem(LOCK_PREF, '1'); } catch (e) { /* ignore */ }
+    if (o.sessionBegin && eh.lock.value && eh.lock.value.endMs > Date.now() + 60000) { const r = await clingLock.startLock(eh.lock.value.endMs, 'ClingNote lock-in', { sessionBegin: true }); if (r && r.monitor === 'ok') lockOn = eh.lock.value.endMs; }
     await syncAppLock(); if (hardLocked.value) setTimeout(() => coachStart('lock-on'), 1500);
   } catch (e) { console.warn('hard lock', e && e.message); }
 };

@@ -38,7 +38,7 @@ const mkDb = () => { const store = { 'users/u1': { isPro: true, lockInEnabled: t
 const verify = async () => ({ uid: 'u1' });
 const call = (db, body, clock) => handler({ httpMethod: 'POST', headers: { authorization: 'Bearer x' }, body: JSON.stringify(body) }, {}, { verify, db, now: () => clock, ts: (ms) => new Ts(ms), serverTime: () => new Ts(clock), apiKey: undefined }).then((r) => ({ code: r.statusCode, body: JSON.parse(r.body) }));
 (async () => {
-  for (const [sent, want] of [[6, 6], [2, 3], [20, 12], [6.3, 6.5], [undefined, 8]]) {
+  for (const [sent, want] of [[6, 6], [5, 5], [12, 12], [undefined, 8]]) {
     const db = mkDb();
     await call(db, { action: 'plan', wakeTime: '07:00', taskCount: 1, tz: TZ }, now);
     db.store['weeklyRoutines/u1_Fri'] = { tasks: Array.from({ length: 6 }, (_, i) => ({ title: `ZZTEST ${i}`, completed: false, createdAt: `x${i}`, type: 'one-time' })) }; // 6 = the 12h minimum (taskRange)

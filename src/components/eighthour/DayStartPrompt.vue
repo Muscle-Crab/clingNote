@@ -1,15 +1,16 @@
 <template>
-  <!-- Morning flow: 1) pick today's hours (3..12h, half hours) 2) "Are you sure?" with the exact end time. The countdown starts ONLY on Confirm. -->
+  <!-- Session flow: 1) pick the session length (5..12 whole hours) 2) pick the apps to lock (seeded with the last session's apps) and Begin:
+       the shield goes up at once. The AI sets the session's points goal at Begin (frozen on the session). -->
   <div class="dsp" role="dialog" aria-modal="true" aria-labelledby="dsp-t" data-test="day-prompt">
     <div class="dsp-card">
       <template v-if="step === 'pick'">
         <h2 id="dsp-t">How many hours will you dedicate today?</h2>
         <div class="dsp-pick">
-          <button type="button" class="dsp-step" :disabled="idx <= 0" aria-label="Half an hour less" data-test="day-prompt-minus" @click="idx--">−</button>
+          <button type="button" class="dsp-step" :disabled="idx <= 0" aria-label="One hour less" data-test="day-prompt-minus" @click="idx--">−</button>
           <select v-model.number="hours" class="dsp-sel" aria-label="Hours today" data-test="day-prompt-hours">
-            <option v-for="h in HOUR_OPTIONS" :key="h" :value="h">{{ hoursLabel(h) }} h</option>
+            <option v-for="h in SESSION_HOUR_OPTIONS" :key="h" :value="h">{{ h }} h</option>
           </select>
-          <button type="button" class="dsp-step" :disabled="idx >= HOUR_OPTIONS.length - 1" aria-label="Half an hour more" data-test="day-prompt-plus" @click="idx++">+</button>
+          <button type="button" class="dsp-step" :disabled="idx >= SESSION_HOUR_OPTIONS.length - 1" aria-label="One hour more" data-test="day-prompt-plus" @click="idx++">+</button>
         </div>
         <p class="dsp-sub">Ends around <b data-test="day-prompt-preview">{{ endLabel }}</b> if you start now.</p>
         <!-- Evening mode (split day): one compact row; tapping reveals a later block inline. The gap in between stays open. -->
@@ -20,22 +21,22 @@
           <select v-model.number="split.hours" aria-label="Later block hours" data-test="day-prompt-later-hours"><option v-for="h in BLOCK_HOUR_OPTIONS" :key="h" :value="h">{{ hoursLabel(h) }}h</option></select>
           <button type="button" class="dsp-x" aria-label="Remove later block" data-test="day-prompt-later-x" @click="split.on = false">✕</button>
         </div>
-        <p v-if="target.total" class="dsp-sub" data-test="day-prompt-target">Today's target: <b>{{ dayPtsLabel(earned, target.target) }}</b> <span class="dsp-of">({{ target.total }} available)</span></p>
+        <p v-if="tasks.length" class="dsp-sub" data-test="day-prompt-target">Session goal: about <b>{{ goalPreview }} pts</b>, set when you Begin <span class="dsp-of">({{ countable }} tasks)</span></p>
         <slot name="checkin" />
-        <button type="button" class="dsp-btn dsp-btn--primary" data-test="day-prompt-next" @click="step = 'confirm'">Continue</button>
+        <button type="button" class="dsp-btn dsp-btn--primary" data-test="day-prompt-next" @click="next">Continue</button>
         <button type="button" class="dsp-btn dsp-skip" data-test="day-prompt-skip-pick" @click="$emit('skip')">Skip lock-in today</button>
       </template>
       <template v-else>
         <h2 id="dsp-t">Are you sure?</h2>
         <p class="dsp-sub" data-test="day-prompt-confirm-text">Your day will end at <b data-test="day-prompt-end">{{ endLabel }}</b> and the app shuts down then.</p>
-        <p v-if="target.total" class="dsp-sub" data-test="day-prompt-target-confirm">You need <b>{{ dayPtsLabel(earned, target.target) }}</b> today.</p>
+        <p v-if="tasks.length" class="dsp-sub" data-test="day-prompt-target-confirm">Apps unlock at about <b>{{ goalPreview }} pts</b> earned this session.</p>
         <p v-if="laterLabel" class="dsp-sub" data-test="day-prompt-later-text">Then again <b>{{ laterLabel }}</b>. Open in between.</p>
         <p class="dsp-fine">{{ hoursLabel(hours) }} hours, starting when you confirm. {{ laterLabel ? 'Blocks can\'t be shortened or removed today.' : 'This can\'t be changed today.' }}</p>
-        <label v-if="canLock" class="dsp-fine dsp-lock" data-test="day-prompt-lock"><input v-model="lockApps" type="checkbox" /> 🔒 Lock my distracting apps until the day ends</label>
+        <label v-if="canLock" class="dsp-fine dsp-lock" data-test="day-prompt-lock"><input v-model="lockApps" type="checkbox" /> <span class="dsp-lock-txt">🔒 Lock <b data-test="day-prompt-apps">{{ appsLabel(apps) }}</b> until the goal · <a href="#" class="dsp-edit" data-test="day-prompt-apps-edit" @click.prevent="$emit('pick-apps')">Edit</a></span></label>
         <p v-if="error" class="dsp-err" role="alert" data-test="day-prompt-error">{{ error }}</p>
         <div class="dsp-row">
           <button type="button" class="dsp-btn" :disabled="busy" data-test="day-prompt-change" @click="step = 'pick'">Change</button>
-          <button type="button" class="dsp-btn dsp-btn--primary" :disabled="busy" data-test="day-prompt-confirm" @click="$emit('confirm', hours, { lock: canLock && lockApps, blocks: laterBlocks })">{{ busy ? 'Starting…' : 'Confirm' }}</button>
+          <button type="button" class="dsp-btn dsp-btn--primary" :disabled="busy" data-test="day-prompt-confirm" @click="$emit('confirm', hours, { lock: canLock && lockApps, blocks: laterBlocks })">{{ busy ? 'Starting…' : 'Begin' }}</button>
           <button type="button" class="dsp-btn dsp-skip" :disabled="busy" data-test="day-prompt-skip" @click="$emit('skip')">Skip lock-in today</button>
         </div>
       </template>
@@ -45,17 +46,22 @@
 
 <script setup>
 import { computed, ref, reactive, onBeforeUnmount } from 'vue';
-import { HOUR_OPTIONS, BLOCK_HOUR_OPTIONS, hoursLabel, clampHours, hoursMs, fmtClock, nextAt } from '@/utils/eightHour';
-import { previewDayTarget, dayPtsLabel } from '@/utils/dayTarget';
+import { SESSION_HOUR_OPTIONS, BLOCK_HOUR_OPTIONS, hoursLabel, hoursMs, fmtClock, nextAt } from '@/utils/eightHour';
+import core from '../../../netlify/functions/lib/eightHourCore.js';
+import { appsLabel } from '@/utils/sessionApps';
 
 const props = defineProps({
-  canLock: { type: Boolean, default: false }, /* iOS app lock available: offer the hard lock at day start */ initialHours: { type: Number, default: 8 }, nowMs: { type: Function, default: () => Date.now() }, tz: { type: String, default: '' }, busy: Boolean, error: { type: String, default: '' }, tasks: { type: Array, default: () => [] }, stats: { type: Object, default: () => ({}) }, earned: { type: Number, default: 0 } });
-defineEmits(['confirm', 'skip']);
+  canLock: { type: Boolean, default: false }, /* iOS app lock available: offer the hard lock at day start */ initialHours: { type: Number, default: 8 }, nowMs: { type: Function, default: () => Date.now() }, tz: { type: String, default: '' }, busy: Boolean, error: { type: String, default: '' }, tasks: { type: Array, default: () => [] }, stats: { type: Object, default: () => ({}) }, earned: { type: Number, default: 0 }, apps: { type: Object, default: null } /* this session's picked app counts */ });
+const emit = defineEmits(['confirm', 'skip', 'pick-apps']);
 const lockApps = ref(true);
 const step = ref('pick');
-const hours = ref(clampHours(props.initialHours));
-const idx = computed({ get: () => Math.max(0, HOUR_OPTIONS.indexOf(hours.value)), set: (i) => { hours.value = HOUR_OPTIONS[Math.min(HOUR_OPTIONS.length - 1, Math.max(0, i))]; } });
-const target = computed(() => previewDayTarget(props.tasks, hours.value, props.stats)); // recomputed as the user changes hours or tasks
+const seedH = Math.round(Number(props.initialHours)); const hours = ref(core.validSessionHours(seedH) ? seedH : 8);
+const idx = computed({ get: () => Math.max(0, SESSION_HOUR_OPTIONS.indexOf(hours.value)), set: (i) => { hours.value = SESSION_HOUR_OPTIONS[Math.min(SESSION_HOUR_OPTIONS.length - 1, Math.max(0, i))]; } });
+// Preview only (the server's AI / fallback sets and freezes the real goal at Begin): core.fallbackGoal(tasks now, hours).
+const countable = computed(() => (props.tasks || []).filter((t) => t && t.status !== 'pending' && t.status !== 'wontdo').length);
+const goalPreview = computed(() => core.fallbackGoal({ tasksBefore: countable.value, hours: hours.value, totalPoints: (props.tasks || []).reduce((a, t) => a + (Number(t && t.points) || 15), 0) }));
+// Step 2: on iOS the app picker opens (seeded with the last session's apps); the user keeps or edits it, then Begins.
+const next = () => { step.value = 'confirm'; if (props.canLock) emit('pick-apps'); };
 const tick = ref(0); const tickId = setInterval(() => { tick.value++; }, 15000); onBeforeUnmount(() => clearInterval(tickId));
 const split = reactive({ on: false, time: '19:00', hours: 3 });
 const laterBlocks = computed(() => (split.on && split.time ? [{ time: split.time, hours: split.hours }] : []));
@@ -82,4 +88,6 @@ const endLabel = computed(() => { void tick.value; const tz = props.tz || Intl.D
 .dsp-later input, .dsp-later select { height: 38px; border-radius: 10px; background: var(--c-surface-2, #22252a); color: inherit; border: 1px solid var(--c-border, #2a2a2e); padding: 0 8px; font-weight: 600; color-scheme: dark; }
 .dsp-x { width: 36px; height: 38px; border: 0; background: none; color: inherit; opacity: .7; cursor: pointer; }
 .dsp-lock { display: flex; gap: .5rem; align-items: center; font-size: 17px; min-height: 44px; cursor: pointer; }
+.dsp-lock-txt { flex: 1; text-align: left; }
+.dsp-edit { color: var(--c-accent, #4ea1ff); font-weight: 600; text-decoration: underline; padding: 8px 2px; }
 </style>

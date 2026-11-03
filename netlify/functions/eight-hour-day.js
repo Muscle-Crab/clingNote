@@ -26,7 +26,7 @@ const stableIdOf = (t) => (t && (t.id != null && t.id !== '' ? `id:${t.id}` : `k
 // Points earned on the locked set. Each lock slot n belongs to the task stored at lock.indexes[n] when the day started; match it by its
 // stable id (lock.ids[n]) so reorders/inserts after Start Day can't shift points onto another task, falling back to lock.indexes[n]
 // for locks written before ids existed. Never tasks[n] (that was the bug: slot n is not array position n).
-const { sessionGrace } = require('./lib/sessionGrace');
+const { sessionGrace, taskPoints } = require('./lib/sessionGrace');
 const lockedEarned = (lock, tasks) => {
   const list = tasks || []; const byId = new Map(); list.forEach((t) => { const k = stableIdOf(t); if (k && !byId.has(k)) byId.set(k, t); });
   let earned = 0, done = 0;
@@ -44,7 +44,11 @@ const pruneStale = (tasks, tz, dayKey) => tasks.filter((t) => { if (!t || t.type
 const countable = (tasks, dayKey) => tasks.map((t, i) => ({ t, i })).filter(({ t }) => t && !(t.activeFrom && dayKey < t.activeFrom));
 
 // ── REQUIRES SERVER AI (OPENAI_API_KEY + user consent). Without them this returns null and the heuristic is used. ──
-const aiRefine = async (items, stats, { fetch: f, apiKey }) => {
+const aiRefine = async (items, stats, deps) => {
+  let timer = null; const ms = deps.timeoutMs || AI_TIMEOUT_MS; // a hung AI must never block Begin
+  try { return await Promise.race([aiRefineRaw(items, stats, deps), new Promise((res) => { timer = setTimeout(() => res(null), ms); })]); } catch (e) { return null; } finally { clearTimeout(timer); }
+};
+const aiRefineRaw = async (items, stats, { fetch: f, apiKey }) => {
   if (!apiKey || !f) return null;
   const list = items.map((x, n) => ({ n, title: String(x.title || '').slice(0, 120), notes: String(x.notes || '').slice(0, 200), minutes: x.minutes, priority: x.priority || '' }));
   const body = {
@@ -71,13 +75,35 @@ const aiRefine = async (items, stats, { fetch: f, apiKey }) => {
   } catch (e) { return null; }
 };
 
+// Session plan AI (same OpenAI call + key as aiRefine; only with the user's AI consent). Every answer is clamped; any error, bad
+// JSON or a timeout (AI_TIMEOUT_MS) returns null and the caller uses the deterministic core fallback.
+const AI_TIMEOUT_MS = 6000;
+const aiJson = async (system, user, { fetch: f, apiKey, timeoutMs = AI_TIMEOUT_MS }) => {
+  if (!apiKey || !f) return null;
+  const body = { model: 'gpt-4o-mini', temperature: 0, response_format: { type: 'json_object' }, messages: [{ role: 'system', content: system }, { role: 'user', content: JSON.stringify(user) }] };
+  let timer = null;
+  try {
+    const call = (async () => { const r = await f('https://api.openai.com/v1/chat/completions', { method: 'POST', headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      if (!r.ok) return null; const data = await r.json(); return JSON.parse(data.choices?.[0]?.message?.content || '{}'); })();
+    const out = await Promise.race([call, new Promise((res) => { timer = setTimeout(() => res(null), timeoutMs); })]);
+    return out && typeof out === 'object' ? out : null;
+  } catch (e) { return null; } finally { if (timer) clearTimeout(timer); }
+};
+// The session's points goal from exactly two inputs: how many tasks existed BEFORE the session was created, and the chosen hours.
+const aiSessionGoal = async (tasksBefore, hours, totalPoints, deps) => {
+  const x = await aiJson(`You set a fair but demanding points goal for one focused work session. The user has ${tasksBefore} tasks (worth ${totalPoints} points in total) and chose a ${hours}-hour session. Reply with JSON only: {"goalPoints":n} with ${core.GOAL_MIN} <= n <= ${Math.max(core.GOAL_MIN, totalPoints)}.`, { tasksBefore, hours }, deps);
+  const g = Number(x && x.goalPoints); return Number.isFinite(g) && g > 0 ? core.clampGoal(g, totalPoints) : null;
+};
+const aiAllowed = async (ctx, apiKey) => { if (!apiKey) return false; try { const u = await ctx.db.doc(`users/${ctx.uid}`).get(); return u.exists && u.data().aiConsent === true; } catch (e) { return false; } };
 const publicLock = (l) => (l ? { hours: core.clampHours(l.hours), dayKey: l.dayKey, dayName: l.dayName, tz: l.tz, wakeTime: l.wakeTime, startMs: l.startMs, endMs: l.endMs, taskCount: l.taskCount, plannedCount: l.plannedCount,
-  points: l.points, totalPoints: l.totalPoints, target: l.target, targetSource: l.targetSource, estimateSource: l.estimateSource, earned: l.earned || 0, done: l.done || 0, settled: !!l.settled, session: l.session || null, graceUntilMs: Number(l.graceUntilMs) || 0,
+  points: l.points, totalPoints: l.totalPoints, target: l.target, targetSource: l.targetSource, goal: l.goal || null, apps: l.apps || null, estimateSource: l.estimateSource, earned: l.earned || 0, done: l.done || 0, settled: !!l.settled, session: l.session || null, graceUntilMs: Number(l.graceUntilMs) || 0,
   index: core.blockIndex(l), scheduled: !!l.scheduled, pending: core.pendingOf(l).map((b) => ({ dayKey: b.dayKey, index: b.index, startMs: b.startMs, endMs: b.endMs, hours: b.hours })) } : null);
 // What firestore.rules read: startAt/endAt bound the edit lock, shutUntil the read-only hard stop (= endMs while a later block is pending).
 const lockWrite = (ctx, lock) => ({ ...lock, startAt: ctx.ts(lock.startMs), endAt: ctx.ts(lock.endMs), shutUntil: ctx.ts(core.rulesShutUntilMs(lock)) });
 
 // Settle a finished window once: final earned, history row, new stats. Idempotent (settled flag + settleDay's lastDay check).
+// A lock's frozen session goal; legacy locks (no goal record) keep the old section-sum rule.
+const lockGoalOpts = (lock) => (lock && lock.goal && Number(lock.target) > 0 ? { goal: Number(lock.target) } : {});
 const settleIfOver = async (ctx, doc, now) => {
   const lock = doc.lock;
   if (!lock || lock.settled || now < lock.endMs) return doc;
@@ -94,11 +120,11 @@ const settleIfOver = async (ctx, doc, now) => {
     // Per-session shutdown rule: the session's own tasks/points, completions inside its window only. Missed -> the picked apps stay
     // locked (appLockDebt) until a later session reaches its goal.
     if (d) { const ud = await userDoc(ctx); const sessions = Number(ud.gamePlan && ud.gamePlan.sessions) === 1 ? 1 : 2;
-      grace = sessionGrace(countable(pruneStale(d.tasks || [], lock.tz || 'UTC', lock.dayKey), lock.dayKey).map((r) => r.t), { n: Math.min(core.blockIndex(lock) + 1, sessions), sessions, startMs: lock.startMs, endMs: lock.endMs }); }
+      grace = sessionGrace(countable(pruneStale(d.tasks || [], lock.tz || 'UTC', lock.dayKey), lock.dayKey).map((r) => r.t), { n: Math.min(core.blockIndex(lock) + 1, sessions), sessions, startMs: lock.startMs, endMs: lock.endMs, ...lockGoalOpts(lock) }); }
   } catch (e) { /* keep the server-time progress value */ }
   const idx = core.blockIndex(lock);
   const settledLock = { ...lock, earned, settled: true, ...(grace ? { session: { ...grace, untilMs: 0 }, graceUntilMs: 0 } : {}) };
-  const debt = grace ? core.debtAfterSettle(doc.appLockDebt, { sessionKey: core.sessionKey(lock.dayKey, idx), startMs: lock.startMs, endMs: lock.endMs, target: grace.target, earned: grace.earned, met: grace.met })
+  const debt = grace ? core.debtAfterSettle(doc.appLockDebt, { sessionKey: core.sessionKey(lock.dayKey, idx), startMs: lock.startMs, endMs: lock.endMs, target: grace.target, earned: grace.earned, done: grace.done, met: grace.met })
     : core.normDebt(doc.appLockDebt);
   // The streak/target settle once per day, on the day's FIRST block. Later blocks (evening mode) and empty scheduled blocks only write a history row.
   const counts = idx === 0 && !(lock.scheduled && !(lock.taskCount > 0)); // legacy locks (no index/taskCount) still settle
@@ -107,7 +133,7 @@ const settleIfOver = async (ctx, doc, now) => {
   await ctx.db.doc(`eightHour/${ctx.uid}`).set({ lock: lockWrite(ctx, settledLock), appLockDebt: debt, ...(counts ? { stats } : {}) }, { merge: true });
   const hid = idx === 0 ? lock.dayKey : core.sessionKey(lock.dayKey, idx);
   await ctx.db.doc(`eightHour/${ctx.uid}/history/${hid}`).set({ dayKey: lock.dayKey, index: idx, startMs: lock.startMs, endMs: lock.endMs, taskCount: lock.taskCount, total: lock.totalPoints, target: lock.target, earned,
-    met: counts ? stats.lastResult === 'met' : (lock.target > 0 && earned >= lock.target), streakCounted: counts, settledMs: ctx.now });
+    met: grace ? grace.met : counts ? stats.lastResult === 'met' : (lock.target > 0 && earned >= lock.target), streakCounted: counts, settledMs: ctx.now });
   return next;
 };
 
@@ -132,7 +158,7 @@ const withSession = (doc, ud, now) => { const g = (ud && ud.gamePlan) || {}; con
 // Lock one block. index 0 = the day's main block: snapshot every countable task, reset completions, enforce the task range (strict).
 // index > 0 (a later block the same day): lock only the still-open tasks, keep completions, no minimum (0 open tasks = an empty block that
 // still shuts nothing early and settles neutrally). Scheduled blocks keep their FIXED start/end even when started late.
-const beginBlock = async (ctx, doc, { hours, startMs, endMs, dayKey, index, pending = [], strict, scheduled = false, apiKey = null }) => {
+const beginBlock = async (ctx, doc, { hours, startMs, endMs, dayKey, index, pending = [], strict, scheduled = false, apiKey = null, apps = null }) => {
   const tz = doc.plan.tz;
   const dayName = core.dayNameIn(tz, startMs);
   const dayRef = ctx.db.doc(`weeklyRoutines/${ctx.uid}_${dayName}`);
@@ -157,7 +183,7 @@ const beginBlock = async (ctx, doc, { hours, startMs, endMs, dayKey, index, pend
   if (apiKey && rows.length) {
     const u = await ctx.db.doc(`users/${ctx.uid}`).get();
     if (u.exists && u.data().aiConsent === true) {
-      const ai = await aiRefine(rows.map(({ t }, n) => ({ title: t.title, notes: t.notes, priority: t.priority, minutes: est[n].minutes })), stats, { fetch: ctx.fetch, apiKey });
+      const ai = await aiRefine(rows.map(({ t }, n) => ({ title: t.title, notes: t.notes, priority: t.priority, minutes: est[n].minutes })), stats, { fetch: ctx.fetch, apiKey, timeoutMs: ctx.aiTimeoutMs });
       if (ai) {
         est = est.map((e, n) => (ai.tasks[n] ? { complexity: ai.tasks[n].complexity, minutes: ai.tasks[n].minutes, points: core.pointsFor(ai.tasks[n].complexity, ai.tasks[n].minutes), source: 'ai' } : e));
         ratioAi = ai.ratio; source = 'ai';
@@ -169,16 +195,23 @@ const beginBlock = async (ctx, doc, { hours, startMs, endMs, dayKey, index, pend
     const cx = Math.round(Number(t.complexity)); return { ...e, points: Math.min(150, Math.max(5, p)), complexity: cx >= 1 && cx <= 5 ? cx : e.complexity, source: 'assistant' }; });
   const blockMin = Math.round((endMs - startMs) / 60000);
   const tgt = core.dailyTarget(est.map((e) => ({ points: e.points, minutes: e.minutes })), stats, blockMin);
-  let target = tgt.target; let targetSource = 'heuristic';
-  if (ratioAi != null && tgt.total > 0) { // the model can only make the target tighter than the level-based one, never easier
-    const raised = core.clamp(core.round5(tgt.total * Math.max(ratioAi, tgt.effRatio)), 5, tgt.total);
-    if (raised > target) { target = raised; targetSource = 'ai'; }
+  void ratioAi;
+  // Session points goal, frozen on this session's goal record: the AI from (tasks that existed before the session was created, chosen
+  // hours) via the existing OpenAI call (consent only, timeout), else core.fallbackGoal; both clamped by core.clampGoal.
+  // Points on the same scale the session is judged on (sessionGoal's taskPoints over the day's countable tasks).
+  const totalPts = countable(stored, dayKey).filter(({ t }) => !t.completed).reduce((a, { t }) => a + (Number(taskPoints(t)) || 0), 0); // goal can't exceed what's still open
+  let target = tgt.target; let targetSource = 'heuristic'; let goal = null;
+  if (rows.length) {
+    const tasksBefore = countable(stored, dayKey).filter(({ t }) => { const ca = t.createdAt; const c = (ca && typeof ca.toMillis === 'function' ? ca.toMillis() : typeof ca === 'number' ? ca : Date.parse(ca || '')) || 0; return !c || c < startMs; }).length;
+    const g = apiKey && (await aiAllowed(ctx, apiKey)) ? await aiSessionGoal(tasksBefore, hours, totalPts, { fetch: ctx.fetch, apiKey, timeoutMs: ctx.aiTimeoutMs }) : null;
+    target = g != null ? g : core.fallbackGoal({ tasksBefore, hours, totalPoints: totalPts }); targetSource = g != null ? 'ai' : 'fallback';
+    goal = { key: core.sessionKey(dayKey, index), points: target, source: targetSource, tasksBefore, hours, frozenMs: startMs };
   }
   const next = stored.map((t) => ({ ...t })); // identical order and size: the lock compares by index
   rows.forEach(({ i }, n) => { next[i] = { ...next[i], ...(later ? {} : { completed: false, completedAt: null }), timerActive: false, points: est[n].points, complexity: est[n].complexity, estimateMin: est[n].minutes }; });
   const points = rows.map((_, n) => est[n].points);
   const lock = { hours, index, scheduled, placeholder: false, dayKey, dayName, tz, wakeTime: doc.plan.wakeTime, startMs, endMs, taskCount: rows.length, plannedCount: doc.plan.taskCount,
-    indexes: rows.map(({ i }) => i), ids: rows.map(({ t }) => stableIdOf(t)), points, totalPoints: points.reduce((a, b) => a + b, 0), target, targetSource, targetLevel: tgt.level, estimateSource: source, earned: 0, done: 0, settled: false,
+    indexes: rows.map(({ i }) => i), ids: rows.map(({ t }) => stableIdOf(t)), points, totalPoints: points.reduce((a, b) => a + b, 0), target, targetSource, goal, apps: apps || null, targetLevel: tgt.level, estimateSource: source, earned: 0, done: 0, settled: false,
     pending: pending.map((b) => ({ dayKey: b.dayKey, index: b.index, startMs: b.startMs, endMs: b.endMs, hours: b.hours })) };
   const ref = ctx.db.doc(`eightHour/${ctx.uid}`);
   await ctx.db.runTransaction(async (tx) => {
@@ -226,13 +259,13 @@ const actions = {
     return view(withSession(doc, await userDoc(ctx), ctx.now), ctx.now);
   },
 
-  // "Start new session" from the shutdown screen: same as start (begins NOW, any time of day). body.hours uses the block range (1..12 h).
+  // "Start new session" from the shutdown screen: same as start (begins NOW, any time of day), same 5..12 whole-hour rule.
   // Kept as its own action for older clients; there is no session cap and no clock window any more.
   async nextSession(ctx, body = {}) {
     const doc = await settleIfOver(ctx, await loadDoc(ctx), ctx.now);
     const st = core.nextSessionState({ lock: doc.lock, nowMs: ctx.now });
     if (st.reason === 'running') throw fail(409, 'A session is already running.', { code: 'running' });
-    return actions.start(ctx, { ...body, blockHours: true });
+    const { blockHours, ...rest } = body; void blockHours; return actions.start(ctx, rest);
   },
 
   // Set/update wake time + planned task count. Refused while the window runs; the wake time is also frozen once it has passed today (the countdown is about to begin).
@@ -274,7 +307,13 @@ const actions = {
     // The session starts NOW (server clock), whatever the time of day. The first session of a calendar day (index 0) snapshots the day's
     // tasks with the task-range check; a later one the same day (index 1, 2, ...) locks the still-open tasks. body.autoWake is ignored
     // (the B44 wake-time auto-lock was removed: no session starts on a clock time).
-    const hours = body.blockHours ? (core.clampBlockHours(body.hours == null ? (doc.lock && doc.lock.hours) : body.hours) || 1) : core.clampHours(body.hours);
+    // A user-started session is whole hours, 5..12 (core.validSessionHours); anything else is refused, not clamped.
+    if (!body.blockHours && body.hours == null) body = { ...body, hours: core.validSessionHours(ud.dayLengthHours) ? Number(ud.dayLengthHours) : 8 };
+    if (!body.blockHours && !core.validSessionHours(body.hours)) throw fail(400, `Pick ${core.SESSION_HOURS.min} to ${core.SESSION_HOURS.max} whole hours.`, { code: 'bad-hours' });
+    const hours = body.blockHours ? (core.clampBlockHours(body.hours == null ? (doc.lock && doc.lock.hours) : body.hours) || 1) : Number(body.hours);
+    // The apps picked for THIS session (counts from the native picker; the tokens stay on the device).
+    const a = body.apps && typeof body.apps === 'object' ? body.apps : null;
+    const apps = a ? { apps: Math.max(0, Math.floor(Number(a.apps) || 0)), categories: Math.max(0, Math.floor(Number(a.categories) || 0)), sites: Math.max(0, Math.floor(Number(a.sites) || 0)) } : null;
     const index = ph.index || 0;
     const startMs = ctx.now, endMs = startMs + hours * 3600000;
     let pending = [];
@@ -284,7 +323,7 @@ const actions = {
       if (r.blocks.some((x) => x.dayKey !== ph.dayKey)) throw fail(400, 'Split blocks must be later today. Use Schedule for tomorrow.', { code: 'bad-blocks' });
       pending = r.blocks;
     }
-    return beginBlock(ctx, doc, { hours, startMs, endMs, dayKey: ph.dayKey, index, pending, strict: index === 0, apiKey: index === 0 ? ctx.apiKey : null });
+    return beginBlock(ctx, doc, { hours, startMs, endMs, dayKey: ph.dayKey, index, pending, strict: index === 0, apiKey: ctx.apiKey, apps });
   },
 
   // Evening mode, option 1: schedule the next lock-in(s). body.blocks: [{ time: 'HH:MM' (plan time zone), hours }]. Blocks are appended to
@@ -330,8 +369,8 @@ const actions = {
     // Missed-goal app lock: this (later) session reaching its own goal pays the debt now, not at the session end.
     let debt = core.normDebt(doc.appLockDebt);
     if (debt) { try { const ud = await userDoc(ctx); const sessions = Number(ud.gamePlan && ud.gamePlan.sessions) === 1 ? 1 : 2;
-      const g = sessionGrace(countable(pruneStale(tasks, lock.tz || 'UTC', lock.dayKey), lock.dayKey).map((r) => r.t), { n: Math.min(core.blockIndex(lock) + 1, sessions), sessions, startMs: lock.startMs, endMs: lock.endMs });
-      if (core.debtCleared(debt, { startMs: lock.startMs, target: g.target, earned: g.earned })) debt = null; } catch (e) { /* keep the debt; settle re-checks */ } }
+      const g = sessionGrace(countable(pruneStale(tasks, lock.tz || 'UTC', lock.dayKey), lock.dayKey).map((r) => r.t), { n: Math.min(core.blockIndex(lock) + 1, sessions), sessions, startMs: lock.startMs, endMs: lock.endMs, ...lockGoalOpts(lock) });
+      if (core.debtCleared(debt, { startMs: lock.startMs, target: g.target, earned: g.earned, done: g.done })) debt = null; } catch (e) { /* keep the debt; settle re-checks */ } }
     await ctx.db.doc(`eightHour/${ctx.uid}`).set({ lock: lockWrite(ctx, next), appLockDebt: debt }, { merge: true });
     return view({ ...doc, lock: next, appLockDebt: debt }, ctx.now);
   },
@@ -348,7 +387,7 @@ const rawHandler = async (event, _ctx, deps = {}) => {
     // Paywall: lock-in / sessions / breaks are Pro. 'state' stays open so a free (or lapsed) user's Home still loads and an old lock settles.
     if (body.action !== 'state') await assertPro(db, uid);
     const ctx = { uid, db, now: deps.now ? deps.now() : Date.now(), // SERVER clock only: the client clock is never trusted
-      ts: deps.ts || defaultTs, serverTime: deps.serverTime || (() => getAdmin().firestore.FieldValue.serverTimestamp()), fetch: deps.fetch || (typeof fetch === 'function' ? fetch : null),
+      ts: deps.ts || defaultTs, serverTime: deps.serverTime || (() => getAdmin().firestore.FieldValue.serverTimestamp()), fetch: deps.fetch || (typeof fetch === 'function' ? fetch : null), aiTimeoutMs: Number(deps.aiTimeoutMs) > 0 ? Number(deps.aiTimeoutMs) : AI_TIMEOUT_MS,
       apiKey: 'apiKey' in deps ? deps.apiKey : process.env.OPENAI_API_KEY };
     return json(200, await fn(ctx, body));
   } catch (e) {

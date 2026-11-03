@@ -20,6 +20,19 @@ const MAX_TASKS_PER_DAY = 50;                   // 8-hour plan size safety max (
 //  - maximum (overload cap): MAX_TASKS_PER_DAY (50), the same plan-size safety max the server already validated. Start needs min <= count <= max.
 const MIN_TASKS_PER_HOUR = 0.5;
 const taskRange = (hours) => { const h = clampHours(hours); return { hours: h, min: Math.min(MAX_TASKS_PER_DAY, Math.max(1, Math.ceil(h * MIN_TASKS_PER_HOUR))), max: MAX_TASKS_PER_DAY }; };
+// A user-started session: whole hours only, 5..12 (app picker + server check).
+const SESSION_HOURS = Object.freeze({ min: 5, max: 12, step: 1 });
+const validSessionHours = (h) => { const n = Number(h); return Number.isInteger(n) && n >= SESSION_HOURS.min && n <= SESSION_HOURS.max; };
+// Session met = the points earned AFTER Start reach the session's frozen goal (the one rule for unlock, settle and debt clearing).
+const sessionMet = ({ earned = 0, target = 0 } = {}) => Number(target) > 0 && Number(earned) >= Number(target);
+// Session points goal: the AI (or this fallback) from the number of tasks that existed BEFORE the session was created + the chosen
+// hours; clamped to [GOAL_MIN, min(GOAL_MAX, the tasks' points)] in steps of 5 and frozen on the session's goal record at Start.
+const GOAL_MIN = 20;
+const GOAL_MAX = 600;
+const goalRange = (totalPoints) => ({ lo: GOAL_MIN, hi: Math.min(GOAL_MAX, Math.max(GOAL_MIN, Math.round(Number(totalPoints) || 0))) });
+const clampGoal = (g, totalPoints) => { const r = goalRange(totalPoints); const n = Number(g); return Number.isFinite(n) && n > 0 ? Math.min(r.hi, Math.max(r.lo, Math.round(n / 5) * 5)) : r.lo; };
+const fallbackGoal = ({ tasksBefore = 0, hours = 8, totalPoints = 0 } = {}) =>
+  clampGoal(Math.round((Math.max(0, Number(tasksBefore) || 0) * 5 + Math.max(0, Number(hours) || 0) * 10) / 5) * 5, totalPoints);
 const LOCK_IDENTITY_SLOTS = 50;                 // Firestore rules cannot loop; they compare the first 50 slots (= task cap) of a day doc (see firestore.rules)
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const WAKE_PICKER_PRESELECT = '07:00';          // UI convenience ONLY (pre-selected picker value). There is no stored/default wake time: the user must pick one.
@@ -279,7 +292,7 @@ const normDebt = (d) => (d && typeof d.sessionKey === 'string' && d.sessionKey &
 const debtUntilMs = (d) => { const x = normDebt(d); return x ? x.sinceMs + DEBT_CAP_MS : 0; };
 const debtActive = (d, nowMs) => { const x = normDebt(d); return !!x && nowMs < x.sinceMs + DEBT_CAP_MS; };
 // s = { startMs, target, earned }: a session started at/after the miss that has reached its goal (target > 0) pays the debt.
-const debtCleared = (d, s) => { const x = normDebt(d); return !!x && !!s && Number(s.target) > 0 && Number(s.earned) >= Number(s.target) && Number(s.startMs) >= x.sinceMs; };
+const debtCleared = (d, s) => { const x = normDebt(d); return !!x && !!s && sessionMet(s) && Number(s.startMs) >= x.sinceMs; };
 // After a session settles. s = { sessionKey, startMs, endMs, target, earned, met }. No goal (target <= 0) never creates or pays a debt.
 const debtAfterSettle = (prev, s) => {
   const p = normDebt(prev);
@@ -293,6 +306,7 @@ const rewardFor = (streak) => (streak >= 30 ? '🏔️ Peak Performer' : streak 
 
 module.exports = {
   DAY_HOURS, clampHours, hoursMs, hoursLabel, WARN_MINUTES, warningDue,
+  SESSION_HOURS, validSessionHours, sessionMet, GOAL_MIN, GOAL_MAX, goalRange, clampGoal, fallbackGoal,
   WINDOW_MS, WINDOW_MIN, MAX_TASKS_PER_DAY, MIN_TASKS_PER_HOUR, taskRange, LOCK_IDENTITY_SLOTS, WEEKDAYS, WAKE_PICKER_PRESELECT, START_MODE, TARGET_LEVELS, LOCKED_FIELDS,
   clamp, round5, parseWake, fmtWake, validTz, partsIn, dayKeyIn, dayNameIn, wakeInstant, evaluatePhase,
   countdownParts, fmtCountdown, fmtClock, fmtWakeLabel,

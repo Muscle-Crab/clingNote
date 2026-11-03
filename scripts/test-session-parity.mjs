@@ -33,7 +33,7 @@ t('160 mismatch case: server == app, target 80 not 160', () => { const [s1, s2] 
   assert.equal(F.mismatch160.filter((x) => x.section === 'morning').reduce((a, x) => a + x.points, 0), 160, 'old server sum'); });
 t('sizes + start-time sections', () => { const [s1, s2] = both(F.sizes); assert.deepEqual([s1.target, s1.earned, s2.target, s2.earned], [50, 50, 60, 20]); });
 // fix/unlock-at-end: finished EARLY (before the session/day started) counts, finished after the session end does not.
-t('completions after the session end do not count; early ones do', () => { const [s1, s2] = both(F.outsideWindow); assert.equal(s1.earned, 0); assert.equal(s2.earned, 20); assert.equal(s2.met, true); });
+t('completions outside the session window do not count (early ones neither, fix/session-lock)', () => { const [s1, s2] = both(F.outsideWindow); assert.equal(s1.earned, 0); assert.equal(s2.earned, 0); assert.equal(s2.met, false); });
 t('wontdo/pending excluded, Firestore {seconds} time', () => { const [s1] = both(F.skippedAndPending); assert.equal(s1.target, 10); assert.equal(s1.earned, 10); });
 t('title estimate fallback identical', () => { const [s1, s2] = both(F.titleEstimate); assert.equal(s1.target, SG.taskPoints(F.titleEstimate[0])); assert.ok(s2.target > 0); });
 t('empty day', () => { const [s1, s2] = both(F.empty); assert.equal(s1.target + s2.target, 0); });

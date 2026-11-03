@@ -52,6 +52,9 @@ export const hoursLabel = core.hoursLabel;
 export const WARN_MINUTES = core.WARN_MINUTES;
 export const warningDue = core.warningDue;
 // 3, 3.5, ... 12 for pickers/steppers
+// A user-started session: whole hours 5..12 (server: core.validSessionHours).
+export const SESSION_HOUR_OPTIONS = (() => { const o = []; for (let h = core.SESSION_HOURS.min; h <= core.SESSION_HOURS.max; h += core.SESSION_HOURS.step) o.push(h); return o; })();
+export const validSessionHours = core.validSessionHours;
 export const HOUR_OPTIONS = (() => { const o = []; for (let h = core.DAY_HOURS.min; h <= core.DAY_HOURS.max; h += core.DAY_HOURS.step) o.push(h); return o; })();
 // Evening mode (scheduled / split lock-in blocks)
 export const BLOCK_HOURS = core.BLOCK_HOURS;

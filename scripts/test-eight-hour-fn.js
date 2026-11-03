@@ -55,7 +55,7 @@ const call = async (db, body, extra = {}) => { const r = await handler(ev(body),
   r = await call(db, { action: 'start' });
   eq([r.code, r.body.phase], [200, 'running']);
   const L = r.body.lock;
-  eq([L.startMs, L.endMs, L.taskCount, L.plannedCount, L.estimateSource, L.targetSource], [at('2026-10-23T11:20:00Z'), at('2026-10-23T19:20:00Z'), 4, 3, 'heuristic', 'heuristic']);
+  eq([L.startMs, L.endMs, L.taskCount, L.plannedCount, L.estimateSource, L.targetSource], [at('2026-10-23T11:20:00Z'), at('2026-10-23T19:20:00Z'), 4, 3, 'heuristic', 'fallback']);
   eq(L.hours, 8); // no hours sent: default 8h, window starts at the confirm (server) time
   ok(L.points.length === 4 && L.points.every((p) => p >= 5), 'points per task assigned');
   eq(L.totalPoints, L.points.reduce((a, b) => a + b, 0)); ok(L.target > 0 && L.target <= L.totalPoints, 'target within total');
@@ -91,7 +91,7 @@ const call = async (db, body, extra = {}) => { const r = await handler(ev(body),
   r = await call(db, { action: 'state' }); eq(r.body.stats.streak, 1, 'settled once');
   // start anytime: a second session the same day starts NOW (session #1), the streak is not settled twice
   db.store['weeklyRoutines/u1_Fri'].tasks.push(T('Second a'), T('Second b'), T('Second c'), T('Second d'));
-  r = await call(db, { action: 'start', hours: 3 }); eq([r.code, r.body.phase, r.body.lock.index, r.body.lock.startMs], [200, 'running', 1, clock], 'second session starts now');
+  r = await call(db, { action: 'start', hours: 5 }); eq([r.code, r.body.phase, r.body.lock.index, r.body.lock.startMs], [200, 'running', 1, clock], 'second session starts now');
   clock = r.body.lock.endMs + 1000; r = await call(db, { action: 'state' }); eq([r.body.phase, r.body.stats.streak], ['ready', 1], 'second session does not re-settle the streak');
   // plan opens again once the window is over (applies to tomorrow)
   r = await call(db, { action: 'plan', wakeTime: '06:00', taskCount: 2, tz: TZ }); eq([r.code, r.body.plan.wakeTime], [200, '06:00']);
@@ -111,9 +111,9 @@ const call = async (db, body, extra = {}) => { const r = await handler(ev(body),
   r = await call(db, { action: 'state' }); eq([r.body.lock.earned, r.body.stats.lastResult], [50, 'met'], 'in-window writes are counted even if progress was never called');
 
   // task count must be within taskRange(hours): min..max, not an exact match with the plan
-  db = mkDb({ 'users/u1': { isPro: true, lockInEnabled: true }, 'eightHour/u1': { plan: { wakeTime: '07:00', tz: TZ, taskCount: 3 } }, 'weeklyRoutines/u1_Fri': { tasks: [T('One task'), T('Two tasks')] } });
-  clock = at('2026-10-23T12:00:00Z'); r = await call(db, { action: 'start' }); eq([r.code, r.body.code], [409, 'too-few'], '2 tasks < 8h minimum of 4');
-  r = await call(db, { action: 'start', hours: 3 }); eq([r.code, r.body.lock.taskCount, r.body.lock.plannedCount], [200, 2, 3], '3h minimum is 2: starts with fewer than plan.taskCount');
+  db = mkDb({ 'users/u1': { isPro: true, lockInEnabled: true }, 'eightHour/u1': { plan: { wakeTime: '07:00', tz: TZ, taskCount: 4 } }, 'weeklyRoutines/u1_Fri': { tasks: [T('One task'), T('Two tasks'), T('Three tasks')] } });
+  clock = at('2026-10-23T12:00:00Z'); r = await call(db, { action: 'start' }); eq([r.code, r.body.code], [409, 'too-few'], '3 tasks < 8h minimum of 4');
+  r = await call(db, { action: 'start', hours: 5 }); eq([r.code, r.body.lock.taskCount, r.body.lock.plannedCount], [200, 3, 4], '5h minimum is 3: starts with fewer than plan.taskCount');
   db = mkDb({ 'users/u1': { isPro: true, lockInEnabled: true }, 'eightHour/u1': { plan: { wakeTime: '07:00', tz: TZ, taskCount: 4 } }, 'weeklyRoutines/u1_Fri': { tasks: Array.from({ length: 9 }, (_, n) => T('m'.repeat(n + 1))) } });
   r = await call(db, { action: 'start' }); eq([r.code, r.body.lock.taskCount], [200, 9], 'more than the minimum (and than plan.taskCount) starts');
   // too many tasks / users are isolated
@@ -121,32 +121,45 @@ const call = async (db, body, extra = {}) => { const r = await handler(ev(body),
   clock = at('2026-10-23T12:00:00Z'); r = await call(db, { action: 'start' }); eq([r.code, r.body.code], [409, 'too-many']);
 
   // ── AI path (REQUIRES SERVER AI): mocked; heuristic otherwise ──
-  const seed = () => mkDb({ 'eightHour/u1': { plan: { wakeTime: '07:00', tz: TZ, taskCount: 2 } }, 'users/u1': { isPro: true, lockInEnabled: true, aiConsent: true }, 'weeklyRoutines/u1_Fri': { tasks: [T('Alpha task'), T('Beta')] } });
-  const mkFetch = (content, okRes = true) => { const calls = []; const f = async (url, o) => { calls.push({ url, o }); return { ok: okRes, json: async () => ({ choices: [{ message: { content } }] }) }; }; f.calls = calls; return f; };
+  const seed = () => mkDb({ 'eightHour/u1': { plan: { wakeTime: '07:00', tz: TZ, taskCount: 3 } }, 'users/u1': { isPro: true, lockInEnabled: true, aiConsent: true }, 'weeklyRoutines/u1_Fri': { tasks: [T('Alpha task'), T('Beta'), T('Gamma')] } });
+  // one fetch mock answers both AI calls: the per-task estimate and the session goal (told apart by the prompt)
+  const mkFetch = (content, okRes = true, goalContent = '{}') => { const calls = []; const f = async (url, o) => { calls.push({ url, o }); const isGoal = String(o.body).includes('goalPoints'); return { ok: okRes, json: async () => ({ choices: [{ message: { content: isGoal ? goalContent : content } }] }) }; }; f.calls = calls; return f; };
+  const SGM = require('../netlify/functions/lib/sessionGrace.js');
+  const openPts = (db) => db.store['weeklyRoutines/u1_Fri'].tasks.reduce((a, t) => a + SGM.taskPoints(t), 0);
   clock = at('2026-10-23T12:00:00Z');
-  let f = mkFetch(JSON.stringify({ tasks: [{ n: 0, complexity: 5, minutes: 120 }, { n: 1, complexity: 99, minutes: -4 }], targetRatio: 1 }));
-  db = seed(); r = await call(db, { action: 'start', hours: 4 }, { fetch: f, apiKey: 'test-key-not-real' });
+  let f = mkFetch(JSON.stringify({ tasks: [{ n: 0, complexity: 5, minutes: 120 }, { n: 1, complexity: 99, minutes: -4 }] }), true, JSON.stringify({ goalPoints: 33 }));
+  db = seed(); r = await call(db, { action: 'start', hours: 5 }, { fetch: f, apiKey: 'test-key-not-real' });
   eq([r.body.lock.estimateSource, r.body.lock.targetSource], ['ai', 'ai']);
-  eq(r.body.lock.points, [core.pointsFor(5, 120), core.pointsFor(5, 1)], 'AI numbers clamped and run through our formula');
-  eq(r.body.lock.target, r.body.lock.totalPoints, 'AI may only tighten the target');
+  eq(r.body.lock.points.slice(0, 2), [core.pointsFor(5, 120), core.pointsFor(5, 1)], 'AI numbers clamped and run through our formula');
+  eq(r.body.lock.target, core.clampGoal(33, openPts(seed())), 'AI goal clamped (round to 5) and used');
+  eq([r.body.lock.goal.points, r.body.lock.goal.source, r.body.lock.goal.tasksBefore, r.body.lock.goal.hours, r.body.lock.goal.frozenMs], [r.body.lock.target, 'ai', 1, 5, clock], 'goal frozen in the session record (tasksBefore: only Alpha task predates the start; Beta/Gamma createdAt 10-24/10-25 are after it)');
+  const goalCall = f.calls.find((c) => String(c.o.body).includes('goalPoints')); ok(goalCall && JSON.stringify(JSON.parse(goalCall.o.body).messages).includes('1 tasks') && JSON.stringify(JSON.parse(goalCall.o.body).messages).includes('5-hour'), 'AI gets tasks-before and hours');
   ok(f.calls[0].url === 'https://api.openai.com/v1/chat/completions' && f.calls[0].o.headers.Authorization === 'Bearer test-key-not-real', 'uses the server env key');
   ok(!JSON.stringify(r.body).includes('test-key'), 'key never in a response');
-  // AI wants an easier target => ignored
-  f = mkFetch(JSON.stringify({ tasks: [], targetRatio: 0.1 })); db = seed(); r = await call(db, { action: 'start', hours: 4 }, { fetch: f, apiKey: 'k' });
-  ok(r.body.lock.target >= core.dailyTarget(r.body.lock.points.map((p) => ({ points: p })), {}).target, 'ratio floor (hours-aware target is never easier)');
-  // no key / no consent / AI error / garbage => heuristic, still 200, no call when not allowed
-  f = mkFetch('{}'); db = seed(); r = await call(db, { action: 'start', hours: 4 }, { fetch: f, apiKey: undefined }); eq([r.code, r.body.lock.estimateSource, f.calls.length], [200, 'heuristic', 0]);
-  f = mkFetch('{}'); db = seed(); db.store['users/u1'] = { isPro: true, lockInEnabled: true, aiConsent: false }; r = await call(db, { action: 'start', hours: 4 }, { fetch: f, apiKey: 'k' }); eq([r.body.lock.estimateSource, f.calls.length], ['heuristic', 0], 'no consent => nothing sent');
-  f = mkFetch('{}', false); db = seed(); r = await call(db, { action: 'start', hours: 4 }, { fetch: f, apiKey: 'k' }); eq([r.code, r.body.lock.estimateSource], [200, 'heuristic'], 'AI failure falls back');
-  f = mkFetch('not json'); db = seed(); r = await call(db, { action: 'start', hours: 4 }, { fetch: f, apiKey: 'k' }); eq([r.code, r.body.lock.estimateSource], [200, 'heuristic'], 'garbage falls back');
+  // frozen: later progress / state reads never change the goal
+  { const g0 = JSON.stringify(r.body.lock.goal); db.store['weeklyRoutines/u1_Fri'].tasks.push(T('Added later')); clock += 60000; const r2 = await call(db, { action: 'state' }); eq(JSON.stringify(r2.body.lock.goal), g0, 'goal frozen after Begin'); clock = at('2026-10-23T12:00:00Z'); }
+  // AI goal out of range => clamped to [GOAL_MIN, open points]
+  f = mkFetch('{}', true, JSON.stringify({ goalPoints: 99999 })); db = seed(); r = await call(db, { action: 'start', hours: 5 }, { fetch: f, apiKey: 'k' }); eq(r.body.lock.target, core.clampGoal(99999, openPts(seed())), 'huge AI goal clamped');
+  f = mkFetch('{}', true, JSON.stringify({ goalPoints: 1 })); db = seed(); r = await call(db, { action: 'start', hours: 5 }, { fetch: f, apiKey: 'k' }); eq(r.body.lock.target, core.GOAL_MIN, 'tiny AI goal raised to the minimum');
+  // no key / no consent / AI error / garbage => deterministic fallback, still 200, no call when not allowed
+  const fb = core.fallbackGoal({ tasksBefore: 1, hours: 5, totalPoints: openPts(seed()) });
+  f = mkFetch('{}'); db = seed(); r = await call(db, { action: 'start', hours: 5 }, { fetch: f, apiKey: undefined }); eq([r.code, r.body.lock.estimateSource, r.body.lock.targetSource, r.body.lock.target, f.calls.length], [200, 'heuristic', 'fallback', fb, 0]);
+  f = mkFetch('{}'); db = seed(); db.store['users/u1'] = { isPro: true, lockInEnabled: true, aiConsent: false }; r = await call(db, { action: 'start', hours: 5 }, { fetch: f, apiKey: 'k' }); eq([r.body.lock.estimateSource, r.body.lock.targetSource, f.calls.length], ['heuristic', 'fallback', 0], 'no consent => nothing sent');
+  f = mkFetch('{}', false); db = seed(); r = await call(db, { action: 'start', hours: 5 }, { fetch: f, apiKey: 'k' }); eq([r.code, r.body.lock.estimateSource, r.body.lock.targetSource, r.body.lock.target], [200, 'heuristic', 'fallback', fb], 'AI failure falls back');
+  f = mkFetch('not json', true, 'not json'); db = seed(); r = await call(db, { action: 'start', hours: 5 }, { fetch: f, apiKey: 'k' }); eq([r.code, r.body.lock.estimateSource, r.body.lock.targetSource], [200, 'heuristic', 'fallback'], 'garbage falls back');
+  // AI that never answers => timeout, fallback
+  { const hang = async () => new Promise(() => {}); db = seed(); const t0 = Date.now(); r = await call(db, { action: 'start', hours: 5 }, { fetch: hang, apiKey: 'k', aiTimeoutMs: 50 }); ok(r.code === 200 && r.body.lock.targetSource === 'fallback', 'hung AI falls back'); ok(Date.now() - t0 < 5000, 'timeout bounded'); }
+  // hours validation: 5..12 whole hours only
+  for (const h of [4, 13, 6.5, 0, -1, 'x']) { db = seed(); r = await call(db, { action: 'start', hours: h }); eq([r.code, r.body.code], [400, 'bad-hours'], `hours ${h} refused`); }
+  for (const h of [5, 12]) { db = mkDb({ 'eightHour/u1': { plan: { wakeTime: '07:00', tz: TZ, taskCount: 6 } }, 'weeklyRoutines/u1_Fri': { tasks: Array.from({ length: 6 }, (_, n) => T('h'.repeat(n + 1))) } }); r = await call(db, { action: 'start', hours: h }); eq([r.code, r.body.lock.hours], [200, h], `hours ${h} ok`); }
   // lock-in is opt-in: off (missing/false) => 403 + no lock written; skipped for today => 403; skip for another date => starts
-  db = seed(); db.store['users/u1'] = { isPro: true }; r = await call(db, { action: 'start', hours: 4 }); eq([r.code, r.body.code, !!db.store['eightHour/u1'].lock], [403, 'lock-in-off', false], 'default off');
-  db = seed(); db.store['users/u1'] = { isPro: true, lockInEnabled: false }; r = await call(db, { action: 'start', hours: 4 }); eq([r.code, r.body.code], [403, 'lock-in-off']);
+  db = seed(); db.store['users/u1'] = { isPro: true }; r = await call(db, { action: 'start', hours: 5 }); eq([r.code, r.body.code, !!db.store['eightHour/u1'].lock], [403, 'lock-in-off', false], 'default off');
+  db = seed(); db.store['users/u1'] = { isPro: true, lockInEnabled: false }; r = await call(db, { action: 'start', hours: 5 }); eq([r.code, r.body.code], [403, 'lock-in-off']);
   // Paywall guard: lock-in is ClingNote Pro. A free user gets 402 for every action except 'state' (Home must load).
   for (const action of ['start', 'plan', 'schedule', 'nextSession', 'progress']) { db = seed(); db.store['users/u1'] = { isPro: false, lockInEnabled: true }; r = await call(db, { action, hours: 4 }); eq([r.code, !!db.store['eightHour/u1'].lock], [402, false], 'free user: ' + action + ' -> 402'); }
   db = seed(); db.store['users/u1'] = { isPro: false, lockInEnabled: true }; r = await call(db, { action: 'state' }); eq(r.code, 200, 'free user: state -> 200');
-  db = seed(); db.store['users/u1'] = { isPro: true, plan: 'pro_monthly', proExpiresAt: '2020-01-01T00:00:00Z', lockInEnabled: true }; r = await call(db, { action: 'start', hours: 4 }); eq(r.code, 402, 'expired Pro -> 402');
-  db = seed(); db.store['users/u1'] = { isPro: true, lockInEnabled: true, lockInSkipDate: '2026-10-23' }; r = await call(db, { action: 'start', hours: 4 }); eq([r.code, r.body.code, !!db.store['eightHour/u1'].lock], [403, 'lock-in-skipped', false], 'skip today');
-  db = seed(); db.store['users/u1'] = { isPro: true, lockInEnabled: true, lockInSkipDate: '2026-10-22' }; r = await call(db, { action: 'start', hours: 4 }); eq(r.code, 200, 'yesterday\'s skip does not carry over');
+  db = seed(); db.store['users/u1'] = { isPro: true, plan: 'pro_monthly', proExpiresAt: '2020-01-01T00:00:00Z', lockInEnabled: true }; r = await call(db, { action: 'start', hours: 5 }); eq(r.code, 402, 'expired Pro -> 402');
+  db = seed(); db.store['users/u1'] = { isPro: true, lockInEnabled: true, lockInSkipDate: '2026-10-23' }; r = await call(db, { action: 'start', hours: 5 }); eq([r.code, r.body.code, !!db.store['eightHour/u1'].lock], [403, 'lock-in-skipped', false], 'skip today');
+  db = seed(); db.store['users/u1'] = { isPro: true, lockInEnabled: true, lockInSkipDate: '2026-10-22' }; r = await call(db, { action: 'start', hours: 5 }); eq(r.code, 200, 'yesterday\'s skip does not carry over');
   console.log(`eight-hour function: ${pass} checks passed`);
 })().catch((e) => { console.error(e); process.exit(1); });

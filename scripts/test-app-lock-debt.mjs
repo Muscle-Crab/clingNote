@@ -37,7 +37,7 @@ const finish = (db, i) => { Object.assign(day(db).tasks[i], { completed: true, c
 // ---- server flow: miss -> debt persists (idempotent) -> new session hits goal -> cleared at once ----
 { const db = mkDb({ 'weeklyRoutines/u1_Fri': { tasks: [T('a'), T('b'), T('c')] } });
   clock = at('2026-10-23T12:00:00Z'); await call(db, { action: 'plan', taskCount: 3, tz: TZ });
-  clock = at('2026-10-23T13:00:00Z'); let r = await call(db, { action: 'start', hours: 3 }); eq([r.code, r.body.lock.index], [200, 0]); const E = r.body.lock.endMs;
+  clock = at('2026-10-23T13:00:00Z'); let r = await call(db, { action: 'start', hours: 5 }); eq([r.code, r.body.lock.index], [200, 0]); const E = r.body.lock.endMs;
   eq(r.body.appLockDebt, null, 'no debt before any miss');
   clock = at('2026-10-23T14:00:00Z'); finish(db, 0); await call(db, { action: 'progress' });
   const stats0 = { ...db.store['eightHour/u1'].stats };
@@ -49,21 +49,21 @@ const finish = (db, i) => { Object.assign(day(db).tasks[i], { completed: true, c
   eq(JSON.stringify(db.store['eightHour/u1']), snap, 'idempotent: re-reading / later reads change nothing'); ok(r.body.appLockDebt, 'still locked hours later (no time-based unlock)');
   ok(!('streak' in stats0) || db.store['eightHour/u1'].stats.streak === undefined || typeof db.store['eightHour/u1'].stats.streak === 'number', 'stats intact');
   // new session: progress short of the goal keeps it; the moment the goal is hit it clears (no wait for the session end)
-  r = await call(db, { action: 'nextSession', hours: 2 }); eq([r.code, r.body.lock.index], [200, 1]); ok(r.body.appLockDebt, 'debt survives starting a new session');
+  r = await call(db, { action: 'nextSession', hours: 5 }); eq([r.code, r.body.lock.index], [200, 1]); ok(r.body.appLockDebt, 'debt survives starting a new session');
   clock += 10 * 60000; finish(db, 1); r = await call(db, { action: 'progress' }); ok(r.body.appLockDebt, '40/60: still locked');
   clock += 10 * 60000; finish(db, 2); r = await call(db, { action: 'progress' }); eq(r.body.appLockDebt, null, 'goal hit mid-session: unlocked at once');
   eq(db.store['eightHour/u1'].appLockDebt, null, 'cleared server-side');
   clock = r.body.lock.endMs + 60000; r = await call(db, { action: 'state' }); eq(r.body.appLockDebt, null, 'met session settles without a new debt'); }
 
 // ---- server: two misses in a row, then a met session pays it at settle (e.g. app killed mid-session, no progress call) ----
-{ const db = mkDb({ 'weeklyRoutines/u1_Fri': { tasks: [T('a'), T('b')] } });
-  clock = at('2026-10-23T12:00:00Z'); await call(db, { action: 'plan', taskCount: 2, tz: TZ });
-  clock = at('2026-10-23T13:00:00Z'); let r = await call(db, { action: 'start', hours: 3 });
-  clock = r.body.lock.endMs + 5 * 60000; r = await call(db, { action: 'nextSession', hours: 3 }); eq(r.body.lock.index, 1);
+{ const db = mkDb({ 'weeklyRoutines/u1_Fri': { tasks: [T('a'), T('b'), T('c')] } });
+  clock = at('2026-10-23T12:00:00Z'); await call(db, { action: 'plan', taskCount: 3, tz: TZ });
+  clock = at('2026-10-23T13:00:00Z'); let r = await call(db, { action: 'start', hours: 5 });
+  clock = r.body.lock.endMs + 5 * 60000; r = await call(db, { action: 'nextSession', hours: 5 }); eq(r.body.lock.index, 1);
   eq(db.store['eightHour/u1'].appLockDebt.sessionKey, '2026-10-23#0', 'session 1 missed (settled by nextSession)');
   clock = r.body.lock.endMs + 5 * 60000; r = await call(db, { action: 'state' }); eq(r.body.appLockDebt.sessionKey, '2026-10-23#1', 'missed again: debt follows the latest miss');
-  r = await call(db, { action: 'nextSession', hours: 3 }); const E3 = r.body.lock.endMs; clock += 60000;
-  finish(db, 0); finish(db, 1); // completions written by the widget while ClingNote was killed: no progress call
+  r = await call(db, { action: 'nextSession', hours: 5 }); const E3 = r.body.lock.endMs; clock += 60000;
+  finish(db, 0); finish(db, 1); finish(db, 2); // completions written by the widget while ClingNote was killed: no progress call
   clock = E3 + 60000; r = await call(db, { action: 'state' }); eq(r.body.appLockDebt, null, 'settle of a met later session pays the debt'); }
 
 // ---- client cache + shield ----

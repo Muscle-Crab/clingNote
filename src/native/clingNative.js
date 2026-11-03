@@ -11,11 +11,11 @@ export const lockAvailable = () => avail('ClingLock');
 export const clingLock = {
   requestAuthorization: safe('ClingLock', Lock, (p) => p.requestAuthorization(), { status: 'unsupported' }),
   status: safe('ClingLock', Lock, (p) => p.status(), { authorization: 'unsupported', locked: false, selectionCount: 0 }),
-  pickApps: safe('ClingLock', Lock, (p) => p.pickApps(), { saved: false }),
+  pickApps: safe('ClingLock', Lock, (p, o) => p.pickApps(o || {}), { saved: false }), // { session: true }: seeded with the last-used selection
   // Not wrapped in safe(): a schedule failure must reach the caller. Resolves { locked, monitor: 'ok' | 'failed: ...' }.
-  startLock: async (untilMs, label = '') => {
+  startLock: async (untilMs, label = '', opts = {}) => {
     if (!avail('ClingLock')) return { locked: false, monitor: 'unavailable' };
-    try { const r = await Lock.startLock({ untilMs, label }); if (r && r.monitor && r.monitor !== 'ok') console.warn('[clingLock] schedule failed', r.monitor); return { monitor: 'ok', ...r }; }
+    try { const r = await Lock.startLock({ untilMs, label, ...(opts && opts.sessionBegin ? { sessionBegin: true } : {}) }); if (r && r.monitor && r.monitor !== 'ok') console.warn('[clingLock] schedule failed', r.monitor); return { monitor: 'ok', ...r }; }
     catch (e) { const m = `failed: ${String((e && e.message) || e)}`; console.warn('[clingLock] startLock', m); return { locked: false, monitor: m }; }
   },
   stopLock: safe('ClingLock', Lock, (p) => p.stopLock(), { locked: false }),

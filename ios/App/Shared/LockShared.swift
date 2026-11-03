@@ -11,6 +11,8 @@ import DeviceActivity
 enum LockShared {
     static let group = "group.app.clingnote.ios"
     static let selectionKey = "lock.selection"
+    /// The apps locked by the previous session (FamilyActivitySelection, plist): seeds the next session's picker; replaced at each Begin.
+    static let lastUsedSelectionKey = "lock.selection.lastUsed"
     static let stateKey = "lock.state"
     static let lockEndAlertKey = "lockEndAlert"   // off | subtle | standard | loud | maximum
     static let lockEndAlertDefault = "loud"

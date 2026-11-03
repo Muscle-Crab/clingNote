@@ -11,12 +11,13 @@ export const sessionOfTask = (t, sessions = 2) => goalSessionOf(t, sessions);
 // Windows: the day split in half (session 2 starts at the midpoint, like the focus blocks); with 1 session, the whole day.
 export const sessionWindows = (gp, nowMs = Date.now()) => {
   // anchored to the session the user started (running or last ended); no fixed day start
-  const l = lastSessionWindow(); const w = l ? { startMs: l.startMs, closeMs: l.endMs, dayKey: dayWindow(gp, l.startMs).dayKey } : dayWindow(gp, nowMs); if (gp.sessions === 1) return [{ n: 1, startMs: w.startMs, endMs: w.closeMs, dayKey: w.dayKey }];
+  const l = lastSessionWindow(); const w = l ? { startMs: l.startMs, closeMs: l.endMs, dayKey: dayWindow(gp, l.startMs).dayKey } : dayWindow(gp, nowMs); if (gp.sessions === 1) return [{ n: 1, startMs: w.startMs, endMs: w.closeMs, dayKey: w.dayKey, sinceMs: w.startMs }];
   const mid = w.startMs + (w.closeMs - w.startMs) / 2;
-  return [{ n: 1, startMs: w.startMs, endMs: mid, dayKey: w.dayKey }, { n: 2, startMs: mid, endMs: w.closeMs, dayKey: w.dayKey }];
+  return [{ n: 1, startMs: w.startMs, endMs: mid, dayKey: w.dayKey, sinceMs: w.startMs }, { n: 2, startMs: mid, endMs: w.closeMs, dayKey: w.dayKey, sinceMs: w.startMs }];
 };
 // Exactly the server's function (sessionGoal.js: same task->session map, same per-task points). Extra opts are ignored on purpose.
-export const sessionPoints = (tasks, win, { sessions = 2 } = {}) => sessionGoal(tasks, { ...win, sessions });
+// Completions count from the eight-hour session's start (sinceMs, = the server's lock.startMs), not the half-window's start.
+export const sessionPoints = (tasks, win, { sessions = 2 } = {}) => sessionGoal(tasks, { ...win, startMs: win.sinceMs != null ? win.sinceMs : win.startMs, sessions });
 export const sessionsOf = (gp, tasks, nowMs = Date.now(), opts = {}) => sessionWindows(gp, nowMs).map((w) => ({ ...w, ...sessionPoints(tasks, w, { sessions: gp.sessions, ...opts }) }));
 // The session now: the one whose window holds now; after the last ends, the last (its grace may still run); before the day, session 1.
 export const currentSession = (list, nowMs = Date.now()) => list.find((s) => nowMs >= s.startMs && nowMs < s.endMs) || (nowMs >= list[list.length - 1].endMs ? list[list.length - 1] : list[0]);

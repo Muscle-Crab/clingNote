@@ -36,7 +36,7 @@
         <p class="eh-clock" data-test="eh-countdown" role="timer">{{ countdown }}</p>
         <div class="eh-meta">
           <span data-test="eh-times">{{ starts }} → <span data-test="eh-ends">Ends {{ ends }}</span></span>
-          <span data-test="eh-points">{{ progress.earned }}/{{ lock.target }} pts</span>
+          <span data-test="eh-points">Goal {{ progress.earned }}/{{ lock.target }} pts</span>
         </div>
       </div>
       <!-- draining bar: time left (track) vs points earned (fill); the pace marker is where points should be by now -->
@@ -53,7 +53,7 @@
     <template v-else-if="view === 'ended'">
       <div class="eh-line">
         <span class="eh-badge" :class="met ? 'eh-badge--ok' : 'eh-badge--miss'" data-test="eh-result">{{ met ? 'Goal met' : 'Goal missed' }}</span>
-        <div class="eh-meta eh-meta--end"><span data-test="eh-points">{{ progress.earned }}/{{ lock.target }} pts</span><span>🔥 {{ stats.streak }} day streak</span></div>
+        <div class="eh-meta eh-meta--end"><span data-test="eh-points">Goal {{ progress.earned }}/{{ lock.target }} pts</span><span>🔥 {{ stats.streak }} day streak</span></div>
       </div>
       <p v-if="met && reward" class="eh-note eh-note--ok" data-test="eh-reward">{{ reward }}</p>
       <p v-if="stats.notice && stats.lastDay === lock.dayKey" class="eh-note" data-test="eh-notice">{{ stats.notice }}</p>
@@ -74,6 +74,7 @@
 import { ref, computed, watch } from 'vue';
 import { useEightHour } from '@/composables/useEightHour';
 import { paceOf, topAlert, badgeLabel, levelOf } from '@/utils/pressure';
+import { sessionGoal } from '@/utils/sessionGoal';
 import { progressOf, countableIndexes, fmtWakeLabel, hoursLabel, taskRange } from '@/utils/eightHour';
 
 // tasks = today's stored task array (all of it; hidden recurring copies are excluded by progressOf/countable logic)
@@ -105,7 +106,10 @@ const rangeLine = computed(() => `Min ${range.value.min} · max ${range.value.ma
 const needMore = computed(() => Math.max(0, range.value.min - taskTotal.value));
 const overBy = computed(() => Math.max(0, taskTotal.value - range.value.max));
 const inRange = computed(() => needMore.value === 0 && overBy.value === 0);
-const progress = computed(() => (lock.value ? progressOf({ dayKey: lock.value.dayKey, points: lock.value.points }, props.tasks) : { earned: 0, done: 0, total: 0 }));
+// A session with a frozen goal record counts only the points earned AFTER its Start (same sessionGoal math as the server / shield).
+const progress = computed(() => { const l = lock.value; if (!l) return { earned: 0, done: 0, total: 0 };
+  if (l.goal && Number(l.target) > 0) { const g = sessionGoal(props.tasks || [], { n: 1, sessions: 1, startMs: l.startMs, endMs: l.endMs, goal: Number(l.target) }); return { earned: g.earned, done: g.done, total: g.total }; }
+  return progressOf({ dayKey: l.dayKey, points: l.points }, props.tasks); });
 const pct = computed(() => (lock.value && lock.value.target > 0 ? Math.min(100, Math.round((progress.value.earned / lock.value.target) * 100)) : 0));
 const pace = computed(() => (lock.value ? paceOf({ earned: progress.value.earned, target: lock.value.target || 0, startMs: lock.value.startMs, endMs: lock.value.endMs, nowMs: (countdown.value, eh.nowMs()) }) : { timePct: 0, pointsPct: 0, expected: 0, behindBy: 0, leftMs: 0 }));
 const alert = computed(() => (lock.value ? topAlert({ offline: !!(eh.st.data && eh.st.data.offline), running: phase.value === 'running', earned: progress.value.earned, target: lock.value.target || 0, startMs: lock.value.startMs, endMs: lock.value.endMs, nowMs: (countdown.value, eh.nowMs()), streak: stats.value.streak || 0, warning: stats.value.warning || '' }) : null));

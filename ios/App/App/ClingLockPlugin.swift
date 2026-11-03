@@ -69,6 +69,15 @@ public class ClingLockPlugin: CAPPlugin, CAPBridgedPlugin {
         return s
     }
 
+    /// Seed for a NEW session's picker (src/utils/sessionApps.js pickerSeed): the previous session's last-used selection, else the current
+    /// global selection (loadSelection, empty when none).
+    @available(iOS 16.0, *)
+    static func sessionSeedSelection() -> FamilyActivitySelection {
+        if let data = LockShared.defaults?.data(forKey: LockShared.lastUsedSelectionKey),
+           let s = try? PropertyListDecoder().decode(FamilyActivitySelection.self, from: data) { return s }
+        return loadSelection()
+    }
+
     @objc func status(_ call: CAPPluginCall) {
         guard #available(iOS 16.0, *) else { call.resolve(["authorization": "unsupported", "locked": false, "selectionCount": 0]); return }
         let s = Self.loadSelection()
@@ -93,7 +102,9 @@ public class ClingLockPlugin: CAPPlugin, CAPBridgedPlugin {
     @objc func pickApps(_ call: CAPPluginCall) {
         guard #available(iOS 16.0, *) else { call.reject("iOS 16 required"); return }
         DispatchQueue.main.async {
-            let model = PickerModel(selection: Self.loadSelection())
+            // session: true = the picker for a new session, pre-filled with the last-used selection (kept or edited before Begin).
+            let forSession = call.getBool("session") ?? false
+            let model = PickerModel(selection: forSession ? Self.sessionSeedSelection() : Self.loadSelection())
             var host: UIViewController?
             let view = PickerView(model: model) { save in
                 // During a lock the list can only grow: a deselect must not unlock anything until the lock ends
@@ -116,6 +127,8 @@ public class ClingLockPlugin: CAPPlugin, CAPBridgedPlugin {
         let until = Date(timeIntervalSince1970: untilMs / 1000)
         guard until.timeIntervalSinceNow > 60 else { call.reject("untilMs must be > 1 min ahead"); return }
         Self.applyShield()
+        // Begin of a session: the selection it locks becomes the "last used" one that seeds the next session's picker.
+        if call.getBool("sessionBegin") ?? false, let data = LockShared.defaults?.data(forKey: LockShared.selectionKey) { LockShared.defaults?.set(data, forKey: LockShared.lastUsedSelectionKey) }
         LockShared.defaults?.set(["locked": true, "until": untilMs, "label": call.getString("label") ?? ""], forKey: LockShared.stateKey)
         AppLocks.cleanupExpired()
         // DeviceActivity needs >= 15 min intervals. The end is never pushed past `until`: with < 15 min left the
