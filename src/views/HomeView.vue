@@ -326,7 +326,7 @@ import { blankSchedule, validateSchedule, scheduleOfTask, applyTaskSchedule, del
 import { syncScheduledNotifications } from '@/composables/useSchedNotifications';
 import { repeatState, patternOf, onSchedule, offSchedule, toastFor, legacyRepeating, legacyPattern } from '@/utils/repeatToggle';
 import { dropUndefined } from '@/utils/firestoreSafe';
-import { lightHaptic } from '@/composables/useTaskMotion';
+import { lightHaptic, warnHaptic } from '@/composables/useTaskMotion';
 import ScheduledList from '@/components/home/ScheduledList.vue';
 import EmptyState from '@/components/home/EmptyState.vue';
 import StartDayPrompt from '@/components/home/StartDayPrompt.vue';
@@ -369,7 +369,8 @@ import { debtShield, debtHoldPlan, turnOffBlocked, TURN_OFF_BLOCKED_MSG } from '
 import { vaultView, startPlan, stopWindows, priceApps, newUnlocks, unlockCelebration, webFallback } from '@/utils/pointsVault';
 import robotPng from '@/assets/assistant-robot@2x.png';
 import PointsCelebration from '@/components/home/PointsCelebration.vue';
-import { sessionGoal } from '@/utils/sessionGoal';
+import { sessionGoal, overtimeStamp, overtimeInfo } from '@/utils/sessionGoal';
+import { durationMs as ringDurationMs, overtimeMs as ringOvertimeMs } from '@/utils/timerRing';
 import { useEightHour, clearDebtLocal, syncAfterAuth, setDayLengthHours, loadDayLengthHours, promptSeenFor, markPromptSeen } from '@/composables/useEightHour';
 import { countableIndexes, taskRange, hoursLabel, validSessionHours } from '@/utils/eightHour';
 import { estimateFor, chipValues, withAiEstimate } from '@/utils/taskEstimate';
@@ -1335,6 +1336,7 @@ const toggleTaskCompletion = async (index) => {
     const completedNow = new Date().toISOString();
 
     task.completedAt = completedNow;
+    Object.assign(task, task.timerEndTime ? overtimeStamp(ringDurationMs(task), ringOvertimeMs(task, Date.parse(completedNow))) : overtimeStamp(0)); // overtime penalty input
     task.completedFor = (!isToday(selectedDayIndex.value) && isShutdown() && days[selectedDayIndex.value]?.day === planTomorrowDayName()) ? localYMDOffset(1) : null; // early (planning window) -> tomorrow's
     task.timerActive = false;
     task.timerStoppedAt = completedNow;
@@ -1342,7 +1344,8 @@ const toggleTaskCompletion = async (index) => {
 
     userCredits.value += 10;
     if (isToday(selectedDayIndex.value)) { const of = core.TASKS_PER_SESSION; const n = sessionTasksDone.value + 1;
-      celebrate({ kind: 'task', title: 'Task done! 🎉', points: completionPoints(task), cheer: cheerFor(n, of) }); }
+      const ot = overtimeInfo(completionPoints(task), task); if (ot.lost > 0) warnHaptic();
+      celebrate({ kind: 'task', title: 'Task done! 🎉', points: ot.earned, penalty: ot.lost > 0 ? ot : null, ms: ot.lost > 0 ? 4200 : undefined, cheer: cheerFor(n, of) }); }
     if (isToday(selectedDayIndex.value)) { const left = (selectedDayRoutine.value || []).filter((t, i) => i !== index && !t.completed).length;
       window.dispatchEvent(new window.CustomEvent('cn:sergeant-ack', { detail: { left } })); }
 
@@ -1353,6 +1356,7 @@ const toggleTaskCompletion = async (index) => {
   } else {
     sfx('tap'); // un-complete: light tap
     task.completedAt = null;
+    Object.assign(task, overtimeStamp(0)); // un-complete: the credited (penalised) points come off exactly, the stamp goes
     task.completedFor = null;
     task.timerStoppedAt = null;
     task.timerActive = false;
@@ -1427,7 +1431,7 @@ const widgetComplete = async (taskId, mode) => {
 widgetComplete.prior = async (taskId, dayName) => {
   if (!userId.value || !dayName || isDayLocked(dayName)) return !!userId.value;
   const at = new Date().toISOString();
-  await mutateDay(dayName, (tasks) => tasks.map((t) => (t && !t.completed && widgetTaskId(t) === taskId ? { ...t, completed: true, completedAt: at, timerActive: false, widgetEffectsPending: false } : t)));
+  await mutateDay(dayName, (tasks) => tasks.map((t) => (t && !t.completed && widgetTaskId(t) === taskId ? { ...t, completed: true, completedAt: at, timerActive: false, widgetEffectsPending: false, ...(t.timerEndTime ? overtimeStamp(ringDurationMs(t), ringOvertimeMs(t, Date.parse(at))) : overtimeStamp(0)) } : t)));
   return true;
 };
 widgetComplete.tasks = () => (isToday(selectedDayIndex.value) ? selectedDayRoutine.value : []);

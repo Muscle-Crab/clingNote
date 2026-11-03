@@ -10,7 +10,10 @@
         </span>
       </div>
       <p class="pc-title">{{ item.title }}</p>
-      <p v-if="item.points" class="pc-pts" data-test="points-celebration-gain">+{{ shown }} pts</p>
+      <!-- Overtime penalty: impossible to miss, and explicit that the points were lost BECAUSE of the overtime. -->
+      <p v-if="item.penalty" class="pc-pen" data-test="points-celebration-penalty">⚠️ Overtime penalty: −{{ item.penalty.lost }} pts</p>
+      <p v-if="item.points" class="pc-pts" data-test="points-celebration-gain"><s v-if="item.penalty" class="pc-full" data-test="points-celebration-full">+{{ item.penalty.full }}</s> +{{ shown }} pts</p>
+      <p v-if="item.penalty" class="pc-sub pc-pen-why" data-test="points-celebration-why">You went {{ item.penalty.overMin }} min over the {{ item.penalty.durMin }} min timer, so you earned {{ item.penalty.earned }} of {{ item.penalty.full }}.</p>
       <p v-if="item.sub" class="pc-sub">{{ item.sub }}</p>
       <p v-if="item.cheer" class="pc-cheer" data-test="points-celebration-cheer">{{ item.cheer }}</p>
     </div>
@@ -38,6 +41,9 @@ onBeforeUnmount(() => { window.cancelAnimationFrame(raf); clearTimeout(t); });
 .pc-title { font-size: 26px; font-weight: 800; margin: 0 0 6px; }
 .pc-pts { font-size: 48px; font-weight: 900; color: #facc15; margin: 0; }
 .pc-sub { opacity: 0.85; margin: 6px 0 0; }
+.pc-pen { font-size: 22px; line-height: 1.2; font-weight: 900; color: #f97316; margin: 0 0 4px; text-shadow: 0 0 18px rgba(239, 68, 68, 0.55); }
+.pc-full { color: #ef4444; opacity: 0.8; font-size: 30px; text-decoration-thickness: 4px; }
+.pc-pen-why { max-width: 280px; margin-left: auto; margin-right: auto; color: #fdba74; font-weight: 700; opacity: 1; }
 .pc-cheer { margin: 10px 0 0; font-weight: 700; color: #86efac; }
 .pc-burst { position: absolute; left: 50%; top: 50%; }
 .pc-dot { position: absolute; width: 10px; height: 10px; border-radius: 50%; animation: pcFly 0.9s ease-out forwards; }

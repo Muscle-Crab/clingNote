@@ -26,14 +26,14 @@ const stableIdOf = (t) => (t && (t.id != null && t.id !== '' ? `id:${t.id}` : `k
 // Points earned on the locked set. Each lock slot n belongs to the task stored at lock.indexes[n] when the day started; match it by its
 // stable id (lock.ids[n]) so reorders/inserts after Start Day can't shift points onto another task, falling back to lock.indexes[n]
 // for locks written before ids existed. Never tasks[n] (that was the bug: slot n is not array position n).
-const { sessionGrace, taskPoints } = require('./lib/sessionGrace');
+const { sessionGrace, taskPoints, overtimePoints } = require('./lib/sessionGrace');
 const lockedEarned = (lock, tasks) => {
   const list = tasks || []; const byId = new Map(); list.forEach((t) => { const k = stableIdOf(t); if (k && !byId.has(k)) byId.set(k, t); });
   let earned = 0, done = 0;
   (lock.points || []).forEach((p, n) => {
     const id = lock.ids && lock.ids[n]; const idx = lock.indexes ? lock.indexes[n] : undefined;
     const t = id && byId.has(id) ? byId.get(id) : (idx != null ? list[idx] : undefined);
-    if (t && t.completed) { earned += Number(p) || 0; done += 1; }
+    if (t && t.completed) { earned += overtimePoints(p, t); done += 1; }
   });
   return { earned, done };
 };

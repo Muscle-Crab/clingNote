@@ -185,7 +185,7 @@ export const breakNote = (n, sessions = 2, min = 10) => ({ title: n < sessions ?
   body: `Take it whenever you want from the game plan line on Home; it opens your apps for ${min} min. Breaks never cost points.` });
 
 // ---- 5. points: per finished task, by size, never by time ----
-import { SIZE_POINTS, sizeFromMinutes, sizeFromPoints, sizeOf, sizePoints } from './sessionGoal.js';
+import { SIZE_POINTS, sizeFromMinutes, sizeFromPoints, sizeOf, sizePoints, overtimePoints } from './sessionGoal.js';
 export { SIZE_POINTS, sizeFromMinutes, sizeFromPoints, sizeOf, sizePoints };
 export const SIZE_LABEL = { s: 'Small', m: 'Medium', l: 'Large' };
 const sizeMode = ref(false); // reactive so cards re-score when Coach mode loads; on in Coach (strict) mode: chips + earned points use size points
@@ -195,7 +195,7 @@ const doneAt = (t) => { const v = t && t.completedAt; if (!v) return NaN; if (ty
 // Earned today: completed tasks only; a task finished after the hard close earns 0 (no overtime). Breaks have no task, so cost nothing.
 export const earnedPoints = (tasks = [], { closeMs = 0, estMinutes = () => 0, penalty = 0 } = {}) => {
   let pts = 0; let after = 0;
-  for (const t of tasks || []) { if (!t || !t.completed) continue; const at = doneAt(t); const p = sizePoints(t, estMinutes(t));
+  for (const t of tasks || []) { if (!t || !t.completed) continue; const at = doneAt(t); const p = overtimePoints(sizePoints(t, estMinutes(t)), t); // overtime penalty (sessionGoal.overtimeFactor)
     if (closeMs && Number.isFinite(at) && at >= closeMs) after += p; else pts += p; }
   return { points: Math.max(0, pts - (penalty || 0)), afterClose: after, gross: pts };
 };
