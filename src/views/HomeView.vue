@@ -94,6 +94,8 @@
       <CelebrationOverlay v-if="showFullScreenAnimation" :streak="streak" @close="closeFullScreenAnimation" />
 
 
+      <StartConfirmSheet v-if="startConfirm" :title="startConfirm.title" v-model:minutes="startConfirm.minutes" v-model:dont-ask="startConfirm.dontAsk"
+          @start="finishStartConfirm(true)" @skip="finishStartConfirm(false)" @close="closeStartConfirm" />
       <TimerModal v-if="showTimerModal" v-model:hours="selectedTimerHours" v-model:minutes="selectedTimerMinutes" @close="showTimerModal = false" @start="startTimer" />
 
 
@@ -327,6 +329,8 @@ import { syncScheduledNotifications } from '@/composables/useSchedNotifications'
 import { repeatState, patternOf, onSchedule, offSchedule, toastFor, legacyRepeating, legacyPattern } from '@/utils/repeatToggle';
 import { dropUndefined } from '@/utils/firestoreSafe';
 import { lightHaptic, warnHaptic } from '@/composables/useTaskMotion';
+import StartConfirmSheet from '@/components/home/StartConfirmSheet.vue';
+import { confirmStartOn, setConfirmStart, confirmLine, speakConfirm, stopConfirm } from '@/utils/startConfirm';
 import ScheduledList from '@/components/home/ScheduledList.vue';
 import EmptyState from '@/components/home/EmptyState.vue';
 import StartDayPrompt from '@/components/home/StartDayPrompt.vue';
@@ -460,14 +464,27 @@ const nowTick = ref(Date.now());
 let timerInterval = null;
 
 // Play = start the countdown immediately from the task's estimate (typed override > stored/auto estimate). No picker step.
-const openTaskTimerModal = async (index) => {
-  const t = selectedDayRoutine.value[index]; if (!t) return;
-  const mins = chipValues(t).minutes || 25;
+// Pre-start confirm (utils/startConfirm.js): spoken question + small sheet (Start / Skip / adjust / Don't ask again), unless turned off.
+const startConfirm = ref(null); // { index, title, minutes, base, dontAsk }
+const launchTimer = async (index, mins) => {
   selectedTimerTaskIndex.value = index;
   selectedTimerHours.value = Math.floor(mins / 60);
   selectedTimerMinutes.value = mins % 60;
   await startTimer();
 };
+const openTaskTimerModal = async (index) => {
+  const t = selectedDayRoutine.value[index]; if (!t) return;
+  const mins = chipValues(t).minutes || 25;
+  if (!confirmStartOn(localStorage, userId.value)) return launchTimer(index, mins);
+  startConfirm.value = { index, title: t.title || 'this task', minutes: mins, base: mins, dontAsk: false };
+  speakConfirm(confirmLine(t.title, mins));
+};
+const finishStartConfirm = async (useAdjusted) => {
+  const c = startConfirm.value; if (!c) return; stopConfirm(); startConfirm.value = null;
+  if (c.dontAsk) setConfirmStart(localStorage, userId.value, false);
+  await launchTimer(c.index, useAdjusted ? c.minutes : c.base);
+};
+const closeStartConfirm = () => { stopConfirm(); startConfirm.value = null; };
 
 // B44: 🍅 in the ⋯ menu: 25/5 ×4 pomodoro on this task (phases advance in the countdown watcher; Live Activity shows "Focus 2/4").
 const startPomodoro = async (index) => {

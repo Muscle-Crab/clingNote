@@ -94,6 +94,8 @@
               <input type="time" class="pf-time" data-test="plan-time" :value="lockIn.planTime" @change="onPlanTime($event.target.value)" /></label>
             <label class="pf-row pf-row--divided" data-test="auto-focus-row"><span class="pf-ico" aria-hidden="true">🎯</span><span class="pf-row-title">Auto-start focus<small class="pf-dl-sub">Starts a task's timer at its start time (and when iPhone Focus turns on) and locks you in until it ends</small></span>
               <input type="checkbox" role="switch" class="pf-switch" data-test="auto-focus-toggle" :checked="autoFocus" @change="onAutoFocus($event.target.checked)" /></label>
+            <label class="pf-row pf-row--divided" data-test="confirm-start-row"><span class="pf-ico" aria-hidden="true">⏱️</span><span class="pf-row-title">Confirm time before starting<small class="pf-dl-sub">Asks if the task fits its minutes when you press play</small></span>
+              <input type="checkbox" role="switch" class="pf-switch" data-test="confirm-start-toggle" :checked="confirmStart" @change="onConfirmStart($event.target.checked)" /></label>
           </section>
           <section v-if="isOwn" class="pf-card pf-card--flush" data-test="wake-alarm-setting">
             <label class="pf-row"><span class="pf-ico" aria-hidden="true">⏰</span><span class="pf-row-title">Wake-up alarm<small class="pf-dl-sub" data-test="wake-alarm-sub">{{ wakeOk ? 'ClingNote asks you each day if you want an alarm, then rings at your time, even on silent (iOS 26+). Off by default.' : 'iOS app only: install ClingNote on your iPhone to use it.' }}</small></span>
@@ -190,6 +192,7 @@
 </template>
 
 <script setup>
+import { confirmStartOn, setConfirmStart } from '@/utils/startConfirm';
 import * as GP from '@/utils/gamePlan';
 import { lockIn, loadLockIn, setLockInEnabled, setWakeAutoLock, setPlanOpenTime } from '@/utils/lockIn';
 import { wakeLockNote } from '@/utils/wakeLock';
@@ -205,6 +208,8 @@ const toggleWakeDay = (n) => { const d = wake.value.days; const next = d.include
 const wakePromptHint = computed(() => (toMin(wake.value.promptTime) < toMin(wake.value.time) ? "Morning: asks about that morning's alarm" : 'Evening: asks about the next morning'));
 const autoFocus = ref(readAutoFocus(localStorage)); // per device (src/utils/focusAutoStart.js)
 const onAutoFocus = (on) => { writeAutoFocus(localStorage, on); autoFocus.value = !!on; };
+const confirmStart = ref(confirmStartOn(localStorage, auth.currentUser?.uid)); // per user (src/utils/startConfirm.js)
+const onConfirmStart = (on) => { setConfirmStart(localStorage, auth.currentUser?.uid, on); confirmStart.value = !!on; };
 // B44 "Lock at wake-up": the picked apps lock at the wake time for the day length, even with ClingNote closed. Needs Screen Time + apps.
 const lockSt = ref({ authorization: 'unsupported', selectionCount: 0 });
 if (lockAvailable()) clingLock.status().then((r) => { if (r) lockSt.value = r; }).catch(() => {});
