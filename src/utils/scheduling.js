@@ -304,8 +304,8 @@ export const scheduledOverdue = (t, now = new Date()) => {
 };
 
 // ── Placement by scheduled date (not creation date) ──
-// A one-off task whose date is after today must go to users/{uid}.scheduledTasks (it materializes on its date and shows in
-// that Mon–Sun week / Upcoming), never into today's weeklyRoutines day doc. Previously the assistant/voice "task" items and
+// A one-off task whose date is after today must go to users/{uid}.scheduledTasks (it materializes on its date and shows on
+// that day's rolling tab / Upcoming), never into today's weeklyRoutines day doc. Previously the assistant/voice "task" items and
 // manual adds with a future due date were written to today's list regardless of their date (bug: Nov 16 task showed today).
 // Returns the date the task belongs to when it must be deferred, else '' (today / past / no date: add to the viewed day).
 export const deferredDateFor = (dateStr, todayStr) => (isValidDate(dateStr) && isValidDate(todayStr) && dateStr > todayStr ? dateStr : '');
