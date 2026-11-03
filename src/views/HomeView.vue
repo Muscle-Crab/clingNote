@@ -366,7 +366,8 @@ import { homeDay } from '@/utils/homeDay';
 import DayStartPrompt from '@/components/eighthour/DayStartPrompt.vue';
 import { sessionApps } from '@/utils/sessionApps';
 import { debtShield, debtHoldPlan, turnOffBlocked, TURN_OFF_BLOCKED_MSG } from '@/utils/appLockDebt';
-import { vaultView, startPlan, stopWindows, priceApps, newUnlocks, unlockText } from '@/utils/pointsVault';
+import { vaultView, startPlan, stopWindows, priceApps, newUnlocks, unlockCelebration, webFallback } from '@/utils/pointsVault';
+import robotPng from '@/assets/assistant-robot@2x.png';
 import PointsCelebration from '@/components/home/PointsCelebration.vue';
 import { sessionGoal } from '@/utils/sessionGoal';
 import { useEightHour, clearDebtLocal, syncAfterAuth, setDayLengthHours, loadDayLengthHours, promptSeenFor, markPromptSeen } from '@/composables/useEightHour';
@@ -4234,10 +4235,12 @@ const syncVault = async () => {
   } finally { vaultSyncing = false; }
 };
 // One full-screen celebration per app per day as the points pass its price.
-watch(() => (gpVault.value ? gpVault.value.items.filter((a) => a.open).map((a) => a.id).join(',') : ''), () => {
+// Native first (real app icons popping out of the vault); whatever it can't draw falls back to the web celebration (app chips).
+watch(() => (gpVault.value ? gpVault.value.items.filter((a) => a.open).map((a) => a.id).join(',') : ''), async () => {
   const fresh = newUnlocks(gpVault.value, dayLoad(VAULT_SEEN_KEY) || []); if (!fresh.length) return;
   daySave(VAULT_SEEN_KEY, [...(dayLoad(VAULT_SEEN_KEY) || []), ...fresh.map((a) => a.id)]);
-  fresh.forEach((a) => celebrate({ kind: 'vault', title: unlockText(a.label), sub: `${a.price} pts reached` })); });
+  const r = await clingLock.celebrateVault(fresh.map((a) => a.id), { points: (gpVault.value && gpVault.value.points) || 0, robot: robotPng });
+  const c = unlockCelebration(webFallback(fresh, r)); if (c) celebrate({ ...c, robot: robotPng }); });
 const vaultStart = async () => { const v = gpVault.value; const now = Date.now(); const plan = startPlan(v, now); if (!plan) return;
   const r = await clingLock.allowVaultApps(plan.ids, plan.untilMs);
   if (!r || !(r.allowed > 0)) { error.value = r && r.reason === 'debt' ? 'Vault closed: a missed goal keeps apps locked.' : "Couldn't open the vault apps right now."; return; }

@@ -52,6 +52,7 @@ public class ClingLockPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "vaultState", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "startUsage", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "vaultUsage", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "celebrateVault", returnType: CAPPluginReturnPromise),
     ]
 
     @objc func requestAuthorization(_ call: CAPPluginCall) {
@@ -535,6 +536,35 @@ public class ClingLockPlugin: CAPPlugin, CAPBridgedPlugin {
         let apps = AppLocks.apps().map { ["id": $0.id, "label": $0.label] as [String: Any] }
         call.resolve(["days": UsageLog.all(), "apps": apps])
     }
+    /// Vault unlock celebration with the apps' REAL icons + names. ApplicationTokens are opaque: only Apple's Label(token) can draw
+    /// them, so this is a native SwiftUI overlay (VaultUnlockView) over the web view. ids = labeled app ids that just opened.
+    /// Resolves at once { shown, missing }: shown = icons on screen (0 = nothing presented -> JS shows the web celebration);
+    /// missing = ids with no saved token (JS celebrates those on the web). Once-per-app-per-day stays in JS (cn.vault.celebrated.v1).
+    @objc func celebrateVault(_ call: CAPPluginCall) {
+        guard #available(iOS 16.0, *) else { call.resolve(["shown": 0, "missing": call.getArray("ids") ?? []]); return }
+        let ids = (call.getArray("ids") as? [String]) ?? []
+        let saved = AppLocks.apps(); var apps: [LabeledApp] = []; var missing: [String] = []
+        for id in ids { if let a = saved.first(where: { $0.id == id }) { apps.append(a) } else { missing.append(id) } }
+        guard !apps.isEmpty else { call.resolve(["shown": 0, "missing": missing]); return }
+        let points = call.getInt("points") ?? 0
+        let robot = Self.bundledWebImage(call.getString("robot") ?? "")
+        DispatchQueue.main.async {
+            guard var top = self.bridge?.viewController else { call.resolve(["shown": 0, "missing": ids]); return }
+            while let p = top.presentedViewController { top = p }
+            if top is UIHostingController<VaultUnlockView> { call.resolve(["shown": 0, "missing": ids]); return } // one at a time
+            var host: UIHostingController<VaultUnlockView>?
+            let view = VaultUnlockView(apps: apps, points: points, robot: robot) { host?.dismiss(animated: true) }
+            host = UIHostingController(rootView: view)
+            host!.view.backgroundColor = .clear; host!.modalPresentationStyle = .overFullScreen; host!.modalTransitionStyle = .crossDissolve
+            top.present(host!, animated: true) { call.resolve(["shown": apps.count, "missing": missing]) }
+        }
+    }
+    /// An image from the bundled web build ("/img/assistant-robot@2x.<hash>.png" -> App.app/public/img/...). nil if absent.
+    static func bundledWebImage(_ path: String) -> UIImage? {
+        guard path.hasPrefix("/"), !path.contains(".."), path.count < 200 else { return nil }
+        return UIImage(contentsOfFile: Bundle.main.bundlePath + "/public" + path)
+    }
+
     @objc func offerBreak(_ call: CAPPluginCall) {
         guard #available(iOS 16.0, *) else { call.resolve(["posted": false]); return }
         let minutes = call.getInt("minutes") ?? 0; let points = call.getInt("points") ?? 0
@@ -627,6 +657,102 @@ struct NamedPickerView: View {
             let name = pending.isEmpty ? "" : pending.removeFirst()
             return LabeledApp(id: UUID().uuidString, label: name, token: t)
         }.sorted { ($0.label.isEmpty ? 1 : 0, $0.label) < ($1.label.isEmpty ? 1 : 0, $1.label) }
+    }
+}
+
+/// Vault unlock: the vault door spins open, then each unlocked app's real icon (Label(token), the only way to draw an opaque
+/// ApplicationToken) springs out of it one by one with a haptic tick, confetti bursts, robot cheers. Same palette as the web
+/// celebration (PointsCelebration.vue): dim navy backdrop, #1e3a8a -> #0f172a, yellow points, green cheer. Tap anywhere / button to close.
+@available(iOS 16.0, *)
+struct VaultUnlockView: View {
+    let apps: [LabeledApp]
+    let points: Int
+    let robot: UIImage?
+    let done: () -> Void
+    @State private var doorOpen = false
+    @State private var shown = 0
+    @State private var burst = false
+    @State private var ready = false
+    private static let yellow = Color(red: 0.98, green: 0.80, blue: 0.08)
+    private static let blue = Color(red: 0.38, green: 0.65, blue: 0.98)
+    private static let green = Color(red: 0.53, green: 0.94, blue: 0.67)
+    private static let confetti: [Color] = [yellow, blue, Color(red: 0.20, green: 0.83, blue: 0.60), Color(red: 0.96, green: 0.45, blue: 0.71)]
+
+    /// Where icon i lands: a fan above the door (up to 5 per arc, extra arcs further out).
+    static func spot(_ i: Int, of n: Int) -> CGSize {
+        let row = i / 5; let inRow = min(5, n - row * 5); let k = i % 5
+        let spread = Double(min(inRow - 1, 4)) * 0.36
+        let a = -Double.pi / 2 + (inRow > 1 ? -spread / 2 + spread * Double(k) / Double(inRow - 1) : 0)
+        let r = 150.0 + Double(row) * 92
+        return CGSize(width: cos(a) * r, height: sin(a) * r + 40)
+    }
+
+    var body: some View {
+        ZStack {
+            Color(red: 5 / 255, green: 10 / 255, blue: 25 / 255).opacity(0.78).ignoresSafeArea().onTapGesture { done() }
+            VStack(spacing: 10) {
+                Spacer()
+                ZStack {
+                    ForEach(0..<24, id: \.self) { i in // confetti
+                        Circle().fill(Self.confetti[i % 4]).frame(width: 9, height: 9)
+                            .offset(y: burst ? -CGFloat(120 + (i % 3) * 45) : 0).rotationEffect(.degrees(Double(i) * 15))
+                            .opacity(burst ? 0 : 1).animation(.easeOut(duration: 1.1).delay(0.35), value: burst)
+                    }
+                    door
+                    ForEach(Array(apps.enumerated()), id: \.element.id) { i, a in
+                        let out = i < shown
+                        VStack(spacing: 4) {
+                            Label(a.token).labelStyle(.iconOnly).scaleEffect(2.1).frame(width: 64, height: 64)
+                                .background(Circle().fill(Self.blue.opacity(0.25)).blur(radius: 10))
+                            Label(a.token).labelStyle(.titleOnly).font(.caption.weight(.semibold)).foregroundColor(.white).lineLimit(1).frame(maxWidth: 84)
+                        }
+                        .scaleEffect(out ? 1 : 0.2).opacity(out ? 1 : 0)
+                        .offset(out ? Self.spot(i, of: apps.count) : CGSize(width: 0, height: 40))
+                        .rotationEffect(.degrees(out ? 0 : -30))
+                        .animation(.spring(response: 0.5, dampingFraction: 0.55), value: shown)
+                    }
+                }
+                .frame(height: 360)
+                Text(apps.count == 1 ? "Vault unlocked!" : "Vault unlocked \(apps.count) apps!")
+                    .font(.system(size: 26, weight: .heavy)).foregroundColor(.white).multilineTextAlignment(.center)
+                if points > 0 { Text("\(points) pts").font(.system(size: 40, weight: .black)).foregroundColor(Self.yellow) }
+                Text("Earned it. 10 pts = 5 min of app time.").font(.subheadline.weight(.bold)).foregroundColor(Self.green)
+                Spacer()
+                Button(action: done) {
+                    Text("Nice!").font(.headline.weight(.heavy)).foregroundColor(.white).padding(.horizontal, 44).padding(.vertical, 14)
+                        .background(Capsule().fill(LinearGradient(colors: [Color(red: 0.12, green: 0.23, blue: 0.54), Color(red: 0.06, green: 0.09, blue: 0.16)], startPoint: .top, endPoint: .bottom)))
+                        .overlay(Capsule().stroke(Self.blue.opacity(0.7), lineWidth: 1.5)).shadow(color: Self.blue.opacity(0.5), radius: 14)
+                }
+                .opacity(ready ? 1 : 0).padding(.bottom, 30).accessibilityLabel("Close")
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .onAppear(perform: play)
+    }
+
+    private var door: some View {
+        ZStack {
+            Circle().fill(LinearGradient(colors: [Color(red: 0.12, green: 0.23, blue: 0.54), Color(red: 0.06, green: 0.09, blue: 0.16)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                .overlay(Circle().stroke(Self.blue.opacity(0.8), lineWidth: 4)).shadow(color: Self.blue.opacity(0.55), radius: 30)
+            ForEach(0..<3, id: \.self) { k in Capsule().fill(Self.blue.opacity(0.9)).frame(width: 6, height: 70).rotationEffect(.degrees(Double(k) * 60)) }
+            if let r = robot { Image(uiImage: r).resizable().scaledToFit().frame(width: 58, height: 58) }
+            else { Circle().fill(Self.yellow).frame(width: 18, height: 18) }
+        }
+        .frame(width: 130, height: 130)
+        .rotationEffect(.degrees(doorOpen ? 200 : 0))
+        .scaleEffect(doorOpen ? 0.82 : 1)
+        .rotation3DEffect(.degrees(doorOpen ? 58 : 0), axis: (x: 0, y: 1, z: 0), anchor: .leading, perspective: 0.6)
+        .offset(y: 40)
+    }
+
+    private func play() {
+        let ok = UINotificationFeedbackGenerator(); let tick = UIImpactFeedbackGenerator(style: .medium); ok.prepare(); tick.prepare()
+        withAnimation(.spring(response: 0.6, dampingFraction: 0.65).delay(0.25)) { doorOpen = true }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { ok.notificationOccurred(.success); burst = true }
+        for i in 0..<apps.count { // staggered pop-outs
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.7 + 0.22 * Double(i)) { shown = i + 1; tick.impactOccurred(intensity: 0.8) }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.9 + 0.22 * Double(apps.count)) { withAnimation(.easeIn(duration: 0.25)) { ready = true } }
     }
 }
 

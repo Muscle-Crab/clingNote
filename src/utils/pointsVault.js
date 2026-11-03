@@ -60,6 +60,12 @@ export const rowText = ({ total, openCount, next, debt, live, liveLeftMin }) => 
 };
 export const unlockText = (label) => `Vault unlocked: ${label} 🎉`;
 // Apps that just opened and haven't been celebrated today (once per app per day).
+// One celebration for everything that opened at once (native shows real icons; this is the web / no-token fallback).
+export const unlockTitle = (apps) => (apps.length === 1 ? unlockText(apps[0].label) : `Vault unlocked: ${apps.length} apps 🎉`);
+export const unlockCelebration = (apps) => (apps && apps.length ? { kind: 'vault', title: unlockTitle(apps), sub: `${Math.max(...apps.map((a) => Number(a.price) || 0))} pts reached`,
+  apps: apps.map((a) => ({ id: a.id, label: a.label || 'App' })), ms: 2400 + 350 * Math.min(apps.length, 6) } : null);
+// After the native overlay (ClingLock.celebrateVault): apps it could not draw (no token / not presented) still get the web one.
+export const webFallback = (apps, res) => (res && Number(res.shown) > 0 ? (apps || []).filter((a) => (res.missing || []).includes(a.id)) : apps || []);
 export const newUnlocks = (view, seen) => (view ? view.items.filter((a) => a.open && !(seen || []).includes(a.id)) : []);
 
 // Start shared app time for every open app: the native window ends when the minutes run out (re-shields with the app closed).
