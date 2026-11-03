@@ -18,6 +18,7 @@ class ClingLockMonitor: DeviceActivityMonitor {
             applyLockShield(); return
         }
         if activity == WakeLock.activity { startWakeLock(); return }
+        if activity == UsageLog.activity { UsageLog.markDay(); return } // new day observed (apps absent = < 15 min)
         if activity == DebtHold.activity { // missed-goal hold begins (the session ended short): shield up, app open or not
             let now = Date().timeIntervalSince1970 * 1000
             guard let e = DebtHold.entry(), now < e.untilMs else { return }
@@ -67,6 +68,12 @@ class ClingLockMonitor: DeviceActivityMonitor {
             if !LockEndAlertGate.isRealEnd(untilMs: until, nowMs: Date().timeIntervalSince1970 * 1000) { return } // restart / already ended by the app
             TaskAllow.clearActive(); TaskAllow.reapply(); DeviceActivityCenter().stopMonitoring([activity]); return
         }
+        if activity == .clingVault { // points-vault app time used up: re-shield those apps (app open or closed)
+            let until = VaultAllow.active()?.until ?? 0
+            if !LockEndAlertGate.isRealEnd(untilMs: until, nowMs: Date().timeIntervalSince1970 * 1000) { return } // restart / ended by the app
+            VaultAllow.clearActive(); TaskAllow.reapply(); DeviceActivityCenter().stopMonitoring([activity]); return
+        }
+        if activity == UsageLog.activity { return } // daily usage window: repeats on its own
         if activity.rawValue.hasPrefix(AppLocks.activityPrefix) {  // per-app timed lock ended
             let id = String(activity.rawValue.dropFirst(AppLocks.activityPrefix.count))
             // Restart artifact (app re-scheduled/unlocked this activity): leave the saved lock and the new schedule alone.
@@ -78,6 +85,12 @@ class ClingLockMonitor: DeviceActivityMonitor {
         }
         if activity == DebtHold.activity { // only the 14-day safety cap ends a hold here; a met goal clears it from the app
             guard let e = DebtHold.entry() else { return } // cleared by the app (clearDebtHold): it already lifted the shield
+            let now = Date().timeIntervalSince1970 * 1000
+            // Chain (iOS caps a schedule at 1 week): a segment ended before the real end -> keep the shield, arm the next segment.
+            if e.untilMs > now + LockEndAlertGate.endSlackMs && LockEndAlertGate.isRealEnd(untilMs: DebtHold.segEnd(), nowMs: now) {
+                if DebtHold.holds(startMs: e.startMs, untilMs: e.untilMs, nowMs: now) { applyLockShield() }
+                DebtHold.armSegment(nowMs: now); return // a failure keeps the entry + shield; the app re-arms on its next sync
+            }
             if !LockEndAlertGate.isRealEnd(untilMs: e.untilMs, nowMs: Date().timeIntervalSince1970 * 1000) { return } // restart / re-arm artifact
             DebtHold.clear(); DeviceActivityCenter().stopMonitoring([activity])
             let st = LockShared.defaults?.dictionary(forKey: LockShared.stateKey) ?? [:]
@@ -117,7 +130,16 @@ class ClingLockMonitor: DeviceActivityMonitor {
         let st = LockShared.defaults?.dictionary(forKey: LockShared.stateKey) ?? [:]
         let untilMs = (st["until"] as? Double) ?? Double((st["until"] as? Int) ?? 0)
         if !LockEndAlertGate.isRealEnd(untilMs: untilMs, nowMs: Date().timeIntervalSince1970 * 1000) {
-            if untilMs > 0 { return } // lock still running (restart): keep shield + new schedule
+            if untilMs > 0 { // lock still running: a restart, or the end of a <= 6.5-day segment of a longer lock (ScheduleChain)
+                let now = Date().timeIntervalSince1970 * 1000, seg = LockShared.defaults?.double(forKey: ScheduleChain.lockSegKey) ?? 0
+                if LockEndAlertGate.isRealEnd(untilMs: seg, nowMs: now), let next = ScheduleChain.segment(startMs: now, untilMs: untilMs, nowMs: now) {
+                    LockShared.defaults?.set(next.endMs, forKey: ScheduleChain.lockSegKey) // before stop/start: the restart's end is not "real"
+                    DeviceActivityCenter().stopMonitoring([.clingLock])
+                    try? DeviceActivityCenter().startMonitoring(.clingLock, during: ScheduleChain.schedule(next))
+                    applyLockShield() // stays up either way; the app re-arms on its next sync if this failed
+                }
+                return
+            }
             store.shield.applications = nil; store.shield.applicationCategories = nil; store.shield.webDomains = nil
             return // stopped by the app (stopLock): no alert
         }
@@ -129,6 +151,12 @@ class ClingLockMonitor: DeviceActivityMonitor {
         DeviceActivityCenter().stopMonitoring([.clingLock])
         LockShared.defaults?.set(["locked": false, "until": 0], forKey: LockShared.stateKey)
         notifyLockEnded()
+    }
+    /// Usage thresholds for vault prices ("u|<appId>|<min>"): idempotent max per app per local day, kept on the device.
+    override func eventDidReachThreshold(_ event: DeviceActivityEvent.Name, activity: DeviceActivityName) {
+        super.eventDidReachThreshold(event, activity: activity)
+        guard activity == UsageLog.activity, let u = UsageLog.parse(event) else { return }
+        UsageLog.record(id: u.id, min: u.min)
     }
     /// Lock time is up. Aggressiveness is user-selectable (Settings > Lock-in > "Lock-end alert", App Group key
     /// LockShared.lockEndAlertKey): off | subtle (passive, silent) | standard (active, default sound) |

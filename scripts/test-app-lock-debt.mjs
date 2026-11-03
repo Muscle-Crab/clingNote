@@ -111,13 +111,13 @@ const finish = (db, i) => { Object.assign(day(db).tasks[i], { completed: true, c
 { const pl = src('ios/App/App/ClingLockPlugin.swift'); const ex = src('ios/App/ClingLockMonitor/ClingLockMonitor.swift'); const sh = src('ios/App/Shared/LockShared.swift'); const js = src('src/native/clingNative.js'); const hv = src('src/views/HomeView.vue');
   for (const m of ['armDebtHold', 'clearDebtHold', 'debtHoldStatus']) ok(pl.includes(`CAPPluginMethod(name: "${m}"`) && pl.includes(`@objc func ${m}(`) && js.includes(`${m}:`), `plugin method ${m}`);
   ok(/enum DebtHold[\s\S]*static let activity = DeviceActivityName\("clingDebt"\)/.test(sh) && /func keepShieldIfHeld/.test(sh), 'shared DebtHold (App Group, both targets)');
-  ok(/DebtHold\.save\(key: key[\s\S]{0,500}startMonitoring\(DebtHold\.activity/.test(pl), 'arm: entry saved before the schedule starts');
+  ok(/DebtHold\.save\(key: key[\s\S]{0,200}DebtHold\.armSegment/.test(pl) && /func armSegment[\s\S]{0,300}save\(key: e\.key[\s\S]{0,300}startMonitoring\(activity/.test(sh), 'arm: entry saved before the (segmented) schedule starts');
   ok(/func clearDebtHold[\s\S]{0,400}DebtHold\.clear\(\)[\s\S]{0,120}stopMonitoring\(\[DebtHold\.activity\]\)[\s\S]{0,900}clearShield\(\)/.test(pl), 'clear: entry, schedule, shield');
   ok(/activity == DebtHold\.activity \{ \/\/ missed-goal hold begins[\s\S]{0,900}applyLockShield\(\)/.test(ex), 'extension raises the shield at the hold start (app closed)');
   const endIdx = ex.indexOf('guard activity == .clingLock else { return }\n        // iOS also calls'); const tail = ex.slice(endIdx);
   ok(tail.indexOf('DebtHold.keepShieldIfHeld()') > 0 && tail.indexOf('DebtHold.keepShieldIfHeld()') < tail.indexOf('notifyLockEnded()'), 'session lock end keeps the shield while a hold is active');
   ok((ex.match(/if DebtHold\.keepShieldIfHeld\(\) \{/g) || []).length >= 3, 'scheduled-block and wake-lock ends also keep it');
-  ok(/activity == DebtHold\.activity \{ \/\/ only the 14-day safety cap[\s\S]{0,600}isRealEnd/.test(ex), 'hold end: only a real cap end lifts it');
+  ok(/activity == DebtHold\.activity \{ \/\/ only the 14-day safety cap[\s\S]{0,1400}isRealEnd\(untilMs: e\.untilMs/.test(ex), 'hold end: only a real cap end lifts it');
   ok(/const syncDebtHold[\s\S]{0,1200}clingLock\.armDebtHold\(p\)[\s\S]{0,300}clingLock\.clearDebtHold\(\)/.test(hv) && /await syncDebtHold\(st/.test(hv) && !/gpOn\.value[^\n]*syncDebtHold/.test(hv), 'HomeView syncs the hold for every user (no Coach gate)');
   ok(!/gpGraceSchedule/.test(hv) && /debtPaidNative\(debt\.sessionKey\)/.test(hv), 'Coach-only grace schedule gone; paid debt clears natively'); }
 console.log(`app lock debt: ${pass} checks passed`);

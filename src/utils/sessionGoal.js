@@ -33,5 +33,5 @@ export const sessionGoal = (tasks, { n, sessions = 2, startMs = 0, endMs, goal =
   for (const t of tasks || []) { if (!countsToward(t) || (!frozen && sessionOfTask(t, sessions) !== n)) continue; const p = pointsOf(t); target += p; total += 1;
     if (t.completed) { const at = doneAtMs(t); if (!Number.isFinite(at) || (at >= from && at < endMs)) { earned += p; done += 1; } } }
   if (frozen) target = Number(goal);
-  return { n, target, earned, done, total, met: target <= 0 || earned >= target /* = core.sessionMet (copied into tests' temp dirs: no core import) */ };
+  return { n, target, earned, done, total, met: target > 0 && earned >= target /* = core.sessionMet (copied into tests' temp dirs: no core import) */ };
 };

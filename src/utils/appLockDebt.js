@@ -49,3 +49,7 @@ export const debtHoldPlan = ({ debt, live = null, known = false, now = Date.now(
   // Only once the server's answer is in (known), so a cold start / offline open never drops a hold for a miss it can't see yet.
   return known && !live ? { action: 'clear' } : { action: 'none' };
 };
+// Turning the app lock off (assistant "turn off app lock") must not be a way out of an unpaid missed-goal lock: debtHoldPlan clears the
+// hold when the lock is off, so the off switch is refused while a debt is active and no live session has paid it yet.
+export const TURN_OFF_BLOCKED_MSG = 'App lock stays on until a session hits its points goal (missed-goal lock).';
+export const turnOffBlocked = ({ debt, now = Date.now(), live = null } = {}) => core.debtActive(debt, now) && !(live && core.debtCleared(debt, live));

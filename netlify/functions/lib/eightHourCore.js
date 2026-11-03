@@ -233,9 +233,17 @@ const lockedChangeAllowed = (oldTasks, newTasks) => {
 
 // Which stored tasks count toward the day (recurring copies whose activeFrom is still in the future are hidden today) and how far along the user is.
 const countableIndexes = (tasks, dayKey) => (tasks || []).map((t, i) => i).filter((i) => tasks[i] && !(tasks[i].activeFrom && dayKey < tasks[i].activeFrom));
+// Slot n of the lock belongs to the task with stable id lock.ids[n] (same key as the server's lockedEarned), so reorders / inserts after
+// Start can't shift points onto another task. Locks without ids (older ones) fall back to the n-th countable task's position.
+const taskKeyOf = (t) => `${(t && t.createdAt) || ''}|${(t && t.title) || ''}`;
+const stableIdOf = (t) => (t && (t.id != null && t.id !== '' ? `id:${t.id}` : `k:${taskKeyOf(t)}`)) || '';
 const progressOf = (lock, tasks) => {
-  const idx = countableIndexes(tasks, lock.dayKey); let earned = 0, done = 0;
-  idx.forEach((i, n) => { if (tasks[i].completed && lock.points && lock.points[n] != null) { earned += lock.points[n]; done += 1; } });
+  const list = tasks || []; const idx = countableIndexes(list, lock.dayKey); let earned = 0, done = 0;
+  const byId = new Map(); if (Array.isArray(lock.ids)) idx.forEach((i) => { const k = stableIdOf(list[i]); if (k && !byId.has(k)) byId.set(k, list[i]); });
+  (lock.points || []).forEach((p, n) => { if (p == null) return;
+    const id = Array.isArray(lock.ids) ? lock.ids[n] : null;
+    const t = id && byId.has(id) ? byId.get(id) : (idx[n] != null ? list[idx[n]] : undefined);
+    if (t && t.completed) { earned += Number(p) || 0; done += 1; } });
   return { earned, done, total: idx.length };
 };
 
@@ -290,6 +298,17 @@ const DEBT_CAP_MS = SHUT_CAP_MS;
 const normDebt = (d) => (d && typeof d.sessionKey === 'string' && d.sessionKey && Number(d.sinceMs) > 0
   ? { sessionKey: d.sessionKey, target: Number(d.target) || 0, earned: Number(d.earned) || 0, sinceMs: Number(d.sinceMs) } : null);
 const debtUntilMs = (d) => { const x = normDebt(d); return x ? x.sinceMs + DEBT_CAP_MS : 0; };
+// iOS rejects a DeviceActivity schedule longer than one week (intervalTooLong) and the failure used to drop the hold. Native schedules
+// are therefore armed in segments of at most NATIVE_SPAN_MAX_MS (6.5 days) and re-armed in a chain until the real end (the monitor at
+// each segment end, and the app on every sync). Mirrored in ios/App/Shared/LockShared.swift (ScheduleChain); >= 15 min per segment.
+const NATIVE_SPAN_MAX_MS = 6.5 * 24 * 3600000; const NATIVE_SPAN_MIN_MS = 15 * 60000;
+// -> { startMs, endMs, last } for the segment to arm now, or null when the real end is under a minute away.
+const nativeSegment = (startMs, untilMs, nowMs) => {
+  if (!(untilMs > nowMs + 60000)) return null;
+  const start = Math.min(Math.max(Number(startMs) || 0, nowMs - 60000), untilMs - NATIVE_SPAN_MIN_MS);
+  const endMs = Math.min(untilMs, start + NATIVE_SPAN_MAX_MS);
+  return { startMs: start, endMs, last: endMs >= untilMs };
+};
 const debtActive = (d, nowMs) => { const x = normDebt(d); return !!x && nowMs < x.sinceMs + DEBT_CAP_MS; };
 // s = { startMs, target, earned }: a session started at/after the miss that has reached its goal (target > 0) pays the debt.
 const debtCleared = (d, s) => { const x = normDebt(d); return !!x && !!s && sessionMet(s) && Number(s.startMs) >= x.sinceMs; };
@@ -314,5 +333,5 @@ module.exports = {
   lockedChangeAllowed, nextDayKey, shutUntilMs, SHUT_CAP_MS, isShut, rulesShutUntilMs,
   DEBT_CAP_MS, normDebt, debtUntilMs, debtActive, debtCleared, debtAfterSettle,
   SESSION_MIN_LEFT_MS, sessionCloseMs, nextDayStartMs, nextSessionState,
-  BLOCK_HOURS, MAX_BLOCKS_PER_DAY, SCHEDULE_LEAD_MS, SCHEDULE_HORIZON_MS, clampBlockHours, sessionKey, blockIndex, pendingOf, nextPending, nextAt, planBlocks, countableIndexes, progressOf, defaultStats, settleDay, rewardsForDay, penaltyForMiss, badgeFor, MAX_SHIELDS, SHIELD_MIN_RATIO, failureNotice, rewardFor,
+  BLOCK_HOURS, MAX_BLOCKS_PER_DAY, SCHEDULE_LEAD_MS, SCHEDULE_HORIZON_MS, clampBlockHours, sessionKey, blockIndex, pendingOf, nextPending, nextAt, planBlocks, countableIndexes, progressOf, stableIdOf, NATIVE_SPAN_MAX_MS, NATIVE_SPAN_MIN_MS, nativeSegment, defaultStats, settleDay, rewardsForDay, penaltyForMiss, badgeFor, MAX_SHIELDS, SHIELD_MIN_RATIO, failureNotice, rewardFor,
 };

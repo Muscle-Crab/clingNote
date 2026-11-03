@@ -47,6 +47,11 @@ public class ClingLockPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "armDebtHold", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "clearDebtHold", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "debtHoldStatus", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "allowVaultApps", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "endVaultApps", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "vaultState", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "startUsage", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "vaultUsage", returnType: CAPPluginReturnPromise),
     ]
 
     @objc func requestAuthorization(_ call: CAPPluginCall) {
@@ -131,18 +136,22 @@ public class ClingLockPlugin: CAPPlugin, CAPBridgedPlugin {
         if call.getBool("sessionBegin") ?? false, let data = LockShared.defaults?.data(forKey: LockShared.selectionKey) { LockShared.defaults?.set(data, forKey: LockShared.lastUsedSelectionKey) }
         LockShared.defaults?.set(["locked": true, "until": untilMs, "label": call.getString("label") ?? ""], forKey: LockShared.stateKey)
         AppLocks.cleanupExpired()
-        // DeviceActivity needs >= 15 min intervals. The end is never pushed past `until`: with < 15 min left the
-        // window is (until - 15 min ... until), which may start in the past so intervalDidStart re-applies right away.
-        let startDate = min(Date().addingTimeInterval(-60), until.addingTimeInterval(-15 * 60))
-        let start = AppLocks.comps(startDate), end = AppLocks.comps(until)
+        // DeviceActivity needs >= 15 min intervals and rejects > 1 week (intervalTooLong): arm the first <= 6.5-day segment of a chain
+        // (ScheduleChain; the monitor re-arms at each segment end, the app on sync). The start may be backdated so intervalDidStart re-applies.
+        let nowMs = Date().timeIntervalSince1970 * 1000
+        guard let seg = ScheduleChain.segment(startMs: nowMs, untilMs: untilMs, nowMs: nowMs) else { call.reject("untilMs must be > 1 min ahead"); return }
+        LockShared.defaults?.set(seg.endMs, forKey: ScheduleChain.lockSegKey)
         do {
             DeviceActivityCenter().stopMonitoring([.clingLock])
-            try DeviceActivityCenter().startMonitoring(.clingLock, during: DeviceActivitySchedule(intervalStart: start, intervalEnd: end, repeats: false))
-            call.resolve(["locked": true, "monitor": "ok"])
+            try DeviceActivityCenter().startMonitoring(.clingLock, during: ScheduleChain.schedule(seg))
+            call.resolve(["locked": true, "monitor": "ok", "segEndMs": seg.endMs])
         } catch {
+            DeviceActivityCenter().stopMonitoring([.clingLock])
+            LockShared.defaults?.removeObject(forKey: ScheduleChain.lockSegKey)
+            // A missed-goal hold is active: never drop the shield on an arm failure (its own clingDebt chain lifts it at the real end).
+            if DebtHold.keepShieldIfHeld(nowMs: nowMs) { Self.applyShield(); call.resolve(["locked": true, "monitor": "failed: \(error)", "heldByDebt": true]); return }
             // No schedule means nothing would ever lift the shield: take it down rather than leave an un-expiring lock.
             Self.clearShield()
-            DeviceActivityCenter().stopMonitoring([.clingLock])
             LockShared.defaults?.set(["locked": false, "until": 0], forKey: LockShared.stateKey)
             call.resolve(["locked": false, "monitor": "failed: \(error)"])
         }
@@ -446,24 +455,19 @@ public class ClingLockPlugin: CAPPlugin, CAPBridgedPlugin {
             call.resolve(["armed": true, "monitor": "ok", "existing": true]); return
         }
         LockShared.installLockEndSound()
-        // DeviceActivity: >= 15 min interval; a start in the past fires intervalDidStart right away (same trick as startLock).
-        let until = Date(timeIntervalSince1970: untilMs / 1000)
-        let startDate = min(max(Date(timeIntervalSince1970: startMs / 1000), Date().addingTimeInterval(-60)), until.addingTimeInterval(-15 * 60))
+        // Chain of <= 6.5-day segments (iOS caps a schedule at one week; the 14-day hold used to fail with intervalTooLong and be
+        // dropped). The monitor re-arms the next segment at each segment end; the app re-calls this on every sync.
         DebtHold.save(key: key, startMs: startMs, untilMs: untilMs) // before stop/start: a restart-triggered intervalDidEnd sees a future end
-        do {
-            DeviceActivityCenter().stopMonitoring([DebtHold.activity])
-            try DeviceActivityCenter().startMonitoring(DebtHold.activity, during: DeviceActivitySchedule(intervalStart: AppLocks.comps(startDate), intervalEnd: AppLocks.comps(until), repeats: false))
-            if startMs <= nowMs {
-                Self.applyShield()
-                let st = LockShared.defaults?.dictionary(forKey: LockShared.stateKey) ?? [:]
-                let curUntil = (st["until"] as? Double) ?? Double((st["until"] as? Int) ?? 0)
-                LockShared.defaults?.set(["locked": true, "until": max(untilMs, curUntil), "label": "ClingNote lock-in"], forKey: LockShared.stateKey)
-            }
-            call.resolve(["armed": true, "monitor": "ok"])
-        } catch {
-            DebtHold.clear()
-            call.resolve(["armed": false, "monitor": "failed: \(error)"])
+        let err = DebtHold.armSegment(nowMs: nowMs)
+        if startMs <= nowMs {
+            // Raise the shield whether or not the schedule armed: a failed arm keeps the hold (entry stays) and the shield up.
+            Self.applyShield()
+            let st = LockShared.defaults?.dictionary(forKey: LockShared.stateKey) ?? [:]
+            let curUntil = (st["until"] as? Double) ?? Double((st["until"] as? Int) ?? 0)
+            LockShared.defaults?.set(["locked": true, "until": max(untilMs, curUntil), "label": "ClingNote lock-in"], forKey: LockShared.stateKey)
         }
+        if let err = err { call.resolve(["armed": false, "kept": true, "monitor": "failed: \(err)"]); return }
+        call.resolve(["armed": true, "monitor": "ok", "segEndMs": DebtHold.segEnd()])
     }
     /// A later session reached its goal (or the lock was turned off): drop the hold and lift the shield unless another lock still runs.
     @objc func clearDebtHold(_ call: CAPPluginCall) {
@@ -484,6 +488,52 @@ public class ClingLockPlugin: CAPPlugin, CAPBridgedPlugin {
         let e = DebtHold.entry()
         call.resolve(["armed": e != nil, "key": e?.key ?? "", "startMs": e?.startMs ?? 0, "untilMs": e?.untilMs ?? 0, "active": DebtHold.isActive(),
                       "monitoring": DeviceActivityCenter().activities.contains(DebtHold.activity)])
+    }
+
+    // ---- points vault (VaultAllow / UsageLog in Shared/LockShared.swift; logic in src/utils/pointsVault.js) ----
+    /// Opens the given labeled apps (ids) until untilMs = the shared app time bought with points. >= 15 min DeviceActivity window
+    /// (backdated start); its intervalDidEnd re-shields with the app closed. Refused while a missed-goal hold is active.
+    @objc func allowVaultApps(_ call: CAPPluginCall) {
+        guard #available(iOS 16.0, *) else { call.resolve(["allowed": 0]); return }
+        let ids = (call.getArray("ids") as? [String]) ?? []; let untilMs = call.getDouble("untilMs") ?? 0
+        let nowMs = Date().timeIntervalSince1970 * 1000
+        if DebtHold.isActive(nowMs: nowMs) { call.resolve(["allowed": 0, "reason": "debt"]); return }
+        guard !ids.isEmpty, untilMs > nowMs + 60_000 else { call.resolve(["allowed": 0]); return }
+        VaultAllow.setActive(ids, until: untilMs)
+        let until = Date(timeIntervalSince1970: untilMs / 1000)
+        let startDate = min(Date().addingTimeInterval(-60), until.addingTimeInterval(-15 * 60))
+        do {
+            DeviceActivityCenter().stopMonitoring([.clingVault])
+            try DeviceActivityCenter().startMonitoring(.clingVault, during: DeviceActivitySchedule(intervalStart: AppLocks.comps(startDate), intervalEnd: AppLocks.comps(until), repeats: false))
+        } catch {
+            VaultAllow.clearActive(); TaskAllow.reapply() // nothing would re-lock: refuse rather than leave apps open
+            call.resolve(["allowed": 0, "monitor": "failed: \(error)"]); return
+        }
+        TaskAllow.reapply()
+        call.resolve(["allowed": ids.count, "untilMs": untilMs, "monitor": "ok"])
+    }
+    @objc func endVaultApps(_ call: CAPPluginCall) {
+        guard #available(iOS 16.0, *) else { call.resolve(["ended": false]); return }
+        let had = VaultAllow.active() != nil
+        VaultAllow.clearActive(); DeviceActivityCenter().stopMonitoring([.clingVault]); TaskAllow.reapply()
+        call.resolve(["ended": had])
+    }
+    @objc func vaultState(_ call: CAPPluginCall) {
+        guard #available(iOS 16.0, *) else { call.resolve(["ids": [], "untilMs": 0, "live": false]); return }
+        VaultAllow.expireIfNeeded()
+        let a = VaultAllow.active(); let nowMs = Date().timeIntervalSince1970 * 1000
+        call.resolve(["ids": a?.ids ?? [], "untilMs": a?.until ?? 0, "live": a.map { VaultAllow.isLive(until: $0.until, nowMs: nowMs) } ?? false])
+    }
+    /// Starts / refreshes the daily "clingUsage" threshold monitor for the labeled apps (no-op when unchanged).
+    @objc func startUsage(_ call: CAPPluginCall) {
+        guard #available(iOS 16.0, *) else { call.resolve(["monitor": "unsupported"]); return }
+        call.resolve(["monitor": UsageLog.ensure()])
+    }
+    /// On-device usage buckets { days: { ymd: { appId: minutes } }, apps: [{ id, label, locked }] } for the vault's prices.
+    @objc func vaultUsage(_ call: CAPPluginCall) {
+        guard #available(iOS 16.0, *) else { call.resolve(["days": [:], "apps": []]); return }
+        let apps = AppLocks.apps().map { ["id": $0.id, "label": $0.label] as [String: Any] }
+        call.resolve(["days": UsageLog.all(), "apps": apps])
     }
     @objc func offerBreak(_ call: CAPPluginCall) {
         guard #available(iOS 16.0, *) else { call.resolve(["posted": false]); return }

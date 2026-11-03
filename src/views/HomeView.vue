@@ -139,8 +139,8 @@
                class="task-section">
         <GamePlanRow v-if="gpOn && isViewingToday" :text="gpText" :phase="gpPhase.phase" :review="gpReview" :leftovers="gpLeft" :tomorrow="gpTomorrow"
                      :locked="hardLocked || gpGate" :gate="gpGate" :friend="(gp.friend && gp.friend.name) || ''" :friend-on="gp.friendUnlock" :unlock="gpUnlock" :penalty="gpPenaltyToday" :after-close="gpEarned.afterClose"
-                     :break-bank="gpBank" :break-min="gpBreakStatus.min || 15" :gift="gpGift" :history="gpHistory" :break-on="gpPhase.phase === 'break'" :screen-ready="strictReadyMin" :ready="gpReady"
-                     @carry="gpCarry" @review="gpApplyReview" @ask="gpAsk" @share="gpShare" @take-break="gpTakeBreak" @end-break="gpEndBreak" @claim-screen="claimScreenTime" />
+                     :break-bank="gpBank" :break-min="gpBreakStatus.min || 15" :gift="gpGift" :history="gpHistory" :break-on="gpPhase.phase === 'break'" :screen-ready="strictReadyMin" :ready="gpReady" :vault="gpVault"
+                     @carry="gpCarry" @review="gpApplyReview" @ask="gpAsk" @share="gpShare" @take-break="gpTakeBreak" @end-break="gpEndBreak" @claim-screen="claimScreenTime" @vault-start="vaultStart" @vault-stop="vaultStop" />
         <EmptyState v-if="dayTasks.length === 0" :show-add="true" :show-templates="isViewingToday && !!userId" @add="onAddClick" @templates="openTemplates" />
 
 
@@ -363,7 +363,8 @@ import { wakeLockPlan, shouldReconcileWake } from '@/utils/wakeLock';
 import { homeDay } from '@/utils/homeDay';
 import DayStartPrompt from '@/components/eighthour/DayStartPrompt.vue';
 import { sessionApps } from '@/utils/sessionApps';
-import { debtShield, debtHoldPlan } from '@/utils/appLockDebt';
+import { debtShield, debtHoldPlan, turnOffBlocked, TURN_OFF_BLOCKED_MSG } from '@/utils/appLockDebt';
+import { vaultView, startPlan, stopWindows } from '@/utils/pointsVault';
 import { sessionGoal } from '@/utils/sessionGoal';
 import { useEightHour, clearDebtLocal, syncAfterAuth, setDayLengthHours, loadDayLengthHours, promptSeenFor, markPromptSeen } from '@/composables/useEightHour';
 import { countableIndexes, taskRange, hoursLabel, validSessionHours } from '@/utils/eightHour';
@@ -4184,7 +4185,39 @@ const syncAppLock = async () => {
   else if (want) lockOn = endMs;
   scheduleLaterLocks(st);
   syncWakeLock(st);
+  syncVault();
 };
+// Points vault (src/utils/pointsVault.js): the day's points open the picked apps cheapest first (price from on-device usage) once 3
+// tasks are done; every 10 pts = 5 min of shared app time (native VaultAllow + "clingVault" re-shield). Never while a missed-goal lock
+// is unpaid. Points / goal progress are never spent: used time is kept as local windows per day.
+const VAULT_WIN_KEY = 'cn.vault.windows.v1';
+const vaultLoad = () => { try { const v = JSON.parse(localStorage.getItem(VAULT_WIN_KEY) || '{}'); return v && v.day === localDateStr() ? v.windows || [] : []; } catch (e) { return []; } };
+const vaultWindows = ref(vaultLoad()); const vaultData = ref({ days: {}, apps: [] }); const vaultNow = ref(Date.now());
+const vaultSave = (w) => { vaultWindows.value = w; try { localStorage.setItem(VAULT_WIN_KEY, JSON.stringify({ day: localDateStr(), windows: w })); } catch (e) { /* ignore */ } };
+const vaultDebt = computed(() => turnOffBlocked({ debt: eh.appLockDebt.value, now: vaultNow.value, live: liveDebtSession() }));
+const gpVault = computed(() => { if (!lockAvailable() || !isViewingToday.value) return null;
+  return vaultView({ apps: vaultData.value.apps || [], days: vaultData.value.days || {}, todayYmd: localDateStr(), points: (gpEarned.value && gpEarned.value.points) || 0,
+    tasksDone: (todayTasksForTarget.value || []).filter((t) => t && t.completed).length, debt: vaultDebt.value, windows: vaultWindows.value, nowMs: vaultNow.value }); });
+let vaultSyncing = false;
+const syncVault = async () => {
+  if (!lockAvailable() || vaultSyncing) return; vaultSyncing = true;
+  try {
+    vaultNow.value = Date.now(); if (vaultWindows.value.length && !vaultLoad().length) vaultWindows.value = []; // new day
+    clingLock.startUsage().catch(() => {});
+    const u = await clingLock.vaultUsage(); if (u && !u.error) vaultData.value = { days: u.days || {}, apps: u.apps || [] };
+    const st = await clingLock.vaultState();
+    const v = gpVault.value; const live = st && st.live;
+    // Debt / gate lost while app time runs: close at once (time already used stays used, the rest is kept).
+    if (live && v && (v.debt || !v.gate.met)) { await clingLock.endVaultApps(); vaultSave(stopWindows(vaultWindows.value, Date.now())); }
+    else if (!live && v && v.live) vaultSave(stopWindows(vaultWindows.value, Date.now())); // ended natively early (stopped elsewhere)
+  } finally { vaultSyncing = false; }
+};
+const vaultStart = async () => { const v = gpVault.value; const now = Date.now(); const plan = startPlan(v, now); if (!plan) return;
+  const r = await clingLock.allowVaultApps(plan.ids, plan.untilMs);
+  if (!r || !(r.allowed > 0)) { error.value = r && r.reason === 'debt' ? 'Vault closed: a missed goal keeps apps locked.' : "Couldn't open the vault apps right now."; return; }
+  vaultSave([...vaultWindows.value, { startMs: plan.startMs, endMs: plan.untilMs }]); vaultNow.value = now; };
+const vaultStop = async () => { await clingLock.endVaultApps(); vaultSave(stopWindows(vaultWindows.value, Date.now())); vaultNow.value = Date.now(); };
+
 // B44 wake-up auto-lock: keep iOS's daily wake schedule in step with the setting, wake time, day length, evening blocks and skip.
 let wakeSig = '';
 const syncWakeLock = async (st) => {
@@ -4549,7 +4582,7 @@ const assistantExecutor = createAssistantExecutor({
   appLock: async (action) => {
     if (!lockAvailable()) return { error: 'App lock needs the iPhone app (iOS 16+).' };
     if (action === 'pick_apps') { const a0 = await clingLock.requestAuthorization(); if (a0.status !== 'approved') return { error: 'Screen Time permission was not given.' }; const r = await clingLock.pickApps(); if (r.saved) { try { localStorage.setItem(LOCK_PREF, '1'); } catch (e) { /* ignore */ } } syncAppLock(); return { saved: !!r.saved, apps: r.apps || 0 }; }
-    if (action === 'turn_off') { try { localStorage.removeItem(LOCK_PREF); } catch (e) { /* ignore */ } await clingLock.stopLock(); return { summary: 'App lock off' }; }
+    if (action === 'turn_off') { if (turnOffBlocked({ debt: eh.appLockDebt.value, now: Date.now(), live: liveDebtSession() })) return { error: TURN_OFF_BLOCKED_MSG, blocked: true }; try { localStorage.removeItem(LOCK_PREF); } catch (e) { /* ignore */ } await clingLock.stopLock(); return { summary: 'App lock off' }; }
     if (action === 'emergency_unlock') return emergencyUnlock();
     return { ...(await clingLock.status()), enabled: lockEnabled() };
   },

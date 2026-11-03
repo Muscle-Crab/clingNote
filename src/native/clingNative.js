@@ -45,6 +45,12 @@ export const clingLock = {
   pickTaskApps: safe('ClingLock', Lock, (p, taskId) => p.pickTaskApps({ taskId }), { saved: false, count: 0 }),
   taskApps: safe('ClingLock', Lock, (p, taskId = '') => p.taskApps({ taskId }), { count: 0, active: null }),
   allowTaskApps: safe('ClingLock', Lock, (p, taskId, untilMs) => p.allowTaskApps({ taskId, untilMs }), { allowed: 0 }),
+  // Points vault (src/utils/pointsVault.js): open labeled apps for the shared app time; on-device usage buckets for the prices.
+  allowVaultApps: safe('ClingLock', Lock, (p, ids, untilMs) => p.allowVaultApps({ ids, untilMs }), { allowed: 0 }),
+  endVaultApps: safe('ClingLock', Lock, (p) => p.endVaultApps(), { ended: false }),
+  vaultState: safe('ClingLock', Lock, (p) => p.vaultState(), { ids: [], untilMs: 0, live: false }),
+  startUsage: safe('ClingLock', Lock, (p) => p.startUsage(), { monitor: 'unsupported' }),
+  vaultUsage: safe('ClingLock', Lock, (p) => p.vaultUsage(), { days: {}, apps: [] }),
   endTaskApps: safe('ClingLock', Lock, (p, taskId) => p.endTaskApps(taskId ? { taskId } : {}), { ended: false }),
   // Earned break: lifts every shield until untilMs; ClingLockMonitor re-locks at the end (app closed too). offerBreak posts the points alert with a background Take break action.
   startBreak: safe('ClingLock', Lock, (p, untilMs, minutes) => p.startBreak({ untilMs, minutes }), { started: false }),

@@ -51,7 +51,20 @@ enum DebtHold {
         let num = { (x: Any?) -> Double in (x as? Double) ?? Double((x as? Int) ?? 0) }
         return (k, num(d["startMs"]), num(d["untilMs"]))
     }
-    static func save(key: String, startMs: Double, untilMs: Double) { LockShared.defaults?.set(["key": key, "startMs": startMs, "untilMs": untilMs], forKey: storeKey) }
+    static func save(key: String, startMs: Double, untilMs: Double, segEndMs: Double = 0) { LockShared.defaults?.set(["key": key, "startMs": startMs, "untilMs": untilMs, "segEndMs": segEndMs], forKey: storeKey) }
+    static func segEnd() -> Double { let d = LockShared.defaults?.dictionary(forKey: storeKey) ?? [:]; return (d["segEndMs"] as? Double) ?? Double((d["segEndMs"] as? Int) ?? 0) }
+    /// Arms the next segment of the chain (<= 6.5 days, ScheduleChain). Returns nil on success, else the error text. Never clears the entry:
+    /// a failed arm keeps the hold (and the shield, when it already holds) so a missed goal is never escaped by an iOS schedule error.
+    @discardableResult
+    static func armSegment(nowMs: Double = Date().timeIntervalSince1970 * 1000) -> String? {
+        guard let e = entry(), let seg = ScheduleChain.segment(startMs: e.startMs, untilMs: e.untilMs, nowMs: nowMs) else { return "no segment" }
+        save(key: e.key, startMs: e.startMs, untilMs: e.untilMs, segEndMs: seg.endMs) // before stop/start: the restart's intervalDidEnd sees a future segment end
+        do {
+            DeviceActivityCenter().stopMonitoring([activity])
+            try DeviceActivityCenter().startMonitoring(activity, during: ScheduleChain.schedule(seg))
+            return nil
+        } catch { return "\(error)" }
+    }
     static func clear() { LockShared.defaults?.removeObject(forKey: storeKey) }
     /// Active = started (minute slack, iOS fires interval starts up to a minute early/late) and before the safety cap.
     static func isActive(nowMs: Double = Date().timeIntervalSince1970 * 1000) -> Bool {
@@ -65,6 +78,28 @@ enum DebtHold {
         LockShared.defaults?.set(["locked": true, "until": e.untilMs, "label": "ClingNote lock-in"], forKey: LockShared.stateKey)
         return true
     }
+}
+
+/// iOS rejects a DeviceActivity interval longer than one week (DeviceActivityCenter.MonitoringError.intervalTooLong). Long holds
+/// (DebtHold, the 8-hour lock-in, both up to the 14-day safety cap) are armed in segments of at most 6.5 days and re-armed in a chain
+/// until the real end: by ClingLockMonitor at each segment's intervalDidEnd and by the app on every sync. Pure math mirrored in
+/// eightHourCore.nativeSegment (scripts/test-points-vault.mjs checks the constants match).
+@available(iOS 16.0, *)
+enum ScheduleChain {
+    static let maxSpanMs: Double = 6.5 * 24 * 3600 * 1000
+    static let minSpanMs: Double = 15 * 60 * 1000
+    /// Segment to arm now for a hold from startMs to untilMs, or nil when the real end is under a minute away.
+    static func segment(startMs: Double, untilMs: Double, nowMs: Double) -> (startMs: Double, endMs: Double)? {
+        guard untilMs > nowMs + 60_000 else { return nil }
+        let s = min(max(startMs, nowMs - 60_000), untilMs - minSpanMs)
+        return (s, min(untilMs, s + maxSpanMs))
+    }
+    static func schedule(_ seg: (startMs: Double, endMs: Double)) -> DeviceActivitySchedule {
+        DeviceActivitySchedule(intervalStart: AppLocks.comps(Date(timeIntervalSince1970: seg.startMs / 1000)),
+                               intervalEnd: AppLocks.comps(Date(timeIntervalSince1970: seg.endMs / 1000)), repeats: false)
+    }
+    /// Segment end of the 8-hour lock-in's current .clingLock schedule (App Group), so the monitor can tell a segment end from a restart.
+    static let lockSegKey = "lock.segEndMs"
 }
 
 /// Evening mode: later lock-in blocks scheduled ahead of time, one DeviceActivity each ("clingLockAt.<key>"), so the shield goes up at
@@ -108,7 +143,7 @@ enum AppLocks {
     static func apply(now: Double = Date().timeIntervalSince1970 * 1000) {
         if BreakState.isLive(now: now) { store.shield.applications = nil; return } // earned break: every app open until it ends
         var l = locked(); l = l.filter { $0.value == 0 || $0.value > now }; saveLocked(l)
-        let tokens = Set(apps().filter { l[$0.id] != nil }.map { $0.token }).subtracting(TaskAllow.allowed(now: now))
+        let tokens = Set(apps().filter { l[$0.id] != nil }.map { $0.token }).subtracting(TaskAllow.allowed(now: now)).subtracting(VaultAllow.allowed(now: now))
         store.shield.applications = tokens.isEmpty ? nil : tokens
     }
     /// Schedule components without seconds (DeviceActivity schedules are minute-granular).
@@ -176,6 +211,73 @@ enum TaskAllow {
     }
 }
 
+
+/// Points vault (src/utils/pointsVault.js): apps the user opened with the day's points, for the shared app time bought with them
+/// (every 10 points = 5 min). Same shape as TaskAllow: App Group ["ids": [LabeledApp.id], "until": ms] + one DeviceActivity
+/// ("clingVault", >= 15 min window, start backdated) whose intervalDidEnd re-shields with the app closed. Never while a missed-goal
+/// hold is active (refused here and in JS). A live break already opens everything and is unaffected.
+@available(iOS 16.0, *)
+extension DeviceActivityName { static let clingVault = Self("clingVault") }
+@available(iOS 16.0, *)
+enum VaultAllow {
+    static let activeKey = "lock.vaultAllow"
+    static func active() -> (ids: [String], until: Double)? {
+        guard let a = LockShared.defaults?.dictionary(forKey: activeKey), let ids = a["ids"] as? [String], !ids.isEmpty else { return nil }
+        return (ids, (a["until"] as? Double) ?? Double((a["until"] as? Int) ?? 0))
+    }
+    static func isLive(until: Double, nowMs: Double) -> Bool { until > nowMs }
+    static func allowed(now: Double = Date().timeIntervalSince1970 * 1000) -> Set<ApplicationToken> {
+        guard let a = active(), isLive(until: a.until, nowMs: now), !DebtHold.isActive(nowMs: now) else { return [] }
+        let ids = Set(a.ids); return Set(AppLocks.apps().filter { ids.contains($0.id) }.map { $0.token })
+    }
+    static func setActive(_ ids: [String], until: Double) { LockShared.defaults?.set(["ids": ids, "until": until], forKey: activeKey) }
+    static func clearActive() { LockShared.defaults?.removeObject(forKey: activeKey) }
+    static func expireIfNeeded(now: Double = Date().timeIntervalSince1970 * 1000) {
+        guard let a = active(), !isLive(until: a.until, nowMs: now) else { return }
+        clearActive(); DeviceActivityCenter().stopMonitoring([.clingVault]); TaskAllow.reapply()
+    }
+}
+
+/// Usage estimate for vault prices: ONE shared repeating DeviceActivity ("clingUsage", all day) with threshold events per labeled app at
+/// 15/30/60/120/240 min (event "u|<appId>|<min>"). ClingLockMonitor.eventDidReachThreshold records the largest threshold reached per
+/// app per local day in the App Group (idempotent: max). Data stays on the device; the app averages the last 7 days (pointsVault.js).
+@available(iOS 16.0, *)
+enum UsageLog {
+    static let activity = DeviceActivityName("clingUsage")
+    static let key = "usage.daily.v1"          // ["yyyy-MM-dd": [appId: minutes]]
+    static let sigKey = "usage.sig.v1"
+    static let thresholds = [15, 30, 60, 120, 240]
+    static let keepDays = 14
+    static func all() -> [String: [String: Int]] { (LockShared.defaults?.dictionary(forKey: key) as? [String: [String: Int]]) ?? [:] }
+    static func eventName(_ id: String, _ m: Int) -> DeviceActivityEvent.Name { DeviceActivityEvent.Name("u|\(id)|\(m)") }
+    static func parse(_ e: DeviceActivityEvent.Name) -> (id: String, min: Int)? {
+        let p = e.rawValue.split(separator: "|").map(String.init)
+        guard p.count == 3, p[0] == "u", let m = Int(p[2]) else { return nil }
+        return (p[1], m)
+    }
+    /// Pure fold (idempotent): keep the larger value, drop days older than keepDays.
+    static func fold(_ m0: [String: [String: Int]], ymd: String, id: String, min: Int) -> [String: [String: Int]] {
+        var m = m0; var day = m[ymd] ?? [:]; day[id] = max(day[id] ?? 0, min); m[ymd] = day
+        let keep = Set(m.keys.sorted().suffix(keepDays)); return m.filter { keep.contains($0.key) }
+    }
+    static func record(id: String, min: Int, now: Date = Date()) { LockShared.defaults?.set(fold(all(), ymd: WakeLock.ymd(now), id: id, min: min), forKey: key) }
+    /// Marks today as observed (an app absent from an observed day used < 15 min). Called at intervalDidStart and on app sync.
+    static func markDay(now: Date = Date()) { var m = all(); let d = WakeLock.ymd(now); if m[d] == nil { m[d] = [:]; LockShared.defaults?.set(m, forKey: key) } }
+    /// (Re)starts the schedule when the labeled app set changed. One activity, apps x 5 events.
+    static func ensure() -> String {
+        let apps = AppLocks.apps(); let sig = apps.map { $0.id }.sorted().joined(separator: ",")
+        if apps.isEmpty { DeviceActivityCenter().stopMonitoring([activity]); LockShared.defaults?.removeObject(forKey: sigKey); return "no-apps" }
+        if LockShared.defaults?.string(forKey: sigKey) == sig, DeviceActivityCenter().activities.contains(activity) { markDay(); return "ok" }
+        var events: [DeviceActivityEvent.Name: DeviceActivityEvent] = [:]
+        for a in apps { for m in thresholds { events[eventName(a.id, m)] = DeviceActivityEvent(applications: [a.token], threshold: DateComponents(minute: m)) } }
+        do {
+            DeviceActivityCenter().stopMonitoring([activity])
+            try DeviceActivityCenter().startMonitoring(activity, during: DeviceActivitySchedule(intervalStart: DateComponents(hour: 0, minute: 0), intervalEnd: DateComponents(hour: 23, minute: 59), repeats: true), events: events)
+            LockShared.defaults?.set(sig, forKey: sigKey); markDay(); return "ok"
+        } catch { return "failed: \(error)" }
+    }
+}
+
 /// Lock-in shield (store .clingLock) from the saved selection, minus the running task's allowed apps.
 @available(iOS 16.0, *)
 enum LockIn {
@@ -184,7 +286,7 @@ enum LockIn {
         if BreakState.isLive() { store.shield.applications = nil; store.shield.applicationCategories = nil; store.shield.webDomains = nil; return }
         guard let d = LockShared.defaults?.data(forKey: LockShared.selectionTokensKey),
               let sel = try? JSONDecoder().decode(LockSelectionTokens.self, from: d) else { return }
-        let allow = TaskAllow.allowed()
+        let allow = TaskAllow.allowed().union(VaultAllow.allowed()) // running task's apps + points-vault apps with app time left
         let apps = sel.apps.subtracting(allow)
         store.shield.applications = apps.isEmpty ? nil : apps
         store.shield.applicationCategories = sel.categories.isEmpty ? nil : .specific(sel.categories, except: allow)

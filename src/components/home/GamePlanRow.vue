@@ -10,6 +10,24 @@
     <!-- Break available: a small 🎁 right on the line (no box); one tap starts the break. Shown whenever a break can be taken, checklist or not. -->
     <button v-if="gift" type="button" class="gp-gift" data-test="gp-gift" :aria-label="`Take your ${Math.min(breakBank, breakMin)} minute break`" :title="`Take break (${Math.min(breakBank, breakMin)}m)`" @click.stop="$emit('take-break')">🎁</button>
     </div>
+    <!-- Points vault: one slim line (no box). Tap expands the price list, tap again collapses it. -->
+    <template v-if="vault">
+      <button type="button" class="gp-row gp-vault" data-test="vault-toggle" :aria-expanded="vaultOpen ? 'true' : 'false'" @click="vaultOpen = !vaultOpen">
+        <span class="gp-title" data-test="vault-text"><span class="gp-main">{{ vault.text }}</span></span>
+        <span class="gp-chev" aria-hidden="true">{{ vaultOpen ? '‹' : '›' }}</span>
+      </button>
+      <div v-if="vaultOpen" class="gp-body gp-vbody" data-test="vault-body">
+        <p v-if="vault.debt" class="gp-line gp-warn" data-test="vault-debt">Vault closed: a missed goal keeps apps locked until a session hits its goal.</p>
+        <p v-else-if="!vault.gate.met" class="gp-line" data-test="vault-gate">Finish {{ vault.gate.left }} more task{{ vault.gate.left === 1 ? '' : 's' }} to open the vault.</p>
+        <p v-for="a in vault.items" :key="a.id" class="gp-line gp-vapp" data-test="vault-app" :data-open="a.open ? '1' : '0'">
+          <span aria-hidden="true">{{ a.open ? '✓' : '🔒' }}</span> <span class="gp-vname">{{ a.label }}</span> <span class="gp-vprice">{{ a.price }} pts</span>
+        </p>
+        <p class="gp-line" data-test="vault-time">
+          <template v-if="vault.live">App time running: {{ vault.liveLeftMin }} min left. <button type="button" class="gp-chip" data-test="vault-stop" @click="$emit('vault-stop')">Stop</button></template>
+          <template v-else>App time left: {{ vault.leftMin }} of {{ vault.earnedMin }} min (10 pts = 5 min).<button v-if="vault.canStart" type="button" class="gp-chip gp-vgo" data-test="vault-start" @click="$emit('vault-start')">Use {{ vault.leftMin }} min</button></template>
+        </p>
+      </div>
+    </template>
     <div v-if="open" class="gp-body">
       <p v-if="gate" class="gp-line" data-test="gp-gate">🔒 Social apps stay locked until your morning checklist is done.<template v-if="gift"> An earned break still opens them.</template></p>
       <p v-if="penalty" class="gp-line gp-warn" data-test="gp-penalty">−{{ penalty }} pts today: Screen Time access was turned off.</p>
@@ -56,9 +74,10 @@ const props = defineProps({
   gate: { type: Boolean, default: false }, friend: { type: String, default: '' }, friendOn: { type: Boolean, default: false }, unlock: { type: Object, default: () => ({ status: '' }) },
   penalty: { type: Number, default: 0 }, afterClose: { type: Number, default: 0 }, minutes: { type: Array, default: () => [10, 20, 30] },
   breakBank: { type: Number, default: 0 }, breakMin: { type: Number, default: 10 }, breakOn: { type: Boolean, default: false }, gift: { type: Boolean, default: false }, screenReady: { type: Number, default: 0 }, ready: { type: String, default: '' }, history: { type: Array, default: () => [] },
+  vault: { type: Object, default: null },
 });
-defineEmits(['carry', 'review', 'ask', 'share', 'take-break', 'end-break', 'claim-screen']);
-const open = ref(false); const picked = ref([]); const accepted = ref([]); const histOpen = ref(false);
+defineEmits(['carry', 'review', 'ask', 'share', 'take-break', 'end-break', 'claim-screen', 'vault-start', 'vault-stop']);
+const open = ref(false); const picked = ref([]); const accepted = ref([]); const histOpen = ref(false); const vaultOpen = ref(false);
 const left = computed(() => props.leftovers);
 const attn = computed(() => !!props.review || (props.phase === 'closed' && props.leftovers.length > 0) || (props.friendOn && props.unlock.status === 'approved'));
 </script>
@@ -80,5 +99,7 @@ const attn = computed(() => !!props.review || (props.phase === 'closed' && props
 .gp-btn, .gp-chip { min-height: 26px; padding: 0 10px; border-radius: 13px; border: 1px solid var(--c-border, #2a2a2e); background: none; color: var(--c-text, #ecebe8); font: inherit; font-size: .72rem; cursor: pointer; justify-self: start; }
 .gp-btn:disabled { opacity: .5; cursor: default; }
 .gp-ask { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.gp-vapp { display: flex; gap: 6px; align-items: baseline; } .gp-vname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .gp-vprice { opacity: .8; font-variant-numeric: tabular-nums; }
+.gp-vbody { gap: 3px; } .gp-vgo { margin-left: 6px; }
 a { color: var(--c-accent-text, #5B9BFF); }
 </style>
