@@ -5,15 +5,30 @@
       <div class="ob-top">
         <button v-if="step > 0" class="ob-back" @click="go(step - 1)" aria-label="Back">‹</button><span v-else></span>
         <div class="ob-dots"><i v-for="(s, i) in STEPS" :key="s" :class="{ on: i <= step }"></i></div>
-        <VoToggle class="ob-vo" @unmuted="narrate" /><button v-if="STEPS[step] !== 'age'" class="ob-skip" @click="go(ageState === 'ok' ? STEPS.length : 1)">Skip</button>
+        <VoToggle class="ob-vo" @unmuted="narrate" /><button v-if="STEPS[step] !== 'age'" class="ob-skip" @click="go(ageState === 'ok' ? STEPS.length : STEPS.indexOf('age'))">Skip</button>
       </div>
 
-      <section v-if="STEPS[step] === 'welcome'" class="ob-sec">
+      <!-- First screen = the core pitch: you buy your free time (screen time) with done tasks. Numbers mirror utils/pointsVault.js. -->
+      <section v-if="STEPS[step] === 'welcome'" class="ob-sec" data-test="ob-pitch">
         <div class="ob-art"></div>
-        <p class="ob-k">Welcome</p>
-        <h1 class="ob-h">Hey {{ firstName }}, meet your <span>robot coach.</span></h1>
-        <p class="ob-p">ClingNote clings to your to‑dos until they're done. A few quick questions and we'll set it up around you.</p>
-        <div class="ob-asb"><AppStoreButton small /></div>
+        <p class="ob-k">Hey {{ firstName }} 👋</p>
+        <h1 class="ob-h">Buy back your <span>free time.</span></h1>
+        <p class="ob-p">In ClingNote, screen time isn't free: you pay for it by getting things done. Your robot coach keeps score.</p>
+        <div class="ob-row"><span class="em">✅</span><div><b>Tasks earn points</b><small>A medium task is about 20 pts. Every 10 pts buys you 5 minutes.</small></div></div>
+        <div class="ob-row"><span class="em">💸</span><div><b>Your top apps cost the most</b><small>Each app's price follows how much you used it this past week (30 pts + 2 per daily minute).</small></div></div>
+        <div class="ob-row"><span class="em">🔓</span><div><b>The vault opens as you earn</b><small>Pass an app's price and it unlocks, right on your phone.</small></div></div>
+        <div class="ob-row"><span class="em">🔥</span><div><b>8 tasks a session</b><small>Hit 8 to keep your streak alive. Earn breaks along the way.</small></div></div>
+        <div class="ob-row"><span class="em">🤖</span><div><b>An AI coach in your corner</b><small>Plans your day, sizes your tasks, and cheers you on.</small></div></div>
+      </section>
+
+      <!-- What's new: big update section (kept in the existing ob-row style). -->
+      <section v-else-if="STEPS[step] === 'whatsnew'" class="ob-sec" data-test="ob-whatsnew">
+        <p class="ob-k">What's new</p>
+        <h1 class="ob-h">Fresh in this <span>update 🎉</span></h1>
+        <p class="ob-p">Three upgrades that make every focus session feel better.</p>
+        <div class="ob-row"><span class="em">⏱️</span><div><b>Timers count up</b><small>Press play and watch it climb from 00:00. Every minute you put in shows.</small></div></div>
+        <div class="ob-row"><span class="em">🔔</span><div><b>A ping at your set time</b><small>Your phone buzzes when you hit the task's time, even when locked. The timer keeps going (+overtime) until you end the session. Your music keeps playing.</small></div></div>
+        <div class="ob-row"><span class="em">🎁</span><div><b>Real app icons pop out of the vault</b><small>When apps unlock, their actual icons burst out of the vault with confetti.</small></div></div>
       </section>
 
       <section v-else-if="STEPS[step] === 'age'" class="ob-sec" data-test="ob-age">
@@ -109,7 +124,7 @@ import { fmtWakeLabel } from '@/utils/eightHour';
 import RobotCoach from '@/components/robot/RobotCoach.vue';
 
 // 'alarm' (iOS app only): optional wake-up alarm opt-in right after the day-start step. index STEPS.length = paywall
-const STEPS = ['welcome', 'age', 'goals', 'schedule', ...(isNativeIOS() ? ['alarm'] : []), 'strictness', 'notifications', ...(lockAvailable() ? ['applock'] : [])];
+const STEPS = ['welcome', 'whatsnew', 'age', 'goals', 'schedule', ...(isNativeIOS() ? ['alarm'] : []), 'strictness', 'notifications', ...(lockAvailable() ? ['applock'] : [])];
 const stepNo = (id) => STEPS.indexOf(id) - 1; // "Step N" counter: welcome + age are not numbered
 const GOALS = [
   { id: 'work', e: '💼', l: 'Crush work tasks' }, { id: 'fitness', e: '💪', l: 'Work out consistently' },
@@ -141,7 +156,7 @@ const wakeLabel = computed(() => fmtWakeLabel(eh.plan.value?.wakeTime || a.wakeT
 // The paywall counts as "seen" the moment it is shown (local flag + users/{uid}.paywallSeenAt) so existing users get it at most once; Subs/Profile can still open it.
 watch(step, (n) => { if (n === STEPS.length) { const u = auth.currentUser; if (u) { markPaywallSeenLocal(u.uid); saveUserFields(u.uid, { paywallSeenAt: new Date() }).catch(() => {}); } } }, { immediate: true });
 const firstName = computed(() => (name.value || 'there').split(' ')[0]);
-const ctaLabel = computed(() => ({ welcome: "Let's go", alarm: 'Yes, turn it on', notifications: 'Turn on notifications', applock: 'Choose apps to block' }[STEPS[step.value]] || 'Continue'));
+const ctaLabel = computed(() => ({ welcome: "Let's go", whatsnew: 'Nice, continue', alarm: 'Yes, turn it on', notifications: 'Turn on notifications', applock: 'Choose apps to block' }[STEPS[step.value]] || 'Continue'));
 const toggle = (id) => { const i = a.goals.indexOf(id); i < 0 ? a.goals.push(id) : a.goals.splice(i, 1); };
 
 onMounted(async () => {
