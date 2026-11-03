@@ -53,5 +53,9 @@ t('rolling window: stale weekday leftovers hidden, Mon tab = next Monday', () =>
   const ag2 = A.agendaForRange({ scheduled: [], dayLists: { Mon: [stale, { title: 'rep', type: 'recurring', createdAt: 'z' }] }, today: td, from: td, to: '2026-11-15' });
   assert.ok(!ag2['2026-11-09'].some((x) => x.title === 'old')); assert.ok(ag2['2026-11-09'].some((x) => x.title === 'rep')); assert.ok(ag2['2026-11-16'] === undefined);
 });
+t('edit-task path uses the uid-prefixed day doc', () => {
+  const v = require('fs').readFileSync(require('path').join(__dirname, '../src/views/HomeView.vue'), 'utf8');
+  assert.ok(!/doc\(db, 'weeklyRoutines', days\[/.test(v), 'no weeklyRoutines/{Day} without the uid prefix');
+});
 console.log(`${n} passed`);
 })().catch((e) => { console.error(e); process.exit(1); });

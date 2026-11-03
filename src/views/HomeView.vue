@@ -2472,7 +2472,8 @@ const updateTask = async () => {
 
   try {
     // Get the reference to the document containing the tasks for the selected day
-    const selectedDayDocRef = doc(db, 'weeklyRoutines', days[selectedDayIndex.value].day);
+    if (!userId.value) return;
+    const selectedDayDocRef = doc(db, 'weeklyRoutines', `${userId.value}_${days[selectedDayIndex.value].day}`); // storage is weeklyRoutines/{uid}_{Day} (the uid prefix was missing)
 
     // Fetch the document snapshot
     const selectedDayDocSnapshot = await getDoc(selectedDayDocRef);
