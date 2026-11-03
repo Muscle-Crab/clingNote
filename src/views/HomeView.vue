@@ -322,7 +322,7 @@ import { scheduleNotification, sendNotificationToPlayer, linkPushUser } from '@/
 import { speak } from '@/composables/useSpeech';
 import { completionPercentage, computeTimeStats, daysLeftInYearFrom, heroTitleFor } from '@/utils/dayStats';
 import { shouldAutoComplete, resetSubtasks } from '@/utils/subtasks';
-import { deferredDateFor, buildScheduledEntry, buildRecurringTemplate, isTaskVisibleOn, futureOf, dueOf, countsByDate, withWeekDates, isValidDate, rescheduleEntry, templatesOf } from '@/utils/scheduling';
+import { deferredDateFor, buildScheduledEntry, buildRecurringTemplate, isTaskVisibleOn, futureOf, dueOf, countsByDate, withWeekDates, tabDateFor, isStaleOnTab, isValidDate, rescheduleEntry, templatesOf } from '@/utils/scheduling';
 import { mutateScheduled, materializeDueForToday } from '@/composables/useScheduledTasks';
 import { blankSchedule, validateSchedule, scheduleOfTask, applyTaskSchedule, deleteTaskScope, deleteEntry, editEntry } from '@/utils/schedEdit';
 import { syncScheduledNotifications } from '@/composables/useSchedNotifications';
@@ -911,9 +911,8 @@ const resetTasksToIncomplete = async (dayIndex = selectedDayIndex.value, isCurre
       completed: false
     }));
 
-    // Prevent streak logic from triggering on past days
-    const todayIndex = new Date().getDay(); // 0 (Sun) - 6 (Sat)
-    const isPastDay = dayIndex < todayIndex;
+    // Prevent streak logic from triggering on past days (rolling tabs: a tab is today or ahead, never past)
+    const isPastDay = tabDateFor(dayIndex) < getTodayId();
 
     // Update Firestore
     await updateDoc(selectedDayDocRef, {
@@ -988,9 +987,10 @@ const { prefs: viewPrefs } = useTaskViewPrefs();
 const effectivePrefs = computed(() => (new Date().getDay() === selectedDayIndex.value ? normalizePrefs(viewPrefs.value) : normalizePrefs(null)));
 // Copies not active yet on the viewed date (e.g. a Daily task created today, on earlier days of this week) are hidden, never deleted.
 const viewTabDate = computed(() => tabDays.value[selectedDayIndex.value]?.date || '');
-const dayTasks = computed(() => selectedDayRoutine.value.filter((t) => !isHiddenOnDate(t, viewTabDate.value)));
+const staleHere = (t) => isStaleOnTab(t, selectedDayIndex.value, viewTabDate.value, todayStr.value); // leftovers from a past occurrence of this weekday
+const dayTasks = computed(() => selectedDayRoutine.value.filter((t) => !isHiddenOnDate(t, viewTabDate.value) && !staleHere(t)));
 const hasHiddenCopies = computed(() => dayTasks.value.length !== selectedDayRoutine.value.length);
-const viewItems = computed(() => viewTasks(selectedDayRoutine.value, effectivePrefs.value).filter((i) => !isHiddenOnDate(i.task, viewTabDate.value)));
+const viewItems = computed(() => viewTasks(selectedDayRoutine.value, effectivePrefs.value).filter((i) => !isHiddenOnDate(i.task, viewTabDate.value) && !staleHere(i.task)));
 const displayTasks = computed(() => viewItems.value.map((i) => i.task));
 // ---- Plan my day (user picks start + hours; preview; saved only on Confirm) ----
 const planOpen = ref(false); const planBusy = ref(false); const planError = ref('');
@@ -1106,38 +1106,10 @@ const editedTask = ref({title: '', time: '', priority: 'low', labels: [], notes:
 const searchQuery = ref('');
 
 
-const generateWeekDates = () => {
-  const today = new Date();
-  const currentDayIndex = today.getDay(); // 0 for Sunday, 1 for Monday, etc.
-  const week = [];
-
-  for (let i = 0; i < 7; i++) {
-    const diff = i - currentDayIndex;
-    const day = new Date(today);
-    day.setDate(today.getDate() + diff);
-
-    // Format the date as YYYY-MM-DD in local time
-    const formattedDate = day.toLocaleDateString('en-CA'); // 'en-CA' formats as YYYY-MM-DD
-    const dayName = new Intl.DateTimeFormat('en-US', { weekday: 'short' }).format(day);
-
-    week.push({ day: dayName, date: formattedDate });
-  }
-
-  days.value = week;
-};
-
-
-// Call this function when the component is mounted
-onMounted(() => {
-  generateWeekDates();
-  console.log('Generated days array:', days.value);
-});
-
 // Header date is derived from the one source of truth (selectedDayIndex) so it can never lag behind the active tab.
 const currentDate = computed(() => {
   if (selectedDayIndex.value === -1) return getCurrentDate();
-  const d = new Date();
-  d.setDate(d.getDate() + (selectedDayIndex.value - d.getDay()));
+  const d = new Date(`${tabDateFor(selectedDayIndex.value)}T12:00:00`); // same rolling helper as the tabs and agenda
   return new Intl.DateTimeFormat('en-US', { weekday: 'long', month: 'long', day: 'numeric' }).format(d);
 });
 

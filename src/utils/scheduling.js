@@ -22,7 +22,7 @@ export const buildScheduledEntry = (fields, date, time, id = makeScheduledId()) 
 };
 
 // ── Visibility (single source of truth) ──
-// A scheduled task becomes visible from Monday (local) of the Mon–Sun week containing its date.
+// A scheduled task becomes visible on its own date (see visibleFrom; it used to be the Monday of its week).
 // Before that it is hidden everywhere (day lists, carry-over, streak, points, discipline/gate counts),
 // because it only exists in users/{uid}.scheduledTasks until it is materialized into a day list.
 const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -125,17 +125,44 @@ export const formatScheduledDate = (s, todayStr) => {
   return new Date(`${s}T12:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 };
 
-// Actual calendar dates (YYYY-MM-DD, local) of the Sun..Sat tabs for the week containing `now`.
-// Same math as the header: date = today + (tabIndex - today.getDay()).
+// Sun..Sat calendar dates (YYYY-MM-DD, local) of the week containing `now` (calendar sync, repeat activeFrom, legacy dates).
+// The Home tabs use rollingDates below, not this.
 export const weekDates = (now = new Date()) => Array.from({ length: 7 }, (_, i) => {
   const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + (i - now.getDay()));
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 });
 
-// Tabs with `date` filled from the computed week (data.json days carry empty dates).
+// Rolling day tabs (single source of truth for the Home tabs, the header date and the agenda's one-off window):
+// tab `i` (weekday index, Sun=0, so storage stays weeklyRoutines/{uid}_{DayName}) shows the NEXT occurrence of that weekday,
+// today included: today..today+6. On Tue Nov 3 the Mon tab is Mon Nov 9 (it used to be the past Mon Nov 2).
+export const tabDateFor = (i, now = new Date()) => {
+  const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + ((i - now.getDay() + 7) % 7), 12);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+export const rollingDates = (now = new Date()) => Array.from({ length: 7 }, (_, i) => tabDateFor(i, now));
+// Display order of the tab indices: today first, then the next six days.
+export const rollingOrder = (now = new Date()) => Array.from({ length: 7 }, (_, k) => (now.getDay() + k) % 7);
+
+// Tabs with `date` filled from the rolling window (data.json days carry empty dates).
 export const withWeekDates = (days, now = new Date()) => {
-  const dates = weekDates(now);
+  const dates = rollingDates(now);
   return (days || []).map((d, i) => ({ ...d, date: dates[i] || d.date }));
+};
+
+// Stale leftover: a one-off task still sitting in a weekday doc from an earlier occurrence of that weekday must not show under
+// the tab's future date. Its own date is `forDate` (stamped on add) or, for older tasks, the date its tab had when it was created
+// (old tabs were the Sun..Sat week of createdAt). Recurring copies, scheduled (materialized) and dated tasks are never stale.
+export const listDateOf = (task, dayIndex) => {
+  if (isValidDate(task?.forDate)) return task.forDate;
+  const c = task?.createdAt ? new Date(task.createdAt) : null;
+  return c && !Number.isNaN(c.getTime()) ? weekDates(c)[dayIndex] : '';
+};
+export const isStaleOnTab = (task, dayIndex, tabDate, todayStr) => {
+  if (!task || !isValidDate(tabDate) || !isValidDate(todayStr) || tabDate <= todayStr) return false;
+  if ((task.repeatDays || []).length > 1 || task.type === 'recurring' || task.templateId || task.scheduledId || task.scheduledFor) return false;
+  if (isValidDate(task.dueDate) && task.dueDate >= todayStr) return false; // still-upcoming dated task: placed by its date
+  const d = listDateOf(task, dayIndex);
+  return !!d && d < todayStr;
 };
 
 // Badge text for a materialized task: 'Due Fri Oct 30' (or 'Due today' / 'Overdue · Fri Oct 30').
