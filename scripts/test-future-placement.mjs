@@ -33,7 +33,7 @@ t('assistant create_tasks keeps the Nov 16 date (so HomeView routes it to the sc
 });
 t('HomeView routes future-dated manual / assistant / voice adds through deferredDateFor', () => {
   const src = fs.readFileSync(path.join(here, '../src/views/HomeView.vue'), 'utf8');
-  assert.ok(/deferredDateFor\(newTask\.value\.dueDate, getTodayId\(\)\)/.test(src), 'manual add');
+  assert.ok(/deferredDateFor\(newTask\.value\.dueDate \|\| \(isViewingToday\.value \? '' : viewTabDate\.value\), getTodayId\(\)\)/.test(src), 'manual add (due date, else the future tab date)');
   assert.ok((src.match(/deferredDateFor\(it\.date, getTodayId\(\)\)/g) || []).length >= 4, 'assistant + voice');
 });
 console.log(`\n${n} future-placement tests passed`);
