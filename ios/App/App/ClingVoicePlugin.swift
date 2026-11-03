@@ -18,6 +18,7 @@ public class ClingVoicePlugin: CAPPlugin, CAPBridgedPlugin, AVSpeechSynthesizerD
         CAPPluginMethod(name: "releaseAudio", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "otherAudioPlaying", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setMusicPlaying", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "ensureMix", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "recognitionAvailable", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "requestRecognitionPermission", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "startListening", returnType: CAPPluginReturnPromise),
@@ -96,7 +97,22 @@ public class ClingVoicePlugin: CAPPlugin, CAPBridgedPlugin, AVSpeechSynthesizerD
     private func finishPending() { remaining = 0; if let c = pendingCall { pendingCall = nil; c.resolve(["done": true]) } }
 
     /// After speaking: stop ducking, keep mixing with other apps' audio.
-    private func restoreMix() { try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [.mixWithOthers]) }
+    private func restoreMix() { Self.mixWithOthers() }
+
+    /// The one app-wide category: .playback (plays with the silent switch on) + .mixWithOthers (never interrupts Spotify/Apple Music).
+    /// WebKit can switch the shared session to a non-mixable category when web audio starts, so JS calls ensureMix before every in-app sound.
+    static func mixWithOthers() {
+        let s = AVAudioSession.sharedInstance()
+        if s.category == .playback && s.mode == .default && s.categoryOptions.contains(.mixWithOthers) { return }
+        try? s.setCategory(.playback, mode: .default, options: [.mixWithOthers])
+    }
+
+    @objc func ensureMix(_ call: CAPPluginCall) {
+        DispatchQueue.main.async {
+            if !self.synth.isSpeaking && !self.audioEngine.isRunning && !self.musicPlaying { Self.mixWithOthers() }
+            call.resolve()
+        }
+    }
 
     /// Web side (utils/audioSession.js) reports when the in-app focus music starts/stops.
     @objc func setMusicPlaying(_ call: CAPPluginCall) {
@@ -166,7 +182,7 @@ public class ClingVoicePlugin: CAPPlugin, CAPBridgedPlugin, AVSpeechSynthesizerD
             if self.synth.isSpeaking { self.synth.stopSpeaking(at: .immediate) }
             do {
                 let session = AVAudioSession.sharedInstance()
-                try session.setCategory(.playAndRecord, mode: .measurement, options: [.duckOthers, .defaultToSpeaker])
+                try session.setCategory(.playAndRecord, mode: .measurement, options: [.mixWithOthers, .duckOthers, .defaultToSpeaker, .allowBluetoothA2DP])
                 try session.setActive(true, options: .notifyOthersOnDeactivation)
                 let req = SFSpeechAudioBufferRecognitionRequest()
                 req.shouldReportPartialResults = true

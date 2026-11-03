@@ -7,20 +7,23 @@ import sunrise from '@/assets/bg/bg-sunrise.jpg';
 import mountains from '@/assets/bg/bg-mountains.jpg';
 import campfire from '@/assets/bg/bg-campfire.jpg';
 import forest from '@/assets/hero-forest.jpg';
+import { gradientCss } from '@/utils/daytimeBg';
 
 const files = { forest, night, ocean, sunrise, mountains, campfire };
-export const imageCss = (id, custom = '') => {
-  const e = effectiveImage(id, custom);
+export const imageCss = (id, custom = '', date = new Date()) => {
+  const e = effectiveImage(id, custom, date);
+  if (gradientCss(e)) return gradientCss(e);
   if (e === 'dark') return 'linear-gradient(180deg, #172036, #0B1220 70%, #070D1C)';
   if (e === 'custom') return 'url("' + custom + '")';
   return 'url("' + files[e] + '")';
 };
-export const applyBackgroundImage = (id, custom = '') => {
+export const applyBackgroundImage = (id, custom = '', date = new Date()) => {
   if (typeof document === 'undefined') return;
-  const root = document.documentElement;
-  if (effectiveImage(id, custom) === 'forest') root.style.removeProperty('--hero-img'); // default: the CSS fallback (original art)
-  else root.style.setProperty('--hero-img', imageCss(id, custom));
-  root.dataset.heroImg = effectiveImage(id, custom);
+  const root = document.documentElement; const e = effectiveImage(id, custom, date);
+  if (e === 'forest') root.style.removeProperty('--hero-img'); // the CSS fallback (original art)
+  else root.style.setProperty('--hero-img', imageCss(id, custom, date));
+  root.dataset.heroImg = e;
+  return e;
 };
 
 // File from <input type=file> -> downscaled JPEG data URL (<= MAX_CUSTOM_CHARS), or throws a friendly Error.

@@ -89,6 +89,12 @@ export const BREAK_RULES = Object.freeze({ hoursPerBreak: 4, breaks: Object.free
 export const breaksPerDay = (dayHours, r = BREAK_RULES) => Math.min(r.breaks.length, Math.max(1, Math.round((Number(dayHours) || 0) / r.hoursPerBreak)));
 export const breakNeed = (n, total, r = BREAK_RULES) => { const d = r.breaks[n - 1]; if (!d) return null;
   return { n, min: d.min, tasks: Math.max(1, Math.ceil(d.taskShare * Math.max(0, Number(total) || 0) - 1e-9)), points: d.points }; };
+// Performance-scaled break length (base 20 min) from the session's points progress toward its goal (earned / target):
+// under 50% -> 15, 50-99% -> 20, goal met -> 25, 150%+ -> 30. Unknown progress (no goal) -> base 20.
+export const BREAK_PERF = Object.freeze({ base: 20, max: 30 });
+export const breakMinutesFor = (earned, target) => { const t = Number(target) || 0; if (t <= 0) return BREAK_PERF.base;
+  const r = Math.max(0, Number(earned) || 0) / t; return r >= 1.5 ? 30 : r >= 1 ? 25 : r >= 0.5 ? 20 : 15; };
+const perfMin = (st, prog) => (prog && prog.goal > 0 ? breakMinutesFor(prog.earned != null ? prog.earned : prog.points, prog.goal) : st.min);
 const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
 // Where the day stands: { ok, n (next break), min, cap, tasksMissing, ptsMissing, text } — text is the compact Home line part:
 // "15m break ready", "3 tasks to 15m break", "2 tasks + 20 pts to 30m break", "40 pts to 15m break", "All 2 breaks taken".
@@ -112,7 +118,7 @@ const progStatus = (gp, cur, prog) => breakStatus({ taken: Math.max(cur.n || 0, 
 export const breakBank = (gp, b, nowMs = Date.now(), prog = {}) => {
   const w = dayWindow(gp, nowMs); const cur = normBreak(b, w.dayKey); const st = progStatus(gp, cur, prog);
   const toClose = Math.max(0, Math.floor((w.closeMs - nowMs) / MIN));
-  return { status: st, used: cur.used, balance: breakActive(b, nowMs) || !st.ok ? 0 : Math.min(st.min, toClose) };
+  return { status: st, used: cur.used, balance: breakActive(b, nowMs) || !st.ok ? 0 : Math.min(perfMin(st, prog), toClose) };
 };
 // User taps the gift / "Take break": starts break n (its full length, never past the hard close). prior = shield state to restore after.
 export const takeBreak = (gp, b, nowMs = Date.now(), prior = null, prog = {}) => {
@@ -129,7 +135,7 @@ export const breakEarned = (gp, b, nowMs = Date.now(), prog = {}, r = BREAK_RULE
   if (!breakActive(b, nowMs)) return true;
   const n = Number(b.n) || 0; const def = r.breaks[n - 1]; if (n < 1 || !def || n > breaksPerDay(gp && gp.closeHours, r)) return false;
   if (b.day && b.day !== dayWindow(gp, nowMs).dayKey) return false;
-  if (Number(b.endMs) - Number(b.startMs) > def.min * MIN + 60000) return false;
+  if (Number(b.endMs) - Number(b.startMs) > Math.max(def.min, BREAK_PERF.max) * MIN + 60000) return false;
   return breakStatus({ taken: n - 1, done: prog && prog.done, total: prog && prog.total, points: prog && prog.points, dayHours: gp && gp.closeHours }, r).ok;
 };
 // Break history (users/{uid}.gpBreakLog, newest last, 60 kept): { at, min, points }.

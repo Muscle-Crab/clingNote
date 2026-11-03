@@ -3,6 +3,8 @@
     <BackgroundLayer :anim="bgAnim" :force-motion="bgPrefs.forceMotion" />
     <div class="safe-top-scrim" aria-hidden="true"></div>
     <BackgroundPanel :open="showBackground" @close="showBackground = false" />
+    <BreakPill v-if="(gpOn && isViewingToday) || bkDemo" :mode="bkDemo ? bkDemo.mode : bkMode" :min="bkDemo ? bkDemo.min : (gpBank || 20)" :left="bkDemo ? bkDemo.left : bkLeft" @take="gpTakeBreak" @collapse="bkCollapse" />
+
 
     <!-- Loading Screen -->
     <div v-if="isLoading" class="splash-screen">
@@ -258,8 +260,9 @@ import { sectionOf, sectionFromTime, sectionForCreate, isSection, mergeOrder } f
 import BackgroundLayer from '@/components/background/BackgroundLayer.vue';
 import HeroAmbience from '@/components/background/HeroAmbience.vue';
 import { effectiveAnim } from '@/utils/heroAmbience';
-import { effectiveImage } from '@/utils/bgPrefs';
 import BackgroundPanel from '@/components/background/BackgroundPanel.vue';
+import BreakPill from '@/components/home/BreakPill.vue';
+import * as BI from '@/utils/breakIndicator';
 import { useBackground } from '@/composables/useBackground';
 import { buildRecap, reportDue, prevDay } from '@/utils/dailyReport';
 import { monthKey, prevMonthKey } from '@/utils/ranking';
@@ -2844,7 +2847,7 @@ const showBackground = ref(false);
 const bgApi = useBackground();
 const bgPrefs = bgApi.prefs;
 // Weather must fit the picture (no rain/snow on sunny scenes): the saved choice is kept, but only a compatible one is shown.
-const bgImg = computed(() => effectiveImage(bgPrefs.image, bgApi.customImage.value));
+const bgImg = computed(() => bgApi.shownImage.value); // 'auto' -> current time-of-day scene; a manual pick wins
 const bgAnim = computed(() => effectiveAnim(bgImg.value, bgPrefs.anim));
 // Returning to the app (cold start or back from the background): bring back the music the user had on.
 const resumeBgMusic = () => { try { bgApi.resumeIfWanted(); } catch (e) { /* audio is optional */ } };
@@ -3990,7 +3993,9 @@ const liveSession = (list, nowMs) => { if (!list.length || nowMs >= list[list.le
 const gpSession = computed(() => liveSession(gpSessions.value, nowTick.value));
 // (the old per-session 2 h grace lock is replaced by the missed-goal app lock, appLockDebt: see syncAppLock)
 const gpProg = computed(() => { const l = todayTasksForTarget.value || []; return { done: l.filter((t) => t && t.completed).length, total: l.length, points: gpSession.value ? gpSession.value.earned : gpEarned.value.points,
-  taken: GP.breaksOn(gpBreakLog.value, GP.dayWindow(gp.value).dayKey).count }; });
+  taken: GP.breaksOn(gpBreakLog.value, GP.dayWindow(gp.value).dayKey).count,
+  // break length scales with the session's points vs its goal (GP.breakMinutesFor)
+  goal: gpSession.value ? gpSession.value.target : (gpGoal.value && gpGoal.value.goal) || 0, earned: gpSession.value ? gpSession.value.earned : gpEarned.value.points }; });
 const gpBankFull = computed(() => (gpOn.value ? GP.breakBank(gp.value, gpBreak.value, nowTick.value, gpProg.value) : { balance: 0, status: GP.breakStatus({ ...gpProg.value, dayHours: gp.value.closeHours }) }));
 const gpBank = computed(() => gpBankFull.value.balance);
 const gpBreakStatus = computed(() => gpBankFull.value.status);
@@ -4033,6 +4038,16 @@ const gpTakeBreak = async () => {
   }
   scheduleLocal(`gp:breakend:${b.day}:${b.used}`, { title: "Break's over", body: 'Your apps are locked again, same as before the break.', at: new Date(b.endMs), route: '/home', type: 'gp' });
 };
+// Break indicator: popup when a break becomes available -> tap/dismiss collapses it into the side pill; countdown while running.
+const bkSeen = ref((() => { try { return JSON.parse(localStorage.getItem(BI.SEEN_KEY) || 'null'); } catch (e) { return null; } })());
+const bkMode = computed(() => BI.indicatorMode({ available: gpGift.value, running: gpPhase.value.phase === 'break' && GP.breakActive(gpBreak.value, nowTick.value), n: gpBreakStatus.value.n, day: gpPhase.value.dayKey, seen: bkSeen.value }));
+const bkLeft = computed(() => BI.fmtLeft((gpBreak.value && gpBreak.value.endMs) - nowTick.value));
+let bkIv = null; watch(() => bkMode.value === 'running', (on) => { clearInterval(bkIv); bkIv = on ? setInterval(() => { nowTick.value = Date.now(); }, 1000) : null; }, { immediate: true });
+onBeforeUnmount(() => clearInterval(bkIv));
+const bkDemo = ref(null); // local e2e screenshots only (emulator builds)
+if (process.env.VUE_APP_FIREBASE_EMULATORS === '1') window.__bkDemo = (v) => { bkDemo.value = v; };
+const bkCollapse = () => { if (bkDemo.value) { bkDemo.value = { ...bkDemo.value, mode: 'pill' }; return; } bkCollapse2(); };
+const bkCollapse2 = () => { bkSeen.value = BI.collapse(gpPhase.value.dayKey, gpBreakStatus.value.n); try { localStorage.setItem(BI.SEEN_KEY, JSON.stringify(bkSeen.value)); } catch (e) { /* ignore */ } };
 const gpHistory = computed(() => GP.fmtBreakLog(gpBreakLog.value));
 // End a break early: native re-locks now and cancels "Break's over"; the unused minutes are not refunded (the break was taken).
 const gpEndBreak = async () => {
@@ -4221,7 +4236,7 @@ watch(() => gpOn.value && gpLoaded.value && isViewingToday.value && `${gpBreakSt
   const n = alertTier(stored, k, GP.breakToAlert(st)); if (!n) return;
   try { localStorage.setItem(GP_TIER_KEY, JSON.stringify({ day: k, n })); } catch (e) { /* ignore */ }
   const note = GP.breakAlertText(st); const pts = gpEarned.value.points;
-  if (lockAvailable()) clingLock.offerBreak({ v: GP.BREAK_RULES_VERSION, n: st.n, minutes: st.min, points: pts, title: note.title, body: note.body, day: k, closeMs: gpPhase.value.closeMs });
+  if (lockAvailable()) clingLock.offerBreak({ v: GP.BREAK_RULES_VERSION, n: st.n, minutes: gpBank.value || st.min, points: pts, title: note.title, body: note.body, day: k, closeMs: gpPhase.value.closeMs });
   else scheduleLocal(`gp:tier:${k}:${n}`, { title: note.title, body: note.body, at: new Date(Date.now() + 1000), route: '/home', type: 'gp' });
 });
 // Not (or no longer) earned: withdraw any posted Take break offer so the lock-screen action cannot start a break.

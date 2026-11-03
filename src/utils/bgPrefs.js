@@ -1,3 +1,4 @@
+import { AUTO, GRADIENT_IDS, resolveImage } from './daytimeBg.js';
 // "Background" settings (animation + music), saved per device in localStorage. Default = the current static look.
 export const KEY = 'clingnot_background_v1';
 export const ANIMS = [{ id: 'none', label: 'None', icon: '🚫' }, { id: 'snow', label: 'Snow', icon: '❄️' }, { id: 'rain', label: 'Rain', icon: '🌧️' }, { id: 'fire', label: 'Fire', icon: '🔥' }];
@@ -19,8 +20,9 @@ export const IMAGES = [
   { id: 'forest', label: 'Forest' }, { id: 'night', label: 'Night sky' }, { id: 'ocean', label: 'Ocean dusk' },
   { id: 'sunrise', label: 'Sunrise' }, { id: 'mountains', label: 'Mountains' }, { id: 'campfire', label: 'Campfire' }, { id: 'dark', label: 'Plain dark' },
 ];
-export const IMAGE_IDS = [...IMAGES.map((i) => i.id), 'custom'];
-export const DEFAULTS = Object.freeze({ anim: 'none', track: 'lofi', volume: 0.5, forceMotion: false, musicOn: false, image: 'forest', autoRotate: false, rotateMins: 20 });
+// 'auto' = time-of-day scene (default); gradient ids = the four daytime scenes + the gallery (utils/daytimeBg.js).
+export const IMAGE_IDS = [AUTO, ...IMAGES.map((i) => i.id), ...GRADIENT_IDS, 'custom'];
+export const DEFAULTS = Object.freeze({ anim: 'none', track: 'lofi', volume: 0.5, forceMotion: false, musicOn: false, image: 'auto', autoRotate: false, rotateMins: 20 });
 export const ROTATE_MINS = [10, 20, 30];
 const clamp01 = (n) => Math.min(1, Math.max(0, Number.isFinite(n) ? n : DEFAULTS.volume));
 export const sanitize = (p) => {
@@ -52,7 +54,8 @@ export const clearCustomImage = (storage = typeof localStorage !== 'undefined' ?
 // Size to downscale a w x h picture to (never upscales).
 export const fitSize = (w, h, max = CUSTOM_MAX_SIDE) => { const k = Math.min(1, max / Math.max(w, h, 1)); return { w: Math.max(1, Math.round(w * k)), h: Math.max(1, Math.round(h * k)) }; };
 // The image to actually show: 'custom' without a valid saved picture falls back to the default.
-export const effectiveImage = (id, custom) => (id === 'custom' && !isCustomImage(custom) ? DEFAULTS.image : (IMAGE_IDS.includes(id) ? id : DEFAULTS.image));
+// 'auto' resolves to the current time-of-day scene (dt-morning/noon/evening/night) at `date`.
+export const effectiveImage = (id, custom, date = new Date()) => resolveImage(id === 'custom' && !isCustomImage(custom) ? DEFAULTS.image : (IMAGE_IDS.includes(id) ? id : DEFAULTS.image), date);
 
 // slider helpers (BackgroundPanel): x position on the track -> 0..1 in 0.05 steps; wheel delta -> +/- one step
 const step05 = (n) => Math.round(clamp01(n) * 20) / 20;

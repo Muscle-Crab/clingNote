@@ -6,13 +6,23 @@
 
         <h3 class="bgp-h">Picture</h3>
         <div class="bgp-imgs" role="radiogroup" aria-label="Background picture">
+          <button type="button" role="radio" class="bgp-img bgp-img--auto" :class="{ on: bg.prefs.image === 'auto' }" :aria-checked="bg.prefs.image === 'auto'" data-test="bg-img-auto" :style="{ backgroundImage: thumb('auto') }" @click="bg.setImage('auto')"><span>Auto (time of day)<small>{{ autoNow }}</small></span></button>
+          <button v-for="d in DAYTIME_LIST" :key="d.id" type="button" role="radio" class="bgp-img" :class="{ on: bg.prefs.image === d.id }" :aria-checked="bg.prefs.image === d.id" :data-test="'bg-img-' + d.id" :style="{ backgroundImage: thumb(d.id) }" @click="bg.setImage(d.id)"><span>{{ d.label }}</span></button>
           <button v-for="im in IMAGES" :key="im.id" type="button" role="radio" class="bgp-img" :class="{ on: bg.prefs.image === im.id }" :aria-checked="bg.prefs.image === im.id" :data-test="'bg-img-' + im.id" :style="{ backgroundImage: thumb(im.id) }" @click="bg.setImage(im.id)"><span>{{ im.label }}</span></button>
           <button type="button" role="radio" class="bgp-img bgp-img--up" :class="{ on: bg.prefs.image === 'custom' }" :aria-checked="bg.prefs.image === 'custom'" data-test="bg-img-custom" :style="bg.customImage.value ? { backgroundImage: thumb('custom') } : null" @click="onCustom"><span>{{ bg.customImage.value ? 'Your photo' : '＋ Upload your own' }}</span></button>
         </div>
+        <h3 class="bgp-h">More backgrounds <small>(tap to preview)</small></h3>
+        <div class="bgp-gal" role="radiogroup" aria-label="More backgrounds" data-test="bg-gallery">
+          <button v-for="g in GALLERY_LIST" :key="g.id" type="button" role="radio" class="bgp-img bgp-gimg" :class="{ on: bg.prefs.image === g.id, pv: bg.preview.value === g.id }" :aria-checked="bg.prefs.image === g.id" :data-test="'bg-img-' + g.id" :style="{ backgroundImage: thumb(g.id) }" @click="onGallery(g.id)"><span>{{ g.label }}</span></button>
+        </div>
         <input ref="fileInput" type="file" accept="image/*" class="bgp-file" data-test="bg-img-file" @change="onFile" />
-        <div v-if="bg.prefs.image !== 'forest' || bg.customImage.value" class="bgp-imgrow">
+        <div v-if="bg.preview.value" class="bgp-imgrow" data-test="bg-preview-row">
+          <button type="button" class="bgp-link" data-test="bg-preview-use" @click="bg.setImage(bg.preview.value)">Use {{ labelOf(bg.preview.value) }}</button>
+          <button type="button" class="bgp-link" data-test="bg-preview-cancel" @click="bg.endPreview()">Cancel preview</button>
+        </div>
+        <div v-else-if="bg.prefs.image !== 'auto' || bg.customImage.value" class="bgp-imgrow">
           <button v-if="bg.customImage.value" type="button" class="bgp-link" data-test="bg-img-change" @click="fileInput && fileInput.click()">Choose another photo</button>
-          <button type="button" class="bgp-link" data-test="bg-img-reset" @click="bg.resetImage()">Reset picture</button>
+          <button type="button" class="bgp-link" data-test="bg-img-reset" @click="bg.resetImage()">Back to Auto (time of day)</button>
         </div>
         <p v-if="bg.imageError.value" class="bgp-note bgp-err" role="alert" data-test="bg-img-error">{{ bg.imageError.value }}</p>
 
@@ -54,15 +64,22 @@ import { useBackground } from '@/composables/useBackground';
 import { ANIMS, TRACKS, IMAGES, ROTATE_MINS } from '@/utils/bgPrefs';
 import { imageCss } from '@/utils/bgImage';
 import { animAllowed, effectiveAnim } from '@/utils/heroAmbience';
-import { effectiveImage } from '@/utils/bgPrefs';
+import { DAYTIME, GALLERY } from '@/utils/daytimeBg';
 import { computed } from 'vue';
 // Weather that doesn't fit the chosen picture (rain/snow on a sunny scene) is greyed out; the saved choice comes back with a fitting picture.
-const curImg = computed(() => effectiveImage(bg.prefs.image, bg.customImage.value));
+const curImg = computed(() => bg.shownImage.value);
 const shownAnim = computed(() => effectiveAnim(curImg.value, bg.prefs.anim));
 
 const props = defineProps({ open: { type: Boolean, default: false } });
 defineEmits(['close']);
 const bg = useBackground();
+const DAYTIME_LIST = Object.entries(DAYTIME).map(([id, v]) => ({ id, label: v.label }));
+const GALLERY_LIST = Object.entries(GALLERY).map(([id, v]) => ({ id, label: v.label }));
+const labelOf = (id) => (DAYTIME[id] || GALLERY[id] || {}).label || 'this';
+const autoNow = computed(() => (bg.prefs.image === 'auto' ? 'now: ' + labelOf(bg.shownImage.value) : ''));
+// First tap previews on the real background; a second tap on the same one (or "Use …") picks it.
+const onGallery = (id) => { if (bg.preview.value === id) bg.setImage(id); else bg.previewImage(id); };
+watch(() => props.open, (o) => { if (!o) bg.endPreview(); });
 const level = ref(0);
 const fileInput = ref(null);
 const thumb = (id) => imageCss(id, bg.customImage.value);
@@ -98,6 +115,11 @@ const volWheel = (e) => bg.setVolume(nudgeVolume(bg.prefs.volume, e.deltaY || -e
 .bgp-img span { width: 100%; padding: 14px 4px 4px; font-size: .72rem; font-weight: 600; text-align: center; background: linear-gradient(180deg, transparent, rgba(0,0,0,.7)); text-shadow: 0 1px 2px rgba(0,0,0,.6); }
 .bgp-img.on { border-color: #6b8cff; box-shadow: 0 0 0 2px rgba(107,140,255,.35); }
 .bgp-img--up { border-style: dashed; }
+.bgp-img span small { display: block; font-weight: 400; opacity: .85; }
+.bgp-gal { display: flex; gap: 8px; overflow-x: auto; scroll-snap-type: x proximity; padding-bottom: 4px; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+.bgp-gal::-webkit-scrollbar { display: none; }
+.bgp-gimg { flex: 0 0 88px; min-height: 88px; scroll-snap-align: start; }
+.bgp-gimg.pv { border-color: #f0c35b; box-shadow: 0 0 0 2px rgba(240,195,91,.35); }
 .bgp-file { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 .bgp-imgrow { display: flex; gap: 14px; margin-top: 6px; }
 .bgp-link { min-height: 44px; border: 0; background: transparent; color: #8fa8ff; font-size: .85rem; text-decoration: underline; cursor: pointer; padding: 0 2px; }

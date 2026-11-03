@@ -3,6 +3,7 @@
 // Pure helpers + a canvas draw; the Vue wrapper (HeroAmbience.vue) owns the canvas, rAF and visibility.
 import { safeRadialGradient } from './canvasSafe.js';
 import { windAt } from './bgScenes.js';
+import { GRADIENT_IDS } from './daytimeBg.js';
 
 const TAU = Math.PI * 2;
 // Picture -> allowed animations. Sunny/dusk pictures never get rain or snow; the warm "fire" glow only fits the Campfire picture (which also has live flames).
@@ -18,6 +19,8 @@ export const SCENES = {
   dark: { weather: ['snow', 'rain'], wind: 0.5 }, // plain gradient: anything
   custom: { weather: ['snow', 'rain'], wind: 0.5 }, // user's own photo: we can't tell, so allow both (they chose it)
 };
+// Gradient scenes (time-of-day + gallery): no photo to warp. Night-ish ones get stars; weather fits all except the sunny noon/desert/peach.
+for (const id of GRADIENT_IDS) SCENES[id] = { weather: ['dt-noon', 'g-desert', 'g-peach'].includes(id) ? [] : ['snow', 'rain'], wind: 0.5, ...(['dt-night', 'g-cosmos', 'g-aurora'].includes(id) ? { stars: { x0: 0, x1: 1, y0: 0.02, y1: 0.55 } } : {}) };
 export const sceneFor = (img) => SCENES[img] || SCENES.forest;
 export const animAllowed = (img, anim) => anim === 'none' || sceneFor(img).weather.includes(anim);
 export const effectiveAnim = (img, anim) => (animAllowed(img, anim) ? anim : 'none');

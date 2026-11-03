@@ -1,5 +1,7 @@
 // Shared Background state: prefs (saved per device in localStorage) + music playback. Music never starts on its own.
-import { reactive, ref, watch } from 'vue';
+import { reactive, ref, watch, computed } from 'vue';
+import { msUntilNextPeriod } from '@/utils/daytimeBg';
+import { refreshOtherAudio, otherAudioBusy } from '@/utils/audioSession';
 import { loadPrefs, savePrefs, sanitize, DEFAULTS, loadCustomImage, saveCustomImage, clearCustomImage, effectiveImage, TRACKS, pickNextTrack, tapAction, restoreFromBackup, KEY } from '@/utils/bgPrefs';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import { applyBackgroundImage, fileToBackgroundDataUrl } from '@/utils/bgImage';
@@ -45,14 +47,26 @@ if (NativePrefs) {
 }
 const savePrefsAll = (p) => { savePrefs(p); backup(p); };
 const persist = () => savePrefsAll({ anim: prefs.anim, track: prefs.track, volume: prefs.volume, forceMotion: prefs.forceMotion, musicOn: prefs.musicOn, image: prefs.image, autoRotate: prefs.autoRotate, rotateMins: prefs.rotateMins });
-const showImage = () => applyBackgroundImage(prefs.image, custom.value);
+// Time-of-day: `now` ticks each minute and on resume; at a period boundary a precise timer fires too. A manual pick ignores it.
+const now = ref(new Date());
+const preview = ref(''); // gallery preview (not saved) shown behind the open sheet
+const shownImage = computed(() => effectiveImage(preview.value || prefs.image, custom.value, now.value));
+const showImage = () => applyBackgroundImage(preview.value || prefs.image, custom.value, now.value);
+const tick = () => { now.value = new Date(); if (prefs.image === 'auto' && !preview.value) showImage(); };
+let edgeTimer = 0;
+const armEdge = () => { clearTimeout(edgeTimer); edgeTimer = setTimeout(() => { tick(); armEdge(); }, msUntilNextPeriod(new Date()) + 500); };
+if (typeof window !== 'undefined') {
+  setInterval(tick, 60000); armEdge();
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { tick(); armEdge(); } });
+  window.addEventListener('focus', tick);
+}
 
 // Keep the button honest: if iOS suspends/interrupts/closes audio (call, Siri, backgrounding) show "Play" again.
 const syncReal = () => { if (playing.value && (!engine || engine.state !== 'running')) { playing.value = false; stopRotate(); npPaused(trackName()); } };
 const onCtxState = (st) => { if (st !== 'running') setTimeout(syncReal, 400); };
 const armTap = () => {
   if (resumeArmed || typeof window === 'undefined') return; resumeArmed = true;
-  const once = () => { window.removeEventListener('pointerdown', once, true); window.removeEventListener('touchend', once, true); resumeArmed = false; if (prefs.musicOn && !(playing.value && engine && engine.state === 'running')) api.play(); };
+  const once = () => { window.removeEventListener('pointerdown', once, true); window.removeEventListener('touchend', once, true); resumeArmed = false; if (otherAudioBusy()) return; /* the user's own music (Spotify…) is playing: never take over audio on a random tap */ if (prefs.musicOn && !(playing.value && engine && engine.state === 'running')) api.play(); };
   window.addEventListener('pointerdown', once, true); window.addEventListener('touchend', once, true);
 };
 if (typeof document !== 'undefined') {
@@ -61,7 +75,10 @@ if (typeof document !== 'undefined') {
 }
 
 const api = {
-  prefs, playing, audioError, customImage: custom, imageError,
+  prefs, playing, audioError, customImage: custom, imageError, shownImage, preview,
+  // Gallery: look at a scene on the real background without saving; commit with setImage, cancel with endPreview.
+  previewImage(id) { preview.value = id || ''; showImage(); },
+  endPreview() { if (!preview.value) return; preview.value = ''; showImage(); },
   audioSupported: typeof window !== 'undefined' && !!(window.AudioContext || window.webkitAudioContext),
   setAnim(a) { Object.assign(prefs, sanitize({ ...prefs, anim: a })); persist(); },
   // Call from a click/tap handler. No await before engine.start(): it resumes the AudioContext synchronously inside the gesture.
@@ -84,7 +101,7 @@ const api = {
     if (!prefs.musicOn) return;
     if (playing.value && engine && engine.state === 'running') return;
     const tryNow = engine && engine.state === 'suspended' ? engine.resume() : Promise.resolve('none');
-    tryNow.then((st) => { if (st === 'running') { playing.value = true; armRotate(); } else { playing.value = false; stopRotate(); armTap(); } });
+    tryNow.then((st) => { if (st === 'running') { playing.value = true; armRotate(); } else { playing.value = false; stopRotate(); refreshOtherAudio().then((busy) => { if (!busy) armTap(); }); } });
   },
   toggle() { return tapAction(playing.value, engine ? engine.state : 'none') === 'pause' ? api.pause() : api.play(); },
   setTrack(id) { Object.assign(prefs, sanitize({ ...prefs, track: id })); persist(); if (engine && playing.value) { engine.setTrack(prefs.track); npTitle(trackName()); armRotate(); } },
@@ -92,7 +109,7 @@ const api = {
   setRotateMins(m) { Object.assign(prefs, sanitize({ ...prefs, rotateMins: Number(m) })); persist(); armRotate(); },
   setForceMotion(on) { Object.assign(prefs, sanitize({ ...prefs, forceMotion: !!on })); persist(); },
   setVolume(v) { Object.assign(prefs, sanitize({ ...prefs, volume: Number(v) })); persist(); if (engine) engine.setVolume(voSpeaking.value ? prefs.volume * DUCK : prefs.volume); },
-  setImage(id) { Object.assign(prefs, sanitize({ ...prefs, image: effectiveImage(id, custom.value) })); imageError.value = ''; persist(); showImage(); },
+  setImage(id) { preview.value = ''; Object.assign(prefs, sanitize({ ...prefs, image: id === 'custom' && !custom.value ? DEFAULTS.image : id })); imageError.value = ''; persist(); showImage(); },
   async uploadImage(file) { // photo library / files via <input type=file>
     imageError.value = '';
     try {
