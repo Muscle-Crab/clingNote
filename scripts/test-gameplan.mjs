@@ -165,7 +165,7 @@ t('row text per phase', () => {
 });
 t('wiring: Home row, Coach-only, earned/close, gate, carry, review, ask; Profile row; TaskCard chips; report', () => {
   const h = src('src/views/HomeView.vue'); assert(/<GamePlanRow v-if="gpOn && isViewingToday"/.test(h)); assert(/const gpOn = computed\(\(\) => isStrictMode\.value && strictAllowed\.value\)/.test(h));
-  assert(/GP\.setSizeMode\(on\)/.test(h)); assert(/gpEarned\.value\.points/.test(h)); assert(/phase: 'checklist'/.test(h)); assert(/gpAuthCheck\(st\)/.test(h)); assert(/isShutdown\(\) \|\| gpOn\.value/.test(h));
+  assert(/GP\.setSizeMode\(on\)/.test(h)); assert(/gpEarned\.value\.points/.test(h)); assert(/phase: 'checklist'/.test(h)); assert(/gpAuthCheck\(st\)/.test(h)); assert(!/autoTransferTaskToTomorrow\(i\)/.test(h)); /* count-up timer: nothing auto-carries (game plan included) */
   assert(/fnUrl\('friend-unlock'\)/.test(h)); assert(/GP\.countdown/.test(h)); assert(/!gpQuiet/.test(h));
   const p = src('src/views/Profile.vue'); assert(/'gp-settings'/.test(p)); assert(/GP\.queueEdit/.test(p));
   const c = src('src/components/home/TaskCard.vue'); assert(/data-test="size-edit"/.test(c));

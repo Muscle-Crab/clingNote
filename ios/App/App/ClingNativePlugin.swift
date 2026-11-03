@@ -185,7 +185,9 @@ public class ClingNativePlugin: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDe
             dayEndsAt: dayEndMs > 0 ? Date(timeIntervalSince1970: dayEndMs / 1000) : nil,
             locked: (call.getBool("locked") ?? false) ? true : nil,
             appsUnlocked: (call.getInt("appsUnlocked") ?? 0) > 0 ? call.getInt("appsUnlocked") : nil,
-            phase: (call.getString("phase") ?? "").isEmpty ? nil : call.getString("phase"))
+            phase: (call.getString("phase") ?? "").isEmpty ? nil : call.getString("phase"),
+            durationSec: (call.getInt("durationSec") ?? 0) > 0 ? call.getInt("durationSec") : nil,
+            elapsedSec: paused && (call.getInt("durationSec") ?? 0) > 0 ? max(0, call.getInt("elapsedSec") ?? 0) : nil)
     }
     #endif
     @objc func startFocusActivity(_ call: CAPPluginCall) {
@@ -199,7 +201,7 @@ public class ClingNativePlugin: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDe
             do {
                 let attrs = FocusActivityAttributes(title: call.getString("title") ?? "Focus",
                                                     taskId: taskId.isEmpty ? nil : taskId, notifId: notifId.isEmpty ? nil : notifId)
-                _ = try Activity.request(attributes: attrs, content: .init(state: state, staleDate: state.paused ? nil : state.endsAt))
+                _ = try Activity.request(attributes: attrs, content: .init(state: state, staleDate: FocusActivityAttributes.staleDate(state)))
                 call.resolve(["started": true])
             } catch { call.resolve(["started": false, "error": "\(error)"]) }
         }
@@ -216,7 +218,7 @@ public class ClingNativePlugin: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDe
         Task {
             var n = 0
             for a in Activity<FocusActivityAttributes>.activities where taskId.isEmpty || (a.attributes.taskId ?? "") == taskId {
-                await a.update(ActivityContent(state: state, staleDate: state.paused ? nil : state.endsAt)); n += 1
+                await a.update(ActivityContent(state: state, staleDate: FocusActivityAttributes.staleDate(state))); n += 1
             }
             call.resolve(["updated": n])
         }

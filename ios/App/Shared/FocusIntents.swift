@@ -61,16 +61,19 @@ enum FocusActivityUpdater {
             if paused {
                 if s.paused { continue }
                 s.remainingSec = max(0, Int(s.endsAt.timeIntervalSince(now).rounded()))
+                if let d = s.durationSec { s.elapsedSec = max(0, d - Int(s.endsAt.timeIntervalSince(now).rounded())) }
                 s.paused = true
                 await a.update(ActivityContent(state: s, staleDate: nil))
                 withdrawTimerNotification(a.attributes.notifId)
             } else {
                 if !s.paused { continue }
-                let left = TimeInterval(s.remainingSec ?? 0)
+                // Count-up: keep the elapsed time (also overtime past the set duration), so endsAt may be in the past.
+                let left = s.durationSec != nil ? TimeInterval((s.durationSec ?? 0) - (s.elapsedSec ?? 0)) : TimeInterval(s.remainingSec ?? 0)
                 s.endsAt = now.addingTimeInterval(left)
                 s.paused = false
                 s.remainingSec = nil
-                await a.update(ActivityContent(state: s, staleDate: s.endsAt))
+                s.elapsedSec = nil
+                await a.update(ActivityContent(state: s, staleDate: FocusActivityAttributes.staleDate(s)))
                 rescheduleTimerNotification(a.attributes.notifId, title: a.attributes.title, at: s.endsAt)
             }
         }

@@ -63,12 +63,19 @@ struct FocusLockScreenView: View {
     }
 }
 
-/// Running: live countdown. Paused: the frozen remaining time.
+/// Count-up (durationSec set): elapsed from 0:00, ticking by itself past the set duration (never stops); paused = frozen elapsed.
+/// Older states without durationSec: running countdown / frozen remaining time.
 @available(iOS 16.1, *)
 struct FocusTimeText: View {
     let state: FocusActivityAttributes.ContentState
     var body: some View {
-        if state.paused {
+        if let d = state.durationSec {
+            if state.paused {
+                Text(FocusFormat.clock(state.elapsedSec ?? max(0, d - (state.remainingSec ?? 0))))
+            } else {
+                Text(state.endsAt.addingTimeInterval(-TimeInterval(d)), style: .timer)
+            }
+        } else if state.paused {
             Text(FocusFormat.clock(state.remainingSec ?? 0))
         } else {
             Text(timerInterval: Date()...max(Date(), state.endsAt), countsDown: true)

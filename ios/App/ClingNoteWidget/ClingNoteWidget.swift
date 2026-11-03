@@ -107,18 +107,18 @@ struct TaskTimerRing: View {
     }
 }
 
-/// Remaining time text: ticks by itself while running, static when paused/finished.
+/// Elapsed time text (counts UP from 0:00, past the set duration too; never stops on its own): ticks by itself while running,
+/// static when paused. tS is the effective start (end - set duration), so paused time is excluded.
 struct TaskTimerText: View {
     let task: WidgetTask
     let date: Date
     var body: some View {
         let color = ringColor(task.ringFraction(at: date))
-        let left = max(0, Int(((task.timerEnd ?? date).timeIntervalSince(task.timerPaused ?? date)).rounded(.up)))
-        let frozen = Text(String(format: "%d:%02d", left / 60, left % 60)).monospacedDigit().foregroundColor(color)
-        if #available(iOSApplicationExtension 16.0, *) {
-            if task.isRunning(at: date), let e = task.timerEnd {
-                Text(timerInterval: date...e, countsDown: true).monospacedDigit().foregroundColor(color)
-            } else { frozen }
+        let up = max(0, Int(((task.timerPaused ?? date).timeIntervalSince(task.timerStart ?? date)).rounded(.down)))
+        let frozen = Text(up >= 3600 ? String(format: "%d:%02d:%02d", up / 3600, (up % 3600) / 60, up % 60) : String(format: "%02d:%02d", up / 60, up % 60))
+            .monospacedDigit().foregroundColor(color)
+        if task.hasTimer, task.timerPaused == nil, let s = task.timerStart, s <= date {
+            Text(s, style: .timer).monospacedDigit().foregroundColor(color)
         } else { frozen }
     }
 }

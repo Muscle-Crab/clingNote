@@ -77,7 +77,7 @@ export const cancelLocal = async (key) => { if (!isNativeIOS()) { webCancel(key)
 
 export const reminderKey = (t) => `rem:${taskKeyOf(t)}`;
 export const timerKey = (t) => `timer:${taskKeyOf(t)}`;
-export const scheduleTimerDone = (t) => scheduleLocal(timerKey(t), { title: 'Timer finished', body: `Time's up: ${t.title || 'your task'}`, at: t.timerEndTime, route: '/home', type: 'timer' });
+export const scheduleTimerDone = (t) => scheduleLocal(timerKey(t), { title: 'Timer finished', body: `${Number(t.timerDurationMinutes) > 0 ? `${Math.round(Number(t.timerDurationMinutes))} min reached` : "Time's up"}: ${t.title || 'your task'} (still counting)`, at: t.timerEndTime, route: '/home', type: 'timer' });
 export const cancelTaskNotifications = (t) => Promise.all([cancelLocal(timerKey(t)), cancelLocal(reminderKey(t))]);
 // Task reminder from { date:'YYYY-MM-DD', time:'HH:MM', repeat } in the phone's local timezone. Returns true if scheduled.
 const repeatOn = (dt, repeat) => {

@@ -21,7 +21,7 @@ t('ring: stale finished timers are hidden (Check email: inactive, ended months a
   assert.equal(hasRing(ended, S), false);
   assert.equal(hasRing({ ...task, timerActive: false }, S + 11 * M), false); // stopped and over
   assert.equal(hasRing(task, S + 11 * M), true); // just finished, still active: red 0:00 stays
-  assert.equal(hasRing(task, S + 10 * M + 13 * 3600000), false); // active flag left on for >12h
+  assert.equal(hasRing(task, S + 10 * M + 13 * 3600000), true); // count-up: an active timer never stops on its own (no 12h cutoff)
   assert.equal(hasRing({ ...task, timerActive: false, timerPausedAt: new Date(S + 2 * M).toISOString() }, S + 99 * M), true); // paused keeps its ring
 });
 t('fraction: paused stays frozen at the pause instant', () => {
@@ -67,7 +67,7 @@ t('Swift ringStops/sat/light/step match JS', () => {
   assert.deepEqual(pairs, RING_STOPS);
   assert.match(sw, new RegExp(`ringSat = ${RING_SAT / 100}, ringLight = ${RING_LIGHT / 100}`));
   assert.match(sw, new RegExp(`widgetStep = ${WIDGET_STEP}, widgetMaxSteps = ${WIDGET_MAX_STEPS}`));
-  assert.match(sw, /ProgressView\(timerInterval:/); assert.match(sw, /Text\(timerInterval:/);
+  assert.match(sw, /ProgressView\(timerInterval:/); assert.match(sw, /Text\(s, style: \.timer\)/); // count-up elapsed text
   assert.match(fs.readFileSync('ios/App/ClingNoteWidget/MatchupWidget.swift', 'utf8'), /timerStepDates\(snap\.tasks/);
 });
 t('widget snapshot carries timer start/end/paused only when set', () => {

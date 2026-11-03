@@ -33,7 +33,8 @@ export const classifyFocusAction = (a, tasks, { now = Date.now(), applied = [] }
 
 // Patches use the TAP time, so the frozen remaining time matches what the Live Activity showed.
 export const pausePatch = (t, ts) => {
-  const end = ms(t && t.timerEndTime); const at = Math.min(Number(ts) || Date.now(), end || Infinity);
+  // Count-up timer: a pause in overtime (past timerEndTime) freezes there too, so no cap at the end.
+  const at = Number(ts) || Date.now();
   return { timerPausedAt: new Date(at).toISOString() };
 };
 export const resumePatch = (t, ts) => {
@@ -70,6 +71,8 @@ export const reconcileFocusActions = async ({ queue, getTasks, apply = {}, appli
 export const focusActivityState = (t, { ptsDone = 0, ptsTarget = 0, dayEndMs = 0, appsUnlocked = 0, now = Date.now() } = {}) => {
   if (!t || !t.timerActive || !ms(t.timerEndTime) || t.completed === true) return null;
   const paused = !!ms(t.timerPausedAt);
+  const startMs = ms(t.timerStartedAt) || (Number(t.timerDurationMinutes) > 0 ? ms(t.timerEndTime) - Number(t.timerDurationMinutes) * 60000 : 0);
+  const durSec = Number(t.timerDurationMinutes) > 0 ? Math.round(Number(t.timerDurationMinutes) * 60) : (startMs ? Math.round((ms(t.timerEndTime) - startMs) / 1000) : 0);
   return {
     taskId: widgetTaskId(t), title: String(t.title || 'Focus').slice(0, 80),
     endsAtMs: paused ? now + remainingMs(t, now) : ms(t.timerEndTime), paused, locked: t.focusLock === true, remainingSec: Math.round(remainingMs(t, now) / 1000),
@@ -77,8 +80,10 @@ export const focusActivityState = (t, { ptsDone = 0, ptsTarget = 0, dayEndMs = 0
     dayEndsAtMs: dayEndMs > now ? Math.round(dayEndMs) : 0,
     ...(appsUnlocked > 0 ? { appsUnlocked: Math.round(appsUnlocked) } : {}),
     ...(pomoLabel(t) ? { phase: pomoLabel(t) } : {}),
+    // Count-up (lock screen counts elapsed from 00:00 past the set duration): set duration, and elapsed frozen while paused.
+    ...(durSec > 0 ? { durationSec: durSec, ...(paused ? { elapsedSec: Math.max(0, durSec - Math.round((ms(t.timerEndTime) - ms(t.timerPausedAt)) / 1000)) } : {}) } : {}),
   };
 };
 // identity of the activity (a new one is requested when it changes) and of its content (an update is pushed when it changes)
 export const focusActivityKey = (s) => (s ? `${s.taskId}` : '');
-export const focusContentSig = (s) => (s ? `${s.paused ? `p${s.remainingSec}` : s.endsAtMs}${s.locked ? 'L' : ''}${s.appsUnlocked ? `U${s.appsUnlocked}` : ''}${s.phase ? `P${s.phase}` : ''}|${s.ptsDone}/${s.ptsTarget}|${s.dayEndsAtMs}` : '');
+export const focusContentSig = (s) => (s ? `${s.paused ? `p${s.remainingSec}e${s.elapsedSec || 0}` : s.endsAtMs}${s.locked ? 'L' : ''}${s.appsUnlocked ? `U${s.appsUnlocked}` : ''}${s.phase ? `P${s.phase}` : ''}|${s.ptsDone}/${s.ptsTarget}|${s.dayEndsAtMs}` : '');

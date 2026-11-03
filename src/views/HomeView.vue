@@ -549,14 +549,8 @@ const startCountdownWatcher = () => {
           await saveSelectedDayTasks().catch((e) => console.warn('pomodoro phase not saved:', e));
           continue;
         }
-        // 8-hour lock: a locked day can never lose a task, so an expired timer only stops in place (no carry to tomorrow).
-        // Before: the carry spliced the task and saveSelectedDayTasks threw a LockError inside this interval -> "Unhandled:" overlay.
-        if (selectedDayLocked.value || isShutdown() || gpOn.value) { // game plan: nothing rolls over by itself (picked at close)
-          selectedDayRoutine.value[i] = { ...task, timerActive: false, timerStartedAt: null, timerEndTime: null };
-          await saveSelectedDayTasks().catch((e) => console.warn('timer stop not saved:', e));
-        } else {
-          await autoTransferTaskToTomorrow(i).catch((e) => { console.warn('auto-carry failed:', e); fetchSelectedDayRoutine(); });
-        }
+        // Count-up timer: reaching the set duration never stops, completes or carries the task. It keeps counting
+        // (overtime, shown as +MM:SS); the one "duration reached" local notification was scheduled at play (scheduleTimerDone).
       }
     }
   }, 1000);
