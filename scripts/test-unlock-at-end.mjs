@@ -10,7 +10,8 @@ for (const f of ['taskSections', 'sessionGoal', 'aiEstimate', 'sessionPoints', '
 const S = await import(path.join(dir, 'strictDay.js')); const SP = await import(path.join(dir, 'sessionPoints.js'));
 const { lockAction } = await import(path.join(dir, 'appLock.js'));
 const srv = createRequire(import.meta.url)(path.join(root, 'netlify/functions/lib/sessionGrace.js'));
-let n = 0; const t = (name, fn) => { try { fn(); n++; console.log('ok ', name); } catch (e) { console.error('FAIL', name); throw e; } };
+const GPm = await import(path.join(dir, 'gamePlan.js'));
+let n = 0; const t = (name, fn) => { try { GPm.setSessionWindow({ startMs: new Date(2026, 10, 3, 9).getTime(), endMs: new Date(2026, 10, 3, 17).getTime() }); /* start anytime: a session the user started at 09:00 */ fn(); n++; console.log('ok ', name); } catch (e) { console.error('FAIL', name); throw e; } };
 const H = 3600000; const at = (h, m = 0) => new Date(2026, 10, 3, h, m).getTime(); const dayEnd = at(17);
 const common = { running: true, dayEndMs: dayEnd, selectionCount: 3, enabled: true, goal: 60, earned: 60, tasksDone: 3, goalAt: at(15) };
 

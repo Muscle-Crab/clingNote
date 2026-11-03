@@ -1,4 +1,4 @@
-// Unit tests for the 8-hour day core: countdown/start phases (before/at/after wake), restart persistence, day rollover, DST, estimator, target, settlement.
+// Unit tests for the 8-hour day core: countdown/start phases (start anytime, next session after one ends), restart persistence, day rollover, DST, estimator, target, settlement.
 const assert = require('assert');
 const c = require('../netlify/functions/lib/eightHourCore');
 let pass = 0; const ok = (v, m) => { assert.ok(v, m); pass++; }; const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); pass++; };
@@ -12,24 +12,14 @@ eq(c.parseWake('07:00'), { h: 7, m: 0 }); eq(c.parseWake('7:05'), { h: 7, m: 5 }
 eq(c.fmtWakeLabel('07:00'), '7:00 AM'); eq(c.fmtWakeLabel('00:30'), '12:30 AM'); eq(c.fmtWakeLabel('15:00'), '3:00 PM');
 ok(c.WAKE_PICKER_PRESELECT === '07:00', 'picker preselect is only a UI value');
 
-// no wake chosen => phase none (user must pick explicitly; there is no fixed 5 AM start)
-eq(c.evaluatePhase({ wakeTime: '', tz: TZ, nowMs: at('2026-10-23T11:00:00Z'), lock: null }).phase, 'none');
-eq(c.evaluatePhase({ wakeTime: WAKE, tz: 'Not/AZone', nowMs: at('2026-10-23T11:00:00Z'), lock: null }).phase, 'none');
-ok(c.evaluatePhase({ wakeTime: '05:00', tz: TZ, nowMs: at('2026-10-23T09:30:00Z'), lock: null }).phase === 'ready', '5 AM is just one possible pick, not a fixed start');
-
-// before wake time
-let p = c.evaluatePhase({ wakeTime: WAKE, tz: TZ, nowMs: at('2026-10-23T10:59:59Z'), lock: null });
-eq(p.phase, 'before'); eq(p.wakeMs, at('2026-10-23T11:00:00Z'));
-// exactly at wake time
-p = c.evaluatePhase({ wakeTime: WAKE, tz: TZ, nowMs: at('2026-10-23T11:00:00Z'), lock: null });
-eq(p.phase, 'ready'); eq(p.endMs - p.startMs, 8 * 3600e3); eq(p.startMs, at('2026-10-23T11:00:00Z'));
-// after wake time, app opened late: window starts when the app sees it (open mode) ...
-p = c.evaluatePhase({ wakeTime: WAKE, tz: TZ, nowMs: at('2026-10-23T14:30:00Z'), lock: null, mode: 'open' });
-eq(p.phase, 'ready'); eq(p.startMs, at('2026-10-23T14:30:00Z')); eq(p.endMs, at('2026-10-23T22:30:00Z'));
-// ... or at the wake time itself in strict 'wake' anchoring
-p = c.evaluatePhase({ wakeTime: WAKE, tz: TZ, nowMs: at('2026-10-23T14:30:00Z'), lock: null, mode: 'wake' });
-eq(p.startMs, at('2026-10-23T11:00:00Z')); eq(p.endMs, at('2026-10-23T19:00:00Z'));
-eq(c.evaluatePhase({ wakeTime: WAKE, tz: TZ, nowMs: at('2026-10-23T20:00:00Z'), lock: null, mode: 'wake' }).phase, 'ended'); // wake-anchored window already over
+// start anytime: no wake gate. Any valid zone => ready right now; the window starts at now.
+eq(c.evaluatePhase({ wakeTime: '', tz: TZ, nowMs: at('2026-10-23T11:00:00Z'), lock: null }).phase, 'ready');
+eq(c.evaluatePhase({ tz: 'Not/AZone', nowMs: at('2026-10-23T11:00:00Z'), lock: null }).phase, 'none');
+for (const iso of ['2026-10-23T04:30:00Z', '2026-10-23T10:59:59Z', '2026-10-23T14:30:00Z', '2026-10-24T03:30:00Z']) {
+  const q = c.evaluatePhase({ wakeTime: WAKE, tz: TZ, nowMs: at(iso), lock: null });
+  eq(q.phase, 'ready', iso); eq(q.startMs, at(iso)); eq(q.endMs - q.startMs, 8 * 3600e3); eq(q.index, 0);
+}
+let p;
 // UI end label: wake 7 => "Ends 3:00 PM"
 eq(c.fmtClock(at('2026-10-23T11:00:00Z') + c.WINDOW_MS, TZ), '3:00 PM');
 
@@ -43,15 +33,11 @@ for (const [now, left] of [['2026-10-23T11:02:00Z', 8 * 3600], ['2026-10-23T13:0
 eq(c.evaluatePhase({ wakeTime: '12:00', tz: TZ, nowMs: at('2026-10-23T13:00:00Z'), lock }).endMs, lock.endMs);
 // a different time zone / device clock quirk cannot move the window (it is epoch based)
 eq(c.evaluatePhase({ wakeTime: WAKE, tz: 'Asia/Tokyo', nowMs: at('2026-10-23T13:00:00Z'), lock }).endMs, lock.endMs);
-// at end: ended (no second window today)
-eq(c.evaluatePhase({ wakeTime: WAKE, tz: TZ, nowMs: at('2026-10-23T19:02:00Z'), lock }).phase, 'ended');
-eq(c.evaluatePhase({ wakeTime: WAKE, tz: TZ, nowMs: at('2026-10-23T23:59:00Z'), lock }).phase, 'ended');
-
-// day rollover: next local calendar day => before / ready again
-eq(c.evaluatePhase({ wakeTime: WAKE, tz: TZ, nowMs: at('2026-10-24T03:59:59Z'), lock }).phase, 'ended', '11:59:59 PM local still the same day');
-p = c.evaluatePhase({ wakeTime: WAKE, tz: TZ, nowMs: at('2026-10-24T04:00:00Z'), lock });
-eq(p.phase, 'before'); eq(p.dayKey, '2026-10-24');
-eq(c.evaluatePhase({ wakeTime: WAKE, tz: TZ, nowMs: at('2026-10-24T11:00:00Z'), lock }).phase, 'ready');
+// after a session ends: ready again right away, as the next session of the same day (no 'ended', no wait for tomorrow)
+p = c.evaluatePhase({ tz: TZ, nowMs: at('2026-10-23T19:02:00Z'), lock }); eq(p.phase, 'ready'); eq(p.index, 1); eq(p.startMs, at('2026-10-23T19:02:00Z'));
+eq(c.evaluatePhase({ tz: TZ, nowMs: at('2026-10-23T23:59:00Z'), lock: { ...lock, index: 2 } }).index, 3);
+// next calendar day: a fresh day, session index 0 again (streak settles per day on index 0)
+p = c.evaluatePhase({ tz: TZ, nowMs: at('2026-10-24T04:00:00Z'), lock }); eq(p.phase, 'ready'); eq(p.dayKey, '2026-10-24'); eq(p.index, 0);
 // a window that crosses local midnight is still running after midnight
 const late = { dayKey: '2026-10-23', startMs: at('2026-10-24T01:00:00Z'), endMs: at('2026-10-24T09:00:00Z') };
 eq(c.evaluatePhase({ wakeTime: WAKE, tz: TZ, nowMs: at('2026-10-24T05:00:00Z'), lock: late }).phase, 'running');

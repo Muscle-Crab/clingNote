@@ -34,7 +34,7 @@ const lockOf = (db) => db.store['eightHour/u1'].lock;
   eq(core.isShut(L0, now0 + 1000), true, 'single lock: shut after the end (unchanged)');
   eq(core.isShut(Lp, now0 + 1000), false, 'a pending block keeps the gap open');
   eq(core.isShut(Lp, at('2026-10-24T02:00:01Z')), true, 'shut after the last block');
-  eq(core.rulesShutUntilMs(Lp), Lp.endMs, 'rules see no hard stop while a block is pending'); eq(core.rulesShutUntilMs(L0), core.shutUntilMs(L0));
+  eq(core.rulesShutUntilMs(Lp), Lp.endMs, 'rules see no hard stop while a block is pending'); eq(core.rulesShutUntilMs(L0), L0.endMs, 'start anytime: rules never hard-stop past the session end');
   let ph = core.evaluatePhase({ wakeTime: '07:00', tz: TZ, nowMs: now0 + 1000, lock: Lp }); eq([ph.phase, ph.nextStartMs], ['gap', Lp.pending[0].startMs]);
   ph = core.evaluatePhase({ wakeTime: '07:00', tz: TZ, nowMs: Lp.pending[0].startMs + 60000, lock: Lp }); eq([ph.phase, ph.scheduled, ph.index, ph.startMs], ['ready', true, 1, Lp.pending[0].startMs]);
   // phaseOf now passes hours (bug fix): the 'ready' window uses the frozen/default day length, not a hard-coded 8h
@@ -66,12 +66,12 @@ const lockOf = (db) => db.store['eightHour/u1'].lock;
   eq([r.body.phase, r.body.lock.index, r.body.lock.startMs, r.body.lock.endMs, r.body.lock.taskCount, r.body.lock.scheduled], ['running', 1, at('2026-10-23T23:00:00Z'), at('2026-10-24T02:00:00Z'), 3, true]);
   eq(db.store['weeklyRoutines/u1_Fri'].tasks.filter((t) => t.completed).length, 2, 'completions kept');
   ok(db.store['eightHour/u1'].sessions['2026-10-23#0'], 'block 0 archived under day#index');
-  eq(lockOf(db).shutUntil.ms, core.shutUntilMs(lockOf(db)), 'last block: normal hard stop to the next wake');
+  eq(lockOf(db).shutUntil.ms, lockOf(db).endMs, 'last block: rules shutUntil = its end (no hard stop to a wake time)');
   eq((await call(db, { action: 'start', hours: 3 })).body.phase, 'running', 'no restart during a block');
   eq((await call(db, { action: 'plan', wakeTime: '07:00', taskCount: 5, tz: TZ })).code, 423, 'plan locked while the evening block runs');
   clock = at('2026-10-24T02:00:05Z');
   r = await call(db, { action: 'state' });
-  eq([r.body.stats.streak, r.body.phase], [streakAfter0, 'ended'], 'later blocks never touch the streak');
+  eq([r.body.stats.streak, r.body.phase], [streakAfter0, 'ready'], 'later blocks never touch the streak; ready for the next session');
   ok(core.isShut(r.body.lock, clock), 'shut after the last block');
   ok(db.store['eightHour/u1/history/2026-10-23#1'] && db.store['eightHour/u1/history/2026-10-23#1'].streakCounted === false, 'history-only row for block 1');
 
@@ -81,7 +81,7 @@ const lockOf = (db) => db.store['eightHour/u1'].lock;
   clock = at('2026-10-24T20:00:00Z'); // 4 PM, shut
   r = await call(db, { action: 'state' }); ok(core.isShut(r.body.lock, clock), 'legacy lock still shuts');
   eq((await call(db, { action: 'schedule', blocks: [{ time: '16:02', hours: 3 }] })).code, 400, 'needs 5 minutes of lead (16:02 rolls to tomorrow, past 18h)');
-  eq((await call(db, { action: 'schedule', blocks: [{ time: '08:00', hours: 3 }] })).body.code, 'bad-blocks', 'while shut, a block after the next wake (7 AM) is refused');
+  // start anytime: there is no next-wake limit while shut (the old 'after the next wake is refused' rule is gone)
   eq((await call(db, { action: 'schedule', blocks: [{ time: '18:00', hours: 3 }] })).code, 200);
   r = await call(db, { action: 'state' });
   eq([r.body.phase, r.body.lock.pending.length, r.body.lock.pending[0].index], ['gap', 1, 1]); ok(!core.isShut(r.body.lock, clock), 'task screens open until 6 PM');
@@ -99,7 +99,7 @@ const lockOf = (db) => db.store['eightHour/u1'].lock;
     pending: [{ dayKey: '2026-10-24', index: 1, startMs: at('2026-10-24T22:00:00Z'), endMs: at('2026-10-25T01:00:00Z'), hours: 3 }] } } });
   clock = at('2026-10-25T02:00:00Z'); r = await call(db, { action: 'state' });
   eq(r.body.lock.pending.length, 0); ok(db.store['eightHour/u1/history/2026-10-24#1'].missedStart, 'missed block recorded');
-  ok(core.isShut(r.body.lock, clock) && lockOf(db).shutUntil.ms > clock, 'shut until the next wake');
+  ok(core.isShut(r.body.lock, clock) && lockOf(db).shutUntil.ms === at('2026-10-25T01:00:00Z'), 'shutdown screen; rules shutUntil = the last end');
 
   // fresh user (no lock yet): schedule tonight -> placeholder lock carries the schedule, block 0 of its day
   db = mkDb({ 'weeklyRoutines/u1_Fri': tasks(), 'eightHour/u1': { plan: { wakeTime: '07:00', tz: TZ, taskCount: 5 } } });

@@ -9,8 +9,8 @@ export const SEEN_KEY = 'clingnote.ehSeen.v1';
 export const pillState = ({ phase, running, countdown, startsLabel, hasPlan, shut, untilLabel, earned = 0, target = 0, pace = null, hours = 8, wrapped = false, allDone = false, lockInOn = true, nextLabel = '', planning = false }) => {
   const hl = String(Math.round((Number(hours) || 8) * 2) / 2); // "6.5" -> "your 6.5-hour day"
   // Tomorrow's planning window (shutdown, plan time..midnight): the overlay is lifted; tapping the pill closes the window again.
-  if (shut && planning) return { kind: 'shut', main: 'Planning tomorrow', sub: 'till 12 AM', aria: 'Planning tomorrow until midnight. Tap to close.' };
-  if (shut) return { kind: 'shut', main: 'Shut', sub: untilLabel ? `till ${untilLabel}` : '', aria: `ClingNote is shut until ${untilLabel || 'tomorrow'}` };
+  if (shut && planning) return { kind: 'shut', main: 'Plan next session', sub: '', aria: 'Plan next session. Tap to close.' };
+  if (shut) return { kind: 'shut', main: 'Shut', sub: untilLabel ? `till ${untilLabel}` : '', aria: untilLabel ? `ClingNote is shut until ${untilLabel}` : 'Session done. Start a new session when you are ready' };
   if (running) {
     const risk = pace && target > 0 && earned < target && pace.leftMs <= 2 * 3600000;
     return { kind: risk ? 'risk' : 'run', main: countdown, sub: target > 0 ? `${earned}/${target}` : '', aria: `${hl}-hour day: ${countdown} left, ${earned} of ${target} points` };

@@ -490,7 +490,7 @@ const lockMessage = (e) => { if (isLockError(e)) { sfx('error'); alert(e.message
 // Returns the block message when adding one more would pass the cap, otherwise null. Adding never changes plan.taskCount.
 const planOverCap = () => {
   const plan = eh.plan.value; const ph = eh.phase.value;
-  if (!plan || (ph !== 'before' && ph !== 'ready')) return null;
+  if (!plan || ph !== 'ready') return null;
   const countNow = countableIndexes(selectedDayRoutine.value || [], eh.phaseInfo.value.dayKey || '').length;
   return capBlockMessage(countNow, 1, taskRange(eh.dayHours.value), hoursLabel(eh.dayHours.value));
 };
@@ -728,9 +728,9 @@ const startDay = async () => {
   }
   // Lock-in on: Start Day starts the server 8-hour day (wake time = now when there is no plan yet / it has not arrived),
   // via the same hours prompt + confirm as the card. The legacy session is written by confirmDayStart.
-  if (lockInToday.value && !eh.lock.value && isToday(selectedDayIndex.value)) {
+  if (lockInToday.value && !eh.running.value && isToday(selectedDayIndex.value)) {
     try {
-      if (eh.phase.value === 'none' || eh.phase.value === 'before') {
+      if (eh.phase.value === 'none') {
         const d = new Date(); const wakeTime = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
         const n = countableIndexes(selectedDayRoutine.value || [], eh.phaseInfo.value.dayKey || '').length;
         await eh.savePlan({ wakeTime, taskCount: Math.max(1, n) });
@@ -3443,7 +3443,7 @@ const canViewSelectedDayTasks = computed(() => {
   }
 
   // 8-hour day: the list is open while a plan is waiting for its tasks and while the window runs (no separate Start Day press needed)
-  if (eh.phase.value === 'running' || eh.phase.value === 'before' || eh.phase.value === 'ready') return true;
+  if (eh.phase.value === 'running' || eh.phase.value === 'ready') return true;
 
   // Evening planning window (shut day): today's list stays open so leftover tasks can still be ticked off in place
   if (planWin.active && isShutdown()) return true;
@@ -3710,7 +3710,7 @@ const dayPromptOpen = ref(false);
 const ehBusy = ref(false);
 // no plan yet => no dayKey: an empty skipDate must not read as "skipped today" (that blocked Start Day for planless web users)
 const lockInToday = computed(() => lockIn.value.enabled && !(lockIn.value.skipDate && lockIn.value.skipDate === (eh.phaseInfo.value.dayKey || '')));
-const openDayPrompt = () => { if (!gatePro(_proRouter, 'lockIn')) return; if (lockInToday.value && eh.phase.value === 'ready' && !eh.phaseInfo.value.scheduled && !eh.lock.value && isToday(selectedDayIndex.value)) { ehStartError.value = ''; dayPromptOpen.value = true; } };
+const openDayPrompt = () => { if (!gatePro(_proRouter, 'lockIn')) return; if (lockInToday.value && eh.phase.value === 'ready' && !eh.phaseInfo.value.scheduled && !eh.running.value && isToday(selectedDayIndex.value)) { ehStartError.value = ''; dayPromptOpen.value = true; } };
 // B44 wake-up auto-lock: iOS already locked the apps at the wake time, so on open the day's server lock is created from that time
 // (no prompt, no Confirm). Once per day key; a refusal (e.g. window over) falls back to the normal prompt.
 let wakeReconciled = '';
@@ -3869,8 +3869,8 @@ const autoStartFocus = async (reason, { index = -1, minutes = 0, key = '' } = {}
   try {
     if (daySession.value.ended) return false; // day already wrapped up: nothing auto-starts
     // Start the day too (no prompts): the 8-hour day when Lock-in is on, else the plain day session; the task list shows behind it.
-    if (lockInToday.value && !eh.lock.value) {
-      if (eh.phase.value === 'none' || eh.phase.value === 'before') {
+    if (lockInToday.value && !eh.running.value) {
+      if (eh.phase.value === 'none') {
         const d = new Date(); const wakeTime = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
         await eh.savePlan({ wakeTime, taskCount: Math.max(1, countableIndexes(selectedDayRoutine.value || [], eh.phaseInfo.value.dayKey || '').length) });
       }
@@ -3956,7 +3956,7 @@ const gpLoad = (d) => {
   if (gpOn.value && !(d && d.gamePlan && d.gamePlan.lastReview)) { gp.value = { ...gp.value, lastReview: GP.reviewKey(gp.value, Date.now()) }; gpSave(); }
 };
 const gpSave = () => saveBossField({ gamePlan: { ...gp.value } });
-const gpLate = computed(() => GP.lateWindow(gp.value, eh.lock.value)); // session 2, or a single session started after the plan's close
+const gpLate = computed(() => { GP.setSessionWindow(eh.lock.value); return null; }); // anchors the game plan day to the session the user started (no fixed day start)
 const gpPhase = computed(() => GP.phaseAt(gp.value, nowTick.value, gpBreak.value, gpLate.value));
 // Earned breaks: each finished focus session banks gp.breakMin; the user takes it from the slim line ("Take break"),
 // which lifts the shield for exactly that long, then restores the shield that was up before (same apps, same until).

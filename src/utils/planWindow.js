@@ -1,10 +1,7 @@
-// Tomorrow's planning window during the post-lock-in shutdown (pure + a tiny reactive state).
-// While ClingNote is shut (the hard stop after a lock-in) the task screens stay closed, EXCEPT:
+// Planning the next session during the post-session shutdown (pure + a tiny reactive state).
+// While ClingNote is shut (a session ended and no new one has started) the task screens stay behind the shutdown screen, EXCEPT:
 //   - completing tasks always works (any day, widget / notification / in-app), see eightHourLock.js;
-//   - from the user's plan time (default 8:00 PM local, Settings > Lock-in > "Plan tomorrow at") until a HARD CLOSE at midnight,
-//     the planning window opens Home on tomorrow's tab so tomorrow can be planned. It opens by itself once per evening (in the
-//     foreground at that time, or on the next open that evening). At 00:00 it closes; tomorrow-planning is gone until the next day starts.
-// If the shutdown begins after the plan time (late lock-in), the window opens as soon as the shutdown starts (same midnight close).
+//   - "Plan next session" on the shutdown screen opens Home on the day the next session will run, any time (no clock window).
 import { reactive } from 'vue';
 
 export const PLAN_OPEN_DEFAULT = '20:00';
@@ -25,12 +22,13 @@ export const localParts = (ms, tz) => {
   return { ymd: `${g('year')}-${g('month')}-${g('day')}`, min: (Number(g('hour')) % 24) * 60 + Number(g('minute')), dow: WEEK.indexOf(g('weekday')) };
 };
 
-// -> { open, eveningKey, tomorrowDay } ; open only while shut AND local time in [planTime, 24:00).
-export const planWindowState = ({ nowMs, shut, planTime, tz }) => {
-  const t = planTimeOrDefault(planTime); const at = Number(t.slice(0, 2)) * 60 + Number(t.slice(3));
+// -> { open, eveningKey, tomorrowDay }. State-based, no clock: planning the next session is open the whole time ClingNote is shut
+// (after a session ends, until a new one starts). eveningKey = the ended session's key (one planning pass per session), tomorrowDay =
+// the weekday the NEXT session runs on = today's local weekday (a new session starts the moment the user starts it).
+// planTime is accepted for compatibility and ignored (the 8 PM-to-midnight window was removed).
+export const planWindowState = ({ nowMs, shut, tz, key }) => {
   const lp = localParts(nowMs, tz);
-  const open = !!shut && lp.min >= at; // the local day rolls over at midnight -> min resets -> hard close
-  return { open, eveningKey: lp.ymd, tomorrowDay: WEEK[(lp.dow + 1) % 7], openTime: t };
+  return { open: !!shut, eveningKey: key || lp.ymd, tomorrowDay: WEEK[lp.dow], openTime: '' };
 };
 
 // Auto-open at most once per evening.

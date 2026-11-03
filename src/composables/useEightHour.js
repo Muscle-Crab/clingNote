@@ -41,7 +41,7 @@ export const markPromptSeen = (dayKey) => { try { localStorage.setItem(PROMPT_KE
 export const deviceTz = () => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch (e) { return 'UTC'; } };
 
 // ── plan cached on the device before there is an account (written to the server after sign-up / sign-in) ──
-export const readCachedPlan = () => { try { const p = JSON.parse(localStorage.getItem(PLAN_KEY) || 'null'); return p && core.parseWake(p.wakeTime) ? p : null; } catch (e) { return null; } };
+export const readCachedPlan = () => { try { const p = JSON.parse(localStorage.getItem(PLAN_KEY) || 'null'); return p && (core.validTz(p.tz) || core.parseWake(p.wakeTime)) ? p : null; } catch (e) { return null; } };
 export const cachePlan = (plan) => { try { localStorage.setItem(PLAN_KEY, JSON.stringify({ wakeTime: plan.wakeTime, taskCount: plan.taskCount, tz: plan.tz || deviceTz(), at: Date.now() })); } catch (e) { /* private mode */ } };
 export const clearCachedPlan = () => { try { localStorage.removeItem(PLAN_KEY); } catch (e) { /* ignore */ } };
 
@@ -106,23 +106,23 @@ export const savePlan = async ({ wakeTime, taskCount }) => {
   catch (e) { if (!isUnavailable(e)) throw e; cachePlan({ wakeTime, taskCount, tz }); const d = localState(readCachedPlan()); apply(d); st.error = e.message; return d; } // synced on next successful refresh
   finally { st.busy = false; }
 };
-// Starts the day NOW for `hours` (only called from the morning Confirm). End = confirm time + hours; frozen for the day.
-// opts.autoWake (B44 wake-up auto-lock): the window starts at today's wake time (server-checked; users/{uid}.wakeAutoLock).
-export const startNow = async (hours, blocks, opts = {}) => {
+// Starts a session NOW for `hours`, any time of day (the start prompt's Confirm). End = confirm time + hours.
+// No clock gate: after a session ends a new one can start right away (the server numbers it dayKey#1, #2, ...).
+export const startNow = async (hours, blocks) => {
   const h = core.clampHours(hours == null ? hoursPref.value : hours);
   st.busy = true;
-  try { const d = await call('start', { hours: h, ...(Array.isArray(blocks) && blocks.length ? { blocks } : {}), ...(opts.autoWake ? { autoWake: true } : {}) }); apply(d); return d; }
+  try { const d = await call('start', { hours: h, ...(Array.isArray(blocks) && blocks.length ? { blocks } : {}) }); apply(d); return d; }
   catch (e) {
-    if (!isUnavailable(e) || e.status === 401 || opts.autoWake) throw e; // a backdated start must be server-checked: retried next open
+    if (!isUnavailable(e) || e.status === 401) throw e;
     const plan = st.data?.plan || readCachedPlan(); const tz = plan?.tz || deviceTz(); const now = nowMs();
-    const prev = localLockToday(plan); if (prev) return st.data; // already confirmed today: frozen
-    const lock = { dayKey: core.dayKeyIn(tz, now), dayName: core.dayNameIn ? core.dayNameIn(tz, now) : '', startMs: now, endMs: now + core.hoursMs(h), hours: h, wakeTime: plan?.wakeTime, tz, local: true };
+    const prev = localLockToday(plan); if (prev && now < prev.endMs) return st.data; // a local session is still running
+    const lock = { dayKey: core.dayKeyIn(tz, now), dayName: core.dayNameIn ? core.dayNameIn(tz, now) : '', index: prev ? (prev.index || 0) + 1 : 0, startMs: now, endMs: now + core.hoursMs(h), hours: h, wakeTime: plan?.wakeTime, tz, local: true };
     cacheLock(lock); const d = { ...localState(plan), now }; d.lock = lock; apply(d); st.error = e.message; return d;
   } finally { st.busy = false; }
 };
 // Evening mode: fix later lock-in block(s) [{ time: 'HH:MM', hours }]. Server-only (no offline fallback: a schedule must be server-checked).
 export const scheduleNext = async (blocks) => { st.busy = true; try { const d = await call('schedule', { blocks }); apply(d); return d; } finally { st.busy = false; } };
-// Afternoon focus session (game plan sessions = 2): starts block 1 NOW from the shutdown. Server-checked (once a day, before the close).
+// "Start new session" from the shutdown screen: starts the next session NOW (server-checked, no clock window, no session cap).
 export const startNextSession = async (hours) => { st.busy = true; try { const d = await call('nextSession', hours ? { hours } : {}); apply(d); return d; } finally { st.busy = false; } };
 export const reportProgress = async () => { try { apply(await call('progress')); } catch (e) { /* server recounts at the end of the window anyway */ } };
 
@@ -144,7 +144,7 @@ export const useEightHour = () => {
   const phaseInfo = computed(() => {
     if (!st.data) return { phase: 'loading' };
     const lk = lockRaw.value && { startMs: lockRaw.value.startMs, endMs: lockRaw.value.endMs, dayKey: lockRaw.value.dayKey, index: lockRaw.value.index, pending: lockRaw.value.pending };
-    return core.evaluatePhase({ wakeTime: plan.value?.wakeTime, tz: plan.value?.tz, nowMs: (tick.value, nowMs()), lock: lk, hours: hoursPref.value });
+    return core.evaluatePhase({ tz: plan.value ? (plan.value.tz || deviceTz()) : undefined, nowMs: (tick.value, nowMs()), lock: lk, hours: hoursPref.value });
   });
   const phase = computed(() => phaseInfo.value.phase);
   const running = computed(() => phase.value === 'running');
@@ -154,28 +154,26 @@ export const useEightHour = () => {
   // "Ends 3:00 PM": real end while running/ended; otherwise now + the chosen hours (what it will be if you confirm now)
   const endsLabel = computed(() => {
     const tz = plan.value?.tz || deviceTz();
-    if (lock.value && (running.value || phase.value === 'ended')) return core.fmtClock(lock.value.endMs, tz);
-    if (phaseInfo.value.phase === 'before' || phaseInfo.value.phase === 'ready') return core.fmtClock((phaseInfo.value.startMs || phaseInfo.value.wakeMs) + core.hoursMs(hoursPref.value), tz);
+    if (lock.value && running.value) return core.fmtClock(lock.value.endMs, tz);
+    if (phaseInfo.value.phase === 'ready') return core.fmtClock((tick.value, nowMs()) + core.hoursMs(hoursPref.value), tz);
     return '';
   });
   // "7:00 AM": the real (locked) start while running/ended; otherwise the planned wake time
   const startsLabel = computed(() => {
     const tz = plan.value?.tz || deviceTz();
-    if (lock.value && (running.value || phase.value === 'ended')) return core.fmtClock(lock.value.startMs, tz);
-    return plan.value ? core.fmtWakeLabel(plan.value.wakeTime) : '';
+    if (lock.value && running.value) return core.fmtClock(lock.value.startMs, tz);
+    return 'Now';
   });
   // Hours of TODAY's day: the confirmed (locked) value, else the preference.
   const dayHours = computed(() => core.clampHours(lock.value && lock.value.hours != null ? lock.value.hours : hoursPref.value));
   // 15 / 5 / 0: in-app end-of-day warning currently due
   const warning = computed(() => (running.value && lock.value ? core.warningDue(lock.value.endMs, (tick.value, nowMs())) : 0));
   const stats = computed(() => st.data?.stats || core.defaultStats());
-  // Hard stop: today's started day has ended -> shut until the next wake time (survives reload via the cached lock).
+  // Shutdown screen: the latest session has ended and no new one has started (state, not clock; survives reload via the cached lock).
   const shutdown = computed(() => {
     const l = shutLock(); const now = (tick.value, nowMs());
     if (!l || !core.isShut(l, now)) return null;
-    const lastEnd = Math.max(l.endMs, ...core.pendingOf(l).map((b) => b.endMs));
-    const until = core.shutUntilMs({ ...l, endMs: lastEnd });
-    return { untilMs: until, untilLabel: core.fmtClock(until, l.tz || deviceTz()), earned: l.earned || 0, target: l.target || 0, done: l.done || 0, total: l.taskCount || 0, met: (l.target || 0) > 0 && (l.earned || 0) >= l.target,
+    return { untilMs: 0, untilLabel: '', earned: l.earned || 0, target: l.target || 0, done: l.done || 0, total: l.taskCount || 0, met: (l.target || 0) > 0 && (l.earned || 0) >= l.target,
       // Per-session rule (server settle): the session's own target/earned; missed -> apps open at end + 2 h.
       ...(l.session ? { session: l.session, met: !!l.session.met, earned: l.session.earned, target: l.session.target, missed: !l.session.met && l.graceUntilMs > 0,
         opensAtMs: l.graceUntilMs || 0, opensAtLabel: l.graceUntilMs ? core.fmtClock(l.graceUntilMs, l.tz || deviceTz()) : '' } : {}) };

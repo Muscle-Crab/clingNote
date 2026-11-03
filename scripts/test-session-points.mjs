@@ -10,7 +10,7 @@ fs.writeFileSync(path.join(dir, 'sessionPoints.mjs'), src('src/utils/sessionPoin
 fs.writeFileSync(path.join(dir, 'package.json'), '{"type":"module"}');
 const G = await import(path.join(dir, 'gamePlan.js')); const S = await import(path.join(dir, 'sessionPoints.mjs'));
 const srv = createRequire(import.meta.url)(path.join(root, 'netlify/functions/lib/sessionGrace.js'));
-let n = 0; const t = (name, fn) => { try { fn(); n++; console.log('ok ', name); } catch (e) { console.error('FAIL', name); throw e; } };
+let n = 0; const t = (name, fn) => { try { G.setSessionWindow({ startMs: new Date(2026, 10, 3, 7).getTime(), endMs: new Date(2026, 10, 3, 15).getTime() }); /* start anytime: a session the user started at 07:00 */ fn(); n++; console.log('ok ', name); } catch (e) { console.error('FAIL', name); throw e; } };
 const at = (h, m = 0) => new Date(2026, 10, 3, h, m).getTime(); const H = 3600000;
 const gp = { ...G.normPlan({ dayStart: '07:00' }), sessions: 2 }; // 07:00-15:00, session 1 07-11, session 2 11-15
 // morning: 2 x m (40) ; rest: l + s (50)

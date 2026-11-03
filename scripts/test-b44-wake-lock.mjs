@@ -13,22 +13,15 @@ t('notes', () => {
   assert.match(wakeLockNote({ native: true, authorized: true, selectionCount: 1, wakeTime: '' }), /wake time/);
   assert.equal(wakeLockNote({ native: true, authorized: true, selectionCount: 1, wakeTime: '07:00' }), null);
 });
-t('plan schedules wake time + day length', () => assert.deepEqual(wakeLockPlan({ ...R, wakeMs: W }), { action: 'schedule', hour: 7, minute: 0, minutes: 480, note: null }));
-t('plan cancels when off / lock-in off / missing auth', () => {
-  assert.equal(wakeLockPlan({ ...R, enabled: false }).action, 'cancel'); assert.equal(wakeLockPlan({ ...R, lockInEnabled: false }).action, 'cancel');
-  const x = wakeLockPlan({ ...R, authorized: false }); assert.equal(x.action, 'cancel'); assert.match(x.note, /Screen Time/);
+// Start anytime: the wake-up auto-lock is removed. The plan always cancels (so an update clears a lock an older
+// version scheduled on iOS) and Home never creates a session from the wake time.
+t('plan always cancels (wake-up lock removed)', () => {
+  assert.deepEqual(wakeLockPlan({ ...R, wakeMs: W }), { action: 'cancel', note: null });
+  assert.equal(wakeLockPlan({ ...R, enabled: false }).action, 'cancel');
 });
-t('no overlap with evening blocks', () => {
-  assert.equal(wakeLockPlan({ ...R, wakeMs: W, blocks: [{ startMs: W + 5 * H, endMs: W + 7 * H }] }).minutes, 300);
-  assert.equal(wakeLockPlan({ ...R, wakeMs: W, blocks: [{ startMs: W + 9 * H, endMs: W + 10 * H }] }).minutes, 480);
-  assert.equal(wakeLockPlan({ ...R, wakeMs: W, blocks: [{ startMs: W + 10 * 60000, endMs: W + H }] }).action, 'cancel');
-});
-t('reconcile only inside today\'s window', () => {
+t('never reconciles a session from the wake time', () => {
   const b = { enabled: true, lockInToday: true, phase: 'ready', hasLock: false, wakeMs: W, hours: 8 };
-  assert.equal(shouldReconcileWake({ ...b, nowMs: W + 40 * 60000 }), true);
-  assert.equal(shouldReconcileWake({ ...b, nowMs: W - 1 }), false); assert.equal(shouldReconcileWake({ ...b, nowMs: W + 8 * H }), false);
-  assert.equal(shouldReconcileWake({ ...b, lockInToday: false, nowMs: W + 1 }), false); assert.equal(shouldReconcileWake({ ...b, hasLock: true, nowMs: W + 1 }), false);
-  assert.equal(shouldReconcileWake({ ...b, enabled: false, nowMs: W + 1 }), false);
+  assert.equal(shouldReconcileWake({ ...b, nowMs: W + 40 * 60000 }), false);
 });
 const src = (p) => fs.readFileSync(new URL('../' + p, import.meta.url), 'utf8');
 t('swift: shared WakeLock + plugin + monitor', () => {
@@ -37,10 +30,6 @@ t('swift: shared WakeLock + plugin + monitor', () => {
   for (const m of ['scheduleWakeLock', 'cancelWakeLock', 'setWakeSkip', 'wakeLockStatus']) assert.match(pl, new RegExp(`CAPPluginMethod\\(name: "${m}"`));
   assert.match(pl, /repeats: true/); assert.match(mo, /startWakeLock/); assert.match(mo, /Your lock-in started/);
 });
-t('server: autoWake needs opt-in and starts at wake time', () => { const s = src('netlify/functions/eight-hour-day.js'); assert.match(s, /wakeAutoLock !== true/); assert.match(s, /autoWake \? ph\.wakeMs : ctx\.now/); });
-t('wiring: settings row, Home schedule/reconcile/skip', () => {
-  const pf = src('src/views/Profile.vue'), hv = src('src/views/HomeView.vue');
-  assert.match(pf, /data-test="wake-lock-toggle"/); assert.match(pf, /setWakeAutoLock/);
-  assert.match(hv, /scheduleWakeLock/); assert.match(hv, /autoWake: true/); assert.match(hv, /setWakeSkip\(localDateStr\(\)\)/);
-});
+t('server: autoWake is ignored, starts are always now', () => { const s = src('netlify/functions/eight-hour-day.js'); assert.doesNotMatch(s, /autoWake \? ph\.wakeMs/); });
+t('wiring: settings row hidden', () => { const pf = src('src/views/Profile.vue'); assert.match(pf, /v-if="false" class="pf-row pf-row--divided" data-test="wake-lock-row"/); });
 console.log(`wake-lock: ${n} ok`);

@@ -13,11 +13,10 @@
     <div class="ehs-card">
       <div class="ehs-icon" aria-hidden="true">🌙</div>
       <h2 id="ehs-t">Your {{ hoursText }} hours are up.</h2>
-      <p v-if="nextOk">Session 1 is done. Start your {{ s2Name }} now, or come back tomorrow at <b data-test="eh-shut-until">{{ shut.untilLabel }}</b>.</p>
-      <p v-else>ClingNote is shut for today. Come back tomorrow at <b data-test="eh-shut-until">{{ shut.untilLabel }}</b>.</p>
+      <p>Session done. Start a new session whenever you're ready.</p>
       <p class="ehs-res" :class="shut.met ? 'ok' : 'miss'" data-test="eh-shut-result">{{ shut.missed ? `Missed ${shut.target} pts: apps open at ${shut.opensAtLabel}` : `${shut.met ? 'Goal met' : 'Goal missed'} · ${shut.earned}/${shut.target} pts` }}</p>
       <p v-if="recap" class="ehs-recap" data-test="eh-shut-recap">{{ recap }}</p>
-      <button v-if="nextOk" type="button" class="ehs-row" data-test="eh-next-session" :disabled="eh.st.busy" @click="doNextSession">Start {{ s2Name }} <span aria-hidden="true">›</span></button>
+      <button v-if="nextOk" type="button" class="ehs-row" data-test="eh-next-session" :disabled="eh.st.busy" @click="doNextSession">Start new session <span aria-hidden="true">›</span></button>
       <!-- Evening mode: one compact row; tapping it reveals time + hours inline. A scheduled block can't be cancelled or shortened. -->
       <button v-if="schedOk && !sch.open" type="button" class="ehs-row" data-test="eh-sched-open" @click="openSched">Schedule next lock-in <span aria-hidden="true">›</span></button>
       <form v-else-if="schedOk" class="ehs-sched" data-test="eh-sched" @submit.prevent="doSchedule">
@@ -26,7 +25,7 @@
         <button type="submit" :disabled="eh.st.busy" data-test="eh-sched-go">Schedule</button>
         <small>Opens your tasks until it starts. Can't be cancelled or shortened.</small>
       </form>
-      <button v-if="planState.open" type="button" class="ehs-row" data-test="eh-plan-open" @click="openPlanning">Plan tomorrow <span aria-hidden="true">›</span></button>
+      <button v-if="planState.open" type="button" class="ehs-row" data-test="eh-plan-open" @click="openPlanning">Plan next session <span aria-hidden="true">›</span></button>
       <p v-if="sch.err" class="ehs-err" role="alert" data-test="eh-sched-err">{{ sch.err }}</p>
       <nav class="ehs-links">
         <router-link :to="profileLink">Settings</router-link><router-link to="/support">Support</router-link><router-link to="/privacy-policy">Privacy</router-link><router-link to="/sub">Premium</router-link>
@@ -45,7 +44,7 @@ import { computed, ref, reactive, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { auth } from '@/firebaseConfig';
-import { useEightHour } from '@/composables/useEightHour';
+import { useEightHour, shutLock } from '@/composables/useEightHour';
 import { paceOf, pendingCelebration } from '@/utils/pressure';
 import { localYMD } from '@/utils/localDate';
 import { recapText, breaksOn } from '@/utils/gamePlan';
@@ -56,7 +55,7 @@ import { scheduleLocal } from '@/utils/localNotify';
 import { homeDayFor } from '@/utils/homeDay';
 import { lockIn } from '@/utils/lockIn';
 import { getTodayId } from '@/utils/dateTime';
-import { planWindowState, shouldAutoOpen, planWin, readSeen as readPlanSeen, markSeen as markPlanSeen } from '@/utils/planWindow';
+import { planWindowState, planWin } from '@/utils/planWindow';
 
 const route = useRoute(); const router = useRouter();
 const eh = useEightHour();
@@ -87,29 +86,18 @@ const pill = computed(() => {
     pace: l && eh.running.value ? paceOf({ earned: l.earned || 0, target: l.target || 0, startMs: l.startMs, endMs: l.endMs, nowMs: eh.nowMs() }) : null });
 });
 const shut = computed(() => eh.shutdown.value);
-// Tomorrow's planning window (see utils/planWindow.js): opens by itself once per evening at the plan time (default 8 PM), hard close at midnight.
-const planState = computed(() => planWindowState({ nowMs: (shut.value, eh.nowMs()), shut: !!shut.value, planTime: lockIn.value.planTime, tz: eh.lock.value?.tz || eh.plan.value?.tz }));
+// Planning the next session (see utils/planWindow.js): open the whole time ClingNote is shut, only when the user taps "Plan next session"
+// (no auto-open at a clock time, no planning notification). Keyed by the ended session so a new session closes it.
+const shutKey = computed(() => { const l = eh.lock.value || (shut.value && shutLock()); return l ? `${l.dayKey}#${l.index || 0}` : ''; });
+const planState = computed(() => planWindowState({ nowMs: (shut.value, eh.nowMs()), shut: !!shut.value, tz: eh.lock.value?.tz || eh.plan.value?.tz, key: shutKey.value }));
 const planningNow = computed(() => !!(planWin.active && planState.value.open && planWin.eveningKey === planState.value.eveningKey));
-const openPlanning = () => { planWin.eveningKey = planState.value.eveningKey; planWin.active = true; markPlanSeen(planState.value.eveningKey); if (route.name !== 'home') router.push({ name: 'home' }).catch(() => {}); };
+const openPlanning = () => { planWin.eveningKey = planState.value.eveningKey; planWin.active = true; if (route.name !== 'home') router.push({ name: 'home' }).catch(() => {}); };
 const closePlanning = () => { planWin.active = false; };
-// Planning opens at its normal time even during the 2 h missed lock or while session 2 could still start: it happens inside ClingNote and unlocks no apps.
-watch(() => [uid.value, planState.value.open, planState.value.eveningKey], () => {
-  const s = planState.value;
-  if (!s.open) { if (planWin.active) planWin.active = false; return; } // midnight (or wake): hard close
-  if (uid.value && shouldAutoOpen({ open: s.open, eveningKey: s.eveningKey, seenKey: readPlanSeen() })) openPlanning();
-}, { immediate: true });
+watch(() => planState.value.open, (open) => { if (!open && planWin.active) planWin.active = false; }, { immediate: true }); // a new session started
 const onPill = () => { if (planningNow.value) closePlanning(); else goCard(); };
 const shutVisible = computed(() => !!(uid.value && shut.value && !planningNow.value && SHUT_ROUTES.includes(route.name)));
-// Optional local notification at the plan time (native iOS; no-op on web), once per shut evening.
-watch(() => shut.value && eh.lock.value && `${eh.lock.value.dayKey}|${lockIn.value.planTime}`, (k) => {
-  if (!k || !lockIn.value.enabled) return; const [hh, mm] = String(lockIn.value.planTime || '20:00').split(':').map(Number);
-  const d = new Date(eh.nowMs()); d.setHours(hh, mm, 0, 0); if (d.getTime() <= eh.nowMs()) return;
-  scheduleLocal(`planwin:${eh.lock.value.dayKey}`, { title: 'Plan tomorrow', body: 'Your planning window is open until midnight.', at: d, route: '/home', type: 'planwin' }).catch(() => {});
-}, { immediate: true });
 // ── evening mode: schedule the next lock-in from the hard stop ──
-// Focus sessions (1 or 2, game plan): with 2, session 2 starts from here once session 1 has ended (server decides: session.canStart).
-// Session 2 name by the time of day: 'afternoon session' before 5 PM, 'evening session' after (it then runs until the next day start).
-const s2Name = computed(() => { const h = new Date(eh.nowMs ? eh.nowMs() : Date.now()).getHours(); return h >= 17 || h < 4 ? 'evening session' : 'afternoon session'; });
+// "Start new session": always offered once a session has ended (server decides: session.canStart; false only while one runs or is scheduled).
 const nextOk = computed(() => !!(eh.session.value && eh.session.value.canStart && !eh.st.data?.offline));
 const doNextSession = async () => { sch.err = ''; try { await eh.startNextSession(); } catch (e) { sch.err = e.message || 'Could not start the session'; } };
 // Day recap line: sessions done of chosen, breaks taken today (from the local break log; Home keeps it in sync with the account).

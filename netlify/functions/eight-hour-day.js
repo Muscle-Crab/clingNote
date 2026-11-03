@@ -110,14 +110,14 @@ const settleIfOver = async (ctx, doc, now) => {
 
 const loadDoc = async (ctx) => { const s = await ctx.db.doc(`eightHour/${ctx.uid}`).get(); return s.exists ? s.data() : {}; };
 // hours: the frozen lock hours, else the user's default day length (doc.dayLengthHours is attached by loadUserDefaults; missing = core default).
-const phaseOf = (doc, now) => core.evaluatePhase({ wakeTime: doc.plan?.wakeTime, tz: doc.plan?.tz, nowMs: now, hours: doc.lock?.hours ?? doc.dayLengthHours,
+const phaseOf = (doc, now) => core.evaluatePhase({ tz: doc.plan?.tz, nowMs: now, hours: doc.lock?.hours ?? doc.dayLengthHours,
   lock: doc.lock ? { startMs: doc.lock.startMs, endMs: doc.lock.endMs, dayKey: doc.lock.dayKey, index: doc.lock.index, pending: doc.lock.pending } : null });
 const userDoc = async (ctx) => { const u = await ctx.db.doc(`users/${ctx.uid}`).get(); return u.exists ? u.data() : {}; };
 const view = (doc, now) => {
   const ph = phaseOf(doc, now);
   return { now, phase: ph.phase, window: ph.phase === 'none' ? null : { startMs: ph.startMs || null, endMs: ph.endMs || null, wakeMs: ph.wakeMs || null, dayKey: ph.dayKey || null, missed: !!ph.missed, nextStartMs: ph.nextStartMs || null, nextEndMs: ph.nextEndMs || null },
     plan: doc.plan ? { wakeTime: doc.plan.wakeTime, tz: doc.plan.tz, taskCount: doc.plan.taskCount } : null,
-    lock: ph.phase === 'running' || ph.phase === 'gap' || (doc.lock && (doc.lock.dayKey === ph.dayKey || core.isShut(doc.lock, now))) ? publicLock(doc.lock) : null, // kept while the hard stop runs (until the next wake time)
+    lock: ph.phase === 'running' || ph.phase === 'gap' || (doc.lock && (doc.lock.dayKey === ph.dayKey || core.isShut(doc.lock, now))) ? publicLock(doc.lock) : null, // kept while the shutdown screen shows (until a new session starts)
     stats: { ...core.defaultStats(), ...(doc.stats || {}) }, reward: core.rewardFor((doc.stats || {}).streak || 0),
     ...(doc._session ? { session: doc._session } : {}) };
 };
@@ -203,7 +203,7 @@ const autoStart = async (ctx, doc) => {
     const lastEnd = Math.max(...stale.map((b) => b.endMs));
     const nextLock = { ...lock, pending: rest };
     for (const b of stale) await ctx.db.doc(`eightHour/${ctx.uid}/history/${core.sessionKey(b.dayKey, b.index)}`).set({ dayKey: b.dayKey, index: b.index, startMs: b.startMs, endMs: b.endMs, missedStart: true, settledMs: ctx.now });
-    const w = lockWrite(ctx, nextLock); if (!rest.length) w.shutUntil = ctx.ts(core.shutUntilMs({ ...lock, endMs: lastEnd }));
+    const w = lockWrite(ctx, nextLock); if (!rest.length) w.shutUntil = ctx.ts(lastEnd);
     await ctx.db.doc(`eightHour/${ctx.uid}`).set({ lock: w }, { merge: true });
     return { ...doc, lock: nextLock };
   }
@@ -222,21 +222,13 @@ const actions = {
     return view(withSession(doc, await userDoc(ctx), ctx.now), ctx.now);
   },
 
-  // Afternoon focus session: start block 1 NOW from the shutdown (sessions === 2 only, once, before the hard close).
-  // body.hours: its length (clamped like a block); it may run past the hard close but ends at the next day start at the latest. Server clock + server-side checks only.
+  // "Start new session" from the shutdown screen: same as start (begins NOW, any time of day). body.hours uses the block range (1..12 h).
+  // Kept as its own action for older clients; there is no session cap and no clock window any more.
   async nextSession(ctx, body = {}) {
-    let doc = await loadDoc(ctx);
-    doc = await settleIfOver(ctx, doc, ctx.now);
-    doc = await autoStart(ctx, doc);
-    const ud = await userDoc(ctx);
-    if (ud.lockInEnabled !== true) throw fail(403, 'Lock-in is off. Turn it on in Settings to use the countdown lock.', { code: 'lock-in-off' });
-    const g = ud.gamePlan || {}; const lock = doc.lock;
-    const r = core.nextSessionState({ lock, sessions: g.sessions, gamePlan: g, nowMs: ctx.now, wakeTime: doc.plan && doc.plan.wakeTime });
-    if (!r.ok) throw fail(409, r.reason === 'done' ? 'All of today\'s focus sessions are done.' : r.reason === 'closed' ? 'Your next day starts soon: no more sessions today.' : r.reason === 'running' ? 'Your session is still running.' : 'No session to start.', { code: r.reason });
-    const hours = core.clampBlockHours(body.hours == null ? lock.hours : body.hours) || 1;
-    const startMs = ctx.now; const endMs = Math.min(startMs + hours * 3600000, r.untilMs); // may run past the hard close; ends at the latest at the next day start
-    const out = await beginBlock(ctx, doc, { hours: Math.round(((endMs - startMs) / 3600000) * 100) / 100, startMs, endMs, dayKey: lock.dayKey, index: 1, pending: [], strict: false, scheduled: false, apiKey: null });
-    return { ...out, session: { canStart: false, reason: 'running', of: 2, done: 1, closeMs: r.closeMs, untilMs: r.untilMs } };
+    const doc = await settleIfOver(ctx, await loadDoc(ctx), ctx.now);
+    const st = core.nextSessionState({ lock: doc.lock, nowMs: ctx.now });
+    if (st.reason === 'running') throw fail(409, 'A session is already running.', { code: 'running' });
+    return actions.start(ctx, { ...body, blockHours: true });
   },
 
   // Set/update wake time + planned task count. Refused while the window runs; the wake time is also frozen once it has passed today (the countdown is about to begin).
@@ -244,17 +236,18 @@ const actions = {
     let doc = await loadDoc(ctx);
     doc = await settleIfOver(ctx, doc, ctx.now);
     doc = await autoStart(ctx, doc);
-    const wake = core.parseWake(body.wakeTime);
-    if (!wake) throw fail(400, 'Pick a valid wake time (HH:MM)');
+    // The wake time is optional and no longer gates anything (sessions start when the user starts them); kept only as a stored preference.
+    const hasWake = body.wakeTime != null && body.wakeTime !== '';
+    const wake = hasWake ? core.parseWake(body.wakeTime) : null;
+    if (hasWake && !wake) throw fail(400, 'Pick a valid time (HH:MM)');
     const tz = body.tz || doc.plan?.tz;
     if (!core.validTz(tz)) throw fail(400, 'Unknown time zone');
     const count = Math.round(Number(body.taskCount));
     if (!(count >= 1 && count <= core.MAX_TASKS_PER_DAY)) throw fail(400, `Plan between 1 and ${core.MAX_TASKS_PER_DAY} tasks`);
     const ph = phaseOf(doc, ctx.now);
-    const wakeTime = core.fmtWake(wake);
+    const wakeTime = wake ? core.fmtWake(wake) : (doc.plan && doc.plan.wakeTime) || '';
     if (ph.phase === 'running') throw fail(423, `Locked: your ${core.hoursLabel(doc.lock && doc.lock.hours)}-hour day is running.`+' Plan changes open after it ends.', { code: 'locked' });
-    if (ph.phase === 'ready' && doc.plan && (doc.plan.wakeTime !== wakeTime)) throw fail(423, 'Locked: the countdown is about to begin, so the wake time can no longer change today.', { code: 'locked' });
-    const plan = { wakeTime, tz: ph.phase === 'ready' && doc.plan ? doc.plan.tz : tz, taskCount: count, updatedMs: ctx.now };
+    const plan = { wakeTime, tz, taskCount: count, updatedMs: ctx.now };
     await ctx.db.doc(`eightHour/${ctx.uid}`).set({ plan }, { merge: true });
     return view({ ...doc, plan }, ctx.now);
   },
@@ -269,25 +262,25 @@ const actions = {
     const ph = phaseOf(doc, ctx.now);
     if (ph.phase === 'running') return view(doc, ctx.now); // already started (second device / retry)
     if (ph.phase === 'gap') throw fail(409, 'Your next lock-in is already scheduled.', { code: 'gap' });
-    if (ph.phase !== 'ready') throw fail(409, ph.phase === 'before' ? 'Your wake time has not arrived yet.' : ph.phase === 'ended' ? 'Today\'s day is already over.' : 'Pick a wake time first.', { code: ph.phase });
+    if (ph.phase !== 'ready') throw fail(409, 'Set up your plan first.', { code: ph.phase });
+    if (ph.scheduled) return view(await autoStart(ctx, doc), ctx.now); // a scheduled block is due: it starts at its fixed time
     // lock-in is opt-in (users/{uid}.lockInEnabled === true) and can be skipped for one date (lockInSkipDate === dayKey)
     if (ud.lockInEnabled !== true) throw fail(403, 'Lock-in is off. Turn it on in Settings to use the countdown lock.', { code: 'lock-in-off' });
     if (ud.lockInSkipDate && ud.lockInSkipDate === ph.dayKey) throw fail(403, 'Lock-in is skipped for today.', { code: 'lock-in-skipped' });
-    const hours = core.clampHours(body.hours);
-    // B44 wake-up auto-lock: iOS already locked the apps at the wake time (no Confirm), so the window starts THEN, not now. Only with the
-    // opt-in (users/{uid}.wakeAutoLock), only back to today's wake instant, and only while that window is still open.
-    const autoWake = body.autoWake === true;
-    if (autoWake && ud.wakeAutoLock !== true) throw fail(403, 'Lock at wake-up is off.', { code: 'wake-off' });
-    const startMs = autoWake ? ph.wakeMs : ctx.now, endMs = startMs + core.hoursMs(hours); // confirm-time start: end = confirm + hours
-    if (autoWake && !(startMs <= ctx.now && endMs > ctx.now)) throw fail(409, 'Today\'s wake-up lock is already over.', { code: 'ended' });
+    // The session starts NOW (server clock), whatever the time of day. The first session of a calendar day (index 0) snapshots the day's
+    // tasks with the task-range check; a later one the same day (index 1, 2, ...) locks the still-open tasks. body.autoWake is ignored
+    // (the B44 wake-time auto-lock was removed: no session starts on a clock time).
+    const hours = body.blockHours ? (core.clampBlockHours(body.hours == null ? (doc.lock && doc.lock.hours) : body.hours) || 1) : core.clampHours(body.hours);
+    const index = ph.index || 0;
+    const startMs = ctx.now, endMs = startMs + hours * 3600000;
     let pending = [];
     if (Array.isArray(body.blocks) && body.blocks.length) { // split day: later blocks today, fixed now (before they start)
-      const r = core.planBlocks({ requests: body.blocks, tz: doc.plan.tz, nowMs: ctx.now, notBefore: endMs, existing: [{ startMs, endMs, dayKey: ph.dayKey, index: 0 }] });
+      const r = core.planBlocks({ requests: body.blocks, tz: doc.plan.tz, nowMs: ctx.now, notBefore: endMs, existing: [{ startMs, endMs, dayKey: ph.dayKey, index }] });
       if (!r.ok) throw fail(400, r.error, { code: 'bad-blocks' });
       if (r.blocks.some((x) => x.dayKey !== ph.dayKey)) throw fail(400, 'Split blocks must be later today. Use Schedule for tomorrow.', { code: 'bad-blocks' });
       pending = r.blocks;
     }
-    return beginBlock(ctx, doc, { hours, startMs, endMs, dayKey: ph.dayKey, index: 0, pending, strict: !autoWake, apiKey: ctx.apiKey });
+    return beginBlock(ctx, doc, { hours, startMs, endMs, dayKey: ph.dayKey, index, pending, strict: index === 0, apiKey: index === 0 ? ctx.apiKey : null });
   },
 
   // Evening mode, option 1: schedule the next lock-in(s). body.blocks: [{ time: 'HH:MM' (plan time zone), hours }]. Blocks are appended to
@@ -306,12 +299,6 @@ const actions = {
     Object.entries(doc.sessions || {}).forEach(([, x]) => { if (x && x.dayKey) existing.push({ startMs: x.startMs, endMs: x.endMs, dayKey: x.dayKey, index: x.index || 0 }); });
     const r = core.planBlocks({ requests: body.blocks, tz: doc.plan.tz, nowMs: ctx.now, existing, notBefore: lock ? Math.max(ctx.now, lock.endMs > ctx.now ? lock.endMs : 0) : 0 });
     if (!r.ok) throw fail(400, r.error, { code: 'bad-blocks' });
-    // Anti-cheat: from the hard stop, the next block must begin BEFORE the stop would have lifted anyway (the next wake time);
-    // otherwise "schedule something tomorrow afternoon" would simply unlock the app all night.
-    if (lock && core.isShut(lock, ctx.now)) {
-      const lastEnd = Math.max(lock.endMs, ...core.pendingOf(lock).map((b) => b.endMs)); const until = core.shutUntilMs({ ...lock, endMs: lastEnd });
-      if (r.blocks.some((b) => b.startMs >= until)) throw fail(400, `While shut, the next lock-in has to start before ${core.fmtClock(until, doc.plan.tz)}.`, { code: 'bad-blocks' });
-    }
     const ref = ctx.db.doc(`eightHour/${ctx.uid}`);
     let out = null;
     await ctx.db.runTransaction(async (tx) => {

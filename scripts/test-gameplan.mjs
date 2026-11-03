@@ -6,9 +6,11 @@ fs.writeFileSync(path.join(dir, 'vue.mjs'), 'export const ref = (value) => ({ va
 fs.writeFileSync(path.join(dir, 'gp.mjs'), src('src/utils/gamePlan.js').replace("from 'vue'", "from './vue.mjs'"));
 fs.writeFileSync(path.join(dir, 'sessionGoal.js'), src('src/utils/sessionGoal.js')); fs.writeFileSync(path.join(dir, 'aiEstimate.js'), src('src/utils/aiEstimate.js')); fs.writeFileSync(path.join(dir, 'taskSections.js'), src('src/utils/taskSections.js'));
 const G = await import(path.join(dir, 'gp.mjs'));
-let n = 0; const t = (name, fn) => { try { fn(); n++; console.log('ok ', name); } catch (e) { console.error('FAIL', name); throw e; } };
+let n = 0; const t = (name, fn) => { try { G.setSessionWindow({ startMs: new Date(2026, 10, 2, 9).getTime(), endMs: new Date(2026, 10, 2, 17).getTime() }); /* default: a session started Mon Nov 2, 9 AM */ fn(); n++; console.log('ok ', name); } catch (e) { console.error('FAIL', name); throw e; } };
 const at = (d, h, m = 0) => new Date(2026, 10, d, h, m).getTime(); // Nov 2026, box-local
 const MIN = 60000;
+// start anytime: the game-plan day is the session the user started (no fixed day start). S(d,h,hrs) = a session started then.
+const S = (d, h, hrs = 8, m = 0) => G.setSessionWindow({ startMs: at(d, h, m), endMs: at(d, h, m) + hrs * 3600000 });
 
 t('1 defaults + onboarding wake time as day start', () => {
   const g = G.normPlan({}); assert.strictEqual(g.dayStart, '09:00'); assert.strictEqual(g.reviewDow, 0); assert.strictEqual(g.reviewTime, '18:00'); assert.strictEqual(g.minGoal, 50);
@@ -23,7 +25,7 @@ t('1 edits are queued, applied only at the weekly review', () => {
   let g = G.normPlan({ dayStart: '09:00', lastReview: G.reviewKey(G.normPlan({}), at(2, 12)) }); // Mon Nov 2: reviewed Sun Nov 1
   g = G.queueEdit(g, { dayStart: '06:00', friend: { name: 'x' } }, at(3, 10));
   assert.strictEqual(g.dayStart, '09:00'); assert.strictEqual(g.pending.dayStart, '06:00'); assert(!('friend' in g.pending));
-  assert.strictEqual(G.dayWindow(g, at(4, 12)).startMs, at(4, 9)); // still the old schedule mid-week
+  S(4, 9); assert.strictEqual(G.dayWindow(g, at(4, 12)).startMs, at(4, 9)); // the started session sets the day, not the queued dayStart
   assert(!G.reviewDue(g, at(7, 12))); assert(G.reviewDue(g, at(8, 18, 1))); // Sun Nov 8 18:00
   const s = G.weekSummary({}, g, at(8, 18, 1)); assert.strictEqual(s.proposals[0].id, 'queued');
   const g2 = G.applyReview(g, at(8, 18, 1)); assert.strictEqual(g2.dayStart, '06:00'); assert.strictEqual(g2.pending, null); assert(!G.reviewDue(g2, at(9, 9)));
@@ -36,8 +38,8 @@ t('1 weekly review shows results and proposes raise / lower', () => {
   const s2 = G.weekSummary(low, g, at(8, 19)); assert(s2.proposals.find((p) => p.id === 'lower' && p.patch.minGoal === 40)); assert.strictEqual(s2.penalties, 25);
 });
 t('2+3 focus 50 / break 10 / focus 50 / break 10 from the day start', () => {
-  const g = G.normPlan({ dayStart: '09:00' });
-  assert.strictEqual(G.phaseAt(g, at(2, 8, 30)).phase, 'before');
+  const g = G.normPlan({ dayStart: '09:00' }); S(2, 9);
+  assert.strictEqual(G.phaseAt(g, at(2, 8, 30)).phase, 'closed'); // no session yet: no 'before' countdown
   const f1 = G.phaseAt(g, at(2, 9, 10)); assert.strictEqual(f1.phase, 'focus'); assert.strictEqual(f1.n, 1); assert.strictEqual(f1.leftMin, 40);
   assert.strictEqual(G.phaseAt(g, at(2, 9, 55)).phase, 'work'); // no automatic break
   assert.strictEqual(G.phaseAt(g, at(2, 10, 5)).phase, 'work'); assert.strictEqual(G.phaseAt(g, at(2, 12, 0)).phase, 'work'); // no midday slot
@@ -75,11 +77,11 @@ t('3 breaks never cost points (earned only from completed tasks)', () => {
   const e = G.earnedPoints([{ title: 'a', size: 'm', completed: true, completedAt: at(2, 9, 55) }], { closeMs: at(2, 17) }); assert.strictEqual(e.points, 20);
 });
 t('4+8 hard close 8 h after the day start, nothing earned after it, shift crossing midnight', () => {
-  const g = G.normPlan({ dayStart: '09:00' }); const w = G.dayWindow(g, at(2, 12)); assert.strictEqual(w.closeMs, at(2, 17));
+  const g = G.normPlan({ dayStart: '09:00' }); S(2, 9); const w = G.dayWindow(g, at(2, 12)); assert.strictEqual(w.closeMs, at(2, 17));
   assert.strictEqual(G.phaseAt(g, at(2, 17)).phase, 'closed');
   const tasks = [{ size: 's', completed: true, completedAt: at(2, 16, 59) }, { size: 'l', completed: true, completedAt: at(2, 17, 0) }];
   const e = G.earnedPoints(tasks, { closeMs: w.closeMs }); assert.strictEqual(e.points, 10); assert.strictEqual(e.afterClose, 40);
-  const n = G.normPlan({ dayStart: '20:00' }); const w2 = G.dayWindow(n, at(3, 2)); assert.strictEqual(w2.startMs, at(2, 20)); assert.strictEqual(w2.closeMs, at(3, 4)); assert.strictEqual(w2.dayKey, '2026-11-02');
+  const n = G.normPlan({ dayStart: '20:00' }); S(2, 20); const w2 = G.dayWindow(n, at(3, 2)); assert.strictEqual(w2.startMs, at(2, 20)); assert.strictEqual(w2.closeMs, at(3, 4)); assert.strictEqual(w2.dayKey, '2026-11-02');
   assert.strictEqual(G.phaseAt(n, at(3, 5)).phase, 'closed'); assert.strictEqual(G.phaseAt(n, at(2, 20, 30)).phase, 'focus');
   assert.strictEqual(G.addHours('20:00', 8), '04:00');
 });

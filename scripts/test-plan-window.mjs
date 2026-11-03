@@ -1,4 +1,4 @@
-// Completing during shutdown + tomorrow's planning window (default 8 PM, hard close at midnight): pure policy tests
+// Completing and planning during shutdown (between sessions; no clock window): pure policy tests
 import assert from 'assert'; import fs from 'fs'; import os from 'os'; import path from 'path'; import { fileURLToPath } from 'url';
 const here = path.dirname(fileURLToPath(import.meta.url)); const root = path.join(here, '..'); const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'planwin-'));
 const src = (f) => fs.readFileSync(path.join(root, f), 'utf8');
@@ -20,18 +20,12 @@ const at = (d, h, m) => { now = ny(d, h, m); };
 const st = (d, h, m, planTime) => P.planWindowState({ nowMs: ny(d, h, m), shut: true, planTime, tz: TZ });
 
 t('default plan time is 8:00 PM', () => { assert.equal(P.PLAN_OPEN_DEFAULT, '20:00'); assert.equal(P.planTimeOrDefault('bad'), '20:00'); assert.equal(P.planTimeOrDefault('18:30'), '18:30'); });
-t('boundary 7:59 PM closed', () => assert.equal(st(30, 19, 59).open, false));
-t('boundary 8:00 PM open, tomorrow = Sat', () => { const s = st(30, 20, 0); assert.equal(s.open, true); assert.equal(s.tomorrowDay, 'Sat'); assert.equal(s.eveningKey, '2026-10-30'); });
-t('boundary 11:59 PM open', () => assert.equal(st(30, 23, 59).open, true));
-t('boundary 12:00 AM hard close', () => assert.equal(st(31, 0, 0).open, false));
-t('custom open time 18:30', () => { assert.equal(st(30, 18, 29, '18:30').open, false); assert.equal(st(30, 18, 30, '18:30').open, true); assert.equal(st(31, 0, 0, '18:30').open, false); });
+// Start anytime: no 8 PM window and no midnight close. While shut (a session ended, no new one yet) planning is open.
+t('no clock window: open any time while shut', () => { for (const [d, h, m] of [[30, 15, 1], [30, 19, 59], [30, 20, 0], [31, 0, 0], [31, 6, 59]]) assert.equal(st(d, h, m).open, true); });
+t('plan time is ignored', () => { assert.equal(st(30, 16, 0, '18:30').open, true); });
 t('not shut -> never "open"', () => assert.equal(P.planWindowState({ nowMs: ny(30, 21, 0), shut: false, tz: TZ }).open, false));
-t('auto-opens at most once per evening', () => {
-  assert.equal(P.shouldAutoOpen({ open: true, eveningKey: '2026-10-30', seenKey: '' }), true);
-  assert.equal(P.shouldAutoOpen({ open: true, eveningKey: '2026-10-30', seenKey: '2026-10-30' }), false);
-  assert.equal(P.shouldAutoOpen({ open: true, eveningKey: '2026-10-31', seenKey: '2026-10-30' }), true);
-  assert.equal(P.shouldAutoOpen({ open: false, eveningKey: '2026-10-30', seenKey: '' }), false);
-});
+t('planning targets the current day (the next session), keyed per session', () => { const s = P.planWindowState({ nowMs: ny(30, 16, 0), shut: true, tz: TZ, key: 'k1' }); assert.equal(s.tomorrowDay, 'Fri'); assert.equal(s.eveningKey, 'k1'); });
+t('planning never auto-opens', () => { const ch = src('src/components/eighthour/EightHourChrome.vue'); assert.ok(!ch.includes('shouldAutoOpen') && !ch.includes('planwin:')); });
 
 const tasks = [{ id: 'a', title: 'A', points: 10, completed: false, createdAt: 1 }];
 const done = [{ ...tasks[0], completed: true, completedAt: 5 }];
@@ -44,31 +38,30 @@ t('guards: completion works while shut on any day, any time', () => {
     }
   }
 });
-t('guards: planning blocked before 8 PM', () => { at(30, 19, 59); assert.throws(() => L.assertPatchAllowed('Sat', { title: 'x' }), /up/); assert.throws(() => L.assertDayUnlocked('Sat')); assert.equal(L.canPlanDay('Sat'), false); });
-t('guards: tomorrow plannable 8 PM..11:59 PM, other days not', () => {
-  for (const [h, m] of [[20, 0], [23, 59]]) {
-    at(30, h, m); assert.equal(L.canPlanDay('Sat'), true); L.assertPatchAllowed('Sat', { title: 'x' }); L.assertDayUnlocked('Sat');
-    L.assertTasksChangeAllowed('Sat', tasks, [...tasks, { id: 'b', title: 'B' }], 'add'); L.assertNotShut();
-    assert.throws(() => L.assertPatchAllowed('Fri', { title: 'x' })); assert.throws(() => L.assertTasksChangeAllowed('Mon', tasks, [], 'delete'));
+t('guards: planning allowed on every day while shut, any time', () => {
+  for (const [d, h, m] of [[30, 15, 30], [30, 23, 59], [31, 3, 0]]) {
+    at(d, h, m); assert.equal(L.isShutdown(), true);
+    for (const day of ['Fri', 'Sat', 'Mon']) { assert.equal(L.canPlanDay(day), true); L.assertPatchAllowed(day, { title: 'x' }); L.assertDayUnlocked(day); L.assertTasksChangeAllowed(day, tasks, [...tasks, { id: 'b', title: 'B' }], 'add'); }
+    L.assertNotShut();
   }
 });
-t('guards: midnight closes planning, completion still works', () => { at(31, 0, 0); assert.equal(L.planWindowOpen(), false); assert.throws(() => L.assertPatchAllowed('Sat', { title: 'x' })); assert.throws(() => L.assertNotShut()); L.assertPatchAllowed('Sat', { completed: true }); });
+t('shut message has no "come back tomorrow"', () => { assert.ok(!/tomorrow/i.test(L.SHUT_MESSAGE)); assert.ok(/Start a new session/.test(L.shutMessage())); });
 t('guards: shut day completes in place', () => { at(30, 21, 0); assert.equal(L.shutDayName(), 'Fri'); assert.equal(L.completionKeepsInPlace({ shutLocked: true }), true); assert.equal(L.completionKeepsInPlace({}), false); });
-t('after wake time everything opens again', () => { at(31, 7, 0); assert.equal(L.isShutdown(), false); L.assertPatchAllowed('Fri', { title: 'x' }); });
+t('shut is state-based: still shut the next morning (no wake time), ends when a new session starts', () => { at(31, 7, 0); assert.equal(L.isShutdown(), true); const l2 = { ...lock, startMs: ny(31, 7, 0), endMs: ny(31, 15, 0), dayKey: '2026-10-31', dayName: 'Sat' }; L.setLockSource(() => ({ lock: l2, nowMs: now })); assert.equal(L.isShutdown(), false); L.setLockSource(() => ({ lock, nowMs: now })); });
 t('completionOnlyChange: only completion fields may differ', () => {
   assert.equal(L.completionOnlyChange(tasks, done), true);
   assert.equal(L.completionOnlyChange(tasks, [{ ...tasks[0], points: 50 }]), false);
   assert.equal(L.completionOnlyChange(tasks, []), false);
   assert.equal(L.completionOnlyPatch({ completed: true, timerActive: false }), true); assert.equal(L.completionOnlyPatch({ points: 5 }), false);
 });
-t('pill: planning state', () => { const p = C.pillState({ shut: true, planning: true }); assert.equal(p.main, 'Planning tomorrow'); assert.equal(C.pillState({ shut: true, untilLabel: '7 AM' }).main, 'Shut'); });
+t('pill: planning state', () => { const p = C.pillState({ shut: true, planning: true }); assert.equal(p.main, 'Plan next session'); assert.equal(C.pillState({ shut: true, untilLabel: '7 AM' }).main, 'Shut'); });
 t('rules: shut day frozen except in-place, other days writable', () => {
   const r = src('firestore.rules'); assert.ok(/function dayFrozen\(lk, dayName\)[\s\S]*?shutUntil/.test(r));
   assert.ok((r.match(/!dayFrozen\(eightHourLock\(/g) || []).length >= 3); assert.ok(/lockedDayUnchanged\(\)/.test(r));
 });
 t('wiring: settings row + chrome + home', () => {
-  const pf = src('src/views/Profile.vue'); assert.ok(pf.includes('data-test="plan-time"') && pf.includes('setPlanOpenTime'));
-  const ch = src('src/components/eighthour/EightHourChrome.vue'); assert.ok(ch.includes('eh-plan-open') && ch.includes('shouldAutoOpen') && ch.includes('planwin:'));
+  const pf = src('src/views/Profile.vue'); assert.ok(pf.includes('v-if="false" class="pf-row pf-row--divided" data-test="plan-time-row"'), 'plan time row hidden');
+  const ch = src('src/components/eighthour/EightHourChrome.vue'); assert.ok(ch.includes('eh-plan-open') && ch.includes('Start new session'));
   const hv = src('src/views/HomeView.vue'); assert.ok(hv.includes('canPlanDay') && hv.includes('goTomorrowTab'));
   assert.ok(!/const toggleTaskCompletion[\s\S]{0,400}blockIfShut\(/.test(hv), 'completion must not be blocked by shutdown');
 });

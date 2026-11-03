@@ -55,17 +55,20 @@ export const applyReview = (gp, nowMs = Date.now(), accepted = {}) => {
   return { ...gp, ...p, ...accepted, pending: null, lastReview: reviewKey(gp, nowMs) };
 };
 
-// ---- 8 + 4. shift-relative day window and hard close ----
-// The day containing now: starts at dayStart (local), closes closeHours later (may be after midnight for evening shifts).
-export const BEFORE_HOURS = 3;
+// ---- 8 + 4. session-anchored day window and hard close ----
+// No fixed clock start any more: the window is the eight-hour session the user started (set by Home via setSessionWindow
+// from the server lock). Inside it: { startMs: session start, closeMs: session end }. With no running session the day is
+// 'closed' (no focus/break segments) on today's calendar key; points are not capped (closeMs 0 in phaseAt).
+export const BEFORE_HOURS = 0; // legacy export
+let sessionWin = null;
+export const setSessionWindow = (lock) => { const a = Number(lock && lock.startMs); const b = Number(lock && lock.endMs);
+  sessionWin = a > 0 && b > a ? { startMs: a, endMs: b } : null; };
+export const lastSessionWindow = () => sessionWin;
 export const dayWindow = (gp, nowMs = Date.now()) => {
-  const d = new Date(nowMs); const t = toMin(gp.dayStart);
-  let startMs = new Date(d.getFullYear(), d.getMonth(), d.getDate(), Math.floor(t / 60), t % 60).getTime();
-  const span = (gp.closeHours || 8) * HOUR;
-  // Before today's start we still belong to yesterday's day: inside its shift (crossed midnight) or in its closed
-  // evening (close picker), until BEFORE_HOURS ahead of today's start, which shows "Day starts in ...".
-  if (nowMs < startMs && nowMs < startMs - BEFORE_HOURS * HOUR) startMs -= DAY;
-  return { startMs, closeMs: startMs + span, dayKey: ymd(startMs), dow: new Date(startMs).getDay() };
+  const w = sessionWin;
+  if (w && nowMs >= w.startMs && nowMs < w.endMs) return { startMs: w.startMs, closeMs: w.endMs, dayKey: ymd(w.startMs), dow: new Date(w.startMs).getDay() };
+  const d = new Date(nowMs); const startMs = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  return { startMs, closeMs: startMs, dayKey: ymd(startMs), dow: d.getDay(), open: false };
 };
 
 // ---- 2 + 3. focus block: focus 50 · (10 min slot) · focus 50 from the day start. Breaks are NOT automatic: ----
@@ -143,15 +146,14 @@ export const relockPlan = (b, nowMs = Date.now()) => {
   const p = b.prior; return p && p.locked && Number(p.until) > nowMs ? { untilMs: Number(p.until), label: p.label || '' } : { untilMs: 0, label: '' };
 };
 export const fmtLeft = (ms) => { const s = Math.max(0, Math.ceil(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
-// -> { phase: 'before'|'focus'|'break'|'work'|'late'|'closed', n, endsMs, leftMin }   (break only while a user-started break runs)
+// -> { phase: 'focus'|'break'|'work'|'late'|'closed', n, endsMs, leftMin }   (break only while a user-started break runs)
 // late = { startMs, endMs } of a running evening (second) session: it may run past the hard close until the next day start (wake).
 // While it runs the day stays open (phase 'late'; points still count up to its end) and the next day only begins once it is over.
 // The eight-hour day the user actually started (server lock { startMs, endMs, index }) runs as a late window when it is a
 // second session (index >= 1) or when it started at/after the plan's hard close (a single session started late), so its
 // completions are not "after close".
-export const lateWindow = (gp, lock) => { if (!lock || lock.settled || !(Number(lock.endMs) > Number(lock.startMs))) return null;
-  const startMs = Number(lock.startMs); const endMs = Number(lock.endMs);
-  return (lock.index || 0) >= 1 || startMs >= dayWindow(gp, startMs).closeMs ? { startMs, endMs } : null; };
+// Legacy: sessions are anchored by setSessionWindow now, so there is no separate "late" window.
+export const lateWindow = () => null;
 // Points close: the plan's hard close, extended to the end of a running eight-hour day the user started (never earlier).
 export const pointsCloseMs = (closeMs, lock) => { const e = lock && !lock.settled ? Number(lock.endMs) || 0 : 0; return closeMs ? Math.max(closeMs, e) : closeMs; };
 export const phaseAt = (gp, nowMs = Date.now(), brk = null, late = null) => {
@@ -160,8 +162,7 @@ export const phaseAt = (gp, nowMs = Date.now(), brk = null, late = null) => {
       if (breakActive(brk, nowMs)) return { phase: 'break', n: 0, endsMs: brk.endMs, leftMin: Math.ceil((brk.endMs - nowMs) / MIN), left: fmtLeft(brk.endMs - nowMs), ...w };
       return { phase: 'late', n: 2, of: 2, endsMs: late.endMs, leftMin: Math.ceil((late.endMs - nowMs) / MIN), ...w }; } }
   const w = dayWindow(gp, nowMs);
-  if (nowMs < w.startMs) return { phase: 'before', n: 0, endsMs: w.startMs, leftMin: Math.ceil((w.startMs - nowMs) / MIN), ...w };
-  if (nowMs >= w.closeMs) return { phase: 'closed', n: 0, endsMs: 0, leftMin: 0, ...w };
+  if (nowMs >= w.closeMs) return { phase: 'closed', n: 0, endsMs: 0, leftMin: 0, ...w, closeMs: 0 }; // no session running: nothing is "after close"
   if (breakActive(brk, nowMs)) return { phase: 'break', n: 0, endsMs: brk.endMs, leftMin: Math.ceil((brk.endMs - nowMs) / MIN), left: fmtLeft(brk.endMs - nowMs), ...w };
   const s = segments(gp, w.startMs).find((x) => nowMs >= x.startMs && nowMs < x.endMs);
   if (s) return { phase: s.kind, n: s.n, of: gp.sessions === 1 ? 1 : 2, endsMs: s.endMs, leftMin: Math.ceil((s.endMs - nowMs) / MIN), ...w };
@@ -245,7 +246,6 @@ export const nextDayName = (dayKey) => { const [y, m, d] = dayKey.split('-').map
 // Compact Home row text.
 export const rowText = (ph, { earned = 0, goal = 0, bank = 0, label = '' } = {}) => {
   const pts = (label || `${earned}/${goal} pts`) + (bank > 0 && ph.phase !== 'closed' && ph.phase !== 'break' ? ` · ${bank}m break ready` : '');
-  if (ph.phase === 'before') return `Day starts in ${ph.leftMin >= 60 ? `${Math.floor(ph.leftMin / 60)}h ${ph.leftMin % 60}m` : `${ph.leftMin}m`} · ${pts}`;
   if (ph.phase === 'focus') return `Focus ${ph.n}/${ph.of || 2} · ${ph.leftMin}m left · notifications held · ${pts}`;
   if (ph.phase === 'break') return `Break · ${ph.left || `${ph.leftMin}m`} left · apps open · ${pts}`;
   if (ph.phase === 'late') return `Session 2 · ${ph.leftMin >= 60 ? `${Math.floor(ph.leftMin / 60)}h ${ph.leftMin % 60}m` : `${ph.leftMin}m`} left · ${pts}`;

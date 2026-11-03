@@ -26,8 +26,8 @@ eq(core.warningDue(end, end - 5 * M), 5); eq(core.warningDue(end, end - 1000), 5
 // target slack scales with the span
 const tasks = [{ points: 50, minutes: 300 }];
 eq(core.dailyTarget(tasks, {}, 360).slackMin, 60); eq(core.dailyTarget(tasks, {}).slackMin, 180); eq(core.dailyTarget(tasks, {}, 360).tight, true);
-// shutdown fallback scales (no wake time on the lock)
-eq(core.shutUntilMs({ dayKey: '2026-10-23', endMs: 1000, hours: 6 }), 1000 + 18 * H);
+// shutdown is state-based now: a safety cap far after the end, the same for any day length
+eq(core.shutUntilMs({ dayKey: '2026-10-23', endMs: 1000, hours: 6 }), 1000 + core.SHUT_CAP_MS); eq(core.SHUT_CAP_MS, 14 * 24 * H);
 
 // server: start with hours
 class Ts { constructor(ms) { this.ms = ms; } toMillis() { return this.ms; } }
@@ -47,13 +47,13 @@ const call = (db, body, clock) => handler({ httpMethod: 'POST', headers: { autho
     // confirmed hours are frozen: a second start with other hours is a no-op
     const r2 = await call(db, { action: 'start', hours: 3 }, now + M);
     eq(r2.body.lock.endMs, now + want * H);
-    // after the end: ended + shut
+    // after the end: shutdown screen, and the next session can start right away (ready, not 'ended')
     const r3 = await call(db, { action: 'state' }, now + want * H + 1000);
-    eq(r3.body.phase, 'ended');
+    eq(r3.body.phase, 'ready'); eq(core.isShut(r3.body.lock, now + want * H + 1000), true, 'shut after the end');
   }
-  // late start past the next wake: 8 PM EDT + 12h ends 8 AM, after the 07:00 wake -> shut until the FOLLOWING 07:00
+  // late start past the old wake: no wake rule any more; shut (state) right after the end until a new session starts
   { const st = at('2026-10-24T00:00:00Z'); const L = { dayKey: '2026-10-23', wakeTime: '07:00', tz: TZ, startMs: st, endMs: st + 12 * H, hours: 12 };
-    eq(core.shutUntilMs(L), at('2026-10-25T11:00:00Z'), 'shut until the wake after the end');
+    eq(core.shutUntilMs(L), L.endMs + core.SHUT_CAP_MS, 'state-based shut, capped');
     eq(core.isShut(L, st + 12 * H + M), true, 'shut right after a day that ran past wake');
     const L0 = { ...L, wakeTime: '00:00', startMs: at('2026-10-23T23:50:00Z'), endMs: at('2026-10-24T05:50:00Z'), hours: 6 }; // 7:50 PM + 6h, wake midnight
     eq(core.isShut(L0, L0.endMs + M), true, 'midnight wake: still shuts at the end'); }

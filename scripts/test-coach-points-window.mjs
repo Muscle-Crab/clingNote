@@ -9,26 +9,29 @@ const G = await import(path.join(dir, 'gp.mjs'));
 const at = (h, m = 0) => new Date(2026, 10, 2, h, m).getTime();
 const gp = G.normPlan({ dayStart: '09:00' }); // plan closes 17:00
 const task = (h, size = 'm') => ({ title: 'ZZTEST', size, completed: true, completedAt: at(h) });
-// 1. day locked at 12:00 for 8 h (ends 20:00); a task finished at 18:00 (after plan close, before lock end) counts.
+// start anytime: the game-plan day IS the session the user started (no fixed day start / plan close / late window).
+// 1. session started at 12:00 for 8 h (ends 20:00): a task at 18:00 (after the old 17:00 plan close) counts; nothing after 20:00.
 const lock = { startMs: at(12), endMs: at(20), index: 0 };
+G.setSessionWindow(lock);
 const ph = G.phaseAt(gp, at(18, 30), null, G.lateWindow(gp, lock));
-const before = G.earnedPoints([task(10)], { closeMs: G.pointsCloseMs(ph.closeMs, lock) }).points;
-const after = G.earnedPoints([task(10), task(18)], { closeMs: G.pointsCloseMs(ph.closeMs, lock) });
-assert.strictEqual(before, 20); assert.strictEqual(after.points, 40, 'points go up after the plan close'); assert.strictEqual(after.afterClose, 0);
-// still nothing after the real lock end
-assert.strictEqual(G.earnedPoints([task(21)], { closeMs: G.pointsCloseMs(ph.closeMs, lock) }).points, 0);
-// old behaviour (no lock) still drops it
-assert.strictEqual(G.earnedPoints([task(18)], { closeMs: G.dayWindow(gp, at(18)).closeMs }).points, 0);
-// 2. single session (index 0) started after the plan close (18:00 -> 23:00) is a late window and earns points.
-const late = { startMs: at(18), endMs: at(23), index: 0 };
-const lw = G.lateWindow(gp, late); assert.deepStrictEqual(lw, { startMs: at(18), endMs: at(23) });
-const p2 = G.phaseAt(gp, at(19), null, lw); assert.strictEqual(p2.phase, 'late'); assert.strictEqual(p2.closeMs, at(23));
-assert.strictEqual(G.earnedPoints([task(19, 'l')], { closeMs: G.pointsCloseMs(p2.closeMs, late) }).points, 40);
-// an index-0 day inside the plan window is not "late"; a settled lock is ignored
-assert.strictEqual(G.lateWindow(gp, lock), null); assert.strictEqual(G.lateWindow(gp, { ...late, settled: true }), null);
+assert.notStrictEqual(ph.phase, 'closed'); assert.strictEqual(ph.closeMs, at(20), 'close = the session end');
+const close = G.pointsCloseMs(ph.closeMs, lock);
+assert.strictEqual(G.earnedPoints([task(10)], { closeMs: close }).points, 20);
+const after = G.earnedPoints([task(10), task(18)], { closeMs: close });
+assert.strictEqual(after.points, 40, 'points go up after the old plan close'); assert.strictEqual(after.afterClose, 0);
+assert.strictEqual(G.earnedPoints([task(21)], { closeMs: close }).points, 0, 'nothing after the session end');
+// 2. an evening session (18:00 -> 23:00) is just a session: it earns points, no special "late" window needed
+const eve = { startMs: at(18), endMs: at(23), index: 1 };
+G.setSessionWindow(eve);
+const p2 = G.phaseAt(gp, at(19), null, G.lateWindow(gp, eve)); assert.strictEqual(p2.closeMs, at(23));
+assert.strictEqual(G.earnedPoints([task(19, 'l')], { closeMs: G.pointsCloseMs(p2.closeMs, eve) }).points, 40);
+assert.strictEqual(G.lateWindow(gp, eve), null, 'late windows are gone');
+// 3. no session running: closed, nothing gated by a clock (closeMs 0 = uncapped)
+G.setSessionWindow(null);
+const p3 = G.phaseAt(gp, at(10)); assert.strictEqual(p3.phase, 'closed'); assert.strictEqual(p3.closeMs, 0);
 assert.strictEqual(G.pointsCloseMs(at(17), { ...lock, settled: true }), at(17));
 // wiring
 const hv = src('src/views/HomeView.vue');
 assert(/closeMs: GP\.pointsCloseMs\(gpPhase\.value\.closeMs, eh\.running\.value \? eh\.lock\.value : null\)/.test(hv));
-assert(/const gpLate = computed\(\(\) => GP\.lateWindow\(gp\.value, eh\.lock\.value\)\)/.test(hv));
+assert(/const gpLate = computed\(\(\) => \{ GP\.setSessionWindow\(eh\.lock\.value\)/.test(hv));
 console.log('coach points window: ok');

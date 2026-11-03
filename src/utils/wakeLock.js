@@ -1,4 +1,4 @@
-// Wake-up auto-lock (B44). users/{uid}.wakeAutoLock === true (Settings > Lock-in > "Lock at wake-up", needs Lock-in on).
+// Wake-up auto-lock (B44) - REMOVED, see wakeLockPlan below. Kept for reference: users/{uid}.wakeAutoLock === true (Settings > Lock-in > "Lock at wake-up", needs Lock-in on).
 // Native: ONE daily repeating DeviceActivity at the plan wake time for the day length (ClingLock.scheduleWakeLock; monitor extension
 // raises the shield + posts "Your lock-in started" even when ClingNote is closed). Server: on the next app open the day's lock is
 // created with start = the scheduled wake time (eight-hour-day start { autoWake: true }), so streak / anti-cheat see one window.
@@ -19,20 +19,9 @@ export const wakeLockNote = ({ native, authorized, selectionCount, wakeTime }) =
 
 // What the app should hand to iOS. blocks = today's pending evening-mode blocks [{startMs,endMs}], wakeMs = today's wake instant.
 // The wake window is trimmed so it ends before the first evening block that would overlap it (no double lock); under 15 min -> cancel.
-export const wakeLockPlan = ({ enabled, lockInEnabled, native, authorized, selectionCount, wakeTime, hours, wakeMs, blocks = [] }) => {
-  const note = wakeLockNote({ native, authorized, selectionCount, wakeTime });
-  if (!enabled || !lockInEnabled || note) return { action: 'cancel', note: enabled && lockInEnabled ? note : null };
-  const hm = parseHM(wakeTime); let minutes = wakeLockMinutes(hours);
-  if (Number.isFinite(wakeMs)) {
-    const end = wakeMs + minutes * 60000;
-    const clash = (blocks || []).filter((b) => b && b.startMs < end && b.endMs > wakeMs).map((b) => b.startMs).sort((a, b) => a - b)[0];
-    if (clash != null) minutes = Math.floor((clash - wakeMs) / 60000);
-  }
-  if (minutes < MIN_MINUTES) return { action: 'cancel', note: 'An evening lock-in starts right after wake-up, so the wake-up lock is off today.' };
-  return { action: 'schedule', hour: hm.hour, minute: hm.minute, minutes, note: null };
-};
+// REMOVED (sessions start only when the user starts them, never at a clock time): always cancel, so an update also
+// removes a wake-up lock an older version scheduled on iOS. The settings row is hidden.
+export const wakeLockPlan = () => ({ action: 'cancel', note: null });
 
-// On app open: create the server lock for a wake-up lock that already started (start = wake time). Only in the 'ready' phase
-// (wake time passed, no lock yet), lock-in on and not skipped today, and while today's window is still open.
-export const shouldReconcileWake = ({ enabled, lockInToday, phase, hasLock, wakeMs, nowMs, hours }) =>
-  !!enabled && !!lockInToday && phase === 'ready' && !hasLock && Number.isFinite(wakeMs) && nowMs >= wakeMs && nowMs < wakeMs + wakeLockMinutes(hours) * 60000;
+// Removed with the wake-up lock: never create a session from the wake time.
+export const shouldReconcileWake = () => false;

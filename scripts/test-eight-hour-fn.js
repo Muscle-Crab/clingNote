@@ -35,18 +35,18 @@ const call = async (db, body, extra = {}) => { const r = await handler(ev(body),
   eq((await call(db, { action: 'plan', wakeTime: '07:00', taskCount: 0, tz: TZ })).code, 400);
   eq((await call(db, { action: 'plan', wakeTime: '07:00', taskCount: 3, tz: 'Mars/Base' })).code, 400);
   r = await call(db, { action: 'plan', wakeTime: '07:00', taskCount: 3, tz: TZ });
-  eq([r.code, r.body.phase, r.body.plan.wakeTime, r.body.plan.taskCount], [200, 'before', '07:00', 3]);
-  eq(r.body.window.wakeMs, at('2026-10-23T11:00:00Z'));
+  eq([r.code, r.body.phase, r.body.plan.wakeTime, r.body.plan.taskCount], [200, 'ready', '07:00', 3], 'start anytime: ready at 5 AM, no wake gate');
+  r = await call(db, { action: 'plan', taskCount: 3, tz: TZ }); eq(r.code, 200, 'wake time is optional');
   // plan stays editable before the countdown
   r = await call(db, { action: 'plan', wakeTime: '06:30', taskCount: 4, tz: TZ }); eq([r.code, r.body.plan.taskCount], [200, 4]);
-  eq((await call(db, { action: 'start' })).code, 409, 'cannot start before wake time');
+  r = await call(db, { action: 'start' }); eq([r.code, r.body.code], [409, 'no-tasks'], 'before the old wake time: only refused for an empty list');
 
   // wake time arrives; no tasks yet => no-tasks, countdown does not begin
   clock = at('2026-10-23T11:00:00Z');
   r = await call(db, { action: 'start' }); eq([r.code, r.body.code], [409, 'no-tasks']);
   eq((await call(db, { action: 'state' })).body.phase, 'ready');
   // wake time can no longer move once it has passed, count still can
-  eq((await call(db, { action: 'plan', wakeTime: '13:00', taskCount: 3, tz: TZ })).code, 423, 'no dodging the start by moving wake time');
+  eq((await call(db, { action: 'plan', wakeTime: '13:00', taskCount: 3, tz: TZ })).code, 200, 'wake time no longer gates anything, so it is not frozen');
   eq((await call(db, { action: 'plan', wakeTime: '06:30', taskCount: 3, tz: TZ })).code, 200);
 
   // add tasks (client writes the day doc) and start
@@ -86,10 +86,13 @@ const call = async (db, body, extra = {}) => { const r = await handler(ev(body),
 
   // window ends: settle once (goal met => streak 1), later calls do not re-settle
   clock = L.endMs + 1000;
-  r = await call(db, { action: 'state' }); eq([r.body.phase, r.body.stats.streak, r.body.stats.lastResult, r.body.lock.settled], ['ended', 1, 'met', true]);
+  r = await call(db, { action: 'state' }); eq([r.body.phase, r.body.stats.streak, r.body.stats.lastResult, r.body.lock.settled], ['ready', 1, 'met', true], 'ended session => ready for the next one right away');
   eq(db.store[`eightHour/u1/history/2026-10-23`].met, true);
   r = await call(db, { action: 'state' }); eq(r.body.stats.streak, 1, 'settled once');
-  eq((await call(db, { action: 'start' })).code, 409, 'no second window the same day');
+  // start anytime: a second session the same day starts NOW (session #1), the streak is not settled twice
+  db.store['weeklyRoutines/u1_Fri'].tasks.push(T('Second a'), T('Second b'), T('Second c'), T('Second d'));
+  r = await call(db, { action: 'start', hours: 3 }); eq([r.code, r.body.phase, r.body.lock.index, r.body.lock.startMs], [200, 'running', 1, clock], 'second session starts now');
+  clock = r.body.lock.endMs + 1000; r = await call(db, { action: 'state' }); eq([r.body.phase, r.body.stats.streak], ['ready', 1], 'second session does not re-settle the streak');
   // plan opens again once the window is over (applies to tomorrow)
   r = await call(db, { action: 'plan', wakeTime: '06:00', taskCount: 2, tz: TZ }); eq([r.code, r.body.plan.wakeTime], [200, '06:00']);
 

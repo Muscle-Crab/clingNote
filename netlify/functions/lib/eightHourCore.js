@@ -98,85 +98,59 @@ const planBlocks = ({ requests, tz, nowMs, existing = [], notBefore = 0 }) => {
   return { ok: true, blocks: out };
 };
 
-// ── focus sessions (game plan): 1 or 2 per day, morning (block 0) + afternoon (block 1, started by the user from the shutdown) ──
-// The afternoon session can start only: sessions === 2, today's block 0 has ended, no later block exists/is pending, and at least
-// SESSION_MIN_LEFT_MS before the NEXT day start (see nextDayStartMs; the hard close does not end it). After block 1 nothing more can start.
-const SESSION_MIN_LEFT_MS = 30 * 60000;
-const sessionCloseMs = (lock, gamePlan) => {
-  if (!lock || !Number.isFinite(lock.startMs)) return 0;
-  const g = gamePlan || {}; const w = parseWake(g.dayStart); const tz = validTz(lock.tz) ? lock.tz : 'UTC';
-  const closeH = Number(g.closeHours) > 0 ? Number(g.closeHours) : 8;
-  if (w && lock.dayKey) { const st = wakeInstant(lock.dayKey, w, tz); if (Number.isFinite(st)) return st + closeH * 3600000; }
-  return lock.startMs + 12 * 3600000;
-};
-// Session 2 is not bound to the hard close: an unstarted or running evening (second) session finishes at the NEXT day start (when the
-// user wakes up), never a fixed clock time. Next day start = the earlier of tomorrow's wake time (plan) and tomorrow's game-plan day
-// start, so the new day's morning block (which begins at the wake time) can never overlap it.
-const nextDayStartMs = (lock, gamePlan, wakeTime) => {
-  if (!lock || !lock.dayKey) return 0; const tz = validTz(lock.tz) ? lock.tz : 'UTC'; const nk = nextDayKey(lock.dayKey);
-  const cands = [wakeTime || lock.wakeTime, gamePlan && gamePlan.dayStart].map(parseWake).filter(Boolean).map((w) => wakeInstant(nk, w, tz)).filter(Number.isFinite);
-  return cands.length ? Math.min(...cands) : lock.startMs + 24 * 3600000;
-};
-const nextSessionState = ({ lock, sessions = 2, gamePlan = null, nowMs, wakeTime = null }) => {
+// ── sessions: start any time ──
+// There is NO clock gate on starting. After a session ends (and no scheduled block is pending) a new session can start right away;
+// it begins at the moment the user taps Start and runs for its chosen hours. Same-day sessions get index 1, 2, ... (sessionKey dayKey#n).
+// sessions/gamePlan/wakeTime are accepted for call compatibility and ignored (no session cap, no day-start or wake-time window).
+const SESSION_MIN_LEFT_MS = 30 * 60000; // legacy export (no longer used as a gate)
+const sessionCloseMs = (lock) => (lock && Number.isFinite(lock.endMs) ? lock.endMs : 0);
+const nextDayStartMs = () => 0; // legacy export: there is no "next day start" any more
+const nextSessionState = ({ lock, sessions = 2, nowMs }) => {
   const of = Number(sessions) === 1 ? 1 : 2;
   if (!lock || lock.placeholder || !lock.dayKey) return { ok: false, reason: 'none', of, done: 0 };
   const idx = blockIndex(lock); const done = nowMs >= lock.endMs ? idx + 1 : idx;
   if (nowMs < lock.endMs) return { ok: false, reason: 'running', of, done };
-  if (of < 2 || idx >= 1) return { ok: false, reason: 'done', of, done };
-  if (pendingOf(lock).length) return { ok: false, reason: 'scheduled', of, done };
-  const closeMs = sessionCloseMs(lock, gamePlan); const untilMs = nextDayStartMs(lock, gamePlan, wakeTime);
-  if (!(untilMs - nowMs >= SESSION_MIN_LEFT_MS)) return { ok: false, reason: 'closed', of, done, closeMs, untilMs };
-  return { ok: true, of, done, closeMs, untilMs };
+  if (nextPending(lock, nowMs)) return { ok: false, reason: 'scheduled', of, done };
+  return { ok: true, of, done };
 };
 
-// ── the 8-hour window state machine ──
-// lock: { startMs, endMs, dayKey } of the most recent window (or null). Returns the phase for `nowMs`:
-//   none     no wake time chosen yet (onboarding not finished)
-//   before   today's wake time has not arrived: planning is still open
-//   ready    wake time has arrived and the window has not begun yet (server begins it now, if there are tasks)
-//   running  window in progress (everything locked)
-//   ended    today's window is over (next one begins at tomorrow's wake time)
+// ── the session state machine (no clock gates) ──
+// lock: { startMs, endMs, dayKey, index } of the most recent session (or null). Returns the phase for `nowMs`:
+//   none     no plan yet (onboarding not finished / no valid timezone)
+//   ready    no session is running: one can start NOW (startMs = now). Also right after a session ended, any time of day.
+//   running  session in progress (everything locked)
 //   gap      (evening mode) a later block is scheduled: the app stays open until it starts (nextStartMs)
 // A pending block whose start has arrived reports 'ready' with scheduled: true (the server begins it at its FIXED start/end).
-const evaluatePhase = ({ wakeTime, tz, nowMs, lock, mode = START_MODE, hours = DAY_HOURS.default }) => {
+// 'before' and 'ended' are no longer produced (kept out on purpose: no wake-time or once-per-day gate).
+const evaluatePhase = ({ tz, nowMs, lock, hours = DAY_HOURS.default }) => {
   if (lock && nowMs >= lock.startMs && nowMs < lock.endMs) return { phase: 'running', startMs: lock.startMs, endMs: lock.endMs, dayKey: lock.dayKey, index: blockIndex(lock) };
   const next = nextPending(lock, nowMs);
   if (next && nowMs >= next.startMs) return { phase: 'ready', scheduled: true, startMs: next.startMs, endMs: next.endMs, dayKey: next.dayKey, index: next.index, hours: next.hours };
   if (next) return { phase: 'gap', nextStartMs: next.startMs, nextEndMs: next.endMs, startMs: lock.startMs, endMs: lock.endMs, dayKey: lock.dayKey, index: blockIndex(lock) };
-  const wake = parseWake(wakeTime);
-  if (!wake || !validTz(tz)) return { phase: 'none' };
-  const today = dayKeyIn(tz, nowMs);
-  if (lock && lock.dayKey === today) return { phase: 'ended', startMs: lock.startMs, endMs: lock.endMs, dayKey: today };
-  const wakeMs = wakeInstant(today, wake, tz);
-  if (nowMs < wakeMs) return { phase: 'before', wakeMs, dayKey: today };
-  const startMs = mode === 'wake' ? wakeMs : nowMs; // 'confirm' / 'open': the window would start now
-  const endMs = startMs + hoursMs(hours);
-  if (endMs <= nowMs) return { phase: 'ended', startMs, endMs, dayKey: today, missed: true };
-  return { phase: 'ready', wakeMs, startMs, endMs, dayKey: today };
+  const zone = validTz(tz) ? tz : lock && validTz(lock.tz) ? lock.tz : null;
+  if (!zone) return { phase: 'none' };
+  const today = dayKeyIn(zone, nowMs);
+  const index = lock && lock.dayKey === today && !lock.placeholder ? blockIndex(lock) + 1 : 0;
+  return { phase: 'ready', startMs: nowMs, endMs: nowMs + hoursMs(hours), dayKey: today, index, after: !!(lock && !lock.placeholder && Number.isFinite(lock.endMs) && nowMs >= lock.endMs) };
 };
 
-// Hard stop: after a started day ends, the app stays shut until the NEXT day's wake time (from the lock's own wakeTime/tz, so it survives plan edits).
+// After a session ends the app shows the shutdown screen until the user starts a new session (state, not clock).
+// SHUT_CAP_MS only bounds how long an untouched old lock keeps reporting "shut" (so a lock from weeks ago cannot trap anyone).
 const nextDayKey = (dayKey) => new Date(Date.parse(`${dayKey}T12:00:00Z`) + 86400000).toISOString().slice(0, 10);
-const shutUntilMs = (lock) => {
-  if (!lock || !lock.dayKey || !Number.isFinite(lock.endMs)) return 0;
-  const w = parseWake(lock.wakeTime); const tz = validTz(lock.tz) ? lock.tz : 'UTC';
-  if (!w) return lock.endMs + (24 - clampHours(lock.hours)) * 3600000;
-  // The first wake time AFTER the day's end (a late start can run past the next morning's wake, e.g. 8 PM + 12h).
-  let k = nextDayKey(lock.dayKey); let next = wakeInstant(k, w, tz);
-  for (let i = 0; i < 3 && next <= lock.endMs; i++) { k = nextDayKey(k); next = wakeInstant(k, w, tz); }
-  return Math.max(next, lock.endMs);
-};
+const SHUT_CAP_MS = 14 * 24 * 3600000;
+const lastEndOf = (lock) => Math.max(lock.endMs, ...pendingOf(lock).map((b) => b.endMs));
+const shutUntilMs = (lock) => (!lock || !Number.isFinite(lock.endMs) ? 0 : lastEndOf(lock) + SHUT_CAP_MS);
 // Which end-of-day warnings are due: [15, 5] minutes before endMs -> the largest threshold already reached (15 or 5), else 0.
 const warningDue = (endMs, nowMs) => { const left = endMs - nowMs; if (!(left > 0)) return 0; for (const m of [...WARN_MINUTES].sort((a, b) => a - b)) if (left <= m * 60000) return m; return 0; };
-// Evening mode: while a later block is pending the app is NOT shut (gap); after the last block the usual hard stop applies,
-// counted from the latest block end. rulesShutUntilMs is what the server writes to lock.shutUntil for firestore.rules (gap = endMs, i.e. open).
+// Shut = the latest session is over and nothing new has started or is scheduled. Starting a session replaces the lock, which ends it.
 const isShut = (lock, nowMs) => {
-  if (!lock || !(nowMs >= lock.endMs)) return false;
+  if (!lock || lock.placeholder || !(nowMs >= lock.endMs)) return false;
   if (nextPending(lock, nowMs)) return false;
-  const lastEnd = Math.max(lock.endMs, ...pendingOf(lock).map((b) => b.endMs));
-  return nowMs >= lastEnd && nowMs < shutUntilMs({ ...lock, endMs: lastEnd });
+  return nowMs < shutUntilMs(lock);
 };
-const rulesShutUntilMs = (lock) => (pendingOf(lock).length ? lock.endMs : shutUntilMs(lock));
+// What the server writes to lock.shutUntil for firestore.rules: the session end. The day doc is read-only only WHILE a session runs,
+// so the user can plan the next session as soon as one ends (no rules change: rules still read startAt/endAt/shutUntil).
+const rulesShutUntilMs = (lock) => (lock && Number.isFinite(lock.endMs) ? lock.endMs : 0);
 
 // ── display helpers ──
 const countdownParts = (ms) => { const s = Math.max(0, Math.floor(ms / 1000)); return { h: Math.floor(s / 3600), m: Math.floor((s % 3600) / 60), s: s % 60 }; };
@@ -303,7 +277,7 @@ module.exports = {
   clamp, round5, parseWake, fmtWake, validTz, partsIn, dayKeyIn, dayNameIn, wakeInstant, evaluatePhase,
   countdownParts, fmtCountdown, fmtClock, fmtWakeLabel,
   complexityFromMinutes, complexityFromText, pointsFor, estimateTask, levelRatio, dailyTarget,
-  lockedChangeAllowed, nextDayKey, shutUntilMs, isShut, rulesShutUntilMs,
+  lockedChangeAllowed, nextDayKey, shutUntilMs, SHUT_CAP_MS, isShut, rulesShutUntilMs,
   SESSION_MIN_LEFT_MS, sessionCloseMs, nextDayStartMs, nextSessionState,
   BLOCK_HOURS, MAX_BLOCKS_PER_DAY, SCHEDULE_LEAD_MS, SCHEDULE_HORIZON_MS, clampBlockHours, sessionKey, blockIndex, pendingOf, nextPending, nextAt, planBlocks, countableIndexes, progressOf, defaultStats, settleDay, rewardsForDay, penaltyForMiss, badgeFor, MAX_SHIELDS, SHIELD_MIN_RATIO, failureNotice, rewardFor,
 };

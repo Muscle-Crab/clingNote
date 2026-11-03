@@ -17,12 +17,13 @@ let n = 0; const ok = (c, m) => { assert.ok(c, m); n++; };
   ok(/Set your day/.test(html) && /data-test="eh-save"/.test(html), 'no plan => setup form');
   ok(/Min 4 · max 50 tasks for 8 hours/.test(html) && !/eh-stepper|eh-count|More tasks|Fewer tasks/.test(html), 'setup: one min/max line for the hours, no Planned stepper');
   html = await render(at('2026-10-23T09:00:00Z'), base, [T('a')]); // 05:00 local, before wake
-  ok(/Starts 7:00 AM/.test(html) && /Ends 3:00 PM/.test(html) && /Min 4 · max 50 tasks for 8 hours · 1 on your list/.test(html), 'before wake: start + end label and min/max vs list count');
-  ok(!/eh-stepper|eh-count|Planned \d|eh-match/.test(html), 'before wake: no stepper and no "plan N" buttons');
+  ok(/Ready/.test(html) && !/Starts 7:00 AM/.test(html) && /Min 4 · max 50 tasks for 8 hours · 1 on your list/.test(html), 'start anytime: 5 AM is already ready (no wake-time gate), min/max vs list count');
+  ok(!/type="time"/.test(html) && !/After your wake time/.test(html), 'start anytime: no wake-time input or "after your wake time" text');
+  ok(!/eh-stepper|eh-count|Planned \d|eh-match/.test(html), 'no stepper and no "plan N" buttons');
   html = await render(at('2026-10-23T11:30:00Z'), base, [T('a')]); // 07:30 ready
   ok(/Add 3 more to start/.test(html) && !/data-test="eh-start"/.test(html), 'ready but below the minimum => no Start, says how many more');
   ok(!/data-test="eh-match|plan 1 instead|Plan 1|You planned/.test(html), 'no match-the-plan buttons');
-  ok(!/type="time"/.test(html), 'wake time frozen once the wake time has passed');
+  ok(!/type="time"/.test(html), 'no wake time input');
   html = await render(at('2026-10-23T11:30:00Z'), base, [T('a'), T('b'), T('c'), T('d')]);
   ok(/data-test="eh-start"/.test(html), 'ready with exactly the minimum => Start');
   html = await render(at('2026-10-23T11:30:00Z'), base, Array.from({ length: 9 }, (_, i) => T('t' + i)));
@@ -42,6 +43,7 @@ let n = 0; const ok = (c, m) => { assert.ok(c, m); n++; };
   ok(/Goal met/.test(html) && /data-test="eh-reward"/.test(html) && /data-test="eh-notice"/.test(html), 'ended + met shows reward and notice');
   html = await render(at('2026-10-23T20:00:00Z'), { ...base, lock, stats: { ...core.defaultStats(), notice: 'Tomorrow is harder.' } }, [T('a', true), T('b'), T('c')]);
   ok(/Goal missed/.test(html), 'ended + missed');
+  ok(/data-test="eh-start"/.test(html) && !/Tomorrow's wake/.test(html), 'ended: Start a new session right away, no "Tomorrow\'s wake"');
   ok(!/data-test="eh-notice"/.test(html), 'stale notice from an earlier day is hidden');
   html = await render(at('2026-10-23T13:00:00Z'), { ...base, lock, stats: { ...core.defaultStats(), lastDay: '2026-10-22', notice: 'You earned 0 of 30 points.' } }, [T('a'), T('b'), T('c')]);
   ok(!/data-test="eh-notice"/.test(html) && !/You earned/.test(html) && /0\/70 pts/.test(html), 'running day never shows the previous day notice');

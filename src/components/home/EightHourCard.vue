@@ -5,11 +5,10 @@
     <div v-else-if="view === 'error'" class="eh-line"><p class="eh-muted">Couldn't reach your {{ hl }}-hour day<span v-if="eh.st.error"> ({{ eh.st.error }})</span>.</p><button class="eh-btn" @click="$emit('retry')">Retry</button></div>
 
     <p v-if="view !== 'error' && view !== 'loading' && eh.st.data && eh.st.data.offline" class="eh-muted" data-test="eh-offline">Offline mode: the countdown lock starts once the server is reachable. <button class="eh-btn" @click="$emit('retry')">Retry</button></p>
-    <!-- no plan yet: one compact row (wake time + the min/max task range for the chosen hours), then it is locked when the day starts -->
+    <!-- no plan yet: one compact row (the min/max task range for the chosen hours); sessions start when you start them -->
     <template v-else-if="view === 'setup'">
-      <div class="eh-line"><b class="eh-title">⏱ Set your day</b><button class="eh-btn eh-btn--primary" :disabled="busy || !wake" @click="locked ? $emit('pro') : save()" data-test="eh-save">{{ locked ? 'Lock in 🔒' : 'Lock in' }}</button></div>
+      <div class="eh-line"><b class="eh-title">⏱ Set your day</b><button class="eh-btn eh-btn--primary" :disabled="busy" @click="locked ? $emit('pro') : save()" data-test="eh-save">{{ locked ? 'Lock in 🔒' : 'Lock in' }}</button></div>
       <div class="eh-ctrl">
-        <label class="eh-mini">Wake <input type="time" v-model="wake" data-test="eh-wake" /></label>
         <span class="eh-fine" data-test="eh-range">{{ rangeLine }}</span>
       </div>
       <p v-if="msg" class="eh-err" role="alert">{{ msg }}</p>
@@ -19,17 +18,12 @@
     <template v-else-if="view === 'planned'">
       <p v-if="stats.warning && !(eh.st.data && eh.st.data.offline)" class="eh-note eh-alert--boss" data-test="eh-alert">⚠️ {{ stats.warning }}</p>
       <div class="eh-line">
-        <p class="eh-big" data-test="eh-starts">{{ phase === 'before' ? 'Starts ' + fmtWake : 'Ready' }}<small> · Ends {{ ends }}</small></p>
+        <p class="eh-big" data-test="eh-starts">Ready<small> · Ends {{ ends }}</small></p>
         <button v-if="phase === 'ready' && inRange" class="eh-btn eh-btn--primary" data-test="eh-start" @click="$emit(locked ? 'pro' : 'start')">{{ locked ? 'Start 🔒' : 'Start' }}</button>
         <span v-else class="eh-badge">Not started</span>
       </div>
       <!-- ONE compact line: the min/max range for the chosen hours + what is on the list (no stepper, no "plan N instead") -->
-      <p class="eh-muted" data-test="eh-range">{{ rangeLine }} · {{ taskTotal }} on your list.<template v-if="needMore > 0"> Add {{ needMore }} more to start.</template><template v-else-if="phase === 'before'"> After your wake time you'll pick today's hours and confirm.</template></p>
-      <div class="eh-ctrl" v-if="phase === 'before'">
-        <label class="eh-mini">Wake <input type="time" v-model="wake" data-test="eh-wake" /></label>
-        <button v-if="wake !== plan.wakeTime" class="eh-btn" :disabled="busy" @click="save">Save</button>
-        <span class="eh-fine">Locked once started</span>
-      </div>
+      <p class="eh-muted" data-test="eh-range">{{ rangeLine }} · {{ taskTotal }} on your list.<template v-if="needMore > 0"> Add {{ needMore }} more to start.</template></p>
       <p v-if="overBy > 0" class="eh-err" data-test="eh-over" role="alert">Over the max of {{ range.max }} tasks. Remove {{ overBy }} to start.</p>
       <p v-if="startError" class="eh-err" role="alert">{{ startError }}</p>
       <p v-if="msg" class="eh-err" role="alert">{{ msg }}</p>
@@ -70,7 +64,8 @@
         </div>
         <ul class="eh-log"><li v-for="e in (stats.log || [])" :key="e.dayKey">{{ e.dayKey }}: {{ e.met ? '✅' : '❌' }} {{ e.earned }}/{{ e.target }}<template v-if="e.reward"> · +{{ e.reward.xp }} XP · +{{ e.reward.coins }} coins</template><template v-if="e.penalty && e.penalty.coins"> · -{{ e.penalty.coins }} coins</template><template v-if="e.penalty && e.penalty.shieldUsed"> · 🛡️ used</template></li></ul>
       </details>
-      <div class="eh-ctrl"><label class="eh-mini">Tomorrow's wake <input type="time" v-model="wake" /></label><button v-if="wake !== plan.wakeTime" class="eh-btn" :disabled="busy" @click="save">Save</button></div>
+      <!-- start any time: the same Start button as the planned view begins a new session right away -->
+      <div v-if="phase === 'ready'" class="eh-line"><span class="eh-fine">Start a new session whenever you're ready.</span><button class="eh-btn eh-btn--primary" data-test="eh-start" @click="$emit(locked ? 'pro' : 'start')">{{ locked ? 'Start 🔒' : 'Start' }}</button></div>
     </template>
   </section>
 </template>
@@ -85,7 +80,7 @@ import { progressOf, countableIndexes, fmtWakeLabel, hoursLabel, taskRange } fro
 const props = defineProps({ tasks: { type: Array, default: () => [] }, startError: { type: String, default: '' }, locked: { type: Boolean, default: false } });
 defineEmits(['retry', 'start', 'pro']);
 const eh = useEightHour();
-const { phase, plan, lock, stats, reward, countdown } = eh;
+const { phase, phaseInfo, plan, lock, stats, reward, countdown } = eh;
 const starts = computed(() => eh.startsLabel.value);
 const wake = ref('07:00'); const msg = ref('');
 const busy = computed(() => eh.st.busy);
@@ -96,6 +91,7 @@ const view = computed(() => {
   if (phase.value === 'none') return 'setup';
   if (phase.value === 'running') return lock.value ? 'running' : 'planned';
   if (phase.value === 'ended') return lock.value ? 'ended' : 'planned';
+  if (phase.value === 'ready' && lock.value && !phaseInfo.value.scheduled && (countdown.value, eh.nowMs()) >= lock.value.endMs) return 'ended'; // the last session is over: result + Start
   return 'planned';
 });
 const ends = computed(() => eh.endsLabel.value);

@@ -3,7 +3,7 @@
 // While the window runs for a weekday doc: no add / delete / swap / reorder / retitle / re-point of tasks, no plan or wake changes.
 // Completing tasks, timers, notes and subtasks stay allowed.
 import { lockedChangeAllowed, LOCKED_FIELDS, isShut, hoursLabel } from './eightHour';
-import { planWindowState, getPlanTime } from './planWindow';
+import { planWindowState } from './planWindow';
 
 export const LOCKED_MESSAGE = 'Locked: your 8-hour day is running. Tasks, points and the target cannot be changed until it ends.';
 
@@ -19,13 +19,13 @@ export const isDayLocked = (dayName) => {
   return s.lock.dayName === dayName && s.nowMs >= s.lock.startMs && s.nowMs < s.lock.endMs;
 };
 
-// Hard stop: once a started 8-hour day has ended, task changes are blocked until the next wake time, except completions and
-// tomorrow's planning window (see below).
-export const SHUT_MESSAGE = 'Your 8 hours are up. ClingNote is shut for today. Come back tomorrow.';
+// After a session ends (shutdown screen, until a new session starts): completions always work, and "Plan next session"
+// opens planning (see below). There is no clock time any more: a new session can start at any time.
+export const SHUT_MESSAGE = "Session done. Start a new session whenever you're ready.";
 // Same messages with the CURRENT day's length ("your 6.5-hour day"); the constants above are the 8h defaults.
 const curHours = () => { const s = source(); return hoursLabel(s && s.lock ? s.lock.hours : undefined); };
 export const lockedMessage = () => `Locked: your ${curHours()}-hour day is running. Tasks, points and the target cannot be changed until it ends.`;
-export const shutMessage = () => `Your ${curHours()} hours are up. ClingNote is shut for today. Come back tomorrow.`;
+export const shutMessage = () => SHUT_MESSAGE;
 export const isShutdown = () => { const s = source(); return !!(s && s.lock && isShut(s.lock, s.nowMs)); };
 
 export class LockError extends Error {
@@ -35,15 +35,15 @@ export class ShutError extends Error {
   constructor() { super(shutMessage()); this.name = 'ShutError'; this.code = 'eight-hour-locked'; this.shut = true; }
 }
 // Shutdown (after the lock-in): completing tasks ALWAYS works (any day, in place on the shut day: the server only counts the window,
-// so a late completion can't raise the lock-in result). Planning (add / edit / delete / reorder) works only on TOMORROW's tab while
-// the planning window is open (plan time, default 8 PM, until a hard close at midnight). Everything else stays shut.
+// so a late completion can't raise the lock-in result). Planning (add / edit / delete / reorder) works on any day's tab: the
+// shutdown is only the gap between sessions, so the user can plan the next one right away (no 8 PM window, no midnight close).
 export const COMPLETION_FIELDS = ['completed', 'completedAt', 'completedFor', 'timerActive', 'timerStoppedAt', 'alarmId', 'alarmAt', 'widgetEffectsPending'];
-const plan = () => { const s = source(); return planWindowState({ nowMs: s ? s.nowMs : Date.now(), shut: isShutdown(), planTime: getPlanTime(), tz: s && s.lock ? s.lock.tz : undefined }); };
+const plan = () => { const s = source(); return planWindowState({ nowMs: s ? s.nowMs : Date.now(), shut: isShutdown(), tz: s && s.lock ? s.lock.tz : undefined }); };
 export const planWindowOpen = () => isShutdown() && plan().open;
 export const planTomorrowDay = () => plan().tomorrowDay;
 export const shutDayName = () => (isShutdown() ? currentLock().dayName || '' : '');
-// May this weekday's list be planned right now? (always when not shut; while shut only tomorrow, only inside the window)
-export const canPlanDay = (dayName) => { if (!isShutdown()) return true; const w = plan(); return !!(w.open && dayName && dayName === w.tomorrowDay); };
+// May this weekday's list be planned right now? Always: between sessions planning is open for every day.
+export const canPlanDay = (dayName) => { if (!isShutdown()) return true; return !!(plan().open && dayName); };
 export const completionOnlyPatch = (patch) => Object.keys(patch || {}).every((k) => COMPLETION_FIELDS.includes(k));
 const strip = (t) => { const o = { ...(t || {}) }; COMPLETION_FIELDS.forEach((k) => { delete o[k]; }); return JSON.stringify(Object.keys(o).sort().map((k) => [k, o[k]])); };
 export const completionOnlyChange = (oldTasks = [], newTasks = []) => Array.isArray(oldTasks) && Array.isArray(newTasks) && oldTasks.length === newTasks.length && oldTasks.every((t, i) => strip(t) === strip(newTasks[i]));
