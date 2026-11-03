@@ -373,7 +373,7 @@ import { debtShield, debtHoldPlan, turnOffBlocked, TURN_OFF_BLOCKED_MSG } from '
 import { vaultView, startPlan, stopWindows, priceApps, newUnlocks, unlockCelebration, webFallback } from '@/utils/pointsVault';
 import robotPng from '@/assets/assistant-robot@2x.png';
 import PointsCelebration from '@/components/home/PointsCelebration.vue';
-import { sessionGoal, overtimeStamp, overtimeInfo } from '@/utils/sessionGoal';
+import { sessionGoal, overtimeStamp, overtimeInfo, overtimePoints } from '@/utils/sessionGoal';
 import { durationMs as ringDurationMs, overtimeMs as ringOvertimeMs, elapsedMs as ringElapsedMs } from '@/utils/timerRing';
 import { topicKey, recordActual, setEstimateHistory, estimateHistory } from '@/utils/personalEstimate';
 import { useEightHour, clearDebtLocal, syncAfterAuth, setDayLengthHours, loadDayLengthHours, promptSeenFor, markPromptSeen } from '@/composables/useEightHour';
@@ -2869,7 +2869,7 @@ watch(
     (tasks) => {
       // Coach game plan: size points (S10/M20/L40), nothing after the hard close, minus today's revoke penalty. Simple mode unchanged.
       pointsAccumulated.value = gpOn.value && isViewingToday.value ? gpEarned.value.points
-        : (tasks || []).filter((task) => task.completed).reduce((n, t) => n + chipValues(t).points, 0); // real points, same as the card
+        : (tasks || []).filter((task) => task.completed).reduce((n, t) => n + overtimePoints(chipValues(t).points, t), 0); // real points minus any overtime penalty (what the celebration credited)
     },
     { deep: true }
 );

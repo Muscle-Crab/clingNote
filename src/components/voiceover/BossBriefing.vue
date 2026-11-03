@@ -39,6 +39,7 @@
 </template>
 
 <script setup>
+import { overtimePoints } from '@/utils/sessionGoal';
 import { suggestPointsGoal, goalSpeech } from '@/utils/dailyReport';
 import BrandMark from '@/components/brand/BrandMark.vue';
 import { ref, watch, onMounted, onBeforeUnmount } from 'vue';
@@ -91,7 +92,7 @@ async function run() {
     if (wantOverdue && mode !== 'manager') {
       const sd0 = await getDoc(doc(db, 'streaks', u.uid)).then((s) => (s.exists() ? s.data() : {})).catch(() => ({}));
       const lk = eh.lock.value; const tgt = eh.data.value && eh.data.value.lock ? eh.data.value.lock : {};
-      const earned = todayTasks.filter((t) => t.completed).reduce((s, t) => s + (Number(t.points) || 0), 0);
+      const earned = todayTasks.filter((t) => t.completed).reduce((s, t) => s + overtimePoints(t.points, t), 0);
       report = buildReport({ tasks: todayTasks, now, nowMs: eh.nowMs(), deadline: ud.onboarding && ud.onboarding.deadline, phase: eh.phase.value,
         lock: lk ? { startMs: lk.startMs, endMs: lk.endMs } : null, earned: Number(tgt.earned) || earned, target: Number(tgt.target) || 0, streak: Number(sd0.streak) || 0 });
       if (!report.lines.length) report = null;
