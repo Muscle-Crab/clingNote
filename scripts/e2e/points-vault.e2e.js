@@ -4,7 +4,7 @@ const { chromium } = require('playwright-core'); const admin = require('firebase
 admin.initializeApp({ projectId: 'demo-clingnote' }); const db = admin.firestore();
 const { rawHandler } = require('../../netlify/functions/friend-unlock');
 const B = `http://localhost:${process.env.WEB_PORT || 8099}`; const FORBIDDEN = 'dsDDbr945rawMAUKKpIAJcnPYrX2';
-const SHOTS = (process.env.SHOTS || '/workspace/vault-screens') + '/'; const TAG = process.env.TAG || 'after'; const AFTER = TAG === 'after';
+const SHOTS = (process.env.SHOTS || '/workspace/points-fix-screens') + '/'; const TAG = process.env.TAG || 'after'; const AFTER = TAG === 'after';
 const WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']; const sleep = (ms) => new Promise((r) => setTimeout(r, ms)); const results = [];
 const ok = (n, c, x = '') => { results.push({ n, c: !!c }); console.log(`${c ? 'PASS' : 'FAIL'} ${n} ${c ? '' : x}`); };
 const ymd = (d = new Date()) => d.toLocaleDateString('en-CA'); const dayName = (d = new Date()) => WEEK[d.getDay()];
@@ -33,7 +33,7 @@ async function page(br) {
   pg.on('console', (m) => process.env.GP_DEBUG && /warn|error/.test(m.type()) && console.log('CONSOLE', m.text().slice(0, 300))); pg.on('pageerror', (e) => !/SDK already initialized/.test(String(e)) && pg.errs.push(String(e).slice(0, 200)));
   return pg;
 }
-const dd = async (p) => { for (let i = 0; i < 3; i++) { const b = p.locator('[data-test=boss-briefing] .bb-x, .drama button, .drama-btn, .dsp-skip, button:has-text("Not now"), button:has-text("Maybe later")'); if (await b.count()) { await b.first().click({ timeout: 1500 }).catch(() => {}); await sleep(400); } } };
+const dd = async (p) => { for (let i = 0; i < 3; i++) { const b = p.locator('[data-test=boss-briefing] .bb-x, .drama button, .drama-btn, .dsp-skip, button:has-text("Not now"), button:has-text("Maybe later"), button:has-text("Skip all tips")'); if (await b.count()) { await b.first().click({ timeout: 1500 }).catch(() => {}); await sleep(400); } } };
 async function login(p, email) {
   await p.goto(B + '/login?returning=1', { waitUntil: 'load' }); await p.click('[data-test=email-toggle]');
   await p.fill('[data-test=login-email]', email); await p.fill('input[autocomplete=current-password]', 'zztest-pass-123'); await p.click('[data-test=email-login]');
@@ -52,44 +52,43 @@ const lastSunday = () => { const d = new Date(); d.setDate(d.getDate() - d.getDa
 
 const FAKE = () => { localStorage.setItem('cn.appLock.on', '1'); const K = 'zz.fakelock'; const rd = () => JSON.parse(localStorage.getItem(K) || '{"locked":true,"until":0,"label":"","scheduled":[],"vault":null}'); const wr = (v) => localStorage.setItem(K, JSON.stringify(v));
   const d = (n) => { const x = new Date(); x.setDate(x.getDate() - n); return x.toLocaleDateString('en-CA'); }; const days = {};
-  for (let i = 1; i <= 7; i++) days[d(i)] = { a1: 0, a2: 15, a3: 30, a4: 60, a5: 120, a6: 240 };
+  for (let i = 1; i <= 7; i++) days[d(i)] = { a1: 10, a2: 30, a3: 60, a4: 90, a5: 120, a6: 180 }; // -> 50, 90, 150, 210, 270, boss 585
   window.__clingLockFake = { status: async () => ({ authorization: 'approved', selectionCount: 6, monitoring: rd().locked, ...rd() }), startLock: async ({ untilMs, label }) => { wr({ ...rd(), locked: true, until: untilMs, label }); return { locked: true, monitor: 'ok' }; },
     stopLock: async () => { wr({ ...rd(), locked: false }); return { locked: false }; }, scheduleLock: async () => ({ monitor: 'ok' }), labeledApps: async () => ({ apps: [] }), clearBreakOffer: async () => ({ cleared: true }), cancelScheduledLock: async () => ({ cancelled: true }),
-    startUsage: async () => ({ monitor: 'ok' }), vaultUsage: async () => ({ days, apps: [['a1', 'Maps'], ['a2', 'News'], ['a3', 'YouTube'], ['a4', 'Instagram'], ['a5', 'X'], ['a6', 'TikTok']].map(([id, label]) => ({ id, label })) }),
+    startUsage: async () => ({ monitor: 'ok' }), vaultUsage: async () => ({ days, apps: ['a1', 'a2', 'a3', 'a4', 'a5', 'a6'].map((id, i) => ({ id, label: `App ${i + 1}` })) }),
     vaultState: async () => { const v = rd().vault; return v && v.untilMs > Date.now() ? { ids: v.ids, untilMs: v.untilMs, live: true } : { ids: [], untilMs: 0, live: false }; },
     allowVaultApps: async ({ ids, untilMs }) => { wr({ ...rd(), vault: { ids, untilMs } }); return { allowed: ids.length }; }, endVaultApps: async () => { wr({ ...rd(), vault: null }); return { ended: true }; } }; };
 (async () => {
-  const br = await chromium.launch({ executablePath: process.env.CHROME || undefined });
+  const br = await chromium.launch({ executablePath: process.env.CHROME || '/usr/bin/google-chrome' });
   const fresh = { gamePlan: { dayStart: ago(300), reviewDow: 0, reviewTime: '18:00', minGoal: 50, friend: { name: 'ZZTEST Sam' }, pending: null, lastReview: lastSunday() } };
   const done = (t, i) => mk(t, i, { completed: true, completedAt: Date.now() - i * 600000, size: 'l' });
-  // main user: 3 done (L = 40 pts each -> 120 pts)
-  { const email = 'zztest.vault.main@example.com'; await seedUser(email, 'ZZTEST Vault', [done('Done A', 1), done('Done B', 2), done('Done C', 3), mk('Open task', 4)], fresh);
+  // main user: 2 done L (40 each = 80 pts) + one open L; completing it reaches 120 -> App 2 (90) unlocks live
+  { const email = 'zztest.vault.main@example.com'; await seedUser(email, 'ZZTEST Vault', [done('Done A', 1), done('Done B', 2), mk('Open big', 4, { size: 'l' }), mk('Open small', 5, { size: 's' })], fresh);
     const p = await page(br); await p.context().addInitScript(FAKE); await login(p, email); await home(p);
+    await sleep(4500); await dd(p); // first-load unlock celebration (App 1) closes on its own
     await shot(p, 'home-gameplan'); await shot(p, 'gameplan-row', '[data-test=gp-row]');
-    if (AFTER) {
-      const t = await p.locator('[data-test=vault-text]').innerText().catch(() => '');
-      ok('vault: one slim line inside the game plan row', await p.locator('[data-test=gp-row] [data-test=vault-toggle]').count() === 1, t);
-      ok('vault: 120 pts opens 3 of 6, next at 150', /Vault · 3 of 6 open · next at 150 pts/.test(t), t);
-      await shot(p, 'vault-collapsed', '[data-test=gp-row]');
-      await p.click('[data-test=vault-toggle]'); await sleep(500);
-      const prices = await p.locator('[data-test=vault-app]').allInnerTexts();
-      ok('vault: expands to 6 priced apps, cheapest first', prices.length === 6 && /Maps/.test(prices[0]) && /TikTok/.test(prices[5]) && /220/.test(prices[5]), prices.join(' | '));
-      ok('vault: time line 60 min from 120 pts', /0 of 60|60 of 60/.test(await p.locator('[data-test=vault-time]').innerText()), await p.locator('[data-test=vault-time]').innerText());
-      await shot(p, 'vault-expanded', '[data-test=gp-row]');
-      await p.click('[data-test=vault-start]').catch(() => {}); await sleep(1200);
-      ok('vault: Use starts app time natively (fake)', !!(await p.evaluate(() => JSON.parse(localStorage.getItem('zz.fakelock')).vault)), '');
-      ok('vault: row shows min left', /min left/.test(await p.locator('[data-test=vault-text]').innerText()));
-      await shot(p, 'vault-running', '[data-test=gp-row]');
-      await p.click('[data-test=vault-stop]').catch(() => {}); await sleep(800);
-    }
-    await home(p); await p.evaluate(() => window.__bkDemo && window.__bkDemo({ mode: 'popup', min: 20 })); await sleep(1200);
-    await shot(p, 'break-popup');
+    const t0 = await p.locator('[data-test=vault-text]').innerText().catch(() => '');
+    ok('vault: 80 pts opens 1 of 6, next at 90 (~5 tasks)', /Vault · 1 of 6 open · next app at 90 pts \(~5 tasks\)/.test(t0), t0);
+    const card = p.locator('.task-card', { hasText: 'ZZTEST Open big' }).first(); await card.scrollIntoViewIfNeeded().catch(() => {});
+    await card.locator('[data-test=task-check]').dispatchEvent('click');
+    const v = p.locator('[data-test=points-celebration][data-kind=vault]');
+    const seen = await v.waitFor({ timeout: 10000 }).then(() => true).catch(() => false); await sleep(600);
+    const vt = seen ? await v.innerText().catch(() => '') : '';
+    if (seen) await v.screenshot({ path: SHOTS + `${TAG}-vault-unlock-celebration.png` }).catch((e) => console.log('shot failed', e.message));
+    ok('vault: unlock celebration fires', seen && /Vault unlocked: App 2 🎉/.test(vt), vt);
+    await sleep(3000); await dd(p);
+    const t = await p.locator('[data-test=vault-text]').innerText().catch(() => '');
+    ok('vault: 120 pts opens 2 of 6, next app at 150 pts (~8 tasks)', /Vault · 2 of 6 open · next app at 150 pts \(~8 tasks\)/.test(t), t);
+    ok('vault: no task gate copy', !/finish \d+ more task/i.test(t) && await p.locator('[data-test=vault-gate]').count() === 0, t);
+    await shot(p, 'vault-collapsed', '[data-test=gp-row]');
+    await p.locator('[data-test=vault-toggle]').dispatchEvent('click'); await sleep(500);
+    const prices = await p.locator('[data-test=vault-app]').allInnerTexts();
+    const want = ['50 pts · ~3 tasks', '90 pts · ~5 tasks', '150 pts · ~8 tasks', '210 pts · ~11 tasks', '270 pts · ~14 tasks', '585 pts · ~30 tasks'];
+    ok('vault: 6 apps ascending by usage price, boss last', prices.length === 6 && want.every((w, i) => prices[i].includes(w)) && /App 6/.test(prices[5]), prices.join(' | '));
+    ok('vault: no hardcoded app names', !/Maps|YouTube|Instagram|TikTok|News/.test(prices.join(' ')));
+    await shot(p, 'vault-expanded', '[data-test=gp-row]');
+    await p.reload(); await sleep(4000); await dd(p);
+    ok('vault: unlock celebration once per app per day', await p.locator('[data-test=points-celebration][data-kind=vault]').count() === 0);
     ok('no page errors', p.errs.length === 0, p.errs.join(' | ')); await p.context().close(); }
-  if (AFTER) { const email = 'zztest.vault.gate@example.com'; await seedUser(email, 'ZZTEST Vault Gate', [done('Done A', 1), mk('Open 1', 2), mk('Open 2', 3)], fresh);
-    const p = await page(br); await p.context().addInitScript(FAKE); await login(p, email); await home(p);
-    ok('gate: needs 2 more tasks', /finish 2 more tasks to open/.test(await p.locator('[data-test=vault-text]').innerText().catch(() => '')));
-    await p.click('[data-test=vault-toggle]'); await sleep(500);
-    ok('gate: body explains, no app open', await p.locator('[data-test=vault-gate]').count() === 1 && await p.locator('[data-test=vault-app][data-open="1"]').count() === 0);
-    await shot(p, 'vault-gate', '[data-test=gp-row]'); await p.context().close(); }
   await br.close(); const f = results.filter((r) => !r.c); console.log(`${results.length - f.length}/${results.length} passed`); process.exit(f.length ? 1 : 0);
 })().catch((e) => { console.error(e); process.exit(1); });

@@ -42,6 +42,9 @@ async function run(br, label, extra, hook) {
   await p.fill('[data-test=login-email]', email); await p.fill('input[autocomplete=current-password]', 'zztest-pass-123'); await p.click('[data-test=email-login]');
   await p.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 30000 });
   await p.goto(B + '/home'); await sleep(4000); await dd(p); await settle(p);
+  const tip = p.locator('button:has-text("Skip all tips")'); if (await tip.count()) { await tip.first().click().catch(() => {}); await sleep(500); }
+  const small = async () => ((((await db.doc(`weeklyRoutines/${uid}_${dayName()}`).get()).data() || {}).tasks || []).find((t) => t.title === 'ZZTEST Small ten'));
+  const st0 = await small(); const gain = extra.gamePlan ? ({ s: 10, m: 20, l: 40 })[st0.size] : (Number(st0.points) || 10); // coach day total = size points (S10/M20/L40) // a session Start re-scores tasks (S 15m -> 25), so the expected gain is the task's own points
   const before = await pts(p); await p.screenshot({ path: `${SHOTS}${TAG}-${label}-1-before.png` });
   const card = p.locator('.task-card', { hasText: 'ZZTEST Small ten' }).first();
   await card.locator('[data-test=task-check]').click(); await sleep(700);
@@ -49,17 +52,17 @@ async function run(br, label, extra, hook) {
   await p.screenshot({ path: `${SHOTS}${TAG}-${label}-2-celebration.png` });
   await sleep(2500); await dd(p);
   const after = await pts(p); await p.screenshot({ path: `${SHOTS}${TAG}-${label}-3-after.png` });
-  ok(`${label}: +10 on screen`, after === before + 10, `${before} -> ${after} | card: ${await ehPts(p)}`);
+  ok(`${label}: +${gain} on screen`, after === before + gain, `${before} -> ${after} | card: ${await ehPts(p)}`);
   ok(`${label}: celebration fired`, celeb > 0);
-  const stored = (((await db.doc(`weeklyRoutines/${uid}_${dayName()}`).get()).data() || {}).tasks || []).find((t) => t.createdAt === 'zz-pt-1');
+  const stored = await small();
   ok(`${label}: completion stored`, stored && stored.completed);
   await p.reload(); await sleep(4000); await dd(p); await settle(p);
   const reloaded = await pts(p); await p.screenshot({ path: `${SHOTS}${TAG}-${label}-4-reload.png` });
-  ok(`${label}: persists after reload`, reloaded === before + 10, `${reloaded}`);
-  const again = p.locator('.task-card', { hasText: 'ZZTEST Small ten' }).first(); if (!(await again.isVisible().catch(() => false))) { const tg = p.locator('.done-toggle', { hasText: 'Completed' }).first(); await tg.scrollIntoViewIfNeeded().catch(() => {}); if ((await tg.getAttribute('aria-expanded').catch(() => null)) !== 'true') await tg.click({ force: true }).catch(() => {}); await sleep(800); }
-  await again.scrollIntoViewIfNeeded().catch(() => {}); await again.locator('[data-test=task-check]').click({ timeout: 8000, force: true }).catch((e) => console.log('uncheck failed', String(e).slice(0, 80))); await sleep(3000); await dd(p);
+  ok(`${label}: persists after reload`, reloaded === before + gain, `${reloaded}`);
+  const again = p.locator('.task-card', { hasText: 'ZZTEST Small ten' }).first(); if (!(await again.isVisible().catch(() => false))) { const tg = p.locator('.done-toggle', { hasText: 'Completed' }).first(); await tg.scrollIntoViewIfNeeded().catch(() => {}); if ((await tg.getAttribute('aria-expanded').catch(() => null)) !== 'true') await tg.dispatchEvent('click').catch(() => {}); await sleep(800); }
+  await again.locator('[data-test=task-check]').dispatchEvent('click', {}, { timeout: 8000 }).catch((e) => console.log('uncheck failed', String(e).slice(0, 80))); await sleep(3000); await dd(p);
   const undone = await pts(p); await p.screenshot({ path: `${SHOTS}${TAG}-${label}-5-uncomplete.png` });
-  ok(`${label}: un-complete -10`, undone === before, `${undone}`);
+  ok(`${label}: un-complete -${gain}`, undone === before && !(await small()).completed, `${undone}`);
   ok(`${label}: no page errors`, !p.errs.length, p.errs.join(' | ')); await ctx.close();
 }
 (async () => {
@@ -72,7 +75,7 @@ async function run(br, label, extra, hook) {
   const startSession = (late) => async (uid) => {
     const L = require('./lib.js'); const fn = L.ehFn(); const tok = await L.idTokenFor(uid); const h = { authorization: `Bearer ${tok}` };
     await fn(JSON.stringify({ action: 'plan', tz: 'America/New_York', taskCount: 6 }), h);
-    const r = await fn(JSON.stringify({ action: 'start', hours: 8 }), h); console.log('start', r.statusCode, String(r.body).slice(0, 160));
+    const r = await fn(JSON.stringify({ action: 'start', hours: 8 }), h); if (r.statusCode !== 200) console.log('start', r.statusCode);
     if (late) { const ref = db.doc(`weeklyRoutines/${uid}_${dayName()}`); const d = (await ref.get()).data(); const t = d.tasks; const i = t.findIndex((x) => x.createdAt === 'zz-pt-1'); const [x] = t.splice(i, 1); t.push({ ...x, createdAt: 'zz-pt-1b' }); await ref.update({ tasks: t }); }
   };
   if (!only || only === 'session') await run(br, 'session', { lockInEnabled: true }, startSession(false));
