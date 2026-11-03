@@ -14,7 +14,11 @@
                 <button v-for="c in CATEGORIES" :key="c.id" type="button" class="cat-chip" :class="['tone-' + c.tone, { on: newTask.category === c.id }]" :aria-pressed="String(newTask.category === c.id)" :data-test="'cat-' + c.id" :title="c.label" @click="newTask.category = newTask.category === c.id ? '' : c.id"><i :class="'fas ' + c.icon" aria-hidden="true"></i> {{ c.label }}</button>
               </span>
             </div>
-            <input id="nt-name" ref="titleInput" type="text" v-model="newTask.title" class="field-input" placeholder="What needs doing? Try “gym tomorrow at 6”" required />
+            <div class="nt-name-wrap">
+              <input id="nt-name" ref="titleInput" type="text" v-model="newTask.title" class="field-input" :placeholder="dict.listening.value ? 'Listening…' : 'What needs doing? Try “gym tomorrow at 6”'" required />
+              <button v-if="dict.supported" type="button" class="nt-mic" :class="{ on: dict.listening.value }" data-test="nt-mic" :aria-label="dict.listening.value ? 'Stop dictation' : 'Dictate task name'" :aria-pressed="String(dict.listening.value)" @click="dict.toggle(newTask.title, (t) => { newTask.title = t; })"><i class="fas fa-microphone" aria-hidden="true"></i></button>
+            </div>
+            <p v-if="dict.error.value" class="nt-mic-err" role="alert" data-test="nt-mic-err">{{ dict.error.value }}</p>
             <button v-if="hint" type="button" class="nl-hint" data-test="nl-hint" :disabled="hintBusy" @click="applyHint"><i class="fas fa-magic" aria-hidden="true"></i> {{ hintLabel }} <span class="nl-go">· tap to set</span></button>
           </div>
 
@@ -153,6 +157,9 @@ import { getOrdinalSuffix } from '@/utils/dateTime';
 import { TASK_LIMITS, PRO_RAISES_LIMIT } from '@/config/pricing';
 import { rcProActive } from '@/composables/usePro';
 import { auth } from '@/firebaseConfig';
+import { createDictation } from '@/composables/useDictation';
+const dict = createDictation();
+onBeforeUnmount(() => dict.stop());
 const rcPro = () => rcProActive(auth.currentUser?.uid); // iOS: RevenueCat says Pro -> never show an upgrade prompt
 
 // newTask is the reactive form object owned by HomeView; the form edits it in place via v-model.
@@ -210,6 +217,11 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+.nt-name-wrap { position: relative; }
+.nt-name-wrap .field-input { padding-right: 2.75rem; }
+.nt-mic { position: absolute; right: .25rem; top: 50%; transform: translateY(-50%); width: 40px; height: 40px; border: none; background: none; color: var(--c-text-2, #888); border-radius: 50%; cursor: pointer; }
+.nt-mic.on { color: #fff; background: #e5484d; }
+.nt-mic-err { margin: .3rem 0 0; font-size: .8rem; color: #e5484d; }
 .label-row { display: flex; align-items: center; justify-content: space-between; gap: .4rem; flex-wrap: wrap; }
 .cat-chips, .rem-chips { display: inline-flex; gap: .3rem; flex-wrap: wrap; align-items: center; }
 .cat-chip, .rem-chip, .rem-add { all: unset; cursor: pointer; font-size: .68rem; padding: .1rem .4rem; border-radius: 999px; border: 1px solid var(--c-border, #2a2a2e); color: var(--c-text-2, #a1a09b); }
