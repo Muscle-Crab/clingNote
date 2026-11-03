@@ -55,7 +55,7 @@ export const vaultView = ({ apps = [], days = {}, todayYmd = '', points = 0, pri
 export const weeklyText = (r) => { const h = (Number(r && r.min) || 0) * 7 / 60; const v = h < 1 ? '<1 h/week' : `~${Math.round(h)} h/week`;
   return r && r.noData ? `${v} (estimate, updates after a few days)` : v; };
 export const priceWhy = (r) => { const name = /^app$/i.test(String(r.label || '').trim()) || !r.label ? 'this app' : r.label; const h = Math.max(1, Math.round((Number(r.min) || 0) * 7 / 60)); const t = tasksFor(r.price);
-  return `${r.noData ? 'People typically spend' : 'You spend'} about ${h} hour${h === 1 ? '' : 's'} a week on ${name}${r.noData ? ' (an estimate until we see your own usage)' : ''}, so it costs ${r.price} points, about ${t} task${t === 1 ? '' : 's'}.${r.boss ? ' It\'s your biggest time sink, so it\'s priced 1.5×.' : ''}`; };
+  return `${r.noData ? 'Most people spend' : 'You spend'} about ${h} hour${h === 1 ? '' : 's'} a week on ${name}, so it costs ${r.price} points, about ${t} task${t === 1 ? '' : 's'}.${r.boss ? ' It\'s your biggest time sink, so it\'s priced 1.5×.' : ''}`; };
 export const costText = (price) => `${price} pts · ~${tasksFor(price)} tasks`;
 export const rowText = ({ total, openCount, next, debt, live, liveLeftMin }) => {
   if (!total) return '🔒 Vault · pick apps to lock first';
