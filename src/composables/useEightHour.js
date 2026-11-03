@@ -10,6 +10,7 @@ import { fnUrl } from '@/config/api';
 import * as core from '@/utils/eightHour';
 import { setLockSource } from '@/utils/eightHourLock';
 import { readLock, writeLock, lockFor } from '@/utils/ehLockCache';
+import { readDebtCache, writeDebtCache, cacheWithDebt, cacheCleared, mergeDebt } from '@/utils/appLockDebt';
 import { onAuthStateChanged } from 'firebase/auth';
 
 const st = reactive({ uid: null, loaded: false, loading: false, error: '', data: null, offset: 0, busy: false });
@@ -70,7 +71,11 @@ export const readLastLock = () => readLock(curUid());
 const cacheLock = (l) => writeLock(curUid(), l);
 // The lock that decides the hard stop: the server's, else (offline / not loaded yet) the cached one. Never invents a lock.
 export const shutLock = () => lockFor(st.data, st.uid, curUid()) || readLastLock();
-const apply = (d) => { if (d && d.lock) cacheLock(d.lock); st.uid = curUid(); st.data = d; st.offset = d.now - Date.now(); st.loaded = true; st.error = ''; tick.value = Date.now() + st.offset; };
+// Missed-goal app lock: cache the server's debt per account (offline / cold start); debtRev re-runs readers after a cache write.
+const debtRev = ref(0);
+const cacheDebt = (d) => { if (d && !d.offline && Object.prototype.hasOwnProperty.call(d, 'appLockDebt') && curUid()) { writeDebtCache(cacheWithDebt(readDebtCache(curUid()), d.appLockDebt)); debtRev.value++; } };
+export const clearDebtLocal = (sessionKey) => { if (!curUid() || !sessionKey) return; writeDebtCache(cacheCleared(readDebtCache(curUid()), sessionKey)); debtRev.value++; };
+const apply = (d) => { if (d && d.lock) cacheLock(d.lock); cacheDebt(d); st.uid = curUid(); st.data = d; st.offset = d.now - Date.now(); st.loaded = true; st.error = ''; tick.value = Date.now() + st.offset; };
 
 export const nowMs = () => Date.now() + st.offset; // server time (offset measured at the last fetch)
 
@@ -174,9 +179,9 @@ export const useEightHour = () => {
     const l = shutLock(); const now = (tick.value, nowMs());
     if (!l || !core.isShut(l, now)) return null;
     return { untilMs: 0, untilLabel: '', earned: l.earned || 0, target: l.target || 0, done: l.done || 0, total: l.taskCount || 0, met: (l.target || 0) > 0 && (l.earned || 0) >= l.target,
-      // Per-session rule (server settle): the session's own target/earned; missed -> apps open at end + 2 h.
-      ...(l.session ? { session: l.session, met: !!l.session.met, earned: l.session.earned, target: l.session.target, missed: !l.session.met && l.graceUntilMs > 0,
-        opensAtMs: l.graceUntilMs || 0, opensAtLabel: l.graceUntilMs ? core.fmtClock(l.graceUntilMs, l.tz || deviceTz()) : '' } : {}) };
+      // Per-session rule (server settle): the session's own target/earned. A miss no longer opens the apps at a clock time
+      // (no "end + 2 h"): they stay locked until a later session hits its goal (appLockDebt), so missed/opensAt stay empty.
+      ...(l.session ? { session: l.session, met: !!l.session.met, earned: l.session.earned, target: l.session.target, missed: false, opensAtMs: 0, opensAtLabel: '' } : {}) };
   });
   // Next scheduled block (evening mode), shown as "Next 6:00 PM" while the app is open in the gap.
   const nextBlock = computed(() => {
@@ -186,7 +191,8 @@ export const useEightHour = () => {
   });
   const pendingBlocks = computed(() => core.pendingOf(lockRaw.value).filter((b) => b.endMs > (tick.value, nowMs())));
   const session = computed(() => st.data?.session || null);
-  return { st, dayHours, nextBlock, pendingBlocks, scheduleNext, startNextSession, session, warning, hoursPref, data, plan, lock, phase, phaseInfo, running, remainingMs, countdown, endsLabel, startsLabel, stats, shutdown, reward: computed(() => st.data?.reward || ''),
+  const appLockDebt = computed(() => (debtRev.value, mergeDebt({ server: st.data && st.data.appLockDebt, serverKnown: !!(st.loaded && st.data && !st.data.offline && st.uid === curUid() && Object.prototype.hasOwnProperty.call(st.data, 'appLockDebt')), cache: readDebtCache(curUid()) })));
+  return { st, appLockDebt, dayHours, nextBlock, pendingBlocks, scheduleNext, startNextSession, session, warning, hoursPref, data, plan, lock, phase, phaseInfo, running, remainingMs, countdown, endsLabel, startsLabel, stats, shutdown, reward: computed(() => st.data?.reward || ''),
     refresh, savePlan, startNow, reportProgress, nowMs };
 };
 

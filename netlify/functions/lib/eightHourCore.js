@@ -268,6 +268,26 @@ const settleDay = (statsIn, lock) => {
   return s;
 };
 // Failure notification text. Deterministic here; the server may swap in AI-written copy when a key is configured (REQUIRES SERVER AI, optional).
+// ---- Missed-goal app lock ("debt"): a session that ends short of its points goal keeps the picked apps (Screen Time shields)
+// locked after it ends. Only a LATER session that reaches its own goal unlocks them, the moment the goal is hit. No streak reset,
+// no points change, ClingNote itself stays usable. Stored on eightHour/{uid}.appLockDebt (server clock), cached on the device.
+// Idempotent: settling the same session twice gives the same debt; a debt is only cleared by a session started after it.
+// DEBT_CAP_MS: a native shield needs an end time; an untouched debt lifts after the same 14-day safety cap as the shutdown state.
+const DEBT_CAP_MS = SHUT_CAP_MS;
+const normDebt = (d) => (d && typeof d.sessionKey === 'string' && d.sessionKey && Number(d.sinceMs) > 0
+  ? { sessionKey: d.sessionKey, target: Number(d.target) || 0, earned: Number(d.earned) || 0, sinceMs: Number(d.sinceMs) } : null);
+const debtUntilMs = (d) => { const x = normDebt(d); return x ? x.sinceMs + DEBT_CAP_MS : 0; };
+const debtActive = (d, nowMs) => { const x = normDebt(d); return !!x && nowMs < x.sinceMs + DEBT_CAP_MS; };
+// s = { startMs, target, earned }: a session started at/after the miss that has reached its goal (target > 0) pays the debt.
+const debtCleared = (d, s) => { const x = normDebt(d); return !!x && !!s && Number(s.target) > 0 && Number(s.earned) >= Number(s.target) && Number(s.startMs) >= x.sinceMs; };
+// After a session settles. s = { sessionKey, startMs, endMs, target, earned, met }. No goal (target <= 0) never creates or pays a debt.
+const debtAfterSettle = (prev, s) => {
+  const p = normDebt(prev);
+  if (!s || !(Number(s.target) > 0)) return p;
+  if (s.met) return p && Number(s.startMs) >= p.sinceMs ? null : p;
+  if (p && p.sessionKey === s.sessionKey) return p; // same session settled again: unchanged
+  return { sessionKey: s.sessionKey, target: Number(s.target), earned: Number(s.earned) || 0, sinceMs: Number(s.endMs) };
+};
 const failureNotice = (lock, s) => `You earned ${lock.earned} of ${lock.target} points. ${s && s.lastPenalty && s.lastPenalty.shieldUsed ? 'A streak shield saved your streak. ' : ''}${s && s.lastPenalty && s.lastPenalty.coins ? `-${s.lastPenalty.coins} coins. ` : ''}Tomorrow is harder: your target goes up and stays there until you hit it.`;
 const rewardFor = (streak) => (streak >= 30 ? '🏔️ Peak Performer' : streak >= 15 ? '🌲 Mature Tree' : streak >= 7 ? '🌳 Small Tree' : streak >= 3 ? '🌿 Sprouting Leaves' : streak >= 1 ? '🌱 Seed Starter' : '');
 
@@ -278,6 +298,7 @@ module.exports = {
   countdownParts, fmtCountdown, fmtClock, fmtWakeLabel,
   complexityFromMinutes, complexityFromText, pointsFor, estimateTask, levelRatio, dailyTarget,
   lockedChangeAllowed, nextDayKey, shutUntilMs, SHUT_CAP_MS, isShut, rulesShutUntilMs,
+  DEBT_CAP_MS, normDebt, debtUntilMs, debtActive, debtCleared, debtAfterSettle,
   SESSION_MIN_LEFT_MS, sessionCloseMs, nextDayStartMs, nextSessionState,
   BLOCK_HOURS, MAX_BLOCKS_PER_DAY, SCHEDULE_LEAD_MS, SCHEDULE_HORIZON_MS, clampBlockHours, sessionKey, blockIndex, pendingOf, nextPending, nextAt, planBlocks, countableIndexes, progressOf, defaultStats, settleDay, rewardsForDay, penaltyForMiss, badgeFor, MAX_SHIELDS, SHIELD_MIN_RATIO, failureNotice, rewardFor,
 };

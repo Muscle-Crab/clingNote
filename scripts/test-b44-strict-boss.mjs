@@ -32,6 +32,6 @@ t('off day detection + wake auto-start', () => {
   assert.equal(S.wakeAutoOn({ mode: 'strict', wakeAuto: false, dayKey: '2026-10-30', offDates: ['2026-10-31'] }), true);
   assert.equal(S.wakeAutoOn({ mode: 'strict', wakeAuto: true, dayKey: '2026-10-31', offDates: ['2026-10-31'] }), false);
   assert.equal(S.wakeAutoOn({ mode: 'simple', wakeAuto: false, dayKey: '2026-10-30' }), false); });
-t('day-end note', () => { const a = S.dayEndNote({ earned: 100, goal: 50, tasksDone: 6 }); assert.match(a.title, /100\/50/); assert.match(a.body, /1h 30m of screen time/); assert.match(S.dayEndNote({ earned: 10, goal: 50 }).body, /locked for 2 more hours/); });
+t('day-end note', () => { const a = S.dayEndNote({ earned: 100, goal: 50, tasksDone: 6 }); assert.match(a.title, /100\/50/); assert.match(a.body, /1h 30m of screen time/); assert.match(S.dayEndNote({ earned: 10, goal: 50 }).body, /Start a new session whenever/); assert.doesNotMatch(S.dayEndNote({ earned: 10, goal: 50 }).body, /2 more hours/); });
 t('greeting + mood', () => { assert.equal(S.wakeGreeting('Sam', 7), 'Good morning, Sam. How are you feeling?'); assert.match(S.moodReply('low', 70), /70 points/); assert.equal(S.MOODS.length, 4); });
 console.log(`${n} b44 strict-boss tests passed`);

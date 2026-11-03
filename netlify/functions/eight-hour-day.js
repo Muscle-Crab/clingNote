@@ -91,17 +91,20 @@ const settleIfOver = async (ctx, doc, now) => {
       const full = lockedEarned(lock, tasks).earned;
       earned = Math.max(earned, full);
     }
-    // Per-session shutdown rule: the session's own tasks/points, completions inside its window only. Missed -> apps stay locked 2 h.
+    // Per-session shutdown rule: the session's own tasks/points, completions inside its window only. Missed -> the picked apps stay
+    // locked (appLockDebt) until a later session reaches its goal.
     if (d) { const ud = await userDoc(ctx); const sessions = Number(ud.gamePlan && ud.gamePlan.sessions) === 1 ? 1 : 2;
       grace = sessionGrace(countable(pruneStale(d.tasks || [], lock.tz || 'UTC', lock.dayKey), lock.dayKey).map((r) => r.t), { n: Math.min(core.blockIndex(lock) + 1, sessions), sessions, startMs: lock.startMs, endMs: lock.endMs }); }
   } catch (e) { /* keep the server-time progress value */ }
-  const settledLock = { ...lock, earned, settled: true, ...(grace ? { session: grace, graceUntilMs: grace.untilMs } : {}) };
   const idx = core.blockIndex(lock);
+  const settledLock = { ...lock, earned, settled: true, ...(grace ? { session: { ...grace, untilMs: 0 }, graceUntilMs: 0 } : {}) };
+  const debt = grace ? core.debtAfterSettle(doc.appLockDebt, { sessionKey: core.sessionKey(lock.dayKey, idx), startMs: lock.startMs, endMs: lock.endMs, target: grace.target, earned: grace.earned, met: grace.met })
+    : core.normDebt(doc.appLockDebt);
   // The streak/target settle once per day, on the day's FIRST block. Later blocks (evening mode) and empty scheduled blocks only write a history row.
   const counts = idx === 0 && !(lock.scheduled && !(lock.taskCount > 0)); // legacy locks (no index/taskCount) still settle
   const stats = counts ? core.settleDay(doc.stats, { dayKey: lock.dayKey, earned, target: lock.target, allDone: (lock.totalPoints || 0) > 0 && earned >= lock.totalPoints }) : { ...core.defaultStats(), ...(doc.stats || {}) };
-  const next = { ...doc, lock: settledLock, stats };
-  await ctx.db.doc(`eightHour/${ctx.uid}`).set({ lock: lockWrite(ctx, settledLock), ...(counts ? { stats } : {}) }, { merge: true });
+  const next = { ...doc, lock: settledLock, stats, appLockDebt: debt };
+  await ctx.db.doc(`eightHour/${ctx.uid}`).set({ lock: lockWrite(ctx, settledLock), appLockDebt: debt, ...(counts ? { stats } : {}) }, { merge: true });
   const hid = idx === 0 ? lock.dayKey : core.sessionKey(lock.dayKey, idx);
   await ctx.db.doc(`eightHour/${ctx.uid}/history/${hid}`).set({ dayKey: lock.dayKey, index: idx, startMs: lock.startMs, endMs: lock.endMs, taskCount: lock.taskCount, total: lock.totalPoints, target: lock.target, earned,
     met: counts ? stats.lastResult === 'met' : (lock.target > 0 && earned >= lock.target), streakCounted: counts, settledMs: ctx.now });
@@ -118,6 +121,7 @@ const view = (doc, now) => {
   return { now, phase: ph.phase, window: ph.phase === 'none' ? null : { startMs: ph.startMs || null, endMs: ph.endMs || null, wakeMs: ph.wakeMs || null, dayKey: ph.dayKey || null, missed: !!ph.missed, nextStartMs: ph.nextStartMs || null, nextEndMs: ph.nextEndMs || null },
     plan: doc.plan ? { wakeTime: doc.plan.wakeTime, tz: doc.plan.tz, taskCount: doc.plan.taskCount } : null,
     lock: ph.phase === 'running' || ph.phase === 'gap' || (doc.lock && (doc.lock.dayKey === ph.dayKey || core.isShut(doc.lock, now))) ? publicLock(doc.lock) : null, // kept while the shutdown screen shows (until a new session starts)
+    appLockDebt: core.normDebt(doc.appLockDebt),
     stats: { ...core.defaultStats(), ...(doc.stats || {}) }, reward: core.rewardFor((doc.stats || {}).streak || 0),
     ...(doc._session ? { session: doc._session } : {}) };
 };
@@ -323,8 +327,13 @@ const actions = {
     const tasks = dsnap.exists ? (dsnap.data().tasks || []) : [];
     const { earned, done } = lockedEarned(lock, tasks);
     const next = { ...lock, earned, done };
-    await ctx.db.doc(`eightHour/${ctx.uid}`).set({ lock: lockWrite(ctx, next) }, { merge: true });
-    return view({ ...doc, lock: next }, ctx.now);
+    // Missed-goal app lock: this (later) session reaching its own goal pays the debt now, not at the session end.
+    let debt = core.normDebt(doc.appLockDebt);
+    if (debt) { try { const ud = await userDoc(ctx); const sessions = Number(ud.gamePlan && ud.gamePlan.sessions) === 1 ? 1 : 2;
+      const g = sessionGrace(countable(pruneStale(tasks, lock.tz || 'UTC', lock.dayKey), lock.dayKey).map((r) => r.t), { n: Math.min(core.blockIndex(lock) + 1, sessions), sessions, startMs: lock.startMs, endMs: lock.endMs });
+      if (core.debtCleared(debt, { startMs: lock.startMs, target: g.target, earned: g.earned })) debt = null; } catch (e) { /* keep the debt; settle re-checks */ } }
+    await ctx.db.doc(`eightHour/${ctx.uid}`).set({ lock: lockWrite(ctx, next), appLockDebt: debt }, { merge: true });
+    return view({ ...doc, lock: next, appLockDebt: debt }, ctx.now);
   },
 };
 

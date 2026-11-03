@@ -68,8 +68,8 @@ t('native: cold start sync stops a leftover midnight lock', () => { const N = mk
 
 // --- wiring (HomeView / plugin) so the pure rules are actually used
 const hv = src('src/views/HomeView.vue'); const pl = src('ios/App/App/ClingLockPlugin.swift');
-t('wiring: allDone passed, per-session claim, grace/eight-hour miss skipped when all done, cancel after end, native cancel lifts', () => {
-  assert(/strictShield\(\{[^\n]*allDone/.test(hv)); assert(hv.includes('claimedAtBy')); assert(hv.includes('grace.want && free && !allTasksDone.value'));
-  assert(hv.includes('ehs.missed && !allTasksDone.value')); assert(hv.includes('s.met && g.untilMs > Date.now()'));
+t('wiring: allDone passed, per-session claim, missed-goal lock via appLockDebt (no 2 h grace), cancel after end, native cancel lifts', () => {
+  assert(/strictShield\(\{[^\n]*allDone/.test(hv)); assert(hv.includes('claimedAtBy')); assert(!hv.includes('grace.want && free')); assert(!hv.includes('ehs.missed'));
+  assert(hv.includes('debtShield({ debt: eh.appLockDebt.value')); assert(hv.includes('s.met && g.untilMs > Date.now()'));
   assert(/func cancelScheduledLock[\s\S]{0,1400}clearShield\(\)/.test(pl)); });
 console.log(`unlock-at-end: ${n} passed`);

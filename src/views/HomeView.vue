@@ -359,7 +359,9 @@ import { lockIn, loadLockIn, skipLockInToday } from '@/utils/lockIn';
 import { wakeLockPlan, shouldReconcileWake } from '@/utils/wakeLock';
 import { homeDay } from '@/utils/homeDay';
 import DayStartPrompt from '@/components/eighthour/DayStartPrompt.vue';
-import { useEightHour, syncAfterAuth, setDayLengthHours, loadDayLengthHours, promptSeenFor, markPromptSeen } from '@/composables/useEightHour';
+import { debtShield } from '@/utils/appLockDebt';
+import { sessionGoal } from '@/utils/sessionGoal';
+import { useEightHour, clearDebtLocal, syncAfterAuth, setDayLengthHours, loadDayLengthHours, promptSeenFor, markPromptSeen } from '@/composables/useEightHour';
 import { countableIndexes, taskRange, hoursLabel } from '@/utils/eightHour';
 import { estimateFor, chipValues, withAiEstimate } from '@/utils/taskEstimate';
 import { requestAiEstimate } from '@/utils/aiEstimate';
@@ -3974,7 +3976,7 @@ const gpSessions = computed(() => (gpOn.value ? SP.sessionsOf(gp.value, todayTas
 // so an empty session never reads as "goal met" (no shield drop) and late points still show.
 const liveSession = (list, nowMs) => { if (!list.length || nowMs >= list[list.length - 1].endMs) return null; const s = SP.currentSession(list, nowMs); return s && s.target > 0 ? s : null; };
 const gpSession = computed(() => liveSession(gpSessions.value, nowTick.value));
-const gpGrace = () => (gpOn.value && gpProgKnown.value ? SP.graceLock(SP.sessionsOf(gp.value, todayTasksForTarget.value || [], Date.now(), { estMinutes: gpEst }), Date.now()) : { want: false, untilMs: 0 });
+// (the old per-session 2 h grace lock is replaced by the missed-goal app lock, appLockDebt: see syncAppLock)
 const gpProg = computed(() => { const l = todayTasksForTarget.value || []; return { done: l.filter((t) => t && t.completed).length, total: l.length, points: gpSession.value ? gpSession.value.earned : gpEarned.value.points,
   taken: GP.breaksOn(gpBreakLog.value, GP.dayWindow(gp.value).dayKey).count }; });
 const gpBankFull = computed(() => (gpOn.value ? GP.breakBank(gp.value, gpBreak.value, nowTick.value, gpProg.value) : { balance: 0, status: GP.breakStatus({ ...gpProg.value, dayHours: gp.value.closeHours }) }));
@@ -4081,9 +4083,7 @@ const strictPlan = (st) => {
   let r = strictShield({ running: eh.running.value, dayEndMs: sd.dayEndMs, goal, earned, tasksDone: tasksDoneToday.value, goalAt: ss ? sd.goalAtBy[sk] || 0 : sd.goalAt, claimedAt: (ss ? (sd.claimedAtBy || {})[sk] : sd.claimedAt) || 0, selectionCount: st.selectionCount || 0, allDone,
     enabled: lockEnabled(), unlockedToday: lockUnlockedDay.value === localDateStr(), offDay: (offDates.value || []).includes(localDateStr()) });
   if (gpOn.value) { // game plan: optional friend-approved unlock window wins (only when enabled); otherwise social apps stay locked until the morning checklist is done
-    const grace = gpGrace(); const free = lockEnabled() && (st.selectionCount || 0) > 0 && lockUnlockedDay.value !== localDateStr();
     if (gp.value.friendUnlock && gpUnlock.value.untilMs > Date.now()) r = { ...r, want: false, phase: 'friend' };
-    else if (grace.want && free && !allTasksDone.value) r = { ...r, want: true, untilMs: Math.max(grace.untilMs, r.want ? r.untilMs : 0), phase: 'missed', session: grace };
     else if (GP.breakActive(gpBreak.value, Date.now()) && gpBreakOk()) r = { ...r, want: false, phase: 'break' };
     else if (!r.want && gpGate.value && lockEnabled() && (st.selectionCount || 0) > 0 && lockUnlockedDay.value !== localDateStr()) r = { ...r, want: true, untilMs: gpPhase.value.closeMs, phase: 'checklist' };
   }
@@ -4106,6 +4106,14 @@ const gpGraceSchedule = async () => {
     else if (!g.want && s.met && g.untilMs > Date.now()) { gpGraceKeys.delete(g.key); await clingLock.cancelScheduledLock({ key: g.key }); }
   }
 };
+// The running session's own goal for the missed-goal lock (same math + tasks as the server's sessionGrace).
+const liveDebtSession = () => { const l = eh.lock.value; if (!eh.running.value || !l || !l.startMs) return null;
+  const sessions = Number(gp.value && gp.value.sessions) === 1 ? 1 : 2; const g = sessionGoal(todayTasksForTarget.value || [], { n: Math.min((Number(l.index) || 0) + 1, sessions), sessions, endMs: l.endMs });
+  return { startMs: l.startMs, target: g.target, earned: g.earned }; };
+// Debt paid: drop every background "missed" lock iOS still holds (scheduled by gpGraceSchedule below while a session ran short).
+const gpGraceCancelAll = (sessionKey = '') => { const day = String(sessionKey).split('#')[0].replace(/-/g, '');
+  if (day) for (const n of [1, 2]) gpGraceKeys.add(`grace${day}s${n}`); // keys are deterministic, so this also covers a cold start
+  for (const key of gpGraceKeys) clingLock.cancelScheduledLock({ key }).catch(() => {}); gpGraceKeys.clear(); };
 const lockEnabled = () => { try { return localStorage.getItem(LOCK_PREF) === '1'; } catch (e) { return false; } };
 let lockOn = null;
 const hardLocked = ref(false); // shield up now: the sergeant menu shows Emergency unlock
@@ -4124,10 +4132,13 @@ const syncAppLock = async () => {
   let want = sp ? sp.want : shouldShield({ enabled: lockEnabled(), running: eh.running.value, endMs, selectionCount: st.selectionCount || 0,
     earned: pointsAccumulated.value || 0, required: dayRequiredPts.value || 0, openTasks: (selectedDayRoutine.value || []).filter((t) => t && !t.completed && t.status !== 'wontdo').length,
     unlockedToday: lockUnlockedDay.value === localDateStr() });
-  // Server session settle (eight-hour state): a missed session keeps apps locked until its graceUntilMs (end + 2 h).
-  const ehs = eh.shutdown && eh.shutdown.value;
-  if (ehs && ehs.missed && !allTasksDone.value && ehs.opensAtMs - Date.now() > 60000 && lockEnabled() && (st.selectionCount || 0) > 0 && lockUnlockedDay.value !== localDateStr() && !(sp && sp.phase === 'friend')) {
-    want = true; endMs = Math.max(ehs.opensAtMs, sp && sp.want ? sp.untilMs : 0); }
+  // Missed-goal app lock (eightHour/{uid}.appLockDebt, server clock + device cache): a session that ended short of its points goal
+  // keeps the picked apps locked after it ends. A LATER session reaching its own goal (same sessionGoal math as the server) lifts it
+  // at once, before the server round trip; the server clears it on that progress call. No clock time, no streak / points change.
+  const debt = debtShield({ debt: eh.appLockDebt.value, now: Date.now(), session: liveDebtSession(), enabled: lockEnabled(), selectionCount: st.selectionCount || 0,
+    unlockedToday: lockUnlockedDay.value === localDateStr(), friend: !!(sp && sp.phase === 'friend'), onBreak: !!(sp && sp.phase === 'break') });
+  if (debt.cleared) { clearDebtLocal(debt.sessionKey); gpGraceCancelAll(debt.sessionKey); eh.reportProgress(); }
+  else if (debt.want) { want = true; endMs = Math.max(debt.untilMs, sp && sp.want ? sp.untilMs : 0); }
   gpGraceSchedule();
   const fEnd = sp && sp.phase === 'break' ? 0 : focusShieldEnd({ dayWant: !!want, enabled: lockEnabled(), selectionCount: st.selectionCount || 0, locked: lockedFocus(selectedDayRoutine.value || []) });
   const act = lockAction({ want: !!(want || fEnd), endMs: fEnd || endMs, st });
@@ -4169,6 +4180,7 @@ watch(() => [eh.running.value, eh.pendingBlocks.value.length, pointsAccumulated.
 // A new session lock (e.g. session 2 started from the shutdown card) or a settled shutdown: re-sync once its doc has landed.
 watch(() => { const l = eh.lock.value || {}; const sh = eh.shutdown && eh.shutdown.value; return `${l.index}:${l.startMs}:${l.endMs}:${sh ? sh.opensAtMs || 1 : 0}`; }, () => { syncAppLock(); });
 onMounted(() => { setTimeout(syncAppLock, 1200); });
+watch(() => { const d = eh.appLockDebt.value; return d ? d.sessionKey : ''; }, () => { syncAppLock(); }); // missed-goal lock set / paid (server or cache)
 // Emergency unlock (assistant tool + sergeant menu): stops the shield for today and books the point penalty.
 const emergencyUnlock = async () => { if (!emergencyOn.value) return { summary: 'Emergency unlock is turned off in Settings.', penalty: 0, refused: true }; await clingLock.stopLock(); hardLocked.value = false; const day = localDateStr(); let pen = []; try { pen = JSON.parse(localStorage.getItem(PENALTY_KEY) || '[]'); } catch (e) { /* ignore */ }
   const at = Date.now(); pen.push({ day, points: EMERGENCY_PENALTY, at, uid: userId.value || '' }); try { localStorage.setItem(PENALTY_KEY, JSON.stringify(pen.slice(-60))); } catch (e) { /* ignore */ }

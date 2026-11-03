@@ -45,17 +45,17 @@ for (const [m1, m2] of [[true, true], [true, false], [false, true], [false, fals
 t('cold start inside the window: grace computed from tasks + clock alone (no stored state)', () => {
   const fresh = S.graceLock(S.sessionsOf(gp, mk(0, 0), at(12)), at(12)); assert.deepStrictEqual([fresh.want, fresh.untilMs], [true, at(13)]);
 });
-t('background schedule: [end, end+2h] while short, none once met', () => {
-  const [s1] = S.sessionsOf(gp, mk(0, 0), at(9)); const g = S.graceSchedule(s1, at(9)); assert.deepStrictEqual([g.want, g.startMs, g.untilMs], [true, at(11), at(13)]); assert.strictEqual(g.key, 'grace20261103s1');
+t('background schedule: from the end to the 14-day debt cap while short, none once met', () => {
+  const [s1] = S.sessionsOf(gp, mk(0, 0), at(9)); const g = S.graceSchedule(s1, at(9)); assert.deepStrictEqual([g.want, g.startMs, g.untilMs], [true, at(11), at(11) + S.DEBT_HOLD_MS]); assert.strictEqual(S.DEBT_HOLD_MS, 14 * 24 * H); assert.strictEqual(g.key, 'grace20261103s1');
   assert.strictEqual(S.graceSchedule(S.sessionsOf(gp, mk(2, 0), at(10))[0], at(10)).want, false);
 });
 t('shutdown line text', () => { assert.strictEqual(S.graceText({ met: false, target: 215, untilMs: 1 }, () => '7:27 PM'), 'Missed 215 pts: apps open at 7:27 PM');
   assert(/Missed \$\{shut\.target\} pts: apps open at \$\{shut\.opensAtLabel\}/.test(src('src/components/eighthour/EightHourChrome.vue'))); });
-t('wiring: strictShield 2 h, server settle, eh shutdown, native cancel', () => {
+t('wiring: strictShield 2 h, server settle -> appLockDebt, eh shutdown, native cancel', () => {
   const sd = src('src/utils/strictDay.js'); assert(/MISS_GRACE_MS = 2 \* 3600000/.test(sd) && /phase: 'missed'/.test(sd) && !/untilMs: midnight, phase: 'missed'/.test(sd));
-  const fn = src('netlify/functions/eight-hour-day.js'); assert(/sessionGrace\(countable\(pruneStale/.test(fn) && /graceUntilMs: grace\.untilMs/.test(fn) && /graceUntilMs: Number\(l\.graceUntilMs\)/.test(fn));
-  assert(/opensAtMs: l\.graceUntilMs/.test(src('src/composables/useEightHour.js')));
-  const h = src('src/views/HomeView.vue'); assert(/grace\.want && free/.test(h) && /ehs\.missed && !allTasksDone\.value && ehs\.opensAtMs/.test(h) && /cancelScheduledLock\(\{ key: g\.key \}\)/.test(h));
+  const fn = src('netlify/functions/eight-hour-day.js'); assert(/sessionGrace\(countable\(pruneStale/.test(fn) && /core\.debtAfterSettle\(doc\.appLockDebt/.test(fn) && /core\.debtCleared\(debt/.test(fn) && /graceUntilMs: Number\(l\.graceUntilMs\)/.test(fn));
+  assert(/missed: false, opensAtMs: 0/.test(src('src/composables/useEightHour.js')));
+  const h = src('src/views/HomeView.vue'); assert(!/grace\.want && free/.test(h) && /debtShield\(\{ debt: eh\.appLockDebt\.value/.test(h) && /cancelScheduledLock\(\{ key: g\.key \}\)/.test(h));
   const sw = src('ios/App/App/ClingLockPlugin.swift'); assert(/name: "cancelScheduledLock"/.test(sw) && /stopMonitoring\(\[ScheduledLocks\.name\(key\)\]\)/.test(sw));
   assert(/name: "clearBreakOffer"/.test(sw) && /\(o\["v"\] as\? Int\) == 2/.test(sw) && /guard close > nowMs/.test(sw));
 });

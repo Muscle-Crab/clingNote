@@ -69,7 +69,7 @@ export const dayEndNote = ({ earned = 0, goal = 0, tasksDone = 0, tuning = STRIC
   const w = earnedWindowMin({ earned, goal, tasksDone }, tuning);
   return w > 0
     ? { title: `Goal hit: ${earned}/${goal} pts`, body: `You earned ${fmtMin(w)} of screen time. Start it from the game plan line on Home whenever you want; when it ends, apps lock again.`, windowMin: w }
-    : { title: `Goal missed: ${earned}/${goal} pts`, body: 'No screen time earned. Apps stay locked for 2 more hours, then open on their own.', windowMin: 0 };
+    : { title: `Goal missed: ${earned}/${goal} pts`, body: "Session done. Start a new session whenever you're ready.", windowMin: 0 };
 };
 
 // Wake greeting + mood check
