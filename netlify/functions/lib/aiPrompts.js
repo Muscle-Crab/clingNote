@@ -46,6 +46,8 @@ Return in JSON format like:
     const title = clip(input.title, 200); const notes = clip(input.notes, 500);
     if (!title) throw Object.assign(new Error('Empty title'), { status: 400 });
     const prompt = `Estimate how many minutes this personal to-do task realistically takes for one person. Task: "${title}"${notes ? `. Notes: "${notes}"` : ''}.
+Estimate from what the task actually involves (travel, waiting, setup and the work itself), not a generic default. Long jobs are fine: up to several hours.
+Examples: "car inspection" 90, "home inspection" 120, "doctor appointment" 60, "dentist" 60, "job interview" 60, "grocery shopping" 60, "deep clean the kitchen" 90, "write a report" 120, "study for exam" 120, "move apartments" 480, "assemble furniture" 90, "reply to an email" 10, "call mom" 15, "take out trash" 5.
 Return ONLY JSON: {"minutes": <integer between 5 and 600>}`;
     return { costsCredit: false, body: { model: 'gpt-4o-mini', temperature: 0, max_tokens: 30, messages: [{ role: 'user', content: prompt }] } };
   }

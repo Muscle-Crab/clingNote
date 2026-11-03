@@ -27,6 +27,14 @@ const r = (s) => new RegExp(s.replace(/~/g, D));
 
 // [regex, minutes] — first match wins, so more specific phrases come first.
 const DICT = [
+  // appointments / inspections: travel + waiting + the visit itself (an inspection is 60-120 min, never a 20-min default)
+  [r('\\b(?:home|house|property|building|roof|termite|pest|fire|safety|site) inspection|\\b(?:inspect|survey) ~(?:house|home|property|building|roof|site)'), 120],
+  [r('\\binspection\\b|\\baudit\\b|\\bwalk[- ]?through\\b|\\bsite visit'), 90],
+  [r('\\bmov(?:e|ing) (?:house|home|apartments?|flats?|out|in)\\b'), 480],
+  [r('\\b(?:job )?interview\\b'), 60],
+  [r('\\b(?:doctor|dentist|dental|physio|therapy|therapist|vet|eye exam|checkup|check-up|appointment)\\b'), 60],
+  [r('\\b(?:dmv|passport|license renewal|visa)\\b'), 90],
+  [r('\\bassemble|\\bput together ~(?:furniture|desk|bed|shelf|wardrobe)'), 90],
   // car (before generic wash/clean/tidy/vacuum/gas rules)
   [r('\\b(?:drive[- ]?thr(?:u|ough)|automatic|express) car ?wash|\\bcar ?wash\\b'), 15],
   [r('\\b(?:clean|detail|wash|vacuum) ~car(?:s)? interior|\\b(?:clean|detail) (?:the )?inside of ~car|\\bdetail ~car'), 45],
