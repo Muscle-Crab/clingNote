@@ -144,7 +144,7 @@
                      :locked="hardLocked || gpGate" :gate="gpGate" :friend="(gp.friend && gp.friend.name) || ''" :friend-on="gp.friendUnlock" :unlock="gpUnlock" :penalty="gpPenaltyToday" :after-close="gpEarned.afterClose"
                      :break-bank="gpBank" :break-min="gpBreakStatus.min || 15" :gift="gpGift" :history="gpHistory" :break-on="gpPhase.phase === 'break'" :screen-ready="strictReadyMin" :ready="gpReady" :vault="gpVault"
                      @carry="gpCarry" @review="gpApplyReview" @ask="gpAsk" @share="gpShare" @take-break="gpTakeBreak" @end-break="gpEndBreak" @claim-screen="claimScreenTime" @vault-start="vaultStart" @vault-stop="vaultStop" />
-        <EmptyState v-if="dayTasks.length === 0" :show-add="true" :show-templates="isViewingToday && !!userId" @add="onAddClick" @templates="openTemplates" />
+        <EmptyState v-if="dayTasks.length === 0" :show-add="true" :show-templates="isViewingToday && !!userId" :day-label="isViewingToday ? '' : formatScheduledDate(viewTabDate, todayStr)" :scheduled="isViewingToday ? 0 : (scheduledCounts[viewTabDate] || 0)" @add="onAddClick" @templates="openTemplates" />
 
 
         <div v-else class="task-list-wrap">
@@ -322,7 +322,7 @@ import { scheduleNotification, sendNotificationToPlayer, linkPushUser } from '@/
 import { speak } from '@/composables/useSpeech';
 import { completionPercentage, computeTimeStats, daysLeftInYearFrom, heroTitleFor } from '@/utils/dayStats';
 import { shouldAutoComplete, resetSubtasks } from '@/utils/subtasks';
-import { deferredDateFor, buildScheduledEntry, buildRecurringTemplate, isTaskVisibleOn, futureOf, dueOf, countsByDate, withWeekDates, tabDateFor, isStaleOnTab, isValidDate, rescheduleEntry, templatesOf } from '@/utils/scheduling';
+import { deferredDateFor, buildScheduledEntry, buildRecurringTemplate, isTaskVisibleOn, futureOf, dueOf, countsByDate, withWeekDates, tabDateFor, isStaleOnTab, formatScheduledDate, isValidDate, rescheduleEntry, templatesOf } from '@/utils/scheduling';
 import { mutateScheduled, materializeDueForToday } from '@/composables/useScheduledTasks';
 import { blankSchedule, validateSchedule, scheduleOfTask, applyTaskSchedule, deleteTaskScope, deleteEntry, editEntry } from '@/utils/schedEdit';
 import { syncScheduledNotifications } from '@/composables/useSchedNotifications';
@@ -1891,7 +1891,7 @@ const runScheduledMaterialization = async () => {
     return res.added;
   } catch (e) {
     console.error('Scheduled tasks unavailable (check Firestore rules for users/{uid}):', e);
-    scheduledError.value = 'Scheduled tasks could not be loaded.';
+    scheduledError.value = 'Scheduled tasks could not be loaded. Check your connection and try again.';
   } finally { materializing = false; }
 };
 const afterMaterialize = async () => {
@@ -2079,7 +2079,7 @@ const editScheduledEntry = async ({ id, fields, sched, scope }) => {
   if (!userId.value) return;
   const bad = validateSchedule(sched, sched.repeat === 'never' ? getTodayId() : null); if (bad) { scheduledError.value = bad; return; }
   try { scheduledList.value = await mutateScheduled(userId.value, (l) => editEntry(l, id, fields || {}, sched, scope, getTodayId())); await afterMaterialize(); resyncNotifications(); }
-  catch (e) { console.error(e); scheduledError.value = 'Could not update the scheduled task.'; }
+  catch (e) { console.error(e); scheduledError.value = 'Could not update the scheduled task. Check your connection and try again.'; }
 };
 
 // Reminders for scheduled/recurring tasks: rebuilt from scratch after any change (capped, see utils/schedNotify.js).
@@ -2127,12 +2127,14 @@ const moveScheduledToToday = async (id) => {
   try {
     scheduledList.value = await mutateScheduled(userId.value, (l) => rescheduleEntry(l, id, getTodayId(), ''));
     await afterMaterialize();
-  } catch (e) { console.error(e); scheduledError.value = 'Could not move the task.'; }
+  } catch (e) { console.error(e); scheduledError.value = 'Could not move the task to today. Check your connection and try again.'; }
 };
 const updateScheduledDate = async ({ id, date, time }) => {
-  if (!userId.value || !isValidDate(date) || date < getTodayId()) return;
+  if (!userId.value) return;
+  if (!isValidDate(date) || date < getTodayId()) { scheduledError.value = 'Pick today or a later date.'; return; } // was a silent no-op
+  scheduledError.value = '';
   try { scheduledList.value = await mutateScheduled(userId.value, (l) => rescheduleEntry(l, id, date, time)); if (date <= getTodayId()) await afterMaterialize(); }
-  catch (e) { console.error(e); scheduledError.value = 'Could not update the date.'; }
+  catch (e) { console.error(e); scheduledError.value = 'Could not change the date. Check your connection and try again.'; }
 };
 const deleteScheduled = async (id) => {
   if (!userId.value) return;
@@ -2141,7 +2143,7 @@ const deleteScheduled = async (id) => {
   if (e?.templateId) { if (!confirm('Delete this repeating task?')) return; scope = confirm('OK = this and all future occurrences\nCancel = only this one') ? 'future' : 'this'; }
   else if (!confirm(e?.recurrence ? 'Delete this whole repeating series?' : 'Delete this scheduled task?')) return;
   try { scheduledList.value = await mutateScheduled(userId.value, (l) => deleteEntry(l, id, scope)); }
-  catch (e) { console.error(e); scheduledError.value = 'Could not delete the task.'; }
+  catch (e) { console.error(e); scheduledError.value = 'Could not delete the task. Check your connection and try again.'; }
 };
 
 const addNewTask = async () => {
