@@ -96,7 +96,7 @@ const aiSessionGoal = async (tasksBefore, hours, totalPoints, deps) => {
 };
 const aiAllowed = async (ctx, apiKey) => { if (!apiKey) return false; try { const u = await ctx.db.doc(`users/${ctx.uid}`).get(); return u.exists && u.data().aiConsent === true; } catch (e) { return false; } };
 const publicLock = (l) => (l ? { hours: core.clampHours(l.hours), dayKey: l.dayKey, dayName: l.dayName, tz: l.tz, wakeTime: l.wakeTime, startMs: l.startMs, endMs: l.endMs, taskCount: l.taskCount, plannedCount: l.plannedCount,
-  points: l.points, totalPoints: l.totalPoints, target: l.target, targetSource: l.targetSource, goal: l.goal || null, apps: l.apps || null, estimateSource: l.estimateSource, earned: l.earned || 0, done: l.done || 0, settled: !!l.settled, session: l.session || null, graceUntilMs: Number(l.graceUntilMs) || 0,
+  points: l.points, ids: Array.isArray(l.ids) ? l.ids : null, indexes: Array.isArray(l.indexes) ? l.indexes : null, totalPoints: l.totalPoints, target: l.target, targetSource: l.targetSource, goal: l.goal || null, apps: l.apps || null, estimateSource: l.estimateSource, earned: l.earned || 0, done: l.done || 0, settled: !!l.settled, session: l.session || null, graceUntilMs: Number(l.graceUntilMs) || 0,
   index: core.blockIndex(l), scheduled: !!l.scheduled, pending: core.pendingOf(l).map((b) => ({ dayKey: b.dayKey, index: b.index, startMs: b.startMs, endMs: b.endMs, hours: b.hours })) } : null);
 // What firestore.rules read: startAt/endAt bound the edit lock, shutUntil the read-only hard stop (= endMs while a later block is pending).
 const lockWrite = (ctx, lock) => ({ ...lock, startAt: ctx.ts(lock.startMs), endAt: ctx.ts(lock.endMs), shutUntil: ctx.ts(core.rulesShutUntilMs(lock)) });
@@ -298,6 +298,8 @@ const actions = {
     const ud = await userDoc(ctx); doc = { ...doc, dayLengthHours: ud.dayLengthHours };
     const ph = phaseOf(doc, ctx.now);
     if (ph.phase === 'running') return view(doc, ctx.now); // already started (second device / retry)
+    { const cd = core.nextSessionState({ lock: doc.lock, nowMs: ctx.now }); // too few tasks last session -> 2h wait (server-enforced)
+      if (cd.reason === 'cooldown') throw fail(409, cd.message, { code: 'cooldown', untilMs: cd.untilMs }); }
     if (ph.phase === 'gap') throw fail(409, 'Your next lock-in is already scheduled.', { code: 'gap' });
     if (ph.phase !== 'ready') throw fail(409, 'Set up your plan first.', { code: ph.phase });
     if (ph.scheduled) return view(await autoStart(ctx, doc), ctx.now); // a scheduled block is due: it starts at its fixed time

@@ -26,6 +26,7 @@
       <p class="eh-muted" data-test="eh-range">{{ rangeLine }} · {{ taskTotal }} on your list.<template v-if="needMore > 0"> Add {{ needMore }} more to start.</template></p>
       <p v-if="overBy > 0" class="eh-err" data-test="eh-over" role="alert">Over the max of {{ range.max }} tasks. Remove {{ overBy }} to start.</p>
       <p v-if="startError" class="eh-err" role="alert">{{ startError }}</p>
+      <p v-else class="eh-heads" data-test="eh-heads-up">{{ HEADS_UP }}</p>
       <p v-if="msg" class="eh-err" role="alert">{{ msg }}</p>
     </template>
 
@@ -36,7 +37,7 @@
         <p class="eh-clock" data-test="eh-countdown" role="timer">{{ countdown }}</p>
         <div class="eh-meta">
           <span data-test="eh-times">{{ starts }} → <span data-test="eh-ends">Ends {{ ends }}</span></span>
-          <span data-test="eh-points">Goal {{ progress.earned }}/{{ lock.target }} pts</span>
+          <span data-test="eh-points">Goal {{ progress.earned }}/{{ lock.target }} pts</span> <span class="eh-n8" data-test="eh-session-tasks">· {{ Math.min(progress.done, PER) }}/{{ PER }} tasks this session</span>
         </div>
       </div>
       <!-- draining bar: time left (track) vs points earned (fill); the pace marker is where points should be by now -->
@@ -53,7 +54,7 @@
     <template v-else-if="view === 'ended'">
       <div class="eh-line">
         <span class="eh-badge" :class="met ? 'eh-badge--ok' : 'eh-badge--miss'" data-test="eh-result">{{ met ? 'Goal met' : 'Goal missed' }}</span>
-        <div class="eh-meta eh-meta--end"><span data-test="eh-points">Goal {{ progress.earned }}/{{ lock.target }} pts</span><span>🔥 {{ stats.streak }} day streak</span></div>
+        <div class="eh-meta eh-meta--end"><span data-test="eh-points">Goal {{ progress.earned }}/{{ lock.target }} pts</span> <span class="eh-n8" data-test="eh-session-tasks">· {{ Math.min(progress.done, PER) }}/{{ PER }} tasks this session</span><span>🔥 {{ stats.streak }} day streak</span></div>
       </div>
       <p v-if="met && reward" class="eh-note eh-note--ok" data-test="eh-reward">{{ reward }}</p>
       <p v-if="stats.notice && stats.lastDay === lock.dayKey" class="eh-note" data-test="eh-notice">{{ stats.notice }}</p>
@@ -76,8 +77,10 @@ import { useEightHour } from '@/composables/useEightHour';
 import { paceOf, topAlert, badgeLabel, levelOf } from '@/utils/pressure';
 import { sessionGoal } from '@/utils/sessionGoal';
 import { progressOf, countableIndexes, fmtWakeLabel, hoursLabel, taskRange } from '@/utils/eightHour';
+import core from '../../../netlify/functions/lib/eightHourCore.js';
 
 // tasks = today's stored task array (all of it; hidden recurring copies are excluded by progressOf/countable logic)
+const PER = core.TASKS_PER_SESSION; const HEADS_UP = core.SESSION_HEADS_UP;
 const props = defineProps({ tasks: { type: Array, default: () => [] }, startError: { type: String, default: '' }, locked: { type: Boolean, default: false } });
 defineEmits(['retry', 'start', 'pro']);
 const eh = useEightHour();
@@ -109,7 +112,7 @@ const inRange = computed(() => needMore.value === 0 && overBy.value === 0);
 // A session with a frozen goal record counts only the points earned AFTER its Start (same sessionGoal math as the server / shield).
 const progress = computed(() => { const l = lock.value; if (!l) return { earned: 0, done: 0, total: 0 };
   if (l.goal && Number(l.target) > 0) { const g = sessionGoal(props.tasks || [], { n: 1, sessions: 1, startMs: l.startMs, endMs: l.endMs, goal: Number(l.target) }); return { earned: g.earned, done: g.done, total: g.total }; }
-  return progressOf({ dayKey: l.dayKey, points: l.points }, props.tasks); });
+  return progressOf({ dayKey: l.dayKey, points: l.points, ids: l.ids || undefined, indexes: l.indexes || undefined }, props.tasks); });
 const pct = computed(() => (lock.value && lock.value.target > 0 ? Math.min(100, Math.round((progress.value.earned / lock.value.target) * 100)) : 0));
 const pace = computed(() => (lock.value ? paceOf({ earned: progress.value.earned, target: lock.value.target || 0, startMs: lock.value.startMs, endMs: lock.value.endMs, nowMs: (countdown.value, eh.nowMs()) }) : { timePct: 0, pointsPct: 0, expected: 0, behindBy: 0, leftMs: 0 }));
 const alert = computed(() => (lock.value ? topAlert({ offline: !!(eh.st.data && eh.st.data.offline), running: phase.value === 'running', earned: progress.value.earned, target: lock.value.target || 0, startMs: lock.value.startMs, endMs: lock.value.endMs, nowMs: (countdown.value, eh.nowMs()), streak: stats.value.streak || 0, warning: stats.value.warning || '' }) : null));
@@ -150,6 +153,7 @@ const save = async () => {
 .eh-big { font-size: .95rem; font-weight: 700; margin: 0; } .eh-big small { font-size: .75rem; font-weight: 500; color: var(--c-text-3, #9aa3b5); }
 .eh-muted { color: var(--c-text-3, #9aa3b5); font-size: .72rem; margin: 2px 0; }
 .eh-fine { color: var(--c-text-3, #9aa3b5); font-size: .65rem; margin-left: auto; }
+.eh-heads { font-size: .72rem; opacity: .8; margin: 3px 0 0; } .eh-n8 { white-space: nowrap; }
 .eh-err { color: #e05a5a; font-size: .72rem; margin: 3px 0 0; }
 .eh-note { margin: 4px 0 0; font-size: .72rem; padding: 4px 8px; border-radius: 8px; background: rgba(224,160,60,.12); color: #e0a03c; }
 .eh-note--ok { background: rgba(60,180,110,.12); color: #3cb46e; }

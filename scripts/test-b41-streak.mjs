@@ -30,7 +30,7 @@ assert.deepEqual(countableDoneKeys([{ id: 'x', completed: true }], { started: tr
 assert.deepEqual(countableDoneKeys([{ id: 'x', completed: true }], { started: true, startMs: start, keyOf: key }).keys, []);
 // gate blocked: 5 done but boss not cleared -> not counted; gate clears -> recheck counts it with no tap
 const today = '2026-10-30'; let st = { streak: 2, bestStreak: 2, lastCompletionDate: '2026-10-29' };
-const five = ['b', 'c', 'd', 'e', 'h'];
+const five = ['b', 'c', 'd', 'e', 'h', 'i', 'j', 'k']; // DAILY_STREAK_MIN (8) done
 for (const k of five) st = applyTaskToggle(st, today, { key: k, completed: true, gate: false });
 assert.equal(st.streak, 2); assert.equal(st.dayDone.length, DAILY_STREAK_MIN);
 const blocked = recheckDay(st, today, { keys: five, gate: false }); assert.equal(blocked.streak, 2); assert.equal(recheckChanges(st, blocked, today), false);

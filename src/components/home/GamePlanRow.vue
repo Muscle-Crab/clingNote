@@ -18,9 +18,8 @@
       </button>
       <div v-if="vaultOpen" class="gp-body gp-vbody" data-test="vault-body">
         <p v-if="vault.debt" class="gp-line gp-warn" data-test="vault-debt">Vault closed: a missed goal keeps apps locked until a session hits its goal.</p>
-        <p v-else-if="!vault.gate.met" class="gp-line" data-test="vault-gate">Finish {{ vault.gate.left }} more task{{ vault.gate.left === 1 ? '' : 's' }} to open the vault.</p>
         <p v-for="a in vault.items" :key="a.id" class="gp-line gp-vapp" data-test="vault-app" :data-open="a.open ? '1' : '0'">
-          <span aria-hidden="true">{{ a.open ? '✓' : '🔒' }}</span> <span class="gp-vname">{{ a.label }}</span> <span class="gp-vprice">{{ a.price }} pts</span>
+          <span aria-hidden="true">{{ a.open ? '✓' : '🔒' }}</span> <span class="gp-vname">{{ a.label }}</span> <span class="gp-vprice">{{ a.price }} pts · ~{{ a.tasks }} tasks</span>
         </p>
         <p class="gp-line" data-test="vault-time">
           <template v-if="vault.live">App time running: {{ vault.liveLeftMin }} min left. <button type="button" class="gp-chip" data-test="vault-stop" @click="$emit('vault-stop')">Stop</button></template>

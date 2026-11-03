@@ -29,11 +29,11 @@ t('recordCompletion covers the gap itself if open-time evaluation never ran', ()
 t('no double use: covering is idempotent', () => { const s = run(null, '2026-10-01', 14); const a = applyFreezes(s, '2026-10-16'); const b = applyFreezes(a.state, '2026-10-16'); assert.equal(a.used, 1); assert.equal(b.used, 0); assert.equal(b.state.freezeBank, 1); });
 t('undo below minimum restores bank/run/frozen days', () => {
   let s = run(null, '2026-10-01', 7); // bank 1, last 10-07
-  s = doN(s, '2026-10-09', 5); assert.equal(s.freezeBank, 0); assert.equal(s.lastCompletionDate, '2026-10-09');
+  s = doN(s, '2026-10-09', 8); assert.equal(s.freezeBank, 0); assert.equal(s.lastCompletionDate, '2026-10-09');
   s = tog(s, '2026-10-09', { key: 't0', completed: false });
   assert.equal(s.lastCompletionDate, '2026-10-07'); assert.equal(s.freezeBank, 1); assert.deepEqual(s.frozenDates, []); assert.ok(!s.counted.includes('2026-10-09')); assert.ok(!s.counted.includes('2026-10-08'));
 });
-t('earning on the 7th day is undone by un-completing', () => { let s = run(null, '2026-10-01', 6); s = doN(s, '2026-10-07', 5); assert.equal(s.freezeBank, 1); s = tog(s, '2026-10-07', { key: 't1', completed: false }); assert.equal(s.freezeBank, 0); assert.equal(s.freezeRun, 6); });
+t('earning on the 7th day is undone by un-completing', () => { let s = run(null, '2026-10-01', 6); s = doN(s, '2026-10-07', 8); assert.equal(s.freezeBank, 1); s = tog(s, '2026-10-07', { key: 't1', completed: false }); assert.equal(s.freezeBank, 0); assert.equal(s.freezeRun, 6); });
 t('legacy docs without freeze fields', () => { const s = rec({ streak: 2, bestStreak: 4, lastCompletionDate: '2026-10-01' }, '2026-10-02'); assert.equal(s.freezeBank, 0); assert.equal(s.freezeRun, 1); assert.deepEqual(s.frozenDates, []); });
 t('bank clamps bad values', () => { assert.equal(ev({ freezeBank: 9 }, '2026-10-01').freezeBank, 2); assert.equal(ev({ freezeBank: -3 }, '2026-10-01').freezeBank, 0); assert.equal(ev({ freezeBank: 'x' }, '2026-10-01').freezeBank, 0); });
 t('frozen dates list is bounded', () => { let s = { streak: 3, lastCompletionDate: '2026-01-01', freezeBank: 2, frozenDates: days('2025-01-01', 40) }; s = applyFreezes(s, '2026-01-03').state; assert.ok(s.frozenDates.length <= 30); assert.equal(s.frozenDates[s.frozenDates.length - 1], '2026-01-02'); });

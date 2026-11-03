@@ -11,7 +11,7 @@ const key = (x) => x.title; const at = (d, hh, mm) => new Date(...d.split('-').m
 const D0 = '2026-10-29'; const D1 = '2026-10-30';
 const start = at(D0, 8, 0); const dl = D.deadlineAt(D0, '21:00').getTime();
 const done = (k, hh, mm = 0, d = D0) => ({ title: `t${k}`, completed: true, completedAt: new Date(at(d, hh, mm)).toISOString() });
-const five = (hh) => [1, 2, 3, 4, 5].map((k) => done(k, hh, k));
+const five = (hh) => [1, 2, 3, 4, 5, 6, 7, 8].map((k) => done(k, hh, k));
 const st0 = { streak: 2, bestStreak: 2, lastCompletionDate: '2026-10-28', counted: ['2026-10-28'] };
 
 // (a) done elsewhere before 21:00, app opened 21:30 / 23:10: qualifies, recheck counts it, settle has nothing missed
@@ -31,24 +31,24 @@ t('(a) day never started: does not qualify', () => assert.equal(S.dayQualifies(f
 t('(a) done before Start Day: does not qualify', () => assert.equal(S.dayQualifies(five(7), { started: true, startMs: start, endMs: dl, keyOf: key }), false));
 
 // (b) same device: a 5th task finished after the deadline never counts; a short day is still missed and breaks the streak
-t('(b) 4 before + 1 after the deadline: not counted, settled as missed', () => {
-  const tasks = [...five(19).slice(0, 4), done(5, 21, 10)];
+t('(b) 7 before + 1 after the deadline: not counted, settled as missed', () => {
+  const tasks = [...five(19).slice(0, 7), done(8, 21, 10)];
   assert.equal(S.dayQualifies(tasks, { started: true, startMs: start, endMs: dl, keyOf: key }), false);
   const { keys } = S.countableDoneKeys(tasks, { started: true, startMs: start, endMs: dl, keyOf: key });
-  assert.equal(keys.length, 4); const s = S.recheckDay(st0, D0, { keys, gate: true });
+  assert.equal(keys.length, 7); const s = S.recheckDay(st0, D0, { keys, gate: true });
   assert.equal(s.lastCompletionDate, '2026-10-28');
   assert.deepEqual(D.settleDays([D0], s.counted).missed, [D0]);
 });
 t('(b) tap flow before the deadline unchanged: 5th tap counts once', () => {
-  let s = st0; for (let k = 1; k <= 5; k += 1) s = S.applyTaskToggle(s, D0, { key: `t${k}`, completed: true, gate: true });
+  let s = st0; for (let k = 1; k <= 8; k += 1) s = S.applyTaskToggle(s, D0, { key: `t${k}`, completed: true, gate: true });
   assert.equal(s.streak, 3); const again = S.applyTaskToggle(s, D0, { key: 't6', completed: true, gate: true }); assert.equal(again.streak, 3);
 });
 t('(b) tap after the deadline: gate closed (missedToday) -> not counted', () => {
-  let s = st0; for (let k = 1; k <= 5; k += 1) s = S.applyTaskToggle(s, D0, { key: `t${k}`, completed: true, gate: D.streakGate({ enabled: true }, { missedToday: true }) });
+  let s = st0; for (let k = 1; k <= 8; k += 1) s = S.applyTaskToggle(s, D0, { key: `t${k}`, completed: true, gate: D.streakGate({ enabled: true }, { missedToday: true }) });
   assert.equal(s.lastCompletionDate, '2026-10-28');
 });
 t('(b) no deadline window (before 21:00): recheck behaves as B41', () => {
-  const { keys } = S.countableDoneKeys([...five(19), done(6, 22)], { started: true, startMs: start, endMs: null, keyOf: key }); assert.equal(keys.length, 6);
+  const { keys } = S.countableDoneKeys([...five(19), done(9, 22)], { started: true, startMs: start, endMs: null, keyOf: key }); assert.equal(keys.length, 9);
 });
 t('(b) a task already counted keeps counting past the deadline (never un-counted)', () => {
   const { keys } = S.countableDoneKeys([done(9, 21, 30)], { started: true, startMs: start, endMs: dl, keyOf: key, prevDone: ['t9'] }); assert.deepEqual(keys, ['t9']);

@@ -26,11 +26,12 @@ const finish = (db, i) => { Object.assign(day(db).tasks[i], { completed: true, c
   const d0 = core.debtAfterSettle(null, s0); eq(d0, { sessionKey: '2026-10-23#0', target: 60, earned: 20, sinceMs: 200 }, 'a miss creates the debt');
   eq(core.debtAfterSettle(d0, s0), d0, 'idempotent: same session settled twice');
   eq(core.debtAfterSettle(null, { ...s0, met: true }), null, 'met: no debt'); eq(core.debtAfterSettle(null, { ...s0, target: 0 }), null, 'no goal: never a debt');
-  eq(core.debtAfterSettle(d0, { sessionKey: '2026-10-23#1', startMs: 300, endMs: 400, target: 40, earned: 40, met: true }), null, 'a later session that met pays it');
+  eq(core.debtAfterSettle(d0, { sessionKey: '2026-10-23#1', startMs: 300, endMs: 400, target: 40, earned: 40, done: 8, met: true }), null, 'a later session that met with 8 tasks pays it'); eq(core.debtAfterSettle(d0, { sessionKey: '2026-10-23#1', startMs: 300, endMs: 400, target: 40, earned: 40, done: 7, met: true }), d0, 'met with 7 tasks: still owed');
   eq(core.debtAfterSettle(d0, { sessionKey: 'x#0', startMs: 150, endMs: 190, target: 40, earned: 40, met: true }), d0, 'a session started BEFORE the miss cannot pay it');
   eq(core.debtAfterSettle(d0, { sessionKey: '2026-10-23#1', startMs: 300, endMs: 400, target: 40, earned: 0, met: false }).sinceMs, 400, 'missed again: debt moves to the latest miss');
-  eq(core.debtCleared(d0, { startMs: 250, target: 40, earned: 40 }), true); eq(core.debtCleared(d0, { startMs: 250, target: 40, earned: 39 }), false);
-  eq(core.debtCleared(d0, { startMs: 250, target: 0, earned: 0 }), false, 'an empty session cannot pay it');
+  eq(core.debtCleared(d0, { startMs: 250, target: 40, earned: 40, done: 8 }), true); eq(core.debtCleared(d0, { startMs: 250, target: 40, earned: 39, done: 8 }), false);
+  eq(core.debtCleared(d0, { startMs: 250, target: 40, earned: 40, done: 7 }), false, 'goal met with fewer than 8 tasks does not clear it');
+  eq(core.debtCleared(d0, { startMs: 250, target: 0, earned: 0, done: 8 }), false, 'an empty session cannot pay it');
   eq(core.debtActive(d0, 200 + core.DEBT_CAP_MS - 1), true); eq(core.debtActive(d0, 200 + core.DEBT_CAP_MS), false, '14-day safety cap');
   eq(core.normDebt({ sessionKey: '', sinceMs: 1 }), null); eq(core.normDebt({ foo: 1 }), null); }
 
@@ -51,20 +52,20 @@ const finish = (db, i) => { Object.assign(day(db).tasks[i], { completed: true, c
   // new session: progress short of the goal keeps it; the moment the goal is hit it clears (no wait for the session end)
   r = await call(db, { action: 'nextSession', hours: 5 }); eq([r.code, r.body.lock.index], [200, 1]); ok(r.body.appLockDebt, 'debt survives starting a new session');
   clock += 10 * 60000; finish(db, 1); r = await call(db, { action: 'progress' }); ok(r.body.appLockDebt, '40/60: still locked');
-  clock += 10 * 60000; finish(db, 2); r = await call(db, { action: 'progress' }); eq(r.body.appLockDebt, null, 'goal hit mid-session: unlocked at once');
-  eq(db.store['eightHour/u1'].appLockDebt, null, 'cleared server-side');
-  clock = r.body.lock.endMs + 60000; r = await call(db, { action: 'state' }); eq(r.body.appLockDebt, null, 'met session settles without a new debt'); }
+  clock += 10 * 60000; finish(db, 2); r = await call(db, { action: 'progress' }); ok(r.body.appLockDebt, 'goal hit with 2 of 8 tasks: still held (needs the goal AND TASKS_PER_SESSION)');
+  ok(db.store['eightHour/u1'].appLockDebt, 'still held server-side'); }
 
 // ---- server: two misses in a row, then a met session pays it at settle (e.g. app killed mid-session, no progress call) ----
 { const db = mkDb({ 'weeklyRoutines/u1_Fri': { tasks: [T('a'), T('b'), T('c')] } });
   clock = at('2026-10-23T12:00:00Z'); await call(db, { action: 'plan', taskCount: 3, tz: TZ });
   clock = at('2026-10-23T13:00:00Z'); let r = await call(db, { action: 'start', hours: 5 });
-  clock = r.body.lock.endMs + 5 * 60000; r = await call(db, { action: 'nextSession', hours: 5 }); eq(r.body.lock.index, 1);
+  clock = r.body.lock.endMs + 5 * 60000; r = await call(db, { action: 'nextSession', hours: 5 }); eq(r.body.code, 'cooldown', '0 of 8 tasks: 2h wait');
+  clock += core.SESSION_COOLDOWN_MS; r = await call(db, { action: 'nextSession', hours: 5 }); eq(r.body.lock.index, 1);
   eq(db.store['eightHour/u1'].appLockDebt.sessionKey, '2026-10-23#0', 'session 1 missed (settled by nextSession)');
   clock = r.body.lock.endMs + 5 * 60000; r = await call(db, { action: 'state' }); eq(r.body.appLockDebt.sessionKey, '2026-10-23#1', 'missed again: debt follows the latest miss');
-  r = await call(db, { action: 'nextSession', hours: 5 }); const E3 = r.body.lock.endMs; clock += 60000;
+  clock += core.SESSION_COOLDOWN_MS; r = await call(db, { action: 'nextSession', hours: 5 }); const E3 = r.body.lock.endMs; clock += 60000;
   finish(db, 0); finish(db, 1); finish(db, 2); // completions written by the widget while ClingNote was killed: no progress call
-  clock = E3 + 60000; r = await call(db, { action: 'state' }); eq(r.body.appLockDebt, null, 'settle of a met later session pays the debt'); }
+  clock = E3 + 60000; r = await call(db, { action: 'state' }); ok(r.body.appLockDebt, 'settle of a session that met its goal with 3 of 8 tasks does NOT pay the debt'); }
 
 // ---- client cache + shield ----
 { const mem = {}; const ls = { getItem: (k) => (k in mem ? mem[k] : null), setItem: (k, v) => { mem[k] = v; } };
@@ -78,8 +79,8 @@ const finish = (db, i) => { Object.assign(day(db).tasks[i], { completed: true, c
   eq(C.cacheCleared(cc, d.sessionKey).cleared.length, 1, 'clearing is idempotent');
   const base = { debt: d, now: 2000, enabled: true, selectionCount: 3 };
   eq(C.debtShield(base), { want: true, cleared: false, untilMs: 1000 + core.DEBT_CAP_MS }, 'shields up after the miss');
-  eq(C.debtShield({ ...base, session: { startMs: 1500, target: 40, earned: 40 } }).cleared, true, 'goal hit in a later session: lifted at once');
-  eq(C.debtShield({ ...base, session: { startMs: 1500, target: 40, earned: 20 } }).want, true);
+  eq(C.debtShield({ ...base, session: { startMs: 1500, target: 40, earned: 40, done: 8 } }).cleared, true, 'goal hit in a later session: lifted at once');
+  eq(C.debtShield({ ...base, session: { startMs: 1500, target: 40, earned: 20, done: 8 } }).want, true);
   for (const x of [{ enabled: false }, { selectionCount: 0 }, { unlockedToday: true }, { friend: true }, { onBreak: true }]) eq(C.debtShield({ ...base, ...x }).want, false, JSON.stringify(x));
   eq(C.debtShield({ ...base, debt: null }).want, false); }
 
@@ -93,7 +94,7 @@ const finish = (db, i) => { Object.assign(day(db).tasks[i], { completed: true, c
 
 // ---- native hold plan (all users, app closed / force-quit) ----
 { const cap = core.DEBT_CAP_MS; const d = { sessionKey: '2026-10-23#0', target: 60, earned: 20, sinceMs: 1000 }; const on = { enabled: true, selectionCount: 2, now: 5000 };
-  const short = { sessionKey: '2026-10-23#1', startMs: 3000, endMs: 5000 + 3 * H, target: 40, earned: 10 };
+  const short = { sessionKey: '2026-10-23#1', startMs: 3000, endMs: 5000 + 3 * H, target: 40, earned: 10, done: 8 };
   eq(C.holdKey('2026-10-23#0'), 'debt_2026-10-23_0', 'native-safe key');
   eq(C.debtHoldPlan({ ...on, debt: d }), { action: 'arm', key: 'debt_2026-10-23_0', startMs: 1000, untilMs: 1000 + cap }, 'unpaid miss: hold now (start in the past)');
   eq(C.debtHoldPlan({ ...on, debt: null, live: short }), { action: 'arm', key: 'debt_2026-10-23_1', startMs: short.endMs, untilMs: short.endMs + cap }, 'short running session: pre-armed for its end (force-quit safe)');

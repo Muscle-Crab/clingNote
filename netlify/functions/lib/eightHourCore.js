@@ -24,6 +24,15 @@ const taskRange = (hours) => { const h = clampHours(hours); return { hours: h, m
 const SESSION_HOURS = Object.freeze({ min: 5, max: 12, step: 1 });
 const validSessionHours = (h) => { const n = Number(h); return Number.isInteger(n) && n >= SESSION_HOURS.min && n <= SESSION_HOURS.max; };
 // Session met = the points earned AFTER Start reach the session's frozen goal (the one rule for unlock, settle and debt clearing).
+// Session access rule (single source, also imported by the client): a session that ends with fewer than TASKS_PER_SESSION completed
+// tasks makes the next one wait SESSION_COOLDOWN_MS after it ended (a wait, not a lockout). Same count clears a debt and keeps the streak.
+const TASKS_PER_SESSION = 8;
+const SESSION_COOLDOWN_MS = 2 * 3600000;
+const sessionDone = (lock) => { if (!lock) return 0; const s = lock.session; return Number(s && s.done != null ? s.done : lock.done) || 0; };
+const cooldownUntilMs = (lock) => { if (!lock || lock.placeholder || !lock.dayKey || !Number(lock.endMs)) return 0; return sessionDone(lock) >= TASKS_PER_SESSION ? 0 : Number(lock.endMs) + SESSION_COOLDOWN_MS; };
+const fmtCdClock = (ms, tz) => { try { return new Date(ms).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: tz || 'UTC' }); } catch (e) { return new Date(ms).toISOString().slice(11, 16); } };
+const cooldownText = (done, untilMs, tz) => `You finished ${done} of ${TASKS_PER_SESSION} tasks, so your next session opens at ${fmtCdClock(untilMs, tz)} (${SESSION_COOLDOWN_MS / 3600000}-hour wait).`;
+const SESSION_HEADS_UP = `Finish at least ${TASKS_PER_SESSION} tasks this session, or your next session waits ${SESSION_COOLDOWN_MS / 3600000} hours.`;
 const sessionMet = ({ earned = 0, target = 0 } = {}) => Number(target) > 0 && Number(earned) >= Number(target);
 // Session points goal: the AI (or this fallback) from the number of tasks that existed BEFORE the session was created + the chosen
 // hours; clamped to [GOAL_MIN, min(GOAL_MAX, the tasks' points)] in steps of 5 and frozen on the session's goal record at Start.
@@ -124,6 +133,8 @@ const nextSessionState = ({ lock, sessions = 2, nowMs }) => {
   const idx = blockIndex(lock); const done = nowMs >= lock.endMs ? idx + 1 : idx;
   if (nowMs < lock.endMs) return { ok: false, reason: 'running', of, done };
   if (nextPending(lock, nowMs)) return { ok: false, reason: 'scheduled', of, done };
+  const until = cooldownUntilMs(lock);
+  if (until > nowMs) return { ok: false, reason: 'cooldown', of, done, untilMs: until, tasksDone: sessionDone(lock), message: cooldownText(sessionDone(lock), until, lock.tz) };
   return { ok: true, of, done };
 };
 
@@ -311,12 +322,12 @@ const nativeSegment = (startMs, untilMs, nowMs) => {
 };
 const debtActive = (d, nowMs) => { const x = normDebt(d); return !!x && nowMs < x.sinceMs + DEBT_CAP_MS; };
 // s = { startMs, target, earned }: a session started at/after the miss that has reached its goal (target > 0) pays the debt.
-const debtCleared = (d, s) => { const x = normDebt(d); return !!x && !!s && sessionMet(s) && Number(s.startMs) >= x.sinceMs; };
+const debtCleared = (d, s) => { const x = normDebt(d); return !!x && !!s && sessionMet(s) && Number(s.done) >= TASKS_PER_SESSION && Number(s.startMs) >= x.sinceMs; };
 // After a session settles. s = { sessionKey, startMs, endMs, target, earned, met }. No goal (target <= 0) never creates or pays a debt.
 const debtAfterSettle = (prev, s) => {
   const p = normDebt(prev);
   if (!s || !(Number(s.target) > 0)) return p;
-  if (s.met) return p && Number(s.startMs) >= p.sinceMs ? null : p;
+  if (s.met) return p && !debtCleared(p, s) ? p : null; // paying an old debt also needs TASKS_PER_SESSION tasks (debtCleared)
   if (p && p.sessionKey === s.sessionKey) return p; // same session settled again: unchanged
   return { sessionKey: s.sessionKey, target: Number(s.target), earned: Number(s.earned) || 0, sinceMs: Number(s.endMs) };
 };
@@ -325,6 +336,7 @@ const rewardFor = (streak) => (streak >= 30 ? '🏔️ Peak Performer' : streak 
 
 module.exports = {
   DAY_HOURS, clampHours, hoursMs, hoursLabel, WARN_MINUTES, warningDue,
+  TASKS_PER_SESSION, SESSION_COOLDOWN_MS, sessionDone, cooldownUntilMs, cooldownText, SESSION_HEADS_UP,
   SESSION_HOURS, validSessionHours, sessionMet, GOAL_MIN, GOAL_MAX, goalRange, clampGoal, fallbackGoal,
   WINDOW_MS, WINDOW_MIN, MAX_TASKS_PER_DAY, MIN_TASKS_PER_HOUR, taskRange, LOCK_IDENTITY_SLOTS, WEEKDAYS, WAKE_PICKER_PRESELECT, START_MODE, TARGET_LEVELS, LOCKED_FIELDS,
   clamp, round5, parseWake, fmtWake, validTz, partsIn, dayKeyIn, dayNameIn, wakeInstant, evaluatePhase,

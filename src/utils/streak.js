@@ -2,7 +2,7 @@
 // A day counts once DAILY_STREAK_MIN distinct non-pending tasks were completed that day.
 // ALLOWED_GAP_DAYS = max days between counted days (1 = no skipped days).
 export const ALLOWED_GAP_DAYS = 1;
-export const DAILY_STREAK_MIN = 5;
+export const DAILY_STREAK_MIN = 8; // = eightHourCore.TASKS_PER_SESSION (pinned by scripts/test-points-total.mjs; this file is copied standalone by tests)
 // The day streak is capped: it displays as N/STREAK_CAP and never goes above it.
 // A day counts only if the user pressed Start Day and completed >= DAILY_STREAK_MIN tasks; a day that doesn't count
 // resets the streak to 0 on the next evaluation (next app open / day rollover).

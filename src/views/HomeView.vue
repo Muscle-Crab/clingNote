@@ -90,6 +90,7 @@
 
       <WorkoutModal v-if="showWorkoutModal" :preferences="workoutPreferences" @close="closeWorkoutModal" @generate="generateWorkoutRoutine" />
 
+      <PointsCelebration v-if="celebration" :key="celebration.id" :item="celebration" @close="nextCelebration" />
       <CelebrationOverlay v-if="showFullScreenAnimation" :streak="streak" @close="closeFullScreenAnimation" />
 
 
@@ -335,6 +336,7 @@ import TaskListHeader from '@/components/home/TaskListHeader.vue';
 import RoutineStrip from '@/components/home/RoutineStrip.vue';
 import GamePlanRow from '@/components/home/GamePlanRow.vue';
 import * as GP from '@/utils/gamePlan';
+import core from '../../netlify/functions/lib/eightHourCore.js';
 import * as SP from '@/utils/sessionPoints';
 import { applyTaken, holdLockAction, alertTier, recapAt } from '@/utils/breakUnlock';
 import { fnUrl } from '@/config/api';
@@ -364,7 +366,8 @@ import { homeDay } from '@/utils/homeDay';
 import DayStartPrompt from '@/components/eighthour/DayStartPrompt.vue';
 import { sessionApps } from '@/utils/sessionApps';
 import { debtShield, debtHoldPlan, turnOffBlocked, TURN_OFF_BLOCKED_MSG } from '@/utils/appLockDebt';
-import { vaultView, startPlan, stopWindows } from '@/utils/pointsVault';
+import { vaultView, startPlan, stopWindows, priceApps, newUnlocks, unlockText } from '@/utils/pointsVault';
+import PointsCelebration from '@/components/home/PointsCelebration.vue';
 import { sessionGoal } from '@/utils/sessionGoal';
 import { useEightHour, clearDebtLocal, syncAfterAuth, setDayLengthHours, loadDayLengthHours, promptSeenFor, markPromptSeen } from '@/composables/useEightHour';
 import { countableIndexes, taskRange, hoursLabel, validSessionHours } from '@/utils/eightHour';
@@ -1318,6 +1321,12 @@ const { soundEnabled, playSound, toggleSound, markUserCompletion, watchMilestone
 
 // Stable task identity for transactional updates (id when both have one, else createdAt|title).
 const sameTask = (a, b) => !!a && !!b && ((a.id && b.id) ? a.id === b.id : taskKey(a) === taskKey(b));
+// Full-screen celebrations (PointsCelebration): queued so a completion and a vault unlock never overlap.
+const celebration = ref(null); const celebQueue = []; let celebId = 0;
+const celebrate = (c) => { celebQueue.push({ ...c, id: ++celebId }); if (!celebration.value) celebration.value = celebQueue.shift(); };
+const nextCelebration = () => { celebration.value = celebQueue.shift() || null; };
+const cheerFor = (n, of) => (n === of ? `${of}/${of} tasks this session — next session opens right away! 🚀` : n === Math.ceil(of / 2) ? `Nice! ${n} of ${of} — halfway there 💪` : `${n}/${of} tasks this session`);
+const completionPoints = (t) => (gpOn.value ? GP.sizePoints(t, chipValues(t).minutes) : chipValues(t).points);
 const toggleTaskCompletion = async (index) => {
   // Completing works during the shutdown too (any day, incl. tomorrow's planned tasks): the server counts the lock-in result only
   // inside the window, streak/boss only run for today's tab, so a late completion credits its own day and nothing else.
@@ -1337,6 +1346,8 @@ const toggleTaskCompletion = async (index) => {
     cancelTaskNotifications(task);
 
     userCredits.value += 10;
+    if (isToday(selectedDayIndex.value)) { const of = core.TASKS_PER_SESSION; const n = sessionTasksDone.value + 1;
+      celebrate({ kind: 'task', title: 'Task done! 🎉', points: completionPoints(task), cheer: cheerFor(n, of) }); }
     if (isToday(selectedDayIndex.value)) { const left = (selectedDayRoutine.value || []).filter((t, i) => i !== index && !t.completed).length;
       window.dispatchEvent(new window.CustomEvent('cn:sergeant-ack', { detail: { left } })); }
 
@@ -4188,30 +4199,45 @@ const syncAppLock = async () => {
   syncVault();
 };
 // Points vault (src/utils/pointsVault.js): the day's points open the picked apps cheapest first (price from on-device usage) once 3
-// tasks are done; every 10 pts = 5 min of shared app time (native VaultAllow + "clingVault" re-shield). Never while a missed-goal lock
+// the day's points pass each price (no task gate; prices frozen once per day); every 10 pts = 5 min of shared app time (native VaultAllow + "clingVault" re-shield). Never while a missed-goal lock
 // is unpaid. Points / goal progress are never spent: used time is kept as local windows per day.
+// Tasks completed in the running session (else today) -> the N/8 cheer on the completion celebration.
+const sessionTasksDone = computed(() => { const l = eh.running.value && eh.lock.value; const list = (todayTasksForTarget.value || []).filter((t) => t && t.completed);
+  if (!l) return list.length; return list.filter((t) => { const c = Date.parse(t.completedAt || ''); return c >= l.startMs && c < l.endMs; }).length; });
 const VAULT_WIN_KEY = 'cn.vault.windows.v1';
 const vaultLoad = () => { try { const v = JSON.parse(localStorage.getItem(VAULT_WIN_KEY) || '{}'); return v && v.day === localDateStr() ? v.windows || [] : []; } catch (e) { return []; } };
 const vaultWindows = ref(vaultLoad()); const vaultData = ref({ days: {}, apps: [] }); const vaultNow = ref(Date.now());
 const vaultSave = (w) => { vaultWindows.value = w; try { localStorage.setItem(VAULT_WIN_KEY, JSON.stringify({ day: localDateStr(), windows: w })); } catch (e) { /* ignore */ } };
+const VAULT_PRICE_KEY = 'cn.vault.prices.v1'; const VAULT_SEEN_KEY = 'cn.vault.celebrated.v1';
+const dayLoad = (k) => { try { const v = JSON.parse(localStorage.getItem(k) || '{}'); return v && v.day === localDateStr() ? v.list : null; } catch (e) { return null; } };
+const daySave = (k, list) => { try { localStorage.setItem(k, JSON.stringify({ day: localDateStr(), list })); } catch (e) { /* ignore */ } };
+const vaultPriced = ref(dayLoad(VAULT_PRICE_KEY));
 const vaultDebt = computed(() => turnOffBlocked({ debt: eh.appLockDebt.value, now: vaultNow.value, live: liveDebtSession() }));
 const gpVault = computed(() => { if (!lockAvailable() || !isViewingToday.value) return null;
   return vaultView({ apps: vaultData.value.apps || [], days: vaultData.value.days || {}, todayYmd: localDateStr(), points: (gpEarned.value && gpEarned.value.points) || 0,
-    tasksDone: (todayTasksForTarget.value || []).filter((t) => t && t.completed).length, debt: vaultDebt.value, windows: vaultWindows.value, nowMs: vaultNow.value }); });
+    priced: vaultPriced.value, debt: vaultDebt.value, windows: vaultWindows.value, nowMs: vaultNow.value }); });
 let vaultSyncing = false;
 const syncVault = async () => {
   if (!lockAvailable() || vaultSyncing) return; vaultSyncing = true;
   try {
     vaultNow.value = Date.now(); if (vaultWindows.value.length && !vaultLoad().length) vaultWindows.value = []; // new day
     clingLock.startUsage().catch(() => {});
-    const u = await clingLock.vaultUsage(); if (u && !u.error) vaultData.value = { days: u.days || {}, apps: u.apps || [] };
+    const u = await clingLock.vaultUsage(); if (u && !u.error) { vaultData.value = { days: u.days || {}, apps: u.apps || [] };
+      // Prices are computed once per day (new apps picked later in the day get priced and appended).
+      const have = dayLoad(VAULT_PRICE_KEY) || []; const missing = (u.apps || []).filter((a) => !have.some((h) => h.id === a.id));
+      if (!have.length || missing.length) { const add = priceApps(have.length ? missing : u.apps || [], u.days || {}, localDateStr()); const list = [...have, ...add].sort((a, b) => a.price - b.price); daySave(VAULT_PRICE_KEY, list); vaultPriced.value = list; } }
     const st = await clingLock.vaultState();
     const v = gpVault.value; const live = st && st.live;
     // Debt / gate lost while app time runs: close at once (time already used stays used, the rest is kept).
-    if (live && v && (v.debt || !v.gate.met)) { await clingLock.endVaultApps(); vaultSave(stopWindows(vaultWindows.value, Date.now())); }
+    if (live && v && v.debt) { await clingLock.endVaultApps(); vaultSave(stopWindows(vaultWindows.value, Date.now())); }
     else if (!live && v && v.live) vaultSave(stopWindows(vaultWindows.value, Date.now())); // ended natively early (stopped elsewhere)
   } finally { vaultSyncing = false; }
 };
+// One full-screen celebration per app per day as the points pass its price.
+watch(() => (gpVault.value ? gpVault.value.items.filter((a) => a.open).map((a) => a.id).join(',') : ''), () => {
+  const fresh = newUnlocks(gpVault.value, dayLoad(VAULT_SEEN_KEY) || []); if (!fresh.length) return;
+  daySave(VAULT_SEEN_KEY, [...(dayLoad(VAULT_SEEN_KEY) || []), ...fresh.map((a) => a.id)]);
+  fresh.forEach((a) => celebrate({ kind: 'vault', title: unlockText(a.label), sub: `${a.price} pts reached` })); });
 const vaultStart = async () => { const v = gpVault.value; const now = Date.now(); const plan = startPlan(v, now); if (!plan) return;
   const r = await clingLock.allowVaultApps(plan.ids, plan.untilMs);
   if (!r || !(r.allowed > 0)) { error.value = r && r.reason === 'debt' ? 'Vault closed: a missed goal keeps apps locked.' : "Couldn't open the vault apps right now."; return; }

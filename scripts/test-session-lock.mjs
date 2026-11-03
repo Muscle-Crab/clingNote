@@ -65,21 +65,25 @@ await t('server: Begin stores apps + frozen goal; met session 1, then session 2 
   for (let i = 0; i < need; i++) { clock += 10 * 60000; finish(db, i); r = await call(db, { action: 'progress' }); }
   clock = r.body.lock.endMs + 60000; r = await call(db, { action: 'state' }); assert.equal(r.body.appLockDebt, null, 'met: no debt');
   r = await call(db, { action: 'nextSession', hours: 6, apps: { apps: 1 } });
-  assert.deepEqual([r.code, r.body.phase, r.body.lock.index], [200, 'running', 1], 'second session runs (locked) right after a met first one');
+  assert.equal(r.code, 409, 'fewer than TASKS_PER_SESSION tasks -> cooldown'); assert.match(JSON.stringify(r.body), /of 8 tasks, so your next session opens at .*2-hour wait/);
+  clock += core.SESSION_COOLDOWN_MS; r = await call(db, { action: 'nextSession', hours: 6, apps: { apps: 1 } });
+  assert.deepEqual([r.code, r.body.phase, r.body.lock.index], [200, 'running', 1], 'second session runs (locked) once the 2h wait is over');
   assert.equal(r.body.lock.goal.key, '2026-10-23#1'); assert.equal(r.body.lock.goal.frozenMs, clock); assert.deepEqual(r.body.lock.apps, { apps: 1, categories: 0, sites: 0 });
   assert.equal(r.body.lock.earned, 0, 'session 1 completions do not count for session 2');
   assert.ok(r.body.lock.target <= (6 - need) * 20, 'goal clamped to what is still open');
 });
 
 await t('server: missed goal => debt hold until a LATER session meets its goal', async () => {
-  const db = mkDb({ 'weeklyRoutines/u1_Fri': { tasks: [T('a'), T('b'), T('c'), T('d'), T('e'), T('f')] } });
-  clock = at('2026-10-23T12:00:00Z'); await call(db, { action: 'plan', taskCount: 6, tz: TZ });
+  const db = mkDb({ 'weeklyRoutines/u1_Fri': { tasks: 'abcdefghijklmn'.split('').map((c) => T(c)) } });
+  clock = at('2026-10-23T12:00:00Z'); await call(db, { action: 'plan', taskCount: 14, tz: TZ });
   clock = at('2026-10-23T13:00:00Z'); let r = await call(db, { action: 'start', hours: 5 });
   clock = r.body.lock.endMs + 60000; r = await call(db, { action: 'state' }); assert.equal(r.body.appLockDebt.sessionKey, '2026-10-23#0');
   clock += 3 * H; r = await call(db, { action: 'state' }); assert.ok(r.body.appLockDebt, 'no time-based unlock');
   r = await call(db, { action: 'nextSession', hours: 5 }); const tgt = r.body.lock.target; assert.ok(r.body.appLockDebt);
   let i = 0; while ((i + 1) * 20 < tgt) { clock += 60000; finish(db, i++); r = await call(db, { action: 'progress' }); assert.ok(r.body.appLockDebt, 'short of the goal: still held'); }
-  clock += 60000; finish(db, i); r = await call(db, { action: 'progress' }); assert.equal(r.body.appLockDebt, null, 'later session met: released');
+  clock += 60000; finish(db, i++); r = await call(db, { action: 'progress' });
+  while (i < core.TASKS_PER_SESSION) { assert.ok(r.body.appLockDebt, 'goal met but fewer than 8 tasks: still held'); clock += 60000; finish(db, i++); r = await call(db, { action: 'progress' }); }
+  assert.equal(r.body.appLockDebt, null, 'later session met goal AND 8 tasks: released');
 });
 
 await t('server: bad hours refused (start + nextSession)', async () => {
