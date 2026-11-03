@@ -57,5 +57,9 @@ t('edit-task path uses the uid-prefixed day doc', () => {
   const v = require('fs').readFileSync(require('path').join(__dirname, '../src/views/HomeView.vue'), 'utf8');
   assert.ok(!/doc\(db, 'weeklyRoutines', days\[/.test(v), 'no weeklyRoutines/{Day} without the uid prefix');
 });
+await t('schedule/repeat/series errors are inline toasts, not alert()', () => {
+  const v = require('fs').readFileSync(require('path').join(__dirname, '../src/views/HomeView.vue'), 'utf8');
+  for (const m of ['Pick a date after today.', 'Could not schedule this task', 'Could not update the repeat setting', 'Saved for this day, but the other repeating days could not be updated']) assert.ok(new RegExp(`showNoteToast\\('${m.replace(/[.]/g, '\\.')}`).test(v) && !new RegExp(`alert\\('${m.replace(/[.]/g, '\\.')}`).test(v), m);
+});
 console.log(`${n} passed`);
 })().catch((e) => { console.error(e); process.exit(1); });

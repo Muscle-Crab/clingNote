@@ -2105,7 +2105,7 @@ watch([voMuted, userId], ([m, u], prev) => {
 // Editor: move an existing one-time task from today's list to a future date.
 const scheduleExistingTask = async (index, task, { date, time }) => {
   if (blockIfLocked()) return;
-  if (!userId.value || !isValidDate(date) || date <= getTodayId()) { alert('Pick a date after today.'); return; }
+  if (!userId.value || !isValidDate(date) || date <= getTodayId()) { showNoteToast('Pick a date after today.', { error: true }); return; }
   const entry = buildScheduledEntry({ ...task, userId: userId.value }, date, time);
   if (!entry) return;
   try {
@@ -2118,7 +2118,7 @@ const scheduleExistingTask = async (index, task, { date, time }) => {
     selectedDayRoutine.value = selectedDayRoutine.value.filter((t) => taskKey(t) !== key);
   } catch (e) {
     console.error('Error scheduling task:', e);
-    alert('Could not schedule this task.');
+    showNoteToast('Could not schedule this task. Check your connection and try again.', { error: true });
   }
 };
 
@@ -2346,7 +2346,7 @@ const setTaskRepeat = async (task, dayNames, { quiet = false, lastRepeat = null 
   } catch (e) {
     console.error('repeat', e); Object.assign(task, prev); selectedDayRoutine.value = [...selectedDayRoutine.value];
     if (quiet) throw e;
-    alert('Could not update the repeat setting. Please try again.');
+    showNoteToast('Could not update the repeat setting. Check your connection and try again.', { error: true });
   }
 };
 
@@ -3610,7 +3610,7 @@ const applyToSeries = async (key, sp) => {
         tx.update(refs[i], { tasks: l.map((t) => (taskKey(t) === key ? { ...t, ...sp } : t)), updatedAt: serverTimestamp() });
       });
     }));
-  } catch (e) { console.error('series edit', e); alert('Saved for this day, but the other repeating days could not be updated.'); }
+  } catch (e) { console.error('series edit', e); showNoteToast('Saved for this day, but the other repeating days could not be updated. Try the edit again.', { error: true }); }
 };
 
 // ── Rollover notice (in-app once per rollover + device notification when it runs) ──
