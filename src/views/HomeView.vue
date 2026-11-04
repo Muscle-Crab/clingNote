@@ -1930,6 +1930,9 @@ const submitScheduledTask = async () => {
   try {
     scheduledList.value = await mutateScheduled(userId.value, (l) => [...l, entry]);
     await afterMaterialize(); // today's date (or today's occurrence) shows up right away
+    // 8-hour lock: scheduled/repeating entries are not written into the locked day (materializeDueForToday), so say so instead of
+    // closing silently with nothing on screen (the "add as recurring does nothing" report). The Recurring checkbox path adds today's card.
+    if (isDayLocked(todayDayName()) && sc.date <= getTodayId()) showNoteToast(sc.repeat !== 'never' ? 'Saved. This repeat starts showing after your locked day ends. Use the Recurring checkbox to add it to today too.' : 'Saved. It shows after your locked day ends.');
     newTask.value = blankTask();
     capWarning.value = false; capOverride.value = false;
     closeModal();
@@ -3015,7 +3018,8 @@ const confirmVoiceItems = async (items) => {
         const r = await saveReminder({ title: it.title.trim(), remindAt: it.remindAt }, { schedule: scheduleLocal });
         ok = r.ok; if (!ok) error.value = r.error;
       } else {
-        newTask.value = { ...blankTask(), title: it.title.trim(), startTime: it.start || '', estimateMin: it.durationMin || '',
+        const rec = it.recurring && it.type !== 'schedule' && (it.repeatDays || []).length ? { type: 'recurring', selectedDays: it.repeatDays.map((k) => days[k]).filter(Boolean) } : {};
+        newTask.value = { ...blankTask(), ...rec, title: it.title.trim(), startTime: it.start || '', estimateMin: it.durationMin || '',
           ...(it.type === 'schedule' ? { sched: { ...blankSchedule(it.date), on: true, date: it.date, time: it.start || '09:00' } }
             : deferTo(it.date) ? { sched: { ...blankSchedule(it.date), on: true, date: it.date, time: it.start || '' } } : {}) };
         capOverride.value = true;

@@ -14,8 +14,9 @@
                 <button v-for="c in CATEGORIES" :key="c.id" type="button" class="cat-chip" :class="['tone-' + c.tone, { on: newTask.category === c.id }]" :aria-pressed="String(newTask.category === c.id)" :data-test="'cat-' + c.id" :title="c.label" @click="newTask.category = newTask.category === c.id ? '' : c.id"><i :class="'fas ' + c.icon" aria-hidden="true"></i> {{ c.label }}</button>
               </span>
             </div>
-            <div class="nt-name-wrap">
-              <input id="nt-name" ref="titleInput" type="text" v-model="newTask.title" class="field-input" :placeholder="'What needs doing? Try “gym tomorrow at 6”'" required />
+            <div class="nt-title-row"><div class="nt-name-wrap nt-title-in">
+              <input id="nt-name" ref="titleInput" type="text" v-model="newTask.title" class="field-input" :placeholder="'What needs doing? Try “gym tomorrow at 6”'" required /></div>
+              <label class="nt-recur" data-test="nt-recur-label"><input type="checkbox" data-test="nt-recur" :checked="repeatMode !== 'once'" @change="repeatMode = $event.target.checked ? 'daily' : 'once'" /> Recurring</label>
             </div>
             <button v-if="hint" type="button" class="nl-hint" data-test="nl-hint" :disabled="hintBusy" @click="applyHint"><i class="fas fa-magic" aria-hidden="true"></i> {{ hintLabel }} <span class="nl-go">· tap to set</span></button>
             <label v-if="!newTask.sched?.on && repeatMode === 'once'" class="nl-hint nt-date-chip" data-test="nt-date-chip" for="nt-due"><i class="fas fa-calendar-day" aria-hidden="true"></i> {{ dateChipLabel }} <span class="nl-go">· change</span>
@@ -39,13 +40,18 @@
           <div class="field-group">
             <SchedulePicker v-if="newTask.sched" v-model="newTask.sched" :min-date="today" />
           </div>
-          <div v-if="!newTask.sched?.on" class="field-group">
+          <div v-if="!newTask.sched?.on && repeatMode !== 'once'" class="field-group">
             <label class="field-label" for="nt-repeat">Repeat</label>
             <select id="nt-repeat" v-model="repeatMode" class="field-select">
-              <option value="daily">Daily</option>
-              <option value="weekly">Weekly (on selected days)</option>
-              <option value="once">Just once</option>
+              <option value="daily">Every day</option>
+              <option value="weekly">On selected days</option>
             </select>
+            <div v-if="repeatMode === 'weekly'" class="day-checkboxes" data-test="nt-repeat-days">
+              <label v-for="(day, index) in days" :key="index" class="day-check-label">
+                <input type="checkbox" :value="day" v-model="newTask.selectedDays" class="day-check-input" />
+                <span>{{ day.day.slice(0, 3) }}</span>
+              </label>
+            </div>
           </div>
           <div class="field-grid">
             <div class="field-group">
@@ -216,6 +222,10 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .nt-name-wrap { position: relative; }
+.nt-title-row { display: flex; align-items: center; gap: 8px; }
+.nt-title-row .nt-title-in { flex: 1; min-width: 0; }
+.nt-recur { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; white-space: nowrap; cursor: pointer; }
+
 .label-row { display: flex; align-items: center; justify-content: space-between; gap: .4rem; flex-wrap: wrap; }
 .cat-chips, .rem-chips { display: inline-flex; gap: .3rem; flex-wrap: wrap; align-items: center; }
 .cat-chip, .rem-chip, .rem-add { all: unset; cursor: pointer; font-size: .68rem; padding: .1rem .4rem; border-radius: 999px; border: 1px solid var(--c-border, #2a2a2e); color: var(--c-text-2, #a1a09b); }

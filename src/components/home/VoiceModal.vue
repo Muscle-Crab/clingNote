@@ -18,7 +18,11 @@
               </div>
               <button type="button" class="vc-del" :aria-label="'Remove ' + it.title" @click="edit.splice(i, 1)">✕</button>
             </div>
-            <input v-model="it.title" class="vc-in" aria-label="Title" maxlength="140" />
+            <div class="vc-row vc-title-row"><input v-model="it.title" class="vc-in vc-title" aria-label="Title" maxlength="140" />
+              <label v-if="it.type !== 'reminder'" class="vc-recur"><input type="checkbox" data-test="voice-recur" :checked="!!it.recurring" @change="setRecurring(it, $event.target.checked)" /> Recurring</label></div>
+            <div v-if="it.recurring && it.type !== 'reminder'" class="vc-row" data-test="voice-repeat-days">
+              <label v-for="(d, k) in WEEK" :key="k"><input type="checkbox" :value="k" v-model="it.repeatDays" />{{ d }}</label>
+            </div>
             <div v-if="it.type === 'reminder'" class="vc-row"><label>Remind at <input v-model="it.remindAt" type="datetime-local" class="vc-in" /></label></div>
             <div v-else class="vc-row">
               <label v-if="it.type === 'schedule'">Day <input v-model="it.date" type="date" class="vc-in" /></label>
@@ -66,6 +70,8 @@
 import { ref, watch } from 'vue';
 import { voiceInputBlocked } from '@/utils/platform';
 const native = voiceInputBlocked();
+const WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']; // checked = repeats that weekday (default: every day)
+const setRecurring = (it, on) => { it.recurring = on; it.repeatDays = on ? [0, 1, 2, 3, 4, 5, 6] : []; };
 const TYPES = [{ v: 'task', l: 'Task' }, { v: 'reminder', l: 'Reminder' }, { v: 'schedule', l: 'Schedule' }];
 const props = defineProps({
   items: { type: Array, default: () => [] },
@@ -163,6 +169,9 @@ const setType = (it, t) => {
 .vc-list { list-style: none; padding: 0; margin: 8px 0; display: grid; gap: 8px; max-height: 46vh; overflow: auto; text-align: left; }
 .vc-item { border: 1px solid rgba(127,127,160,.35); border-radius: 12px; padding: 8px; display: grid; gap: 6px; }
 .vc-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; font-size: 12px; }
+.vc-title-row { flex-wrap: nowrap; }
+.vc-title-row .vc-title { flex: 1; }
+.vc-recur { white-space: nowrap; }
 .vc-row label { display: flex; gap: 4px; align-items: center; }
 .vc-in { border: 1px solid rgba(127,127,160,.4); border-radius: 8px; padding: 4px 6px; background: transparent; color: inherit; font-size: 14px; min-width: 0; }
 .vc-num { width: 64px; }
