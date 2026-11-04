@@ -14,7 +14,7 @@
       <div class="ehs-icon" aria-hidden="true">🌙</div>
       <h2 id="ehs-t">Your {{ hoursText }} hours are up.</h2>
       <p>Session done. Start a new session whenever you're ready.</p>
-      <p class="ehs-res" :class="shut.met ? 'ok' : 'miss'" data-test="eh-shut-result">{{ shut.missed ? `Missed ${shut.target} pts: apps open at ${shut.opensAtLabel}` : !(shut.target > 0) ? 'No points goal this session' : `${shut.met ? 'Goal met' : 'Goal missed'} · ${shut.earned}/${shut.target} pts` }}</p>
+      <p class="ehs-res" :class="shutMet ? 'ok' : 'miss'" data-test="eh-shut-result">{{ shut.missed ? `Missed ${shut.target} pts: apps open at ${shut.opensAtLabel}` : !(shut.target > 0) ? 'No points goal this session' : `${shutMet ? 'Goal met' : 'Goal missed'} · ${shut.earned}/${shut.target} pts${shutMet ? '' : ` · ${shutDone}/${PER_SESSION} tasks`}` }}</p>
       <p v-if="recap" class="ehs-recap" data-test="eh-shut-recap">{{ recap }}</p>
       <!-- One tap: pick how long, start NOW. No date, no clock time, no planning or scheduling step. Unfinished tasks stay in the list. -->
       <form v-if="nextOk" class="ehs-sched" data-test="eh-next" @submit.prevent="doNextSession">
@@ -43,6 +43,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { auth } from '@/firebaseConfig';
 import { useEightHour, shutLock } from '@/composables/useEightHour';
+import core from '../../../netlify/functions/lib/eightHourCore.js';
 import { paceOf, pendingCelebration } from '@/utils/pressure';
 import { localYMD } from '@/utils/localDate';
 import { recapText, breaksOn } from '@/utils/gamePlan';
@@ -88,6 +89,10 @@ const onPill = () => goCard();
 const shutVisible = computed(() => !!(uid.value && shut.value && SHUT_ROUTES.includes(route.name)));
 // ── session end: the only input is how long the next session lasts (5..12 h); it starts now ──
 // "Start next session": always offered once a session has ended (server decides: session.canStart; false only while one runs or is scheduled).
+// Goal met = points goal AND 8 tasks (eightHourCore.goalMissed).
+const PER_SESSION = core.TASKS_PER_SESSION;
+const shutDone = computed(() => Number(shut.value && shut.value.session && shut.value.session.done) || 0);
+const shutMet = computed(() => !!(shut.value && shut.value.met) && shutDone.value >= PER_SESSION);
 const nextOk = computed(() => !!(eh.session.value && eh.session.value.canStart && !eh.st.data?.offline));
 const canPick = lockAvailable();
 const addApps = async () => { try { const a = await clingLock.requestAuthorization(); if (a.status === 'approved') await clingLock.pickApps(); } catch (e) { /* stays as is */ } };

@@ -54,23 +54,23 @@ await t('unlock only when post-Start points reach the goal; early completions ne
 });
 
 await t('server: Begin stores apps + frozen goal; met session 1, then session 2 locks again with its own goal', async () => {
-  const db = mkDb({ 'weeklyRoutines/u1_Fri': { tasks: [T('a'), T('b'), T('c'), T('d'), T('e'), T('f')] } });
-  clock = at('2026-10-23T12:00:00Z'); await call(db, { action: 'plan', taskCount: 6, tz: TZ });
+  const db = mkDb({ 'weeklyRoutines/u1_Fri': { tasks: 'abcdefghijkl'.split('').map(T) } });
+  clock = at('2026-10-23T12:00:00Z'); await call(db, { action: 'plan', taskCount: 12, tz: TZ });
   clock = at('2026-10-23T13:00:00Z');
   let r = await call(db, { action: 'start', hours: 5, apps: { apps: 3, categories: 1, sites: 0, junk: 'x' } });
   assert.equal(r.code, 200); assert.deepEqual(r.body.lock.apps, { apps: 3, categories: 1, sites: 0 }, 'per-session selection stored (counts only)');
-  const g1 = r.body.lock.goal; assert.equal(g1.key, '2026-10-23#0'); assert.equal(g1.source, 'fallback'); assert.equal(g1.hours, 5); assert.equal(g1.tasksBefore, 6);
-  assert.equal(r.body.lock.target, core.fallbackGoal({ tasksBefore: 6, hours: 5, totalPoints: 120 }));
+  const g1 = r.body.lock.goal; assert.equal(g1.key, '2026-10-23#0'); assert.equal(g1.source, 'fallback'); assert.equal(g1.hours, 5); assert.equal(g1.tasksBefore, 12);
+  assert.equal(r.body.lock.target, core.flooredGoal(core.fallbackGoal({ tasksBefore: 12, hours: 5, totalPoints: 240 }), Array(12).fill(20), 240)); assert.ok(r.body.lock.target >= 160, '8-task floor: 8 × 20 pts');
   const need = Math.ceil(r.body.lock.target / 20);
   for (let i = 0; i < need; i++) { clock += 10 * 60000; finish(db, i); r = await call(db, { action: 'progress' }); }
   clock = r.body.lock.endMs + 60000; r = await call(db, { action: 'state' }); assert.equal(r.body.appLockDebt, null, 'met: no debt');
   r = await call(db, { action: 'nextSession', hours: 6, apps: { apps: 1 } });
-  // Session-end delay rule: the points goal was met and no important task was left open -> no wait (even with fewer than TASKS_PER_SESSION tasks).
-  assert.notEqual(r.code, 409, 'goal met, 0 important missed -> no cooldown');
+  // Points goal met AND >= 8 tasks (the floor forces >= 8) with no important task open -> no wait.
+  assert.ok(need >= core.TASKS_PER_SESSION); assert.notEqual(r.code, 409, 'both met, 0 important -> no cooldown');
   assert.deepEqual([r.code, r.body.phase, r.body.lock.index], [200, 'running', 1], 'second session runs (locked) right away');
   assert.equal(r.body.lock.goal.key, '2026-10-23#1'); assert.equal(r.body.lock.goal.frozenMs, clock); assert.deepEqual(r.body.lock.apps, { apps: 1, categories: 0, sites: 0 });
   assert.equal(r.body.lock.earned, 0, 'session 1 completions do not count for session 2');
-  assert.ok(r.body.lock.target <= (6 - need) * 20, 'goal clamped to what is still open');
+  assert.ok(r.body.lock.target <= (12 - need) * 20, 'goal clamped to what is still open');
 });
 
 await t('server: missed goal => debt hold until a LATER session meets its goal', async () => {

@@ -91,8 +91,10 @@ const call = async (db, body, extra = {}) => { const r = await handler(ev(body),
   r = await call(db, { action: 'state' }); eq(r.body.stats.streak, 1, 'settled once');
   // start anytime: a second session the same day starts NOW (session #1), the streak is not settled twice
   db.store['weeklyRoutines/u1_Fri'].tasks.push(T('Second a'), T('Second b'), T('Second c'), T('Second d'));
-  // session 1 met its points goal (4 of 8 tasks) and left no important task open -> no session-end delay
-  r = await call(db, { action: 'start', hours: 5 }); eq([r.code, r.body.phase, r.body.lock.index, r.body.lock.startMs], [200, 'running', 1, clock], 'goal met: second session starts right away');
+  // session 1 met its points but only 4 of 8 tasks -> goal not met (8 is the hard minimum) -> the next Start waits 2h
+  r = await call(db, { action: 'start', hours: 5 }); eq([r.code, r.body.code], [409, 'cooldown'], 'start rejected during the 2h wait');
+  clock = L.endMs + 2 * 3600e3 + 1000;
+  r = await call(db, { action: 'start', hours: 5 }); eq([r.code, r.body.phase, r.body.lock.index, r.body.lock.startMs], [200, 'running', 1, clock], 'second session starts once the wait is over');
   clock = r.body.lock.endMs + 1000; r = await call(db, { action: 'state' }); eq([r.body.phase, r.body.stats.streak], ['ready', 1], 'second session does not re-settle the streak');
   // plan opens again once the window is over (applies to tomorrow)
   r = await call(db, { action: 'plan', wakeTime: '06:00', taskCount: 2, tz: TZ }); eq([r.code, r.body.plan.wakeTime], [200, '06:00']);
@@ -141,9 +143,9 @@ const call = async (db, body, extra = {}) => { const r = await handler(ev(body),
   { const g0 = JSON.stringify(r.body.lock.goal); db.store['weeklyRoutines/u1_Fri'].tasks.push(T('Added later')); clock += 60000; const r2 = await call(db, { action: 'state' }); eq(JSON.stringify(r2.body.lock.goal), g0, 'goal frozen after Begin'); clock = at('2026-10-23T12:00:00Z'); }
   // AI goal out of range => clamped to [GOAL_MIN, open points]
   f = mkFetch('{}', true, JSON.stringify({ goalPoints: 99999 })); db = seed(); r = await call(db, { action: 'start', hours: 5 }, { fetch: f, apiKey: 'k' }); eq(r.body.lock.target, core.clampGoal(99999, openPts(seed())), 'huge AI goal clamped');
-  f = mkFetch('{}', true, JSON.stringify({ goalPoints: 1 })); db = seed(); r = await call(db, { action: 'start', hours: 5 }, { fetch: f, apiKey: 'k' }); eq(r.body.lock.target, core.GOAL_MIN, 'tiny AI goal raised to the minimum');
+  f = mkFetch('{}', true, JSON.stringify({ goalPoints: 1 })); db = seed(); r = await call(db, { action: 'start', hours: 5 }, { fetch: f, apiKey: 'k' }); eq(r.body.lock.target, Math.max(core.GOAL_MIN, openPts(seed())), 'tiny AI goal raised to the 8-task floor (clamped to the open points: fewer than 8 open)');
   // no key / no consent / AI error / garbage => deterministic fallback, still 200, no call when not allowed
-  const fb = core.fallbackGoal({ tasksBefore: 1, hours: 5, totalPoints: openPts(seed()) });
+  const fb = core.clampGoal(Math.max(core.fallbackGoal({ tasksBefore: 1, hours: 5, totalPoints: openPts(seed()) }), openPts(seed())), openPts(seed())); // < 8 open -> floor = all open
   f = mkFetch('{}'); db = seed(); r = await call(db, { action: 'start', hours: 5 }, { fetch: f, apiKey: undefined }); eq([r.code, r.body.lock.estimateSource, r.body.lock.targetSource, r.body.lock.target, f.calls.length], [200, 'heuristic', 'fallback', fb, 0]);
   f = mkFetch('{}'); db = seed(); db.store['users/u1'] = { isPro: true, lockInEnabled: true, aiConsent: false }; r = await call(db, { action: 'start', hours: 5 }, { fetch: f, apiKey: 'k' }); eq([r.body.lock.estimateSource, r.body.lock.targetSource, f.calls.length], ['heuristic', 'fallback', 0], 'no consent => nothing sent');
   f = mkFetch('{}', false); db = seed(); r = await call(db, { action: 'start', hours: 5 }, { fetch: f, apiKey: 'k' }); eq([r.code, r.body.lock.estimateSource, r.body.lock.targetSource, r.body.lock.target], [200, 'heuristic', 'fallback', fb], 'AI failure falls back');

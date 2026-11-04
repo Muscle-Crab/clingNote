@@ -210,7 +210,8 @@ const beginBlock = async (ctx, doc, { hours, startMs, endMs, dayKey, index, pend
   if (rows.length) {
     const tasksBefore = countable(stored, dayKey).filter(({ t }) => { const ca = t.createdAt; const c = (ca && typeof ca.toMillis === 'function' ? ca.toMillis() : typeof ca === 'number' ? ca : Date.parse(ca || '')) || 0; return !c || c < startMs; }).length;
     const g = apiKey && (await aiAllowed(ctx, apiKey)) ? await aiSessionGoal(tasksBefore, hours, totalPts, { fetch: ctx.fetch, apiKey, timeoutMs: ctx.aiTimeoutMs }) : null;
-    target = g != null ? g : core.fallbackGoal({ tasksBefore, hours, totalPoints: totalPts }); targetSource = g != null ? 'ai' : 'fallback';
+    const openPts = countable(stored, dayKey).filter(({ t }) => !t.completed).map(({ t }) => Number(taskPoints(t)) || 0);
+    target = core.flooredGoal(g != null ? g : core.fallbackGoal({ tasksBefore, hours, totalPoints: totalPts }), openPts, totalPts); targetSource = g != null ? 'ai' : 'fallback';
     goal = { key: core.sessionKey(dayKey, index), points: target, source: targetSource, tasksBefore, hours, frozenMs: startMs };
   }
   const next = stored.map((t) => ({ ...t })); // identical order and size: the lock compares by index

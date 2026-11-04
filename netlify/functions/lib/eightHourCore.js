@@ -37,8 +37,9 @@ const IMPORTANT_MISS_MS = 30 * 60000;
 const isImportant = (t) => !!t && (!!t.important || t.priority === 'high');
 const missedImportant = (tasks, dayKey) => (tasks || []).filter((t) => t && !t.completed && t.status !== 'pending' && t.status !== 'wontdo'
   && !(t.activeFrom && dayKey && dayKey < t.activeFrom) && isImportant(t)).length;
+// Goal met = BOTH the points goal (earned >= target) AND at least TASKS_PER_SESSION (8) tasks completed in the session (hard minimum).
 const goalMissed = (lock) => { const s = (lock && lock.session) || {}; const tg = Number(s.target) || 0;
-  return tg > 0 ? !(Number(s.earned) >= tg) : sessionDone(lock) < TASKS_PER_SESSION; };
+  return sessionDone(lock) < TASKS_PER_SESSION || (tg > 0 && !(Number(s.earned) >= tg)); };
 const delayParts = (lock) => { if (!lock || lock.placeholder || !lock.dayKey || !Number(lock.endMs)) return { goalMissed: false, important: 0, ms: 0 };
   const g = goalMissed(lock); const imp = Math.max(0, Math.floor(Number(lock.session && lock.session.missedImportant) || 0));
   return { goalMissed: g, important: imp, ms: (g ? SESSION_COOLDOWN_MS : 0) + imp * IMPORTANT_MISS_MS }; };
@@ -52,7 +53,7 @@ const cooldownText = (lock, untilMs, tz) => { const d = delayParts(lock); const 
 // Live countdown line (shutdown screen + vault row): 'Next session in 3h12m · 6:30 PM (2h + 2 important × 30m)'.
 const waitText = (untilMs, nowMs, breakdown, tz) => { const left = Math.max(0, Number(untilMs) - Number(nowMs)); if (!left) return '';
   const m = Math.ceil(left / 60000); return `Next session in ${fmtDur(m * 60000)} · ${fmtCdClock(untilMs, tz)}${breakdown ? ` (${breakdown})` : ''}`; };
-const SESSION_HEADS_UP = `Hit your points goal, or your next session waits ${SESSION_COOLDOWN_MS / 3600000}h, plus 30m per unfinished important task.`;
+const SESSION_HEADS_UP = `Hit your points goal and ${TASKS_PER_SESSION} tasks, or your next session waits ${SESSION_COOLDOWN_MS / 3600000}h, plus 30m per unfinished important task.`;
 const sessionMet = ({ earned = 0, target = 0 } = {}) => Number(target) > 0 && Number(earned) >= Number(target);
 // Session points goal: the AI (or this fallback) from the number of tasks that existed BEFORE the session was created + the chosen
 // hours; clamped to [GOAL_MIN, min(GOAL_MAX, the tasks' points)] in steps of 5 and frozen on the session's goal record at Start.
@@ -62,6 +63,10 @@ const goalRange = (totalPoints) => ({ lo: GOAL_MIN, hi: Math.min(GOAL_MAX, Math.
 const clampGoal = (g, totalPoints) => { const r = goalRange(totalPoints); const n = Number(g); return Number.isFinite(n) && n > 0 ? Math.min(r.hi, Math.max(r.lo, Math.round(n / 5) * 5)) : r.lo; };
 const fallbackGoal = ({ tasksBefore = 0, hours = 8, totalPoints = 0 } = {}) =>
   clampGoal(Math.round((Math.max(0, Number(tasksBefore) || 0) * 5 + Math.max(0, Number(hours) || 0) * 10) / 5) * 5, totalPoints);
+// Goal floor: never below what TASKS_PER_SESSION typical tasks earn = 8 × the average points of the open tasks (rounded to 5).
+// (The 8 highest would make 8 cheap tasks unable to reach it; still clamped to what's open, so < 8 open tasks -> all of them.)
+const eightTaskFloor = (pts) => { const a = (pts || []).map(Number).filter((x) => x > 0); return a.length ? Math.round((a.reduce((x, y) => x + y, 0) / a.length) * TASKS_PER_SESSION / 5) * 5 : 0; };
+const flooredGoal = (g, pts, totalPoints) => clampGoal(Math.max(Number(g) || 0, eightTaskFloor(pts)), totalPoints);
 const LOCK_IDENTITY_SLOTS = 50;                 // Firestore rules cannot loop; they compare the first 50 slots (= task cap) of a day doc (see firestore.rules)
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const WAKE_PICKER_PRESELECT = '07:00';          // UI convenience ONLY (pre-selected picker value). There is no stored/default wake time: the user must pick one.
@@ -367,7 +372,7 @@ module.exports = {
   DAY_HOURS, clampHours, hoursMs, hoursLabel, WARN_MINUTES, warningDue,
   TASKS_PER_SESSION, SESSION_COOLDOWN_MS, sessionDone, cooldownUntilMs, cooldownText, SESSION_HEADS_UP,
   IMPORTANT_MISS_MS, isImportant, missedImportant, goalMissed, delayParts, delayBreakdown, waitText,
-  SESSION_HOURS, validSessionHours, sessionMet, GOAL_MIN, GOAL_MAX, goalRange, clampGoal, fallbackGoal,
+  SESSION_HOURS, validSessionHours, sessionMet, GOAL_MIN, GOAL_MAX, goalRange, clampGoal, fallbackGoal, eightTaskFloor, flooredGoal,
   WINDOW_MS, WINDOW_MIN, MAX_TASKS_PER_DAY, MIN_TASKS_PER_HOUR, taskRange, LOCK_IDENTITY_SLOTS, WEEKDAYS, WAKE_PICKER_PRESELECT, START_MODE, TARGET_LEVELS, LOCKED_FIELDS,
   clamp, round5, parseWake, fmtWake, validTz, partsIn, dayKeyIn, dayNameIn, wakeInstant, evaluatePhase,
   countdownParts, fmtCountdown, fmtClock, fmtWakeLabel,
