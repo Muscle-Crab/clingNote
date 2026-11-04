@@ -59,7 +59,10 @@ const tasksOf = async (uid, day) => ((await db.doc(`weeklyRoutines/${uid}_${day}
   // 1) session over: one action only, "Start next session" with the hours picker (no plan / schedule step, no time or date input)
   await at(15, 30); ok(await shutOn(), '15:30 shut overlay'); ok(!(await planRow()), 'no "Plan next session" row');
   ok(!(await p.locator('[data-test=eh-sched-open]').count()) && !(await p.locator('[data-test=eh-shutdown] input').count()), 'no schedule row, no time/date input');
-  ok(await p.locator('[data-test=eh-next-session]').count() === 1, 'one "Start next session" button');
+  // main (e54115c): fewer than TASKS_PER_SESSION done -> 2 h cooldown after the session end (server session.canStart false until 17:00)
+  ok(await p.locator('[data-test=eh-next-session]').count() === 0, '15:30: cooldown, no "Start next session" yet');
+  await at(17, 30); ok(await shutOn() && !(await planRow()), '17:30: still shut, no plan row');
+  ok(await p.locator('[data-test=eh-next-session]').count() === 1, 'after the cooldown: one "Start next session" button');
   await p.screenshot({ path: SHOTS + 'after-1-shut.png' });
   await at(20, 0); ok(await shutOn() && !(await planRow()), '8 PM: still shut, no planning auto-open');
   // 2) unfinished tasks stay in today's list (nothing moved to tomorrow)
