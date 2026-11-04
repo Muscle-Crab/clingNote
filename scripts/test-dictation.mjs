@@ -29,9 +29,20 @@ await n.toggle('', () => {}); await tick(); n.toggle('', () => {}); assert(!n.li
 const d = createDictation({ native: true, plugin: { ...plugin, requestRecognitionPermission: async () => ({ granted: false }) } });
 await d.toggle('', () => {}); assert(!d.listening.value && /access is off/.test(d.error.value));
 
-// Wiring: the mic sits in the Add task name field, fills newTask.title only. No AI / auto-create.
+// Tap stop while the permission prompt is up: nothing is left listening, no orphan listeners.
+{ let rp; const L2 = {}; let started = 0; const p2 = { ...plugin, requestRecognitionPermission: () => new Promise((r) => { rp = r; }), startListening: async () => { started++; },
+    addListener: async (nm, cb) => { L2[nm] = cb; return { remove() { delete L2[nm]; } }; } };
+  const r = createDictation({ native: true, plugin: p2 }); const pr = r.toggle('', () => {}); await tick(); r.toggle('', () => {});
+  rp({ granted: true }); await pr; await tick(); assert(!r.listening.value && started === 0 && !Object.keys(L2).length, 'stop during permission'); }
+
+// Wiring: mic is the standalone FAB again (voice-to-create); the field has no mic.
 const m = readFileSync('src/components/home/AddTaskModal.vue', 'utf8');
-assert(/data-test="nt-mic"[^>]*@click="dict\.toggle\(newTask\.title, \(t\) => \{ newTask\.title = t; \}\)"/.test(m), 'mic button wired to title');
+assert(!/nt-mic|createDictation/.test(m), 'no mic inside the task-name box (restored standalone mic FAB instead)');
+const fab = readFileSync('src/components/home/FabButtons.vue', 'utf8'); const hv = readFileSync('src/views/HomeView.vue', 'utf8');
+assert(/v-if="showVoice" @click="\$emit\('voice'\)" class="fab fab-voice"/.test(fab), 'standalone mic FAB restored');
+assert(/<FabButtons[^>]*@voice="startVoiceInput"/.test(hv), 'mic FAB starts voice-to-create');
+const sw = readFileSync('ios/App/App/ClingVoicePlugin.swift', 'utf8');
+assert(/gen == self\.listenGen/.test(sw) && /teardown\(\) \{\n\s*listenGen \+= 1/.test(sw), 'stale recognition callbacks cannot kill a new session');
 const src = readFileSync('src/composables/useDictation.js', 'utf8');
 assert(!/fetch\(|netlify|parse|agent|addTask|emit/i.test(src.replace(/^\/\/.*$/gm, '')), 'dictation does nothing but fill text');
 console.log('ok   dictation (task-name mic)');

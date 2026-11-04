@@ -21,13 +21,17 @@ export function createDictation({ native = nativeVoiceAvailable(), plugin = Clin
       stopFn = end; listening.value = true;
       try {
         const perm = await plugin.requestRecognitionPermission();
+        if (stopFn !== end) return; // tapped stop / closed while the permission prompt was up
         if (!perm || !perm.granted) throw new Error('permission');
         subs.push(await plugin.addListener('partialResults', (d) => {
+          if (stopFn !== end) return;
           const t = d && d.matches && d.matches[0]; if (t) fill(t);
           if (d && d.isFinal) stop(); // pause = done
         }));
-        subs.push(await plugin.addListener('listeningState', (d) => { if (d && d.status === 'stopped' && listening.value) stop(); }));
+        subs.push(await plugin.addListener('listeningState', (d) => { if (d && d.status === 'stopped' && stopFn === end) stop(); }));
+        if (stopFn !== end) { end(); return; }
         await plugin.startListening({ language: 'en-US' });
+        if (stopFn !== end) plugin.stopListening().catch(() => {}); // stopped while starting: don't leave the mic on
       } catch (e) {
         stop();
         error.value = /permission|denied|authori/i.test(String(e && e.message)) ? 'Microphone or Speech Recognition access is off. Turn it on in Settings > ClingNote.' : 'Could not start voice input.';

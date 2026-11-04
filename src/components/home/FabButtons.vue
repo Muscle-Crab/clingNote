@@ -12,6 +12,12 @@
       <span>Add Task</span>
     </router-link>
 
+    <button v-if="showVoice" @click="$emit('voice')" class="fab fab-voice" :class="{ 'fab-voice--listening': listening }" title="Voice input" data-test="voice-fab">
+      <span v-if="listening" class="fab-pulse"></span>
+      <svg xmlns="http://www.w3.org/2000/svg" class="fab-icon" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2Z"/>
+      </svg>
+    </button>
     <button type="button" class="fab fab-voice fab-assistant" :class="{ 'fab-voice--listening': assistantLive }" data-test="assistant-bubble" data-coach="sergeant"
         title="Assistant (hold for choices)" aria-label="Assistant. Tap to open, press and hold for choices" :aria-expanded="menuOpen ? 'true' : 'false'"
         @pointerdown="lp.down" @pointermove="lp.move" @pointerup="lp.up" @pointercancel="lp.cancel" @touchstart.prevent="lp.touchstart" @contextmenu.prevent @selectstart.prevent @dragstart.prevent @click="onClick">
@@ -39,8 +45,10 @@ defineProps({
   userId: { type: String, default: null },
   assistantLive: { type: Boolean, default: false },
   showAdd: { type: Boolean, default: true },
+  listening: { type: Boolean, default: false }, // restored standalone mic FAB (from f850dd3^)
+  showVoice: { type: Boolean, default: true },
 });
-const emit = defineEmits(['add', 'assistant', 'sergeant', 'menu-open']);
+const emit = defineEmits(['add', 'voice', 'assistant', 'sergeant', 'menu-open']);
 // Tap = open the assistant. Press and hold = the sergeant menu (What's next · Replan · I'm off · Make critical · Talk).
 const menuOpen = ref(false); const menuEl = ref(null);
 let t = null; let longed = false;

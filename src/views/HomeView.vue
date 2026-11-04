@@ -218,7 +218,7 @@
       <ScheduledList v-if="userId" :tasks="isViewingToday ? futureScheduled : futureScheduled.filter((e) => e.scheduledDate === viewTabDate)" :start-open="!isViewingToday && futureScheduled.some((e) => e.scheduledDate === viewTabDate)" :today-str="todayStr" :error="scheduledError" :series="templatesOf(scheduledList)" @edit="editScheduledEntry"
                      @move-today="moveScheduledToToday" @update="updateScheduledDate" @delete="deleteScheduled" />
 
-      <FabButtons :show-add="false" :user-id="userId" :assistant-live="askOpen" @add="onAddClick" @assistant="openAssistant" @sergeant="onSergeant" @menu-open="coachSignal('menu-open')" :locked="hardLocked" />
+      <FabButtons :show-add="false" :user-id="userId" :listening="listening" :show-voice="!voiceBlocked || nativeVoiceIn" :assistant-live="askOpen" @add="onAddClick" @voice="startVoiceInput" @assistant="openAssistant" @sergeant="onSergeant" @menu-open="coachSignal('menu-open')" :locked="hardLocked" />
       <CoachSpotlight :step="coachStep" @skip="coachEnd" @skip-all="coachSkipAll" @tap="coachSignal('tap')" />
       <BreakdownSheet v-if="bd.open" :title="bd.task?.title || ''" :steps="bd.steps" :loading="bd.loading" :error="bd.error" @close="closeBreakdown" @retry="runBreakdown" @confirm="confirmBreakdown" />
       <HolidayModal v-if="holidayOpen" :today="localDateStr()" @close="holidayOpen = false" @save="saveDaysOff" />
