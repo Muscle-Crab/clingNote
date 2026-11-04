@@ -159,6 +159,9 @@ public class ClingVoicePlugin: CAPPlugin, CAPBridgedPlugin, AVSpeechSynthesizerD
     private var request: SFSpeechAudioBufferRecognitionRequest?
     private var task: SFSpeechRecognitionTask?
     private var recognizer: SFSpeechRecognizer?
+    // Bumped on every start/teardown. A cancelled task still fires its callback (with an error) after the next session has
+    // started; without this check that stale callback tore down the NEW session and sent 'stopped' -> mic died instantly.
+    private var listenGen = 0
 
     @objc func recognitionAvailable(_ call: CAPPluginCall) {
         call.resolve(["available": SFSpeechRecognizer(locale: Locale(identifier: "en-US"))?.isAvailable ?? false])
@@ -198,13 +201,13 @@ public class ClingVoicePlugin: CAPPlugin, CAPBridgedPlugin, AVSpeechSynthesizerD
                 input.installTap(onBus: 0, bufferSize: 1024, format: fmt) { buf, _ in req.append(buf) }
                 self.audioEngine.prepare(); try self.audioEngine.start()
                 self.recognizer = rec; self.request = req
+                self.listenGen += 1; let gen = self.listenGen
                 self.task = rec.recognitionTask(with: req) { [weak self] result, error in
-                    guard let self = self else { return }
-                    if let r = result {
-                        self.notifyListeners("partialResults", data: ["matches": [r.bestTranscription.formattedString], "isFinal": r.isFinal])
-                    }
-                    if error != nil || (result?.isFinal ?? false) {
-                        DispatchQueue.main.async { self.teardown(); self.notifyListeners("listeningState", data: ["status": "stopped"]) }
+                    let text = result?.bestTranscription.formattedString; let fin = result?.isFinal ?? false
+                    DispatchQueue.main.async {
+                        guard let self = self, gen == self.listenGen else { return } // stale task from an earlier session
+                        if let t = text { self.notifyListeners("partialResults", data: ["matches": [t], "isFinal": fin]) }
+                        if error != nil || fin { self.teardown(); self.notifyListeners("listeningState", data: ["status": "stopped"]) }
                     }
                 }
                 self.notifyListeners("listeningState", data: ["status": "started"])
@@ -220,6 +223,7 @@ public class ClingVoicePlugin: CAPPlugin, CAPBridgedPlugin, AVSpeechSynthesizerD
     }
 
     private func teardown() {
+        listenGen += 1
         task?.cancel(); request?.endAudio()
         if audioEngine.isRunning { audioEngine.stop() }
         audioEngine.inputNode.removeTap(onBus: 0)

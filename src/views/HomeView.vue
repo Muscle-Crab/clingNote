@@ -94,6 +94,8 @@
       <CelebrationOverlay v-if="showFullScreenAnimation" :streak="streak" @close="closeFullScreenAnimation" />
 
 
+      <StartConfirmSheet v-if="startConfirm" :title="startConfirm.title" v-model:minutes="startConfirm.minutes" v-model:dont-ask="startConfirm.dontAsk"
+          @start="finishStartConfirm(true)" @skip="finishStartConfirm(false)" @close="closeStartConfirm" />
       <TimerModal v-if="showTimerModal" v-model:hours="selectedTimerHours" v-model:minutes="selectedTimerMinutes" @close="showTimerModal = false" @start="startTimer" />
 
 
@@ -142,7 +144,7 @@
                      :locked="hardLocked || gpGate" :gate="gpGate" :friend="(gp.friend && gp.friend.name) || ''" :friend-on="gp.friendUnlock" :unlock="gpUnlock" :penalty="gpPenaltyToday" :after-close="gpEarned.afterClose"
                      :break-bank="gpBank" :break-min="gpBreakStatus.min || 15" :gift="gpGift" :history="gpHistory" :break-on="gpPhase.phase === 'break'" :screen-ready="strictReadyMin" :ready="gpReady" :vault="gpVault"
                      @carry="gpCarry" @review="gpApplyReview" @ask="gpAsk" @share="gpShare" @take-break="gpTakeBreak" @end-break="gpEndBreak" @claim-screen="claimScreenTime" @vault-start="vaultStart" @vault-stop="vaultStop" />
-        <EmptyState v-if="dayTasks.length === 0" :show-add="true" :show-templates="isViewingToday && !!userId" @add="onAddClick" @templates="openTemplates" />
+        <EmptyState v-if="dayTasks.length === 0" :show-add="true" :show-templates="isViewingToday && !!userId" :day-label="isViewingToday ? '' : formatScheduledDate(viewTabDate, todayStr)" :scheduled="isViewingToday ? 0 : (scheduledCounts[viewTabDate] || 0)" @add="onAddClick" @templates="openTemplates" />
 
 
         <div v-else class="task-list-wrap">
@@ -213,10 +215,10 @@
 
       <TimeStatsBar v-if="isViewingToday" :stats="timeStats" :ended="!!daySession.ended" :suggest="suggestShutdown && !shutdownDismissed" @wrap-up="openShutdown" />
 
-      <ScheduledList v-if="userId" :tasks="futureScheduled" :today-str="todayStr" :error="scheduledError" :series="templatesOf(scheduledList)" @edit="editScheduledEntry"
+      <ScheduledList v-if="userId" :tasks="isViewingToday ? futureScheduled : futureScheduled.filter((e) => e.scheduledDate === viewTabDate)" :start-open="!isViewingToday && futureScheduled.some((e) => e.scheduledDate === viewTabDate)" :today-str="todayStr" :error="scheduledError" :series="templatesOf(scheduledList)" @edit="editScheduledEntry"
                      @move-today="moveScheduledToToday" @update="updateScheduledDate" @delete="deleteScheduled" />
 
-      <FabButtons :show-add="false" :user-id="userId" :assistant-live="askOpen" @add="onAddClick" @assistant="openAssistant" @sergeant="onSergeant" @menu-open="coachSignal('menu-open')" :locked="hardLocked" />
+      <FabButtons :show-add="false" :user-id="userId" :listening="listening" :show-voice="!voiceBlocked || nativeVoiceIn" :assistant-live="askOpen" @add="onAddClick" @voice="startVoiceInput" @assistant="openAssistant" @sergeant="onSergeant" @menu-open="coachSignal('menu-open')" :locked="hardLocked" />
       <CoachSpotlight :step="coachStep" @skip="coachEnd" @skip-all="coachSkipAll" @tap="coachSignal('tap')" />
       <BreakdownSheet v-if="bd.open" :title="bd.task?.title || ''" :steps="bd.steps" :loading="bd.loading" :error="bd.error" @close="closeBreakdown" @retry="runBreakdown" @confirm="confirmBreakdown" />
       <HolidayModal v-if="holidayOpen" :today="localDateStr()" @close="holidayOpen = false" @save="saveDaysOff" />
@@ -320,13 +322,15 @@ import { scheduleNotification, sendNotificationToPlayer, linkPushUser } from '@/
 import { speak } from '@/composables/useSpeech';
 import { completionPercentage, computeTimeStats, daysLeftInYearFrom, heroTitleFor } from '@/utils/dayStats';
 import { shouldAutoComplete, resetSubtasks } from '@/utils/subtasks';
-import { deferredDateFor, buildScheduledEntry, buildRecurringTemplate, isTaskVisibleOn, futureOf, dueOf, countsByDate, withWeekDates, isValidDate, rescheduleEntry, templatesOf } from '@/utils/scheduling';
+import { deferredDateFor, buildScheduledEntry, buildRecurringTemplate, isTaskVisibleOn, futureOf, dueOf, countsByDate, withWeekDates, tabDateFor, isStaleOnTab, formatScheduledDate, isValidDate, rescheduleEntry, templatesOf } from '@/utils/scheduling';
 import { mutateScheduled, materializeDueForToday } from '@/composables/useScheduledTasks';
 import { blankSchedule, validateSchedule, scheduleOfTask, applyTaskSchedule, deleteTaskScope, deleteEntry, editEntry } from '@/utils/schedEdit';
 import { syncScheduledNotifications } from '@/composables/useSchedNotifications';
 import { repeatState, patternOf, onSchedule, offSchedule, toastFor, legacyRepeating, legacyPattern } from '@/utils/repeatToggle';
 import { dropUndefined } from '@/utils/firestoreSafe';
-import { lightHaptic } from '@/composables/useTaskMotion';
+import { lightHaptic, warnHaptic } from '@/composables/useTaskMotion';
+import StartConfirmSheet from '@/components/home/StartConfirmSheet.vue';
+import { confirmStartOn, setConfirmStart, confirmLine, speakConfirm, stopConfirm } from '@/utils/startConfirm';
 import ScheduledList from '@/components/home/ScheduledList.vue';
 import EmptyState from '@/components/home/EmptyState.vue';
 import StartDayPrompt from '@/components/home/StartDayPrompt.vue';
@@ -366,9 +370,13 @@ import { homeDay } from '@/utils/homeDay';
 import DayStartPrompt from '@/components/eighthour/DayStartPrompt.vue';
 import { sessionApps } from '@/utils/sessionApps';
 import { debtShield, debtHoldPlan, turnOffBlocked, TURN_OFF_BLOCKED_MSG } from '@/utils/appLockDebt';
-import { vaultView, startPlan, stopWindows, priceApps, newUnlocks, unlockText } from '@/utils/pointsVault';
+import { vaultView, startPlan, stopWindows, priceApps, newUnlocks, unlockCelebration, webFallback } from '@/utils/pointsVault';
+import { typicalMin } from '@/utils/typicalUsage';
+import robotPng from '@/assets/assistant-robot@2x.png';
 import PointsCelebration from '@/components/home/PointsCelebration.vue';
-import { sessionGoal } from '@/utils/sessionGoal';
+import { sessionGoal, overtimeStamp, overtimeInfo, overtimePoints } from '@/utils/sessionGoal';
+import { durationMs as ringDurationMs, overtimeMs as ringOvertimeMs, elapsedMs as ringElapsedMs } from '@/utils/timerRing';
+import { topicKey, recordActual, setEstimateHistory, estimateHistory } from '@/utils/personalEstimate';
 import { useEightHour, clearDebtLocal, syncAfterAuth, setDayLengthHours, loadDayLengthHours, promptSeenFor, markPromptSeen } from '@/composables/useEightHour';
 import { countableIndexes, taskRange, hoursLabel, validSessionHours } from '@/utils/eightHour';
 import { estimateFor, chipValues, withAiEstimate } from '@/utils/taskEstimate';
@@ -458,14 +466,27 @@ const nowTick = ref(Date.now());
 let timerInterval = null;
 
 // Play = start the countdown immediately from the task's estimate (typed override > stored/auto estimate). No picker step.
-const openTaskTimerModal = async (index) => {
-  const t = selectedDayRoutine.value[index]; if (!t) return;
-  const mins = chipValues(t).minutes || 25;
+// Pre-start confirm (utils/startConfirm.js): spoken question + small sheet (Start / Skip / adjust / Don't ask again), unless turned off.
+const startConfirm = ref(null); // { index, title, minutes, base, dontAsk }
+const launchTimer = async (index, mins) => {
   selectedTimerTaskIndex.value = index;
   selectedTimerHours.value = Math.floor(mins / 60);
   selectedTimerMinutes.value = mins % 60;
   await startTimer();
 };
+const openTaskTimerModal = async (index) => {
+  const t = selectedDayRoutine.value[index]; if (!t) return;
+  const mins = chipValues(t).minutes || 25;
+  if (!confirmStartOn(localStorage, userId.value)) return launchTimer(index, mins);
+  startConfirm.value = { index, title: t.title || 'this task', minutes: mins, base: mins, dontAsk: false };
+  speakConfirm(confirmLine(t.title, mins));
+};
+const finishStartConfirm = async (useAdjusted) => {
+  const c = startConfirm.value; if (!c) return; stopConfirm(); startConfirm.value = null;
+  if (c.dontAsk) setConfirmStart(localStorage, userId.value, false);
+  await launchTimer(c.index, useAdjusted ? c.minutes : c.base);
+};
+const closeStartConfirm = () => { stopConfirm(); startConfirm.value = null; };
 
 // B44: 🍅 in the ⋯ menu: 25/5 ×4 pomodoro on this task (phases advance in the countdown watcher; Live Activity shows "Focus 2/4").
 const startPomodoro = async (index) => {
@@ -548,14 +569,8 @@ const startCountdownWatcher = () => {
           await saveSelectedDayTasks().catch((e) => console.warn('pomodoro phase not saved:', e));
           continue;
         }
-        // 8-hour lock: a locked day can never lose a task, so an expired timer only stops in place (no carry to tomorrow).
-        // Before: the carry spliced the task and saveSelectedDayTasks threw a LockError inside this interval -> "Unhandled:" overlay.
-        if (selectedDayLocked.value || isShutdown() || gpOn.value) { // game plan: nothing rolls over by itself (picked at close)
-          selectedDayRoutine.value[i] = { ...task, timerActive: false, timerStartedAt: null, timerEndTime: null };
-          await saveSelectedDayTasks().catch((e) => console.warn('timer stop not saved:', e));
-        } else {
-          await autoTransferTaskToTomorrow(i).catch((e) => { console.warn('auto-carry failed:', e); fetchSelectedDayRoutine(); });
-        }
+        // Count-up timer: reaching the set duration never stops, completes or carries the task. It keeps counting
+        // (overtime, shown as +MM:SS); the one "duration reached" local notification was scheduled at play (scheduleTimerDone).
       }
     }
   }, 1000);
@@ -896,9 +911,8 @@ const resetTasksToIncomplete = async (dayIndex = selectedDayIndex.value, isCurre
       completed: false
     }));
 
-    // Prevent streak logic from triggering on past days
-    const todayIndex = new Date().getDay(); // 0 (Sun) - 6 (Sat)
-    const isPastDay = dayIndex < todayIndex;
+    // Prevent streak logic from triggering on past days (rolling tabs: a tab is today or ahead, never past)
+    const isPastDay = tabDateFor(dayIndex) < getTodayId();
 
     // Update Firestore
     await updateDoc(selectedDayDocRef, {
@@ -961,6 +975,11 @@ const openModal = (type = 'task', index = null, title = '') => {
     selectedTaskTitle.value = title || "Task Reminder";
     isModalOpen.value = true;
   } else {
+    // Date chip: prefill with the selected tab's real date (rolling tabs); today's tab leaves it empty (= today), as before.
+    if (type === 'task' && !isViewingToday.value && selectedDayDate.value > getTodayId()) {
+      if (!newTask.value.dueDate) newTask.value.dueDate = selectedDayDate.value;
+      if (newTask.value.sched && !newTask.value.sched.on) newTask.value.sched.date = selectedDayDate.value;
+    }
     modalOpen.value = true;
     prefetchGate();
   }
@@ -973,9 +992,10 @@ const { prefs: viewPrefs } = useTaskViewPrefs();
 const effectivePrefs = computed(() => (new Date().getDay() === selectedDayIndex.value ? normalizePrefs(viewPrefs.value) : normalizePrefs(null)));
 // Copies not active yet on the viewed date (e.g. a Daily task created today, on earlier days of this week) are hidden, never deleted.
 const viewTabDate = computed(() => tabDays.value[selectedDayIndex.value]?.date || '');
-const dayTasks = computed(() => selectedDayRoutine.value.filter((t) => !isHiddenOnDate(t, viewTabDate.value)));
+const staleHere = (t) => isStaleOnTab(t, selectedDayIndex.value, viewTabDate.value, todayStr.value); // leftovers from a past occurrence of this weekday
+const dayTasks = computed(() => selectedDayRoutine.value.filter((t) => !isHiddenOnDate(t, viewTabDate.value) && !staleHere(t)));
 const hasHiddenCopies = computed(() => dayTasks.value.length !== selectedDayRoutine.value.length);
-const viewItems = computed(() => viewTasks(selectedDayRoutine.value, effectivePrefs.value).filter((i) => !isHiddenOnDate(i.task, viewTabDate.value)));
+const viewItems = computed(() => viewTasks(selectedDayRoutine.value, effectivePrefs.value).filter((i) => !isHiddenOnDate(i.task, viewTabDate.value) && !staleHere(i.task)));
 const displayTasks = computed(() => viewItems.value.map((i) => i.task));
 // ---- Plan my day (user picks start + hours; preview; saved only on Confirm) ----
 const planOpen = ref(false); const planBusy = ref(false); const planError = ref('');
@@ -1091,38 +1111,10 @@ const editedTask = ref({title: '', time: '', priority: 'low', labels: [], notes:
 const searchQuery = ref('');
 
 
-const generateWeekDates = () => {
-  const today = new Date();
-  const currentDayIndex = today.getDay(); // 0 for Sunday, 1 for Monday, etc.
-  const week = [];
-
-  for (let i = 0; i < 7; i++) {
-    const diff = i - currentDayIndex;
-    const day = new Date(today);
-    day.setDate(today.getDate() + diff);
-
-    // Format the date as YYYY-MM-DD in local time
-    const formattedDate = day.toLocaleDateString('en-CA'); // 'en-CA' formats as YYYY-MM-DD
-    const dayName = new Intl.DateTimeFormat('en-US', { weekday: 'short' }).format(day);
-
-    week.push({ day: dayName, date: formattedDate });
-  }
-
-  days.value = week;
-};
-
-
-// Call this function when the component is mounted
-onMounted(() => {
-  generateWeekDates();
-  console.log('Generated days array:', days.value);
-});
-
 // Header date is derived from the one source of truth (selectedDayIndex) so it can never lag behind the active tab.
 const currentDate = computed(() => {
   if (selectedDayIndex.value === -1) return getCurrentDate();
-  const d = new Date();
-  d.setDate(d.getDate() + (selectedDayIndex.value - d.getDay()));
+  const d = new Date(`${tabDateFor(selectedDayIndex.value)}T12:00:00`); // same rolling helper as the tabs and agenda
   return new Intl.DateTimeFormat('en-US', { weekday: 'long', month: 'long', day: 'numeric' }).format(d);
 });
 
@@ -1340,6 +1332,8 @@ const toggleTaskCompletion = async (index) => {
     const completedNow = new Date().toISOString();
 
     task.completedAt = completedNow;
+    Object.assign(task, task.timerEndTime ? overtimeStamp(ringDurationMs(task), ringOvertimeMs(task, Date.parse(completedNow))) : overtimeStamp(0)); // overtime penalty input
+    if (task.timerEndTime) recordEstimateActual(task, ringElapsedMs(task, Date.parse(completedNow)) / 60000); // personalized estimates
     task.completedFor = (!isToday(selectedDayIndex.value) && isShutdown() && days[selectedDayIndex.value]?.day === planTomorrowDayName()) ? localYMDOffset(1) : null; // early (planning window) -> tomorrow's
     task.timerActive = false;
     task.timerStoppedAt = completedNow;
@@ -1347,7 +1341,8 @@ const toggleTaskCompletion = async (index) => {
 
     userCredits.value += 10;
     if (isToday(selectedDayIndex.value)) { const of = core.TASKS_PER_SESSION; const n = sessionTasksDone.value + 1;
-      celebrate({ kind: 'task', title: 'Task done! 🎉', points: completionPoints(task), cheer: cheerFor(n, of) }); }
+      const ot = overtimeInfo(completionPoints(task), task); if (ot.lost > 0) warnHaptic();
+      celebrate({ kind: 'task', title: 'Task done! 🎉', points: ot.earned, penalty: ot.lost > 0 ? ot : null, ms: ot.lost > 0 ? 4200 : undefined, cheer: cheerFor(n, of) }); }
     if (isToday(selectedDayIndex.value)) { const left = (selectedDayRoutine.value || []).filter((t, i) => i !== index && !t.completed).length;
       window.dispatchEvent(new window.CustomEvent('cn:sergeant-ack', { detail: { left } })); }
 
@@ -1358,6 +1353,7 @@ const toggleTaskCompletion = async (index) => {
   } else {
     sfx('tap'); // un-complete: light tap
     task.completedAt = null;
+    Object.assign(task, overtimeStamp(0)); // un-complete: the credited (penalised) points come off exactly, the stamp goes
     task.completedFor = null;
     task.timerStoppedAt = null;
     task.timerActive = false;
@@ -1432,7 +1428,7 @@ const widgetComplete = async (taskId, mode) => {
 widgetComplete.prior = async (taskId, dayName) => {
   if (!userId.value || !dayName || isDayLocked(dayName)) return !!userId.value;
   const at = new Date().toISOString();
-  await mutateDay(dayName, (tasks) => tasks.map((t) => (t && !t.completed && widgetTaskId(t) === taskId ? { ...t, completed: true, completedAt: at, timerActive: false, widgetEffectsPending: false } : t)));
+  await mutateDay(dayName, (tasks) => tasks.map((t) => (t && !t.completed && widgetTaskId(t) === taskId ? { ...t, completed: true, completedAt: at, timerActive: false, widgetEffectsPending: false, ...(t.timerEndTime ? overtimeStamp(ringDurationMs(t), ringOvertimeMs(t, Date.parse(at))) : overtimeStamp(0)) } : t)));
   return true;
 };
 widgetComplete.tasks = () => (isToday(selectedDayIndex.value) ? selectedDayRoutine.value : []);
@@ -1895,7 +1891,7 @@ const runScheduledMaterialization = async () => {
     return res.added;
   } catch (e) {
     console.error('Scheduled tasks unavailable (check Firestore rules for users/{uid}):', e);
-    scheduledError.value = 'Scheduled tasks could not be loaded.';
+    scheduledError.value = 'Scheduled tasks could not be loaded. Check your connection and try again.';
   } finally { materializing = false; }
 };
 const afterMaterialize = async () => {
@@ -2083,7 +2079,7 @@ const editScheduledEntry = async ({ id, fields, sched, scope }) => {
   if (!userId.value) return;
   const bad = validateSchedule(sched, sched.repeat === 'never' ? getTodayId() : null); if (bad) { scheduledError.value = bad; return; }
   try { scheduledList.value = await mutateScheduled(userId.value, (l) => editEntry(l, id, fields || {}, sched, scope, getTodayId())); await afterMaterialize(); resyncNotifications(); }
-  catch (e) { console.error(e); scheduledError.value = 'Could not update the scheduled task.'; }
+  catch (e) { console.error(e); scheduledError.value = 'Could not update the scheduled task. Check your connection and try again.'; }
 };
 
 // Reminders for scheduled/recurring tasks: rebuilt from scratch after any change (capped, see utils/schedNotify.js).
@@ -2109,7 +2105,7 @@ watch([voMuted, userId], ([m, u], prev) => {
 // Editor: move an existing one-time task from today's list to a future date.
 const scheduleExistingTask = async (index, task, { date, time }) => {
   if (blockIfLocked()) return;
-  if (!userId.value || !isValidDate(date) || date <= getTodayId()) { alert('Pick a date after today.'); return; }
+  if (!userId.value || !isValidDate(date) || date <= getTodayId()) { showNoteToast('Pick a date after today.', { error: true }); return; }
   const entry = buildScheduledEntry({ ...task, userId: userId.value }, date, time);
   if (!entry) return;
   try {
@@ -2122,7 +2118,7 @@ const scheduleExistingTask = async (index, task, { date, time }) => {
     selectedDayRoutine.value = selectedDayRoutine.value.filter((t) => taskKey(t) !== key);
   } catch (e) {
     console.error('Error scheduling task:', e);
-    alert('Could not schedule this task.');
+    showNoteToast('Could not schedule this task. Check your connection and try again.', { error: true });
   }
 };
 
@@ -2131,12 +2127,14 @@ const moveScheduledToToday = async (id) => {
   try {
     scheduledList.value = await mutateScheduled(userId.value, (l) => rescheduleEntry(l, id, getTodayId(), ''));
     await afterMaterialize();
-  } catch (e) { console.error(e); scheduledError.value = 'Could not move the task.'; }
+  } catch (e) { console.error(e); scheduledError.value = 'Could not move the task to today. Check your connection and try again.'; }
 };
 const updateScheduledDate = async ({ id, date, time }) => {
-  if (!userId.value || !isValidDate(date) || date < getTodayId()) return;
+  if (!userId.value) return;
+  if (!isValidDate(date) || date < getTodayId()) { scheduledError.value = 'Pick today or a later date.'; return; } // was a silent no-op
+  scheduledError.value = '';
   try { scheduledList.value = await mutateScheduled(userId.value, (l) => rescheduleEntry(l, id, date, time)); if (date <= getTodayId()) await afterMaterialize(); }
-  catch (e) { console.error(e); scheduledError.value = 'Could not update the date.'; }
+  catch (e) { console.error(e); scheduledError.value = 'Could not change the date. Check your connection and try again.'; }
 };
 const deleteScheduled = async (id) => {
   if (!userId.value) return;
@@ -2145,7 +2143,7 @@ const deleteScheduled = async (id) => {
   if (e?.templateId) { if (!confirm('Delete this repeating task?')) return; scope = confirm('OK = this and all future occurrences\nCancel = only this one') ? 'future' : 'this'; }
   else if (!confirm(e?.recurrence ? 'Delete this whole repeating series?' : 'Delete this scheduled task?')) return;
   try { scheduledList.value = await mutateScheduled(userId.value, (l) => deleteEntry(l, id, scope)); }
-  catch (e) { console.error(e); scheduledError.value = 'Could not delete the task.'; }
+  catch (e) { console.error(e); scheduledError.value = 'Could not delete the task. Check your connection and try again.'; }
 };
 
 const addNewTask = async () => {
@@ -2161,7 +2159,10 @@ const addNewTask = async () => {
   }
 
   // A one-time task with a future due date belongs to that date, not to today's day doc (route it through the scheduler).
-  { const fut = !newTask.value.sched?.on && newTask.value.type !== 'recurring' && !(newTask.value.selectedDays || []).length ? deferredDateFor(newTask.value.dueDate, getTodayId()) : '';
+  // Rolling tabs: a one-off added on a future tab belongs to that tab's real date (scheduler), not to the reused weekday doc.
+  // A past due date is clamped to today (it would otherwise land on a date that never comes again).
+  if (isValidDate(newTask.value.dueDate) && newTask.value.dueDate < getTodayId()) newTask.value = { ...newTask.value, dueDate: '' };
+  { const fut = !newTask.value.sched?.on && newTask.value.type !== 'recurring' && !(newTask.value.selectedDays || []).length ? deferredDateFor(newTask.value.dueDate || (isViewingToday.value ? '' : viewTabDate.value), getTodayId()) : '';
     if (fut) newTask.value = { ...newTask.value, sched: { ...blankSchedule(fut), on: true, date: fut, time: newTask.value.startTime || '' } }; }
   limitHit.value = null;
   try {
@@ -2220,6 +2221,7 @@ const addNewTask = async () => {
     status: newTask.value.status || 'todo',
     pendingOn: newTask.value.status === 'pending' ? (newTask.value.pendingOn || '').trim() : '',
     dueDate: newTask.value.dueDate || '',
+    forDate: isViewingToday.value ? getTodayId() : (viewTabDate.value || ''), // the tab's real date: a later week never shows it as a leftover
     startTime: newTask.value.startTime || '',
     estimateMin: Number(newTask.value.estimateMin) || 0,
     section: sectionForCreate({ start: newTask.value.startTime, section: newTask.value.section }), // Morning unless a time or the assistant says otherwise
@@ -2344,7 +2346,7 @@ const setTaskRepeat = async (task, dayNames, { quiet = false, lastRepeat = null 
   } catch (e) {
     console.error('repeat', e); Object.assign(task, prev); selectedDayRoutine.value = [...selectedDayRoutine.value];
     if (quiet) throw e;
-    alert('Could not update the repeat setting. Please try again.');
+    showNoteToast('Could not update the repeat setting. Check your connection and try again.', { error: true });
   }
 };
 
@@ -2421,6 +2423,14 @@ const updateCreditsInFirestore = async () => {
 };
 
 watch(userCredits, updateCreditsInFirestore);
+// Personalized estimates: actual minutes per topic on users/{uid}.estHistory (last 20 per key, outliers ignored).
+const recordEstimateActual = (task, actualMin) => {
+  const key = topicKey(task.title); const before = estimateHistory();
+  const next = recordActual(before, key, actualMin, chipValues(task).minutes);
+  if (next === before || !userId.value) return;
+  setEstimateHistory(next);
+  updateDoc(doc(db, 'users', userId.value), { [`estHistory.${key}`]: next[key] }).catch(() => saveBossField({ estHistory: { [key]: next[key] } }));
+};
 const fetchUserCredits = async () => {
   if (!userId.value) return;
 
@@ -2430,6 +2440,7 @@ const fetchUserCredits = async () => {
     const userDocSnapshot = await getDoc(userDocRef);
     if (userDocSnapshot.exists()) {
       userCredits.value = userDocSnapshot.data().credits || 0;
+      setEstimateHistory(userDocSnapshot.data().estHistory); // personalized estimates (utils/personalEstimate.js)
       console.log('User credits loaded:', userCredits.value);
     }
   } catch (error) {
@@ -2463,7 +2474,8 @@ const updateTask = async () => {
 
   try {
     // Get the reference to the document containing the tasks for the selected day
-    const selectedDayDocRef = doc(db, 'weeklyRoutines', days[selectedDayIndex.value].day);
+    if (!userId.value) return;
+    const selectedDayDocRef = doc(db, 'weeklyRoutines', `${userId.value}_${days[selectedDayIndex.value].day}`); // storage is weeklyRoutines/{uid}_{Day} (the uid prefix was missing)
 
     // Fetch the document snapshot
     const selectedDayDocSnapshot = await getDoc(selectedDayDocRef);
@@ -2842,7 +2854,7 @@ watch(
     (tasks) => {
       // Coach game plan: size points (S10/M20/L40), nothing after the hard close, minus today's revoke penalty. Simple mode unchanged.
       pointsAccumulated.value = gpOn.value && isViewingToday.value ? gpEarned.value.points
-        : (tasks || []).filter((task) => task.completed).reduce((n, t) => n + chipValues(t).points, 0); // real points, same as the card
+        : (tasks || []).filter((task) => task.completed).reduce((n, t) => n + overtimePoints(chipValues(t).points, t), 0); // real points minus any overtime penalty (what the celebration credited)
     },
     { deep: true }
 );
@@ -3598,7 +3610,7 @@ const applyToSeries = async (key, sp) => {
         tx.update(refs[i], { tasks: l.map((t) => (taskKey(t) === key ? { ...t, ...sp } : t)), updatedAt: serverTimestamp() });
       });
     }));
-  } catch (e) { console.error('series edit', e); alert('Saved for this day, but the other repeating days could not be updated.'); }
+  } catch (e) { console.error('series edit', e); showNoteToast('Saved for this day, but the other repeating days could not be updated. Try the edit again.', { error: true }); }
 };
 
 // ── Rollover notice (in-app once per rollover + device notification when it runs) ──
@@ -4225,7 +4237,7 @@ const syncVault = async () => {
     const u = await clingLock.vaultUsage(); if (u && !u.error) { vaultData.value = { days: u.days || {}, apps: u.apps || [] };
       // Prices are computed once per day (new apps picked later in the day get priced and appended).
       const have = dayLoad(VAULT_PRICE_KEY) || []; const missing = (u.apps || []).filter((a) => !have.some((h) => h.id === a.id));
-      if (!have.length || missing.length) { const add = priceApps(have.length ? missing : u.apps || [], u.days || {}, localDateStr()); const list = [...have, ...add].sort((a, b) => a.price - b.price); daySave(VAULT_PRICE_KEY, list); vaultPriced.value = list; } }
+      if (!have.length || missing.length) { const add = priceApps(have.length ? missing : u.apps || [], u.days || {}, localDateStr(), typicalMin); const list = [...have, ...add].sort((a, b) => a.price - b.price); daySave(VAULT_PRICE_KEY, list); vaultPriced.value = list; } }
     const st = await clingLock.vaultState();
     const v = gpVault.value; const live = st && st.live;
     // Debt / gate lost while app time runs: close at once (time already used stays used, the rest is kept).
@@ -4234,10 +4246,12 @@ const syncVault = async () => {
   } finally { vaultSyncing = false; }
 };
 // One full-screen celebration per app per day as the points pass its price.
-watch(() => (gpVault.value ? gpVault.value.items.filter((a) => a.open).map((a) => a.id).join(',') : ''), () => {
+// Native first (real app icons popping out of the vault); whatever it can't draw falls back to the web celebration (app chips).
+watch(() => (gpVault.value ? gpVault.value.items.filter((a) => a.open).map((a) => a.id).join(',') : ''), async () => {
   const fresh = newUnlocks(gpVault.value, dayLoad(VAULT_SEEN_KEY) || []); if (!fresh.length) return;
   daySave(VAULT_SEEN_KEY, [...(dayLoad(VAULT_SEEN_KEY) || []), ...fresh.map((a) => a.id)]);
-  fresh.forEach((a) => celebrate({ kind: 'vault', title: unlockText(a.label), sub: `${a.price} pts reached` })); });
+  const r = await clingLock.celebrateVault(fresh.map((a) => a.id), { points: (gpVault.value && gpVault.value.points) || 0, robot: robotPng });
+  const c = unlockCelebration(webFallback(fresh, r)); if (c) celebrate({ ...c, robot: robotPng }); });
 const vaultStart = async () => { const v = gpVault.value; const now = Date.now(); const plan = startPlan(v, now); if (!plan) return;
   const r = await clingLock.allowVaultApps(plan.ids, plan.untilMs);
   if (!r || !(r.allowed > 0)) { error.value = r && r.reason === 'debt' ? 'Vault closed: a missed goal keeps apps locked.' : "Couldn't open the vault apps right now."; return; }

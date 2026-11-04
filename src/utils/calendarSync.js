@@ -37,7 +37,7 @@ export const keyFromUrl = (url) => (typeof url === 'string' && url.startsWith(EV
 
 export const syncWindow = (nowMs) => ({ fromMs: nowMs - SYNC_WINDOW_DAYS.back * 86400000, toMs: nowMs + SYNC_WINDOW_DAYS.ahead * 86400000 });
 
-// Local events. scheduled: users/{uid}.scheduledTasks.tasks; dayLists: { Sun: task[] ... }; weekDates: ['YYYY-MM-DD' x7] (Sun..Sat of this week).
+// Local events. scheduled: users/{uid}.scheduledTasks.tasks; dayLists: { Sun: task[] ... }; weekDates: ['YYYY-MM-DD' x7] (Sun..Sat of this week; the Home tabs roll today..today+6 instead).
 export const buildLocalEvents = ({ scheduled = [], dayLists = {}, weekDates = [], blocks = [], nowMs = Date.now() }) => {
   const { fromMs, toMs } = syncWindow(nowMs); const out = new Map();
   const add = (key, t, date, time, src, done = false) => {

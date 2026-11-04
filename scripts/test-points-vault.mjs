@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 // Points vault: formula prices from the user's own usage, ascending unlock order, no task gate. Generic labels only.
 import assert from 'node:assert/strict';
 import * as V from '../src/utils/pointsVault.js';
@@ -44,6 +45,40 @@ t('one celebration per app per day', () => { const v = { items: [{ id: 'a', open
 t('time: 10 pts = 5 min, start plan', () => { assert.equal(V.timeEarnedMin(95), 45);
   const v = V.vaultView({ apps: [{ id: 'a', label: 'A' }], days: daysOf({ a: 10 }), todayYmd: today, points: 100, nowMs: 1000 });
   assert.deepEqual(V.startPlan(v, 1000).ids, ['a']); });
+t('one batched unlock celebration, native first then web fallback', () => {
+  const a = [{ id: 'x', label: 'Any App', price: 50 }, { id: 'y', label: 'Other', price: 90 }];
+  assert.equal(V.unlockCelebration([]), null); assert.equal(V.unlockCelebration([a[0]]).title, 'Vault unlocked: Any App 🎉');
+  const c = V.unlockCelebration(a); assert.equal(c.title, 'Vault unlocked: 2 apps 🎉'); assert.equal(c.sub, '90 pts reached'); assert.deepEqual(c.apps.map((x) => x.label), ['Any App', 'Other']);
+  assert.equal(V.webFallback(a, { shown: 0 }).length, 2); assert.equal(V.webFallback(a, null).length, 2);
+  assert.deepEqual(V.webFallback(a, { shown: 1, missing: ['y'] }).map((x) => x.id), ['y']); assert.equal(V.webFallback(a, { shown: 2, missing: [] }).length, 0); });
+t('native overlay: plugin method registered, real icons via Label(token), no web icon fetch', () => {
+  const sw = fs.readFileSync(new URL('../ios/App/App/ClingLockPlugin.swift', import.meta.url), 'utf8');
+  assert.ok(/CAPPluginMethod\(name: "celebrateVault"/.test(sw)); assert.ok(/@objc func celebrateVault/.test(sw)); assert.ok(/Label\(a\.token\)\.labelStyle\(\.iconOnly\)/.test(sw));
+  assert.ok(/celebrateVault: safe\('ClingLock'/.test(fs.readFileSync(new URL('../src/native/clingNative.js', import.meta.url), 'utf8'))); });
 const src = (await import('node:fs')).readFileSync(new URL('../src/utils/pointsVault.js', import.meta.url), 'utf8');
 t('no hardcoded app names in the logic', () => { assert.ok(!/pubg|instagram|youtube|tiktok/i.test(src)); });
 console.log(`points vault: ${n} passed`);
+
+// Vault pop-out web fallback: main social platforms get brand-colored SVG tiles; unknown apps keep the letter tile.
+{
+  const { socialIcon } = await import('../src/utils/socialIcons.js');
+  for (const l of ['Instagram', 'TikTok', 'X', 'YouTube', 'Facebook', 'twitter']) { const s = socialIcon(l); if (!s || !s.bg || !/<(path|rect|circle)/.test(s.svg)) throw new Error('brand icon ' + l); }
+  if (socialIcon('Duolingo') !== null) throw new Error('unknown app should fall back to letter tile');
+  console.log('ok   vault pop-out social brand icons');
+}
+{ // onboarding vault step: typical estimates with no history, weekly text, price explanation, AI prompt
+  const { typicalMin } = await import('../src/utils/typicalUsage.js');
+  const r = V.priceApps([{ id: 'a', label: 'TikTok' }, { id: 'b', label: 'Instagram' }, { id: 'c', label: 'App' }], {}, '2026-11-03', typicalMin);
+  assert.equal(V.priceApps([{ id: 'a', label: 'TikTok' }], {}, '2026-11-03')[0].min, V.NO_DATA_MIN);
+  const tk = r.find((x) => x.id === 'a'); assert.equal(tk.min, 90); assert.ok(tk.boss && tk.noData); assert.equal(tk.price, Math.min(600, V.round5(V.priceOf(90) * 1.5)));
+  assert.equal(r.find((x) => x.id === 'c').min, V.NO_DATA_MIN);
+  assert.match(V.weeklyText(tk), /^~11 h\/week \(estimate, updates after a few days\)$/);
+  assert.match(V.priceWhy(r.find((x) => x.id === 'c')), /^Most people spend about 7 hours a week on this app, so/);
+  const d = { '2026-11-01': { a: 120, b: 30 }, '2026-11-02': { a: 90, b: 30 } }; const r2 = V.priceApps([{ id: 'a', label: 'TikTok' }, { id: 'b', label: 'Instagram' }], d, '2026-11-03');
+  const ig = r2.find((x) => x.id === 'b'); assert.equal(ig.price, 90); assert.equal(V.weeklyText(ig), '~4 h/week'); assert.equal(V.priceWhy(ig), 'You spend about 4 hours a week on Instagram, so it costs 90 points, about 5 tasks.');
+  const { createRequire } = await import('node:module'); const { buildRequest } = createRequire(import.meta.url)('../netlify/functions/lib/aiPrompts.js');
+  const q = buildRequest('vault_why', { apps: [{ id: 'a', label: 'TikTok', hoursPerWeek: 11, price: 315, tasks: 16, estimate: true, boss: true }] });
+  assert.ok(q.body.messages[1].content.includes('"price":315') && /estimate/.test(q.body.messages[0].content));
+  assert.throws(() => buildRequest('vault_why', { apps: [] }));
+  console.log('ok   onboarding vault step: estimates, weekly text, price why, AI prompt');
+}

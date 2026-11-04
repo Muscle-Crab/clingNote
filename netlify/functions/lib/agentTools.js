@@ -12,7 +12,7 @@ const DECLARATIONS = [
   fn('create_tasks', 'Add one or more tasks/reminders/scheduled blocks (e.g. a spoken day plan or errand list). Max 5 tasks/day (free and Pro): respect context.limit.remaining.', {
     items: S('ARRAY', { items: S('OBJECT', { properties: {
       title: S('STRING'), type: S('STRING', { enum: ['task', 'reminder', 'schedule'] }), date: DATE, start: TIME,
-      durationMin: S('INTEGER'), remindAt: S('STRING', { description: 'YYYY-MM-DDTHH:MM for reminders' }), points: POINTS,
+      durationMin: S('INTEGER', { description: 'Realistic minutes (5..600) from what the task actually is: travel + waiting + the work. E.g. car inspection 90, home inspection 120, doctor/dentist 60, interview 60, groceries 60, deep clean 90-120, write a report 120, move house 480, email 10, call 15.' }), remindAt: S('STRING', { description: 'YYYY-MM-DDTHH:MM for reminders' }), points: POINTS,
       complexity: S('INTEGER', { description: '1 (trivial) .. 5 (very hard)' }), priority: S('STRING', { enum: ['normal', 'high'], description: 'Omit unless the user says it is important' }),
       repeat: S('STRING', { enum: ['daily', 'weekdays', 'weekends', 'weekly', 'monthly', 'yearly'], description: 'Recurring ("every weekday at 7"): type schedule + start + repeat. Omit for one-off tasks' }),
       days: S('ARRAY', { items: S('INTEGER'), description: 'weekly repeat days 0=Sun..6=Sat' }),
@@ -58,7 +58,7 @@ const SYSTEM = `You are the ClingNote assistant: the friendly robot coach inside
 - Every task gets dynamic points from difficulty, effort/duration and type (never a flat 10). If the user says a number of points, use it.
 - Use tools to act; use get_overview when you need fresh data. Refer to tasks only by the refs in the context.
 - delete_task, complete_task, start_day, post_to_community, app_lock (emergency_unlock) and big create_tasks lists are confirmed by the user in the app: CALL the tool right away, never ask "are you sure?" or "should I?" in text first; the app shows the confirm. Then say what you drafted.
-- Recurring tasks ("every weekday at 7 gym"): call create_tasks with repeat (weekdays/daily/weekly + days) and start right away. Never ask the user for a duration or points: guess points yourself and omit duration when they did not say one.
+- Recurring tasks ("every weekday at 7 gym"): call create_tasks with repeat (weekdays/daily/weekly + days) and start right away. Never ask the user for a duration or points: guess points yourself, and when they did not say a duration set durationMin to a realistic estimate of what the task actually takes (an inspection is 60-120 min, not 20).
 - App lock requests ("emergency unlock", "turn off the lock", "lock status"): call app_lock with the matching action; do not ask in text. If a tool returns declined, accept it.
 - Never say a change is done ("Done", "moved it", "updated") unless a tool result in THIS turn says it succeeded. A combined edit ("move it to 3pm and make it an hour") needs the tool call(s) with every change: edit_task with start and durationMin together.
 - Never complete a task the user did not say they finished. Never change the day's hours unless the user asks; never pick them yourself.

@@ -63,8 +63,8 @@ export const buildWidgetSnapshot = (tasks, { now = new Date(), dayName = '', pen
 function timerFields(t) {
   const ms = (v) => { const n = v ? new Date(v).getTime() : 0; return Number.isFinite(n) && n > 0 ? n : 0; };
   const tE = ms(t.timerEndTime);
-  let tS = ms(t.timerStartedAt);
-  if (!tS && tE && Number(t.timerDurationMinutes) > 0) tS = tE - Number(t.timerDurationMinutes) * 60000;
+  // tS = effective start (end - set duration): timerEndTime moves on resume, so the widget's count-up excludes paused time.
+  let tS = tE && Number(t.timerDurationMinutes) > 0 ? tE - Number(t.timerDurationMinutes) * 60000 : ms(t.timerStartedAt);
   return tE && tS && tE > tS && t.completed !== true ? { tS, tE, tP: ms(t.timerPausedAt) } : {};
 }
 

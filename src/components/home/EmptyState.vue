@@ -1,15 +1,21 @@
 <template>
   <div class="empty-state">
     <div class="empty-icon">✦</div>
-    <h2 class="empty-title">Nothing here yet</h2>
-    <p class="empty-sub">Tap the + button below to add your first task.</p>
+    <h2 class="empty-title" data-test="empty-title">{{ title }}</h2>
+    <p class="empty-sub">{{ sub }}</p>
     <button v-if="showAdd" type="button" class="empty-add" @click="$emit('add')">Add task</button>
     <button v-if="showTemplates" type="button" class="empty-link" data-test="templates-open" @click="$emit('templates')">or use a day template</button>
   </div>
 </template>
 
 <script setup>
-defineProps({ showAdd: { type: Boolean, default: false }, showTemplates: Boolean });
+import { computed } from 'vue';
+// dayLabel: '' on today; 'Mon, Nov 9' on a future tab. scheduled: tasks already scheduled for that date (listed under Scheduled).
+const props = defineProps({ showAdd: { type: Boolean, default: false }, showTemplates: Boolean, dayLabel: { type: String, default: '' }, scheduled: { type: Number, default: 0 } });
+const label = computed(() => (props.dayLabel === 'Tomorrow' ? 'tomorrow' : props.dayLabel));
+const title = computed(() => (!props.dayLabel ? 'Nothing here yet' : props.scheduled ? `${props.scheduled} scheduled for ${label.value}` : `Nothing planned for ${label.value}`));
+const sub = computed(() => (!props.dayLabel ? 'Add your first task to get the day moving.'
+  : props.scheduled ? 'They move into this list on the day. Add more below.' : 'Add a task now and it will be waiting on that day.'));
 defineEmits(['add', 'templates']);
 </script>
 

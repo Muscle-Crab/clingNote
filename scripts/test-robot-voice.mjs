@@ -5,7 +5,8 @@ const { SCRIPTS, VOICE } = await import('../src/voiceover/scripts.js');
 const walk = (d) => readdirSync(d).flatMap((f) => { const p = join(d, f); return statSync(p).isDirectory() ? walk(p) : [p]; });
 const src = walk('src').filter((f) => /\.(js|vue)$/.test(f));
 for (const f of src) { const s = readFileSync(f, 'utf8').replace(/\/\/.*$/gm, '');
-  assert(!/SpeechSynthesisUtterance|speechSynthesis\.speak|ClingVoice\.speak\(/.test(s), `${f}: device TTS`);
+  // Only exception: the pre-start time confirm, which is spoken with native TTS by request (mixes with music, no network).
+  if (!f.endsWith('startConfirm.js')) assert(!/SpeechSynthesisUtterance|speechSynthesis\.speak|ClingVoice\.speak\(/.test(s), `${f}: device TTS`);
   assert(!/sergeant\.jpg|BossSergeant/.test(s), `${f}: old sergeant character`); }
 // visible copy: no boss / sergeant naming left in templates
 for (const f of src.filter((x) => x.endsWith('.vue'))) { const t = (readFileSync(f, 'utf8').match(/<template>[\s\S]*<\/template>/) || [''])[0]

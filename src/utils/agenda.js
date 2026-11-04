@@ -1,9 +1,9 @@
 // Native calendar/agenda model: which tasks fall on which date (pure; no Firestore).
 // Sources: the 7 weekday lists (weeklyRoutines Sun..Sat), the scheduled list (users/{uid}.scheduledTasks), and recurring templates.
-import { isValidDate, addDaysStr, isTemplate, isMaterialized, occursOn, instanceId, WEEKDAYS } from './scheduling';
+import { isValidDate, addDaysStr, isTemplate, isMaterialized, occursOn, instanceId, WEEKDAYS, isStaleOnTab } from './scheduling';
 
 export const dowOf = (s) => new Date(`${s}T12:00:00`).getDay();
-export const weekStartOf = (s) => addDaysStr(s, -dowOf(s)); // Sunday-first, like the Home tabs
+export const weekStartOf = (s) => addDaysStr(s, -dowOf(s)); // Sunday-first calendar weeks (Upcoming view); the Home tabs roll from today
 export const datesBetween = (from, to) => { const out = []; for (let d = from; d <= to && out.length < 400; d = addDaysStr(d, 1)) out.push(d); return out; };
 
 const byTime = (a, b) => (a.time && b.time ? a.time.localeCompare(b.time) : a.time ? -1 : b.time ? 1 : 0);
@@ -12,7 +12,7 @@ const byTime = (a, b) => (a.time && b.time ? a.time.localeCompare(b.time) : a.ti
 export const agendaForRange = ({ scheduled = [], dayLists = {}, today, from, to }) => {
   const out = Object.fromEntries(datesBetween(from, to).map((d) => [d, []]));
   const add = (date, item) => { if (out[date]) out[date].push(item); };
-  const weekStart = weekStartOf(today); const weekEnd = addDaysStr(weekStart, 6);
+  const weekStart = today; const weekEnd = addDaysStr(today, 6); // same rolling window as the Home tabs (today..today+6)
   const have = new Set(); // scheduled entry ids already represented
   const placed = new Set();
 
@@ -38,7 +38,7 @@ export const agendaForRange = ({ scheduled = [], dayLists = {}, today, from, to 
         continue;
       }
       if (recurring) { add(d, { key: `r-${name}-${t.createdAt || ''}-${t.title}`, title: t.title, time, done: inWeek ? !!t.completed : false, recurring: true, kind: 'repeat' }); continue; }
-      if (!inWeek) continue; // one-off list tasks belong to the current week only
+      if (!inWeek || isStaleOnTab(t, dowOf(d), d, today)) continue; // one-off list tasks belong to the rolling 7-day window only, minus stale leftovers
       if (isValidDate(t.dueDate) && t.dueDate !== d) { // dated task: show on its date
         const k = `t-${t.createdAt || ''}-${t.title}`;
         if (!placed.has(k)) { placed.add(k); add(t.dueDate, { key: k, title: t.title, time, done: !!t.completed, recurring: false, kind: 'due' }); }

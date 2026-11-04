@@ -50,6 +50,6 @@ export const pickTimerIntent = (items, tasks, nowMs = Date.now()) => {
     hit = [list[Number(n.id)], Number(n.id)];
   }
   if (hit[0].timerActive) return { error: `A timer is already running for “${hit[0].title}”.` };
-  const minutes = clampMin(it.minutes) || clampMin(hit[0].estimateMin) || TIMER_DEFAULT_MIN;
+  const minutes = clampMin(it.minutes) || clampMin(hit[0].estimateMin) || clampMin(hit[0].minutes) || TIMER_DEFAULT_MIN; // AI-estimated tasks store minutes
   return { index: hit[1], minutes, title: hit[0].title };
 };

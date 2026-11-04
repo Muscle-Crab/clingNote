@@ -5,15 +5,31 @@
       <div class="ob-top">
         <button v-if="step > 0" class="ob-back" @click="go(step - 1)" aria-label="Back">‹</button><span v-else></span>
         <div class="ob-dots"><i v-for="(s, i) in STEPS" :key="s" :class="{ on: i <= step }"></i></div>
-        <VoToggle class="ob-vo" @unmuted="narrate" /><button v-if="STEPS[step] !== 'age'" class="ob-skip" @click="go(ageState === 'ok' ? STEPS.length : 1)">Skip</button>
+        <VoToggle class="ob-vo" @unmuted="narrate" /><button v-if="STEPS[step] !== 'age'" class="ob-skip" @click="go(ageState === 'ok' ? STEPS.length : STEPS.indexOf('age'))">Skip</button>
       </div>
 
-      <section v-if="STEPS[step] === 'welcome'" class="ob-sec">
+      <!-- First screen = the core pitch: you buy your free time (screen time) with done tasks. Numbers mirror utils/pointsVault.js. -->
+      <Transition name="ob-step" mode="out-in">
+      <section v-if="STEPS[step] === 'welcome'" class="ob-sec" data-test="ob-pitch">
         <div class="ob-art"></div>
-        <p class="ob-k">Welcome</p>
-        <h1 class="ob-h">Hey {{ firstName }}, meet your <span>robot coach.</span></h1>
-        <p class="ob-p">ClingNote clings to your to‑dos until they're done. A few quick questions and we'll set it up around you.</p>
-        <div class="ob-asb"><AppStoreButton small /></div>
+        <p class="ob-k">Hey {{ firstName }} 👋</p>
+        <h1 class="ob-h">Buy back your <span>free time.</span></h1>
+        <p class="ob-p">In ClingNote, screen time isn't free: you pay for it by getting things done. Your robot coach keeps score.</p>
+        <div class="ob-row"><span class="em">✅</span><div><b>Tasks earn points</b><small>A medium task is about 20 pts. Every 10 pts buys you 5 minutes.</small></div></div>
+        <div class="ob-row"><span class="em">💸</span><div><b>Your top apps cost the most</b><small>Each app's price follows how much you used it this past week (30 pts + 2 per daily minute).</small></div></div>
+        <div class="ob-row"><span class="em">🔓</span><div><b>The vault opens as you earn</b><small>Pass an app's price and it unlocks, right on your phone.</small></div></div>
+        <div class="ob-row"><span class="em">🔥</span><div><b>8 tasks a session</b><small>Hit 8 to keep your streak alive. Earn breaks along the way.</small></div></div>
+        <div class="ob-row"><span class="em">🤖</span><div><b>An AI coach in your corner</b><small>Plans your day, sizes your tasks, and cheers you on.</small></div></div>
+      </section>
+
+      <!-- What's new: big update section (kept in the existing ob-row style). -->
+      <section v-else-if="STEPS[step] === 'whatsnew'" class="ob-sec" data-test="ob-whatsnew">
+        <p class="ob-k">What's new</p>
+        <h1 class="ob-h">Fresh in this <span>update 🎉</span></h1>
+        <p class="ob-p">Three upgrades that make every focus session feel better.</p>
+        <div class="ob-row"><span class="em">⏱️</span><div><b>Timers count up</b><small>Press play and watch it climb from 00:00. Every minute you put in shows.</small></div></div>
+        <div class="ob-row"><span class="em">🔔</span><div><b>A ping at your set time</b><small>Your phone buzzes when you hit the task's time, even when locked. The timer keeps going (+overtime) until you end the session. Your music keeps playing.</small></div></div>
+        <div class="ob-row"><span class="em">🎁</span><div><b>Real app icons pop out of the vault</b><small>When apps unlock, their actual icons burst out of the vault with confetti.</small></div></div>
       </section>
 
       <section v-else-if="STEPS[step] === 'age'" class="ob-sec" data-test="ob-age">
@@ -75,10 +91,20 @@
         <p v-if="a.appLock" class="ob-p">{{ a.appLock }}</p>
       </section>
 
+      <!-- Right after the app picker: the chosen apps locked in the vault, priced/ordered by utils/pointsVault.js (same list as Home's vault row). -->
+      <section v-else-if="STEPS[step] === 'vault'" class="ob-sec" data-test="ob-vault">
+        <div class="ob-bell">🔐</div>
+        <p class="ob-k">Step {{ stepNo('vault') }}</p><h1 class="ob-h">Your apps are in <span>the vault</span></h1>
+        <p class="ob-p">Earn points to unlock these. Cheapest opens first; 10 pts = 5 min of app time.</p>
+        <div class="gp-body gp-vbody ob-vault" data-test="ob-vault-list"><VaultApps :items="vaultItems" detail :why="vaultWhy" /></div>
+        <p v-if="!vaultItems.length" class="ob-p" data-test="ob-vault-empty">Your picked apps will show here with their prices.</p>
+      </section>
+      </Transition>
+
       <div class="ob-foot">
-        <button class="ob-cta" :disabled="(STEPS[step] === 'goals' && !a.goals.length) || (STEPS[step] === 'age' && ageState !== 'ok') || (STEPS[step] === 'alarm' && (alarmBusy || !alarmTime))" @click="next">{{ ctaLabel }}</button>
+        <button class="ob-cta" :aria-busy="String(busy)" :disabled="busy || (STEPS[step] === 'goals' && !a.goals.length) || (STEPS[step] === 'age' && ageState !== 'ok') || (STEPS[step] === 'alarm' && (alarmBusy || !alarmTime))" @click="next">{{ ctaLabel }}</button>
         <button v-if="STEPS[step] === 'alarm'" class="ob-later" data-test="ob-alarm-later" @click="a.wakeAlarm = 'later'; go(step + 1)">Not now</button>
-        <button v-if="STEPS[step] === 'applock'" class="ob-later" @click="a.appLock = 'later'; go(step + 1)">Not now</button>
+        <button v-if="STEPS[step] === 'applock'" class="ob-later" :disabled="busy" @click="a.appLock = 'later'; go(step + 2)">Not now</button>
         <button v-if="STEPS[step] === 'notifications'" class="ob-later" @click="a.notifications = 'later'; go(step + 1)">Not now</button>
       </div>
     </template>
@@ -107,9 +133,14 @@ import { defaultAlarmTime, DEFAULT_ALARM_TIME } from '@/utils/wakeAlarm';
 import { clearProCache } from '@/composables/usePro';
 import { fmtWakeLabel } from '@/utils/eightHour';
 import RobotCoach from '@/components/robot/RobotCoach.vue';
+import { typicalMin } from '@/utils/typicalUsage';
+import VaultApps from '@/components/vault/VaultApps.vue';
+import { askAiQuiet } from '@/composables/useAi';
+import { vaultView } from '@/utils/pointsVault';
+import { localDateStr } from '@/utils/streak';
 
 // 'alarm' (iOS app only): optional wake-up alarm opt-in right after the day-start step. index STEPS.length = paywall
-const STEPS = ['welcome', 'age', 'goals', 'schedule', ...(isNativeIOS() ? ['alarm'] : []), 'strictness', 'notifications', ...(lockAvailable() ? ['applock'] : [])];
+const STEPS = ['welcome', 'whatsnew', 'age', 'goals', 'schedule', ...(isNativeIOS() ? ['alarm'] : []), 'strictness', 'notifications', ...(lockAvailable() ? ['applock', 'vault'] : [])];
 const stepNo = (id) => STEPS.indexOf(id) - 1; // "Step N" counter: welcome + age are not numbered
 const GOALS = [
   { id: 'work', e: '💼', l: 'Crush work tasks' }, { id: 'fitness', e: '💪', l: 'Work out consistently' },
@@ -141,7 +172,16 @@ const wakeLabel = computed(() => fmtWakeLabel(eh.plan.value?.wakeTime || a.wakeT
 // The paywall counts as "seen" the moment it is shown (local flag + users/{uid}.paywallSeenAt) so existing users get it at most once; Subs/Profile can still open it.
 watch(step, (n) => { if (n === STEPS.length) { const u = auth.currentUser; if (u) { markPaywallSeenLocal(u.uid); saveUserFields(u.uid, { paywallSeenAt: new Date() }).catch(() => {}); } } }, { immediate: true });
 const firstName = computed(() => (name.value || 'there').split(' ')[0]);
-const ctaLabel = computed(() => ({ welcome: "Let's go", alarm: 'Yes, turn it on', notifications: 'Turn on notifications', applock: 'Choose apps to block' }[STEPS[step.value]] || 'Continue'));
+const busy = ref(false); // CTA is disabled while a native prompt (notifications, Screen Time, alarm) is open: no double taps
+const ctaLabel = computed(() => (busy.value && STEPS[step.value] === 'applock' ? 'Opening Screen Time…' : { welcome: "Let's go", whatsnew: 'Nice, continue', alarm: 'Yes, turn it on', notifications: 'Turn on notifications', applock: 'Choose apps to block', vault: 'Start earning' }[STEPS[step.value]] || 'Continue'));
+// Vault step: the apps just picked, with 0 pts earned = all locked, cheapest first (prices from on-device usage, same as Home).
+const vaultItems = ref([]); const vaultWhy = ref(null);
+// AI wording of each price (server task 'vault_why'); only when AI consent was already given (never prompts here). Any failure keeps the template line.
+const explainVault = async (items) => { if (!items.length) return;
+  const apps = items.map((r) => ({ id: r.id, label: r.label, hoursPerWeek: Math.max(1, Math.round(r.min * 7 / 60)), price: r.price, tasks: r.tasks, estimate: !!r.noData, boss: !!r.boss }));
+  const d = await askAiQuiet('vault_why', { apps }); if (d && d.lines) vaultWhy.value = d.lines; };
+const loadVault = async () => { try { const u = await clingLock.vaultUsage(); vaultItems.value = vaultView({ apps: (u && u.apps) || [], days: (u && u.days) || {}, todayYmd: localDateStr(), points: 0, typical: typicalMin }).items; explainVault(vaultItems.value); } catch (e) { vaultItems.value = []; } };
+watch(step, (n) => { if (STEPS[n] === 'vault' && !vaultItems.value.length) loadVault(); }, { immediate: true });
 const toggle = (id) => { const i = a.goals.indexOf(id); i < 0 ? a.goals.push(id) : a.goals.splice(i, 1); };
 
 onMounted(async () => {
@@ -157,6 +197,10 @@ function go(n) {
   if (STEPS[step.value] === 'age' && n > step.value) { if (ageState.value !== 'ok') return; if (auth.currentUser) saveUserFields(auth.currentUser.uid, { age: Number(a.age), ageCollectedAt: new Date() }).catch(() => {}); }
   step.value = n; router.replace({ query: { ...route.query, step: n } }); persist(); }
 async function next() {
+  if (busy.value) return; busy.value = true;
+  try { await nextStep(); } finally { busy.value = false; }
+}
+async function nextStep() {
   if (STEPS[step.value] === 'notifications') {
     try {
       if (isNativeIOS()) { // iOS app: ask through the native OneSignal prompt (the web Notification API does not exist in WKWebView)
@@ -175,6 +219,7 @@ async function next() {
     const auth0 = await clingLock.requestAuthorization();
     if (auth0.status === 'approved') { const r = await clingLock.pickApps(); if (r.saved && (r.apps + r.categories + r.sites) > 0) { try { localStorage.setItem(LOCK_PREF, '1'); } catch (e) { /* ignore */ } a.appLock = 'on'; } else a.appLock = 'none'; }
     else a.appLock = auth0.status || 'denied';
+    if (a.appLock === 'on') await loadVault(); else return go(step.value + 2); // no apps chosen: no vault step
   }
   go(step.value + 1);
 }
@@ -189,12 +234,13 @@ async function finish() { await persist({ onboardingComplete: true, onboardingCo
 .ob-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 36px; }
 .ob-back { background: none; border: 0; color: #A9B4CC; font-size: 28px; line-height: 1; cursor: pointer; width: 32px; }
 .ob-skip { background: none; border: 0; color: #7180A0; font-weight: 600; font-size: 14px; cursor: pointer; min-height: 44px; min-width: 44px; padding: 0 10px; }
-.ob-dots { display: flex; gap: 6px; flex: 1; } .ob-dots i { flex: 1; height: 4px; border-radius: 4px; background: rgba(255,255,255,.1); } .ob-dots i.on { background: linear-gradient(90deg,#1E5BFF,#3C8CFF); }
+.ob-dots { display: flex; gap: 6px; flex: 1; } .ob-dots i { flex: 1; height: 4px; border-radius: 4px; background: rgba(255,255,255,.1); } .ob-dots i { transition: background .25s ease; } .ob-dots i.on { background: linear-gradient(90deg,#1E5BFF,#3C8CFF); }
 .ob-sec { flex: 1; padding-top: 18px; }
 .ob-art { height: 220px; margin: 0 -20px 10px; background: linear-gradient(180deg, rgba(7,13,28,.1), rgba(7,13,28,.3) 55%, #070D1C), var(--hero-img, url('~@/assets/hero-forest.jpg')) 72% 35%/cover; border-radius: 0 0 24px 24px; }
 .ob-k { margin: 8px 0 0; font-size: 12px; font-weight: 600; letter-spacing: .16em; text-transform: uppercase; color: #5E9BFF; }
 .ob-h { margin: 4px 0 10px; font-size: 30px; line-height: 36px; font-weight: 800; letter-spacing: -.02em; color: #fff; } .ob-h span { color: #3D8BFF; }
 .ob-p { color: #A9B4CC; line-height: 1.55; margin: 0 0 18px; }
+.ob-vault { display: grid; gap: 8px; margin: 0 0 18px; color: #A9B4CC; font-size: .95rem; text-align: left; }
 .ob-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .ob-opt, .ob-row { text-align: left; font: inherit; color: inherit; cursor: pointer; border-radius: 16px; border: 1.5px solid #2A3C66; background: linear-gradient(180deg, rgba(18,32,63,.92), rgba(12,22,48,.92)); padding: 14px; font-weight: 600; font-size: 14px; }
 .ob-opt .em { display: block; font-size: 24px; margin-bottom: 6px; }
@@ -210,6 +256,10 @@ async function finish() { await persist({ onboardingComplete: true, onboardingCo
 .ob-foot { padding-top: 16px; display: flex; flex-direction: column; gap: 8px; }
 .ob-cta { min-height: 56px; border: 0; border-radius: 16px; font-size: 17px; font-weight: 800; color: #fff; background: linear-gradient(90deg,#1E5BFF,#3C8CFF); box-shadow: 0 10px 26px rgba(47,111,255,.35); cursor: pointer; }
 .ob-cta:disabled { opacity: .45; box-shadow: none; }
+.ob-cta[aria-busy="true"] { opacity: .7; }
+.ob-step-enter-active, .ob-step-leave-active { transition: opacity .18s ease, transform .18s ease; }
+.ob-step-enter-from { opacity: 0; transform: translateX(14px); } .ob-step-leave-to { opacity: 0; transform: translateX(-14px); }
+@media (prefers-reduced-motion: reduce) { .ob-step-enter-active, .ob-step-leave-active { transition: none; } .ob-dots i { transition: none; } }
 .ob-later { background: none; border: 0; color: #7180A0; font-weight: 600; padding: 8px; cursor: pointer; }
 .ob-vo { margin-left: auto; }
 .ob-age { display: flex; align-items: center; justify-content: center; gap: 14px; margin: 18px 0; }

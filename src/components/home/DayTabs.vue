@@ -1,7 +1,7 @@
 <template>
   <div class="day-tabs">
     <button
-        v-for="(day, index) in days"
+        v-for="{ day, index } in ordered"
         :key="index"
         class="day-tab"
         :class="{
@@ -20,14 +20,18 @@
 </template>
 
 <script setup>
+import { computed } from 'vue';
 import { isToday } from '@/utils/dateTime';
+import { rollingOrder } from '@/utils/scheduling';
 
-defineProps({
+const props = defineProps({
   days: { type: Array, required: true },
   selectedIndex: { type: Number, default: -1 },
   scheduledCounts: { type: Object, default: () => ({}) },
 });
 defineEmits(['select']);
+// Rolling order: today first, then the next six days (index stays the weekday, so storage is unchanged).
+const ordered = computed(() => rollingOrder().filter((i) => props.days[i]).map((i) => ({ day: props.days[i], index: i })));
 const dayNumber = (d) => (/^\d{4}-\d{2}-\d{2}$/.test(d) ? String(Number(d.slice(8))) : d);
 </script>
 

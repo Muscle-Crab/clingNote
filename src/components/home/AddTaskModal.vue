@@ -14,8 +14,12 @@
                 <button v-for="c in CATEGORIES" :key="c.id" type="button" class="cat-chip" :class="['tone-' + c.tone, { on: newTask.category === c.id }]" :aria-pressed="String(newTask.category === c.id)" :data-test="'cat-' + c.id" :title="c.label" @click="newTask.category = newTask.category === c.id ? '' : c.id"><i :class="'fas ' + c.icon" aria-hidden="true"></i> {{ c.label }}</button>
               </span>
             </div>
-            <input id="nt-name" ref="titleInput" type="text" v-model="newTask.title" class="field-input" placeholder="What needs doing? Try “gym tomorrow at 6”" required />
+            <div class="nt-name-wrap">
+              <input id="nt-name" ref="titleInput" type="text" v-model="newTask.title" class="field-input" :placeholder="'What needs doing? Try “gym tomorrow at 6”'" required />
+            </div>
             <button v-if="hint" type="button" class="nl-hint" data-test="nl-hint" :disabled="hintBusy" @click="applyHint"><i class="fas fa-magic" aria-hidden="true"></i> {{ hintLabel }} <span class="nl-go">· tap to set</span></button>
+            <label v-if="!newTask.sched?.on && repeatMode === 'once'" class="nl-hint nt-date-chip" data-test="nt-date-chip" for="nt-due"><i class="fas fa-calendar-day" aria-hidden="true"></i> {{ dateChipLabel }} <span class="nl-go">· change</span>
+              <input id="nt-due" type="date" v-model="newTask.dueDate" :min="today" class="nt-date-input" aria-label="Date" @change="clampDue" /></label>
           </div>
 
           <div class="field-group">
@@ -61,10 +65,6 @@
             <div v-if="newTask.status === 'pending'" class="field-group">
               <label class="field-label" for="nt-pending-on">Pending on</label>
               <input id="nt-pending-on" type="text" v-model="newTask.pendingOn" class="field-input" placeholder="e.g. Apple review" />
-            </div>
-            <div class="field-group">
-              <label class="field-label" for="nt-due">Due date</label>
-              <input id="nt-due" type="date" v-model="newTask.dueDate" class="field-input" />
             </div>
             <div class="field-group">
               <label class="field-label" for="nt-start">Start time</label>
@@ -148,6 +148,7 @@ import SchedulePicker from './SchedulePicker.vue';
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { CATEGORIES, REMINDER_PRESETS, MAX_REMINDERS, TRAVEL_PRESETS, offsetLabel, cleanOffsets } from '@/utils/taskExtras';
 import { localParse, hintText } from '@/utils/nlEntry';
+import { formatScheduledDate } from '@/utils/scheduling';
 import { ACTIVE_CAP, STATUSES } from '@/utils/taskPlanning';
 import { getOrdinalSuffix } from '@/utils/dateTime';
 import { TASK_LIMITS, PRO_RAISES_LIMIT } from '@/config/pricing';
@@ -170,6 +171,9 @@ const proRaises = PRO_RAISES_LIMIT;
 const repeatMode = defineModel('repeatMode');
 const showAdvanced = defineModel('showAdvanced');
 const today = new Date().toLocaleDateString('en-CA');
+// Date chip: the day this one-off is for (prefilled with the selected tab's date; empty = today). Past dates clamp to today.
+const dateChipLabel = computed(() => { const d = props.newTask.dueDate; return !d || d <= today ? 'Today' : formatScheduledDate(d, today); });
+const clampDue = () => { if (props.newTask.dueDate && props.newTask.dueDate < today) props.newTask.dueDate = ''; };
 defineEmits(['close', 'submit', 'add-anyway', 'upgrade']);
 const titleInput = ref(null);
 // B44 reminders before the start (chips) — stored as remindOffsets (minutes)
@@ -186,8 +190,9 @@ const applyHint = async () => {
   try { if (props.parseEntry) p = (await props.parseEntry(text)) || p; } catch (e) { /* local */ } finally { hintBusy.value = false; }
   if (!p) return;
   const nt = props.newTask; nt.title = p.title;
-  if (nt.sched) { nt.sched.on = true; nt.sched.date = p.date < today ? today : p.date; nt.sched.time = p.time || ''; }
-  else { nt.startTime = p.time || nt.startTime; if (p.date !== today) nt.dueDate = p.date; }
+  // A timed hint ('gym tomorrow at 6') sets the schedule, as before; a date-only hint ('next Monday') moves the date chip.
+  if (nt.sched && (nt.sched.on || p.time)) { nt.sched.on = true; nt.sched.date = p.date < today ? today : p.date; nt.sched.time = p.time || ''; }
+  else { nt.startTime = p.time || nt.startTime; nt.dueDate = !p.date || p.date <= today ? '' : p.date; }
 };
 onMounted(() => nextTick(() => titleInput.value && titleInput.value.focus()));
 
@@ -210,6 +215,7 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+.nt-name-wrap { position: relative; }
 .label-row { display: flex; align-items: center; justify-content: space-between; gap: .4rem; flex-wrap: wrap; }
 .cat-chips, .rem-chips { display: inline-flex; gap: .3rem; flex-wrap: wrap; align-items: center; }
 .cat-chip, .rem-chip, .rem-add { all: unset; cursor: pointer; font-size: .68rem; padding: .1rem .4rem; border-radius: 999px; border: 1px solid var(--c-border, #2a2a2e); color: var(--c-text-2, #a1a09b); }
@@ -217,6 +223,8 @@ onBeforeUnmount(() => {
 .cat-chip.on.tone-teal { background: rgba(20, 184, 166, .22); color: #5eead4; border-color: #14b8a6; }
 .cat-chip.on.tone-green { background: rgba(34, 197, 94, .22); color: #86efac; border-color: #22c55e; }
 .rem-pick { font-size: .7rem; background: transparent; color: inherit; border: 1px solid var(--c-border, #2a2a2e); border-radius: 6px; }
+.nl-hint.nt-date-chip { position: relative; display: inline-block; }
+.nt-date-input { position: absolute; inset: 0; opacity: 0; width: 100%; cursor: pointer; }
 .nl-hint { all: unset; box-sizing: border-box; cursor: pointer; display: block; margin-top: .3rem; font-size: .74rem; color: var(--c-accent, #a78bfa); }
 .nl-go { color: var(--c-text-3, #6b6a66); }
 .place-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .4rem; }

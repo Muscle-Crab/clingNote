@@ -21,6 +21,11 @@ struct FocusActivityAttributes: ActivityAttributes {
         var appsUnlocked: Int? = nil
         /// Pomodoro phase caption ("Focus 2/4" / "Break 2/4", src/utils/pomodoro.js); nil = plain timer.
         var phase: String? = nil
+        /// Count-up timer: the set duration (seconds). When present the lock screen counts UP from 0:00 since
+        /// (endsAt - durationSec) and keeps counting past endsAt (never stops); nil = older build, countdown.
+        var durationSec: Int? = nil
+        /// Count-up: elapsed seconds frozen while paused (may exceed durationSec in overtime).
+        var elapsedSec: Int? = nil
     }
     var title: String
     /// widgetTaskId of the focused task (src/utils/widgetSnapshot.js), carried by the Pause/Resume/Done intents.
@@ -28,5 +33,7 @@ struct FocusActivityAttributes: ActivityAttributes {
     /// Identifier of the app's "Timer finished" local notification (String(notifId(timerKey(task))), src/utils/localNotify.js),
     /// so Pause can withdraw it and Resume can move it to the new end time before the app reconciles.
     var notifId: String? = nil
+    /// A count-up timer never goes stale (it keeps counting past endsAt); a paused one neither.
+    static func staleDate(_ s: ContentState) -> Date? { s.paused || s.durationSec != nil ? nil : s.endsAt }
 }
 #endif

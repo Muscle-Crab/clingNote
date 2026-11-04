@@ -1,5 +1,5 @@
 // Shared motion helpers for task completion + reorder. Transform/opacity only; honours prefers-reduced-motion.
-import { Haptics, ImpactStyle } from '@capacitor/haptics';
+import { Haptics, ImpactStyle, NotificationType } from '@capacitor/haptics';
 
 export const prefersReducedMotion = () =>
   typeof window !== 'undefined' && !!window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -8,6 +8,7 @@ export const EASE_OUT = 'cubic-bezier(0.22, 1, 0.36, 1)';
 export const COMPLETE_MS = 560; // time the completion animation plays before the task leaves the list
 export const CELEBRATE_MS = 1000; // lingering glow / sparkle class lifetime
 
+export const warnHaptic = () => { try { Haptics.notification({ type: NotificationType.Warning }).catch(() => {}); } catch (_) { /* web / unsupported */ } };
 export const lightHaptic = () => { try { Haptics.impact({ style: ImpactStyle.Light }).catch(() => {}); } catch (_) { /* web / unsupported */ } };
 
 const COLORS = ['#7C9CFF', '#5EEAD4', '#F5C542', '#34D399', '#F472B6', '#A78BFA'];

@@ -24,7 +24,7 @@ export const mutateScheduled = async (userId, fn) => {
   return next;
 };
 
-// Add scheduled tasks that became visible (their Mon–Sun week has started) to today's weeklyRoutines doc, exactly once.
+// Add scheduled tasks that became visible (their date has arrived; see visibleFrom) to today's weeklyRoutines doc, exactly once.
 // Also: expands recurring templates for this week, and rolls unfinished scheduled tasks forward to today until their date.
 // Order: write day docs first, then the scheduled list; a failed second step is healed next run via scheduledId.
 export const materializeDueForToday = async (userId, dayName, todayStr, dayNameOf = null) => {

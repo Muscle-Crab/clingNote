@@ -60,7 +60,7 @@
                     <p class="task-sub" :title="cat.label + ' · ' + whenText">{{ cat.label }}<template v-if="!est.minutes"> · {{ whenText }}</template></p>
 
                     <div class="task-meta-row">
-                      <span class="task-pts" title="Points for completing this task" data-test="task-pts">+{{ est.points }} pts</span>
+                      <span class="task-pts" :title="task.completed && overtimePoints(est.points, task) < est.points ? 'Overtime penalty: finished past the timer' : 'Points for completing this task'" data-test="task-pts">+{{ task.completed ? overtimePoints(est.points, task) : est.points }} pts</span>
 
                       <span v-if="task.completed && isTodayTab" class="task-status task-status--done">Complete</span>
                       <span v-else-if="task.status === 'pending'" class="task-status task-status--pending" :title="task.pendingOn ? 'Pending on ' + task.pendingOn : 'Pending'">Pending</span>
@@ -228,6 +228,7 @@
 </template>
 
 <script setup>
+import { overtimePoints } from '@/utils/sessionGoal';
 // coach signal (interactive tips): HomeView listens for cn:coach
 const coachSig = (sig) => { try { window.dispatchEvent(new window.CustomEvent('cn:coach', { detail: sig })); } catch (e) { /* ignore */ } };
 import { burstFrom, lightHaptic, prefersReducedMotion, COMPLETE_MS, CELEBRATE_MS } from '@/composables/useTaskMotion';

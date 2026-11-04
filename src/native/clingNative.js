@@ -51,6 +51,8 @@ export const clingLock = {
   vaultState: safe('ClingLock', Lock, (p) => p.vaultState(), { ids: [], untilMs: 0, live: false }),
   startUsage: safe('ClingLock', Lock, (p) => p.startUsage(), { monitor: 'unsupported' }),
   vaultUsage: safe('ClingLock', Lock, (p) => p.vaultUsage(), { days: {}, apps: [] }),
+  // Vault unlock overlay with the apps' real icons (native SwiftUI Label(token)); { shown: 0 } -> web celebration.
+  celebrateVault: safe('ClingLock', Lock, (p, ids, o = {}) => p.celebrateVault({ ids, ...o }), { shown: 0, missing: [] }),
   endTaskApps: safe('ClingLock', Lock, (p, taskId) => p.endTaskApps(taskId ? { taskId } : {}), { ended: false }),
   // Earned break: lifts every shield until untilMs; ClingLockMonitor re-locks at the end (app closed too). offerBreak posts the points alert with a background Take break action.
   startBreak: safe('ClingLock', Lock, (p, untilMs, minutes) => p.startBreak({ untilMs, minutes }), { started: false }),

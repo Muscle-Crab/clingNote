@@ -34,7 +34,8 @@ export const hasRing = (t, nowMs = Date.now()) => {
   const stopped = ms(t.timerStoppedAt);
   if (!t.timerActive && stopped && stopped >= (paused || start || 0)) return false;
   if (!paused && !t.timerActive) return false; // inactive and not paused: not running, never a finished red ring
-  if (!paused && end <= nowMs && (!t.timerActive || nowMs - end > STALE_RING_MS)) return false;
+  // A running (active) timer never stops on its own: it keeps counting past its set duration (overtime), so no stale cutoff.
+  if (!paused && end <= nowMs && !t.timerActive) return false;
   return true;
 };
 
@@ -65,6 +66,25 @@ export const ringDash = (f, r) => { const c = 2 * Math.PI * r; const x = Math.mi
 export const fmtRemaining = (msLeft) => {
   const s = Math.ceil(Math.max(0, msLeft) / 1000), h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), r = s % 60;
   return h ? `${h}:${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}` : `${m}:${String(r).padStart(2, '0')}`;
+};
+
+// Count-up: elapsed time since start (pauses excluded, since timerEndTime is shifted on resume), and time past the set duration.
+// The set duration: timerDurationMinutes (timerStartedAt is not moved by pause/resume, timerEndTime is), else end - start.
+export const durationMs = (t) => {
+  const d = Number(t && t.timerDurationMinutes); if (d > 0) return Math.round(d * 60000);
+  const { start, end } = timerTimes(t); return end > start && start ? end - start : 0;
+};
+export const elapsedMs = (t, nowMs = Date.now()) => {
+  const { end, paused } = timerTimes(t); const d = durationMs(t);
+  if (!end || !d) return 0;
+  return Math.max(0, d - (end - (paused || nowMs)));
+};
+export const overtimeMs = (t, nowMs = Date.now()) => { const { end, paused } = timerTimes(t); return end ? Math.max(0, (paused || nowMs) - end) : 0; };
+// "00:00" style, counting up (floor, so it reads 00:00 at play); hours only when needed.
+export const fmtElapsed = (msUp) => {
+  const s = Math.floor(Math.max(0, msUp) / 1000), h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), r = s % 60;
+  const p = (n) => String(n).padStart(2, '0');
+  return h ? `${h}:${p(m)}:${p(r)}` : `${p(m)}:${p(r)}`;
 };
 
 // Widget timeline: times (ms) at every WIDGET_STEP of the duration still ahead, plus the end (capped).

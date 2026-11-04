@@ -96,9 +96,8 @@ export const taskTimeLeft = (task, nowMs) => {
 };
 
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-// Hero heading: motivational on today, weekday-appropriate on other days of the (Sun..Sat) week.
+// Hero heading: motivational on today; every other tab is an upcoming day (the tabs roll today..today+6, no past days).
 export const heroTitleFor = (selectedIndex, todayIndex) => {
   if (selectedIndex === todayIndex || selectedIndex < 0 || selectedIndex > 6) return 'Make today count.';
-  const name = WEEKDAYS[selectedIndex];
-  return selectedIndex < todayIndex ? `Looking back at ${name}` : `Plan your ${name}`;
+  return `Plan your ${WEEKDAYS[selectedIndex]}`;
 };

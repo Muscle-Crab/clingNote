@@ -41,5 +41,25 @@ t('upcoming: only dated tasks after today; no undated routine tasks, no repeats'
   const v = require('fs').readFileSync(require('path').join(__dirname, '../src/views/UpcomingView.vue'), 'utf8');
   assert.ok(/const agenda = computed\(\(\) => datedFutureOnly\(agendaForRange\(/.test(v), 'UpcomingView applies the filter');
 });
+t('rolling window: stale weekday leftovers hidden, Mon tab = next Monday', () => {
+  const td = '2026-11-03'; // Tue
+  assert.equal(S.tabDateFor(1, new Date(2026, 10, 3, 9)), '2026-11-09');
+  const stale = { title: 'old', createdAt: '2026-10-26T15:00:00Z' }; const fresh = { title: 'new', forDate: '2026-11-09', createdAt: '2026-11-03T15:00:00Z' };
+  assert.equal(S.isStaleOnTab(stale, 1, '2026-11-09', td), true); assert.equal(S.isStaleOnTab(fresh, 1, '2026-11-09', td), false);
+  assert.equal(S.isStaleOnTab({ title: 'rep', type: 'recurring', createdAt: '2026-10-01T00:00:00Z' }, 1, '2026-11-09', td), false, 'recurring never stale');
+  assert.equal(S.isStaleOnTab(stale, 2, td, td), false, 'today tab unchanged');
+  // created Sun Nov 1 on the old Thu tab (= Thu Nov 5, still ahead): not stale
+  assert.equal(S.isStaleOnTab({ title: 'thu', createdAt: '2026-11-01T15:00:00Z' }, 4, '2026-11-05', td), false);
+  const ag2 = A.agendaForRange({ scheduled: [], dayLists: { Mon: [stale, { title: 'rep', type: 'recurring', createdAt: 'z' }] }, today: td, from: td, to: '2026-11-15' });
+  assert.ok(!ag2['2026-11-09'].some((x) => x.title === 'old')); assert.ok(ag2['2026-11-09'].some((x) => x.title === 'rep')); assert.ok(ag2['2026-11-16'] === undefined);
+});
+t('edit-task path uses the uid-prefixed day doc', () => {
+  const v = require('fs').readFileSync(require('path').join(__dirname, '../src/views/HomeView.vue'), 'utf8');
+  assert.ok(!/doc\(db, 'weeklyRoutines', days\[/.test(v), 'no weeklyRoutines/{Day} without the uid prefix');
+});
+await t('schedule/repeat/series errors are inline toasts, not alert()', () => {
+  const v = require('fs').readFileSync(require('path').join(__dirname, '../src/views/HomeView.vue'), 'utf8');
+  for (const m of ['Pick a date after today.', 'Could not schedule this task', 'Could not update the repeat setting', 'Saved for this day, but the other repeating days could not be updated']) assert.ok(new RegExp(`showNoteToast\\('${m.replace(/[.]/g, '\\.')}`).test(v) && !new RegExp(`alert\\('${m.replace(/[.]/g, '\\.')}`).test(v), m);
+});
 console.log(`${n} passed`);
 })().catch((e) => { console.error(e); process.exit(1); });

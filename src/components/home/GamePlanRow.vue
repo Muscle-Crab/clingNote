@@ -18,9 +18,7 @@
       </button>
       <div v-if="vaultOpen" class="gp-body gp-vbody" data-test="vault-body">
         <p v-if="vault.debt" class="gp-line gp-warn" data-test="vault-debt">Vault closed: a missed goal keeps apps locked until a session hits its goal.</p>
-        <p v-for="a in vault.items" :key="a.id" class="gp-line gp-vapp" data-test="vault-app" :data-open="a.open ? '1' : '0'">
-          <span aria-hidden="true">{{ a.open ? '✓' : '🔒' }}</span> <span class="gp-vname">{{ a.label }}</span> <span class="gp-vprice">{{ a.price }} pts · ~{{ a.tasks }} tasks</span>
-        </p>
+        <VaultApps :items="vault.items" />
         <p class="gp-line" data-test="vault-time">
           <template v-if="vault.live">App time running: {{ vault.liveLeftMin }} min left. <button type="button" class="gp-chip" data-test="vault-stop" @click="$emit('vault-stop')">Stop</button></template>
           <template v-else>App time left: {{ vault.leftMin }} of {{ vault.earnedMin }} min (10 pts = 5 min).<button v-if="vault.canStart" type="button" class="gp-chip gp-vgo" data-test="vault-start" @click="$emit('vault-start')">Use {{ vault.leftMin }} min</button></template>
@@ -66,6 +64,7 @@
 </template>
 
 <script setup>
+import VaultApps from '@/components/vault/VaultApps.vue';
 import { computed, ref } from 'vue';
 const props = defineProps({
   text: { type: String, default: '' }, phase: { type: String, default: 'work' }, review: { type: Object, default: null },

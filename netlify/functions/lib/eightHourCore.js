@@ -248,13 +248,17 @@ const countableIndexes = (tasks, dayKey) => (tasks || []).map((t, i) => i).filte
 // Start can't shift points onto another task. Locks without ids (older ones) fall back to the n-th countable task's position.
 const taskKeyOf = (t) => `${(t && t.createdAt) || ''}|${(t && t.title) || ''}`;
 const stableIdOf = (t) => (t && (t.id != null && t.id !== '' ? `id:${t.id}` : `k:${taskKeyOf(t)}`)) || '';
+// Overtime penalty (same formula as src/utils/sessionGoal.js overtimePoints; parity pinned by scripts/test-overtime-penalty.mjs):
+// round(points x max(0.5, 1 - overSec/overDurSec)), from the fields stamped on the task at completion.
+const overtimePoints = (points, t) => { const d = Number(t && t.overDurSec) || 0, o = Number(t && t.overSec) || 0;
+  return Math.round((Number(points) || 0) * (d > 0 && o > 0 ? Math.max(0.5, 1 - o / d) : 1)); };
 const progressOf = (lock, tasks) => {
   const list = tasks || []; const idx = countableIndexes(list, lock.dayKey); let earned = 0, done = 0;
   const byId = new Map(); if (Array.isArray(lock.ids)) idx.forEach((i) => { const k = stableIdOf(list[i]); if (k && !byId.has(k)) byId.set(k, list[i]); });
   (lock.points || []).forEach((p, n) => { if (p == null) return;
     const id = Array.isArray(lock.ids) ? lock.ids[n] : null;
     const t = id && byId.has(id) ? byId.get(id) : (idx[n] != null ? list[idx[n]] : undefined);
-    if (t && t.completed) { earned += Number(p) || 0; done += 1; } });
+    if (t && t.completed) { earned += overtimePoints(p, t); done += 1; } });
   return { earned, done, total: idx.length };
 };
 
@@ -341,7 +345,7 @@ module.exports = {
   WINDOW_MS, WINDOW_MIN, MAX_TASKS_PER_DAY, MIN_TASKS_PER_HOUR, taskRange, LOCK_IDENTITY_SLOTS, WEEKDAYS, WAKE_PICKER_PRESELECT, START_MODE, TARGET_LEVELS, LOCKED_FIELDS,
   clamp, round5, parseWake, fmtWake, validTz, partsIn, dayKeyIn, dayNameIn, wakeInstant, evaluatePhase,
   countdownParts, fmtCountdown, fmtClock, fmtWakeLabel,
-  complexityFromMinutes, complexityFromText, pointsFor, estimateTask, levelRatio, dailyTarget,
+  overtimePoints, complexityFromMinutes, complexityFromText, pointsFor, estimateTask, levelRatio, dailyTarget,
   lockedChangeAllowed, nextDayKey, shutUntilMs, SHUT_CAP_MS, isShut, rulesShutUntilMs,
   DEBT_CAP_MS, normDebt, debtUntilMs, debtActive, debtCleared, debtAfterSettle,
   SESSION_MIN_LEFT_MS, sessionCloseMs, nextDayStartMs, nextSessionState,
