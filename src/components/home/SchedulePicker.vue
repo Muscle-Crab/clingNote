@@ -32,7 +32,7 @@
         <span class="sp-hint">Every</span>
         <input type="number" min="1" max="365" class="sp-input sp-num" v-model.number="model.everyDays" placeholder="3" aria-label="Days after I finish" data-test="sched-every" />
         <select class="sp-input sp-mode" :value="model.repeat" aria-label="Count from" data-test="sched-every-mode" @change="setRepeat($event.target.value)">
-          <option :value="AFTER">days after I finish</option>
+          <option :value="AFTER">days after done</option>
           <option :value="INTERVAL">days, fixed</option>
         </select>
       </div>
@@ -106,9 +106,10 @@ const summary = computed(() => {
 .sp-switch.on .sp-knob { transform: translateX(18px); background: #fff; }
 .sp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; }
 .sp-input { width: 100%; box-sizing: border-box; background: var(--c-surface-2, #232327); color: var(--c-text, #ededea); border: 1px solid var(--c-border, #2a2a2e); border-radius: var(--r, 3px); padding: .5rem .6rem; font: inherit; color-scheme: dark; }
-.sp-num { width: 5rem; }
-.sp-seg { display: grid; grid-template-columns: repeat(5, 1fr); border: 1px solid var(--c-border, #2a2a2e); border-radius: var(--r, 3px); overflow: hidden; }
-.sp-seg-btn { background: transparent; color: var(--c-text-2, #a1a09b); border: 0; border-right: 1px solid var(--c-border, #2a2a2e); padding: .45rem 0; font: inherit; font-size: .74rem; white-space: nowrap; cursor: pointer; }
+.sp-num { width: 3.4rem; flex: 0 0 auto; }
+.sp-mode { min-width: 0; padding-left: .45rem; padding-right: 1.1rem; text-overflow: ellipsis; }
+.sp-seg { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)) minmax(max-content, 1.15fr); /* 'Every N' keeps its width on 320px phones */ border: 1px solid var(--c-border, #2a2a2e); border-radius: var(--r, 3px); overflow: hidden; }
+.sp-seg-btn { background: transparent; color: var(--c-text-2, #a1a09b); border: 0; border-right: 1px solid var(--c-border, #2a2a2e); padding: .45rem .15rem; font: inherit; font-size: .74rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
 .sp-seg-btn:last-child { border-right: 0; }
 .sp-seg-btn.on { background: var(--c-accent, #2F6FFF); color: #fff; font-weight: 600; }
 .sp-days { display: flex; gap: .3rem; flex-wrap: wrap; }
