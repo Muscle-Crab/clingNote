@@ -5,7 +5,7 @@ const assert = require('assert'); const fs = require('fs'); const rd = (f) => fs
 let n = 0; const t = (name, fn) => { fn(); n++; console.log('ok -', name); };
 const modal = rd('src/components/home/AddTaskModal.vue'); const voice = rd('src/components/home/VoiceModal.vue'); const home = rd('src/views/HomeView.vue');
 t('Recurring checkbox sits in the same row as the title input', () => {
-  assert(/<div class="nt-title-row"><input id="nt-name"[^>]*>\s*<label class="nt-recur"[^>]*><input type="checkbox" data-test="nt-recur"[^>]*\/> Recurring<\/label>/.test(modal));
+  assert(/<div class="nt-title-row"><div class="nt-name-wrap[^"]*">\s*<input id="nt-name"[^>]*><\/div>\s*<label class="nt-recur"[^>]*><input type="checkbox" data-test="nt-recur"[^>]*\/> Recurring<\/label>/.test(modal));
   assert(/repeatMode = \$event\.target\.checked \? 'daily' : 'once'/.test(modal), 'checked = every day, unchecked = one-time');
   assert(/v-if="!newTask\.sched\?\.on && repeatMode !== 'once'"/.test(modal), 'repeat-days choice only when Recurring is checked');
 });
