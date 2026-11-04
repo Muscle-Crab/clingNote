@@ -10,6 +10,9 @@
     <!-- Break available: a small 🎁 right on the line (no box); one tap starts the break. Shown whenever a break can be taken, checklist or not. -->
     <button v-if="gift" type="button" class="gp-gift" data-test="gp-gift" :aria-label="`Take your ${Math.min(breakBank, breakMin)} minute break`" :title="`Take break (${Math.min(breakBank, breakMin)}m)`" @click.stop="$emit('take-break')">🎁</button>
     </div>
+    <!-- Earned break / running break: shown on the collapsed row (no expand needed), same slim line, no box. -->
+    <p v-if="breakBank > 0 && !breakOn && phase !== 'closed'" class="gp-line gp-bline" data-test="gp-break-line">Break earned: opens your apps, never costs points. <button type="button" class="gp-chip" data-test="gp-take-break" @click="$emit('take-break')">Take break ({{ Math.min(breakBank, breakMin) }}m)</button></p>
+    <p v-if="breakOn" class="gp-line gp-bline" data-test="gp-break-on">Break running: all apps open, they lock again on their own. <button type="button" class="gp-chip" data-test="gp-end-break" @click="$emit('end-break')">End break now</button></p>
     <!-- Points vault: one slim line (no box). Tap expands the price list, tap again collapses it. -->
     <template v-if="vault">
       <button type="button" class="gp-row gp-vault" data-test="vault-toggle" :aria-expanded="vaultOpen ? 'true' : 'false'" @click="vaultOpen = !vaultOpen">
@@ -28,8 +31,6 @@
     <div v-if="open" class="gp-body">
       <p v-if="gate" class="gp-line" data-test="gp-gate">🔒 Social apps stay locked until your morning checklist is done.<template v-if="gift"> An earned break still opens them.</template></p>
       <p v-if="penalty" class="gp-line gp-warn" data-test="gp-penalty">−{{ penalty }} pts today: Screen Time access was turned off.</p>
-      <p v-if="breakBank > 0 && !breakOn && phase !== 'closed'" class="gp-line" data-test="gp-break-line">Earned break, yours to take when you want. Opens your apps, never costs points. <button type="button" class="gp-chip" data-test="gp-take-break" @click="$emit('take-break')">Take break ({{ Math.min(breakBank, breakMin) }}m)</button></p>
-      <p v-if="breakOn" class="gp-line" data-test="gp-break-on">Break running: all apps open, they lock again on their own. <button type="button" class="gp-chip" data-test="gp-end-break" @click="$emit('end-break')">End break now</button></p>
       <button v-if="history.length" type="button" class="gp-line gp-link" data-test="gp-history-open" :aria-expanded="histOpen ? 'true' : 'false'" @click="histOpen = !histOpen">Break history ({{ history.length }}) {{ histOpen ? '‹' : '›' }}</button>
       <template v-if="histOpen"><p v-for="h in history" :key="h.key" class="gp-line gp-hist" data-test="gp-history-item">{{ h.date }} {{ h.time }} · {{ h.min }} min · at {{ h.points }} pts</p></template>
       <p v-if="screenReady > 0" class="gp-line" data-test="gp-screen-line">Goal hit: {{ screenReady }}m screen time earned. <button type="button" class="gp-chip" data-test="gp-claim-screen" @click="$emit('claim-screen')">Start screen time ({{ screenReady }}m)</button></p>
@@ -85,7 +86,7 @@ const attn = computed(() => !!props.review || (props.friendOn && props.unlock.st
 .gp-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--c-accent-text, #5B9BFF); }
 .gp-chev { font-size: .7rem; opacity: .7; }
 .gp-body { padding: 2px 2px 4px; font-size: .72rem; color: var(--c-text-2, #a1a09b); display: grid; gap: 6px; }
-.gp-line, .gp-h { margin: 0; } .gp-h { color: var(--c-text-2, #a1a09b); font-weight: 600; } .gp-warn { color: var(--c-warning, #d29922); }
+.gp-line, .gp-h { margin: 0; } .gp-bline { padding: 0 2px 2px; font-size: .7rem; color: var(--c-text-2, #a1a09b); } .gp-h { color: var(--c-text-2, #a1a09b); font-weight: 600; } .gp-warn { color: var(--c-warning, #d29922); }
 .gp-check { display: flex; gap: 8px; align-items: center; min-height: 32px; }
 .gp-btn, .gp-chip { min-height: 26px; padding: 0 10px; border-radius: 13px; border: 1px solid var(--c-border, #2a2a2e); background: none; color: var(--c-text, #ecebe8); font: inherit; font-size: .72rem; cursor: pointer; justify-self: start; }
 .gp-btn:disabled { opacity: .5; cursor: default; }

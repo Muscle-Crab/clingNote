@@ -301,13 +301,13 @@ const bossMode = ref('simple'); const emergencyOn = ref(true);
 const GP_WEEK = GP.WEEK; const gpOpen = ref(false); const gpMsg = ref(''); const gpPlan = ref(GP.normPlan({})); const gpHas = ref(false);
 const gpForm = ref({ dayStart: '09:00', sessions: 2, breakEvery: 50, reviewDow: 0, reviewTime: '18:00', minGoal: 50, friend: '' });
 const gpView = () => { const p = { ...gpPlan.value, ...(gpPlan.value.pending || {}) }; gpForm.value = { dayStart: p.dayStart, sessions: gpPlan.value.sessions === 1 ? 1 : 2, breakEvery: gpPlan.value.breakEvery || 50, reviewDow: p.reviewDow, reviewTime: p.reviewTime, minGoal: p.minGoal, friend: (gpPlan.value.friend && gpPlan.value.friend.name) || '' }; };
-// Summary + help follow the current rules: breaks are earned by tasks + points (GP.BREAK_RULES), each session has its own points bar.
+// Summary + help follow the current rules: breaks are earned by day points only (GP.BREAK_RULES), each session has its own points bar.
 const gpClock = (hhmm) => { const [h, m] = String(hhmm || '00:00').split(':').map(Number); return `${h % 12 || 12}${m ? `:${String(m).padStart(2, '0')}` : ''} ${h < 12 ? 'AM' : 'PM'}`; };
-const gpBreaks = () => GP.BREAK_RULES.breaks.slice(0, GP.breaksPerDay(8)).map((b) => `${b.min}m`).join(' + ');
+const gpBreaks = () => `${GP.breakMinN(1)}m/${GP.BREAK_RULES.every} pts`;
 const gpSummary = computed(() => `${gpPlan.value.sessions === 1 ? '1 session' : '2 sessions'} · breaks ${gpBreaks()} · review ${GP.WEEK[gpPlan.value.reviewDow]} ${gpClock(gpPlan.value.reviewTime)}${gpPlan.value.pending ? ' · change queued' : ''}`);
-const gpHelp = computed(() => { const [b1, b2] = GP.BREAK_RULES.breaks;
+const gpHelp = computed(() => { const R = GP.BREAK_RULES;
   return `${gpForm.value.sessions === 1 ? 'One session; it closes 8 h after you start it.' : 'Morning session = your Morning tasks, afternoon session = the rest; each has its own points bar and only counts points earned in it.'} `
-    + `Break 1: ${b1.min} min after ${Math.round(b1.taskShare * 100)}% of tasks + ${b1.points} pts. Break 2: ${b2.min} min after ${Math.round(b2.taskShare * 100)}% + ${b2.points} pts. `
+    + `A break every ${R.every} day points: ${GP.breakMinN(1)} min, then ${GP.breakMinN(2)} min, then ${GP.breakMinN(3)} min each. `
     + 'Miss a session\'s points and apps stay locked 2 h after it ends. Schedule changes wait for the weekly review.'; });
 const saveGamePlan = async () => { const u = auth.currentUser; if (!u) return;
   const f = gpForm.value; const friend = String(f.friend || '').trim() ? { name: String(f.friend).trim().slice(0, 40) } : null;

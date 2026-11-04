@@ -58,14 +58,14 @@ t('wiring: strictShield 2 h, server settle -> appLockDebt, eh shutdown, native c
   const sw = src('ios/App/App/ClingLockPlugin.swift'); assert(/name: "cancelScheduledLock"/.test(sw) && /stopMonitoring\(\[ScheduledLocks\.name\(key\)\]\)/.test(sw));
   assert(/name: "clearBreakOffer"/.test(sw) && /\(o\["v"\] as\? Int\) == 2/.test(sw) && /guard close > nowMs/.test(sw));
 });
-t('break points use the current session', () => assert(/points: gpSession\.value \? gpSession\.value\.earned/.test(src('src/views/HomeView.vue'))));
+t('break points use DAY points (not session points)', () => assert(/points: gpEarned\.value\.points, \/\/ breaks: DAY points/.test(src('src/views/HomeView.vue'))));
 t('break eligibility: under threshold no break, over allowed, legacy/stale/too-long rejected', () => {
-  const now = at(10); const day = G.dayWindow(gp, now).dayKey; const b = { n: 1, day, startMs: now - 60000, endMs: now + 14 * 60000 };
+  const now = at(10); const day = G.dayWindow(gp, now).dayKey; const b = { n: 1, day, startMs: now - 60000, endMs: now + 9 * 60000 };
   assert.strictEqual(G.breakEarned(gp, b, now, { done: 1, total: 4, points: 10 }), false);
   assert.strictEqual(G.breakEarned(gp, b, now, { done: 2, total: 4, points: 60 }), true);
   assert.strictEqual(G.breakEarned(gp, { ...b, n: 0 }, now, { done: 4, total: 4, points: 200 }), false);
   assert.strictEqual(G.breakEarned(gp, { ...b, day: '2026-11-01' }, now, { done: 4, total: 4, points: 200 }), false);
-  assert.strictEqual(G.breakEarned(gp, { ...b, endMs: now + 40 * 60000 }, now, { done: 4, total: 4, points: 200 }), false);
+  assert.strictEqual(G.breakEarned(gp, { ...b, endMs: now + 20 * 60000 }, now, { done: 4, total: 4, points: 200 }), false);
   assert(/loc\.uid === userId\.value/.test(src('src/views/HomeView.vue')));
 });
 console.log(`session points: ${n} passed`);

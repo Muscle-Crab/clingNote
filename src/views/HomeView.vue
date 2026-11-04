@@ -142,7 +142,7 @@
                class="task-section">
         <GamePlanRow v-if="gpOn && isViewingToday" :text="gpText" :phase="gpPhase.phase" :review="gpReview"
                      :locked="hardLocked || gpGate" :gate="gpGate" :friend="(gp.friend && gp.friend.name) || ''" :friend-on="gp.friendUnlock" :unlock="gpUnlock" :penalty="gpPenaltyToday" :after-close="gpEarned.afterClose"
-                     :break-bank="gpBank" :break-min="gpBreakStatus.min || 15" :gift="gpGift" :history="gpHistory" :break-on="gpPhase.phase === 'break'" :screen-ready="strictReadyMin" :ready="gpReady" :vault="gpVault"
+                     :break-bank="gpBank" :break-min="gpBreakStatus.min || 10" :gift="gpGift" :history="gpHistory" :break-on="gpPhase.phase === 'break'" :screen-ready="strictReadyMin" :ready="gpReady" :vault="gpVault"
                      @review="gpApplyReview" @ask="gpAsk" @share="gpShare" @take-break="gpTakeBreak" @end-break="gpEndBreak" @claim-screen="claimScreenTime" @vault-start="vaultStart" @vault-stop="vaultStop" />
         <EmptyState v-if="dayTasks.length === 0" :show-add="true" :show-templates="isViewingToday && !!userId" :day-label="isViewingToday ? '' : formatScheduledDate(viewTabDate, todayStr)" :scheduled="isViewingToday ? 0 : (scheduledCounts[viewTabDate] || 0)" @add="onAddClick" @templates="openTemplates" />
 
@@ -3997,11 +3997,10 @@ const gpEst = (t) => chipValues(t).minutes;
 const gpPenaltyToday = computed(() => (gpPenalty.value && gpPenalty.value.day === gpPhase.value.dayKey ? Number(gpPenalty.value.points) || 0 : 0));
 const gpEarned = computed(() => GP.earnedPoints(todayTasksForTarget.value, { closeMs: GP.pointsCloseMs(gpPhase.value.closeMs, eh.running.value ? eh.lock.value : null), estMinutes: gpEst, penalty: gpPenaltyToday.value }));
 const gpGoal = computed(() => GP.dailyGoal({ history: GP.historyFrom(gpLog.value, gpPhase.value.dayKey), load: GP.plannedLoad(todayTasksForTarget.value, gpEst), min: gp.value.minGoal }));
-const gpProg = computed(() => { const l = todayTasksForTarget.value || []; return { done: l.filter((t) => t && t.completed).length, total: l.length, points: gpSession.value ? gpSession.value.earned : gpEarned.value.points,
+const gpProg = computed(() => { const l = todayTasksForTarget.value || []; return { done: l.filter((t) => t && t.completed).length, total: l.length, points: gpEarned.value.points, // breaks: DAY points (GP.BREAK_RULES), not session points
   taken: GP.breaksOn(gpBreakLog.value, GP.dayWindow(gp.value).dayKey).count,
-  // break length scales with the session's points vs its goal (GP.breakMinutesFor)
   goal: gpSession.value ? gpSession.value.target : (gpGoal.value && gpGoal.value.goal) || 0, earned: gpSession.value ? gpSession.value.earned : gpEarned.value.points }; });
-const gpBankFull = computed(() => (gpOn.value ? GP.breakBank(gp.value, gpBreak.value, nowTick.value, gpProg.value) : { balance: 0, status: GP.breakStatus({ ...gpProg.value, dayHours: gp.value.closeHours }) }));
+const gpBankFull = computed(() => (gpOn.value ? GP.breakBank(gp.value, gpBreak.value, nowTick.value, gpProg.value) : { balance: 0, status: GP.breakStatus(gpProg.value) }));
 const gpBank = computed(() => gpBankFull.value.balance);
 const gpBreakStatus = computed(() => gpBankFull.value.status);
 // Eligibility guard (login, cold start, resume, notification Take break while closed): progress is only judged once today's

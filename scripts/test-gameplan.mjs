@@ -54,15 +54,15 @@ t('2+3 focus 50 / break 10 / focus 50 / break 10 from the day start', () => {
 t('earned breaks: user-started, rule-gated, no stacking, capped at close, relock to prior', () => {
   const g = G.normPlan({ dayStart: '09:00' }); const day = G.dayWindow(g, at(2, 9)).dayKey; const ok1 = { done: 7, total: 20, points: 60 };
   assert.strictEqual(G.breakBank(g, null, at(2, 14)).balance, 0); // finished sessions no longer bank minutes
-  assert.strictEqual(G.breakBank(g, null, at(2, 9, 10), ok1).balance, 15);
+  assert.strictEqual(G.breakBank(g, null, at(2, 9, 10), ok1).balance, 10);
   assert(/10m break ready/.test(G.rowText(G.phaseAt(g, at(2, 9, 55)), { earned: 0, goal: 130, bank: 10 })));
   const prior = { locked: true, until: at(2, 17), label: 'ClingNote lock-in' };
-  const b = G.takeBreak(g, null, at(2, 9, 55), prior, ok1); assert.strictEqual(b.used, 15); assert.strictEqual(b.n, 1); assert.strictEqual(b.endMs, at(2, 10, 10)); assert.deepStrictEqual(b.prior, prior);
-  assert.strictEqual(G.phaseAt(g, at(2, 10, 0), b).phase, 'break'); assert(/Break · 10:00 left/.test(G.rowText(G.phaseAt(g, at(2, 10, 0), b), {})));
+  const b = G.takeBreak(g, null, at(2, 9, 55), prior, ok1); assert.strictEqual(b.used, 10); assert.strictEqual(b.n, 1); assert.strictEqual(b.endMs, at(2, 10, 5)); assert.deepStrictEqual(b.prior, prior);
+  assert.strictEqual(G.phaseAt(g, at(2, 10, 0), b).phase, 'break'); assert(/Break · 5:00 left/.test(G.rowText(G.phaseAt(g, at(2, 10, 0), b), {})));
   assert.strictEqual(G.breakBank(g, b, at(2, 10, 0), ok1).balance, 0);
-  assert.strictEqual(G.takeBreak(g, b, at(2, 10, 11), ok1), null); // no stacking: break 2 needs 15 tasks + 150 pts
+  assert.strictEqual(G.takeBreak(g, b, at(2, 10, 11), ok1), null); // no stacking: break 2 needs 100 day pts
   assert.strictEqual(G.relockPlan(b, at(2, 10, 0)), null);
-  assert.deepStrictEqual(G.relockPlan(b, at(2, 10, 10)), { untilMs: at(2, 17), label: 'ClingNote lock-in' });
+  assert.deepStrictEqual(G.relockPlan(b, at(2, 10, 5)), { untilMs: at(2, 17), label: 'ClingNote lock-in' });
   assert.strictEqual(G.relockPlan({ ...b, relocked: true }, at(2, 11)), null);
   assert.deepStrictEqual(G.relockPlan({ ...b, prior: { locked: false } }, at(2, 11)), { untilMs: 0, label: '' });
   const late = G.takeBreak(g, null, at(2, 16, 55), null, ok1); assert.strictEqual(late.endMs, at(2, 17)); assert.strictEqual(late.used, 5); // close caps it
@@ -102,37 +102,40 @@ t('5 daily goal = max(min, min(round5(90% median 14d), planned load)); new users
   const log = {}; for (let i = 1; i <= 20; i++) log[`2026-10-${String(i).padStart(2, '0')}`] = { earned: i }; log['2026-10-21'] = { earned: 999 };
   const h = G.historyFrom(log, '2026-10-21'); assert.strictEqual(h.length, 14); assert.strictEqual(h[0], 7); assert(!h.includes(999));
 });
-t('numbered breaks: 15m at 35% tasks + 50 pts, 30m at 75% + 150 pts, cap max(1, round(h/4)), alert once per break', () => {
-  assert.deepStrictEqual(G.BREAK_RULES.breaks.map((x) => [x.n, x.min, x.taskShare, x.points]), [[1, 15, 0.35, 50], [2, 30, 0.75, 150]]);
-  assert.deepStrictEqual([G.breakNeed(1, 20).tasks, G.breakNeed(2, 20).tasks], [7, 15]); // 20 tasks: 7 then 15
-  assert.deepStrictEqual([G.breakNeed(1, 10).tasks, G.breakNeed(2, 10).tasks, G.breakNeed(1, 1).tasks, G.breakNeed(1, 0).tasks], [4, 8, 1, 1]);
-  assert.deepStrictEqual([2, 4, 5, 6, 8, 10, 12].map((h) => G.breaksPerDay(h)), [1, 1, 1, 2, 2, 2, 2]);
-  const S = (o) => G.breakStatus({ total: 20, dayHours: 8, ...o });
-  assert.strictEqual(S({ done: 4, points: 80 }).text, '3 tasks to 15m break');
-  assert.strictEqual(S({ done: 7, points: 30 }).text, '20 pts to 15m break');
-  assert.strictEqual(S({ done: 6, points: 30 }).text, '1 task + 20 pts to 15m break');
-  const s1 = S({ done: 7, points: 50 }); assert.strictEqual(s1.ok, true); assert.strictEqual(s1.min, 15); assert.strictEqual(s1.text, '15m break ready');
-  assert.strictEqual(S({ taken: 1, done: 13, points: 130 }).text, '2 tasks + 20 pts to 30m break');
-  const s2 = S({ taken: 1, done: 15, points: 150 }); assert.strictEqual(s2.ok, true); assert.strictEqual(s2.min, 30);
-  assert.strictEqual(S({ taken: 2, done: 20, points: 400 }).text, 'All 2 breaks taken');
-  // short days: a 4h day gets break 1 only
-  const short = (o) => G.breakStatus({ total: 20, dayHours: 4, ...o });
-  assert.strictEqual(short({ done: 7, points: 50 }).ok, true); const s4 = short({ taken: 1, done: 20, points: 500 }); assert.strictEqual(s4.ok, false); assert.strictEqual(s4.text, 'Break taken today');
-  assert.strictEqual(G.breakStatus({ total: 20, dayHours: 2, taken: 1, done: 20, points: 500 }).ok, false);
-  assert.strictEqual(G.breakToAlert(s1, 0), 1); assert.strictEqual(G.breakToAlert(s1, 1), 0); assert.strictEqual(G.breakToAlert(S({ done: 4, points: 80 }), 0), 0); assert.strictEqual(G.breakToAlert(s2, 1), 2);
-  assert(/Break 1 unlocked: 15 min/.test(G.breakAlertText(s1).title) && /never costs points/.test(G.breakAlertText(s1).body));
+t('numbered breaks: points only (day points), break n at 50*n, 10/20/30 min, no daily cap, alert once per break', () => {
+  assert.deepStrictEqual([G.BREAK_RULES.every, G.BREAK_RULES.baseMin], [G.GP_DEFAULTS.breakEvery, G.GP_DEFAULTS.breakMin]);
+  assert.deepStrictEqual([1, 2, 3, 4, 7].map((n) => G.breakMinN(n)), [10, 20, 30, 30, 30]);
+  assert.deepStrictEqual([1, 2, 3].map((n) => G.breakNeed(n, 20).points), [50, 100, 150]);
+  const S = (o) => G.breakStatus({ total: 20, done: 0, dayHours: 4, ...o }); // tasks and day length no longer matter
+  assert.strictEqual(S({ points: 30 }).text, '20 pts to 10m break');
+  const s1 = S({ points: 50 }); assert.strictEqual(s1.ok, true); assert.strictEqual(s1.min, 10); assert.strictEqual(s1.text, '10m break ready');
+  // 125 day points = 2 breaks earned: none taken -> 1st at 10m; after 1 taken -> 2nd at 20m; 3rd needs 150
+  assert.strictEqual(G.breaksEarned(125), 2);
+  assert.deepStrictEqual([S({ points: 125 }).ok, S({ points: 125 }).min], [true, 10]);
+  const s2 = S({ taken: 1, points: 125 }); assert.deepStrictEqual([s2.ok, s2.n, s2.min], [true, 2, 20]);
+  assert.deepStrictEqual([S({ taken: 2, points: 125 }).ok, S({ taken: 2, points: 125 }).text], [false, '25 pts to 30m break']);
+  const s3 = S({ taken: 2, points: 150 }); assert.deepStrictEqual([s3.ok, s3.n, s3.min], [true, 3, 30]);
+  const s5 = S({ taken: 4, points: 250 }); assert.deepStrictEqual([s5.ok, s5.min], [true, 30]); // no round(closeHours/4) cap
+  assert.strictEqual(G.breakToAlert(s1, 0), 1); assert.strictEqual(G.breakToAlert(s1, 1), 0); assert.strictEqual(G.breakToAlert(S({ points: 10 }), 0), 0); assert.strictEqual(G.breakToAlert(s2, 1), 2);
+  assert(/Break 1 unlocked: 10 min/.test(G.breakAlertText(s1).title) && /never costs points/.test(G.breakAlertText(s1).body));
   const g = G.normPlan({ dayStart: '09:00' }); const g4 = { ...G.normPlan({ dayStart: '09:00' }), closeHours: 4 };
-  const b = G.takeBreak(g, null, at(2, 9, 10), null, { done: 7, total: 20, points: 100 }); assert.strictEqual(b.used, 15); assert.strictEqual(b.endMs, at(2, 9, 25)); assert.deepStrictEqual(b.last, { at: at(2, 9, 10), min: 15, points: 100 });
+  const b = G.takeBreak(g, null, at(2, 9, 10), null, { done: 0, total: 20, points: 125 }); assert.strictEqual(b.used, 10); assert.strictEqual(b.endMs, at(2, 9, 20)); assert.deepStrictEqual(b.last, { at: at(2, 9, 10), min: 10, points: 125 });
+  assert.strictEqual(G.breakEarned(g, b, at(2, 9, 15), { points: 125 }), true);
   const done = { ...b, startMs: 0, endMs: 0 };
-  assert.strictEqual(G.breakBank(g, done, at(2, 9, 40), { done: 14, total: 20, points: 200 }).balance, 0);
-  const b2 = G.takeBreak(g, done, at(2, 9, 40), null, { done: 15, total: 20, points: 150 }); assert.strictEqual(b2.used, 45); assert.strictEqual(b2.n, 2); assert.strictEqual(b2.last.min, 30);
-  assert.strictEqual(G.takeBreak(g, { ...b2, startMs: 0, endMs: 0 }, at(2, 11), null, { done: 20, total: 20, points: 500 }), null); // day cap 2
-  assert.strictEqual(G.takeBreak(g4, { ...done, day: G.dayWindow(g4, at(2, 9)).dayKey }, at(2, 9, 40), null, { done: 20, total: 20, points: 500 }), null); // 4h day: break 1 only
-  assert.strictEqual(G.breakBank(g, null, at(2, 9, 40), { done: 20, total: 20, points: 500, taken: 1 }).status.n, 2); // log count counts as taken
+  assert.strictEqual(G.breakBank(g, done, at(2, 9, 40), { points: 99 }).balance, 0);
+  const b2 = G.takeBreak(g, done, at(2, 9, 40), null, { points: 125 }); assert.strictEqual(b2.used, 30); assert.strictEqual(b2.n, 2); assert.strictEqual(b2.last.min, 20);
+  assert.strictEqual(G.breakEarned(g, b2, at(2, 9, 55), { points: 125 }), true); // 20-min break 2 is not cut off
+  assert.strictEqual(G.takeBreak(g, { ...b2, startMs: 0, endMs: 0 }, at(2, 11), null, { points: 125 }), null); // 3rd needs 150
+  const b3 = G.takeBreak(g, { ...b2, startMs: 0, endMs: 0 }, at(2, 11), null, { points: 150 }); assert.strictEqual(b3.n, 3); assert.strictEqual(b3.last.min, 30);
+  assert.strictEqual(G.breakEarned(g, b3, at(2, 11, 25), { points: 150 }), true);
+  assert.strictEqual(G.breakEarned(g, b3, at(2, 11, 25), { points: 149 }), false);
+  const b4 = G.takeBreak(g4, { ...done, day: G.dayWindow(g4, at(2, 9)).dayKey }, at(2, 9, 40), null, { points: 500 }); assert.strictEqual(b4.n, 2); // 4h day: no cap
+  const late = G.takeBreak(g, done, at(2, 16, 55), null, { points: 500 }); assert.strictEqual(late.last.min, 5); // capped by the hard close
+  assert.strictEqual(G.breakBank(g, null, at(2, 9, 40), { points: 500, taken: 1 }).status.n, 2); // log count counts as taken
   const log = G.addBreakLog(G.addBreakLog([], b.last), { at: 0, min: 5 }); assert.strictEqual(log.length, 1);
-  assert.deepStrictEqual(G.breaksOn(log, G.dayWindow(g, at(2, 9)).dayKey), { count: 1, min: 15 });
+  assert.deepStrictEqual(G.breaksOn(log, G.dayWindow(g, at(2, 9)).dayKey), { count: 1, min: 10 });
   assert.strictEqual(G.recapText({ points: 120, sessionsDone: 2, sessions: 2, breaks: 1, breakMin: 20 }), '120 pts · 2 of 2 sessions · 1 break (20 min)');
-  assert.strictEqual(G.fmtBreakLog(log, 'en-US')[0].min, 15);
+  assert.strictEqual(G.fmtBreakLog(log, 'en-US')[0].min, 10);
   assert.strictEqual(typeof G.pacingNote, 'undefined'); // midday pacing removed
 });
 t('6 checklist gate, revoke detection + penalty once a day, friction countdown', () => {
