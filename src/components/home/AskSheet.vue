@@ -31,6 +31,7 @@ import { askAi } from '@/composables/useAi';
 import { speakLive, stopVoice, unlockVoice } from '@/composables/useVoiceover';
 import { startNativeSpeech, nativeSpeechAvailable } from '@/composables/useNativeSpeech';
 import { askSession } from '@/utils/askSession';
+import { audioRestored } from '@/utils/audioSession';
 defineEmits(['close']);
 const msgs = askSession.msgs; const remaining = askSession.remaining;
 const draft = ref(''); const busy = ref(false); const err = ref(''); const needsPro = ref(false); const listening = ref(false); const listEl = ref(null);
@@ -70,7 +71,7 @@ const toggleMic = async () => {
   rec = new WebSR(); rec.lang = navigator.language || 'en-US'; rec.interimResults = true; rec.continuous = true;
   let fin = '';
   rec.onresult = (e) => { let interim = ''; for (let i = e.resultIndex; i < e.results.length; i++) { const r = e.results[i]; if (r.isFinal) fin += `${r[0].transcript} `; else interim += r[0].transcript; } put(`${fin}${interim}`); };
-  rec.onend = () => { listening.value = false; rec = null; };
+  rec.onend = () => { listening.value = false; rec = null; audioRestored('dictation'); };
   rec.onerror = (e) => { if (e.error !== 'aborted' && e.error !== 'no-speech') err.value = 'Voice input failed.'; };
   try { rec.start(); listening.value = true; } catch (e) { err.value = 'Could not start voice input.'; }
 };

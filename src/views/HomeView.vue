@@ -322,6 +322,7 @@ import { scheduleNotification, sendNotificationToPlayer, linkPushUser } from '@/
 import { speak } from '@/composables/useSpeech';
 import { completionPercentage, computeTimeStats, daysLeftInYearFrom, heroTitleFor } from '@/utils/dayStats';
 import { shouldAutoComplete, resetSubtasks } from '@/utils/subtasks';
+import { audioRestored } from '@/utils/audioSession';
 import { deferredDateFor, buildScheduledEntry, buildRecurringTemplate, isTaskVisibleOn, futureOf, dueOf, countsByDate, withWeekDates, tabDateFor, isStaleOnTab, formatScheduledDate, isValidDate, rescheduleEntry } from '@/utils/scheduling';
 import { mutateScheduled, materializeDueForToday } from '@/composables/useScheduledTasks';
 import { blankSchedule, validateSchedule, scheduleOfTask, applyTaskSchedule, deleteTaskScope, deleteEntry, editEntry } from '@/utils/schedEdit';
@@ -2950,6 +2951,7 @@ if (voiceSupported && !nativeVoiceIn) {
   recognition.continuous = voiceCap !== 'partial'; // hands-free: keep listening across pauses (Chrome/Edge)
   recognition.onend = () => {
     listening.value = false;
+    if (voiceFinishing || !voiceOpen.value) audioRestored('dictation'); // dictation over: focus music resumes unless the user paused it
     // iOS Safari often ends without flagging a result final: use what we heard instead of dropping it.
     // Long dictation: commit what was heard in this segment and keep listening until the user taps Done.
     if (pendingVoiceText.trim()) { voiceCommitted = `${voiceCommitted} ${pendingVoiceText.trim()}`.trim(); pendingVoiceText = ''; }

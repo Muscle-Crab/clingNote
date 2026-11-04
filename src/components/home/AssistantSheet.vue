@@ -51,6 +51,7 @@ import RobotAvatar from './RobotAvatar.vue';
 import { askAi } from '@/composables/useAi';
 import { speakLive, stopVoice, unlockVoice } from '@/composables/useVoiceover';
 import { startNativeSpeech, nativeSpeechAvailable } from '@/composables/useNativeSpeech';
+import { audioRestored } from '@/utils/audioSession';
 import { assistantSession, saveAssistant, clearAssistant } from '@/utils/assistantSession';
 import { runAgentTurn } from '@/utils/assistantLoop';
 import { spokenConfirm, ttsText } from '@/utils/assistantTools';
@@ -113,7 +114,7 @@ const toggleMic = async () => {
   rec = new WebSR(); rec.lang = navigator.language || 'en-US'; rec.interimResults = true; rec.continuous = true;
   let fin = '';
   rec.onresult = (e) => { let interim = ''; for (let i = e.resultIndex; i < e.results.length; i++) { const r = e.results[i]; if (r.isFinal) fin += `${r[0].transcript} `; else interim += r[0].transcript; } put(`${fin}${interim}`); };
-  rec.onend = () => { listening.value = false; rec = null; };
+  rec.onend = () => { listening.value = false; rec = null; audioRestored('dictation'); };
   rec.onerror = (e) => { if (e.error !== 'aborted' && e.error !== 'no-speech') err.value = 'Voice input failed.'; };
   try { rec.start(); listening.value = true; } catch (e) { err.value = 'Could not start voice input.'; }
 };

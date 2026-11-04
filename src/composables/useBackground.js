@@ -63,7 +63,31 @@ if (typeof window !== 'undefined') {
 
 // Keep the button honest: if iOS suspends/interrupts/closes audio (call, Siri, backgrounding) show "Play" again.
 const syncReal = () => { if (playing.value && (!engine || engine.state !== 'running')) { playing.value = false; stopRotate(); npPaused(trackName()); } };
-const onCtxState = (st) => { if (st !== 'running') setTimeout(syncReal, 400); };
+const onCtxState = (st) => {
+  if (st === 'running') { if (prefs.musicOn && engine && engine.playing && !playing.value) { playing.value = true; npStart(trackName(), lockHandlers()); armRotate(); } return; }
+  setTimeout(syncReal, 400);
+};
+// Only the music's own pause button (or lock-screen pause) stops it. Anything else that took the audio (dictation, TTS,
+// an OS interruption such as a call or Siri) brings it back afterwards, unless the user paused (prefs.musicOn false).
+export const resumeAfterInterruption = () => {
+  if (!prefs.musicOn) return Promise.resolve('paused-by-user');
+  if (playing.value && engine && engine.state === 'running') return Promise.resolve('running');
+  const st = engine ? engine.state : 'none';
+  const tryResume = st === 'suspended' ? Promise.race([engine.resume(), new Promise((r) => setTimeout(() => r('timeout'), 1200))]) : Promise.resolve(st);
+  return tryResume.then(() => {
+    if (engine && engine.state === 'running') { if (!playing.value) { playing.value = true; npStart(trackName(), lockHandlers()); armRotate(); } return 'resumed'; }
+    return Promise.resolve(api.play()).then(() => { if (!(engine && engine.state === 'running')) armTap(); return 'restarted'; });
+  });
+};
+if (typeof window !== 'undefined') {
+  window.addEventListener('cn:audio-restored', () => { setTimeout(() => { resumeAfterInterruption(); }, 250); });
+  if (Capacitor.getPlatform && Capacitor.getPlatform() === 'ios' && Capacitor.isPluginAvailable('ClingVoice')) {
+    import('@/utils/clingVoice').then(({ ClingVoice }) => {
+      ClingVoice.addListener('audioRestored', () => setTimeout(() => { resumeAfterInterruption(); }, 250));
+      ClingVoice.addListener('audioInterruption', (e) => { if (e && e.type === 'ended') setTimeout(() => { resumeAfterInterruption(); }, 400); });
+    }).catch(() => {});
+  }
+}
 const armTap = () => {
   if (resumeArmed || typeof window === 'undefined') return; resumeArmed = true;
   const once = () => { window.removeEventListener('pointerdown', once, true); window.removeEventListener('touchend', once, true); resumeArmed = false; if (otherAudioBusy()) return; /* the user's own music (Spotify…) is playing: never take over audio on a random tap */ if (prefs.musicOn && !(playing.value && engine && engine.state === 'running')) api.play(); };

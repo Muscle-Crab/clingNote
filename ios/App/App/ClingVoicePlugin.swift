@@ -33,7 +33,31 @@ public class ClingVoicePlugin: CAPPlugin, CAPBridgedPlugin, AVSpeechSynthesizerD
     private var musicPlaying = false
     static let preferred = ["Evan", "Nathan", "Aaron", "Tom", "Reed", "Alex", "Fred"]
 
-    override public func load() { synth.delegate = self }
+    override public func load() {
+        synth.delegate = self
+        // Music is interrupted only by its own pause button: when an OS interruption (call, Siri, alarm, another app) ends,
+        // re-activate our mixable playback session and tell JS (useBackground) to resume, unless the user paused (JS owns that flag).
+        NotificationCenter.default.addObserver(self, selector: #selector(onInterruption(_:)), name: AVAudioSession.interruptionNotification, object: AVAudioSession.sharedInstance())
+    }
+
+    @objc private func onInterruption(_ n: Notification) {
+        guard let raw = n.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt, let type = AVAudioSession.InterruptionType(rawValue: raw) else { return }
+        DispatchQueue.main.async {
+            if type == .began { self.notifyListeners("audioInterruption", data: ["type": "began"]); return }
+            let opts = AVAudioSession.InterruptionOptions(rawValue: (n.userInfo?[AVAudioSessionInterruptionOptionKey] as? UInt) ?? 0)
+            self.restoreMix()
+            if self.musicPlaying { try? AVAudioSession.sharedInstance().setActive(true) }
+            self.notifyListeners("audioInterruption", data: ["type": "ended", "shouldResume": opts.contains(.shouldResume), "musicPlaying": self.musicPlaying])
+        }
+    }
+
+    /// After dictation / speech: put the mixable .playback category back and, if focus music is on, keep the session active
+    /// and ask JS to resume it (WKWebView suspends the AudioContext on a category change).
+    private func restoreAfterCapture(_ reason: String) {
+        restoreMix()
+        if musicPlaying { try? AVAudioSession.sharedInstance().setActive(true); notifyListeners("audioRestored", data: ["reason": reason]) }
+        else { try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation) }
+    }
 
     static func bestVoice() -> AVSpeechSynthesisVoice? {
         let en = AVSpeechSynthesisVoice.speechVoices().filter { $0.language.hasPrefix("en") }
@@ -151,7 +175,7 @@ public class ClingVoicePlugin: CAPPlugin, CAPBridgedPlugin, AVSpeechSynthesizerD
             Self.releaseNowPlaying(musicPlaying: music); call.resolve(["released": true])
         }
     }
-    public func speechSynthesizer(_ s: AVSpeechSynthesizer, didFinish u: AVSpeechUtterance) { remaining -= 1; if remaining <= 0 { restoreMix(); finishPending() } }
+    public func speechSynthesizer(_ s: AVSpeechSynthesizer, didFinish u: AVSpeechUtterance) { remaining -= 1; if remaining <= 0 { restoreMix(); if musicPlaying { notifyListeners("audioRestored", data: ["reason": "speech"]) }; finishPending() } }
     public func speechSynthesizer(_ s: AVSpeechSynthesizer, didCancel u: AVSpeechUtterance) { restoreMix(); finishPending() }
 
     // MARK: - Voice input (speech recognition)
@@ -185,7 +209,9 @@ public class ClingVoicePlugin: CAPPlugin, CAPBridgedPlugin, AVSpeechSynthesizerD
             if self.synth.isSpeaking { self.synth.stopSpeaking(at: .immediate) }
             do {
                 let session = AVAudioSession.sharedInstance()
-                try session.setCategory(.playAndRecord, mode: .measurement, options: [.mixWithOthers, .duckOthers, .defaultToSpeaker, .allowBluetoothA2DP])
+                // .mixWithOthers: recording must not take the session from the focus music (non-mixable playAndRecord interrupted it).
+                // No .duckOthers / .measurement (measurement mode drops output gain, ducking dims the music while dictating).
+                try session.setCategory(.playAndRecord, mode: .default, options: [.mixWithOthers, .defaultToSpeaker, .allowBluetoothA2DP])
                 try session.setActive(true, options: .notifyOthersOnDeactivation)
                 let req = SFSpeechAudioBufferRecognitionRequest()
                 req.shouldReportPartialResults = true
@@ -229,7 +255,6 @@ public class ClingVoicePlugin: CAPPlugin, CAPBridgedPlugin, AVSpeechSynthesizerD
         audioEngine.inputNode.removeTap(onBus: 0)
         audioEngine.reset()
         request = nil; task = nil; recognizer = nil
-        restoreMix()
-        if !musicPlaying { try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation) }
+        restoreAfterCapture("dictation")
     }
 }
