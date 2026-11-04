@@ -18,3 +18,12 @@ export const stopConfirm = () => {
   try { if (nativeVoiceAvailable()) { ClingVoice.stop().catch(() => {}); return; } } catch (e) { /* fall through */ }
   try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch (e) { /* no voice */ }
 };
+
+// Start with a time different from the assigned one: the chosen minutes replace the task's duration everywhere (estimate chip,
+// overtime penalty base, personal estimate, lock screen / Live Activity) and the deadline becomes start + chosen minutes.
+// Same time (or no valid choice) -> {} (nothing changes on the task).
+export const overridePatch = (chosen, base, nowMs = Date.now()) => {
+  const m = Math.round(Number(chosen)); if (!(m > 0) || m === Math.round(Number(base))) return {};
+  const due = new Date(nowMs + m * 60000); const p2 = (n) => String(n).padStart(2, '0');
+  return { estimateMin: m, minutes: m, dueAt: due.toISOString(), dueTime: `${p2(due.getHours())}:${p2(due.getMinutes())}` };
+};

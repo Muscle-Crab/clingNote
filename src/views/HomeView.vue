@@ -331,7 +331,7 @@ import { repeatState, patternOf, onSchedule, offSchedule, toastFor, legacyRepeat
 import { dropUndefined } from '@/utils/firestoreSafe';
 import { lightHaptic, warnHaptic } from '@/composables/useTaskMotion';
 import StartConfirmSheet from '@/components/home/StartConfirmSheet.vue';
-import { confirmStartOn, setConfirmStart, confirmLine, speakConfirm, stopConfirm } from '@/utils/startConfirm';
+import { confirmStartOn, setConfirmStart, confirmLine, speakConfirm, stopConfirm, overridePatch } from '@/utils/startConfirm';
 import ScheduledList from '@/components/home/ScheduledList.vue';
 import EmptyState from '@/components/home/EmptyState.vue';
 import StartDayPrompt from '@/components/home/StartDayPrompt.vue';
@@ -468,11 +468,11 @@ let timerInterval = null;
 // Play = start the countdown immediately from the task's estimate (typed override > stored/auto estimate). No picker step.
 // Pre-start confirm (utils/startConfirm.js): spoken question + small sheet (Start / Skip / adjust / Don't ask again), unless turned off.
 const startConfirm = ref(null); // { index, title, minutes, base, dontAsk }
-const launchTimer = async (index, mins) => {
+const launchTimer = async (index, mins, base = mins) => {
   selectedTimerTaskIndex.value = index;
   selectedTimerHours.value = Math.floor(mins / 60);
   selectedTimerMinutes.value = mins % 60;
-  await startTimer();
+  await startTimer({ override: base }); // chosen != assigned: the chosen time replaces the task's duration + deadline (overridePatch)
 };
 const openTaskTimerModal = async (index) => {
   const t = selectedDayRoutine.value[index]; if (!t) return;
@@ -484,7 +484,7 @@ const openTaskTimerModal = async (index) => {
 const finishStartConfirm = async (useAdjusted) => {
   const c = startConfirm.value; if (!c) return; stopConfirm(); startConfirm.value = null;
   if (c.dontAsk) setConfirmStart(localStorage, userId.value, false);
-  await launchTimer(c.index, useAdjusted ? c.minutes : c.base);
+  await launchTimer(c.index, useAdjusted ? c.minutes : c.base, c.base);
 };
 const closeStartConfirm = () => { stopConfirm(); startConfirm.value = null; };
 
@@ -1182,6 +1182,7 @@ const startTimer = async (opts = {}) => {
 
   const task = {
     ...selectedDayRoutine.value[selectedTimerTaskIndex.value],
+    ...(!pomo && opts.override != null ? overridePatch(totalMinutes, opts.override, now) : {}),
     timerActive: true,
     timerStartedAt: new Date(now).toISOString(),
     timerEndTime: new Date(endTime).toISOString(),
