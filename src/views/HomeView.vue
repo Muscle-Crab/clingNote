@@ -2840,16 +2840,6 @@ const totalPoints = computed(() => (selectedDayRoutine?.value || []).reduce((n, 
 
 
 
-// Update points when tasks are completed
-watch(
-    () => selectedDayRoutine.value,
-    (tasks) => {
-      // Coach game plan: size points (S10/M20/L40), nothing after the hard close, minus today's revoke penalty. Simple mode unchanged.
-      pointsAccumulated.value = gpOn.value && isViewingToday.value ? gpEarned.value.points
-        : (tasks || []).filter((task) => task.completed).reduce((n, t) => n + overtimePoints(chipValues(t).points, t), 0); // real points minus any overtime penalty (what the celebration credited)
-    },
-    { deep: true }
-);
 
 
 
@@ -4001,6 +3991,11 @@ const gpSessions = computed(() => (gpOn.value ? SP.sessionsOf(gp.value, todayTas
 const liveSession = (list, nowMs) => { if (!list.length || nowMs >= list[list.length - 1].endMs) return null; const s = SP.currentSession(list, nowMs); return s && s.target > 0 ? s : null; };
 const gpSession = computed(() => liveSession(gpSessions.value, nowTick.value));
 // (the old per-session 2 h grace lock is replaced by the missed-goal app lock, appLockDebt: see syncAppLock)
+// Defined before gpProg (which reads them): a computed read during setup must not hit a later const (TDZ).
+const gpEst = (t) => chipValues(t).minutes;
+const gpPenaltyToday = computed(() => (gpPenalty.value && gpPenalty.value.day === gpPhase.value.dayKey ? Number(gpPenalty.value.points) || 0 : 0));
+const gpEarned = computed(() => GP.earnedPoints(todayTasksForTarget.value, { closeMs: GP.pointsCloseMs(gpPhase.value.closeMs, eh.running.value ? eh.lock.value : null), estMinutes: gpEst, penalty: gpPenaltyToday.value }));
+const gpGoal = computed(() => GP.dailyGoal({ history: GP.historyFrom(gpLog.value, gpPhase.value.dayKey), load: GP.plannedLoad(todayTasksForTarget.value, gpEst), min: gp.value.minGoal }));
 const gpProg = computed(() => { const l = todayTasksForTarget.value || []; return { done: l.filter((t) => t && t.completed).length, total: l.length, points: gpSession.value ? gpSession.value.earned : gpEarned.value.points,
   taken: GP.breaksOn(gpBreakLog.value, GP.dayWindow(gp.value).dayKey).count,
   // break length scales with the session's points vs its goal (GP.breakMinutesFor)
@@ -4076,11 +4071,18 @@ watch(gpLoaded, (v) => { if (v) syncAppLock(); });
 const onAppLockChanged = () => syncAppLock(); // Settings "Locked apps" saved a new selection
 onMounted(() => window.addEventListener('cling:applock-changed', onAppLockChanged)); onBeforeUnmount(() => window.removeEventListener('cling:applock-changed', onAppLockChanged));
 if (process.env.VUE_APP_FIREBASE_EMULATORS === '1') window.__gpBreakEnd = (ms) => { if (gpBreak.value) gpBreakSave({ ...gpBreak.value, endMs: ms }); }; // local e2e hook only
-const gpEst = (t) => chipValues(t).minutes;
-const gpPenaltyToday = computed(() => (gpPenalty.value && gpPenalty.value.day === gpPhase.value.dayKey ? Number(gpPenalty.value.points) || 0 : 0));
-const gpEarned = computed(() => GP.earnedPoints(todayTasksForTarget.value, { closeMs: GP.pointsCloseMs(gpPhase.value.closeMs, eh.running.value ? eh.lock.value : null), estMinutes: gpEst, penalty: gpPenaltyToday.value }));
 watch(() => gpOn.value && isViewingToday.value && gpEarned.value.points, (v) => { if (v !== false) pointsAccumulated.value = v; });
-const gpGoal = computed(() => GP.dailyGoal({ history: GP.historyFrom(gpLog.value, gpPhase.value.dayKey), load: GP.plannedLoad(todayTasksForTarget.value, gpEst), min: gp.value.minGoal }));
+// (moved below gpEarned: it read gpEarned before its const was initialised -> TDZ ReferenceError on an early routine change)
+// Update points when tasks are completed
+watch(
+    () => selectedDayRoutine.value,
+    (tasks) => {
+      // Coach game plan: size points (S10/M20/L40), nothing after the hard close, minus today's revoke penalty. Simple mode unchanged.
+      pointsAccumulated.value = gpOn.value && isViewingToday.value ? gpEarned.value.points
+        : (tasks || []).filter((task) => task.completed).reduce((n, t) => n + overtimePoints(chipValues(t).points, t), 0); // real points minus any overtime penalty (what the celebration credited)
+    },
+    { deep: true }
+);
 const gpGoalWhy = computed(() => { const g = gpGoal.value; return g.from === 'history' ? `90% of your 2-week median, capped at today's ${g.load} pts planned, never under ${g.min}.` : `80% of today's ${g.load} pts planned (needs 3 logged days for the 2-week median), never under ${g.min}.`; });
 const loadBossPrefs = () => loadUserDoc().then((d) => { const day = localDateStr(); bossMode.value = normBossMode(d && d.bossMode); emergencyOn.value = emergencyAllowed(d); gpLoad(d);
   goalOverride.value = d && d.pointsGoal && d.pointsGoal.day === day ? d.pointsGoal : null; todayMood.value = d && d.mood && d.mood.day === day ? d.mood.id : ''; }).catch(() => {});
