@@ -9,6 +9,7 @@
       </div>
 
       <!-- First screen = the core pitch: you buy your free time (screen time) with done tasks. Numbers mirror utils/pointsVault.js. -->
+      <Transition name="ob-step" mode="out-in">
       <section v-if="STEPS[step] === 'welcome'" class="ob-sec" data-test="ob-pitch">
         <div class="ob-art"></div>
         <p class="ob-k">Hey {{ firstName }} 👋</p>
@@ -98,11 +99,12 @@
         <div class="gp-body gp-vbody ob-vault" data-test="ob-vault-list"><VaultApps :items="vaultItems" detail :why="vaultWhy" /></div>
         <p v-if="!vaultItems.length" class="ob-p" data-test="ob-vault-empty">Your picked apps will show here with their prices.</p>
       </section>
+      </Transition>
 
       <div class="ob-foot">
-        <button class="ob-cta" :disabled="(STEPS[step] === 'goals' && !a.goals.length) || (STEPS[step] === 'age' && ageState !== 'ok') || (STEPS[step] === 'alarm' && (alarmBusy || !alarmTime))" @click="next">{{ ctaLabel }}</button>
+        <button class="ob-cta" :aria-busy="String(busy)" :disabled="busy || (STEPS[step] === 'goals' && !a.goals.length) || (STEPS[step] === 'age' && ageState !== 'ok') || (STEPS[step] === 'alarm' && (alarmBusy || !alarmTime))" @click="next">{{ ctaLabel }}</button>
         <button v-if="STEPS[step] === 'alarm'" class="ob-later" data-test="ob-alarm-later" @click="a.wakeAlarm = 'later'; go(step + 1)">Not now</button>
-        <button v-if="STEPS[step] === 'applock'" class="ob-later" @click="a.appLock = 'later'; go(step + 2)">Not now</button>
+        <button v-if="STEPS[step] === 'applock'" class="ob-later" :disabled="busy" @click="a.appLock = 'later'; go(step + 2)">Not now</button>
         <button v-if="STEPS[step] === 'notifications'" class="ob-later" @click="a.notifications = 'later'; go(step + 1)">Not now</button>
       </div>
     </template>
@@ -170,7 +172,8 @@ const wakeLabel = computed(() => fmtWakeLabel(eh.plan.value?.wakeTime || a.wakeT
 // The paywall counts as "seen" the moment it is shown (local flag + users/{uid}.paywallSeenAt) so existing users get it at most once; Subs/Profile can still open it.
 watch(step, (n) => { if (n === STEPS.length) { const u = auth.currentUser; if (u) { markPaywallSeenLocal(u.uid); saveUserFields(u.uid, { paywallSeenAt: new Date() }).catch(() => {}); } } }, { immediate: true });
 const firstName = computed(() => (name.value || 'there').split(' ')[0]);
-const ctaLabel = computed(() => ({ welcome: "Let's go", whatsnew: 'Nice, continue', alarm: 'Yes, turn it on', notifications: 'Turn on notifications', applock: 'Choose apps to block' }[STEPS[step.value]] || 'Continue'));
+const busy = ref(false); // CTA is disabled while a native prompt (notifications, Screen Time, alarm) is open: no double taps
+const ctaLabel = computed(() => (busy.value && STEPS[step.value] === 'applock' ? 'Opening Screen Time…' : { welcome: "Let's go", whatsnew: 'Nice, continue', alarm: 'Yes, turn it on', notifications: 'Turn on notifications', applock: 'Choose apps to block', vault: 'Start earning' }[STEPS[step.value]] || 'Continue'));
 // Vault step: the apps just picked, with 0 pts earned = all locked, cheapest first (prices from on-device usage, same as Home).
 const vaultItems = ref([]); const vaultWhy = ref(null);
 // AI wording of each price (server task 'vault_why'); only when AI consent was already given (never prompts here). Any failure keeps the template line.
@@ -194,6 +197,10 @@ function go(n) {
   if (STEPS[step.value] === 'age' && n > step.value) { if (ageState.value !== 'ok') return; if (auth.currentUser) saveUserFields(auth.currentUser.uid, { age: Number(a.age), ageCollectedAt: new Date() }).catch(() => {}); }
   step.value = n; router.replace({ query: { ...route.query, step: n } }); persist(); }
 async function next() {
+  if (busy.value) return; busy.value = true;
+  try { await nextStep(); } finally { busy.value = false; }
+}
+async function nextStep() {
   if (STEPS[step.value] === 'notifications') {
     try {
       if (isNativeIOS()) { // iOS app: ask through the native OneSignal prompt (the web Notification API does not exist in WKWebView)
@@ -227,7 +234,7 @@ async function finish() { await persist({ onboardingComplete: true, onboardingCo
 .ob-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 36px; }
 .ob-back { background: none; border: 0; color: #A9B4CC; font-size: 28px; line-height: 1; cursor: pointer; width: 32px; }
 .ob-skip { background: none; border: 0; color: #7180A0; font-weight: 600; font-size: 14px; cursor: pointer; min-height: 44px; min-width: 44px; padding: 0 10px; }
-.ob-dots { display: flex; gap: 6px; flex: 1; } .ob-dots i { flex: 1; height: 4px; border-radius: 4px; background: rgba(255,255,255,.1); } .ob-dots i.on { background: linear-gradient(90deg,#1E5BFF,#3C8CFF); }
+.ob-dots { display: flex; gap: 6px; flex: 1; } .ob-dots i { flex: 1; height: 4px; border-radius: 4px; background: rgba(255,255,255,.1); } .ob-dots i { transition: background .25s ease; } .ob-dots i.on { background: linear-gradient(90deg,#1E5BFF,#3C8CFF); }
 .ob-sec { flex: 1; padding-top: 18px; }
 .ob-art { height: 220px; margin: 0 -20px 10px; background: linear-gradient(180deg, rgba(7,13,28,.1), rgba(7,13,28,.3) 55%, #070D1C), var(--hero-img, url('~@/assets/hero-forest.jpg')) 72% 35%/cover; border-radius: 0 0 24px 24px; }
 .ob-k { margin: 8px 0 0; font-size: 12px; font-weight: 600; letter-spacing: .16em; text-transform: uppercase; color: #5E9BFF; }
@@ -249,6 +256,10 @@ async function finish() { await persist({ onboardingComplete: true, onboardingCo
 .ob-foot { padding-top: 16px; display: flex; flex-direction: column; gap: 8px; }
 .ob-cta { min-height: 56px; border: 0; border-radius: 16px; font-size: 17px; font-weight: 800; color: #fff; background: linear-gradient(90deg,#1E5BFF,#3C8CFF); box-shadow: 0 10px 26px rgba(47,111,255,.35); cursor: pointer; }
 .ob-cta:disabled { opacity: .45; box-shadow: none; }
+.ob-cta[aria-busy="true"] { opacity: .7; }
+.ob-step-enter-active, .ob-step-leave-active { transition: opacity .18s ease, transform .18s ease; }
+.ob-step-enter-from { opacity: 0; transform: translateX(14px); } .ob-step-leave-to { opacity: 0; transform: translateX(-14px); }
+@media (prefers-reduced-motion: reduce) { .ob-step-enter-active, .ob-step-leave-active { transition: none; } .ob-dots i { transition: none; } }
 .ob-later { background: none; border: 0; color: #7180A0; font-weight: 600; padding: 8px; cursor: pointer; }
 .ob-vo { margin-left: auto; }
 .ob-age { display: flex; align-items: center; justify-content: center; gap: 14px; margin: 18px 0; }
