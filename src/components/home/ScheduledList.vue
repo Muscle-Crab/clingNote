@@ -9,22 +9,8 @@
     </button>
     <div v-if="open" class="sched-body">
       <p v-if="error" class="sched-empty sched-error" role="alert">{{ error }}</p>
-      <p v-else-if="!groups.length && !series.length" class="sched-empty">Nothing scheduled. Turn on “Schedule” when adding a task.</p>
-      <div v-if="series.length" class="sched-group" data-test="series-list">
-        <h3 class="sched-date">Repeating</h3>
-        <div v-for="t in series" :key="t.id" class="sched-row">
-          <div class="sched-main">
-            <span class="sched-title">{{ t.title }}</span>
-            <span class="sched-time" data-test="sched-label">{{ scheduleLabel(t) }}<template v-if="t.recurrence.until"> · until {{ formatScheduledDate(t.recurrence.until) }}</template></span>
-          </div>
-          <button type="button" class="sched-more" aria-label="Repeating task actions" @click="toggleMenu(t)"><i class="fas fa-ellipsis-h"></i></button>
-          <div v-if="menuId === t.id" class="sched-menu">
-            <SchedulePicker v-model="edit" />
-            <div class="sched-edit"><button type="button" class="sched-btn sched-btn--primary" data-test="save-series" @click="saveEdit(t, 'future')">Save all future</button></div>
-            <button type="button" class="sched-btn sched-btn--danger" @click="$emit('delete', t.id); menuId = null">Delete series</button>
-          </div>
-        </div>
-      </div>
+      <p v-else-if="!groups.length" class="sched-empty">Nothing scheduled. Turn on “Schedule” when adding a task.</p>
+      <!-- No separate "Repeating" list: recurring tasks show as normal cards in the day's list on the days they recur (edit via the card's ... menu). -->
       <div v-for="g in groups" :key="g.date" class="sched-group">
         <h3 class="sched-date">{{ formatScheduledDate(g.date, todayStr) }}</h3>
         <div v-for="t in g.tasks" :key="t.id" class="sched-row">
@@ -65,7 +51,6 @@ const props = defineProps({
   tasks: { type: Array, default: () => [] }, // already filtered/sorted future entries
   todayStr: { type: String, default: '' },
   error: { type: String, default: '' },
-  series: { type: Array, default: () => [] }, // recurring templates
   startOpen: { type: Boolean, default: false }, // future day tab with tasks for that date: show them without a tap
 });
 const emit = defineEmits(['move-today', 'update', 'delete', 'edit']);
@@ -77,7 +62,7 @@ watch(() => props.startOpen, (v) => { if (v) open.value = true; });
 const menuId = ref(null);
 const editDate = ref('');
 const editTime = ref('');
-const count = computed(() => props.tasks.length + props.series.length);
+const count = computed(() => props.tasks.length);
 const groups = computed(() => groupByDate(props.tasks));
 const minDate = computed(() => props.todayStr);
 

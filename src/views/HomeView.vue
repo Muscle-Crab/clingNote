@@ -215,7 +215,7 @@
 
       <TimeStatsBar v-if="isViewingToday" :stats="timeStats" :ended="!!daySession.ended" :suggest="suggestShutdown && !shutdownDismissed" @wrap-up="openShutdown" />
 
-      <ScheduledList v-if="userId" :tasks="isViewingToday ? futureScheduled : futureScheduled.filter((e) => e.scheduledDate === viewTabDate)" :start-open="!isViewingToday && futureScheduled.some((e) => e.scheduledDate === viewTabDate)" :today-str="todayStr" :error="scheduledError" :series="templatesOf(scheduledList)" @edit="editScheduledEntry"
+      <ScheduledList v-if="userId" :tasks="isViewingToday ? futureScheduled : futureScheduled.filter((e) => e.scheduledDate === viewTabDate)" :start-open="!isViewingToday && futureScheduled.some((e) => e.scheduledDate === viewTabDate)" :today-str="todayStr" :error="scheduledError" @edit="editScheduledEntry"
                      @move-today="moveScheduledToToday" @update="updateScheduledDate" @delete="deleteScheduled" />
 
       <FabButtons :show-add="false" :user-id="userId" :listening="listening" :show-voice="!voiceBlocked || nativeVoiceIn" :assistant-live="askOpen" @add="onAddClick" @voice="startVoiceInput" @assistant="openAssistant" @sergeant="onSergeant" @menu-open="coachSignal('menu-open')" :locked="hardLocked" />
@@ -322,7 +322,7 @@ import { scheduleNotification, sendNotificationToPlayer, linkPushUser } from '@/
 import { speak } from '@/composables/useSpeech';
 import { completionPercentage, computeTimeStats, daysLeftInYearFrom, heroTitleFor } from '@/utils/dayStats';
 import { shouldAutoComplete, resetSubtasks } from '@/utils/subtasks';
-import { deferredDateFor, buildScheduledEntry, buildRecurringTemplate, isTaskVisibleOn, futureOf, dueOf, countsByDate, withWeekDates, tabDateFor, isStaleOnTab, formatScheduledDate, isValidDate, rescheduleEntry, templatesOf } from '@/utils/scheduling';
+import { deferredDateFor, buildScheduledEntry, buildRecurringTemplate, isTaskVisibleOn, futureOf, dueOf, countsByDate, withWeekDates, tabDateFor, isStaleOnTab, formatScheduledDate, isValidDate, rescheduleEntry } from '@/utils/scheduling';
 import { mutateScheduled, materializeDueForToday } from '@/composables/useScheduledTasks';
 import { blankSchedule, validateSchedule, scheduleOfTask, applyTaskSchedule, deleteTaskScope, deleteEntry, editEntry } from '@/utils/schedEdit';
 import { syncScheduledNotifications } from '@/composables/useSchedNotifications';

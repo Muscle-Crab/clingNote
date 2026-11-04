@@ -57,8 +57,8 @@ const shot = (p, n) => p.screenshot({ path: SHOTS + n });
   await p.click('button[type=submit]'); await sleep(2500);
   ok('weekly (other day) not on today', await p.locator('.task-title', { hasText: 'ZZTEST Sched weekly' }).count() === 0);
   await p.click('.sched-toggle'); await sleep(500);
-  ok('series list shows weekly + daily', (await p.locator('[data-test=series-list]').innerText()).includes('ZZTEST Sched weekly'));
-  await p.locator('[data-test=series-list]').scrollIntoViewIfNeeded(); await shot(p, 'sched_4_upcoming_series.png');
+  ok('no separate Repeating list', !(await p.locator('[data-test=series-list]').count()));
+  await shot(p, 'sched_4_upcoming_no_series.png');
 
   // validation: weekly with no weekday
   await openAdd('ZZTEST Sched invalid'); await p.click('[data-test=schedule-switch]'); await p.click('[data-test=repeat-weekly]');
