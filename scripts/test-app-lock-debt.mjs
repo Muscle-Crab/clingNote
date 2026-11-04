@@ -84,13 +84,13 @@ const finish = (db, i) => { Object.assign(day(db).tasks[i], { completed: true, c
   for (const x of [{ enabled: false }, { selectionCount: 0 }, { unlockedToday: true }, { friend: true }, { onBreak: true }]) eq(C.debtShield({ ...base, ...x }).want, false, JSON.stringify(x));
   eq(C.debtShield({ ...base, debt: null }).want, false); }
 
-// ---- wiring (existing UI text only: the shutdown line falls back to "Goal missed · 20/60 pts"; Start new session unchanged) ----
+// ---- wiring (existing UI text only: the shutdown line falls back to "Goal missed · 20/60 pts"; Start next session) ----
 { const hv = src('src/views/HomeView.vue'); const ue = src('src/composables/useEightHour.js'); const ch = src('src/components/eighthour/EightHourChrome.vue');
   ok(/debtShield\(\{ debt: eh\.appLockDebt\.value/.test(hv) && /clearDebtLocal\(debt\.sessionKey\)/.test(hv) && /eh\.reportProgress\(\)/.test(hv), 'syncAppLock uses the debt');
   ok(/want = true; endMs = Math\.max\(debt\.untilMs/.test(hv), 'debt keeps the shield on');
   ok(/const liveDebtSession[\s\S]{0,400}sessionGoal\(todayTasksForTarget\.value/.test(hv), 'client goal = server sessionGoal math');
   ok(/missed: false, opensAtMs: 0/.test(ue) && /cacheDebt\(d\)/.test(ue) && /appLockDebt,/.test(ue), 'useEightHour caches + exposes the debt');
-  ok(ch.includes("'Goal missed'") && ch.includes('Start new session'), 'existing UI text'); }
+  ok(ch.includes("'Goal missed'") && ch.includes('Start next session'), 'existing UI text'); }
 
 // ---- native hold plan (all users, app closed / force-quit) ----
 { const cap = core.DEBT_CAP_MS; const d = { sessionKey: '2026-10-23#0', target: 60, earned: 20, sinceMs: 1000 }; const on = { enabled: true, selectionCount: 2, now: 5000 };

@@ -169,13 +169,11 @@ const lastSunday = () => { const d = new Date(); d.setDate(d.getDate() - d.getDa
       ok('close: work after close earns nothing (+40 not counted)', /\+40 pts finished after close are not counted/.test(await p.locator('[data-test=gp-after]').innerText().catch(() => '')));
       await sleep(1500); const log = ((await user(uid)).gpLog || {})[ymd()] || {};
       ok('close: only the S before close counts (10)', log.earned === 10, JSON.stringify(log));
-      ok('close: picker lists the 3 open leftovers, none picked', await p.locator('[data-test=gp-carry-pick]').count() === 3 && await p.locator('[data-test=gp-carry-pick]:checked').count() === 0);
+      ok('close: no tomorrow picker on the card', await p.locator('[data-test=gp-carry-pick], [data-test=gp-carry]').count() === 0);
       ok('close: planning stays allowed after close (add button present)', await p.locator('[data-test=create-task-fab], .fab-add, [data-test=easy-add]').count() > 0);
-      await shot(p, 'close-picker', '[data-test=gp-row]');
-      const picks = p.locator('[data-test=gp-carry-pick]'); await picks.nth(0).check(); await picks.nth(2).check(); await p.click('[data-test=gp-carry]'); await sleep(2500);
+      await shot(p, 'close-card', '[data-test=gp-row]');
       const tm = (await tasksOf(uid, dayName(tmrw()))).map((t) => t.title); const td = (await tasksOf(uid)).map((t) => t.title);
-      ok('close: picked go to tomorrow (deduped by title)', tm.filter((x) => x === 'ZZTEST Leftover A').length === 1 && tm.filter((x) => x === 'ZZTEST Leftover C').length === 1, JSON.stringify(tm));
-      ok('close: unpicked stays today, nothing automatic', td.includes('ZZTEST Leftover B') && !tm.includes('ZZTEST Leftover B'), JSON.stringify(td));
+      ok('close: unfinished tasks stay in the list, nothing moved', ['A', 'B', 'C'].every((x) => td.includes('ZZTEST Leftover ' + x)) && tm.length === 1, JSON.stringify({ td, tm }));
       ok('close: no penalty for leftovers', !((await user(uid)).gpPenalty));
     }
     ok('close: no page errors', p.errs.length === 0, p.errs.join(' | ')); await p.context().close(); }

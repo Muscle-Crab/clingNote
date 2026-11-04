@@ -143,11 +143,12 @@ t('6 checklist gate, revoke detection + penalty once a day, friction countdown',
   assert.strictEqual(G.authCheck({ prev: 'approved', now: 'unsupported', day: 'd1' }).penalty, 0);
   assert.strictEqual(G.countdown(0, 0), 8); assert.strictEqual(G.countdown(0, 7500), 1); assert.strictEqual(G.countdown(0, 9000), 0); assert(G.FRICTION_SEC >= 5 && G.FRICTION_SEC <= 10);
 });
-t('7 close picker: nothing automatic; picked copies dedupe by title, reset completion', () => {
+t('7 close: leftovers listed, no carry picker (tasks stay for the next session)', () => {
   const today = [{ title: 'A', createdAt: 'c1' }, { title: 'B', completed: true }, { title: 'C', status: 'wontdo' }, { title: 'D', templateId: 'x' }, { title: 'E', createdAt: 'c5', completedAt: 5, timerActive: true }];
   assert.deepStrictEqual(G.leftovers(today).map((x) => x.title), ['A', 'E']);
-  const out = G.carryOver([today[0], today[4]], [{ title: 'a' }], 77);
-  assert.deepStrictEqual(out.map((x) => x.title), ['a', 'E']); assert.strictEqual(out[1].completedAt, null); assert.strictEqual(out[1].timerActive, false); assert.strictEqual(out[1].carriedFrom, 'c5'); assert(/^gp-carry-77/.test(out[1].createdAt));
+  assert.strictEqual(G.carryOver, undefined);
+  const row = src('src/components/home/GamePlanRow.vue'); assert(!/gp-carry|Pick what goes/.test(row));
+  const h = src('src/views/HomeView.vue'); assert(!/gpCarry|Pick what goes to tomorrow/.test(h)); assert(/Unfinished tasks stay on your list for the next session/.test(h));
   assert.strictEqual(G.nextDayName('2026-11-07'), 'Sun');
 });
 t('wiring: earned break (take-break action, shield lift, relock on expiry/launch, native re-shield, earned note)', () => {

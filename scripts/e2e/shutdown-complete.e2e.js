@@ -1,9 +1,7 @@
-// Complete during shutdown + tomorrow's planning window e2e (local emulators only, ZZTEST users). The REAL eight-hour-day function
+// Session end e2e: one-tap "Start next session" (hours only), no planning window (local emulators only, ZZTEST users). The REAL eight-hour-day function
 // runs in-process against the emulator with a mocked clock. Lock-in 07:00-15:00, shut until the next 07:00 wake.
-// Covers: custom plan time (Settings row) opens at 18:30 not 18:29; default 8 PM: 7:59 PM shut overlay, 8:00 PM auto-opens on
-// tomorrow's tab; add a task to tomorrow, complete tomorrow's task early (kept as tomorrow's), complete an open shut-day task in
-// place; the lock-in result does not change; once per evening; 11:59 PM still open; 12:00 AM hard close (overlay back).
-// MODE=before against the base build only takes the "before" shots (no planning path, completion hidden behind the overlay).
+// Covers: the shut overlay offers only "Start next session" (hours 5..12); no plan/schedule row, no auto-open window; starting
+// runs a new session now for the chosen hours; tomorrow is untouched. MODE=before against the base build only takes the "before" shot.
 // Run: EMU_AUTH_PORT=9611 EMU_FS_PORT=8611 WEB_PORT=8613 CHROME=... SHOTS=/workspace/plan-shots/shutdown-complete/ node scripts/e2e/shutdown-complete.e2e.js
 const H = require('./manager-pal.e2e.js'); const { chromium } = require('playwright-core');
 const { db, admin, sleep, seedUser, emailLogin, idTokenFor, B } = H; const ok = (cond, name) => H.ok(name, cond);
@@ -52,73 +50,26 @@ const tasksOf = async (uid, day) => ((await db.doc(`weeklyRoutines/${uid}_${day}
 
   if (BEFORE) {
     await at(20, 0); ok(await shutOn(), 'before: shut overlay at 8 PM');
-    ok(!(await planRow()), 'before: no planning path');
-    ok(!(await p.locator('button.task-check').isVisible().catch(() => false)), 'before: completion not reachable');
+    ok(await planRow(), 'before: "Plan next session" row present');
     await p.screenshot({ path: SHOTS + 'before-1-shut-8pm.png' });
-    await at(21, 0, '/profile/' + uid); await p.screenshot({ path: SHOTS + 'before-2-settings.png' });
     await br.close(); const f = H.results.filter((r) => !r.pass); console.log(`shutdown-complete (before) e2e: ${H.results.length - f.length}/${H.results.length} passed`); process.exit(f.length ? 1 : 0);
   }
 
-  // 0) Settings: custom plan time 18:30 inside the existing lock-in card
-  await at(8, 0, '/profile/' + uid);
-  const pt = p.locator('[data-test=plan-time]'); await pt.scrollIntoViewIfNeeded().catch(() => {});
-  ok(await pt.isVisible().catch(() => false), 'settings: "Plan tomorrow at" row in the lock-in card');
-  ok((await pt.inputValue()) === '20:00', 'settings: default 8:00 PM');
-  await p.locator('[data-test=plan-time-row]').screenshot({ path: SHOTS + 'after-0-settings-row.png' }).catch(() => {});
-  await pt.fill('18:30'); await pt.dispatchEvent('change');
-  ok(await waitFor(async () => ((await db.doc(`users/${uid}`).get()).data() || {}).planOpenTime === '18:30'), 'settings: plan time saved (18:30)');
   const earned0 = JSON.stringify(((await ehDoc(uid)).lock || {}).earned ?? null);
-
-  // 1) shut after the lock-in
-  await at(15, 30); ok(await shutOn(), '15:30 shut overlay'); ok(!(await planRow()), '15:30 no planning yet');
-  await p.screenshot({ path: SHOTS + 'after-1-shut-1530.png' });
-  // 2) custom open time
-  await at(18, 29); ok(await shutOn() && !(await planRow()), 'custom 18:29: still shut');
-  await at(18, 30); ok(!(await shutOn()), 'custom 18:30: planning auto-opens');
-  ok(/Planning tomorrow/.test(await p.locator('body').innerText()), 'custom 18:30: pill says Planning tomorrow');
-  await p.screenshot({ path: SHOTS + 'after-2-custom-1830-open.png' });
-
-  // back to the default 8 PM for the boundary checks (a fresh evening: clear the once-per-evening mark)
-  await db.doc(`users/${uid}`).set({ planOpenTime: '20:00' }, { merge: true });
-  await p.evaluate(() => localStorage.removeItem('clingnote.planWin.seen'));
-  await at(19, 59); ok(await shutOn(), '7:59 PM: shut overlay'); ok(!(await planRow()), '7:59 PM: no plan row');
-  await p.screenshot({ path: SHOTS + 'after-3-shut-759pm.png' });
-  await at(20, 0); ok(!(await shutOn()), '8:00 PM: auto-opens');
-  ok(await waitFor(async () => (await p.locator('.day-tab--selected .day-tab-name').textContent().catch(() => '')).trim() === tomorrow), '8:00 PM: on tomorrow\'s tab');
-  ok(await waitFor(() => p.locator('.task-card', { hasText: 'ZZTEST Tomorrow prep' }).isVisible().catch(() => false)), 'tomorrow\'s tasks shown');
-  await p.screenshot({ path: SHOTS + 'after-4-8pm-planning-tomorrow.png' });
-
-  // 3) plan: add a task to tomorrow
-  await p.click('[data-test=create-task-fab]'); await sleep(900); await p.fill('#nt-name', 'ZZTEST Planned tonight');
-  await p.locator('.nt-form button[type=submit]').click(); await sleep(2500); await dd(p);
-  ok(await waitFor(async () => (await tasksOf(uid, tomorrow)).some((t) => t.title === 'ZZTEST Planned tonight')), 'added a task to tomorrow');
-  // 4) complete tomorrow's task early -> stored, stamped completedFor tomorrow
-  const tc = p.locator('.task-card', { hasText: 'ZZTEST Tomorrow prep' }).locator('[data-test=task-check]');
-  ok(await tc.isVisible().catch(() => false), 'tomorrow\'s task has the done check in the window');
-  await tc.click(); 
-  ok(await waitFor(async () => { const t = (await tasksOf(uid, tomorrow)).find((x) => x.title === 'ZZTEST Tomorrow prep'); return t && t.completed && t.completedFor === tomorrowYmd; }), 'completed tomorrow\'s task (completedFor = tomorrow)');
-  await sleep(800); await p.screenshot({ path: SHOTS + 'after-5-completed-tomorrow-task.png' });
-  // 5) complete an open shut-day task, in place
-  await p.locator('.day-tab--today').click(); await sleep(2500); await dd(p);
-  const before = await tasksOf(uid, today);
-  const gc = p.locator('.task-card', { hasText: 'ZZTEST Gym' }).locator('[data-test=task-check]'); await gc.click();
-  ok(await waitFor(async () => (await tasksOf(uid, today)).find((x) => x.title === 'ZZTEST Gym')?.completed === true), 'completed an open shut-day task');
-  const after = await tasksOf(uid, today); ok(after.length === before.length && after.map((t) => t.id).join() === before.map((t) => t.id).join(), 'shut day: completed in place (no shrink/reorder)');
-  ok(JSON.stringify(((await ehDoc(uid)).lock || {}).earned ?? null) === earned0, 'lock-in result unchanged by late completions');
-  await sleep(600); await p.screenshot({ path: SHOTS + 'after-6-completed-shutday-task.png' });
-  // tomorrow's early completion survives switching tabs (old-week reset skips it)
-  await p.locator('.day-tab', { hasText: tomorrow }).first().click(); await sleep(2500);
-  ok((await tasksOf(uid, tomorrow)).find((x) => x.title === 'ZZTEST Tomorrow prep')?.completed === true, 'early completion kept after reopening tomorrow\'s tab');
-
-  // 6) once per evening: closed via the pill -> stays closed on reload, the overlay offers "Plan tomorrow"
-  await p.locator('.ehp, [data-test=eh-pill]').first().click({ timeout: 4000 }).catch(() => {}); await sleep(800);
-  await at(21, 0); ok(await shutOn() && await planRow(), 'once per evening: no second auto-open, plan row offered');
-  await p.screenshot({ path: SHOTS + 'after-7-reopen-row.png' });
-  await p.click('[data-test=eh-plan-open]'); await sleep(1500); ok(!(await shutOn()), 'plan row reopens planning');
-  // 7) 11:59 PM still open, 12:00 AM hard close
-  await at(23, 59); ok(!(await shutOn()) || await planRow(), '11:59 PM: planning still available');
-  await at(24, 0); ok(await shutOn(), '12:00 AM: hard close, overlay back'); ok(!(await planRow()), '12:00 AM: no plan row');
-  await p.screenshot({ path: SHOTS + 'after-8-midnight-closed.png' });
+  // 1) session over: one action only, "Start next session" with the hours picker (no plan / schedule step, no time or date input)
+  await at(15, 30); ok(await shutOn(), '15:30 shut overlay'); ok(!(await planRow()), 'no "Plan next session" row');
+  ok(!(await p.locator('[data-test=eh-sched-open]').count()) && !(await p.locator('[data-test=eh-shutdown] input').count()), 'no schedule row, no time/date input');
+  ok(await p.locator('[data-test=eh-next-session]').count() === 1, 'one "Start next session" button');
+  await p.screenshot({ path: SHOTS + 'after-1-shut.png' });
+  await at(20, 0); ok(await shutOn() && !(await planRow()), '8 PM: still shut, no planning auto-open');
+  // 2) unfinished tasks stay in today's list (nothing moved to tomorrow)
+  const tmBefore = (await tasksOf(uid, tomorrow)).map((t) => t.title).join();
+  // 3) start the next session: 6 h from now
+  await p.selectOption('[data-test=eh-next-hours]', '6'); await p.click('[data-test=eh-next-session]');
+  ok(await waitFor(async () => { const l = (await ehDoc(uid)).lock; return l && l.index === 1 && l.endMs - l.startMs === 6 * 3600e3 && Math.abs(l.startMs - now()) < 120000; }), 'next session starts now for 6 h');
+  ok(await waitFor(async () => !(await shutOn())), 'overlay gone, session running');
+  ok((await tasksOf(uid, tomorrow)).map((t) => t.title).join() === tmBefore, 'tomorrow untouched');
+  await sleep(800); await dd(p); await p.screenshot({ path: SHOTS + 'after-2-next-running.png' });
 
   await br.close(); const f = H.results.filter((r) => !r.pass); console.log(`shutdown-complete e2e: ${H.results.length - f.length}/${H.results.length} passed`); process.exit(f.length ? 1 : 0);
 })().catch((e) => { console.error(e); process.exit(1); });

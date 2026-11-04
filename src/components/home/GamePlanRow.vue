@@ -42,12 +42,6 @@
         <button type="button" class="gp-btn" data-test="gp-review-apply" @click="$emit('review', accepted)">Start next week</button>
       </template>
 
-      <template v-if="phase === 'closed' && left.length">
-        <p class="gp-h">Pick what goes to {{ tomorrow }}. The rest stays here, no penalty.</p>
-        <label v-for="t in left" :key="t.key" class="gp-check"><input type="checkbox" v-model="picked" :value="t.key" data-test="gp-carry-pick"> {{ t.title }}</label>
-        <button type="button" class="gp-btn" data-test="gp-carry" :disabled="!picked.length" @click="$emit('carry', picked); picked = []">Move {{ picked.length || '' }} to {{ tomorrow }}</button>
-      </template>
-
       <template v-if="locked && friendOn">
         <p v-if="unlock.status === 'counting'" class="gp-line" data-test="gp-countdown">Opening in {{ unlock.left }}s… take a breath.</p>
         <p v-else-if="unlock.status === 'pending'" class="gp-line" data-test="gp-pending">Waiting for {{ friend }}. <a :href="unlock.url" data-test="gp-link" @click.prevent="$emit('share')">Share link again</a></p>
@@ -68,16 +62,15 @@ import VaultApps from '@/components/vault/VaultApps.vue';
 import { computed, ref } from 'vue';
 const props = defineProps({
   text: { type: String, default: '' }, phase: { type: String, default: 'work' }, review: { type: Object, default: null },
-  leftovers: { type: Array, default: () => [] }, tomorrow: { type: String, default: 'tomorrow' }, locked: { type: Boolean, default: false },
+  locked: { type: Boolean, default: false },
   gate: { type: Boolean, default: false }, friend: { type: String, default: '' }, friendOn: { type: Boolean, default: false }, unlock: { type: Object, default: () => ({ status: '' }) },
   penalty: { type: Number, default: 0 }, afterClose: { type: Number, default: 0 }, minutes: { type: Array, default: () => [10, 20, 30] },
   breakBank: { type: Number, default: 0 }, breakMin: { type: Number, default: 10 }, breakOn: { type: Boolean, default: false }, gift: { type: Boolean, default: false }, screenReady: { type: Number, default: 0 }, ready: { type: String, default: '' }, history: { type: Array, default: () => [] },
   vault: { type: Object, default: null },
 });
-defineEmits(['carry', 'review', 'ask', 'share', 'take-break', 'end-break', 'claim-screen', 'vault-start', 'vault-stop']);
-const open = ref(false); const picked = ref([]); const accepted = ref([]); const histOpen = ref(false); const vaultOpen = ref(false);
-const left = computed(() => props.leftovers);
-const attn = computed(() => !!props.review || (props.phase === 'closed' && props.leftovers.length > 0) || (props.friendOn && props.unlock.status === 'approved'));
+defineEmits(['review', 'ask', 'share', 'take-break', 'end-break', 'claim-screen', 'vault-start', 'vault-stop']);
+const open = ref(false); const accepted = ref([]); const histOpen = ref(false); const vaultOpen = ref(false);
+const attn = computed(() => !!props.review || (props.friendOn && props.unlock.status === 'approved'));
 </script>
 
 <style scoped>

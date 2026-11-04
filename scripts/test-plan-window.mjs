@@ -54,15 +54,16 @@ t('completionOnlyChange: only completion fields may differ', () => {
   assert.equal(L.completionOnlyChange(tasks, []), false);
   assert.equal(L.completionOnlyPatch({ completed: true, timerActive: false }), true); assert.equal(L.completionOnlyPatch({ points: 5 }), false);
 });
-t('pill: planning state', () => { const p = C.pillState({ shut: true, planning: true }); assert.equal(p.main, 'Plan next session'); assert.equal(C.pillState({ shut: true, untilLabel: '7 AM' }).main, 'Shut'); });
+t('pill: no planning state any more', () => { assert.equal(C.pillState({ shut: true, planning: true }).main, 'Shut'); assert.equal(C.pillState({ shut: true, untilLabel: '7 AM' }).main, 'Shut'); });
 t('rules: shut day frozen except in-place, other days writable', () => {
   const r = src('firestore.rules'); assert.ok(/function dayFrozen\(lk, dayName\)[\s\S]*?shutUntil/.test(r));
   assert.ok((r.match(/!dayFrozen\(eightHourLock\(/g) || []).length >= 3); assert.ok(/lockedDayUnchanged\(\)/.test(r));
 });
 t('wiring: settings row + chrome + home', () => {
   const pf = src('src/views/Profile.vue'); assert.ok(pf.includes('v-if="false" class="pf-row pf-row--divided" data-test="plan-time-row"'), 'plan time row hidden');
-  const ch = src('src/components/eighthour/EightHourChrome.vue'); assert.ok(ch.includes('eh-plan-open') && ch.includes('Start new session'));
-  const hv = src('src/views/HomeView.vue'); assert.ok(hv.includes('canPlanDay') && hv.includes('goTomorrowTab'));
+  const ch = src('src/components/eighthour/EightHourChrome.vue'); assert.ok(!ch.includes('eh-plan-open') && !ch.includes('Plan next session') && !ch.includes('eh-sched-open') && ch.includes('Start next session'));
+  assert.ok(/startNextSession\(sch\.hours\)/.test(ch) && /h >= 5 && h <= 12/.test(ch) && !/type="time"|type="date"/.test(ch), 'only input: hours 5..12, starts now');
+  const hv = src('src/views/HomeView.vue'); assert.ok(hv.includes('canPlanDay') && !hv.includes('goTomorrowTab') && !hv.includes('planWin'));
   assert.ok(!/const toggleTaskCompletion[\s\S]{0,400}blockIfShut\(/.test(hv), 'completion must not be blocked by shutdown');
 });
 t('early completion of tomorrow is kept at the rollover (completedFor), old ones still reset', () => {
@@ -73,8 +74,7 @@ t('early completion of tomorrow is kept at the rollover (completedFor), old ones
   assert.equal(D.isStaleCompletion({ completed: true, completedAt: fri.toISOString() }, 6, sat), true, 'without completedFor a Friday completion is stale on Saturday');
   assert.ok(L.COMPLETION_FIELDS.includes('completedFor'));
 });
-t('wiring: tomorrow tab gets the done check only in the planning window', () => {
-  const tc = src('src/components/home/TaskCard.vue'); assert.ok(tc.includes('v-if="isTodayTab || canComplete"'));
-  const hv = src('src/views/HomeView.vue'); assert.ok(hv.includes(':can-complete="planningTomorrowTab"') && hv.includes('task.completedFor =') && /keepEarly\(task\) \? task/.test(hv));
+t('wiring: no planning window, tomorrow tab is not opened from the shutdown screen', () => {
+  const hv = src('src/views/HomeView.vue'); assert.ok(!hv.includes('planningTomorrowTab') && hv.includes('task.completedFor =') && /keepEarly\(task\) \? task/.test(hv));
 });
 console.log(`\n${n} plan-window tests passed`);

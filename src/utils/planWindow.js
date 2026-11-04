@@ -1,8 +1,7 @@
 // Planning the next session during the post-session shutdown (pure + a tiny reactive state).
 // While ClingNote is shut (a session ended and no new one has started) the task screens stay behind the shutdown screen, EXCEPT:
 //   - completing tasks always works (any day, widget / notification / in-app), see eightHourLock.js;
-//   - "Plan next session" on the shutdown screen opens Home on the day the next session will run, any time (no clock window).
-import { reactive } from 'vue';
+//   - there is no "Plan next session" step: the shutdown screen's one action is "Start next session" (pick hours, starts now).
 
 export const PLAN_OPEN_DEFAULT = '20:00';
 let planTime = PLAN_OPEN_DEFAULT; // the signed-in user's Settings value (users/{uid}.planOpenTime), mirrored by lockIn.js
@@ -34,7 +33,5 @@ export const planWindowState = ({ nowMs, shut, tz, key }) => {
 // Auto-open at most once per evening.
 export const shouldAutoOpen = ({ open, eveningKey, seenKey }) => !!open && seenKey !== eveningKey;
 
-// Reactive UI state: active = the user is in the window right now (overlay hidden, Home on tomorrow's tab).
-export const planWin = reactive({ active: false, eveningKey: '' });
 export const readSeen = () => { try { return localStorage.getItem(PLAN_SEEN_KEY) || ''; } catch (e) { return ''; } };
 export const markSeen = (k) => { try { localStorage.setItem(PLAN_SEEN_KEY, k); } catch (e) { /* ignore */ } };

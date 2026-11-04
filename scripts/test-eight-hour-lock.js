@@ -92,7 +92,7 @@ lockMod.setLockSource(() => ({ lock: { dayName: 'Fri', startMs: start, endMs: en
   });
   await t('boss + shutdown paths are not blocked by the lock', () => {
     assert.ok(!/blockIfLocked|isDayLocked/.test(body('setBoss')), 'boss still allowed (not a locked field)');
-    assert.ok(/carryTasksToDay/.test(home), 'shutdown carry still used (copy-only while locked)');
+    assert.ok(!/shutdownCarry/.test(home) && !/carryTasksToDay\(/.test(home), 'shutdown carries nothing (unfinished tasks stay on the list)');
   });
   const card = read('src/components/home/EightHourCard.vue');
   await t('card exposes no edit controls while running', () => {

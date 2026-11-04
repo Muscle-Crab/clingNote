@@ -4,7 +4,7 @@ import { ref } from 'vue';
 // 3 each finished focus session EARNS a 10 min break (banked; the user chooses when to take it; never costs points)   4 hard close = day start + 8 h, nothing earned after
 // 5 points per finished task by size (S 10 / M 20 / L 40); goal = max(min, min(90% of trailing 14-day median, today's planned load))
 // 6 locking: checklist gate, Screen Time revoke penalty, optional friend-approved early unlock (off by default), friction countdown
-// 7 at close the user picks which leftovers go to tomorrow (nothing rolls over by itself, no penalty)
+// 7 at close unfinished tasks stay in the list for the next session (nothing moves to another day, no penalty)
 // 8 shift-relative: everything anchors to the user's day start (an evening shift may close after midnight)
 
 export const GP_DEFAULTS = { dayStart: '09:00', focusMin: 50, sessions: 2, breakMin: 10, breakEvery: 50, closeHours: 8, reviewDow: 0, reviewTime: '18:00', minGoal: 50, friend: null, friendUnlock: false };
@@ -238,15 +238,8 @@ export const FRICTION_SEC = 8;
 export const countdown = (startMs, nowMs, sec = FRICTION_SEC) => Math.max(0, Math.ceil((startMs + sec * 1000 - nowMs) / 1000));
 export const UNLOCK_MINUTES = [10, 20, 30];
 
-// ---- 7. at close: pick what goes to tomorrow (nothing automatic, no penalty) ----
+// ---- 7. at close: open tasks (they simply stay in the list for the next session; nothing moves, no penalty) ----
 export const leftovers = (tasks = []) => (tasks || []).filter((t) => t && !t.completed && t.status !== 'wontdo' && t.status !== 'pending' && !t.templateId);
-export const carryOver = (picked = [], tomorrowTasks = [], stamp = Date.now()) => {
-  const have = new Set((tomorrowTasks || []).map((t) => String(t && t.title).toLowerCase()));
-  const add = (picked || []).filter((t) => t && !have.has(String(t.title).toLowerCase())).map((t, i) => {
-    const c = { ...t, completed: false, completedAt: null, completedFor: null, timerActive: false, timerStartedAt: null, timerEndTime: null, createdAt: `gp-carry-${stamp}-${i}`, carriedFrom: t.createdAt || null };
-    delete c.id; return c; });
-  return [...(tomorrowTasks || []), ...add];
-};
 export const nextDayName = (dayKey) => { const [y, m, d] = dayKey.split('-').map(Number); return WEEK[new Date(y, m - 1, d + 1).getDay()]; };
 
 // Compact Home row text.

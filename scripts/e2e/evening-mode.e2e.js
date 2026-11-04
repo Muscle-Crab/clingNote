@@ -1,8 +1,7 @@
 // Evening mode e2e (local emulators only, ZZTEST users). The REAL eight-hour-day function runs in-process against the emulator with
 // a mocked clock (the client follows the server clock through its offset).
 // Covers: split day in the start prompt (a later block fixed at confirm), the gap between blocks keeps ClingNote open with a
-// "Next <time>" pill, the later block auto-starts at its fixed time, then "Schedule next lock-in" from the shut overlay opens the app
-// until that block starts; a running block can't be cancelled.
+// "Next <time>" pill, the later block auto-starts at its fixed time, then the shut overlay offers only "Start next session" (hours 5..12, starts now).
 // Run: EMU_AUTH_PORT=9199 EMU_FS_PORT=8185 WEB_PORT=8199 CHROME=... node scripts/e2e/evening-mode.e2e.js
 const H = require('./manager-pal.e2e.js'); const { chromium } = require('playwright-core');
 const { db, admin, sleep, seedUser, emailLogin, idTokenFor, B } = H; const ok = (cond, name) => H.ok(name, cond);
@@ -76,23 +75,19 @@ const waitFor = async (f, ms = 15000) => { const t = Date.now(); while (Date.now
   ok(d.sessions && d.sessions[Object.keys(d.sessions)[0]].index === 0, 'block 0 archived by day+index');
   await sleep(1500); await dd(p); await p.screenshot({ path: SHOTS + '4-block2-running.png' });
 
-  // 4) day over: shut overlay offers one compact "Schedule next lock-in" row
+  // 4) day over: the shut overlay's only action is "Start next session" (pick hours 5..12, starts now; no date, time or schedule step)
   clock = atNY(20, 2); await p.reload({ waitUntil: 'load' });
-  // 8 PM opens tomorrow's planning window once; close it via the pill to get back to the shut overlay
-  await sleep(2500); if (/Planning tomorrow/.test(await p.locator('body').innerText())) { await p.locator('.ehp, [data-test=eh-pill]').first().click({ timeout: 4000 }).catch(() => {}); }
   await p.waitForSelector('[data-test=eh-shutdown]', { timeout: 20000 }); await sleep(800); await dd(p);
-  await p.screenshot({ path: SHOTS + '5-shut-schedule-row.png' });
-  await p.click('[data-test=eh-sched-open]'); await p.fill('[data-test=eh-sched-time]', '21:00'); await p.selectOption('[data-test=eh-sched-hours]', '1');
-  await sleep(300); await p.screenshot({ path: SHOTS + '6-shut-schedule-form.png' });
-  // anti-cheat: a block after the next wake can't be used to escape the shut-down
-  // tomorrow 06:00 is past the next wake (00:00)
+  ok(!(await p.locator('[data-test=eh-sched-open], [data-test=eh-plan-open], [data-test=eh-shutdown] input').count()), 'no schedule / plan / time input on the shut screen');
+  const opts = await p.locator('[data-test=eh-next-hours] option').evaluateAll((o) => o.map((x) => Number(x.value)));
+  ok(opts[0] === 5 && opts[opts.length - 1] === 12, 'next session hours 5..12');
+  await p.screenshot({ path: SHOTS + '5-shut-next-session.png' });
+  // anti-cheat: a block after the next wake can't be used to escape the shut-down (server API, no UI)
   const late = await api(uid, { action: 'schedule', blocks: [{ time: '06:00', hours: 1 }] }); ok(late.code >= 400, 'block past the next wake refused');
-  await p.click('[data-test=eh-sched-go]');
-  ok(await waitFor(async () => ((await ehDoc(uid)).lock?.pending || []).some((b) => b.startMs === atNY(21))), 'scheduled 21:00 block stored');
-  ok(await waitFor(async () => !(await p.locator('[data-test=eh-shutdown]').count())), 'app opens until the block starts');
-  await sleep(800); await dd(p); await p.screenshot({ path: SHOTS + '7-scheduled-gap.png' });
-  clock = atNY(21, 0) + 20000; await p.reload({ waitUntil: 'load' });
-  ok(await waitFor(async () => (await ehDoc(uid)).lock?.index === 2), 'scheduled block auto-starts at 21:00');
+  await p.selectOption('[data-test=eh-next-hours]', '5'); await p.click('[data-test=eh-next-session]');
+  ok(await waitFor(async () => { const l = (await ehDoc(uid)).lock; return l && l.index === 2 && l.startMs >= atNY(20, 2) - 60000 && l.endMs - l.startMs === 5 * 3600e3; }), 'next session starts now for 5 h');
+  ok(await waitFor(async () => !(await p.locator('[data-test=eh-shutdown]').count())), 'app opens for the new session');
+  await sleep(800); await dd(p); await p.screenshot({ path: SHOTS + '6-next-session-running.png' });
 
   await br.close(); const f = H.results.filter((r) => !r.pass); console.log(`evening-mode e2e: ${H.results.length - f.length}/${H.results.length} passed`); process.exit(f.length ? 1 : 0);
 })().catch((e) => { console.error(e); process.exit(1); });

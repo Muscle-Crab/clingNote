@@ -127,7 +127,6 @@ export const startNow = async (hours, blocks, opts = {}) => {
   } finally { st.busy = false; }
 };
 // Evening mode: fix later lock-in block(s) [{ time: 'HH:MM', hours }]. Server-only (no offline fallback: a schedule must be server-checked).
-export const scheduleNext = async (blocks) => { st.busy = true; try { const d = await call('schedule', { blocks }); apply(d); return d; } finally { st.busy = false; } };
 // "Start new session" from the shutdown screen: starts the next session NOW (server-checked, no clock window, no session cap).
 export const startNextSession = async (hours) => { st.busy = true; try { const d = await call('nextSession', hours ? { hours } : {}); apply(d); return d; } finally { st.busy = false; } };
 export const reportProgress = async () => { try { apply(await call('progress')); } catch (e) { /* server recounts at the end of the window anyway */ } };
@@ -194,7 +193,7 @@ export const useEightHour = () => {
   const session = computed(() => st.data?.session || null);
   const debtKnown = computed(() => !!(st.loaded && st.data && !st.data.offline && st.uid === curUid() && Object.prototype.hasOwnProperty.call(st.data, 'appLockDebt')));
   const appLockDebt = computed(() => (debtRev.value, mergeDebt({ server: st.data && st.data.appLockDebt, serverKnown: debtKnown.value, cache: readDebtCache(curUid()) })));
-  return { st, appLockDebt, debtKnown, dayHours, nextBlock, pendingBlocks, scheduleNext, startNextSession, session, warning, hoursPref, data, plan, lock, phase, phaseInfo, running, remainingMs, countdown, endsLabel, startsLabel, stats, shutdown, reward: computed(() => st.data?.reward || ''),
+  return { st, appLockDebt, debtKnown, dayHours, nextBlock, pendingBlocks, startNextSession, session, warning, hoursPref, data, plan, lock, phase, phaseInfo, running, remainingMs, countdown, endsLabel, startsLabel, stats, shutdown, reward: computed(() => st.data?.reward || ''),
     refresh, savePlan, startNow, reportProgress, nowMs };
 };
 

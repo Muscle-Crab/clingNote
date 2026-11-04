@@ -14,15 +14,13 @@
         <p class="shutdown-h">Done ({{ done.length }})</p>
         <ul class="shutdown-list"><li v-for="t in done" :key="taskKey(t)">✓ {{ t.title }}</li>
           <li v-if="!done.length" class="muted">Nothing finished yet.</li></ul>
-        <p class="shutdown-h">Unfinished ({{ openTasks.length }}) — carry to tomorrow?</p>
-        <ul class="shutdown-list"><li v-for="t in openTasks" :key="taskKey(t)">
-          <label><input type="checkbox" :checked="carry[taskKey(t)]" @change="$emit('update:carry', { ...carry, [taskKey(t)]: $event.target.checked })" /> {{ t.title }}</label></li>
+        <p class="shutdown-h">Unfinished ({{ openTasks.length }}) · stays on your list for the next session</p>
+        <ul class="shutdown-list"><li v-for="t in openTasks" :key="taskKey(t)">{{ t.title }}</li>
           <li v-if="!openTasks.length" class="muted">All clear. 🎉</li></ul>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn-secondary shutdown-cancel" @click="$emit('close')">Cancel</button>
-        <button class="btn-secondary" :disabled="busy" @click="$emit('finish', false)">Finish day</button>
-        <button class="btn-primary" :disabled="busy" @click="$emit('finish', true)">Carry selected &amp; finish</button>
+        <button class="btn-primary" :disabled="busy" @click="$emit('finish')">Finish day</button>
       </div>
     </div>
   </div>
@@ -37,10 +35,9 @@ const props = defineProps({
   open: { type: Boolean, default: false },
   done: { type: Array, default: () => [] },
   openTasks: { type: Array, default: () => [] },
-  carry: { type: Object, default: () => ({}) },
   busy: { type: Boolean, default: false },
 });
-const emit = defineEmits(['start', 'dismiss', 'close', 'finish', 'update:carry']);
+const emit = defineEmits(['start', 'dismiss', 'close', 'finish']);
 // Escape closes the dialog (not while a finish is saving)
 const onKey = (e) => { if (e.key === 'Escape' && !props.busy) emit('close'); };
 watch(() => props.open, (o) => { if (typeof document === 'undefined') return; document.removeEventListener('keydown', onKey); if (o) document.addEventListener('keydown', onKey); }, { immediate: true });

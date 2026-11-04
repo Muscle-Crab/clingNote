@@ -16,17 +16,14 @@
       <p>Session done. Start a new session whenever you're ready.</p>
       <p class="ehs-res" :class="shut.met ? 'ok' : 'miss'" data-test="eh-shut-result">{{ shut.missed ? `Missed ${shut.target} pts: apps open at ${shut.opensAtLabel}` : !(shut.target > 0) ? 'No points goal this session' : `${shut.met ? 'Goal met' : 'Goal missed'} · ${shut.earned}/${shut.target} pts` }}</p>
       <p v-if="recap" class="ehs-recap" data-test="eh-shut-recap">{{ recap }}</p>
-      <button v-if="nextOk" type="button" class="ehs-row" data-test="eh-next-session" :disabled="eh.st.busy" @click="doNextSession">Start new session <span aria-hidden="true">›</span></button>
-      <!-- Evening mode: one compact row; tapping it reveals time + hours inline. A scheduled block can't be cancelled or shortened. -->
-      <button v-if="schedOk && !sch.open" type="button" class="ehs-row" data-test="eh-sched-open" @click="openSched">Schedule next lock-in <span aria-hidden="true">›</span></button>
-      <form v-else-if="schedOk" class="ehs-sched" data-test="eh-sched" @submit.prevent="doSchedule">
-        <input v-model="sch.time" type="time" required aria-label="Start time" data-test="eh-sched-time">
-        <select v-model.number="sch.hours" aria-label="Hours" data-test="eh-sched-hours"><option v-for="h in BLOCK_HOUR_OPTIONS" :key="h" :value="h">{{ hoursLabel(h) }}h</option></select>
-        <button type="submit" :disabled="eh.st.busy" data-test="eh-sched-go">Schedule</button>
-        <small>Opens your tasks until it starts. Can't be cancelled or shortened.</small>
+      <!-- One tap: pick how long, start NOW. No date, no clock time, no planning or scheduling step. Unfinished tasks stay in the list. -->
+      <form v-if="nextOk" class="ehs-sched" data-test="eh-next" @submit.prevent="doNextSession">
+        <select v-model.number="sch.hours" aria-label="Session length" data-test="eh-next-hours"><option v-for="h in NEXT_HOUR_OPTIONS" :key="h" :value="h">{{ hoursLabel(h) }}h</option></select>
+        <button type="submit" data-test="eh-next-session" :disabled="eh.st.busy">Start next session</button>
+        <!-- Lock apps carry over from the last session; the picker opens ONLY from this optional link (never on its own). -->
+        <small v-if="canPick" data-test="eh-next-apps">Same lock apps as last session · <button type="button" class="ehs-add" data-test="eh-add-apps" @click="addApps">Add apps</button></small>
       </form>
-      <button v-if="planState.open" type="button" class="ehs-row" data-test="eh-plan-open" @click="openPlanning">Plan next session <span aria-hidden="true">›</span></button>
-      <p v-if="sch.err" class="ehs-err" role="alert" data-test="eh-sched-err">{{ sch.err }}</p>
+      <p v-if="sch.err" class="ehs-err" role="alert" data-test="eh-next-err">{{ sch.err }}</p>
       <nav class="ehs-links">
         <router-link :to="profileLink">Settings</router-link><router-link to="/support">Support</router-link><router-link to="/privacy-policy">Privacy</router-link><router-link to="/sub">Premium</router-link>
         <button type="button" @click="signOutNow" data-test="eh-shut-signout">Sign out</button>
@@ -50,12 +47,12 @@ import { localYMD } from '@/utils/localDate';
 import { recapText, breaksOn } from '@/utils/gamePlan';
 import { pillState, SHUT_ROUTES, PILL_ROUTES, SEEN_KEY } from '@/utils/eightHourChrome';
 import { speak } from '@/composables/useSpeech';
-import { hoursLabel, WARN_MINUTES, BLOCK_HOUR_OPTIONS } from '@/utils/eightHour';
+import { hoursLabel, WARN_MINUTES, HOUR_OPTIONS } from '@/utils/eightHour';
 import { scheduleLocal } from '@/utils/localNotify';
 import { homeDayFor } from '@/utils/homeDay';
 import { lockIn } from '@/utils/lockIn';
+import { clingLock, lockAvailable } from '@/native/clingNative';
 import { getTodayId } from '@/utils/dateTime';
-import { planWindowState, planWin } from '@/utils/planWindow';
 
 const route = useRoute(); const router = useRouter();
 const eh = useEightHour();
@@ -82,35 +79,24 @@ const pill = computed(() => {
   const l = eh.lock.value; const hd = homeDayFor(getTodayId());
   return pillState({ wrapped: hd.wrapped, allDone: hd.allDone, lockInOn: lockIn.value.enabled, phase: eh.phase.value, running: eh.running.value, countdown: eh.countdown.value, startsLabel: eh.startsLabel.value, hasPlan: !!eh.plan.value,
     shut: !!eh.shutdown.value, untilLabel: eh.shutdown.value?.untilLabel, nextLabel: eh.nextBlock.value?.startLabel || '', earned: l ? l.earned || 0 : 0, target: l ? l.target || 0 : 0,
-    hours: eh.dayHours.value, planning: planningNow.value,
+    hours: eh.dayHours.value,
     pace: l && eh.running.value ? paceOf({ earned: l.earned || 0, target: l.target || 0, startMs: l.startMs, endMs: l.endMs, nowMs: eh.nowMs() }) : null });
 });
 const shut = computed(() => eh.shutdown.value);
-// Planning the next session (see utils/planWindow.js): open the whole time ClingNote is shut, only when the user taps "Plan next session"
-// (no auto-open at a clock time, no planning notification). Keyed by the ended session so a new session closes it.
-const shutKey = computed(() => { const l = eh.lock.value || (shut.value && shutLock()); return l ? `${l.dayKey}#${l.index || 0}` : ''; });
-const planState = computed(() => planWindowState({ nowMs: (shut.value, eh.nowMs()), shut: !!shut.value, tz: eh.lock.value?.tz || eh.plan.value?.tz, key: shutKey.value }));
-const planningNow = computed(() => !!(planWin.active && planState.value.open && planWin.eveningKey === planState.value.eveningKey));
-const openPlanning = () => { planWin.eveningKey = planState.value.eveningKey; planWin.active = true; if (route.name !== 'home') router.push({ name: 'home' }).catch(() => {}); };
-const closePlanning = () => { planWin.active = false; };
-watch(() => planState.value.open, (open) => { if (!open && planWin.active) planWin.active = false; }, { immediate: true }); // a new session started
-const onPill = () => { if (planningNow.value) closePlanning(); else goCard(); };
-const shutVisible = computed(() => !!(uid.value && shut.value && !planningNow.value && SHUT_ROUTES.includes(route.name)));
-// ── evening mode: schedule the next lock-in from the hard stop ──
-// "Start new session": always offered once a session has ended (server decides: session.canStart; false only while one runs or is scheduled).
+const onPill = () => goCard();
+const shutVisible = computed(() => !!(uid.value && shut.value && SHUT_ROUTES.includes(route.name)));
+// ── session end: the only input is how long the next session lasts (5..12 h); it starts now ──
+// "Start next session": always offered once a session has ended (server decides: session.canStart; false only while one runs or is scheduled).
 const nextOk = computed(() => !!(eh.session.value && eh.session.value.canStart && !eh.st.data?.offline));
-const doNextSession = async () => { sch.err = ''; try { await eh.startNextSession(); } catch (e) { sch.err = e.message || 'Could not start the session'; } };
+const canPick = lockAvailable();
+const addApps = async () => { try { const a = await clingLock.requestAuthorization(); if (a.status === 'approved') await clingLock.pickApps(); } catch (e) { /* stays as is */ } };
+const doNextSession = async () => { sch.err = ''; try { await eh.startNextSession(sch.hours); } catch (e) { sch.err = e.message || 'Could not start the session'; } };
 // Day recap line: sessions done of chosen, breaks taken today (from the local break log; Home keeps it in sync with the account).
 const recap = computed(() => { const s = eh.session.value; if (!shut.value || !s || nextOk.value) return '';
   let log = []; try { log = JSON.parse(localStorage.getItem('cn.gp.breakLog') || '[]'); } catch (e) { /* none */ }
   const b = breaksOn(log, eh.lock.value?.dayKey || localYMD()); return recapText({ points: shut.value.earned, sessionsDone: s.done, sessions: s.of, breaks: b.count, breakMin: b.min }); });
-const schedOk = computed(() => !!(lockIn.value.enabled && eh.plan.value && !eh.st.data?.offline));
-const sch = reactive({ open: false, time: '18:00', hours: 3, err: '' });
-const openSched = () => { sch.open = true; sch.err = ''; };
-const doSchedule = async () => {
-  sch.err = '';
-  try { await eh.scheduleNext([{ time: sch.time, hours: sch.hours }]); sch.open = false; } catch (e) { sch.err = e.message || 'Could not schedule'; }
-};
+const NEXT_HOUR_OPTIONS = HOUR_OPTIONS.filter((h) => h >= 5 && h <= 12);
+const sch = reactive({ hours: Math.min(12, Math.max(5, eh.hoursPref.value || 8)), err: '' });
 const goCard = () => { router.push({ name: 'home' }).then(() => setTimeout(() => document.querySelector('[data-test="eight-hour-card"]')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 250)).catch(() => {}); };
 const signOutNow = async () => { try { await signOut(auth); } finally { router.push('/login'); } };
 
@@ -171,6 +157,7 @@ watch(() => eh.lock.value && eh.running.value && `${eh.lock.value.dayKey}|${eh.l
 .ehs-sched { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px; margin-top: 14px; }
 .ehs-sched input, .ehs-sched select { height: 40px; border-radius: 10px; border: 1px solid rgba(159,183,224,.35); background: rgba(255,255,255,.06); color: #e6e9ef; padding: 0 10px; font: 600 15px system-ui, -apple-system, sans-serif; color-scheme: dark; }
 .ehs-sched button { height: 40px; padding: 0 16px; border-radius: 10px; border: 0; background: #378ADD; color: #fff; font: 700 14px system-ui, -apple-system, sans-serif; cursor: pointer; }
+.ehs-add { color: #9fb7e0; background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; font: inherit; }
 .ehs-sched small { flex-basis: 100%; opacity: .6; font-size: 12px; }
 .ehs-err { color: #ffb4b4; font-size: 13px; }
 .ehs-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 14px; margin-top: 18px; font-size: 13px; }

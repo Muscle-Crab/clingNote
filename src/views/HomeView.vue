@@ -71,7 +71,7 @@
 
       </section>
       <ShutdownPrompt class="home-notice" :suggest="false" :open="shutdownOpen" :done="shutdownDone" :open-tasks="shutdownOpenTasks"
-                      v-model:carry="shutdownCarry" :busy="shutdownBusy"
+                      :busy="shutdownBusy"
                       @start="openShutdown" @dismiss="shutdownDismissed = true" @close="shutdownOpen = false" @finish="finishShutdown" />
 
 
@@ -140,10 +140,10 @@
       <!-- ─── Task List ─── -->
       <section v-if="canViewSelectedDayTasks"
                class="task-section">
-        <GamePlanRow v-if="gpOn && isViewingToday" :text="gpText" :phase="gpPhase.phase" :review="gpReview" :leftovers="gpLeft" :tomorrow="gpTomorrow"
+        <GamePlanRow v-if="gpOn && isViewingToday" :text="gpText" :phase="gpPhase.phase" :review="gpReview"
                      :locked="hardLocked || gpGate" :gate="gpGate" :friend="(gp.friend && gp.friend.name) || ''" :friend-on="gp.friendUnlock" :unlock="gpUnlock" :penalty="gpPenaltyToday" :after-close="gpEarned.afterClose"
                      :break-bank="gpBank" :break-min="gpBreakStatus.min || 15" :gift="gpGift" :history="gpHistory" :break-on="gpPhase.phase === 'break'" :screen-ready="strictReadyMin" :ready="gpReady" :vault="gpVault"
-                     @carry="gpCarry" @review="gpApplyReview" @ask="gpAsk" @share="gpShare" @take-break="gpTakeBreak" @end-break="gpEndBreak" @claim-screen="claimScreenTime" @vault-start="vaultStart" @vault-stop="vaultStop" />
+                     @review="gpApplyReview" @ask="gpAsk" @share="gpShare" @take-break="gpTakeBreak" @end-break="gpEndBreak" @claim-screen="claimScreenTime" @vault-start="vaultStart" @vault-stop="vaultStop" />
         <EmptyState v-if="dayTasks.length === 0" :show-add="true" :show-templates="isViewingToday && !!userId" :day-label="isViewingToday ? '' : formatScheduledDate(viewTabDate, todayStr)" :scheduled="isViewingToday ? 0 : (scheduledCounts[viewTabDate] || 0)" @add="onAddClick" @templates="openTemplates" />
 
 
@@ -168,7 +168,7 @@
                         @drop="onSectionDrop" @drag-start="onDragStart" @drag-end="onSectionDragEnd" v-slot="{ task, section }">
               <TaskCard :section="section" @move-section="moveTaskToSection(task, $event)"
                   :data-reorder-key="taskKey(task)"
-                  :task="task" :up-next="isViewingToday && !task.completed && taskKey(task) === upNextKey" :drag-disabled="!reorderable" :index="realIndex(task)" :is-today-tab="isViewingToday" :can-complete="planningTomorrowTab" :expanded="expandedKey === taskKey(task)"
+                  :task="task" :up-next="isViewingToday && !task.completed && taskKey(task) === upNextKey" :drag-disabled="!reorderable" :index="realIndex(task)" :is-today-tab="isViewingToday" :expanded="expandedKey === taskKey(task)"
                   :active-labels="activeLabels" :now="nowTick" :show-notification="showNotification" :transfer-notification="transferNotification"
                   @toggle-expand="toggleExpanded(task)" @toggle-complete="toggleTaskCompletion(realIndex(task))" @alarm="toggleTaskAlarm(task)" @open-detail="openTaskDetailModal(task)"
                   @set-boss="setBoss(realIndex(task), task)" @toggle-important="toggleTaskImportance(realIndex(task))" :day-locked="selectedDayLocked" :highlight="rolledKeys.includes(taskKey(task))" :all-occurrences="seriesKey === taskKey(task)"
@@ -242,7 +242,7 @@ import { weekStats, searchTasks, suggestNext, snoozeTo } from '@/utils/assistant
 import { rollNext, rollLine, keyOf as rollKey } from '@/utils/rollNext';
 import { ref, onMounted, onBeforeUnmount, computed, watch, reactive, nextTick } from 'vue';
 import { useSounds } from '@/composables/useSounds';
-import { patchStoredTask, loadDayTasks, carryTasksToDay } from '@/composables/useDayPersistence';
+import { patchStoredTask, loadDayTasks } from '@/composables/useDayPersistence';
 import { activeFromForDay, isHiddenOnDate, seriesDays, withoutSeries } from '@/utils/repeat';
 import { useTaskViewPrefs } from '@/composables/useTaskViewPrefs';
 import { viewTasks, canReorder, applyManualOrder, normalizePrefs, visibleCount, shouldHandleShortcut } from '@/utils/taskView';
@@ -383,7 +383,6 @@ import { estimateFor, chipValues, withAiEstimate } from '@/utils/taskEstimate';
 import { requestAiEstimate } from '@/utils/aiEstimate';
 import { patchTouchesLocked } from '@/utils/eightHourLock';
 import { isDayLocked, completionKeepsInPlace, isLockError, assertTasksChangeAllowed, lockedMessage, isShutdown, shutMessage, canPlanDay, shutDayName } from '@/utils/eightHourLock';
-import { planWin } from '@/utils/planWindow';
 import { planTomorrowDay as planTomorrowDayName } from '@/utils/eightHourLock';
 import ReminderModal from '@/components/home/ReminderModal.vue';
 import ShutdownPrompt from '@/components/home/ShutdownPrompt.vue';
@@ -506,15 +505,6 @@ const blockIfLocked = (dayIdx = selectedDayIndex.value) => {
 };
 // 8-hour hard stop: once today's started day has ended, task actions are refused until the next wake time (data layer also guards),
 // except completing tasks (toggleTaskCompletion never calls this) and planning TOMORROW's tab inside the planning window (8 PM..midnight).
-// Tomorrow's planning window (shutdown, plan time..midnight): Home opens on tomorrow's tab (the same tab path as a tap on it).
-// Planning window: tomorrow's tab also gets the done check (an early completion is stamped completedFor = tomorrow, so it is kept
-// at the rollover and belongs to tomorrow; no streak/boss/lock-in credit tonight).
-const planningTomorrowTab = computed(() => !!(planWin.active && isShutdown() && days[selectedDayIndex.value]?.day === planTomorrowDayName()));
-const goTomorrowTab = () => { const i = days.findIndex((d) => d.day === planTomorrowDayName()); if (i >= 0 && selectedDayIndex.value !== i) selectDate(i); };
-// Planning lands on tomorrow's tab; closing it (pill back to the shutdown card) returns to today, so the shutdown card,
-// a session started from it and its app lock all act on today (syncAppLock only runs for the day shown).
-watch(() => planWin.active, (on) => { if (on) { goTomorrowTab(); return; } const t = days.findIndex((d) => d.day === planTomorrowDayName()); if (selectedDayIndex.value === t && todayIdx.value >= 0 && todayIdx.value !== t) selectDate(todayIdx.value); });
-onMounted(() => { if (planWin.active) setTimeout(goTomorrowTab, 0); });
 const blockIfShut = (dayIdx = selectedDayIndex.value) => { if (!isShutdown() || canPlanDay(days[dayIdx]?.day)) return false; sfx('error'); alert(shutMessage()); return true; };
 const lockMessage = (e) => { if (isLockError(e)) { sfx('error'); alert(e.message); return true; } return false; };
 // Locked-in day (planned, countdown not started): today's list may grow past the minimum up to the overload cap for the chosen hours.
@@ -1858,7 +1848,6 @@ onAuthStateChanged(auth, async(user) => {
       selectedDayIndex.value = todayIndex;
       await runScheduledMaterialization(); // add due scheduled tasks to today before the list is fetched
       fetchSelectedDayRoutine(); // Fetch tasks for the current day
-      if (planWin.active) goTomorrowTab(); // evening planning window open: land on tomorrow's tab
     }
   } else {
     userId.value = null; // Clear user ID when the user logs out
@@ -3475,9 +3464,6 @@ const canViewSelectedDayTasks = computed(() => {
   // 8-hour day: the list is open while a plan is waiting for its tasks and while the window runs (no separate Start Day press needed)
   if (eh.phase.value === 'running' || eh.phase.value === 'ready') return true;
 
-  // Evening planning window (shut day): today's list stays open so leftover tasks can still be ticked off in place
-  if (planWin.active && isShutdown()) return true;
-
   // Today requires Start Day
   return daySession.value.started && !daySession.value.ended;
 });
@@ -3674,7 +3660,6 @@ const shutdownDismissed = ref(false);
 const shutdownOpen = ref(false);
 const shutdownDone = ref([]);
 const shutdownOpenTasks = ref([]);
-const shutdownCarry = ref({});
 const shutdownBusy = ref(false);
 const openShutdown = async () => {
   shutdownOpen.value = true;
@@ -3682,20 +3667,12 @@ const openShutdown = async () => {
     const tasks = userId.value ? await loadDayTasks(userId.value, todayDayName()) : [];
     shutdownDone.value = tasks.filter((t) => t.completed);
     shutdownOpenTasks.value = tasks.filter((t) => !t.completed && t.status !== 'pending'); // pending: no carry/nag
-    shutdownCarry.value = Object.fromEntries(shutdownOpenTasks.value.map((t) => [taskKey(t), true]));
   } catch (e) { console.error('Shutdown load failed:', e); }
 };
-const finishShutdown = async (carry) => {
+// Wrap-up: unfinished tasks simply stay in the current list for the next session (nothing is moved to another day).
+const finishShutdown = async () => {
   shutdownBusy.value = true;
   try {
-    if (carry) {
-      const picked = shutdownOpenTasks.value.filter((t) => shutdownCarry.value[taskKey(t)]);
-      if (picked.length) {
-        const tomorrow = days[(new Date().getDay() + 1) % days.length].day;
-        await carryTasksToDay(userId.value, todayDayName(), tomorrow, strictOn.value ? picked.map(carryTask) : picked, getTodayId());
-        notifyRollover(picked.map((t) => t.title));
-      }
-    }
     try { await saveDailyPerformance(); } catch (e) { console.error(e); }
     shutdownOpen.value = false;
     shutdownDismissed.value = true;
@@ -4320,9 +4297,6 @@ watch(() => gpProgKnown.value && GP.breakActive(gpBreak.value, nowTick.value) &&
 const gpReady = computed(() => { const ph = gpPhase.value.phase; if (ph === 'closed' || ph === 'break') return '';
   return `· ${gpBreakStatus.value.text}`; }); // always visible, own span (never ellipsized)
 const gpReview = computed(() => (gpOn.value && gpLoaded.value && GP.reviewDue(gp.value, nowTick.value) ? GP.weekSummary(gpLog.value, gp.value, nowTick.value) : null));
-const gpLeft = computed(() => (gpPhase.value.phase === 'closed' ? GP.leftovers(todayTasksForTarget.value).map((t) => ({ key: taskKey(t), title: t.title || 'Untitled task' })) : []));
-const gpTomorrowIdx = computed(() => (nowTick.value, (new Date().getDay() + 1) % days.length)); // days[] is Sun..Sat by name (getTodayId() is a YMD, never a day name)
-const gpTomorrow = computed(() => (days[gpTomorrowIdx.value] && days[gpTomorrowIdx.value].day) || 'tomorrow');
 // Day log for history/weekly review (one merge write when the numbers change).
 let gpLogSig = '';
 watch(() => [gpOn.value, gpLoaded.value, isViewingToday.value, gpEarned.value.points, strictGoal.value, gpPenaltyToday.value], () => {
@@ -4345,20 +4319,10 @@ watch(() => [gpOn.value, gpPhase.value.startMs, gp.value.reviewDow, gp.value.rev
   const ss = eh.session.value; const lk = eh.lock.value; const lastEnd = ss && lk && lk.dayKey === k && ss.of && (lk.index || 0) + 1 >= ss.of ? lk.endMs : 0;
   const at = recapAt({ closeMs: w.closeMs, lastSessionEndMs: lastEnd }); const bk = GP.breaksOn(gpBreakLog.value, k);
   const done = ss && lk && lk.dayKey === k ? (lk.index || 0) + 1 : GP.segments(gp.value, w.startMs).length;
-  if (at > now) scheduleLocal(`gp:close:${k}`, { title: 'Day done', body: `${GP.recapText({ points: gpEarned.value.points, sessionsDone: done, sessions: gp.value.sessions, breaks: bk.count, breakMin: bk.min })}. Pick what goes to tomorrow; the rest carries no penalty.`, at: new Date(at), route: '/home', type: 'gp' });
+  if (at > now) scheduleLocal(`gp:close:${k}`, { title: 'Day done', body: `${GP.recapText({ points: gpEarned.value.points, sessionsDone: done, sessions: gp.value.sessions, breaks: bk.count, breakMin: bk.min })}. Unfinished tasks stay on your list for the next session.`, at: new Date(at), route: '/home', type: 'gp' });
   const nextReview = GP.lastReviewAt(gp.value, now) + 7 * 864e5;
   scheduleLocal(`gp:review:${GP.reviewKey(gp.value, nextReview)}`, { title: 'Weekly review', body: 'See your week and set next week’s plan.', at: new Date(nextReview), route: '/home', type: 'gp' });
 });
-// 7. Close picker: copies the picked leftovers to tomorrow (dedup by title) and takes them off today when today can still be edited.
-const gpCarry = async (keys) => {
-  const set = new Set(keys); const picked = todayTasksForTarget.value.filter((t) => set.has(taskKey(t))); if (!picked.length || !userId.value) return;
-  const target = gpTomorrow.value; const today = days[new Date().getDay()].day;
-  try {
-    await trackWrite(mutateDay(target, (cur) => GP.carryOver(picked, cur, Date.now())));
-    try { const cur = await trackWrite(mutateDay(today, (c) => c.filter((t) => !set.has(taskKey(t))))); if (isViewingToday.value) selectedDayRoutine.value = cur; } catch (e) { /* locked day: the copy is on tomorrow, the original stays */ }
-    showRepeatToast(`${picked.length} moved to ${target}. No penalty for the rest.`);
-  } catch (e) { console.warn('gp carry', e && e.message); showRepeatToast("Couldn't move them. Try again."); }
-};
 const gpApplyReview = (acceptedIds = []) => {
   const s = gpReview.value; let acc = {}; for (const p of (s && s.proposals) || []) if (acceptedIds.includes(p.id) && p.id !== 'queued') acc = { ...acc, ...p.patch };
   if (!acceptedIds.includes('queued')) gp.value = { ...gp.value, pending: null };

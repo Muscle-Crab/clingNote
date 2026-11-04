@@ -58,7 +58,7 @@ t('card: pencil, title tap, long-press, chips, timer lock, lock hint', () => {
   assert.ok(!/estimateMin: Number\(\$event\.target\.value\) \|\| 0/.test(card), 'old raw estimate input removed');
 });
 t('home: handlers wired, rollover stamped + notified', () => {
-  ['@edit="toggleExpanded(task)"', 'if (timerStarted(task)) patch = { ...patch, ...retimePatch(task, patch.estimateMin) };', 'editTask(realIndex(task)', 'rolledOverFor: getTodayId()', 'notifyRollover(picked', 'notifyRollover([task.title])', 'data-test="rollover-banner"', 'scheduleLocal(`rollover:']
+  ['@edit="toggleExpanded(task)"', 'if (timerStarted(task)) patch = { ...patch, ...retimePatch(task, patch.estimateMin) };', 'editTask(realIndex(task)', 'rolledOverFor: getTodayId()', 'notifyRollover([task.title])', 'data-test="rollover-banner"', 'scheduleLocal(`rollover:']
     .forEach((s) => assert.ok(home.includes(s), s));
   ['@adjust-timer=', '@set-remaining=', 'adjustRunningTimer'].forEach((k) => assert.ok(!home.includes(k), 'removed ' + k));
   assert.ok(!/editTask[\s\S]{0,1500}completed: true/.test(home.slice(home.indexOf('const editTask'), home.indexOf('const editTask') + 1500)));
