@@ -24,4 +24,15 @@ t('server view exposes ids/indexes and the card passes the whole lock', () => {
   // main (e54115c) passes ids/indexes explicitly; goal sessions use sessionGoal
   assert(/progressOf\(\{[^)]*ids: l\.ids[^)]*indexes: l\.indexes[^)]*\}, props\.tasks\)/.test(fs.readFileSync(require.resolve('../src/components/home/EightHourCard.vue'), 'utf8')));
 });
+const { _internal: srv } = require('../netlify/functions/eight-hour-day.js');
+t('task added after Start Day earns exactly its card points, same on card and server', () => {
+  const list = [T('ZZTEST added', { id: 'n', points: 25, completed: true }), { ...locked[0], completed: true }, locked[1], locked[2]];
+  assert.deepStrictEqual(core.progressOf(lock, list), { earned: 125, done: 2, total: 4 });
+  assert.deepStrictEqual(srv.lockedEarned(lock, list), { earned: 125, done: 2 });
+});
+t('no double count: a locked task is never also counted as an added one; pending/won\'t-do and future recurring copies earn 0', () => {
+  const list = [{ ...locked[0], points: 100, completed: true }, T('ZZTEST p', { points: 20, completed: true, status: 'pending' }),
+    T('ZZTEST later', { points: 20, completed: true, activeFrom: '2026-11-06' }), locked[1], locked[2]];
+  assert.strictEqual(core.progressOf(lock, list).earned, 100); assert.strictEqual(srv.lockedEarned(lock, list).earned, 100);
+});
 console.log(`lock points display: ${n} passed`);

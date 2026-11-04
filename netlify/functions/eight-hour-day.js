@@ -29,12 +29,17 @@ const stableIdOf = (t) => (t && (t.id != null && t.id !== '' ? `id:${t.id}` : `k
 const { sessionGrace, taskPoints, overtimePoints } = require('./lib/sessionGrace');
 const lockedEarned = (lock, tasks) => {
   const list = tasks || []; const byId = new Map(); list.forEach((t) => { const k = stableIdOf(t); if (k && !byId.has(k)) byId.set(k, t); });
-  let earned = 0, done = 0;
+  let earned = 0, done = 0; const used = new Set();
   (lock.points || []).forEach((p, n) => {
     const id = lock.ids && lock.ids[n]; const idx = lock.indexes ? lock.indexes[n] : undefined;
     const t = id && byId.has(id) ? byId.get(id) : (idx != null ? list[idx] : undefined);
+    if (t) used.add(t);
     if (t && t.completed) { earned += overtimePoints(p, t); done += 1; }
   });
+  // Tasks added after Start Day (not in the lock) earn the points shown on their card; the target stays fixed.
+  if ((lock.ids && lock.ids.length) || (lock.indexes && lock.indexes.length)) for (const t of list) {
+    if (!t || used.has(t) || !t.completed || t.status === 'pending' || t.status === 'wontdo' || (t.activeFrom && lock.dayKey && lock.dayKey < t.activeFrom)) continue;
+    const p = Math.round(Number(t.points)); if (p > 0) { earned += Math.min(150, p); done += 1; } }
   return { earned, done };
 };
 

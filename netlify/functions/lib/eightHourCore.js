@@ -253,12 +253,17 @@ const stableIdOf = (t) => (t && (t.id != null && t.id !== '' ? `id:${t.id}` : `k
 const overtimePoints = (points, t) => { const d = Number(t && t.overDurSec) || 0, o = Number(t && t.overSec) || 0;
   return Math.round((Number(points) || 0) * (d > 0 && o > 0 ? Math.max(0.5, 1 - o / d) : 1)); };
 const progressOf = (lock, tasks) => {
-  const list = tasks || []; const idx = countableIndexes(list, lock.dayKey); let earned = 0, done = 0;
+  const list = tasks || []; const idx = countableIndexes(list, lock.dayKey); let earned = 0, done = 0; const used = new Set();
   const byId = new Map(); if (Array.isArray(lock.ids)) idx.forEach((i) => { const k = stableIdOf(list[i]); if (k && !byId.has(k)) byId.set(k, list[i]); });
   (lock.points || []).forEach((p, n) => { if (p == null) return;
     const id = Array.isArray(lock.ids) ? lock.ids[n] : null;
     const t = id && byId.has(id) ? byId.get(id) : (idx[n] != null ? list[idx[n]] : undefined);
+    if (t) used.add(t);
     if (t && t.completed) { earned += overtimePoints(p, t); done += 1; } });
+  // Tasks added after Start Day (not in the lock) earn the points shown on their card (same rule as the server's lockedEarned); target stays fixed.
+  if ((Array.isArray(lock.ids) && lock.ids.length) || (Array.isArray(lock.indexes) && lock.indexes.length)) for (const i of idx) { const t = list[i];
+    if (!t || used.has(t) || !t.completed || t.status === 'pending' || t.status === 'wontdo') continue;
+    const q = Math.round(Number(t.points)); if (q > 0) { earned += Math.min(150, q); done += 1; } }
   return { earned, done, total: idx.length };
 };
 
