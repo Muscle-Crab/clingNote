@@ -72,6 +72,7 @@ const cases = [
   ['ScheduledList', { todayStr: '2026-10-17', tasks: [{ id: 'a', title: 'Pay rent', scheduledDate: '2026-10-18', scheduledTime: '09:30' }, { id: 'b', title: 'Dentist', scheduledDate: '2026-10-25', scheduledTime: '' }] }, ['Scheduled', 'sched-count', '>2<', 'aria-expanded="false"']],
   ['TaskListHeader', { label: 'Monday', isToday: false, completed: 0, total: 2 }, ['Monday', '0/2'], ['Sort and filter', 'Show completed', 'Sounds']],
   ['DayTabs', { days: [{ day: 'Sat', date: '2026-10-17' }], selectedIndex: 0, scheduledCounts: { '2026-10-17': 2 } }, ['day-tab-dot', '2 scheduled', '>17<']],
+  ['DayTabs', { days: ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((day, i) => ({ day, date: '2026-10-1' + i })), selectedIndex: (new Date().getDay() + 1) % 7 }, ['data-test="day-tab-today"', 'aria-current="date"', '>Today<']],
   ['TaskCard', { task: { ...task, type: 'one-time' }, index: 0, isTodayTab: true, expanded: true, activeLabels: [], now: 0 }, ['Schedule for later', 'Schedule date']],
   // points shown once, in the badge, with the task's real points (no flat +10, no '· Np' after the time chip)
   ['TaskCard', { task: { title: 'House cleaning', createdAt: 't', estimateMin: 90, points: 60, pointsSource: 'ai' }, index: 0, isTodayTab: true, expanded: false, activeLabels: [], now: 0 }, ['+60 pts', '1h 30m</span>'], ['+10 pts', '· 60p']],

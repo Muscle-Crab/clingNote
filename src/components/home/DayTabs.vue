@@ -9,10 +9,13 @@
         'day-tab--selected': index === selectedIndex
       }"
         :aria-pressed="index === selectedIndex ? 'true' : 'false'"
+        :aria-current="isToday(index) ? 'date' : null"
         @click="$emit('select', index)"
     >
       <span class="day-tab-name">{{ day.day }}</span>
       <span class="day-tab-date">{{ dayNumber(day.date) }}</span>
+      <span v-if="isToday(index)" class="day-tab-today" data-test="day-tab-today" aria-hidden="true"></span>
+      <span v-if="isToday(index)" class="sr-only">Today</span>
       <span v-if="scheduledCounts[day.date]" class="day-tab-dot" :title="scheduledCounts[day.date] + ' scheduled'" aria-hidden="true"></span>
       <span v-if="scheduledCounts[day.date]" class="sr-only">{{ scheduledCounts[day.date] }} scheduled</span>
     </button>

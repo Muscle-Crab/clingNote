@@ -5403,6 +5403,12 @@ body.home-v2 .app-topbar { position: absolute; top: 0; left: 0; right: 0; z-inde
 .app-root .day-tabs.day-tabs.day-tabs { margin: 14px 0 10px; }
 .app-root .day-tab.day-tab.day-tab { min-height: 56px; }
 .app-root .day-tab-date.day-tab-date { font-size: 19px; }
+/* Persistent "today" marker: accent text + a short accent bar at the top of today's tab, kept when another day is selected
+   (selected = filled blue pill; today-not-selected = accent text/bar, no fill). */
+.app-root .day-tab .day-tab-today { position: absolute; top: 5px; left: 50%; width: 14px; height: 3px; margin-left: -7px; border-radius: 2px; background: #5B8CFF; box-shadow: 0 0 6px rgba(91,140,255,.7); }
+.app-root .day-tab--selected .day-tab-today { background: rgba(255,255,255,.9); box-shadow: none; }
+.app-root .day-tab--today:not(.day-tab--selected) .day-tab-name, .app-root .day-tab--today:not(.day-tab--selected) .day-tab-date.day-tab-date.day-tab-date { color: #7FA6FF; }
+html[data-theme="light"] .app-root .day-tab--today:not(.day-tab--selected) .day-tab-date.day-tab-date, html[data-theme="light"] .app-root .day-tab--today:not(.day-tab--selected) .day-tab-name { color: #2F6BFF !important; }
 .app-root .progress-top.progress-top { min-height: 104px; padding: 12px 12px 10px; }
 .app-root .progress-ring.progress-ring { width: 84px; height: 84px; }
 .app-root .foot-item { padding: 10px 14px; }
