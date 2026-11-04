@@ -33,7 +33,12 @@ t('assistant create_tasks keeps the Nov 16 date (so HomeView routes it to the sc
 });
 t('HomeView routes future-dated manual / assistant / voice adds through deferredDateFor', () => {
   const src = fs.readFileSync(path.join(here, '../src/views/HomeView.vue'), 'utf8');
-  assert.ok(/deferredDateFor\(newTask\.value\.dueDate \|\| \(isViewingToday\.value \? '' : viewTabDate\.value\), getTodayId\(\)\)/.test(src), 'manual add (due date, else the future tab date)');
-  assert.ok((src.match(/deferredDateFor\(it\.date, getTodayId\(\)\)/g) || []).length >= 4, 'assistant + voice');
+  assert.ok(/deferTo\(newTask\.value\.dueDate\)/.test(src), 'manual add');
+  assert.ok((src.match(/deferTo\(it\.date\)/g) || []).length >= 4, 'assistant + voice');
+  assert.ok(/const deferTo = \(d\) => \(d && d === viewTabDate\.value \? '' : deferredDateFor\(d, getTodayId\(\)\)\)/.test(src), 'viewed day tab is exempt');
+});
+t('adding from another day tab (date == viewed tab) is a normal card; other future dates still defer', () => {
+  const viewTab = '2026-11-05'; const deferTo = (d) => (d && d === viewTab ? '' : S.deferredDateFor(d, '2026-11-04'));
+  assert.equal(deferTo('2026-11-05'), ''); assert.equal(deferTo(NOV16), NOV16); assert.equal(deferTo('2026-11-04'), ''); assert.equal(deferTo(''), '');
 });
 console.log(`\n${n} future-placement tests passed`);

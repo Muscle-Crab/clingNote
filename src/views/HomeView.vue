@@ -980,6 +980,8 @@ const showCompleted = ref(false);
 // ─── Today sort/filter (prefs in localStorage; logic in @/utils/taskView) ───
 const { prefs: viewPrefs } = useTaskViewPrefs();
 const effectivePrefs = computed(() => (new Date().getDay() === selectedDayIndex.value ? normalizePrefs(viewPrefs.value) : normalizePrefs(null)));
+// Future date -> Schedule, except the day tab being viewed: adding from that tab saves a normal card in its day list.
+const deferTo = (d) => (d && d === viewTabDate.value ? '' : deferredDateFor(d, getTodayId()));
 // Copies not active yet on the viewed date (e.g. a Daily task created today, on earlier days of this week) are hidden, never deleted.
 const viewTabDate = computed(() => tabDays.value[selectedDayIndex.value]?.date || '');
 const staleHere = (t) => isStaleOnTab(t, selectedDayIndex.value, viewTabDate.value, todayStr.value); // leftovers from a past occurrence of this weekday
@@ -2144,11 +2146,11 @@ const addNewTask = async () => {
     return false;
   }
 
-  // A one-time task with a future due date belongs to that date, not to today's day doc (route it through the scheduler).
-  // Rolling tabs: a one-off added on a future tab belongs to that tab's real date (scheduler), not to the reused weekday doc.
+  // A one-time task with a future due date belongs to that date, not to today's day doc (route it through the scheduler),
+  // unless that date is the day tab being viewed: adding from another day's tab saves a normal card in that day's list (stale leftovers are hidden by isStaleOnTab).
   // A past due date is clamped to today (it would otherwise land on a date that never comes again).
   if (isValidDate(newTask.value.dueDate) && newTask.value.dueDate < getTodayId()) newTask.value = { ...newTask.value, dueDate: '' };
-  { const fut = !newTask.value.sched?.on && newTask.value.type !== 'recurring' && !(newTask.value.selectedDays || []).length ? deferredDateFor(newTask.value.dueDate || (isViewingToday.value ? '' : viewTabDate.value), getTodayId()) : '';
+  { const fut = !newTask.value.sched?.on && newTask.value.type !== 'recurring' && !(newTask.value.selectedDays || []).length ? deferTo(newTask.value.dueDate) : '';
     if (fut) newTask.value = { ...newTask.value, sched: { ...blankSchedule(fut), on: true, date: fut, time: newTask.value.startTime || '' } }; }
   limitHit.value = null;
   try {
@@ -3013,9 +3015,9 @@ const confirmVoiceItems = async (items) => {
       } else {
         newTask.value = { ...blankTask(), title: it.title.trim(), startTime: it.start || '', estimateMin: it.durationMin || '',
           ...(it.type === 'schedule' ? { sched: { ...blankSchedule(it.date), on: true, date: it.date, time: it.start || '09:00' } }
-            : deferredDateFor(it.date, getTodayId()) ? { sched: { ...blankSchedule(it.date), on: true, date: it.date, time: it.start || '' } } : {}) };
+            : deferTo(it.date) ? { sched: { ...blankSchedule(it.date), on: true, date: it.date, time: it.start || '' } } : {}) };
         capOverride.value = true;
-        ok = !!(await addNewTask()) && (it.type === 'schedule' || !!deferredDateFor(it.date, getTodayId()) || (await lastAddPersist));
+        ok = !!(await addNewTask()) && (it.type === 'schedule' || !!deferTo(it.date) || (await lastAddPersist));
         capOverride.value = false;
       }
       if (!ok) { voiceError.value = `${it.title}: ${error.value || 'could not be saved.'}`; break; }
@@ -4533,12 +4535,12 @@ const assistantExecutor = createAssistantExecutor({
     newTask.value = { ...blankTask(), title: it.title, startTime: it.start || '', estimateMin: it.durationMin || '', section: it.section || '', priority: it.priority || newTask.value.priority,
       aiPoints: it.points || 0, aiComplexity: it.complexity || 0,
       ...(it.type === 'schedule' ? { sched: { ...blankSchedule(it.date), on: true, date: it.date, time: it.start || '09:00', ...(it.repeat ? { repeat: it.repeat, days: it.days || [] } : {}) } }
-        : deferredDateFor(it.date, getTodayId()) ? { sched: { ...blankSchedule(it.date), on: true, date: it.date, time: it.start || '' } } : {}) };
+        : deferTo(it.date) ? { sched: { ...blankSchedule(it.date), on: true, date: it.date, time: it.start || '' } } : {}) };
     capOverride.value = true; agentAdd.value = true;
     try {
-      const ok = !!(await addNewTask()) && (it.type === 'schedule' || !!deferredDateFor(it.date, getTodayId()) || (await lastAddPersist));
+      const ok = !!(await addNewTask()) && (it.type === 'schedule' || !!deferTo(it.date) || (await lastAddPersist));
       const lim = limitHit.value;
-      if (ok && it.type !== 'schedule' && !deferredDateFor(it.date, getTodayId())) { // same Undo chip the old mic gave (kept longer: the sheet may still be open)
+      if (ok && it.type !== 'schedule' && !deferTo(it.date)) { // same Undo chip the old mic gave (kept longer: the sheet may still be open)
         const saved = [...(selectedDayRoutine.value || [])].filter((x) => x.title === it.title).sort((x, y) => String(y.createdAt).localeCompare(String(x.createdAt)))[0];
         const entry = { id: `${Date.now()}-${Math.random()}`, title: it.title, createdAt: saved?.createdAt, dayName: days[selectedDayIndex.value]?.day, undoUntil: Date.now() + ASSIST_UNDO_MS };
         voiceAdded.value = [...voiceAdded.value, entry];
