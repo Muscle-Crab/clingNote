@@ -17,7 +17,7 @@
           <div class="sched-main">
             <span class="sched-title">{{ t.title }}</span>
             <span v-if="t.scheduledTime" class="sched-time">{{ formatClock(toMinutes(t.scheduledTime)) }}</span>
-            <span v-if="t.templateId" class="sched-time" data-test="sched-label">🔁 {{ t.repeatText || 'Repeats' }}</span>
+            <span v-if="t.templateId" class="sched-time" data-test="sched-label" :title="t.repeatText || 'Repeats'">🔁 {{ t.repeatText || 'Repeats' }}</span>
           </div>
           <button type="button" class="sched-more" aria-label="Scheduled task actions" title="Actions" :aria-expanded="menuId === t.id ? 'true' : 'false'" @click="toggleMenu(t)">
             <i class="fas fa-ellipsis-h"></i>
@@ -86,9 +86,10 @@ const toggleMenu = (t) => {
 .sched-empty { margin: 0; padding: var(--sp-2) var(--sp-1); font-size: var(--fs-sm); color: var(--c-text-3); }
 .sched-date { margin: var(--sp-3) 0 var(--sp-1); font-size: var(--fs-xs); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--c-text-3); }
 .sched-row { position: relative; display: flex; align-items: center; gap: var(--sp-2); padding: 0 0 0 var(--sp-3); margin-bottom: var(--sp-1); background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--r-lg); }
-.sched-main { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: var(--sp-2); padding: var(--sp-2) 0; }
-.sched-title { font-weight: 600; font-size: var(--fs-md); word-break: break-word; }
-.sched-time { font-family: 'JetBrains Mono', monospace; font-size: var(--fs-xs); color: var(--c-text-3); white-space: nowrap; }
+.sched-main { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: baseline; column-gap: var(--sp-2); row-gap: 2px; padding: var(--sp-2) 0; }
+/* Title keeps a sane width (never squeezed to one character by a long repeat label); meta wraps to its own line and truncates. */
+.sched-title { flex: 1 1 10em; min-width: min(10em, 100%); font-weight: 600; font-size: var(--fs-md); overflow-wrap: anywhere; }
+.sched-time { flex: 0 1 auto; min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; font-family: 'JetBrains Mono', monospace; font-size: var(--fs-xs); color: var(--c-text-3); white-space: nowrap; }
 .sched-more { width: 40px; height: 40px; background: none; border: none; color: var(--c-text-2); cursor: pointer; border-radius: var(--r); }
 .sched-more:hover { background: var(--c-surface-2); color: var(--c-text); }
 .sched-menu { position: absolute; right: var(--sp-2); top: calc(100% - 2px); z-index: 20; min-width: 240px; display: flex; flex-direction: column; gap: var(--sp-1); padding: var(--sp-2); background: var(--c-surface-2); border: 1px solid var(--c-border-strong); border-radius: var(--r-lg); box-shadow: 0 8px 24px rgba(0,0,0,.5); }
