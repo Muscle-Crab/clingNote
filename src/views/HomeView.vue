@@ -1336,10 +1336,7 @@ const toggleTaskCompletion = async (index) => {
     if (isToday(selectedDayIndex.value)) { const left = (selectedDayRoutine.value || []).filter((t, i) => i !== index && !t.completed).length;
       window.dispatchEvent(new window.CustomEvent('cn:sergeant-ack', { detail: { left } })); }
 
-    const userName = await fetchUserName(userId.value);
-    if (userName) {
-      await sendNotificationToPlayer(userName, "completed");
-    }
+    // No push on completion (removed: it pinged every finished task).
   } else {
     sfx('tap'); // un-complete: light tap
     task.completedAt = null;
