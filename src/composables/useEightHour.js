@@ -191,9 +191,14 @@ export const useEightHour = () => {
   });
   const pendingBlocks = computed(() => core.pendingOf(lockRaw.value).filter((b) => b.endMs > (tick.value, nowMs())));
   const session = computed(() => st.data?.session || null);
+  // Session-end delay countdown (2h if the goal was missed + 30m per unfinished important task); refreshes once when it runs out.
+  let waitRefreshed = 0;
+  const wait = computed(() => { const s = session.value; if (!s || s.reason !== 'cooldown' || !s.untilMs) return null; const now = (tick.value, nowMs());
+    if (now >= s.untilMs) { if (waitRefreshed !== s.untilMs) { waitRefreshed = s.untilMs; setTimeout(() => refresh().catch(() => {}), 0); } return null; }
+    return { untilMs: s.untilMs, breakdown: s.breakdown || '', text: core.waitText(s.untilMs, now, s.breakdown || '', plan.value?.tz || deviceTz()) }; });
   const debtKnown = computed(() => !!(st.loaded && st.data && !st.data.offline && st.uid === curUid() && Object.prototype.hasOwnProperty.call(st.data, 'appLockDebt')));
   const appLockDebt = computed(() => (debtRev.value, mergeDebt({ server: st.data && st.data.appLockDebt, serverKnown: debtKnown.value, cache: readDebtCache(curUid()) })));
-  return { st, appLockDebt, debtKnown, dayHours, nextBlock, pendingBlocks, startNextSession, session, warning, hoursPref, data, plan, lock, phase, phaseInfo, running, remainingMs, countdown, endsLabel, startsLabel, stats, shutdown, reward: computed(() => st.data?.reward || ''),
+  return { st, appLockDebt, debtKnown, dayHours, nextBlock, pendingBlocks, startNextSession, session, wait, warning, hoursPref, data, plan, lock, phase, phaseInfo, running, remainingMs, countdown, endsLabel, startsLabel, stats, shutdown, reward: computed(() => st.data?.reward || ''),
     refresh, savePlan, startNow, reportProgress, nowMs };
 };
 

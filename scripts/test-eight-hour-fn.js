@@ -91,10 +91,8 @@ const call = async (db, body, extra = {}) => { const r = await handler(ev(body),
   r = await call(db, { action: 'state' }); eq(r.body.stats.streak, 1, 'settled once');
   // start anytime: a second session the same day starts NOW (session #1), the streak is not settled twice
   db.store['weeklyRoutines/u1_Fri'].tasks.push(T('Second a'), T('Second b'), T('Second c'), T('Second d'));
-  // session 1 ended with 4 of 8 tasks -> the next Start waits 2h after it ended (server rejects during the wait)
-  r = await call(db, { action: 'start', hours: 5 }); eq([r.code, r.body.code], [409, 'cooldown'], 'start rejected during the 2h wait');
-  clock = L.endMs + 2 * 3600e3 + 1000;
-  r = await call(db, { action: 'start', hours: 5 }); eq([r.code, r.body.phase, r.body.lock.index, r.body.lock.startMs], [200, 'running', 1, clock], 'second session starts once the wait is over');
+  // session 1 met its points goal (4 of 8 tasks) and left no important task open -> no session-end delay
+  r = await call(db, { action: 'start', hours: 5 }); eq([r.code, r.body.phase, r.body.lock.index, r.body.lock.startMs], [200, 'running', 1, clock], 'goal met: second session starts right away');
   clock = r.body.lock.endMs + 1000; r = await call(db, { action: 'state' }); eq([r.body.phase, r.body.stats.streak], ['ready', 1], 'second session does not re-settle the streak');
   // plan opens again once the window is over (applies to tomorrow)
   r = await call(db, { action: 'plan', wakeTime: '06:00', taskCount: 2, tz: TZ }); eq([r.code, r.body.plan.wakeTime], [200, '06:00']);

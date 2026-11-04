@@ -4212,7 +4212,7 @@ const vaultPriced = ref(dayLoad(VAULT_PRICE_KEY));
 const vaultDebt = computed(() => turnOffBlocked({ debt: eh.appLockDebt.value, now: vaultNow.value, live: liveDebtSession() }));
 const gpVault = computed(() => { if (!lockAvailable() || !isViewingToday.value) return null;
   return vaultView({ apps: vaultData.value.apps || [], days: vaultData.value.days || {}, todayYmd: localDateStr(), points: (gpEarned.value && gpEarned.value.points) || 0,
-    priced: vaultPriced.value, debt: vaultDebt.value, windows: vaultWindows.value, nowMs: vaultNow.value }); });
+    priced: vaultPriced.value, debt: vaultDebt.value, windows: vaultWindows.value, nowMs: vaultNow.value, wait: eh.wait && eh.wait.value }); });
 let vaultSyncing = false;
 const syncVault = async () => {
   if (!lockAvailable() || vaultSyncing) return; vaultSyncing = true;

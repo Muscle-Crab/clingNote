@@ -29,10 +29,30 @@ const validSessionHours = (h) => { const n = Number(h); return Number.isInteger(
 const TASKS_PER_SESSION = 8;
 const SESSION_COOLDOWN_MS = 2 * 3600000;
 const sessionDone = (lock) => { if (!lock) return 0; const s = lock.session; return Number(s && s.done != null ? s.done : lock.done) || 0; };
-const cooldownUntilMs = (lock) => { if (!lock || lock.placeholder || !lock.dayKey || !Number(lock.endMs)) return 0; return sessionDone(lock) >= TASKS_PER_SESSION ? 0 : Number(lock.endMs) + SESSION_COOLDOWN_MS; };
+// Session-end delay (stacking): goal missed -> SESSION_COOLDOWN_MS (2 h) base; PLUS IMPORTANT_MISS_MS (30 min) for every IMPORTANT task
+// left unfinished at the session end (non-important misses add nothing). Goal met + important misses -> only the 30 min each.
+// "Goal" = the session's frozen points goal (session.target/earned, set at settle); a lock without a points goal falls back to main's
+// task-count rule (fewer than TASKS_PER_SESSION done). Missed = countsToward (not pending / won't-do), not active-later, not completed.
+const IMPORTANT_MISS_MS = 30 * 60000;
+const isImportant = (t) => !!t && (!!t.important || t.priority === 'high');
+const missedImportant = (tasks, dayKey) => (tasks || []).filter((t) => t && !t.completed && t.status !== 'pending' && t.status !== 'wontdo'
+  && !(t.activeFrom && dayKey && dayKey < t.activeFrom) && isImportant(t)).length;
+const goalMissed = (lock) => { const s = (lock && lock.session) || {}; const tg = Number(s.target) || 0;
+  return tg > 0 ? !(Number(s.earned) >= tg) : sessionDone(lock) < TASKS_PER_SESSION; };
+const delayParts = (lock) => { if (!lock || lock.placeholder || !lock.dayKey || !Number(lock.endMs)) return { goalMissed: false, important: 0, ms: 0 };
+  const g = goalMissed(lock); const imp = Math.max(0, Math.floor(Number(lock.session && lock.session.missedImportant) || 0));
+  return { goalMissed: g, important: imp, ms: (g ? SESSION_COOLDOWN_MS : 0) + imp * IMPORTANT_MISS_MS }; };
+const fmtDur = (ms) => { const m = Math.round(ms / 60000); const h = Math.floor(m / 60); const r = m % 60; return h && r ? `${h}h ${r}m` : h ? `${h}h` : `${r}m`; };
+// '2h + 2 important × 30m' (or '2h', or '1 important × 30m').
+const delayBreakdown = ({ goalMissed: g, important: imp }) => [g ? fmtDur(SESSION_COOLDOWN_MS) : '', imp ? `${imp} important × ${fmtDur(IMPORTANT_MISS_MS)}` : ''].filter(Boolean).join(' + ');
+const cooldownUntilMs = (lock) => { const d = delayParts(lock); return d.ms ? Number(lock.endMs) + d.ms : 0; };
 const fmtCdClock = (ms, tz) => { try { return new Date(ms).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: tz || 'UTC' }); } catch (e) { return new Date(ms).toISOString().slice(11, 16); } };
-const cooldownText = (done, untilMs, tz) => `You finished ${done} of ${TASKS_PER_SESSION} tasks, so your next session opens at ${fmtCdClock(untilMs, tz)} (${SESSION_COOLDOWN_MS / 3600000}-hour wait).`;
-const SESSION_HEADS_UP = `Finish at least ${TASKS_PER_SESSION} tasks this session, or your next session waits ${SESSION_COOLDOWN_MS / 3600000} hours.`;
+const cooldownText = (lock, untilMs, tz) => { const d = delayParts(lock); const b = delayBreakdown(d);
+  return `Next session opens at ${fmtCdClock(untilMs, tz)} · ${fmtDur(d.ms)} wait${b.includes('+') || d.important ? ` (${b})` : ''}`; };
+// Live countdown line (shutdown screen + vault row): 'Next session in 3h12m · 6:30 PM (2h + 2 important × 30m)'.
+const waitText = (untilMs, nowMs, breakdown, tz) => { const left = Math.max(0, Number(untilMs) - Number(nowMs)); if (!left) return '';
+  const m = Math.ceil(left / 60000); return `Next session in ${fmtDur(m * 60000)} · ${fmtCdClock(untilMs, tz)}${breakdown ? ` (${breakdown})` : ''}`; };
+const SESSION_HEADS_UP = `Hit your points goal, or your next session waits ${SESSION_COOLDOWN_MS / 3600000}h, plus 30m per unfinished important task.`;
 const sessionMet = ({ earned = 0, target = 0 } = {}) => Number(target) > 0 && Number(earned) >= Number(target);
 // Session points goal: the AI (or this fallback) from the number of tasks that existed BEFORE the session was created + the chosen
 // hours; clamped to [GOAL_MIN, min(GOAL_MAX, the tasks' points)] in steps of 5 and frozen on the session's goal record at Start.
@@ -134,7 +154,7 @@ const nextSessionState = ({ lock, sessions = 2, nowMs }) => {
   if (nowMs < lock.endMs) return { ok: false, reason: 'running', of, done };
   if (nextPending(lock, nowMs)) return { ok: false, reason: 'scheduled', of, done };
   const until = cooldownUntilMs(lock);
-  if (until > nowMs) return { ok: false, reason: 'cooldown', of, done, untilMs: until, tasksDone: sessionDone(lock), message: cooldownText(sessionDone(lock), until, lock.tz) };
+  if (until > nowMs) return { ok: false, reason: 'cooldown', of, done, untilMs: until, tasksDone: sessionDone(lock), message: cooldownText(lock, until, lock.tz), breakdown: delayBreakdown(delayParts(lock)) };
   return { ok: true, of, done };
 };
 
@@ -346,6 +366,7 @@ const rewardFor = (streak) => (streak >= 30 ? '🏔️ Peak Performer' : streak 
 module.exports = {
   DAY_HOURS, clampHours, hoursMs, hoursLabel, WARN_MINUTES, warningDue,
   TASKS_PER_SESSION, SESSION_COOLDOWN_MS, sessionDone, cooldownUntilMs, cooldownText, SESSION_HEADS_UP,
+  IMPORTANT_MISS_MS, isImportant, missedImportant, goalMissed, delayParts, delayBreakdown, waitText,
   SESSION_HOURS, validSessionHours, sessionMet, GOAL_MIN, GOAL_MAX, goalRange, clampGoal, fallbackGoal,
   WINDOW_MS, WINDOW_MIN, MAX_TASKS_PER_DAY, MIN_TASKS_PER_HOUR, taskRange, LOCK_IDENTITY_SLOTS, WEEKDAYS, WAKE_PICKER_PRESELECT, START_MODE, TARGET_LEVELS, LOCKED_FIELDS,
   clamp, round5, parseWake, fmtWake, validTz, partsIn, dayKeyIn, dayNameIn, wakeInstant, evaluatePhase,

@@ -23,6 +23,7 @@
         <!-- Lock apps carry over from the last session; the picker opens ONLY from this optional link (never on its own). -->
         <small v-if="canPick" data-test="eh-next-apps">Same lock apps as last session · <button type="button" class="ehs-add" data-test="eh-add-apps" @click="addApps">Add apps</button></small>
       </form>
+      <p v-else-if="eh.wait.value" class="ehs-res miss" data-test="eh-next-wait">{{ eh.wait.value.text }}</p>
       <p v-if="sch.err" class="ehs-err" role="alert" data-test="eh-next-err">{{ sch.err }}</p>
       <nav class="ehs-links">
         <router-link :to="profileLink">Settings</router-link><router-link to="/support">Support</router-link><router-link to="/privacy-policy">Privacy</router-link><router-link to="/sub">Premium</router-link>

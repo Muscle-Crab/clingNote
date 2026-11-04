@@ -112,7 +112,7 @@ const lockGoalOpts = (lock) => (lock && lock.goal && Number(lock.target) > 0 ? {
 const settleIfOver = async (ctx, doc, now) => {
   const lock = doc.lock;
   if (!lock || lock.settled || now < lock.endMs) return doc;
-  let earned = lock.earned || 0; let grace = null;
+  let earned = lock.earned || 0; let grace = null; let missImp = 0;
   try { // last full recount, only when the day doc was last written inside the window (updatedAt is a server timestamp, so completions cannot be back-dated)
     const dsnap = await ctx.db.doc(`weeklyRoutines/${ctx.uid}_${lock.dayName}`).get();
     const d = dsnap.exists ? dsnap.data() : null;
@@ -124,11 +124,12 @@ const settleIfOver = async (ctx, doc, now) => {
     }
     // Per-session shutdown rule: the session's own tasks/points, completions inside its window only. Missed -> the picked apps stay
     // locked (appLockDebt) until a later session reaches its goal.
+    if (d) missImp = core.missedImportant(countable(pruneStale(d.tasks || [], lock.tz || 'UTC', lock.dayKey), lock.dayKey).map((r) => r.t), lock.dayKey);
     if (d) { const ud = await userDoc(ctx); const sessions = Number(ud.gamePlan && ud.gamePlan.sessions) === 1 ? 1 : 2;
       grace = sessionGrace(countable(pruneStale(d.tasks || [], lock.tz || 'UTC', lock.dayKey), lock.dayKey).map((r) => r.t), { n: Math.min(core.blockIndex(lock) + 1, sessions), sessions, startMs: lock.startMs, endMs: lock.endMs, ...lockGoalOpts(lock) }); }
   } catch (e) { /* keep the server-time progress value */ }
   const idx = core.blockIndex(lock);
-  const settledLock = { ...lock, earned, settled: true, ...(grace ? { session: { ...grace, untilMs: 0 }, graceUntilMs: 0 } : {}) };
+  const settledLock = { ...lock, earned, settled: true, ...(grace ? { session: { ...grace, untilMs: 0, missedImportant: missImp }, graceUntilMs: 0 } : {}) };
   const debt = grace ? core.debtAfterSettle(doc.appLockDebt, { sessionKey: core.sessionKey(lock.dayKey, idx), startMs: lock.startMs, endMs: lock.endMs, target: grace.target, earned: grace.earned, done: grace.done, met: grace.met })
     : core.normDebt(doc.appLockDebt);
   // The streak/target settle once per day, on the day's FIRST block. Later blocks (evening mode) and empty scheduled blocks only write a history row.
@@ -158,7 +159,7 @@ const view = (doc, now) => {
 };
 // Focus sessions (1 or 2, users/{uid}.gamePlan.sessions): may the afternoon session start now? Attached to every state view.
 const withSession = (doc, ud, now) => { const g = (ud && ud.gamePlan) || {}; const r = core.nextSessionState({ lock: doc.lock, sessions: g.sessions, gamePlan: g, nowMs: now, wakeTime: doc.plan && doc.plan.wakeTime });
-  return { ...doc, _session: { canStart: r.ok, reason: r.reason || '', of: r.of, done: r.done, closeMs: r.closeMs || 0, untilMs: r.untilMs || 0 } }; };
+  return { ...doc, _session: { canStart: r.ok, reason: r.reason || '', of: r.of, done: r.done, closeMs: r.closeMs || 0, untilMs: r.untilMs || 0, message: r.message || '', breakdown: r.breakdown || '' } }; };
 
 // Lock one block. index 0 = the day's main block: snapshot every countable task, reset completions, enforce the task range (strict).
 // index > 0 (a later block the same day): lock only the still-open tasks, keep completions, no minimum (0 open tasks = an empty block that

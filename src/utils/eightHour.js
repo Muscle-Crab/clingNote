@@ -68,3 +68,4 @@ export const nextAt = core.nextAt;
 export const planBlocks = core.planBlocks;
 export const rulesShutUntilMs = core.rulesShutUntilMs;
 export const BLOCK_HOUR_OPTIONS = (() => { const o = []; for (let h = core.BLOCK_HOURS.min; h <= core.BLOCK_HOURS.max; h += core.BLOCK_HOURS.step) o.push(h); return o; })();
+export const waitText = core.waitText;

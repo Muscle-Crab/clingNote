@@ -65,9 +65,9 @@ await t('server: Begin stores apps + frozen goal; met session 1, then session 2 
   for (let i = 0; i < need; i++) { clock += 10 * 60000; finish(db, i); r = await call(db, { action: 'progress' }); }
   clock = r.body.lock.endMs + 60000; r = await call(db, { action: 'state' }); assert.equal(r.body.appLockDebt, null, 'met: no debt');
   r = await call(db, { action: 'nextSession', hours: 6, apps: { apps: 1 } });
-  assert.equal(r.code, 409, 'fewer than TASKS_PER_SESSION tasks -> cooldown'); assert.match(JSON.stringify(r.body), /of 8 tasks, so your next session opens at .*2-hour wait/);
-  clock += core.SESSION_COOLDOWN_MS; r = await call(db, { action: 'nextSession', hours: 6, apps: { apps: 1 } });
-  assert.deepEqual([r.code, r.body.phase, r.body.lock.index], [200, 'running', 1], 'second session runs (locked) once the 2h wait is over');
+  // Session-end delay rule: the points goal was met and no important task was left open -> no wait (even with fewer than TASKS_PER_SESSION tasks).
+  assert.notEqual(r.code, 409, 'goal met, 0 important missed -> no cooldown');
+  assert.deepEqual([r.code, r.body.phase, r.body.lock.index], [200, 'running', 1], 'second session runs (locked) right away');
   assert.equal(r.body.lock.goal.key, '2026-10-23#1'); assert.equal(r.body.lock.goal.frozenMs, clock); assert.deepEqual(r.body.lock.apps, { apps: 1, categories: 0, sites: 0 });
   assert.equal(r.body.lock.earned, 0, 'session 1 completions do not count for session 2');
   assert.ok(r.body.lock.target <= (6 - need) * 20, 'goal clamped to what is still open');

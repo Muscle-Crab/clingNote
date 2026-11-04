@@ -38,18 +38,20 @@ export const liveWindow = (windows, nowMs) => (windows || []).find((w) => w.star
 // The whole vault for the Home line. debt = a missed-goal lock is unpaid (no vault while it is).
 // The whole vault for the Home line. Points only: no task-count gate. priced = today's frozen prices (computed once per day).
 // debt = a missed-goal lock is unpaid (no vault while it is).
-export const vaultView = ({ apps = [], days = {}, todayYmd = '', points = 0, priced = null, debt = false, windows = [], nowMs = Date.now(), typical = null } = {}) => {
+export const vaultView = ({ apps = [], days = {}, todayYmd = '', points = 0, priced = null, debt = false, windows = [], nowMs = Date.now(), typical = null, wait = null } = {}) => {
+  // wait = the session-end delay ({ untilMs, text }): the vault stays shut until it runs out (same clock as the next session).
+  const held = !!(wait && Number(wait.untilMs) > nowMs);
   const p = Math.max(0, Number(points) || 0); const ids = new Set((apps || []).map((a) => a.id));
   const base = priced && priced.length ? priced.filter((a) => ids.has(a.id)) : priceApps(apps, days, todayYmd, typical);
-  const items = base.map((a) => ({ ...a, open: !debt && p >= a.price }));
+  const items = base.map((a) => ({ ...a, open: !debt && !held && p >= a.price }));
   const openCount = items.filter((a) => a.open).length;
   const next = items.find((a) => !a.open);
   const earned = timeEarnedMin(p); const used = Math.min(earned, spentMin(windows, nowMs));
   const leftMin = Math.max(0, Math.floor(earned - used));
   const live = liveWindow(windows, nowMs);
   const liveLeftMin = live ? Math.max(0, Math.ceil((live.endMs - nowMs) / 60000)) : 0;
-  const canStart = !debt && openCount > 0 && !live && leftMin >= 2;
-  return { items, debt, openCount, total: items.length, nextPrice: next ? next.price : 0, points: p, earnedMin: earned, leftMin, live: !!live, liveLeftMin, canStart, text: rowText({ total: items.length, openCount, next, debt, live: !!live, liveLeftMin }) };
+  const canStart = !debt && !held && openCount > 0 && !live && leftMin >= 2;
+  return { items, debt, openCount, total: items.length, nextPrice: next ? next.price : 0, points: p, earnedMin: earned, leftMin, live: !!live, liveLeftMin, canStart, text: held && items.length && !debt ? `🔒 Vault · ${wait.text || 'opens after the session delay'}` : rowText({ total: items.length, openCount, next, debt, live: !!live, liveLeftMin }), held };
 };
 // Onboarding vault step: weekly screen time, coarse (never fake precision), and a plain-words reason for the price.
 export const weeklyText = (r) => { const h = (Number(r && r.min) || 0) * 7 / 60; const v = h < 1 ? '<1 h/week' : `~${Math.round(h)} h/week`;

@@ -33,7 +33,7 @@ const tasksOf = async (uid, day) => ((await db.doc(`weeklyRoutines/${uid}_${day}
   await db.doc(`users/${uid}`).set({ lockInEnabled: true }, { merge: true });
   const todayWd = nyParts(Date.now()).wd; const today = todayWd; const tomorrow = SHORT[(SHORT.indexOf(todayWd) + 1) % 7];
   const tomorrowYmd = nyParts(atNY(12) + 24 * 3600e3).ymd;
-  const mk = (t, i) => ({ id: 'zz' + i, title: 'ZZTEST ' + t, completed: false, estimateMin: 30, createdAt: 1000 + i });
+  const mk = (t, i) => ({ id: 'zz' + i, title: 'ZZTEST ' + t, completed: false, estimateMin: 30, createdAt: 1000 + i, ...(t === 'Gym' || t === 'Email' ? { important: true } : {}) }); // 2 important, left open
   await db.doc(`weeklyRoutines/${uid}_${today}`).set({ tasks: ['Write report', 'Gym', 'Email', 'Read', 'Plan week'].map(mk) });
   await db.doc(`weeklyRoutines/${uid}_${tomorrow}`).set({ tasks: [mk('Tomorrow prep', 9)] });
   await api(uid, { action: 'plan', wakeTime: '07:00', taskCount: 5, tz: TZ });
@@ -59,10 +59,16 @@ const tasksOf = async (uid, day) => ((await db.doc(`weeklyRoutines/${uid}_${day}
   // 1) session over: one action only, "Start next session" with the hours picker (no plan / schedule step, no time or date input)
   await at(15, 30); ok(await shutOn(), '15:30 shut overlay'); ok(!(await planRow()), 'no "Plan next session" row');
   ok(!(await p.locator('[data-test=eh-sched-open]').count()) && !(await p.locator('[data-test=eh-shutdown] input').count()), 'no schedule row, no time/date input');
-  // main (e54115c): fewer than TASKS_PER_SESSION done -> 2 h cooldown after the session end (server session.canStart false until 17:00)
-  ok(await p.locator('[data-test=eh-next-session]').count() === 0, '15:30: cooldown, no "Start next session" yet');
+  // Session-end delay: goal missed (2h) + 2 unfinished important tasks (2 × 30m) = 3h -> next session (and vault) at 18:00.
+  ok(await p.locator('[data-test=eh-next-session]').count() === 0, '15:30: delay running, no "Start next session" yet');
+  const w1 = (await p.locator('[data-test=eh-next-wait]').innerText().catch(() => '')).trim(); console.log('wait text 15:30:', JSON.stringify(w1));
+  ok(/^Next session in 2h 30m · 6:00 PM \(2h \+ 2 important × 30m\)$/.test(w1), 'countdown shows total + breakdown (2h + 2 important × 30m)');
+  await p.screenshot({ path: SHOTS + 'after-vault-delay.png' });
   await at(17, 30); ok(await shutOn() && !(await planRow()), '17:30: still shut, no plan row');
-  ok(await p.locator('[data-test=eh-next-session]').count() === 1, 'after the cooldown: one "Start next session" button');
+  ok(await p.locator('[data-test=eh-next-session]').count() === 0, '17:30: main\'s plain 2h would be over, the stacked 3h is not');
+  const w2 = (await p.locator('[data-test=eh-next-wait]').innerText().catch(() => '')).trim(); ok(/^Next session in 30m · 6:00 PM /.test(w2), '17:30: 30m left');
+  await at(18, 1); ok(await p.locator('[data-test=eh-next-session]').count() === 1, '18:01: after the 3h delay, one "Start next session" button');
+  ok(!(await p.locator('[data-test=eh-next-wait]').count()), 'countdown gone');
   await p.screenshot({ path: SHOTS + 'after-1-shut.png' });
   await at(20, 0); ok(await shutOn() && !(await planRow()), '8 PM: still shut, no planning auto-open');
   // 2) unfinished tasks stay in today's list (nothing moved to tomorrow)
