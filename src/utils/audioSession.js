@@ -30,4 +30,4 @@ export const setMusicPlaying = (on) => {
 };
 export const musicPlaying = () => music;
 // Dictation / speech ended (web Speech API or native): the focus music resumes itself unless the user paused it (useBackground listens).
-export const audioRestored = (reason = '') => { try { if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('cn:audio-restored', { detail: { reason } })); } catch (e) { /* old engine */ } };
+export const audioRestored = (reason = '') => { try { if (typeof window !== 'undefined') window.dispatchEvent(new window.CustomEvent('cn:audio-restored', { detail: { reason } })); } catch (e) { /* old engine */ } };
