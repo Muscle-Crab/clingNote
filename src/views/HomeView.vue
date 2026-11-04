@@ -3033,6 +3033,7 @@ const confirmVoiceItems = async (items) => {
     else cancelVoiceInput(); // saved: close and clear the transcript/state now (undo stays available in the toasts)
   } finally { voiceBusy.value = false; }
 };
+if (process.env.VUE_APP_FIREBASE_EMULATORS === '1') window.__startVoice = () => startVoiceInput(); // local e2e hook only (the voice review sheet)
 const relistenVoice = () => { voiceItems.value = []; startVoiceInput(); };
 const drainVoiceQueue = async () => {
   if (voiceSubmitting) return;
