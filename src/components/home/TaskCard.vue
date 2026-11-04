@@ -299,7 +299,7 @@ const customDays = ref([...(props.task.repeatDays || [])]);
 const pickRepeat = (list) => { repeatOpen.value = false; emit('set-repeat', [...list]); };
 
 const moreOpen = ref(false);
-const MOVE_TO = [{ id: 'morning', label: 'Morning', icon: '🌅' }, { id: 'noon', label: 'Noon', icon: '☀️' }, { id: 'afternoon', label: 'Afternoon', icon: '🌇' }];
+const MOVE_TO = [{ id: 'morning', label: 'Morning', icon: '🌅' }, { id: 'afternoon', label: 'Afternoon', icon: '🌇' }];
 const cat = computed(() => categoryOf(props.task));
 // labels may be stored as an array or a comma-separated string (older tasks); never iterate a string per character
 const labelList = computed(() => { const l = props.task.labels; return (Array.isArray(l) ? l : typeof l === 'string' ? l.split(',') : []).map((x) => String(x).trim()).filter(Boolean); });

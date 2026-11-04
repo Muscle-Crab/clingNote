@@ -3486,7 +3486,7 @@ const onSectionDrop = async ({ key, section, order }) => {
   if (sectionOf(t) !== section) await moveTaskToSection(t, section);
 };
 const onSectionDragEnd = (changed) => { isDraggingTask.value = false; settleReorder(); playSound('dragEnd'); if (changed) handleDragEnd(); };
-// "Move to Morning/Noon/Afternoon" (... menu) and cross-section drops. Saved as task.section; opens the target section.
+// "Move to Morning/Afternoon" (... menu) and cross-section drops. Saved as task.section; opens the target section.
 const moveTaskToSection = async (task, section) => {
   if (!isSection(section)) return;
   const live = (selectedDayRoutine.value || []).find((x) => taskKey(x) === taskKey(task)) || task;

@@ -1,5 +1,5 @@
 // Per-session points (game plan, pure). Session 1 = the morning session: the Morning section's tasks, its own bar, only points
-// earned inside its window count. Session 2 (afternoon/evening) = the rest of the tasks (Noon + Afternoon), same rules, judged
+// earned inside its window count. Session 2 (afternoon/evening) = the rest of the tasks (Afternoon, incl. legacy noon), same rules, judged
 // on its own (a missed morning never changes the afternoon bar). One session a day (gamePlan.sessions = 1): all tasks.
 // Target = the sum of the session's tasks' points (SIZE_POINTS, same as the day bar). Shutdown rule: a session that ends
 // with earned < target keeps the locked apps locked SESSION_RULES.graceMs (2 h) past its end, then they unlock on their own.

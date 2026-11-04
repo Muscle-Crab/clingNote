@@ -1,18 +1,20 @@
-// Home task list sections (Morning / Noon / Afternoon).
-// Boundaries (local time, from task.startTime): Morning < 12:00, Noon 12:00-14:59, Afternoon >= 15:00.
+// Home task list sections (Morning / Afternoon). There is no Noon section: legacy section 'noon' is read as Afternoon
+// (data is kept as stored; it becomes 'afternoon' on the task's next section save). Boundaries: Morning < 12:00, Afternoon >= 12:00.
 // A task's own `section` field wins (set on create, by drag between sections or by "Move to ..." in the ... menu);
 // otherwise its start time decides; untimed tasks without a section go to Morning (the default for new tasks).
-export const SECTIONS = [{ id: 'morning', label: 'Morning' }, { id: 'noon', label: 'Noon' }, { id: 'afternoon', label: 'Afternoon' }];
+export const SECTIONS = [{ id: 'morning', label: 'Morning' }, { id: 'afternoon', label: 'Afternoon' }];
 export const SECTION_IDS = SECTIONS.map((s) => s.id);
 export const DEFAULT_SECTION = 'morning';
-export const isSection = (s) => SECTION_IDS.includes(s);
+export const LEGACY_SECTIONS = { noon: 'afternoon' };
+export const normSection = (s) => LEGACY_SECTIONS[s] || s;
+export const isSection = (s) => SECTION_IDS.includes(normSection(s));
 export const sectionFromTime = (hhmm) => {
   const m = /^(\d{1,2}):(\d{2})/.exec(String(hhmm || '')); if (!m) return null;
-  const h = Number(m[1]); return h < 12 ? 'morning' : h < 15 ? 'noon' : 'afternoon';
+  const h = Number(m[1]); return h < 12 ? 'morning' : 'afternoon';
 };
-export const sectionOf = (t) => (t && isSection(t.section) ? t.section : sectionFromTime(t && t.startTime) || DEFAULT_SECTION);
+export const sectionOf = (t) => (t && isSection(t.section) ? normSection(t.section) : sectionFromTime(t && t.startTime) || DEFAULT_SECTION);
 // On create: an explicit start time wins, then the requested section, else Morning.
-export const sectionForCreate = ({ start, section } = {}) => sectionFromTime(start) || (isSection(section) ? section : DEFAULT_SECTION);
+export const sectionForCreate = ({ start, section } = {}) => sectionFromTime(start) || (isSection(section) ? normSection(section) : DEFAULT_SECTION);
 export const groupBySection = (tasks = []) => SECTIONS.map((s) => ({ ...s, tasks: tasks.filter((t) => sectionOf(t) === s.id) }));
 
 // Drag/drop: section headers are drop targets in the same flat list as the cards (key HEADER + id).
@@ -38,9 +40,9 @@ export const mergeOrder = (full, visibleOrder, keyOf, movedKey) => {
   rest.splice(at, 0, moved); return rest;
 };
 
-// Collapse state per section: Morning open, Noon and Afternoon collapsed by default.
+// Collapse state per section: Morning open, Afternoon collapsed by default.
 export const COLLAPSE_KEY = 'cn.taskSections.collapsed';
-export const DEFAULT_COLLAPSED = { morning: false, noon: true, afternoon: true };
+export const DEFAULT_COLLAPSED = { morning: false, afternoon: true };
 export const loadCollapsed = (store = (typeof localStorage !== 'undefined' ? localStorage : null)) => {
   try { const v = JSON.parse((store && store.getItem(COLLAPSE_KEY)) || 'null'); if (v && typeof v === 'object') return { ...DEFAULT_COLLAPSED, ...Object.fromEntries(SECTION_IDS.filter((k) => typeof v[k] === 'boolean').map((k) => [k, v[k]])) }; } catch (e) { /* ignore */ }
   return { ...DEFAULT_COLLAPSED };

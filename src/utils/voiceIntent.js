@@ -172,7 +172,7 @@ export function normalizeItems(items, now = new Date(), { userText = '' } = {}) 
     let remindAt = ra && raT ? `${ra[1]}T${raT}` : '';
     if (type === 'reminder' && !remindAt) remindAt = `${date}T${start || '09:00'}`;
     const st2 = start || (type === 'reminder' ? remindAt.slice(11) : type === 'schedule' ? '09:00' : '');
-    const section = ['morning', 'noon', 'afternoon'].includes(x.section) ? x.section : ''; // optional Home section; an explicit start time wins when saved
+    const section = x.section === 'noon' ? 'afternoon' : ['morning', 'afternoon'].includes(x.section) ? x.section : ''; // optional Home section; an explicit start time wins when saved
     return { type, title, date: type === 'reminder' ? remindAt.slice(0, 10) : date, start: st2, durationMin, remindAt: type === 'reminder' ? remindAt : '', ...(section ? { section } : {}) };
   }).filter((x) => x.title);
 }
