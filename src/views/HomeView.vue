@@ -3025,8 +3025,11 @@ const confirmVoiceItems = async (items) => {
       done.push(it);
       voiceAdded.value = [...voiceAdded.value, { id: `${Date.now()}-${Math.random()}`, title: `${it.type === 'reminder' ? '⏰ ' : it.type === 'schedule' ? '📅 ' : ''}${it.title}`, undoUntil: 0 }];
     }
-    voiceItems.value = voiceItems.value.filter((x) => !done.includes(x));
-    if (!voiceItems.value.length && !voiceError.value) setTimeout(() => { if (!voiceItems.value.length) cancelVoiceInput(); }, 1200);
+    // The modal emits COPIES of its rows, so match by position (not identity): keep only what wasn't saved. Matching by identity
+    // never removed anything, so the list stayed non-empty and the modal never closed after a successful Save.
+    voiceItems.value = voiceError.value ? items.filter((x) => !done.includes(x)) : [];
+    if (voiceError.value) showNoteToast(voiceError.value, { error: true });
+    else cancelVoiceInput(); // saved: close and clear the transcript/state now (undo stays available in the toasts)
   } finally { voiceBusy.value = false; }
 };
 const relistenVoice = () => { voiceItems.value = []; startVoiceInput(); };
