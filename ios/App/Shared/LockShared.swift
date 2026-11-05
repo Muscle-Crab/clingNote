@@ -163,6 +163,46 @@ enum AppLocks {
         apply(now: now)
     }
 }
+
+/// Apps the user chose for the vault. The lock-in selection and the named-app list are unioned, and each token keeps a
+/// stable id so today's prices don't jump when the picker is reopened. UsageLog and VaultAllow both read this list, so
+/// the priced apps and the shielded apps are the same tokens (a name-only list used to disagree with the lock-in shield).
+@available(iOS 16.0, *)
+enum VaultCatalog {
+    static let key = "lock.vaultCatalog"
+    struct Item: Codable { var id: String; var label: String; var token: ApplicationToken }
+    static func apps() -> [Item] {
+        guard let d = LockShared.defaults?.data(forKey: key), let a = try? JSONDecoder().decode([Item].self, from: d) else { return [] }
+        return a
+    }
+    static func save(_ a: [Item]) { if let d = try? JSONEncoder().encode(a) { LockShared.defaults?.set(d, forKey: key) } }
+    /// Rebuild from the current selection and named apps. A token already in the catalog keeps its id.
+    static func sync(selectionTokens: Set<ApplicationToken>, labeled: [LabeledApp]) -> [Item] {
+        let prev = apps()
+        var next: [Item] = []
+        var seen = Set<ApplicationToken>()
+        func add(_ token: ApplicationToken, preferLabel: String, preferId: String?) {
+            if seen.contains(token) { return }
+            seen.insert(token)
+            let named = preferLabel.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let e = prev.first(where: { $0.token == token }) {
+                var c = e
+                if !named.isEmpty && named != "App" { c.label = named }
+                next.append(c)
+                return
+            }
+            let id = (preferId?.isEmpty == false) ? preferId! : UUID().uuidString
+            next.append(Item(id: id, label: named.isEmpty ? "App" : named, token: token))
+        }
+        for t in selectionTokens {
+            let lab = labeled.first(where: { $0.token == t })
+            add(t, preferLabel: lab?.label ?? "", preferId: lab?.id)
+        }
+        for l in labeled { add(l.token, preferLabel: l.label, preferId: l.id) }
+        save(next)
+        return next
+    }
+}
 @available(iOS 16.0, *)
 extension ManagedSettingsStore.Name { static let clingApps = Self("clingApps") }
 
@@ -228,7 +268,9 @@ enum VaultAllow {
     static func isLive(until: Double, nowMs: Double) -> Bool { until > nowMs }
     static func allowed(now: Double = Date().timeIntervalSince1970 * 1000) -> Set<ApplicationToken> {
         guard let a = active(), isLive(until: a.until, nowMs: now), !DebtHold.isActive(nowMs: now) else { return [] }
-        let ids = Set(a.ids); return Set(AppLocks.apps().filter { ids.contains($0.id) }.map { $0.token })
+        let ids = Set(a.ids)
+        let tokens = AppLocks.apps().filter { ids.contains($0.id) }.map { $0.token } + VaultCatalog.apps().filter { ids.contains($0.id) }.map { $0.token }
+        return Set(tokens)
     }
     static func setActive(_ ids: [String], until: Double) { LockShared.defaults?.set(["ids": ids, "until": until], forKey: activeKey) }
     static func clearActive() { LockShared.defaults?.removeObject(forKey: activeKey) }
@@ -265,7 +307,10 @@ enum UsageLog {
     static func markDay(now: Date = Date()) { var m = all(); let d = WakeLock.ymd(now); if m[d] == nil { m[d] = [:]; LockShared.defaults?.set(m, forKey: key) } }
     /// (Re)starts the schedule when the labeled app set changed. One activity, apps x 5 events.
     static func ensure() -> String {
-        let apps = AppLocks.apps(); let sig = apps.map { $0.id }.sorted().joined(separator: ",")
+        // Chosen apps (selection + named). Fall back to named apps if the catalog has not been synced yet.
+        let catalog = VaultCatalog.apps()
+        let apps: [(id: String, token: ApplicationToken)] = catalog.isEmpty ? AppLocks.apps().map { ($0.id, $0.token) } : catalog.map { ($0.id, $0.token) }
+        let sig = apps.map { $0.id }.sorted().joined(separator: ",")
         if apps.isEmpty { DeviceActivityCenter().stopMonitoring([activity]); LockShared.defaults?.removeObject(forKey: sigKey); return "no-apps" }
         if LockShared.defaults?.string(forKey: sigKey) == sig, DeviceActivityCenter().activities.contains(activity) { markDay(); return "ok" }
         var events: [DeviceActivityEvent.Name: DeviceActivityEvent] = [:]

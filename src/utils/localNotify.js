@@ -5,6 +5,7 @@ import { LocalNotifications } from '@capacitor/local-notifications';
 import { isNativeIOS } from '@/utils/platform';
 import { notifSound, voiceMutedNow } from '@/utils/notifSound';
 import { quietDefer } from '@/utils/gamePlan';
+import { audioRestored } from '@/utils/audioSession';
 
 // Stable 31-bit positive int id from a string key (plugin ids must be Int32).
 export const notifId = (key) => { let h = 0; const s = String(key); for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0; return (Math.abs(h) % 2147483646) + 1; };
@@ -70,10 +71,11 @@ export const scheduleLocal = async (key, { title, body, at: at0, on, route, type
     await LocalNotifications.cancel({ notifications: [{ id }] }).catch(() => {});
     const sound = notifSound(type, key, { muted: voiceMutedNow() }); // robot-coach clip in the app bundle; omitted when muted -> iOS default
     await LocalNotifications.schedule({ notifications: [{ id, title, body, ...(sound ? { sound } : {}), extra: { route: route || '/home', type: type || String(key).split(':')[0] }, schedule: on ? { on, allowWhileIdle: true } : { at: when, allowWhileIdle: true } }] });
+    audioRestored('notification'); // scheduling a sound used to suspend focus music; bring it back unless the user paused
     return true;
-  } catch (e) { console.warn('local notification schedule failed', e); return false; }
+  } catch (e) { console.warn('local notification schedule failed', e); audioRestored('notification'); return false; }
 };
-export const cancelLocal = async (key) => { if (!isNativeIOS()) { webCancel(key); return; } try { await LocalNotifications.cancel({ notifications: [{ id: notifId(key) }] }); } catch (e) { /* ignore */ } };
+export const cancelLocal = async (key) => { if (!isNativeIOS()) { webCancel(key); return; } try { await LocalNotifications.cancel({ notifications: [{ id: notifId(key) }] }); } catch (e) { /* ignore */ } audioRestored('notification'); };
 
 export const reminderKey = (t) => `rem:${taskKeyOf(t)}`;
 export const timerKey = (t) => `timer:${taskKeyOf(t)}`;

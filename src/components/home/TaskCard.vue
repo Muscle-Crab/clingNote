@@ -160,7 +160,7 @@
                   <div v-if="showNotification" class="task-toast">Saved ✓</div>
                   <div v-if="transferNotification" class="task-toast task-toast--info">{{ transferNotification }}</div>
                                     <div v-if="expanded" class="task-expand edit-panel" data-test="edit-panel">
-                      <p v-if="dayLocked" class="lock-hint" data-test="lock-hint">🔒 Locked in: you can still edit the name, estimate and timer. Deleting and adding stay locked.</p>
+                      <p v-if="dayLocked" class="lock-hint" data-test="lock-hint">🔒 Locked in: you can still delete, move, and edit tasks. Screen Time stays on until you earn it.</p>
                       <label class="mini-field"><span>Name</span>
                         <input type="text" class="field-input" data-test="edit-title" :value="task.title" maxlength="140"
                                @change="$event.target.value.trim() && $emit('patch', { title: $event.target.value.trim() })" /></label>
@@ -269,7 +269,7 @@ const props = defineProps({
   now: { type: Number, default: 0 }, // ticking clock from HomeView for running task timers
   showNotification: { type: Boolean, default: false },
   transferNotification: { type: String, default: null },
-  dayLocked: { type: Boolean, default: false }, // 8-hour lock on this day: title/estimate/points frozen
+  dayLocked: { type: Boolean, default: false }, // running lock-in: informational only, task actions stay enabled
   highlight: { type: Boolean, default: false }, // just rolled over (tapped from the rollover banner)
   allOccurrences: { type: Boolean, default: false },
   section: { type: String, default: '' }, // Home section this card is shown in (enables Move to ... in the ... menu)

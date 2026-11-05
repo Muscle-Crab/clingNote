@@ -139,6 +139,7 @@ export const createEngine = () => {
   return {
     get playing() { return playing; },
     get state() { return ctx ? ctx.state : 'none'; },
+    get context() { return ctx; },
     // Must be called from a user gesture (tap/click)
     // Must be called from a user gesture (tap/click). Everything up to ctx.resume() runs synchronously so iOS
     // still sees the gesture (an await before resume() loses it). A closed/'interrupted' (iOS: call, Siri, other app) context is replaced.

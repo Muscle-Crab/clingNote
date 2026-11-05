@@ -1,7 +1,7 @@
 // Shared Background state: prefs (saved per device in localStorage) + music playback. Music never starts on its own.
 import { reactive, ref, watch, computed } from 'vue';
 import { msUntilNextPeriod } from '@/utils/daytimeBg';
-import { refreshOtherAudio, otherAudioBusy } from '@/utils/audioSession';
+import { refreshOtherAudio, otherAudioBusy, setMusicContext } from '@/utils/audioSession';
 import { loadPrefs, savePrefs, sanitize, DEFAULTS, loadCustomImage, saveCustomImage, clearCustomImage, effectiveImage, TRACKS, pickNextTrack, tapAction, restoreFromBackup, KEY } from '@/utils/bgPrefs';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import { applyBackgroundImage, fileToBackgroundDataUrl } from '@/utils/bgImage';
@@ -22,6 +22,7 @@ watch(voSpeaking, (v) => { if (engine && playing.value) engine.setVolume(v ? pre
 _setMusicHolds(() => { if (!npActive()) return false; npTitle(trackName()); return true; }); // after a voice line: re-assert the music widget
 const audioError = ref('');
 let engine = null;
+setMusicContext(() => (engine && engine.context) || null);
 let resumeArmed = false;
 // Auto-rotate: purely time-based. While playing, every rotateMins minutes crossfade to another track (shuffled, no immediate repeat).
 // Generative tracks never "end", so nothing else triggers a change.
@@ -61,8 +62,16 @@ if (typeof window !== 'undefined') {
   window.addEventListener('focus', tick);
 }
 
-// Keep the button honest: if iOS suspends/interrupts/closes audio (call, Siri, backgrounding) show "Play" again.
-const syncReal = () => { if (playing.value && (!engine || engine.state !== 'running')) { playing.value = false; stopRotate(); npPaused(trackName()); } };
+// A blip (confirm dialog, notification schedule, a sound effect) suspends the AudioContext. That is not a user pause.
+// Do not pause the Now Playing anchor here: pausing it deactivates the iOS session and the music stays silent.
+let resumeAt = 0;
+const syncReal = () => {
+  if (!prefs.musicOn) return;
+  if (engine && engine.playing && engine.state === 'running') return;
+  if (Date.now() - resumeAt < 1500) return;
+  resumeAt = Date.now();
+  resumeAfterInterruption();
+};
 const onCtxState = (st) => {
   if (st === 'running') { if (prefs.musicOn && engine && engine.playing && !playing.value) { playing.value = true; npStart(trackName(), lockHandlers()); armRotate(); } return; }
   setTimeout(syncReal, 400);
@@ -146,4 +155,15 @@ const api = {
   async reset() { await api.pause(); clearCustomImage(); custom.value = ''; Object.assign(prefs, DEFAULTS); persist(); showImage(); },
   level: () => (engine ? engine.level() : 0),
 };
+// Any tap while the user still wants music and the context is not running restarts it inside that gesture
+// (delete confirm, move, app picker). The pause button is excluded so it can still stop the track.
+if (typeof window !== 'undefined') {
+  window.addEventListener('pointerup', (e) => {
+    if (!prefs.musicOn) return;
+    const t = e && e.target;
+    if (t && t.closest && t.closest('[data-test=bg-play], .bgp-playbtn')) return;
+    if (engine && engine.playing && engine.state === 'running') return;
+    api.play();
+  }, true);
+}
 export const useBackground = () => api;

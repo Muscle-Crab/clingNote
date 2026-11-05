@@ -113,11 +113,14 @@ public class ClingLockPlugin: CAPPlugin, CAPBridgedPlugin {
             let model = PickerModel(selection: forSession ? Self.sessionSeedSelection() : Self.loadSelection())
             var host: UIViewController?
             let view = PickerView(model: model) { save in
-                // During a lock the list can only grow: a deselect must not unlock anything until the lock ends
-                // (reopening a locked app goes only through the per-task unlock). Mirrors src/utils/lockedAppsRow.js.
-                var s = model.selection
-                if save && Self.lockIsActive() { let old = Self.loadSelection(); s.applicationTokens.formUnion(old.applicationTokens); s.categoryTokens.formUnion(old.categoryTokens); s.webDomainTokens.formUnion(old.webDomainTokens) }
-                if save, let data = try? PropertyListEncoder().encode(s) { LockShared.defaults?.set(data, forKey: LockShared.selectionKey); Self.saveSelectionTokens(s) }
+                // The user can add or remove apps during a lock-in. Whatever remains is shielded again;
+                // a removed app leaves the shield. This does not bypass the points vault for apps they keep.
+                let s = model.selection
+                if save, let data = try? PropertyListEncoder().encode(s) {
+                    LockShared.defaults?.set(data, forKey: LockShared.selectionKey); Self.saveSelectionTokens(s)
+                    VaultCatalog.sync(selectionTokens: s.applicationTokens, labeled: AppLocks.apps())
+                    if Self.lockIsActive() { Self.applyShield() }
+                }
                 host?.dismiss(animated: true)
                 call.resolve(["saved": save, "apps": s.applicationTokens.count, "categories": s.categoryTokens.count, "sites": s.webDomainTokens.count])
             }
@@ -289,8 +292,18 @@ public class ClingLockPlugin: CAPPlugin, CAPBridgedPlugin {
             let view = NamedPickerView(model: model, existing: AppLocks.apps(), suggest: suggest) { result in
                 host?.dismiss(animated: true)
                 guard let result = result else { call.resolve(["saved": false, "apps": Self.appsPayload()]); return }
+                let previous = AppLocks.apps()
+                let kept = Set(result.map { $0.token })
+                let removed = Set(previous.filter { !kept.contains($0.token) }.map { $0.token })
                 AppLocks.saveApps(result)
                 var l = AppLocks.locked(); let ids = Set(result.map { $0.id }); l = l.filter { ids.contains($0.key) }; AppLocks.saveLocked(l); AppLocks.apply()
+                if !removed.isEmpty {
+                    var sel = Self.loadSelection()
+                    sel.applicationTokens.subtract(removed)
+                    if let data = try? PropertyListEncoder().encode(sel) { LockShared.defaults?.set(data, forKey: LockShared.selectionKey); Self.saveSelectionTokens(sel) }
+                }
+                VaultCatalog.sync(selectionTokens: Self.loadSelection().applicationTokens, labeled: result)
+                if Self.lockIsActive() { Self.applyShield() }
                 call.resolve(["saved": true, "apps": Self.appsPayload()])
             }
             host = UIHostingController(rootView: view)
@@ -528,13 +541,37 @@ public class ClingLockPlugin: CAPPlugin, CAPBridgedPlugin {
     /// Starts / refreshes the daily "clingUsage" threshold monitor for the labeled apps (no-op when unchanged).
     @objc func startUsage(_ call: CAPPluginCall) {
         guard #available(iOS 16.0, *) else { call.resolve(["monitor": "unsupported"]); return }
+        VaultCatalog.sync(selectionTokens: Self.loadSelection().applicationTokens, labeled: AppLocks.apps())
         call.resolve(["monitor": UsageLog.ensure()])
     }
-    /// On-device usage buckets { days: { ymd: { appId: minutes } }, apps: [{ id, label, locked }] } for the vault's prices.
+    /// On-device usage buckets { days, apps: [{ id, label, icon }] }. Apps are the user's chosen set
+    /// (lock-in selection union named apps), ranked later in pointsVault.js by these Screen Time buckets.
     @objc func vaultUsage(_ call: CAPPluginCall) {
         guard #available(iOS 16.0, *) else { call.resolve(["days": [:], "apps": []]); return }
-        let apps = AppLocks.apps().map { ["id": $0.id, "label": $0.label] as [String: Any] }
+        let items = VaultCatalog.sync(selectionTokens: Self.loadSelection().applicationTokens, labeled: AppLocks.apps())
+        let apps: [[String: Any]] = items.map { a in
+            var row: [String: Any] = ["id": a.id, "label": a.label]
+            let icon = Self.iconBase64(a.id, a.token)
+            if !icon.isEmpty { row["icon"] = "data:image/png;base64,\(icon)" }
+            return row
+        }
         call.resolve(["days": UsageLog.all(), "apps": apps])
+    }
+    /// Real home-screen icon for an opaque ApplicationToken. Only Label can draw it; ImageRenderer snapshots that for the web vault row.
+    @available(iOS 16.0, *)
+    static var iconCache: [String: String] = [:]
+    @available(iOS 16.0, *)
+    static func iconBase64(_ id: String, _ token: ApplicationToken) -> String {
+        if let hit = iconCache[id], !hit.isEmpty { return hit }
+        var b64 = ""
+        let draw = {
+            let r = ImageRenderer(content: Label(token).labelStyle(.iconOnly).frame(width: 48, height: 48))
+            r.scale = 2
+            if let data = r.uiImage?.pngData() { b64 = data.base64EncodedString() }
+        }
+        if Thread.isMainThread { draw() } else { DispatchQueue.main.sync(execute: draw) }
+        if !b64.isEmpty { iconCache[id] = b64 }
+        return b64
     }
     /// Vault unlock celebration with the apps' REAL icons + names. ApplicationTokens are opaque: only Apple's Label(token) can draw
     /// them, so this is a native SwiftUI overlay (VaultUnlockView) over the web view. ids = labeled app ids that just opened.
@@ -543,8 +580,12 @@ public class ClingLockPlugin: CAPPlugin, CAPBridgedPlugin {
     @objc func celebrateVault(_ call: CAPPluginCall) {
         guard #available(iOS 16.0, *) else { call.resolve(["shown": 0, "missing": call.getArray("ids") ?? []]); return }
         let ids = (call.getArray("ids") as? [String]) ?? []
-        let saved = AppLocks.apps(); var apps: [LabeledApp] = []; var missing: [String] = []
-        for id in ids { if let a = saved.first(where: { $0.id == id }) { apps.append(a) } else { missing.append(id) } }
+        let saved = VaultCatalog.apps(); let named = AppLocks.apps(); var apps: [LabeledApp] = []; var missing: [String] = []
+        for id in ids {
+            if let a = saved.first(where: { $0.id == id }) { apps.append(LabeledApp(id: a.id, label: a.label, token: a.token)) }
+            else if let a = named.first(where: { $0.id == id }) { apps.append(a) }
+            else { missing.append(id) }
+        }
         guard !apps.isEmpty else { call.resolve(["shown": 0, "missing": missing]); return }
         let points = call.getInt("points") ?? 0
         let robot = Self.bundledWebImage(call.getString("robot") ?? "")
