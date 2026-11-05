@@ -11,7 +11,9 @@ export const fmt = (n) => `$${n.toFixed(2)}`;
 export const planById = (id) => PLANS.find((p) => p.id === id);
 
 // Daily task-creation limits (tasks created or scheduled for one calendar day). Change here only.
-export const TASK_LIMITS = { free: 5, pro: 5 }; // 5 tasks/day for free and Pro
-// Free and Pro share the same 50/day safety max, so Pro does not sell a higher daily limit.
+// Free stays at 5. Pro uses the 50/day safety max (same ceiling as the day plan). A Pro cap of 5
+// blocked the voice Review sheet after a normal morning: "Daily limit reached: 5 tasks per day on Pro."
+export const TASK_LIMITS = { free: 5, pro: 50 };
+// True when Pro's cap is higher, so the paywall can say so. 50 is a safety max, not an unlimited plan.
 export const PRO_RAISES_LIMIT = TASK_LIMITS.pro > TASK_LIMITS.free;
 export const dailyTaskLimit = (pro) => (pro ? TASK_LIMITS.pro : TASK_LIMITS.free);

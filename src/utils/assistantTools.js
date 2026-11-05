@@ -60,7 +60,7 @@ export const validateCall = (name, args = {}, { refs = {}, tasksByKey = new Map(
       // Only items landing today count against today's remaining; a future-dated one-off is checked against its own day when it is saved
       // (HomeView addNewTask -> dailyLimitGate(sched.date)), same as the Add sheet. Recurring items start today, so they count.
       const counted = items.filter((x) => x.type !== 'reminder' && !(today && x.date && x.date > today && !x.repeat)).length;
-      if (limitRemaining != null && counted > limitRemaining) return { ok: false, error: `Daily limit: only ${Math.max(0, limitRemaining)} more task(s) today (5/day on free and Pro).`, limit: true };
+      if (limitRemaining != null && counted > limitRemaining) return { ok: false, error: `Daily limit: only ${Math.max(0, limitRemaining)} more task(s) today.`, limit: true };
       return { ok: true, args: { items } };
     }
     case 'edit_task': {

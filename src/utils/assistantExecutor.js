@@ -1,6 +1,7 @@
 // ClingNote assistant executor: maps validated tool calls (utils/assistantTools.validateCall) onto the app's own flows.
 // Pure factory: HomeView injects the real handlers (same paths as the buttons: daily limit, boss, points, lock rules); tested in scripts/test-assistant.js.
 import { buildContext, taskKeyOf, clampPoints, clampComplexity } from './assistantTools';
+import { dailyTaskLimit } from '../config/pricing.js';
 
 // deps: { tasks(), today(), pro(), limitRemaining() async, stats() -> {streak,points,target,hours,lock,upcoming,settings,route},
 //   addTask(item) -> {ok,error}, deleteTask(task), editTask(task, patch), reschedule(task,{date,time}), complete(task), startTimer(task, minutes),
@@ -12,7 +13,8 @@ export function createAssistantExecutor(deps) {
     let limitRemaining = null;
     try { limitRemaining = await deps.limitRemaining(); } catch (e) { limitRemaining = null; }
     const s = deps.stats ? deps.stats() : {};
-    const b = buildContext({ tasks, pro: deps.pro(), limit: limitRemaining == null ? null : { remainingToday: limitRemaining, perDay: 5 }, ...s,
+    const proNow = !!deps.pro();
+    const b = buildContext({ tasks, pro: proNow, limit: limitRemaining == null ? null : { remainingToday: limitRemaining, perDay: dailyTaskLimit(proNow) }, ...s,
       tz: (typeof Intl !== 'undefined' && Intl.DateTimeFormat().resolvedOptions().timeZone) || '' });
     refs = b.refs;
     return { refs: b.refs, context: b.context, tasksByKey: new Map(tasks.map((t) => [taskKeyOf(t), t])), today: deps.today(), limitRemaining };

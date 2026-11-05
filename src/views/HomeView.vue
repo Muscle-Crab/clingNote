@@ -281,7 +281,7 @@ import { checkDailyLimit } from '@/utils/taskLimits';
 import { defaultTransferDay, transferFits, MAX_TASKS_PER_DAY } from '@/utils/transfer';
 import { canUse } from '@/utils/pro';
 const _proRouter = _useRouter();
-// Daily task limit (config/pricing.js TASK_LIMITS): safety max 50/day, free and Pro alike
+// Daily task limit (config/pricing.js TASK_LIMITS): free 5/day, Pro 50/day safety max. Voice Review uses this same gate.
 const limitHit = ref(null); // { limit, count, pro, day } when the last add was blocked
 const goUpgradeForLimit = () => { if (rcProActive(auth.currentUser?.uid)) return; modalOpen.value = false; _proRouter.push({ path: '/paywall', query: { feature: 'taskLimit', from: '/home' } }); };
 // Limit data is prefetched when the add modal opens so Save does not wait on 8 Firestore reads.
