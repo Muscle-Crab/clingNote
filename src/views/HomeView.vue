@@ -371,7 +371,7 @@ import { homeDay } from '@/utils/homeDay';
 import DayStartPrompt from '@/components/eighthour/DayStartPrompt.vue';
 import { sessionApps } from '@/utils/sessionApps';
 import { debtShield, debtHoldPlan, turnOffBlocked, TURN_OFF_BLOCKED_MSG } from '@/utils/appLockDebt';
-import { vaultView, startPlan, stopWindows, priceApps, newUnlocks, unlockCelebration, webFallback, releasePlan } from '@/utils/pointsVault';
+import { vaultView, startPlan, stopWindows, priceApps, newUnlocks, unlockCelebration, webFallback, focusTimerRunning, focusPaused, vaultAccessOpen, shieldBecauseTimerOff, vaultTimerPlan } from '@/utils/pointsVault';
 import { typicalMin } from '@/utils/typicalUsage';
 import robotPng from '@/assets/assistant-robot@2x.png';
 import PointsCelebration from '@/components/home/PointsCelebration.vue';
@@ -4172,6 +4172,12 @@ const syncAppLock = async () => {
   if (debt.cleared) { clearDebtLocal(debt.sessionKey); debtPaidNative(debt.sessionKey); eh.reportProgress(); }
   else if (debt.want) { want = true; endMs = Math.max(debt.untilMs, sp && sp.want ? sp.untilMs : 0); }
   await syncDebtHold(st, !!(sp && sp.phase === 'friend'), !!(sp && sp.phase === 'break'));
+  const sessionRunning = !!(eh.running.value && eh.lock.value && eh.lock.value.endMs > Date.now());
+  const sessionEnded = eh.phase.value === 'ended' || !!(eh.lock.value && !eh.running.value && Date.now() >= eh.lock.value.endMs);
+  const accessOpen = vaultAccessOpen({ focusRunning: focusTimerRunning(selectedDayRoutine.value, Date.now()), focusPaused: focusPaused(selectedDayRoutine.value), sessionRunning, sessionEnded });
+  const goalMet = !!(eh.lock.value && Number(eh.lock.value.target) > 0 && (Number(eh.lock.value.earned) || 0) >= Number(eh.lock.value.target));
+  const idle = shieldBecauseTimerOff({ enabled: lockEnabled(), selectionCount: st.selectionCount || 0, accessOpen, unlockedToday: lockUnlockedDay.value === localDateStr(), onBreak: !!(sp && sp.phase === 'break'), goalMet, sessionEnded, now: Date.now() });
+  if (idle && !want) { want = true; endMs = Math.max(endMs || 0, idle.untilMs); }
   const fEnd = sp && sp.phase === 'break' ? 0 : focusShieldEnd({ dayWant: !!want, enabled: lockEnabled(), selectionCount: st.selectionCount || 0, locked: lockedFocus(selectedDayRoutine.value || []) });
   const act = lockAction({ want: !!(want || fEnd), endMs: fEnd || endMs, st });
   hardLocked.value = !!(want || fEnd);
@@ -4186,8 +4192,8 @@ const syncAppLock = async () => {
   syncVault();
 };
 // Points vault (src/utils/pointsVault.js): the day's points open the apps the user chose, cheapest (least Screen Time) first.
-// Prices are round5(30 + 2 × average daily minutes), frozen once per day. No task-count gate. Crossing a price releases that
-// app from the Screen Time shield (VaultAllow) and plays the unlock animation. Every 10 pts = 5 min of shared app time.
+// Prices are round5(80 + 2 × average daily minutes), heaviest ×1.5, cap 600, frozen once per day. No task-count gate.
+// Earned apps leave the shield only while the session or a focus timer is running; otherwise the allowance is revoked and the shield comes back. Every 10 pts = 5 min of shared app time.
 // Never while a missed-goal lock is unpaid. Points are not spent: used time is local windows.
 // Tasks completed in the running session (else today) -> the N/8 cheer on the completion celebration.
 const sessionTasksDone = computed(() => { const l = eh.running.value && eh.lock.value; const list = (todayTasksForTarget.value || []).filter((t) => t && t.completed);
@@ -4196,7 +4202,7 @@ const VAULT_WIN_KEY = 'cn.vault.windows.v1';
 const vaultLoad = () => { try { const v = JSON.parse(localStorage.getItem(VAULT_WIN_KEY) || '{}'); return v && v.day === localDateStr() ? v.windows || [] : []; } catch (e) { return []; } };
 const vaultWindows = ref(vaultLoad()); const vaultData = ref({ days: {}, apps: [] }); const vaultNow = ref(Date.now());
 const vaultSave = (w) => { vaultWindows.value = w; try { localStorage.setItem(VAULT_WIN_KEY, JSON.stringify({ day: localDateStr(), windows: w })); } catch (e) { /* ignore */ } };
-const VAULT_PRICE_KEY = 'cn.vault.prices.v1'; const VAULT_SEEN_KEY = 'cn.vault.celebrated.v1'; const VAULT_REL_KEY = 'cn.vault.released.v1';
+const VAULT_PRICE_KEY = 'cn.vault.prices.v1'; const VAULT_SEEN_KEY = 'cn.vault.celebrated.v1';
 const dayLoad = (k) => { try { const v = JSON.parse(localStorage.getItem(k) || '{}'); return v && v.day === localDateStr() ? v.list : null; } catch (e) { return null; } };
 const daySave = (k, list) => { try { localStorage.setItem(k, JSON.stringify({ day: localDateStr(), list })); } catch (e) { /* ignore */ } };
 const vaultPriced = ref(dayLoad(VAULT_PRICE_KEY));
@@ -4216,23 +4222,20 @@ const syncVault = async () => {
       const have = dayLoad(VAULT_PRICE_KEY) || []; const missing = (u.apps || []).filter((a) => !have.some((h) => h.id === a.id));
       if (!have.length || missing.length) { const add = priceApps(have.length ? missing : u.apps || [], u.days || {}, localDateStr(), typicalMin); const list = [...have, ...add].sort((a, b) => a.price - b.price); daySave(VAULT_PRICE_KEY, list); vaultPriced.value = list; } }
     clingLock.startUsage().catch(() => {}); // after the catalog sync inside vaultUsage, so Screen Time pings cover the chosen apps
-    const st = await clingLock.vaultState();
-    const v = gpVault.value; const live = st && st.live;
-    // Debt / gate lost while app time runs: close at once (time already used stays used, the rest is kept).
-    if (live && v && v.debt) { await clingLock.endVaultApps(); vaultSave(stopWindows(vaultWindows.value, Date.now())); }
-    else if (!live && v && v.live) vaultSave(stopWindows(vaultWindows.value, Date.now())); // ended natively early (stopped elsewhere)
-    else {
-      // Crossing a price must take that app off the shield. The list used to mark it open and stop there,
-      // so Screen Time kept it locked until a separate "Use minutes" tap (and that tap no-ops under 1 min).
-      const plan = releasePlan({ view: v, already: dayLoad(VAULT_REL_KEY) || [], nowMs: Date.now(), liveUntil: live ? Number(st.untilMs) || 0 : 0 });
-      if (plan) {
-        const r = await clingLock.allowVaultApps(plan.ids, plan.untilMs);
-        if (r && r.allowed > 0) {
-          daySave(VAULT_REL_KEY, [...new Set([...(dayLoad(VAULT_REL_KEY) || []), ...plan.fresh])]);
-          if (!live) vaultSave([...vaultWindows.value, { startMs: Date.now(), endMs: plan.untilMs }]);
-          vaultNow.value = Date.now();
-        }
-      }
+    const stv = await clingLock.vaultState();
+    const v = gpVault.value; const live = stv && stv.live;
+    const sessionRunning = !!(eh.running.value && eh.lock.value && eh.lock.value.endMs > Date.now());
+    const sessionEnded = eh.phase.value === 'ended' || !!(eh.lock.value && !eh.running.value && Date.now() >= eh.lock.value.endMs);
+    const accessOpen = vaultAccessOpen({ focusRunning: focusTimerRunning(selectedDayRoutine.value, Date.now()), focusPaused: focusPaused(selectedDayRoutine.value), sessionRunning, sessionEnded });
+    // No running session or focus timer: take earned apps back off the shield. Leftover minutes stay banked.
+    const plan = vaultTimerPlan({ accessOpen, view: v, nativeLive: !!live, nativeIds: (stv && stv.ids) || [], nowMs: Date.now(), liveUntil: live ? Number(stv.untilMs) || 0 : 0 });
+    if (plan.action === 'close' || (live && v && v.debt)) {
+      await clingLock.endVaultApps(); vaultSave(stopWindows(vaultWindows.value, Date.now())); vaultNow.value = Date.now();
+    } else if (!live && v && v.live) vaultSave(stopWindows(vaultWindows.value, Date.now()));
+    else if (plan.action === 'allow') {
+      const r = await clingLock.allowVaultApps(plan.ids, plan.untilMs);
+      if (r && r.allowed > 0 && !live) vaultSave([...vaultWindows.value, { startMs: Date.now(), endMs: plan.untilMs }]);
+      vaultNow.value = Date.now();
     }
   } finally { vaultSyncing = false; }
 };
@@ -4273,7 +4276,7 @@ const scheduleLaterLocks = async (st) => {
     if (!r || r.monitor !== 'ok') { nativeScheduled.delete(key); console.warn('[clingLock] scheduleLock', r && r.monitor); }
   }
 };
-watch(() => [eh.running.value, eh.pendingBlocks.value.length, pointsAccumulated.value, dayVaultPoints.value, dayRequiredPts.value, streakProgress.value, lockUnlockedDay.value, bossMode.value, strictGoal.value, Math.floor(nowTick.value / 60000)], () => { syncAppLock(); });
+watch(() => [eh.running.value, eh.phase.value, eh.pendingBlocks.value.length, pointsAccumulated.value, dayVaultPoints.value, dayRequiredPts.value, streakProgress.value, lockUnlockedDay.value, bossMode.value, strictGoal.value, (selectedDayRoutine.value || []).map((t) => t && `${t.timerActive ? 1 : 0}:${t.timerPausedAt || ''}:${t.timerEndTime || ''}`).join(','), Math.floor(nowTick.value / 60000)], () => { syncAppLock(); });
 // A new session lock (e.g. session 2 started from the shutdown card) or a settled shutdown: re-sync once its doc has landed.
 watch(() => { const l = eh.lock.value || {}; const sh = eh.shutdown && eh.shutdown.value; return `${l.index}:${l.startMs}:${l.endMs}:${sh ? sh.opensAtMs || 1 : 0}`; }, () => { syncAppLock(); });
 onMounted(() => { setTimeout(syncAppLock, 1200); });

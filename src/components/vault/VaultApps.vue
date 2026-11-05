@@ -8,7 +8,7 @@
         <span v-else class="gp-vletter">{{ initial(a.label) }}</span>
       </span>
       <span class="gp-vname">{{ a.label }}</span>
-      <span class="gp-vprice">{{ a.open ? 'Open' : '🔒' }} {{ a.price }} pts · ~{{ a.tasks }} tasks</span>
+      <span class="gp-vprice">{{ a.open ? 'Open' : '🔒' }} {{ a.price }} pts · ~{{ a.tasks }} tasks<template v-if="toGo(a)"> · {{ toGo(a) }} to go</template></span>
     </p>
     <!-- detail (onboarding): weekly screen time + why this price, as plain lines under the app (no box) -->
     <p v-if="detail" class="gp-line gp-vsub" data-test="vault-app-week">{{ weeklyText(a) }}</p>
@@ -19,9 +19,11 @@
 <script setup>
 import { weeklyText, priceWhy } from '@/utils/pointsVault';
 import { socialIcon } from '@/utils/socialIcons';
-defineProps({ items: { type: Array, default: () => [] }, detail: { type: Boolean, default: false }, why: { type: Object, default: null } });
+const props = defineProps({ items: { type: Array, default: () => [] }, detail: { type: Boolean, default: false }, why: { type: Object, default: null }, points: { type: Number, default: 0 } });
 const brand = (label) => socialIcon(label);
 const initial = (label) => { const s = String(label || 'App').trim(); return (s[0] || 'A').toUpperCase(); };
+const nextId = () => { const n = (props.items || []).find((a) => a && !a.open); return n ? n.id : ''; };
+const toGo = (a) => (!a || a.open || a.id !== nextId() ? 0 : Math.max(0, a.price - (Number(props.points) || 0)));
 </script>
 
 <style scoped>

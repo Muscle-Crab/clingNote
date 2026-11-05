@@ -52,7 +52,7 @@ const lastSunday = () => { const d = new Date(); d.setDate(d.getDate() - d.getDa
 
 const FAKE = () => { localStorage.setItem('cn.appLock.on', '1'); const K = 'zz.fakelock'; const rd = () => JSON.parse(localStorage.getItem(K) || '{"locked":true,"until":0,"label":"","scheduled":[],"vault":null}'); const wr = (v) => localStorage.setItem(K, JSON.stringify(v));
   const d = (n) => { const x = new Date(); x.setDate(x.getDate() - n); return x.toLocaleDateString('en-CA'); }; const days = {};
-  for (let i = 1; i <= 7; i++) days[d(i)] = { a1: 10, a2: 30, a3: 60, a4: 90, a5: 120, a6: 180 }; // -> 50, 90, 150, 210, 270, boss 585
+  for (let i = 1; i <= 7; i++) days[d(i)] = { a1: 10, a2: 30, a3: 60, a4: 90, a5: 120, a6: 180 }; // -> 100, 140, 200, 260, 320, boss 600
   window.__clingLockFake = { status: async () => ({ authorization: 'approved', selectionCount: 6, monitoring: rd().locked, ...rd() }), startLock: async ({ untilMs, label }) => { wr({ ...rd(), locked: true, until: untilMs, label }); return { locked: true, monitor: 'ok' }; },
     stopLock: async () => { wr({ ...rd(), locked: false }); return { locked: false }; }, scheduleLock: async () => ({ monitor: 'ok' }), labeledApps: async () => ({ apps: [] }), clearBreakOffer: async () => ({ cleared: true }), cancelScheduledLock: async () => ({ cancelled: true }),
     startUsage: async () => ({ monitor: 'ok' }), vaultUsage: async () => ({ days, apps: ['a1', 'a2', 'a3', 'a4', 'a5', 'a6'].map((id, i) => ({ id, label: `App ${i + 1}` })) }),
@@ -68,22 +68,22 @@ const FAKE = () => { localStorage.setItem('cn.appLock.on', '1'); const K = 'zz.f
     await sleep(4500); await dd(p); // first-load unlock celebration (App 1) closes on its own
     await shot(p, 'home-gameplan'); await shot(p, 'gameplan-row', '[data-test=gp-row]');
     const t0 = await p.locator('[data-test=vault-text]').innerText().catch(() => '');
-    ok('vault: 80 pts opens 1 of 6, next at 90 (~5 tasks)', /Vault · 1 of 6 open · next app at 90 pts \(~5 tasks\)/.test(t0), t0);
+    ok('vault: 80 pts opens none, next at 100', /Vault · 0 of 6 open · 20 pts to go · next app at 100 pts \(~5 tasks\)/.test(t0), t0);
     const card = p.locator('.task-card', { hasText: 'ZZTEST Open big' }).first(); await card.scrollIntoViewIfNeeded().catch(() => {});
     await card.locator('[data-test=task-check]').dispatchEvent('click');
     const v = p.locator('[data-test=points-celebration][data-kind=vault]');
     const seen = await v.waitFor({ timeout: 10000 }).then(() => true).catch(() => false); await sleep(600);
     const vt = seen ? await v.innerText().catch(() => '') : '';
     if (seen) await v.screenshot({ path: SHOTS + `${TAG}-vault-unlock-celebration.png` }).catch((e) => console.log('shot failed', e.message));
-    ok('vault: unlock celebration fires', seen && /Vault unlocked: App 2 🎉/.test(vt), vt);
+    ok('vault: unlock celebration fires', seen && /Vault unlocked: App 1 🎉/.test(vt), vt);
     await sleep(3000); await dd(p);
     const t = await p.locator('[data-test=vault-text]').innerText().catch(() => '');
-    ok('vault: 120 pts opens 2 of 6, next app at 150 pts (~8 tasks)', /Vault · 2 of 6 open · next app at 150 pts \(~8 tasks\)/.test(t), t);
+    ok('vault: 120 pts opens 1 of 6, next app at 140 pts (~7 tasks)', /Vault · 1 of 6 open · 20 pts to go · next app at 140 pts \(~7 tasks\)/.test(t), t);
     ok('vault: no task gate copy', !/finish \d+ more task/i.test(t) && await p.locator('[data-test=vault-gate]').count() === 0, t);
     await shot(p, 'vault-collapsed', '[data-test=gp-row]');
     await p.locator('[data-test=vault-toggle]').dispatchEvent('click'); await sleep(500);
     const prices = await p.locator('[data-test=vault-app]').allInnerTexts();
-    const want = ['50 pts · ~3 tasks', '90 pts · ~5 tasks', '150 pts · ~8 tasks', '210 pts · ~11 tasks', '270 pts · ~14 tasks', '585 pts · ~30 tasks'];
+    const want = ['100 pts · ~5 tasks', '140 pts · ~7 tasks', '200 pts · ~10 tasks', '260 pts · ~13 tasks', '320 pts · ~16 tasks', '600 pts · ~30 tasks'];
     ok('vault: 6 apps ascending by usage price, boss last', prices.length === 6 && want.every((w, i) => prices[i].includes(w)) && /App 6/.test(prices[5]), prices.join(' | '));
     ok('vault: no hardcoded app names', !/Maps|YouTube|Instagram|TikTok|News/.test(prices.join(' ')));
     await shot(p, 'vault-expanded', '[data-test=gp-row]');

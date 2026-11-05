@@ -5,7 +5,7 @@
 export const POINTS_PER_SLICE = 10; export const MIN_PER_SLICE = 5;
 // Usage buckets (minutes), mirrored by UsageLog.thresholds (clingUsage threshold events). A day's value is the bucket's lower bound.
 export const USAGE_THRESHOLDS = [10, 15, 30, 45, 60, 90, 120, 180, 240];
-export const AVG_DAYS = 7; export const BASE_PRICE = 30; export const PTS_PER_MIN = 2; export const BOSS_MULT = 1.5; export const PRICE_CAP = 600;
+export const AVG_DAYS = 7; export const BASE_PRICE = 80; export const PTS_PER_MIN = 2; export const BOSS_MULT = 1.5; export const PRICE_CAP = 600;
 export const NO_DATA_MIN = 60; export const PTS_PER_TASK = 20; // a medium task
 export const round5 = (x) => Math.round(x / 5) * 5;
 export const bucketMin = (m) => { const v = Number(m) || 0; let b = 0; USAGE_THRESHOLDS.forEach((t) => { if (v >= t) b = t; }); return b; };
@@ -52,7 +52,7 @@ export const vaultView = ({ apps = [], days = {}, todayYmd = '', points = 0, pri
   const live = liveWindow(windows, nowMs);
   const liveLeftMin = live ? Math.max(0, Math.ceil((live.endMs - nowMs) / 60000)) : 0;
   const canStart = !debt && !held && openCount > 0 && !live && leftMin >= 2;
-  return { items, debt, openCount, total: items.length, nextPrice: next ? next.price : 0, points: p, earnedMin: earned, leftMin, live: !!live, liveLeftMin, canStart, text: held && items.length && !debt ? `🔒 Vault · ${wait.text || 'opens after the session delay'}` : rowText({ total: items.length, openCount, next, debt, live: !!live, liveLeftMin }), held };
+  return { items, debt, openCount, total: items.length, nextPrice: next ? next.price : 0, points: p, earnedMin: earned, leftMin, live: !!live, liveLeftMin, canStart, text: held && items.length && !debt ? `🔒 Vault · ${wait.text || 'opens after the session delay'}` : rowText({ total: items.length, openCount, next, debt, live: !!live, liveLeftMin, points: p }), held };
 };
 // Onboarding vault step: weekly screen time, coarse (never fake precision), and a plain-words reason for the price.
 export const weeklyText = (r) => { const h = (Number(r && r.min) || 0) * 7 / 60; const v = h < 1 ? '<1 h/week' : `~${Math.round(h)} h/week`;
@@ -60,11 +60,12 @@ export const weeklyText = (r) => { const h = (Number(r && r.min) || 0) * 7 / 60;
 export const priceWhy = (r) => { const name = /^app$/i.test(String(r.label || '').trim()) || !r.label ? 'this app' : r.label; const h = Math.max(1, Math.round((Number(r.min) || 0) * 7 / 60)); const t = tasksFor(r.price);
   return `${r.noData ? 'Most people spend' : 'You spend'} about ${h} hour${h === 1 ? '' : 's'} a week on ${name}, so it costs ${r.price} points, about ${t} task${t === 1 ? '' : 's'}.${r.boss ? ' It\'s your biggest time sink, so it\'s priced 1.5×.' : ''}`; };
 export const costText = (price) => `${price} pts · ~${tasksFor(price)} tasks`;
-export const rowText = ({ total, openCount, next, debt, live, liveLeftMin }) => {
+export const rowText = ({ total, openCount, next, debt, live, liveLeftMin, points = 0 }) => {
   if (!total) return '🔒 Vault · pick apps to lock first';
   if (debt) return '🔒 Vault · closed until a session hits its goal';
   const icon = openCount ? '🔓' : '🔒';
-  const tail = live ? ` · ${liveLeftMin} min left` : next ? ` · next app at ${next.price} pts (~${tasksFor(next.price)} tasks)` : ' · all open';
+  const need = next ? Math.max(0, next.price - (Number(points) || 0)) : 0;
+  const tail = live ? ` · ${liveLeftMin} min left` : next ? ` · ${need} pts to go · next app at ${next.price} pts (~${tasksFor(next.price)} tasks)` : ' · all open';
   return `${icon} Vault · ${openCount} of ${total} open${tail}`;
 };
 export const unlockText = (label) => `Vault unlocked: ${label} 🎉`;
@@ -88,6 +89,37 @@ export const releasePlan = ({ view, already = [], nowMs = 0, liveUntil = 0 } = {
   const untilMs = liveUntil > nowMs + 60000 ? liveUntil : nowMs + Math.max(2, Math.floor(Number(view.leftMin) || 0)) * 60000;
   if (!(untilMs > nowMs + 60000)) return null;
   return { ids: open, fresh, untilMs };
+};
+
+// A task timer is running only while it is counting: not paused, not finished, end still ahead.
+export const focusTimerRunning = (tasks, now = Date.now()) => (tasks || []).some((t) => {
+  if (!t || t.completed === true || !t.timerActive || t.timerPausedAt) return false;
+  const end = new Date(t.timerEndTime).getTime();
+  return Number.isFinite(end) && end > now;
+});
+// Vault holes stay open only while a session countdown or a focus timer is actually running.
+// Paused, stopped, expired, not started, or a finished session all close them.
+export const vaultAccessOpen = ({ focusRunning = false, focusPaused = false, sessionRunning = false, sessionEnded = false } = {}) => {
+  if (sessionEnded || focusPaused) return false;
+  return !!(focusRunning || sessionRunning);
+};
+export const focusPaused = (tasks) => (tasks || []).some((t) => t && t.timerActive && t.timerPausedAt && t.completed !== true);
+// After the session ends short of its goal, keep the shield up. Goal met, breaks, and emergency unlock do not.
+export const shieldBecauseTimerOff = ({ enabled = false, selectionCount = 0, accessOpen = false, unlockedToday = false, onBreak = false, goalMet = false, sessionEnded = false, now = 0 } = {}) => {
+  if (!sessionEnded || accessOpen || !enabled || !(selectionCount > 0) || unlockedToday || onBreak || goalMet) return null;
+  return { want: true, untilMs: now + 8 * 3600000 };
+};
+// While access is closed, a live vault allowance is revoked (apps re-shield). While it is open, earned apps may be allowed.
+export const vaultTimerPlan = ({ accessOpen = false, view, nativeLive = false, nativeIds = [], nowMs = 0, liveUntil = 0 } = {}) => {
+  const localLive = !!(view && view.live);
+  const open = (view && view.items || []).filter((a) => a.open).map((a) => a.id);
+  if (!accessOpen || !view || view.debt || view.held || !open.length) return (nativeLive || localLive) ? { action: 'close' } : { action: null };
+  const untilMs = liveUntil > nowMs + 60000 ? liveUntil : nowMs + Math.max(2, Math.floor(Number(view.leftMin) || 0)) * 60000;
+  if (!(untilMs > nowMs + 60000)) return (nativeLive || localLive) ? { action: 'close' } : { action: null };
+  const ids = nativeIds || [];
+  const same = nativeLive && open.length === ids.length && open.every((id) => ids.includes(id));
+  if (same) return { action: null };
+  return { action: 'allow', ids: open, untilMs, fresh: open.filter((id) => !ids.includes(id)) };
 };
 
 // Start shared app time for every open app: the native window ends when the minutes run out (re-shields with the app closed).
