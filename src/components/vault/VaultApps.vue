@@ -8,7 +8,7 @@
         <span v-else class="gp-vletter">{{ initial(a.label) }}</span>
       </span>
       <span class="gp-vname">{{ a.label }}</span>
-      <span class="gp-vprice">{{ a.open ? 'Open' : '🔒' }} {{ a.price }} pts · ~{{ a.tasks }} tasks<template v-if="toGo(a)"> · {{ toGo(a) }} to go</template></span>
+      <span class="gp-vprice"><button v-if="a.buyable" type="button" class="gp-buy" data-test="vault-buy" @click="$emit('buy', a.id)">Buy</button><template v-else>{{ a.open ? 'Open' : (a.bought ? 'Bought' : '🔒') }}</template> {{ a.price }} pts · ~{{ a.tasks }} tasks<template v-if="toGo(a)"> · {{ toGo(a) }} to go</template></span>
     </p>
     <!-- detail (onboarding): weekly screen time + why this price, as plain lines under the app (no box) -->
     <p v-if="detail" class="gp-line gp-vsub" data-test="vault-app-week">{{ weeklyText(a) }}</p>
@@ -20,10 +20,11 @@
 import { weeklyText, priceWhy } from '@/utils/pointsVault';
 import { socialIcon } from '@/utils/socialIcons';
 const props = defineProps({ items: { type: Array, default: () => [] }, detail: { type: Boolean, default: false }, why: { type: Object, default: null }, points: { type: Number, default: 0 } });
+defineEmits(['buy']);
 const brand = (label) => socialIcon(label);
 const initial = (label) => { const s = String(label || 'App').trim(); return (s[0] || 'A').toUpperCase(); };
-const nextId = () => { const n = (props.items || []).find((a) => a && !a.open); return n ? n.id : ''; };
-const toGo = (a) => (!a || a.open || a.id !== nextId() ? 0 : Math.max(0, a.price - (Number(props.points) || 0)));
+const nextId = () => { const n = (props.items || []).find((a) => a && !a.bought); return n ? n.id : ''; };
+const toGo = (a) => (!a || a.bought || a.open || a.buyable || a.id !== nextId() ? 0 : Math.max(0, a.price - (Number(props.points) || 0)));
 </script>
 
 <style scoped>
@@ -35,7 +36,8 @@ const toGo = (a) => (!a || a.open || a.id !== nextId() ? 0 : Math.max(0, a.price
 .gp-vletter { font-size: .68rem; font-weight: 700; color: var(--c-text, #ecebe8); }
 .gp-vbrand :deep(svg) { display: block; }
 .gp-vname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.gp-vprice { opacity: .8; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.gp-vprice { opacity: .8; font-variant-numeric: tabular-nums; white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; }
+.gp-buy { min-height: 22px; padding: 0 8px; border-radius: 11px; border: 1px solid var(--c-border, #2a2a2e); background: none; color: var(--c-text, #ecebe8); font: inherit; font-size: .68rem; cursor: pointer; }
 .gp-vapp--open .gp-vico { animation: vault-release .7s cubic-bezier(.2, .8, .2, 1); }
 @keyframes vault-release { 0% { transform: scale(.45) rotate(-18deg); filter: grayscale(1); } 55% { transform: scale(1.18) rotate(6deg); filter: none; } 100% { transform: none; } }
 @media (prefers-reduced-motion: reduce) { .gp-vapp--open .gp-vico { animation: none; } }

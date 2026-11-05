@@ -1,6 +1,7 @@
-// Points vault: the day's points open apps one by one (cheapest = least used), and every 10 points buys 5 min of shared app time.
+// Points vault: the day's points are the only currency (never stats.coins, and the session goal is not reduced).
+// Apps are bought one at a time, cheapest first. Crossing a price does not open anything; Buy releases that one app.
+// Every 10 points still buys 5 min of shared app time for apps already bought.
 // Pure logic (tests: scripts/test-points-vault.mjs). Native half: VaultAllow / UsageLog in ios/App/Shared/LockShared.swift.
-// Points only (never stats.coins). Spending app time never takes points or goal progress away: it is tracked as local time windows.
 
 export const POINTS_PER_SLICE = 10; export const MIN_PER_SLICE = 5;
 // Usage buckets (minutes), mirrored by UsageLog.thresholds (clingUsage threshold events). A day's value is the bucket's lower bound.
@@ -19,7 +20,7 @@ const median = (xs) => { const a = [...xs].sort((x, y) => x - y); const m = a.le
 export const priceOf = (min) => Math.min(PRICE_CAP, round5(BASE_PRICE + PTS_PER_MIN * Math.max(0, Number(min) || 0)));
 export const tasksFor = (price) => Math.ceil((Number(price) || 0) / PTS_PER_TASK);
 // Prices from the user's own usage: no-data apps get the median of the others (60 min if none); the heaviest app (first on a tie)
-// is the boss at round5(price x 1.5), capped. Sorted ascending by price, so apps open in that order as the day's points grow.
+// is the boss at round5(price x 1.5), capped. Sorted ascending by price, so the next buy is always the cheapest not yet bought.
 // typical(label) -> daily minutes for when there is no history at all (see utils/typicalUsage.js); default NO_DATA_MIN.
 export const priceApps = (apps, days, todayYmd, typical) => {
   const rows = (apps || []).map((a, i) => ({ id: a.id, label: a.label || 'App', ord: i, avg: avgUsage(days, a.id, todayYmd) }));
@@ -35,24 +36,42 @@ export const timeEarnedMin = (points) => Math.floor(Math.max(0, Number(points) |
 export const spentMin = (windows, nowMs) => (windows || []).reduce((s, w) => s + Math.max(0, Math.min(Number(w.endMs) || 0, nowMs) - (Number(w.startMs) || 0)), 0) / 60000;
 export const liveWindow = (windows, nowMs) => (windows || []).find((w) => w.startMs <= nowMs && nowMs < w.endMs) || null;
 
-// The whole vault for the Home line. debt = a missed-goal lock is unpaid (no vault while it is).
 // The whole vault for the Home line. Points only: no task-count gate. priced = today's frozen prices (computed once per day).
 // debt = a missed-goal lock is unpaid (no vault while it is).
-export const vaultView = ({ apps = [], days = {}, todayYmd = '', points = 0, priced = null, debt = false, windows = [], nowMs = Date.now(), typical = null, wait = null } = {}) => {
-  // wait = the session-end delay ({ untilMs, text }): the vault stays shut until it runs out (same clock as the next session).
+// bought = ids purchased today. open = that purchase is released right now (session or focus timer running).
+// buyable = the cheapest not-yet-bought app, and only when the day's points cover its own price and the timer is running.
+// wait = the session-end delay ({ untilMs, text }): the vault stays shut until it runs out (same clock as the next session).
+export const vaultView = ({ apps = [], days = {}, todayYmd = '', points = 0, priced = null, debt = false, windows = [], nowMs = Date.now(), typical = null, wait = null, bought = [], accessOpen = false } = {}) => {
   const held = !!(wait && Number(wait.untilMs) > nowMs);
   const p = Math.max(0, Number(points) || 0);   const ids = new Set((apps || []).map((a) => a.id));
+  const owned = new Set(bought || []);
   const icons = new Map((apps || []).filter((a) => a && a.icon).map((a) => [a.id, a.icon]));
   const base = priced && priced.length ? priced.filter((a) => ids.has(a.id)) : priceApps(apps, days, todayYmd, typical);
-  const items = base.map((a) => ({ ...a, icon: a.icon || icons.get(a.id) || '', open: !debt && !held && p >= a.price }));
+  let waiting = false;
+  const items = base.map((a) => {
+    const isBought = owned.has(a.id);
+    const open = isBought && !debt && !held && !!accessOpen;
+    const buyable = !isBought && !waiting && !debt && !held && !!accessOpen && p >= a.price;
+    if (!isBought) waiting = true;
+    return { ...a, icon: a.icon || icons.get(a.id) || '', bought: isBought, open, buyable };
+  });
   const openCount = items.filter((a) => a.open).length;
-  const next = items.find((a) => !a.open);
+  const next = items.find((a) => !a.bought);
   const earned = timeEarnedMin(p); const used = Math.min(earned, spentMin(windows, nowMs));
   const leftMin = Math.max(0, Math.floor(earned - used));
   const live = liveWindow(windows, nowMs);
   const liveLeftMin = live ? Math.max(0, Math.ceil((live.endMs - nowMs) / 60000)) : 0;
   const canStart = !debt && !held && openCount > 0 && !live && leftMin >= 2;
-  return { items, debt, openCount, total: items.length, nextPrice: next ? next.price : 0, points: p, earnedMin: earned, leftMin, live: !!live, liveLeftMin, canStart, text: held && items.length && !debt ? `🔒 Vault · ${wait.text || 'opens after the session delay'}` : rowText({ total: items.length, openCount, next, debt, live: !!live, liveLeftMin, points: p }), held };
+  const boughtIds = items.filter((a) => a.bought).map((a) => a.id);
+  return { items, debt, openCount, total: items.length, nextPrice: next ? next.price : 0, points: p, earnedMin: earned, leftMin, live: !!live, liveLeftMin, canStart, boughtIds, text: held && items.length && !debt ? `🔒 Vault · ${wait.text || 'opens after the session delay'}` : rowText({ total: items.length, openCount, next, debt, live: !!live, liveLeftMin, points: p }), held };
+};
+// Buy the next cheapest app only. Returns the new bought-id list. Does not deduct the day's points (the session goal stays).
+export const buyApp = (view, id) => {
+  const bought = (view && view.boughtIds) || [];
+  if (!view || view.debt || view.held) return { ok: false, reason: 'closed', bought };
+  const item = (view.items || []).find((a) => a && a.id === id);
+  if (!item || !item.buyable) return { ok: false, reason: 'not-buyable', bought };
+  return { ok: true, id, bought: [...bought, id] };
 };
 // Onboarding vault step: weekly screen time, coarse (never fake precision), and a plain-words reason for the price.
 export const weeklyText = (r) => { const h = (Number(r && r.min) || 0) * 7 / 60; const v = h < 1 ? '<1 h/week' : `~${Math.round(h)} h/week`;
@@ -65,7 +84,7 @@ export const rowText = ({ total, openCount, next, debt, live, liveLeftMin, point
   if (debt) return '🔒 Vault · closed until a session hits its goal';
   const icon = openCount ? '🔓' : '🔒';
   const need = next ? Math.max(0, next.price - (Number(points) || 0)) : 0;
-  const tail = live ? ` · ${liveLeftMin} min left` : next ? ` · ${need} pts to go · next app at ${next.price} pts (~${tasksFor(next.price)} tasks)` : ' · all open';
+  const tail = live ? ` · ${liveLeftMin} min left` : next ? (next.buyable ? ` · buy next for ${next.price} pts (~${tasksFor(next.price)} tasks)` : ` · ${need} pts to go · next app at ${next.price} pts (~${tasksFor(next.price)} tasks)`) : (openCount === total ? ' · all open' : ' · timer off');
   return `${icon} Vault · ${openCount} of ${total} open${tail}`;
 };
 export const unlockText = (label) => `Vault unlocked: ${label} 🎉`;
@@ -77,9 +96,9 @@ export const unlockCelebration = (apps) => (apps && apps.length ? { kind: 'vault
 // After the native overlay (ClingLock.celebrateVault): apps it could not draw (no token / not presented) still get the web one.
 export const webFallback = (apps, res) => (res && Number(res.shown) > 0 ? (apps || []).filter((a) => (res.missing || []).includes(a.id)) : apps || []);
 export const newUnlocks = (view, seen) => (view ? view.items.filter((a) => a.open && !(seen || []).includes(a.id)) : []);
-// Shield release for apps whose price the day's points just crossed. `already` = ids released earlier today,
-// so Stop is not undone. liveUntil = a running app-time window. The native allowance refuses anything <= 1 min,
-// which used to leave the Screen Time shield up after the UI had already marked the app open.
+// Shield release for apps the user has bought (`open`). `already` = ids released earlier today, so Stop is not undone.
+// liveUntil = a running app-time window. The native allowance refuses anything <= 1 min (DeviceActivity is backdated
+// to 15 min), which used to leave the Screen Time shield up after the UI had already marked the app open.
 export const releasePlan = ({ view, already = [], nowMs = 0, liveUntil = 0 } = {}) => {
   if (!view || view.debt || view.held) return null;
   const open = (view.items || []).filter((a) => a.open).map((a) => a.id);
@@ -109,15 +128,21 @@ export const shieldBecauseTimerOff = ({ enabled = false, selectionCount = 0, acc
   if (!sessionEnded || accessOpen || !enabled || !(selectionCount > 0) || unlockedToday || onBreak || goalMet) return null;
   return { want: true, untilMs: now + 8 * 3600000 };
 };
-// While access is closed, a live vault allowance is revoked (apps re-shield). While it is open, earned apps may be allowed.
-export const vaultTimerPlan = ({ accessOpen = false, view, nativeLive = false, nativeIds = [], nowMs = 0, liveUntil = 0 } = {}) => {
+// While access is closed, a live vault allowance is revoked (apps re-shield). While it is open, bought apps stay released
+// until the session or focus timer ends (accessUntil). The native call refuses a window <= 1 min, so the floor is 2 min.
+export const vaultTimerPlan = ({ accessOpen = false, view, nativeLive = false, nativeIds = [], nowMs = 0, liveUntil = 0, accessUntil = 0 } = {}) => {
   const localLive = !!(view && view.live);
   const open = (view && view.items || []).filter((a) => a.open).map((a) => a.id);
   if (!accessOpen || !view || view.debt || view.held || !open.length) return (nativeLive || localLive) ? { action: 'close' } : { action: null };
-  const untilMs = liveUntil > nowMs + 60000 ? liveUntil : nowMs + Math.max(2, Math.floor(Number(view.leftMin) || 0)) * 60000;
+  const floor = nowMs + 2 * 60000;
+  const bank = nowMs + Math.max(2, Math.floor(Number(view.leftMin) || 0)) * 60000;
+  const session = accessUntil > nowMs + 60000 ? accessUntil : 0;
+  let untilMs = Math.max(floor, session || bank);
+  if (liveUntil > untilMs) untilMs = liveUntil;
   if (!(untilMs > nowMs + 60000)) return (nativeLive || localLive) ? { action: 'close' } : { action: null };
   const ids = nativeIds || [];
-  const same = nativeLive && open.length === ids.length && open.every((id) => ids.includes(id));
+  // A shorter live window must not re-shield a bought app while the session is still running.
+  const same = nativeLive && open.length === ids.length && open.every((id) => ids.includes(id)) && !(session && liveUntil + 60000 < session);
   if (same) return { action: null };
   return { action: 'allow', ids: open, untilMs, fresh: open.filter((id) => !ids.includes(id)) };
 };

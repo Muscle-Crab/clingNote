@@ -28,35 +28,69 @@ t('no data -> median of the others, or 60 min', () => {
   assert.equal(r.find((x) => x.id === 'n').price, 140);
   assert.equal(V.priceApps([{ id: 'n', label: 'N' }], {}, today)[0].price, 300); // 60 min -> 200, alone = boss x1.5
 });
-t('no task gate: points alone open apps in ascending order; copy', () => {
+t('no task gate: points make the next app buyable, cheapest first; copy', () => {
   const apps = [{ id: 'a', label: 'App A' }, { id: 'b', label: 'App B' }, { id: 'c', label: 'App C' }];
   const days = daysOf({ a: 10, b: 60, c: 120 });
-  let v = V.vaultView({ apps, days, todayYmd: today, points: 65, nowMs: 0 });
-  assert.equal(v.openCount, 0, '65 pts is not enough for the cheapest app');
-  v = V.vaultView({ apps, days, todayYmd: today, points: 100, nowMs: 0 });
-  assert.equal(v.openCount, 1); assert.equal(v.items[0].label, 'App A'); assert.equal(v.text, '🔓 Vault · 1 of 3 open · 100 pts to go · next app at 200 pts (~10 tasks)');
+  let v = V.vaultView({ apps, days, todayYmd: today, points: 65, accessOpen: true, nowMs: 0 });
+  assert.equal(v.openCount, 0, '65 pts is not enough for the cheapest app'); assert.equal(v.items[0].buyable, false);
+  v = V.vaultView({ apps, days, todayYmd: today, points: 100, accessOpen: true, nowMs: 0 });
+  assert.equal(v.openCount, 0); assert.equal(v.items[0].buyable, true); assert.equal(v.items[1].buyable, false);
+  assert.equal(v.text, '🔒 Vault · 0 of 3 open · buy next for 100 pts (~5 tasks)');
+  const sale = V.buyApp(v, 'a'); assert.equal(sale.ok, true); assert.equal(V.buyApp(v, 'b').ok, false);
+  v = V.vaultView({ apps, days, todayYmd: today, points: 100, bought: sale.bought, accessOpen: true, nowMs: 0 });
+  assert.equal(v.openCount, 1); assert.equal(v.items[0].label, 'App A'); assert.equal(v.items[1].open, false);
+  assert.equal(v.text, '🔓 Vault · 1 of 3 open · 100 pts to go · next app at 200 pts (~10 tasks)');
   assert.equal(V.costText(200), '200 pts · ~10 tasks'); assert.equal(V.unlockText('App A'), 'Vault unlocked: App A 🎉');
-  v = V.vaultView({ apps, days, todayYmd: today, points: 200, debt: true, nowMs: 0 }); assert.equal(v.openCount, 0);
+  v = V.vaultView({ apps, days, todayYmd: today, points: 200, debt: true, accessOpen: true, nowMs: 0 }); assert.equal(v.openCount, 0); assert.equal(v.items[0].buyable, false);
+});
+t('65 pts with a 105 goal buys nothing; 105 buys only the cheapest', () => {
+  const apps = [0, 15, 30, 60, 120].map((m) => ({ id: 'm' + m, label: m + ' min' }));
+  const days = daysOf({ m0: 0, m15: 15, m30: 30, m60: 60, m120: 120 });
+  const prices = (pts) => V.vaultView({ apps, days, todayYmd: today, points: pts, accessOpen: true, nowMs: 0 });
+  let v = prices(65);
+  assert.deepEqual(v.items.map((a) => a.price), [80, 110, 140, 200, 480]);
+  assert.equal(v.items.filter((a) => a.buyable || a.open).length, 0);
+  assert.equal(v.text, '🔒 Vault · 0 of 5 open · 15 pts to go · next app at 80 pts (~4 tasks)');
+  v = prices(105);
+  assert.equal(v.items.filter((a) => a.buyable).map((a) => a.id).join(), 'm0');
+  assert.equal(v.openCount, 0);
+  v = V.vaultView({ apps, days, todayYmd: today, points: 105, bought: ['m0'], accessOpen: true, nowMs: 0 });
+  assert.deepEqual(v.items.filter((a) => a.open).map((a) => a.id), ['m0']);
+  assert.equal(v.items.find((a) => a.id === 'm15').buyable, false);
 });
 t('frozen daily prices win over new usage', () => {
   const apps = [{ id: 'a', label: 'App A' }]; const priced = [{ id: 'a', label: 'App A', price: 50, tasks: 3 }];
-  assert.equal(V.vaultView({ apps, days: daysOf({ a: 240 }), todayYmd: today, priced, points: 50, nowMs: 0 }).openCount, 1);
+  const offered = V.vaultView({ apps, days: daysOf({ a: 240 }), todayYmd: today, priced, points: 50, accessOpen: true, nowMs: 0 });
+  assert.equal(offered.openCount, 0); assert.equal(offered.items[0].buyable, true); assert.equal(offered.items[0].price, 50);
+  assert.equal(V.vaultView({ apps, days: daysOf({ a: 240 }), todayYmd: today, priced, points: 50, bought: ['a'], accessOpen: true, nowMs: 0 }).openCount, 1);
 });
 t('one celebration per app per day', () => { const v = { items: [{ id: 'a', open: true }, { id: 'b', open: true }, { id: 'c', open: false }] };
   assert.deepEqual(V.newUnlocks(v, ['a']).map((x) => x.id), ['b']); assert.equal(V.newUnlocks(v, ['a', 'b']).length, 0); });
-t('crossing a price releases that app on the shield, and Stop is not undone', () => {
-  const view = V.vaultView({ apps: [{ id: 'a', label: 'App A' }, { id: 'b', label: 'App B' }], days: daysOf({ a: 10, b: 60 }), todayYmd: today, points: 400, nowMs: 1000 });
-  assert.equal(view.items[0].open, true); assert.equal(view.items[1].open, true); assert.ok(view.items[0].price < view.items[1].price);
+t('buying one app releases only that app on the shield', () => {
+  const apps = [{ id: 'a', label: 'App A' }, { id: 'b', label: 'App B' }];
+  let view = V.vaultView({ apps, days: daysOf({ a: 10, b: 60 }), todayYmd: today, points: 400, accessOpen: true, nowMs: 1000 });
+  assert.equal(view.items[0].open, false); assert.equal(view.items[0].buyable, true); assert.equal(view.items[1].buyable, false);
+  assert.ok(view.items[0].price < view.items[1].price); assert.equal(V.buyApp(view, 'b').ok, false);
+  const sale = V.buyApp(view, 'a'); assert.deepEqual(sale.bought, ['a']);
+  view = V.vaultView({ apps, days: daysOf({ a: 10, b: 60 }), todayYmd: today, points: 400, bought: sale.bought, accessOpen: true, nowMs: 1000 });
+  assert.equal(view.items[0].open, true); assert.equal(view.items[1].open, false);
   const plan = V.releasePlan({ view, already: [], nowMs: 1000, liveUntil: 0 });
-  assert.deepEqual(plan.fresh, ['a', 'b']); assert.ok(plan.untilMs > 1000 + 60000);
-  assert.equal(V.releasePlan({ view, already: ['a', 'b'], nowMs: 1000 }), null);
+  assert.deepEqual(plan.fresh, ['a']); assert.deepEqual(plan.ids, ['a']); assert.ok(plan.untilMs >= 1000 + 120000);
+  const shield = V.vaultTimerPlan({ accessOpen: true, view, nativeLive: false, nowMs: 1000, accessUntil: 1000 + 36 * 60000 });
+  assert.equal(shield.action, 'allow'); assert.deepEqual(shield.ids, ['a']); assert.equal(shield.untilMs, 1000 + 36 * 60000);
+  const extend = V.vaultTimerPlan({ accessOpen: true, view, nativeLive: true, nativeIds: ['a'], nowMs: 1000, liveUntil: 1000 + 5 * 60000, accessUntil: 1000 + 36 * 60000 });
+  assert.equal(extend.action, 'allow'); assert.equal(extend.untilMs, 1000 + 36 * 60000);
+  assert.equal(V.releasePlan({ view, already: ['a'], nowMs: 1000 }), null);
   assert.equal(V.releasePlan({ view: { ...view, debt: true }, already: [], nowMs: 1000 }), null);
-  const held = V.vaultView({ apps: [{ id: 'a', label: 'A' }], days: daysOf({ a: 10 }), todayYmd: today, points: 200, nowMs: 1000, wait: { untilMs: 5000, text: 'wait' } });
-  assert.equal(held.openCount, 0); assert.equal(V.releasePlan({ view: held, nowMs: 1000 }), null);
+  const held = V.vaultView({ apps: [{ id: 'a', label: 'A' }], days: daysOf({ a: 10 }), todayYmd: today, points: 200, accessOpen: true, nowMs: 1000, wait: { untilMs: 5000, text: 'wait' } });
+  assert.equal(held.openCount, 0); assert.equal(held.items[0].buyable, false); assert.equal(V.releasePlan({ view: held, nowMs: 1000 }), null);
 });
-t('no running timer closes a live vault; a running timer can reopen what is earned', () => {
-  const view = V.vaultView({ apps: [{ id: 'a', label: 'A' }], days: daysOf({ a: 10 }), todayYmd: today, points: 200, windows: [{ startMs: 0, endMs: 5000 }], nowMs: 1000 });
-  assert.equal(view.live, true);
+t('no running timer closes a live vault; a running timer reopens only what was bought', () => {
+  const earned = V.vaultView({ apps: [{ id: 'a', label: 'A' }], days: daysOf({ a: 10 }), todayYmd: today, points: 200, accessOpen: true, nowMs: 1000 });
+  assert.equal(earned.openCount, 0); assert.equal(earned.items[0].buyable, true);
+  assert.equal(V.vaultTimerPlan({ accessOpen: true, view: earned, nativeLive: false, nowMs: 1000 }).action, null);
+  const view = V.vaultView({ apps: [{ id: 'a', label: 'A' }], days: daysOf({ a: 10 }), todayYmd: today, points: 200, bought: ['a'], accessOpen: true, windows: [{ startMs: 0, endMs: 5000 }], nowMs: 1000 });
+  assert.equal(view.live, true); assert.equal(view.items[0].open, true);
   assert.equal(V.vaultTimerPlan({ accessOpen: false, view, nativeLive: true, nowMs: 1000 }).action, 'close');
   assert.equal(V.vaultAccessOpen({ sessionEnded: true, focusRunning: true }), false);
   assert.equal(V.vaultAccessOpen({ focusPaused: true, sessionRunning: true }), false);
@@ -64,18 +98,22 @@ t('no running timer closes a live vault; a running timer can reopen what is earn
   assert.equal(V.focusTimerRunning([{ timerActive: true, timerEndTime: new Date(5000).toISOString() }], 1000), true);
   assert.equal(V.focusTimerRunning([{ timerActive: true, timerPausedAt: 'x', timerEndTime: new Date(5000).toISOString() }], 1000), false);
   const again = V.vaultTimerPlan({ accessOpen: true, view: { ...view, live: false }, nativeLive: false, nowMs: 1000 });
-  assert.equal(again.action, 'allow'); assert.deepEqual(again.ids, ['a']);
+  assert.equal(again.action, 'allow'); assert.deepEqual(again.ids, ['a']); assert.ok(again.untilMs >= 1000 + 120000);
+  const off = V.vaultView({ apps: [{ id: 'a', label: 'A' }], days: daysOf({ a: 10 }), todayYmd: today, points: 200, bought: ['a'], accessOpen: false, nowMs: 1000 });
+  assert.equal(off.items[0].open, false); assert.equal(off.items[0].bought, true); assert.equal(off.items[0].buyable, false);
   assert.equal(V.shieldBecauseTimerOff({ enabled: true, selectionCount: 2, sessionEnded: true, now: 1000 }).want, true);
   assert.equal(V.shieldBecauseTimerOff({ enabled: true, selectionCount: 2, sessionEnded: true, goalMet: true, now: 1000 }), null);
 });
 t('vault rows carry the chosen app icon through frozen prices', () => {
   const priced = [{ id: 'a', label: 'App A', price: 50, tasks: 3, min: 10 }];
   const v = V.vaultView({ apps: [{ id: 'a', label: 'App A', icon: 'data:image/png;base64,abc' }], priced, points: 50, todayYmd: today, nowMs: 0 });
-  assert.equal(v.items[0].icon, 'data:image/png;base64,abc'); assert.equal(v.items[0].open, true);
+  assert.equal(v.items[0].icon, 'data:image/png;base64,abc'); assert.equal(v.items[0].open, false);
+  assert.equal(V.vaultView({ apps: [{ id: 'a', label: 'App A', icon: 'data:image/png;base64,abc' }], priced, points: 50, bought: ['a'], accessOpen: true, todayYmd: today, nowMs: 0 }).items[0].open, true);
 });
 t('time: 10 pts = 5 min, start plan', () => { assert.equal(V.timeEarnedMin(95), 45);
-  const v = V.vaultView({ apps: [{ id: 'a', label: 'A' }], days: daysOf({ a: 10 }), todayYmd: today, points: 200, nowMs: 1000 });
-  assert.deepEqual(V.startPlan(v, 1000).ids, ['a']); });
+  const v = V.vaultView({ apps: [{ id: 'a', label: 'A' }], days: daysOf({ a: 10 }), todayYmd: today, points: 200, bought: ['a'], accessOpen: true, nowMs: 1000 });
+  assert.deepEqual(V.startPlan(v, 1000).ids, ['a']);
+  assert.equal(V.startPlan(V.vaultView({ apps: [{ id: 'a', label: 'A' }], days: daysOf({ a: 10 }), todayYmd: today, points: 200, accessOpen: true, nowMs: 1000 }), 1000), null); });
 t('one batched unlock celebration, native first then web fallback', () => {
   const a = [{ id: 'x', label: 'Any App', price: 50 }, { id: 'y', label: 'Other', price: 90 }];
   assert.equal(V.unlockCelebration([]), null); assert.equal(V.unlockCelebration([a[0]]).title, 'Vault unlocked: Any App 🎉');

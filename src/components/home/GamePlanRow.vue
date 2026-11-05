@@ -21,7 +21,7 @@
       </button>
       <div v-if="vaultOpen" class="gp-body gp-vbody" data-test="vault-body">
         <p v-if="vault.debt" class="gp-line gp-warn" data-test="vault-debt">Vault closed: a missed goal keeps apps locked until a session hits its goal.</p>
-        <VaultApps :items="vault.items" :points="vault.points" />
+        <VaultApps :items="vault.items" :points="vault.points" @buy="$emit('vault-buy', $event)" />
         <p class="gp-line" data-test="vault-time">
           <template v-if="vault.live">App time running: {{ vault.liveLeftMin }} min left. <button type="button" class="gp-chip" data-test="vault-stop" @click="$emit('vault-stop')">Stop</button></template>
           <template v-else>App time left: {{ vault.leftMin }} of {{ vault.earnedMin }} min (10 pts = 5 min).<button v-if="vault.canStart" type="button" class="gp-chip gp-vgo" data-test="vault-start" @click="$emit('vault-start')">Use {{ vault.leftMin }} min</button></template>
@@ -69,7 +69,7 @@ const props = defineProps({
   breakBank: { type: Number, default: 0 }, breakMin: { type: Number, default: 10 }, breakOn: { type: Boolean, default: false }, gift: { type: Boolean, default: false }, screenReady: { type: Number, default: 0 }, ready: { type: String, default: '' }, history: { type: Array, default: () => [] },
   vault: { type: Object, default: null },
 });
-defineEmits(['review', 'ask', 'share', 'take-break', 'end-break', 'claim-screen', 'vault-start', 'vault-stop']);
+defineEmits(['review', 'ask', 'share', 'take-break', 'end-break', 'claim-screen', 'vault-start', 'vault-stop', 'vault-buy']);
 const open = ref(false); const accepted = ref([]); const histOpen = ref(false); const vaultOpen = ref(false);
 const attn = computed(() => !!props.review || (props.friendOn && props.unlock.status === 'approved'));
 </script>

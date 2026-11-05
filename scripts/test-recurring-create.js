@@ -22,7 +22,9 @@ t('voice review: Recurring checkbox per item, default every day, saved as recurr
   assert(/it\.repeatDays = on \? \[0, 1, 2, 3, 4, 5, 6\] : \[\]/.test(voice));
   assert(/it\.recurring && it\.type !== 'schedule' && \(it\.repeatDays \|\| \[\]\)\.length \? \{ type: 'recurring', selectedDays: it\.repeatDays\.map\(\(k\) => days\[k\]\)/.test(home));
 });
-t('Schedule -> Repeat on a locked day tells the user instead of closing silently', () => {
-  assert(/isDayLocked\(todayDayName\(\)\) && sc\.date <= getTodayId\(\)\) showNoteToast/.test(home));
+t('Schedule -> Repeat during a lock-in still saves and shows today', () => {
+  const fn = home.slice(home.indexOf('const submitScheduledTask'), home.indexOf('const schedEditError'));
+  assert(/blockIfShut\(\)/.test(fn) && /mutateScheduled\(/.test(fn) && /afterMaterialize\(\)/.test(fn));
+  assert(!/isDayLocked\(todayDayName\(\)\)/.test(fn));
 });
 console.log(`recurring create: ${n} passed`);

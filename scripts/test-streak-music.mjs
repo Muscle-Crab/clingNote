@@ -2,7 +2,8 @@
 import assert from 'assert';
 import fs from 'fs';
 const src = fs.readFileSync(new URL('../src/composables/useSounds.js', import.meta.url), 'utf8');
-const mod = await import('data:text/javascript,' + encodeURIComponent(src.replace(/^import .*$/m, 'const ref=(v)=>({value:v}),watch=()=>{};')));
+const stubbed = src.replace(/^import .*$/m, 'const ref=(v)=>({value:v}),watch=()=>{};').replace(/^import .*$/gm, '');
+const mod = await import('data:text/javascript,' + encodeURIComponent(stubbed));
 const { streakStepNotes, streakHitNotes } = mod;
 let pass = 0; const ok = (c, m) => { assert.ok(c, m); pass++; };
 const end = (n) => Math.max(...n.map(([, s, d]) => s + d));

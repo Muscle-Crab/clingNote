@@ -62,23 +62,18 @@ const FAKE = () => { localStorage.setItem('cn.appLock.on', '1'); const K = 'zz.f
   const br = await chromium.launch({ executablePath: process.env.CHROME || '/usr/bin/google-chrome' });
   const fresh = { gamePlan: { dayStart: ago(300), reviewDow: 0, reviewTime: '18:00', minGoal: 50, friend: { name: 'ZZTEST Sam' }, pending: null, lastReview: lastSunday() } };
   const done = (t, i) => mk(t, i, { completed: true, completedAt: Date.now() - i * 600000, size: 'l' });
-  // main user: 2 done L (40 each = 80 pts) + one open L; completing it reaches 120 -> App 2 (90) unlocks live
+  // main user: 2 done L (40 each = 80 pts) + one open L. No session is running, so reaching 120 does not open an app and Buy stays hidden.
   { const email = 'zztest.vault.main@example.com'; await seedUser(email, 'ZZTEST Vault', [done('Done A', 1), done('Done B', 2), mk('Open big', 4, { size: 'l' }), mk('Open small', 5, { size: 's' })], fresh);
     const p = await page(br); await p.context().addInitScript(FAKE); await login(p, email); await home(p);
-    await sleep(4500); await dd(p); // first-load unlock celebration (App 1) closes on its own
+    await sleep(4500); await dd(p);
     await shot(p, 'home-gameplan'); await shot(p, 'gameplan-row', '[data-test=gp-row]');
     const t0 = await p.locator('[data-test=vault-text]').innerText().catch(() => '');
     ok('vault: 80 pts opens none, next at 100', /Vault · 0 of 6 open · 20 pts to go · next app at 100 pts \(~5 tasks\)/.test(t0), t0);
     const card = p.locator('.task-card', { hasText: 'ZZTEST Open big' }).first(); await card.scrollIntoViewIfNeeded().catch(() => {});
     await card.locator('[data-test=task-check]').dispatchEvent('click');
-    const v = p.locator('[data-test=points-celebration][data-kind=vault]');
-    const seen = await v.waitFor({ timeout: 10000 }).then(() => true).catch(() => false); await sleep(600);
-    const vt = seen ? await v.innerText().catch(() => '') : '';
-    if (seen) await v.screenshot({ path: SHOTS + `${TAG}-vault-unlock-celebration.png` }).catch((e) => console.log('shot failed', e.message));
-    ok('vault: unlock celebration fires', seen && /Vault unlocked: App 1 🎉/.test(vt), vt);
-    await sleep(3000); await dd(p);
+    await sleep(1500); await dd(p);
     const t = await p.locator('[data-test=vault-text]').innerText().catch(() => '');
-    ok('vault: 120 pts opens 1 of 6, next app at 140 pts (~7 tasks)', /Vault · 1 of 6 open · 20 pts to go · next app at 140 pts \(~7 tasks\)/.test(t), t);
+    ok('vault: 120 pts stays locked until a buy during a running timer', /Vault · 0 of 6 open · 0 pts to go · next app at 100 pts \(~5 tasks\)/.test(t), t);
     ok('vault: no task gate copy', !/finish \d+ more task/i.test(t) && await p.locator('[data-test=vault-gate]').count() === 0, t);
     await shot(p, 'vault-collapsed', '[data-test=gp-row]');
     await p.locator('[data-test=vault-toggle]').dispatchEvent('click'); await sleep(500);
