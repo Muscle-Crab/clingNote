@@ -116,6 +116,13 @@ export const focusTimerRunning = (tasks, now = Date.now()) => (tasks || []).some
   const end = new Date(t.timerEndTime).getTime();
   return Number.isFinite(end) && end > now;
 });
+// Purchases belong to one lock-in session. A new session key drops them so those apps lock again until bought in this session.
+// Same key (reload, timer pause) keeps them. An empty key is not a new session.
+export const vaultSessionReset = ({ sessionKey = '', storedKey = '', bought = [] } = {}) => {
+  const key = String(sessionKey || '');
+  if (!key || key === String(storedKey || '')) return { reset: false, sessionKey: String(storedKey || ''), bought: bought || [] };
+  return { reset: true, sessionKey: key, bought: [] };
+};
 // Vault holes stay open only while a session countdown or a focus timer is actually running.
 // Paused, stopped, expired, not started, or a finished session all close them.
 export const vaultAccessOpen = ({ focusRunning = false, focusPaused = false, sessionRunning = false, sessionEnded = false } = {}) => {

@@ -371,7 +371,7 @@ import { homeDay } from '@/utils/homeDay';
 import DayStartPrompt from '@/components/eighthour/DayStartPrompt.vue';
 import { sessionApps } from '@/utils/sessionApps';
 import { debtShield, debtHoldPlan, turnOffBlocked, TURN_OFF_BLOCKED_MSG } from '@/utils/appLockDebt';
-import { vaultView, startPlan, stopWindows, priceApps, newUnlocks, unlockCelebration, webFallback, focusTimerRunning, focusPaused, vaultAccessOpen, shieldBecauseTimerOff, vaultTimerPlan, buyApp } from '@/utils/pointsVault';
+import { vaultView, startPlan, stopWindows, priceApps, newUnlocks, unlockCelebration, webFallback, focusTimerRunning, focusPaused, vaultAccessOpen, shieldBecauseTimerOff, vaultTimerPlan, buyApp, vaultSessionReset } from '@/utils/pointsVault';
 import { typicalMin } from '@/utils/typicalUsage';
 import robotPng from '@/assets/assistant-robot@2x.png';
 import PointsCelebration from '@/components/home/PointsCelebration.vue';
@@ -4148,6 +4148,7 @@ let lockOn = null;
 const hardLocked = ref(false); // shield up now: the sergeant menu shows Emergency unlock
 const syncAppLock = async () => {
   if (!lockAvailable()) return;
+  await relockVaultForSession(); // a new lock-in drops earlier vault purchases before this sync can re-allow them
   let st = await clingLock.status();
   if (gpOn.value && gpLoaded.value) { await gpBreakReconcile(); if (await gpVoidBreak()) st = await clingLock.status(); st = await gpBreakRelock(st); }
   if (holdLockAction(gpBreak.value, Date.now()) && gpBreakOk()) { hardLocked.value = false; return; } // native break live: shields are off, lock state kept for the re-lock
@@ -4202,7 +4203,7 @@ const VAULT_WIN_KEY = 'cn.vault.windows.v1';
 const vaultLoad = () => { try { const v = JSON.parse(localStorage.getItem(VAULT_WIN_KEY) || '{}'); return v && v.day === localDateStr() ? v.windows || [] : []; } catch (e) { return []; } };
 const vaultWindows = ref(vaultLoad()); const vaultData = ref({ days: {}, apps: [] }); const vaultNow = ref(Date.now());
 const vaultSave = (w) => { vaultWindows.value = w; try { localStorage.setItem(VAULT_WIN_KEY, JSON.stringify({ day: localDateStr(), windows: w })); } catch (e) { /* ignore */ } };
-const VAULT_PRICE_KEY = 'cn.vault.prices.v1'; const VAULT_SEEN_KEY = 'cn.vault.celebrated.v1'; const VAULT_BOUGHT_KEY = 'cn.vault.bought.v1';
+const VAULT_PRICE_KEY = 'cn.vault.prices.v1'; const VAULT_SEEN_KEY = 'cn.vault.celebrated.v1'; const VAULT_BOUGHT_KEY = 'cn.vault.bought.v1'; const VAULT_SESSION_KEY = 'cn.vault.session.v1';
 const dayLoad = (k) => { try { const v = JSON.parse(localStorage.getItem(k) || '{}'); return v && v.day === localDateStr() ? v.list : null; } catch (e) { return null; } };
 const daySave = (k, list) => { try { localStorage.setItem(k, JSON.stringify({ day: localDateStr(), list })); } catch (e) { /* ignore */ } };
 const vaultPriced = ref(dayLoad(VAULT_PRICE_KEY));
@@ -4223,6 +4224,18 @@ const vaultAccessState = () => {
 const gpVault = computed(() => { if (!lockAvailable() || !isViewingToday.value) return null; const gate = vaultAccessState();
   return vaultView({ apps: vaultData.value.apps || [], days: vaultData.value.days || {}, todayYmd: localDateStr(), points: dayVaultPoints.value,
     priced: vaultPriced.value, debt: vaultDebt.value, windows: vaultWindows.value, nowMs: vaultNow.value, typical: typicalMin, wait: eh.wait && eh.wait.value, bought: vaultBought.value, accessOpen: gate.accessOpen }); });
+const vaultSessionId = () => { const l = eh.lock.value; if (!eh.running.value || !l || !l.startMs) return ''; return `${l.dayKey || ''}#${Number(l.index) || 0}:${l.startMs}`; };
+const loadVaultSession = () => { try { return localStorage.getItem(VAULT_SESSION_KEY) || ''; } catch (e) { return ''; } };
+const saveVaultSession = (k) => { try { localStorage.setItem(VAULT_SESSION_KEY, k || ''); } catch (e) { /* ignore */ } };
+// New lock-in / next session: forget today's earlier buys and revoke the native allowance (endVaultApps → VaultAllow.clearActive + re-shield).
+// Same session keeps the buys. Runs on the vault queue so a sync cannot re-allow the old set afterwards.
+const relockVaultForSession = () => runVault(async () => {
+  const next = vaultSessionReset({ sessionKey: vaultSessionId(), storedKey: loadVaultSession(), bought: vaultBought.value || [] });
+  if (!next.reset) return;
+  vaultBought.value = next.bought; daySave(VAULT_BOUGHT_KEY, next.bought); saveVaultSession(next.sessionKey);
+  if (lockAvailable()) await clingLock.endVaultApps();
+  vaultSave(stopWindows(vaultWindows.value, Date.now())); vaultNow.value = Date.now();
+});
 let vaultJob = Promise.resolve(); let syncQueued = false;
 const runVault = (fn) => { const run = vaultJob.then(() => fn()); vaultJob = run.then(() => {}, () => {}); return run; };
 const syncVault = () => { if (syncQueued) return vaultJob; syncQueued = true; return runVault(async () => { syncQueued = false;
@@ -4415,6 +4428,7 @@ const startHardLock = async (o = {}) => {
     const a0 = await clingLock.requestAuthorization(); if (a0.status !== 'approved') { showNoteToast('Screen Time permission was not given, so apps stay unlocked.', { error: true }); return; }
     const st = await clingLock.status(); if (!(st.selectionCount > 0)) { const r = await clingLock.pickApps(); if (!r.saved) return; }
     try { localStorage.setItem(LOCK_PREF, '1'); } catch (e) { /* ignore */ }
+    if (o.sessionBegin) await relockVaultForSession(); // before the shield: forget earlier buys and revoke their allowance
     if (o.sessionBegin && eh.lock.value && eh.lock.value.endMs > Date.now() + 60000) { const r = await clingLock.startLock(eh.lock.value.endMs, 'ClingNote lock-in', { sessionBegin: true }); if (r && r.monitor === 'ok') lockOn = eh.lock.value.endMs; }
     await syncAppLock(); if (hardLocked.value) setTimeout(() => coachStart('lock-on'), 1500);
   } catch (e) { console.warn('hard lock', e && e.message); }

@@ -135,9 +135,11 @@ public class ClingLockPlugin: CAPPlugin, CAPBridgedPlugin {
         let untilMs = call.getDouble("untilMs") ?? 0
         let until = Date(timeIntervalSince1970: untilMs / 1000)
         guard until.timeIntervalSinceNow > 60 else { call.reject("untilMs must be > 1 min ahead"); return }
-        Self.applyShield()
         // Begin of a session: the selection it locks becomes the "last used" one that seeds the next session's picker.
         if call.getBool("sessionBegin") ?? false, let data = LockShared.defaults?.data(forKey: LockShared.selectionKey) { LockShared.defaults?.set(data, forKey: LockShared.lastUsedSelectionKey) }
+        // Same Begin drops any vault allowance first. applyShield subtracts VaultAllow, so a previous session's buys would stay open.
+        if call.getBool("sessionBegin") ?? false { VaultAllow.clearActive(); DeviceActivityCenter().stopMonitoring([.clingVault]) }
+        Self.applyShield()
         LockShared.defaults?.set(["locked": true, "until": untilMs, "label": call.getString("label") ?? ""], forKey: LockShared.stateKey)
         AppLocks.cleanupExpired()
         // DeviceActivity needs >= 15 min intervals and rejects > 1 week (intervalTooLong): arm the first <= 6.5-day segment of a chain

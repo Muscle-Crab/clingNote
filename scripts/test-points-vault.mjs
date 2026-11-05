@@ -85,6 +85,22 @@ t('buying one app releases only that app on the shield', () => {
   const held = V.vaultView({ apps: [{ id: 'a', label: 'A' }], days: daysOf({ a: 10 }), todayYmd: today, points: 200, accessOpen: true, nowMs: 1000, wait: { untilMs: 5000, text: 'wait' } });
   assert.equal(held.openCount, 0); assert.equal(held.items[0].buyable, false); assert.equal(V.releasePlan({ view: held, nowMs: 1000 }), null);
 });
+t('a new lock-in session drops earlier purchases so those apps lock again', () => {
+  const same = V.vaultSessionReset({ sessionKey: '2026-11-05#0:1000', storedKey: '2026-11-05#0:1000', bought: ['a'] });
+  assert.equal(same.reset, false); assert.deepEqual(same.bought, ['a']);
+  assert.equal(V.vaultSessionReset({ sessionKey: '', storedKey: '2026-11-05#0:1000', bought: ['a'] }).reset, false);
+  const next = V.vaultSessionReset({ sessionKey: '2026-11-05#1:9000', storedKey: '2026-11-05#0:1000', bought: ['a', 'b'] });
+  assert.equal(next.reset, true); assert.deepEqual(next.bought, []); assert.equal(next.sessionKey, '2026-11-05#1:9000');
+  const apps = [{ id: 'a', label: 'A' }, { id: 'b', label: 'B' }];
+  const view = V.vaultView({ apps, days: daysOf({ a: 10, b: 60 }), todayYmd: today, points: 400, bought: next.bought, accessOpen: true, nowMs: 9000 });
+  assert.equal(view.openCount, 0); assert.equal(view.items[0].buyable, true); assert.equal(view.items[1].buyable, false);
+  assert.equal(V.vaultTimerPlan({ accessOpen: true, view, nativeLive: true, nativeIds: ['a', 'b'], nowMs: 9000 }).action, 'close');
+  const home = fs.readFileSync(new URL('../src/views/HomeView.vue', import.meta.url), 'utf8');
+  const plug = fs.readFileSync(new URL('../ios/App/App/ClingLockPlugin.swift', import.meta.url), 'utf8');
+  assert.match(home, /await relockVaultForSession\(\)/);
+  assert.match(home, /vaultSessionReset\(\{ sessionKey: vaultSessionId\(\)/);
+  assert.match(plug, /sessionBegin[\s\S]{0,400}VaultAllow\.clearActive\(\)/);
+});
 t('no running timer closes a live vault; a running timer reopens only what was bought', () => {
   const earned = V.vaultView({ apps: [{ id: 'a', label: 'A' }], days: daysOf({ a: 10 }), todayYmd: today, points: 200, accessOpen: true, nowMs: 1000 });
   assert.equal(earned.openCount, 0); assert.equal(earned.items[0].buyable, true);
