@@ -6,7 +6,7 @@ export async function ensureUserDoc(user) {
   const snap = await getDoc(ref);
   if (snap.exists()) return snap.data();
   const base = { id: user.uid, email: user.email || '', name: user.displayName || (user.email || '').split('@')[0] || 'You',
-    onboardingComplete: false, createdAt: new Date() }; // billing fields (isPro/plan/credits/hasPaid) are server-only
+    onboardingComplete: false, lockInEnabled: true, createdAt: new Date() }; // billing fields (isPro/plan) stay server-only; Lock In starts on
   await setDoc(ref, base, { merge: true });
   return base;
 }

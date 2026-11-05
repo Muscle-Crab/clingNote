@@ -59,7 +59,7 @@ const { entitlementUpdate, decideWrite, candidateUids, authOk } = require(path.j
   await t('anonymous ids / unknown users / path-like ids ignored; TRANSFER syncs both sides', async () => {
     assert.deepEqual(candidateUids({ app_user_id: '$RCAnonymousID:abc', aliases: ['../../x', UID] }), [UID]);
     const other = 'zzzzYYYY1111xxxxWWWW2222'; assert.deepEqual(candidateUids({ type: 'TRANSFER', transferred_from: [UID], transferred_to: [other] }).sort(), [UID, other].sort());
-    const d = mkDeps(subOf(null), {}); const r = await wh._handler(ev({ type: 'INITIAL_PURCHASE', app_user_id: UID }), d); assert.equal(r.statusCode, 200); assert.equal(d.calls.length, 0); assert.equal(d.writes.length, 0);
+    const d = mkDeps(subOf(null), {}); const r = await wh._handler(ev({ type: 'INITIAL_PURCHASE', app_user_id: UID }), d); assert.equal(r.statusCode, 200); assert.equal(d.calls.length, 1); assert.equal(d.writes.length, 0);
   });
   await t('RC lookup failure -> 500 so RevenueCat retries', async () => {
     const d = mkDeps(subOf(null)); d.fetch = async () => ({ ok: false, status: 503, json: async () => ({}) }); assert.equal((await wh._handler(ev({ type: 'RENEWAL', app_user_id: UID }), d)).statusCode, 500);
@@ -69,7 +69,30 @@ const { entitlementUpdate, decideWrite, candidateUids, authOk } = require(path.j
     const d = mkDeps(subOf({ product_identifier: 'clingnote_pro_monthly', expires_date: day(30) }));
     assert.equal((await sy._handler({ httpMethod: 'POST', headers: {} }, { ...d, verify })).statusCode, 401);
     const r = await sy._handler({ httpMethod: 'POST', headers: { authorization: 'Bearer good' }, body: JSON.stringify({ uid: 'attacker1234567' }) }, { ...d, verify });
-    assert.equal(r.statusCode, 200); assert.deepEqual(JSON.parse(r.body), { isPro: true, plan: 'monthly' }); assert.ok(d.calls[0].url.includes(UID)); assert.equal(d.writes[0].u, UID);
+    assert.equal(r.statusCode, 200); assert.deepEqual(JSON.parse(r.body), { isPro: true, plan: 'monthly', wrote: true }); assert.ok(d.calls[0].url.includes(UID)); assert.equal(d.writes[0].u, UID);
+  });
+  await t('sync with no user doc still writes Pro and turns Lock In on', async () => {
+    const verify = async () => ({ uid: UID });
+    const d = mkDeps(subOf({ product_identifier: 'clingnote_pro_monthly', expires_date: day(30) }), {});
+    const r = await sy._handler({ httpMethod: 'POST', headers: { authorization: 'Bearer good' } }, { ...d, verify });
+    assert.equal(r.statusCode, 200);
+    assert.equal(d.writes.length, 1);
+    assert.equal(d.writes[0].d.isPro, true);
+    assert.equal(d.writes[0].d.plan, 'monthly');
+    assert.equal(d.writes[0].d.lockInEnabled, true);
+    const { isProDoc } = require(path.join(__dirname, '../netlify/functions/lib/requirePro'));
+    assert.equal(isProDoc(d.writes[0].d, NOW), true);
+  });
+  await t('client: purchase sync is not swallowed, and a 402 retries after sync', () => {
+    const fs = require('fs');
+    const iap = fs.readFileSync(path.join(__dirname, '../src/utils/iap.js'), 'utf8');
+    const eh = fs.readFileSync(path.join(__dirname, '../src/composables/useEightHour.js'), 'utf8');
+    const login = fs.readFileSync(path.join(__dirname, '../src/views/Login.vue'), 'utf8');
+    const doc = fs.readFileSync(path.join(__dirname, '../src/utils/userDoc.js'), 'utf8');
+    assert.ok(/await syncEntitlement\(user\)/.test(iap) && /syncError/.test(iap));
+    assert.ok(/r\.status === 402 && !retried/.test(eh) && /syncEntitlement/.test(eh));
+    assert.ok(/lockInEnabled: true/.test(login) && /lockInEnabled: true/.test(doc));
+    assert.ok(/lockInEnabled === true/.test(fs.readFileSync(path.join(__dirname, '../src/utils/lockIn.js'), 'utf8')));
   });
   await t('client code never writes entitlement fields', () => {
     const fs = require('fs'); const src = fs.readFileSync(path.join(__dirname, '../src/utils/iap.js'), 'utf8'); assert.ok(!/setDoc|updateDoc|isPro\s*:/.test(src));

@@ -141,10 +141,9 @@ const signInWithGoogle = async () => {
         profilePicture: user.photoURL,
         provider: user.providerId,
         lastLogin: new Date(),
-        isPro: false,
-        plan: 'free',
         onboardingComplete: false,
-      });
+        lockInEnabled: true,
+      }, { merge: true });
       syncAfterAuth().catch(() => {});
       router.push(afterNewAccount());
       return;
@@ -177,7 +176,7 @@ const signInWithAppleClick = async () => {
     const name = [a.givenName, a.familyName].filter(Boolean).join(' ') || user.displayName || (user.email || '').split('@')[0] || 'You';
     if (a.givenName && !user.displayName) { try { await updateProfile(user, { displayName: name }); } catch (e) { /* non-fatal */ } }
     if (!userSnap.exists()) {
-      await setDoc(userRef, { id: user.uid, uid: user.uid, name, email: user.email || a.email || '', provider: 'apple.com', lastLogin: new Date(), createdAt: new Date(), isPro: false, plan: 'free', onboardingComplete: false });
+      await setDoc(userRef, { id: user.uid, uid: user.uid, name, email: user.email || a.email || '', provider: 'apple.com', lastLogin: new Date(), createdAt: new Date(), onboardingComplete: false, lockInEnabled: true }, { merge: true });
       syncAfterAuth().catch(() => {});
       router.push(afterNewAccount());
       return;

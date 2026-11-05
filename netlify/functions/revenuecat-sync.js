@@ -10,8 +10,8 @@ const handler = async (event, deps = {}) => {
   try {
     const uid = await verifyUser(event.headers, deps.verify || ((t) => getAdmin().auth().verifyIdToken(t)));
     const r = await syncUid(uid, deps);
-    if (!r) return { statusCode: 404, body: JSON.stringify({ error: 'User not found' }) };
-    return { statusCode: 200, body: JSON.stringify({ isPro: r.isPro, plan: r.plan }) };
+    if (!r) return { statusCode: 400, body: JSON.stringify({ error: 'Bad user id' }) };
+    return { statusCode: 200, body: JSON.stringify({ isPro: r.isPro, plan: r.plan, wrote: !!r.wrote }) };
   } catch (e) {
     return { statusCode: e.status || 500, body: JSON.stringify({ error: e.status ? e.message : 'Sync failed' }) };
   }

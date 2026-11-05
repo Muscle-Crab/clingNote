@@ -46,7 +46,7 @@ export const readCachedPlan = () => { try { const p = JSON.parse(localStorage.ge
 export const cachePlan = (plan) => { try { localStorage.setItem(PLAN_KEY, JSON.stringify({ wakeTime: plan.wakeTime, taskCount: plan.taskCount, tz: plan.tz || deviceTz(), at: Date.now() })); } catch (e) { /* private mode */ } };
 export const clearCachedPlan = () => { try { localStorage.removeItem(PLAN_KEY); } catch (e) { /* ignore */ } };
 
-const call = async (action, body = {}) => {
+const call = async (action, body = {}, retried = false) => {
   const u = auth.currentUser; if (!u) throw Object.assign(new Error('Not signed in'), { status: 401 });
   const r = await fetch(fnUrl('eight-hour-day'), { method: 'POST', headers: { Authorization: `Bearer ${await u.getIdToken()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ action, ...body }) });
   const ct = (r.headers && r.headers.get && r.headers.get('content-type')) || '';
@@ -54,6 +54,10 @@ const call = async (action, body = {}) => {
   if (!/json/i.test(ct)) throw Object.assign(new Error('8-hour day service is unavailable'), { status: r.status, unavailable: true });
   const data = await r.json().catch(() => ({}));
   if (r.status === 404) throw Object.assign(new Error(data.error || '8-hour day service is unavailable'), { status: 404, unavailable: true });
+  // Paid on this phone but users/{uid}.isPro not written yet: mirror RevenueCat once, then retry. A second 402 stays a 402.
+  if (r.status === 402 && !retried) {
+    try { const { syncEntitlement } = await import('@/utils/iap'); const u2 = auth.currentUser; if (u2) { await syncEntitlement(u2); return call(action, body, true); } } catch (e) { /* still not Pro on the server */ }
+  }
   if (!r.ok) throw Object.assign(new Error(data.error || `Request failed (${r.status})`), { status: r.status, code: data.code });
   return data;
 };

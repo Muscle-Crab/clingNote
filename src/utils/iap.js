@@ -52,7 +52,10 @@ export async function identifyIapUser(user) {
     if (user?.uid) { if (currentUid !== user.uid) { await Purchases.logIn({ appUserID: user.uid }); currentUid = user.uid; } }
     else if (currentUid) { await Purchases.logOut(); currentUid = null; setRcPro(null, false); }
   } catch (e) { console.warn('RevenueCat identify failed', e?.message || e); }
-  if (user?.uid && currentUid === user.uid) await refreshCustomerInfo(); // launch / after login
+  if (user?.uid && currentUid === user.uid) {
+    await refreshCustomerInfo(); // launch / after login
+    try { await syncEntitlement(user); } catch (e) { console.warn('RevenueCat sync failed', e?.message || e); }
+  }
 }
 
 // Returns [{ id:'monthly'|'yearly'|'lifetime', pkg, priceString, trialEligible, trialText }] from the current RevenueCat offering.
@@ -94,7 +97,7 @@ export async function purchase(user, plan) {
     if (e?.userCancelled) return { ok: false, cancelled: true };
     return { ok: false, error: e?.message || 'Purchase failed.' };
   }
-  try { await syncEntitlement(user); } catch (e) { /* webhook will catch up; the purchase itself succeeded */ }
+  try { await syncEntitlement(user); } catch (e) { return { ok: true, syncError: e?.message || 'Purchase succeeded, but Pro did not sync. Try Restore.' }; }
   return { ok: true };
 }
 
@@ -105,7 +108,7 @@ export async function restore(user) {
     const { customerInfo } = await Purchases.restorePurchases();
     const active = entitlementActive(customerInfo);
     if (user?.uid) setRcPro(user.uid, active, entitlementPlan(customerInfo));
-    try { await syncEntitlement(user); } catch (e) { /* ignore */ }
+    try { await syncEntitlement(user); } catch (e) { return { ok: true, restored: active, syncError: e?.message || 'Restored on this phone, but Pro did not sync.' }; }
     return { ok: true, restored: active };
   } catch (e) { return { ok: false, error: e?.message || 'Restore failed.' }; }
 }
