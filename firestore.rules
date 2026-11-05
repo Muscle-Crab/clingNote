@@ -177,15 +177,14 @@ service cloud.firestore {
     }
 
     // Weekly Routines - routineId format: {userId}_{dayName}
-    // A running lock-in (dayRunning) does not freeze the task list: delete, move, reorder and edit all persist.
-    // The shutdown after the window (dayFrozen and not dayRunning) still refuses updates. The whole day doc still
-    // cannot be created or deleted during that freeze. lockedDayUnchanged remains for the expression-budget shape
-    // and is not applied to updates. Session points stay on eightHour/{uid}.lock, which clients cannot write.
+    // Moving, editing, reordering and deleting tasks are updates of this doc. The owner can do those during a
+    // lock-in and after it (the shutdown window used to deny them, and the app reported that as a lost connection).
+    // Creating or deleting the whole day doc stays frozen while that weekday's window is shut. Session points stay
+    // on eightHour/{uid}.lock, which clients cannot write.
     match /weeklyRoutines/{routineId} {
       allow read: if isAuthenticated() && (request.auth.uid == routineId.split('_')[0]);  // pals/managers see tasks only via the manager-pal function (private tasks stripped)
       allow create: if isAuthenticated() && request.auth.uid == routineId.split('_')[0] && !dayFrozen(eightHourLock(routineId.split('_')[0]), routineId.split('_')[1]);
-      allow update: if isAuthenticated() && request.auth.uid == routineId.split('_')[0]
-        && (!dayFrozen(eightHourLock(routineId.split('_')[0]), routineId.split('_')[1]) || dayRunning(eightHourLock(routineId.split('_')[0]), routineId.split('_')[1]));
+      allow update: if isAuthenticated() && request.auth.uid == routineId.split('_')[0];
       allow delete: if isAuthenticated() && request.auth.uid == routineId.split('_')[0] && !dayFrozen(eightHourLock(routineId.split('_')[0]), routineId.split('_')[1]);
     }
 

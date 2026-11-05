@@ -278,7 +278,7 @@ import { useRouter as _useRouter, onBeforeRouteLeave } from 'vue-router';
 import { requirePro, loadUserDoc, rcProActive, proNow, gatePro } from '@/composables/usePro';
 import { isPro as isProUser } from '@/utils/pro';
 import { checkDailyLimit } from '@/utils/taskLimits';
-import { defaultTransferDay, transferFits, MAX_TASKS_PER_DAY } from '@/utils/transfer';
+import { defaultTransferDay, transferFits, MAX_TASKS_PER_DAY, moveKey, transferFailure } from '@/utils/transfer';
 import { canUse } from '@/utils/pro';
 const _proRouter = _useRouter();
 // Daily task limit: free 5/day. Pro has none. Voice Review uses this same gate (addNewTask).
@@ -311,9 +311,9 @@ const dailyLimitGate = async (dayKey) => {
 const mutateDay = (dayName, fn) => runTransaction(db, async (tx) => {
   const ref_ = doc(db, 'weeklyRoutines', `${userId.value}_${dayName}`);
   const snap = await tx.get(ref_);
-  const next = fn(snap.exists() ? [...(snap.data().tasks || [])] : []);
-  tx.set(ref_, { tasks: next, updatedAt: serverTimestamp() }, { merge: true });
-  return next;
+  const next = dropUndefined(fn(snap.exists() ? [...(snap.data().tasks || [])] : []));
+  tx.set(ref_, { tasks: Array.isArray(next) ? next : [], updatedAt: serverTimestamp() }, { merge: true });
+  return Array.isArray(next) ? next : [];
 });
 const strictAllowed = ref(true); // false for free users once ENFORCE_PAYWALL is on
 loadUserDoc().then((d) => { strictAllowed.value = canUse(d, 'strictBoss'); }).catch(() => {});
@@ -814,7 +814,9 @@ const endDay = async () => {
 
 
 
+let transferBusy = false;
 const transferTask = async () => {
+  if (transferBusy) return;
   if (blockIfShut()) return false;
   if (!userId.value || selectedTransferTaskIndex.value === null || selectedTransferDay.value === null) {
     console.warn("Invalid task or day selection");
@@ -823,49 +825,55 @@ const transferTask = async () => {
 
   if (strictOn.value && !validReason(deferReason.value)) return;
   const currentDayIndex = selectedDayIndex.value;
-  const targetDayIndex = selectedTransferDay.value;
-  if (currentDayIndex === targetDayIndex) {
+  const targetDayIndex = Number(selectedTransferDay.value);
+  if (!Number.isInteger(targetDayIndex) || currentDayIndex === targetDayIndex) {
     console.warn("Cannot transfer task to the same day");
     return;
   }
 
   if (blockIfLocked(currentDayIndex) || blockIfLocked(targetDayIndex)) { closeTransferModal(); return; }
-  const currentDay = days[currentDayIndex].day;
-  const targetDay = days[targetDayIndex].day;
+  const currentDay = days[currentDayIndex] && days[currentDayIndex].day;
+  const targetDay = days[targetDayIndex] && days[targetDayIndex].day;
   const picked = (selectedDayRoutine.value || [])[selectedTransferTaskIndex.value];
-  if (!picked) { closeTransferModal(); return; }
-  const key = taskKey(picked);
+  if (!picked || !currentDay || !targetDay) { closeTransferModal(); return; }
+  const key = moveKey(picked);
 
+  transferBusy = true;
   try {
-    // daily cap on the target day (same 50/day limit as adding a task)
-    const tSnap = await getDoc(doc(db, 'weeklyRoutines', `${userId.value}_${targetDay}`));
-    const targetLen = tSnap.exists() ? (tSnap.data().tasks || []).length : 0;
-    if (!transferFits(targetLen)) { alert(`${targetDay} already has ${targetLen} tasks (limit ${MAX_TASKS_PER_DAY}).`); return; }
-
-    // remove by identity (not by a list index that may have shifted), then append to the target day; both in transactions
-    let rawTask = null;
-    const currentTasks = await trackWrite(mutateDay(currentDay, (cur) => {
-      const i = cur.findIndex((t) => taskKey(t) === key);
-      rawTask = i === -1 ? null : cur[i];
-      return i === -1 ? cur : [...cur.slice(0, i), ...cur.slice(i + 1)];
+    // One transaction: remove by identity (Timestamp or ISO createdAt both match) and append. No separate read that can fail first.
+    let rawTask = null; let full = false; let targetLen = 0;
+    const currentTasks = await trackWrite(runTransaction(db, async (tx) => {
+      const srcRef = doc(db, 'weeklyRoutines', `${userId.value}_${currentDay}`);
+      const dstRef = doc(db, 'weeklyRoutines', `${userId.value}_${targetDay}`);
+      const srcSnap = await tx.get(srcRef); const dstSnap = await tx.get(dstRef);
+      const src = srcSnap.exists() ? [...(srcSnap.data().tasks || [])] : [];
+      const dst = dstSnap.exists() ? [...(dstSnap.data().tasks || [])] : [];
+      targetLen = dst.length;
+      if (!transferFits(targetLen)) { full = true; rawTask = null; return null; }
+      const i = src.findIndex((t) => moveKey(t) === key);
+      if (i === -1) { rawTask = null; return null; } // not on this day: do not write a second copy
+      rawTask = src[i];
+      const task = dropUndefined(strictOn.value ? carryTask(rawTask) : rawTask);
+      const nextSrc = dropUndefined([...src.slice(0, i), ...src.slice(i + 1)]);
+      const nextDst = dropUndefined(dst.some((t) => moveKey(t) === key) ? dst : [...dst, task]);
+      tx.set(srcRef, { tasks: nextSrc, updatedAt: serverTimestamp() }, { merge: true });
+      tx.set(dstRef, { tasks: nextDst, updatedAt: serverTimestamp() }, { merge: true });
+      return nextSrc;
     }));
+    if (full) { alert(`${targetDay} already has ${targetLen} tasks (limit ${MAX_TASKS_PER_DAY}).`); return; }
     if (!rawTask) { closeTransferModal(); return; }
-    const task = strictOn.value ? carryTask(rawTask) : rawTask;
     if (strictOn.value) {
-      logStrict('deferred', `${task.title} → ${targetDay}: ${deferReason.value.trim()}`);
-      if (task.bossWatching && !rawTask.bossWatching) logStrict('boss-watching', task.title);
+      logStrict('deferred', `${rawTask.title} → ${targetDay}: ${deferReason.value.trim()}`);
       deferReason.value = '';
     }
-    await trackWrite(mutateDay(targetDay, (cur) => [...cur, task]));
-
     if (selectedDayIndex.value === currentDayIndex) selectedDayRoutine.value = currentTasks;
-    transferNotification.value = `Task "${task.title}" moved to ${targetDay}`;
+    transferNotification.value = `Task "${rawTask.title}" moved to ${targetDay}`;
     setTimeout(() => { transferNotification.value = null; }, 3000);
     closeTransferModal();
   } catch (error) {
     console.error('Error transferring task:', error);
-    if (!lockMessage(error)) alert("Couldn't move the task. Check your connection and try again.");
-  }
+    if (!lockMessage(error)) alert(transferFailure(error));
+  } finally { transferBusy = false; }
 };
 const resetTasksToIncomplete = async (dayIndex = selectedDayIndex.value, isCurrent = () => true) => {
   if (!userId.value || dayIndex === -1) return;

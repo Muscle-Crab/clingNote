@@ -108,7 +108,7 @@ lockMod.setLockSource(() => ({ lock: { dayName: 'Fri', startMs: start, endMs: en
     const m = rules.match(/match \/weeklyRoutines\/\{routineId\}\s*\{[\s\S]*?\n    \}/); assert.ok(m, 'weeklyRoutines block');
     const b = m[0];
     assert.ok(/allow create:[^;]*!dayFrozen\(eightHourLock\(/.test(b)); assert.ok(/allow delete:[^;]*!dayFrozen\(eightHourLock\(/.test(b));
-    assert.ok(/allow update:[^;]*!dayFrozen\(eightHourLock\([^;]*\|\| dayRunning\(eightHourLock\(/.test(b), 'running lock-in allows task updates; shutdown still freezes');
+    assert.ok(/allow update: if isAuthenticated\(\) && request\.auth\.uid == routineId\.split\('_'\)\[0\];/.test(b), 'task updates (move, edit, delete) are allowed for the owner');
   });
   await t('rules: lock helper checks day name and request.time against the server window', () => {
     const f = rules.match(/function eightHourLock\([\s\S]*?function dayFrozen[\s\S]*?\n    \}/)[0];
