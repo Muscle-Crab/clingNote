@@ -42,6 +42,21 @@ t('frozen daily prices win over new usage', () => {
 });
 t('one celebration per app per day', () => { const v = { items: [{ id: 'a', open: true }, { id: 'b', open: true }, { id: 'c', open: false }] };
   assert.deepEqual(V.newUnlocks(v, ['a']).map((x) => x.id), ['b']); assert.equal(V.newUnlocks(v, ['a', 'b']).length, 0); });
+t('crossing a price releases that app on the shield, and Stop is not undone', () => {
+  const view = V.vaultView({ apps: [{ id: 'a', label: 'App A' }, { id: 'b', label: 'App B' }], days: daysOf({ a: 10, b: 60 }), todayYmd: today, points: 300, nowMs: 1000 });
+  assert.equal(view.items[0].open, true); assert.equal(view.items[1].open, true); assert.ok(view.items[0].price < view.items[1].price);
+  const plan = V.releasePlan({ view, already: [], nowMs: 1000, liveUntil: 0 });
+  assert.deepEqual(plan.fresh, ['a', 'b']); assert.ok(plan.untilMs > 1000 + 60000);
+  assert.equal(V.releasePlan({ view, already: ['a', 'b'], nowMs: 1000 }), null);
+  assert.equal(V.releasePlan({ view: { ...view, debt: true }, already: [], nowMs: 1000 }), null);
+  const held = V.vaultView({ apps: [{ id: 'a', label: 'A' }], days: daysOf({ a: 10 }), todayYmd: today, points: 200, nowMs: 1000, wait: { untilMs: 5000, text: 'wait' } });
+  assert.equal(held.openCount, 0); assert.equal(V.releasePlan({ view: held, nowMs: 1000 }), null);
+});
+t('vault rows carry the chosen app icon through frozen prices', () => {
+  const priced = [{ id: 'a', label: 'App A', price: 50, tasks: 3, min: 10 }];
+  const v = V.vaultView({ apps: [{ id: 'a', label: 'App A', icon: 'data:image/png;base64,abc' }], priced, points: 50, todayYmd: today, nowMs: 0 });
+  assert.equal(v.items[0].icon, 'data:image/png;base64,abc'); assert.equal(v.items[0].open, true);
+});
 t('time: 10 pts = 5 min, start plan', () => { assert.equal(V.timeEarnedMin(95), 45);
   const v = V.vaultView({ apps: [{ id: 'a', label: 'A' }], days: daysOf({ a: 10 }), todayYmd: today, points: 100, nowMs: 1000 });
   assert.deepEqual(V.startPlan(v, 1000).ids, ['a']); });

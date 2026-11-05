@@ -8,7 +8,7 @@ import { loadDayTasks } from '@/composables/useDayPersistence';
 import { loadScheduled, mutateScheduled } from '@/composables/useScheduledTasks';
 import { isDayLocked, assertNotShut } from '@/utils/eightHourLock';
 import { countTasksForDay } from '@/utils/taskLimits';
-import { dailyTaskLimit } from '@/config/pricing';
+import { dailyLimitRoom } from '@/config/pricing';
 import { buildExport, toCsv, parseImport, planImport, importSummary, exportFileName, DAY_NAMES } from '@/utils/taskTransfer';
 import { saveTextFile } from '@/utils/fileSave';
 
@@ -35,11 +35,10 @@ export const importTasks = async (uid, text, { pro = false } = {}) => {
   try { assertNotShut(); } catch (e) { return { ok: false, message: e.message }; }
   const all = await loadAll(uid);
   const lists = DAY_NAMES.map((d) => all.days[d]);
-  const limit = dailyTaskLimit(pro);
   const plan = planImport(parsed.data, all, {
     lockedDays: DAY_NAMES.filter((d) => isDayLocked(d)),
-    freshRoom: limit - countTasksForDay(localDay(), lists, all.scheduled),
-    scheduledRoom: (date) => limit - countTasksForDay(date, lists, all.scheduled),
+    freshRoom: dailyLimitRoom(pro, countTasksForDay(localDay(), lists, all.scheduled)),
+    scheduledRoom: (date) => dailyLimitRoom(pro, countTasksForDay(date, lists, all.scheduled)),
   });
   for (const d of Object.keys(plan.days)) {
     const fresh = await loadDayTasks(uid, d); // re-read right before writing

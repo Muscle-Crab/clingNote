@@ -281,7 +281,7 @@ import { checkDailyLimit } from '@/utils/taskLimits';
 import { defaultTransferDay, transferFits, MAX_TASKS_PER_DAY } from '@/utils/transfer';
 import { canUse } from '@/utils/pro';
 const _proRouter = _useRouter();
-// Daily task limit (config/pricing.js TASK_LIMITS): safety max 50/day, free and Pro alike
+// Daily task limit: free 5/day. Pro has none. Voice Review uses this same gate (addNewTask).
 const limitHit = ref(null); // { limit, count, pro, day } when the last add was blocked
 const goUpgradeForLimit = () => { if (rcProActive(auth.currentUser?.uid)) return; modalOpen.value = false; _proRouter.push({ path: '/paywall', query: { feature: 'taskLimit', from: '/home' } }); };
 // Limit data is prefetched when the add modal opens so Save does not wait on 8 Firestore reads.
@@ -289,7 +289,7 @@ let gateCache = null; // { at, pro, lists, extra: [] }
 const pendingAdds = new Map(); // taskKey -> task added in this session (a refetch started before the write landed would miss it; counting dedupes by key)
 const fetchGateData = async () => {
   const [ud, ...snaps] = await Promise.all([loadUserDoc(), ...days.map((d) => getDoc(doc(db, 'weeklyRoutines', `${userId.value}_${d.day}`)))]);
-  gateCache = { at: Date.now(), pro: isProUser(ud), lists: snaps.map((x) => (x.exists() ? x.data().tasks || [] : [])), extra: [] };
+  gateCache = { at: Date.now(), pro: isProUser(ud) || rcProActive(auth.currentUser && auth.currentUser.uid), lists: snaps.map((x) => (x.exists() ? x.data().tasks || [] : [])), extra: [] };
   return gateCache;
 };
 let gatePrefetch = null;
@@ -371,7 +371,7 @@ import { homeDay } from '@/utils/homeDay';
 import DayStartPrompt from '@/components/eighthour/DayStartPrompt.vue';
 import { sessionApps } from '@/utils/sessionApps';
 import { debtShield, debtHoldPlan, turnOffBlocked, TURN_OFF_BLOCKED_MSG } from '@/utils/appLockDebt';
-import { vaultView, startPlan, stopWindows, priceApps, newUnlocks, unlockCelebration, webFallback } from '@/utils/pointsVault';
+import { vaultView, startPlan, stopWindows, priceApps, newUnlocks, unlockCelebration, webFallback, releasePlan } from '@/utils/pointsVault';
 import { typicalMin } from '@/utils/typicalUsage';
 import robotPng from '@/assets/assistant-robot@2x.png';
 import PointsCelebration from '@/components/home/PointsCelebration.vue';
@@ -382,8 +382,7 @@ import { useEightHour, clearDebtLocal, syncAfterAuth, setDayLengthHours, loadDay
 import { countableIndexes, taskRange, hoursLabel, validSessionHours } from '@/utils/eightHour';
 import { estimateFor, chipValues, withAiEstimate } from '@/utils/taskEstimate';
 import { requestAiEstimate } from '@/utils/aiEstimate';
-import { patchTouchesLocked } from '@/utils/eightHourLock';
-import { isDayLocked, completionKeepsInPlace, isLockError, assertTasksChangeAllowed, lockedMessage, isShutdown, shutMessage, canPlanDay, shutDayName } from '@/utils/eightHourLock';
+import { isDayLocked, completionKeepsInPlace, isLockError, assertTasksChangeAllowed, isShutdown, shutMessage, canPlanDay, shutDayName } from '@/utils/eightHourLock';
 import { planTomorrowDay as planTomorrowDayName } from '@/utils/eightHourLock';
 import ReminderModal from '@/components/home/ReminderModal.vue';
 import ShutdownPrompt from '@/components/home/ShutdownPrompt.vue';
@@ -498,12 +497,9 @@ const startPomodoro = async (index) => {
 const eh = useEightHour();
 const lockedDayName = computed(() => (eh.running.value && eh.lock.value ? eh.lock.value.dayName : ''));
 const selectedDayLocked = computed(() => !!lockedDayName.value && days[selectedDayIndex.value]?.day === lockedDayName.value);
-// true (after telling the user) when the given weekday tab is the locked day; every list-changing action calls this first
-const blockIfLocked = (dayIdx = selectedDayIndex.value) => {
-  if (dayIdx === -1 || !days[dayIdx] || !isDayLocked(days[dayIdx].day)) return false;
-  alert(lockedMessage());
-  return true;
-};
+// Lock-in does not block task management. Call sites stay so a future shield change cannot silently
+// start refusing deletes, moves, or edits again. Screen Time / the vault are unchanged.
+const blockIfLocked = () => false;
 // 8-hour hard stop: once today's started day has ended, task actions are refused until the next wake time (data layer also guards),
 // except completing tasks (toggleTaskCompletion never calls this) and planning TOMORROW's tab inside the planning window (8 PM..midnight).
 const blockIfShut = (dayIdx = selectedDayIndex.value) => { if (!isShutdown() || canPlanDay(days[dayIdx]?.day)) return false; sfx('error'); alert(shutMessage()); return true; };
@@ -874,7 +870,6 @@ const transferTask = async () => {
 const resetTasksToIncomplete = async (dayIndex = selectedDayIndex.value, isCurrent = () => true) => {
   if (!userId.value || dayIndex === -1) return;
 
-  if (isDayLocked(days[dayIndex]?.day)) return; // 8-hour lock: never wipe the locked day's progress
   const selectedDay = days[dayIndex];
   const selectedDayDocRef = doc(db, 'weeklyRoutines', `${userId.value}_${selectedDay.day}`);
 
@@ -1417,7 +1412,7 @@ const widgetComplete = async (taskId, mode) => {
 // Widget tap made before midnight, drained after: mark the task done on the day it was made (that day's doc), instead of dropping it.
 // Points/streak for that past day are not re-run (the streak day has already closed). Locked day / missing task: acked as no-op.
 widgetComplete.prior = async (taskId, dayName) => {
-  if (!userId.value || !dayName || isDayLocked(dayName)) return !!userId.value;
+  if (!userId.value || !dayName) return !!userId.value;
   const at = new Date().toISOString();
   await mutateDay(dayName, (tasks) => tasks.map((t) => (t && !t.completed && widgetTaskId(t) === taskId ? { ...t, completed: true, completedAt: at, timerActive: false, widgetEffectsPending: false, ...(t.timerEndTime ? overtimeStamp(ringDurationMs(t), ringOvertimeMs(t, Date.parse(at))) : overtimeStamp(0)) } : t)));
   return true;
@@ -1930,10 +1925,7 @@ const submitScheduledTask = async () => {
   if (!entry) { error.value = 'Could not schedule this task.'; return false; }
   try {
     scheduledList.value = await mutateScheduled(userId.value, (l) => [...l, entry]);
-    await afterMaterialize(); // today's date (or today's occurrence) shows up right away
-    // 8-hour lock: scheduled/repeating entries are not written into the locked day (materializeDueForToday), so say so instead of
-    // closing silently with nothing on screen (the "add as recurring does nothing" report). The Recurring checkbox path adds today's card.
-    if (isDayLocked(todayDayName()) && sc.date <= getTodayId()) showNoteToast(sc.repeat !== 'never' ? 'Saved. This repeat starts showing after your locked day ends. Use the Recurring checkbox to add it to today too.' : 'Saved. It shows after your locked day ends.');
+    await afterMaterialize(); // today's date (or today's occurrence) shows up right away, including during a lock-in
     newTask.value = blankTask();
     capWarning.value = false; capOverride.value = false;
     closeModal();
@@ -2161,9 +2153,12 @@ const addNewTask = async () => {
   try {
     if (!(await dailyLimitGate((newTask.value.sched?.on && newTask.value.sched.repeat === 'never' && newTask.value.sched.date) || getTodayId()))) {
       const l = limitHit.value;
-      if (!l.pro && !agentAdd.value) { goUpgradeForLimit(); return false; } // free user over the daily limit: open the paywall instead of an error
-      error.value = l.pro ? `Daily limit reached: ${l.limit} tasks per day on Pro.` : `Daily limit reached: free accounts can add ${l.limit} tasks per day.`;
-      return false;
+      if (l && l.pro) { limitHit.value = null; } // Pro has no daily cap; never block or mention one
+      else {
+        if (!agentAdd.value) { goUpgradeForLimit(); return false; } // free user over the daily limit: open the paywall instead of an error
+        error.value = `Daily limit reached: free accounts can add ${l.limit} tasks per day.`;
+        return false;
+      }
     }
   } catch (e) { console.error('limit check', e); error.value = 'Could not check your daily task limit, try again.'; return false; }
 
@@ -2184,8 +2179,6 @@ const addNewTask = async () => {
           ? newTask.value.selectedDays
           : [days[selectedDayIndex.value]];
 
-  // 8-hour lock: nothing can be added to the locked day (including repeating copies); before the countdown the plan count is the cap
-  // (adds ARE allowed during the locked window; they are appended so the locked slots never move. Deletes stay blocked.)
   // Locked-in plan (before the countdown): adding past the minimum just works, up to the overload cap for the chosen hours.
   // Past the cap the add is refused with a short message. The plan count is NOT bumped (Start needs min <= count <= max, not an exact match).
   if (selectedDays.some((d) => d.day === days[selectedDayIndex.value].day) && isToday(selectedDayIndex.value) && !isDayLocked(days[selectedDayIndex.value].day)) {
@@ -2245,10 +2238,10 @@ const addNewTask = async () => {
     const activeFrom = newTask.value.selectedDays.length > 0 && task.type === 'recurring' && dayIdx !== selectedDayIndex.value && dayIdx >= 0 ? activeFromForDay(dayIdx) : '';
     return activeFrom ? { ...task, activeFrom } : { ...task };
   };
-  const insertAt = (list, copy, dayName) => { const l = [...list]; l.splice(Number.isNaN(position) || isDayLocked(dayName) ? l.length : position, 0, copy); return l; }; // locked day: append only
+  const insertAt = (list, copy) => { const l = [...list]; l.splice(Number.isNaN(position) ? l.length : position, 0, copy); return l; };
   const viewDay = days[selectedDayIndex.value].day;
   const key = taskKey(task);
-  if (selectedDays.some((d) => d.day === viewDay)) selectedDayRoutine.value = insertAt(selectedDayRoutine.value || [], copyFor({ day: viewDay }), viewDay);
+  if (selectedDays.some((d) => d.day === viewDay)) selectedDayRoutine.value = insertAt(selectedDayRoutine.value || [], copyFor({ day: viewDay }));
   if (gateCache) gateCache.extra.push(task);
   pendingAdds.set(key, task);
   const hadReminder = !!task.reminder;
@@ -2259,7 +2252,7 @@ const addNewTask = async () => {
   error.value = '';
   lastAddPersist = trackWrite((async () => {
     try {
-      await Promise.all(selectedDays.map((d) => mutateDay(d.day, (l) => (l.some((t) => taskKey(t) === key) ? l : insertAt(l, copyFor(d), d.day)))));
+      await Promise.all(selectedDays.map((d) => mutateDay(d.day, (l) => (l.some((t) => taskKey(t) === key) ? l : insertAt(l, copyFor(d))))));
     } catch (e) {
       console.error('Error adding task:', e);
       selectedDayRoutine.value = (selectedDayRoutine.value || []).filter((t) => taskKey(t) !== key);
@@ -2288,8 +2281,8 @@ const refineWithAi = async (task, dayNames, key) => {
     const patched = minutes ? withAiEstimate(task, minutes) : null;
     if (!patched) return;
     const fields = { minutes: patched.minutes, complexity: patched.complexity, points: patched.points, estimateSource: 'ai' };
-    await Promise.all(dayNames.filter((d) => !isDayLocked(d)).map((d) => mutateDay(d, (l) => l.map((t) => (taskKey(t) === key && t.estimateSource === 'local' ? { ...t, ...fields } : t)))));
-    if (selectedDayRoutine.value) selectedDayRoutine.value = selectedDayRoutine.value.map((t) => (taskKey(t) === key && t.estimateSource === 'local' && !isDayLocked(days[selectedDayIndex.value].day) ? { ...t, ...fields } : t));
+    await Promise.all(dayNames.map((d) => mutateDay(d, (l) => l.map((t) => (taskKey(t) === key && t.estimateSource === 'local' ? { ...t, ...fields } : t)))));
+    if (selectedDayRoutine.value) selectedDayRoutine.value = selectedDayRoutine.value.map((t) => (taskKey(t) === key && t.estimateSource === 'local' ? { ...t, ...fields } : t));
   } catch (e) { console.warn('AI estimate skipped:', e && e.message); }
 };
 
@@ -2297,8 +2290,7 @@ const refineWithAi = async (task, dayNames, key) => {
 // Copies keep the original createdAt, so making a task recurring never counts as a new task toward the daily limit.
 const setTaskRepeat = async (task, dayNames, { quiet = false, lastRepeat = null } = {}) => {
   if (!userId.value || !task) return;
-  if (days.some((d) => isDayLocked(d.day))) { if (quiet) throw Object.assign(new Error(lockedMessage()), { code: 'locked' }); alert(lockedMessage()); return; }
-  if (isShutdown()) { if (quiet) throw Object.assign(new Error(shutMessage()), { code: 'locked' }); alert(shutMessage()); return; } // a repeat edit rewrites copies on every weekday, including the locked one
+  if (isShutdown()) { if (quiet) throw Object.assign(new Error(shutMessage()), { code: 'locked' }); alert(shutMessage()); return; } // shutdown still blocks a repeat edit that rewrites every weekday
   // v2 occurrence (templateId): the legacy day popover must not add per-day copies on top of the series; edit the template instead
   if (task.templateId && !quiet) {
     const names = (dayNames || []).filter((d) => d !== days[selectedDayIndex.value].day);
@@ -3547,7 +3539,7 @@ const patchTask = async (index, task, patch) => {
     if (patch.estimateMin !== undefined) task.estimateMin = Number(patch.estimateMin) || 0;
     let saved = patch.estimateMin !== undefined ? { ...patch, estimateMin: task.estimateMin } : patch;
     // re-estimate when the inputs change (only possible outside a running lock: estimateMin/title are locked fields there)
-    if (['estimateMin', 'title', 'notes', 'priority'].some((k) => patch[k] !== undefined) && !isDayLocked(dayName)) { const e = estimateFor(task); Object.assign(task, e); saved = { ...saved, ...e }; }
+    if (['estimateMin', 'title', 'notes', 'priority'].some((k) => patch[k] !== undefined)) { const e = estimateFor(task); Object.assign(task, e); saved = { ...saved, ...e }; }
     await patchStoredTask(userId.value, dayName, before, index, saved);
     return true;
   } catch (e) {
@@ -3563,9 +3555,6 @@ const editTask = async (index, task, rawPatch) => {
   let patch = safeEditPatch(rawPatch); // an edit never completes a task
   if (patch.startTime && patch.section === undefined && sectionFromTime(patch.startTime)) patch = { ...patch, section: sectionFromTime(patch.startTime) }; // a new time moves the card to its section
   if (!Object.keys(patch).length) return;
-  const dayName = days[selectedDayIndex.value].day;
-  const lockedHit = patchTouchesLocked(patch);
-  if (isDayLocked(dayName) && lockedHit.length) { alert(`${lockedMessage()} (${lockedHit.join(', ')})`); return false; }
   const oldKey = taskKey(task);
   if (patch.estimateMin !== undefined) {
     patch.estimateMin = cleanEstimate(patch.estimateMin);
@@ -3583,7 +3572,6 @@ const editTask = async (index, task, rawPatch) => {
 // Copy the editable fields to every other weekday copy of a repeating task (one transaction).
 const applyToSeries = async (key, sp) => {
   const others = days.filter((d, i) => i !== selectedDayIndex.value);
-  if (others.some((d) => isDayLocked(d.day)) && patchTouchesLocked(sp).length) { alert(lockedMessage()); return; }
   try {
     await trackWrite(runTransaction(db, async (tx) => {
       const refs = others.map((d) => doc(db, 'weeklyRoutines', `${userId.value}_${d.day}`));
@@ -4197,9 +4185,10 @@ const syncAppLock = async () => {
   syncWakeLock(st);
   syncVault();
 };
-// Points vault (src/utils/pointsVault.js): the day's points open the picked apps cheapest first (price from on-device usage) once 3
-// the day's points pass each price (no task gate; prices frozen once per day); every 10 pts = 5 min of shared app time (native VaultAllow + "clingVault" re-shield). Never while a missed-goal lock
-// is unpaid. Points / goal progress are never spent: used time is kept as local windows per day.
+// Points vault (src/utils/pointsVault.js): the day's points open the apps the user chose, cheapest (least Screen Time) first.
+// Prices are round5(30 + 2 × average daily minutes), frozen once per day. No task-count gate. Crossing a price releases that
+// app from the Screen Time shield (VaultAllow) and plays the unlock animation. Every 10 pts = 5 min of shared app time.
+// Never while a missed-goal lock is unpaid. Points are not spent: used time is local windows.
 // Tasks completed in the running session (else today) -> the N/8 cheer on the completion celebration.
 const sessionTasksDone = computed(() => { const l = eh.running.value && eh.lock.value; const list = (todayTasksForTarget.value || []).filter((t) => t && t.completed);
   if (!l) return list.length; return list.filter((t) => { const c = Date.parse(t.completedAt || ''); return c >= l.startMs && c < l.endMs; }).length; });
@@ -4207,29 +4196,44 @@ const VAULT_WIN_KEY = 'cn.vault.windows.v1';
 const vaultLoad = () => { try { const v = JSON.parse(localStorage.getItem(VAULT_WIN_KEY) || '{}'); return v && v.day === localDateStr() ? v.windows || [] : []; } catch (e) { return []; } };
 const vaultWindows = ref(vaultLoad()); const vaultData = ref({ days: {}, apps: [] }); const vaultNow = ref(Date.now());
 const vaultSave = (w) => { vaultWindows.value = w; try { localStorage.setItem(VAULT_WIN_KEY, JSON.stringify({ day: localDateStr(), windows: w })); } catch (e) { /* ignore */ } };
-const VAULT_PRICE_KEY = 'cn.vault.prices.v1'; const VAULT_SEEN_KEY = 'cn.vault.celebrated.v1';
+const VAULT_PRICE_KEY = 'cn.vault.prices.v1'; const VAULT_SEEN_KEY = 'cn.vault.celebrated.v1'; const VAULT_REL_KEY = 'cn.vault.released.v1';
 const dayLoad = (k) => { try { const v = JSON.parse(localStorage.getItem(k) || '{}'); return v && v.day === localDateStr() ? v.list : null; } catch (e) { return null; } };
 const daySave = (k, list) => { try { localStorage.setItem(k, JSON.stringify({ day: localDateStr(), list })); } catch (e) { /* ignore */ } };
 const vaultPriced = ref(dayLoad(VAULT_PRICE_KEY));
 const vaultDebt = computed(() => turnOffBlocked({ debt: eh.appLockDebt.value, now: vaultNow.value, live: liveDebtSession() }));
+// Same day's points the home screen shows: size points in Coach, chip points otherwise. Not the session-only tally the shield uses for the goal.
+const dayVaultPoints = computed(() => (gpOn.value ? ((gpEarned.value && gpEarned.value.points) || 0) : (pointsAccumulated.value || 0)));
 const gpVault = computed(() => { if (!lockAvailable() || !isViewingToday.value) return null;
-  return vaultView({ apps: vaultData.value.apps || [], days: vaultData.value.days || {}, todayYmd: localDateStr(), points: (gpEarned.value && gpEarned.value.points) || 0,
-    priced: vaultPriced.value, debt: vaultDebt.value, windows: vaultWindows.value, nowMs: vaultNow.value, wait: eh.wait && eh.wait.value }); });
+  return vaultView({ apps: vaultData.value.apps || [], days: vaultData.value.days || {}, todayYmd: localDateStr(), points: dayVaultPoints.value,
+    priced: vaultPriced.value, debt: vaultDebt.value, windows: vaultWindows.value, nowMs: vaultNow.value, typical: typicalMin, wait: eh.wait && eh.wait.value }); });
 let vaultSyncing = false;
 const syncVault = async () => {
   if (!lockAvailable() || vaultSyncing) return; vaultSyncing = true;
   try {
     vaultNow.value = Date.now(); if (vaultWindows.value.length && !vaultLoad().length) vaultWindows.value = []; // new day
-    clingLock.startUsage().catch(() => {});
     const u = await clingLock.vaultUsage(); if (u && !u.error) { vaultData.value = { days: u.days || {}, apps: u.apps || [] };
       // Prices are computed once per day (new apps picked later in the day get priced and appended).
       const have = dayLoad(VAULT_PRICE_KEY) || []; const missing = (u.apps || []).filter((a) => !have.some((h) => h.id === a.id));
       if (!have.length || missing.length) { const add = priceApps(have.length ? missing : u.apps || [], u.days || {}, localDateStr(), typicalMin); const list = [...have, ...add].sort((a, b) => a.price - b.price); daySave(VAULT_PRICE_KEY, list); vaultPriced.value = list; } }
+    clingLock.startUsage().catch(() => {}); // after the catalog sync inside vaultUsage, so Screen Time pings cover the chosen apps
     const st = await clingLock.vaultState();
     const v = gpVault.value; const live = st && st.live;
     // Debt / gate lost while app time runs: close at once (time already used stays used, the rest is kept).
     if (live && v && v.debt) { await clingLock.endVaultApps(); vaultSave(stopWindows(vaultWindows.value, Date.now())); }
     else if (!live && v && v.live) vaultSave(stopWindows(vaultWindows.value, Date.now())); // ended natively early (stopped elsewhere)
+    else {
+      // Crossing a price must take that app off the shield. The list used to mark it open and stop there,
+      // so Screen Time kept it locked until a separate "Use minutes" tap (and that tap no-ops under 1 min).
+      const plan = releasePlan({ view: v, already: dayLoad(VAULT_REL_KEY) || [], nowMs: Date.now(), liveUntil: live ? Number(st.untilMs) || 0 : 0 });
+      if (plan) {
+        const r = await clingLock.allowVaultApps(plan.ids, plan.untilMs);
+        if (r && r.allowed > 0) {
+          daySave(VAULT_REL_KEY, [...new Set([...(dayLoad(VAULT_REL_KEY) || []), ...plan.fresh])]);
+          if (!live) vaultSave([...vaultWindows.value, { startMs: Date.now(), endMs: plan.untilMs }]);
+          vaultNow.value = Date.now();
+        }
+      }
+    }
   } finally { vaultSyncing = false; }
 };
 // One full-screen celebration per app per day as the points pass its price.
@@ -4269,7 +4273,7 @@ const scheduleLaterLocks = async (st) => {
     if (!r || r.monitor !== 'ok') { nativeScheduled.delete(key); console.warn('[clingLock] scheduleLock', r && r.monitor); }
   }
 };
-watch(() => [eh.running.value, eh.pendingBlocks.value.length, pointsAccumulated.value, dayRequiredPts.value, streakProgress.value, lockUnlockedDay.value, bossMode.value, strictGoal.value, Math.floor(nowTick.value / 60000)], () => { syncAppLock(); });
+watch(() => [eh.running.value, eh.pendingBlocks.value.length, pointsAccumulated.value, dayVaultPoints.value, dayRequiredPts.value, streakProgress.value, lockUnlockedDay.value, bossMode.value, strictGoal.value, Math.floor(nowTick.value / 60000)], () => { syncAppLock(); });
 // A new session lock (e.g. session 2 started from the shutdown card) or a settled shutdown: re-sync once its doc has landed.
 watch(() => { const l = eh.lock.value || {}; const sh = eh.shutdown && eh.shutdown.value; return `${l.index}:${l.startMs}:${l.endMs}:${sh ? sh.opensAtMs || 1 : 0}`; }, () => { syncAppLock(); });
 onMounted(() => { setTimeout(syncAppLock, 1200); });
@@ -4531,7 +4535,8 @@ const assistantExecutor = createAssistantExecutor({
   limitRemaining: async () => {
     const g = gateCache && Date.now() - gateCache.at < 60000 ? gateCache : await fetchGateData();
     const r = checkDailyLimit(g.pro, getTodayId(), [...g.lists, g.extra, [...pendingAdds.values()]], scheduledList.value || []);
-    return Math.max(0, (Number(r.limit) || 5) - (Number(r.count) || 0));
+    if (g.pro || r.limit == null) return null; // Pro: the assistant must not invent a daily cap
+    return Math.max(0, r.limit - (Number(r.count) || 0));
   },
   stats: () => ({ streak: streak.value, points: pointsAccumulated.value, hours: eh.hoursPref.value,
     target: eh.lock.value ? eh.lock.value.target : previewDayTarget(todayTasksForTarget.value, eh.hoursPref.value, eh.stats.value).target,

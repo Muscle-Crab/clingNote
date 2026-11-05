@@ -1,6 +1,7 @@
 // Lightweight synthesized sound effects (Web Audio API, no audio files).
 // Off by default; preference persisted in localStorage. Never throws.
 import { ref, watch } from 'vue';
+import { musicContext } from '@/utils/audioSession';
 
 const STORAGE_KEY = 'soundEnabled';
 
@@ -28,10 +29,12 @@ export function useSounds() {
     try {
       // iOS: play under the 'ambient' session (mixes with other apps' audio); leave 'playback' alone while focus music plays (utils/audioSession.js)
       try { const as = navigator.audioSession; if (as && window.Capacitor && window.Capacitor.getPlatform && window.Capacitor.getPlatform() === 'ios' && as.type !== 'playback' && as.type !== 'ambient') as.type = 'ambient'; } catch (e) { /* unsupported */ }
+      const shared = musicContext();
+      if (shared && shared.state !== 'closed') { if (shared.state === 'suspended') shared.resume(); return shared; }
       if (!ctx) {
         const AC = window.AudioContext || window.webkitAudioContext;
         if (!AC) return null;
-        ctx = new AC(); // created lazily, from a user gesture
+        ctx = new AC(); // created lazily, from a user gesture, only when focus music has no context
       }
       if (ctx.state === 'suspended') ctx.resume();
       return ctx;

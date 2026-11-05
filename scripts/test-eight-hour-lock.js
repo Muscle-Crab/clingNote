@@ -31,39 +31,41 @@ lockMod.setLockSource(() => ({ lock: { dayName: 'Fri', startMs: start, endMs: en
     clock = end; assert.ok(!lockMod.isDayLocked('Fri'), 'unlocks exactly at the end'); clock = start - 1; assert.ok(!lockMod.isDayLocked('Fri'), 'not before the start'); clock = start + 60000;
   });
   await t('no lock source => nothing locked', () => { lockMod.setLockSource(null); assert.ok(!lockMod.isDayLocked('Fri')); lockMod.setLockSource(() => ({ lock: { dayName: 'Fri', startMs: start, endMs: end }, nowMs: clock })); });
-  await t('assertDayUnlocked throws LockError', () => { assert.throws(() => lockMod.assertDayUnlocked('Fri', 'x'), (e) => lockMod.isLockError(e) && /Locked/.test(e.message)); lockMod.assertDayUnlocked('Sat'); });
-  await t('whole-array writes: reorder, delete, add, swap and retitle are refused; identical or completion-only passes', () => {
+  await t('assertDayUnlocked does not block a running lock-in', () => { lockMod.assertDayUnlocked('Fri'); lockMod.assertDayUnlocked('Sat'); });
+  await t('whole-array writes: delete, reorder, swap, retitle and points are allowed during lock-in', () => {
     const a = [T('Alpha'), T('Beta'), T('Gamma')];
-    assert.throws(() => lockMod.assertTasksChangeAllowed('Fri', a, [a[1], a[0], a[2]]), lockMod.isLockError, 'reorder');
-    assert.throws(() => lockMod.assertTasksChangeAllowed('Fri', a, a.slice(0, 2)), lockMod.isLockError, 'delete');
-    lockMod.assertTasksChangeAllowed('Fri', a, [...a, T('Delta')]); // add (append) allowed while locked
-    lockMod.assertTasksChangeAllowed('Fri', a, [{ ...a[0], title: 'Alpha edited', estimateMin: 5 }, a[1], a[2]]); // edit allowed while locked
-    assert.throws(() => lockMod.assertTasksChangeAllowed('Fri', a, [a[0], T('Other'), a[2]]), lockMod.isLockError, 'swap');
-    assert.throws(() => lockMod.assertTasksChangeAllowed('Fri', a, [{ ...a[0], points: 99 }, a[1], a[2]]), lockMod.isLockError, 'points');
+    lockMod.assertTasksChangeAllowed('Fri', a, [a[1], a[0], a[2]]);
+    lockMod.assertTasksChangeAllowed('Fri', a, a.slice(0, 2));
+    lockMod.assertTasksChangeAllowed('Fri', a, [...a, T('Delta')]);
+    lockMod.assertTasksChangeAllowed('Fri', a, [{ ...a[0], title: 'Alpha edited', estimateMin: 5 }, a[1], a[2]]);
+    lockMod.assertTasksChangeAllowed('Fri', a, [a[0], T('Other'), a[2]]);
+    lockMod.assertTasksChangeAllowed('Fri', a, [{ ...a[0], points: 99 }, a[1], a[2]]);
     lockMod.assertTasksChangeAllowed('Fri', a, [{ ...a[0], completed: true, notes: 'x', timerActive: true }, a[1], a[2]]);
-    lockMod.assertTasksChangeAllowed('Sat', a, a.slice(0, 1)); // other day: free
+    lockMod.assertTasksChangeAllowed('Sat', a, a.slice(0, 1));
   });
-  await t('patches: locked fields refused, completion/notes/timer/boss/subtasks allowed', () => {
-    for (const k of ['createdAt', 'points']) assert.throws(() => lockMod.assertPatchAllowed('Fri', { [k]: 1 }), lockMod.isLockError, k);
+  await t('patches: points and the rest of a task stay editable during lock-in', () => {
+    for (const k of ['createdAt', 'points']) lockMod.assertPatchAllowed('Fri', { [k]: 1 });
     lockMod.assertPatchAllowed('Fri', { title: 'edit ok', estimateMin: 5, completed: true, notes: 'n', boss: true, status: 'done', timerActive: true, subtasks: [] });
     lockMod.assertPatchAllowed('Sat', { title: 'free' });
   });
 
   // ── data layer ──
-  await t('patchStoredTask refuses locked fields before any read/write', async () => {
+  await t('patchStoredTask allows points edits during a lock-in', async () => {
     calls.length = 0; docs['weeklyRoutines/u_Fri'] = { tasks: [T('Alpha')] };
-    assert.throws(() => persist.patchStoredTask('u', 'Fri', T('Alpha'), 0, { points: 5 }), lockMod.isLockError);
-    assert.strictEqual(calls.length, 0);
-    assert.strictEqual(await persist.patchStoredTask('u', 'Fri', T('Alpha'), 0, { completed: true }), true);
+    assert.strictEqual(await persist.patchStoredTask('u', 'Fri', T('Alpha'), 0, { points: 5 }), true);
+    assert.strictEqual(docs['weeklyRoutines/u_Fri'].tasks[0].points, 5);
+    assert.strictEqual(await persist.patchStoredTask('u', 'Fri', { ...T('Alpha'), points: 5 }, 0, { completed: true }), true);
     assert.strictEqual(docs['weeklyRoutines/u_Fri'].tasks[0].completed, true);
     assert.strictEqual(docs['weeklyRoutines/u_Fri'].tasks[0].estimateMin, 30);
   });
-  await t('carryTasksToDay: copy-only from a locked day; refused into a locked day', async () => {
+  await t('carryTasksToDay moves a one-time task off a locked day and into one', async () => {
     calls.length = 0; docs['weeklyRoutines/u_Fri'] = { tasks: [T('Alpha'), T('Beta')] }; delete docs['weeklyRoutines/u_Sat'];
     const made = await persist.carryTasksToDay('u', 'Fri', 'Sat', [T('Alpha')], '2026-10-23');
-    assert.strictEqual(made, 1); assert.strictEqual(docs['weeklyRoutines/u_Fri'].tasks.length, 2, 'locked day keeps every task');
-    assert.ok(!calls.some((c) => c[1] === 'weeklyRoutines/u_Fri'), 'no write to the locked day');
-    await assert.rejects(() => persist.carryTasksToDay('u', 'Sat', 'Fri', [T('Zed')], 'x'), lockMod.isLockError);
+    assert.strictEqual(made, 1); assert.strictEqual(docs['weeklyRoutines/u_Fri'].tasks.length, 1, 'one-time task leaves the locked day');
+    assert.ok(calls.some((c) => c[1] === 'weeklyRoutines/u_Fri'), 'locked day is written');
+    docs['weeklyRoutines/u_Sat'] = { tasks: [T('Zed')] };
+    const into = await persist.carryTasksToDay('u', 'Sat', 'Fri', [T('Zed')], 'x');
+    assert.strictEqual(into, 1);
     // unlocked: one-time task is moved out as before
     clock = end + 1000; docs['weeklyRoutines/u_Fri'] = { tasks: [T('Alpha'), T('Beta')] };
     await persist.carryTasksToDay('u', 'Fri', 'Sun', [T('Alpha')], '2026-10-24'); assert.strictEqual(docs['weeklyRoutines/u_Fri'].tasks.length, 1); clock = start + 60000;
@@ -79,13 +81,13 @@ lockMod.setLockSource(() => ({ lock: { dayName: 'Fri', startMs: start, endMs: en
   await t('every list-changing HomeView action checks the lock', () => {
     for (const fn of ['deleteTask', 'markTaskAsWontDo', 'undoWontDo', 'scheduleExistingTask']) assert.ok(/blockIfLocked\(/.test(body(fn)), fn);
     assert.ok(/blockIfLocked\(currentDayIndex\)\s*\|\|\s*blockIfLocked\(targetDayIndex\)/.test(body('transferTask')), 'transfer checks both days');
-    assert.ok(/isDayLocked\(d\.day\)/.test(body('setTaskRepeat')), 'repeat edits touch every weekday');
+    assert.ok(!/isDayLocked\(/.test(body('setTaskRepeat')), 'repeat edits allowed during lock-in');
     assert.ok(!/blockIfLocked\(/.test(body('updateTask')), 'edits allowed while locked');
     // drag reorder is allowed while locked: it only writes task.sortOrder, slot positions (locked identity) never move
     assert.ok(/applyManualOrder\(selectedDayRoutine\.value/.test(home), 'drag keeps positions (sortOrder only)');
-    assert.ok(/isDayLocked\(dayName\) \? l\.length/.test(home) || /isDayLocked\(dayName\)/.test(body('addNewTask')), 'adds allowed on the locked day, appended only');
+    assert.ok(!/isDayLocked\(dayName\) \? l\.length/.test(home), 'lock-in does not force append-only inserts');
     assert.ok(/assertTasksChangeAllowed/.test(body('saveSelectedDayTasks')), 'whole-array saves are checked');
-    assert.ok(/isDayLocked\(days\[dayIndex\]/.test(body('resetTasksToIncomplete')), 'past-day reset skips the locked day');
+    assert.ok(!/isDayLocked\(days\[dayIndex\]/.test(body('resetTasksToIncomplete')), 'reset is allowed during lock-in');
     assert.ok(!/selectedDayLocked/.test(home.match(/const reorderable = .*/)[0]), 'drag reorder stays on while locked (sortOrder only)');
     const tog = body('toggleTaskCompletion'); assert.ok(/lockedToggle/.test(tog) && /reportProgress/.test(tog), 'completion keeps working in place and reports progress');
     assert.ok(/isLockError/.test(body('patchTask').replace(/^/, '') || home.slice(home.indexOf('const patchTask'), home.indexOf('const patchTask') + 900)), 'patchTask reports lock errors');
@@ -106,7 +108,7 @@ lockMod.setLockSource(() => ({ lock: { dayName: 'Fri', startMs: start, endMs: en
     const m = rules.match(/match \/weeklyRoutines\/\{routineId\}\s*\{[\s\S]*?\n    \}/); assert.ok(m, 'weeklyRoutines block');
     const b = m[0];
     assert.ok(/allow create:[^;]*!dayFrozen\(eightHourLock\(/.test(b)); assert.ok(/allow delete:[^;]*!dayFrozen\(eightHourLock\(/.test(b));
-    assert.ok(/allow update:[^;]*!dayFrozen\(eightHourLock\([^;]*\|\| lockedDayUnchanged\(\)/.test(b));
+    assert.ok(/allow update:[^;]*!dayFrozen\(eightHourLock\([^;]*\|\| dayRunning\(eightHourLock\(/.test(b), 'running lock-in allows task updates; shutdown still freezes');
   });
   await t('rules: lock helper checks day name and request.time against the server window', () => {
     const f = rules.match(/function eightHourLock\([\s\S]*?function dayFrozen[\s\S]*?\n    \}/)[0];

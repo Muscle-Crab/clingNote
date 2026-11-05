@@ -24,6 +24,14 @@ t('JS: resume only if the user did not pause', () => {
 t('every dictation end path signals audio-restored', () => {
   for (const p of ['src/components/home/AskSheet.vue', 'src/components/home/AssistantSheet.vue', 'src/views/HomeView.vue']) assert(/audioRestored\('dictation'\)/.test(rd(p)), p);
 });
+t('a context blip resumes music instead of pausing the anchor', () => {
+  const s = bg.slice(bg.indexOf('const syncReal'), bg.indexOf('const onCtxState'));
+  assert(/if \(!prefs\.musicOn\) return/.test(s));
+  assert(/resumeAfterInterruption\(\)/.test(s));
+  assert(!/npPaused\(/.test(s), 'syncReal must not pause the Now Playing anchor');
+  assert(/setMusicContext\(/.test(bg) && /musicContext\(/.test(rd('src/utils/sfx.js')) && /musicContext\(/.test(rd('src/composables/useSounds.js')));
+  assert(/audioRestored\('notification'\)/.test(rd('src/utils/localNotify.js')));
+});
 t('pause() is still the only thing that turns musicOn off', () => {
   const offs = bg.split('\n').filter((l) => /prefs\.musicOn = false/.test(l)); assert(offs.length >= 1);
   assert(!/resumeAfterInterruption[\s\S]{0,900}prefs\.musicOn = false/.test(bg.slice(bg.indexOf('export const resumeAfterInterruption'), bg.indexOf('export const resumeAfterInterruption') + 900)));

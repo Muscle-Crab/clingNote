@@ -59,7 +59,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
-import { PLANS, DEFAULT_PLAN, fmt, planById, TASK_LIMITS, PRO_RAISES_LIMIT } from '@/config/pricing';
+import { PLANS, DEFAULT_PLAN, fmt, planById, TASK_LIMITS } from '@/config/pricing';
 import { startCheckout } from '@/utils/checkout';
 import { auth } from '@/firebaseConfig';
 import { isNativeIOS } from '@/utils/platform';
@@ -99,7 +99,7 @@ const FEATURES = [
 ];
 const FEAT = { aiCoach: 'The AI coach', strictBoss: 'Strict Coach mode', calendarFeed: 'The calendar feed', community: 'Community' };
 const sel = ref(DEFAULT_PLAN); const busy = ref(false);
-const msg = ref(route.query.checkout === 'cancel' ? 'Checkout canceled — no charge was made.' : route.query.feature === 'taskLimit' ? (PRO_RAISES_LIMIT ? `You've reached the free limit of ${TASK_LIMITS.free} tasks today. Pro lets you add ${TASK_LIMITS.pro} per day.` : `You've reached today's limit of ${TASK_LIMITS.free} tasks. Pro adds the AI coach, Strict Boss and more.`) : FEAT[route.query.feature] ? `🔒 ${FEAT[route.query.feature]} is a Pro feature.` : '');
+const msg = ref(route.query.checkout === 'cancel' ? 'Checkout canceled — no charge was made.' : route.query.feature === 'taskLimit' ? `You've reached today's limit of ${TASK_LIMITS.free} tasks. Pro adds the AI coach, Strict Boss and more.` : FEAT[route.query.feature] ? `🔒 ${FEAT[route.query.feature]} is a Pro feature.` : '');
 const plan = computed(() => planById(sel.value));
 const ctaText = computed(() => busy.value ? 'One sec…' : ios ? (trialDaysFor(plan.value) ? 'Start free trial' : plan.value.period === 'once' ? 'Buy lifetime access' : 'Subscribe') : trialDaysFor(plan.value) ? 'Try for $0.00' : `Continue — ${priceText(plan.value)}`);
 // iOS: the billed amount (from the store) is the boldest line, shown above the button; trial wording only when this plan really has a trial.

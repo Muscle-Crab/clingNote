@@ -29,5 +29,10 @@ export const setMusicPlaying = (on) => {
   if (was !== music) call('setMusicPlaying', { playing: music });
 };
 export const musicPlaying = () => music;
+// Focus-music AudioContext, registered by useBackground. Sound effects reuse it so a second
+// context cannot suspend the music (iOS does that on every new AudioContext).
+let musicCtx = () => null;
+export const setMusicContext = (fn) => { musicCtx = typeof fn === 'function' ? fn : () => null; };
+export const musicContext = () => { try { return musicCtx() || null; } catch (e) { return null; } };
 // Dictation / speech ended (web Speech API or native): the focus music resumes itself unless the user paused it (useBackground listens).
 export const audioRestored = (reason = '') => { try { if (typeof window !== 'undefined') window.dispatchEvent(new window.CustomEvent('cn:audio-restored', { detail: { reason } })); } catch (e) { /* old engine */ } };

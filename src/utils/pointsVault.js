@@ -41,9 +41,10 @@ export const liveWindow = (windows, nowMs) => (windows || []).find((w) => w.star
 export const vaultView = ({ apps = [], days = {}, todayYmd = '', points = 0, priced = null, debt = false, windows = [], nowMs = Date.now(), typical = null, wait = null } = {}) => {
   // wait = the session-end delay ({ untilMs, text }): the vault stays shut until it runs out (same clock as the next session).
   const held = !!(wait && Number(wait.untilMs) > nowMs);
-  const p = Math.max(0, Number(points) || 0); const ids = new Set((apps || []).map((a) => a.id));
+  const p = Math.max(0, Number(points) || 0);   const ids = new Set((apps || []).map((a) => a.id));
+  const icons = new Map((apps || []).filter((a) => a && a.icon).map((a) => [a.id, a.icon]));
   const base = priced && priced.length ? priced.filter((a) => ids.has(a.id)) : priceApps(apps, days, todayYmd, typical);
-  const items = base.map((a) => ({ ...a, open: !debt && !held && p >= a.price }));
+  const items = base.map((a) => ({ ...a, icon: a.icon || icons.get(a.id) || '', open: !debt && !held && p >= a.price }));
   const openCount = items.filter((a) => a.open).length;
   const next = items.find((a) => !a.open);
   const earned = timeEarnedMin(p); const used = Math.min(earned, spentMin(windows, nowMs));
@@ -75,6 +76,19 @@ export const unlockCelebration = (apps) => (apps && apps.length ? { kind: 'vault
 // After the native overlay (ClingLock.celebrateVault): apps it could not draw (no token / not presented) still get the web one.
 export const webFallback = (apps, res) => (res && Number(res.shown) > 0 ? (apps || []).filter((a) => (res.missing || []).includes(a.id)) : apps || []);
 export const newUnlocks = (view, seen) => (view ? view.items.filter((a) => a.open && !(seen || []).includes(a.id)) : []);
+// Shield release for apps whose price the day's points just crossed. `already` = ids released earlier today,
+// so Stop is not undone. liveUntil = a running app-time window. The native allowance refuses anything <= 1 min,
+// which used to leave the Screen Time shield up after the UI had already marked the app open.
+export const releasePlan = ({ view, already = [], nowMs = 0, liveUntil = 0 } = {}) => {
+  if (!view || view.debt || view.held) return null;
+  const open = (view.items || []).filter((a) => a.open).map((a) => a.id);
+  const seen = new Set(already || []);
+  const fresh = open.filter((id) => !seen.has(id));
+  if (!fresh.length) return null;
+  const untilMs = liveUntil > nowMs + 60000 ? liveUntil : nowMs + Math.max(2, Math.floor(Number(view.leftMin) || 0)) * 60000;
+  if (!(untilMs > nowMs + 60000)) return null;
+  return { ids: open, fresh, untilMs };
+};
 
 // Start shared app time for every open app: the native window ends when the minutes run out (re-shields with the app closed).
 export const startPlan = (view, nowMs) => (view && view.canStart ? { ids: view.items.filter((a) => a.open).map((a) => a.id), startMs: nowMs, untilMs: nowMs + view.leftMin * 60000 } : null);

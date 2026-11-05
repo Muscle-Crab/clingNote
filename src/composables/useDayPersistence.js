@@ -3,7 +3,7 @@ import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firest
 import { db } from '@/firebaseConfig';
 import { taskKey } from '@/utils/taskPlanning';
 import { createKeyedQueue, applyTaskPatch } from '@/utils/taskPatch';
-import { assertPatchAllowed, assertDayUnlocked, isDayLocked } from '@/utils/eightHourLock';
+import { assertPatchAllowed, assertDayUnlocked } from '@/utils/eightHourLock';
 
 const dayRef = (userId, dayName) => doc(db, 'weeklyRoutines', `${userId}_${dayName}`);
 
@@ -16,7 +16,7 @@ export const loadDayTasks = async (userId, dayName) => {
 // Writes to the same day doc are serialized so read-modify-write cycles of quick successive edits cannot overwrite each other.
 const enqueue = createKeyedQueue();
 export const patchStoredTask = (userId, dayName, task, fallbackIndex, patch) => {
-  assertPatchAllowed(dayName, patch); // 8-hour lock: title/points/complexity/estimate/type of a locked day are frozen (completion, timers, notes stay editable)
+  assertPatchAllowed(dayName, patch); // shutdown still refuses non-completion edits; a running lock-in does not
   const keyTask = { createdAt: task?.createdAt, title: task?.title }; // identity at call time, not at run time
   return enqueue(`${userId}_${dayName}`, async () => {
     const ref = dayRef(userId, dayName);
@@ -31,7 +31,7 @@ export const patchStoredTask = (userId, dayName, task, fallbackIndex, patch) => 
 
 // Copy unfinished tasks to another day as one-time tasks (no duplicates if carried twice).
 export const carryTasksToDay = async (userId, fromDayName, toDayName, tasks, dateStamp) => {
-  assertDayUnlocked(toDayName, 'carry into a locked day');
+  assertDayUnlocked(toDayName);
   const toRef = dayRef(userId, toDayName);
   const existing = await loadDayTasks(userId, toDayName);
   const fresh = tasks
@@ -40,9 +40,8 @@ export const carryTasksToDay = async (userId, fromDayName, toDayName, tasks, dat
   if (fresh.length) {
     await setDoc(toRef, { tasks: [...existing, ...fresh], updatedAt: serverTimestamp() });
   }
-  // one-time tasks are moved (removed from today); recurring tasks stay in their weekly routine
-  // 8-hour lock: a locked day keeps every task (the copy above is all the shutdown ritual can do); nothing is removed from it
-  const moved = isDayLocked(fromDayName) ? [] : tasks.filter((t) => t.type === 'one-time');
+  // one-time tasks are moved (removed from today), including during a running lock-in; recurring tasks stay in their weekly routine
+  const moved = tasks.filter((t) => t.type === 'one-time');
   if (moved.length) {
     const fromRef = dayRef(userId, fromDayName);
     const cur = await loadDayTasks(userId, fromDayName);
