@@ -11,7 +11,7 @@ import { loadScheduled, mutateScheduled } from '@/composables/useScheduledTasks'
 import { isDayLocked, isShutdown, currentLock } from '@/utils/eightHourLock';
 import { focusBlocks, lockBlock } from '@/utils/timeBlocks';
 import { countTasksForDay } from '@/utils/taskLimits';
-import { dailyTaskLimit } from '@/config/pricing';
+import { dailyLimitFull } from '@/config/pricing';
 import { weekDates, buildScheduledEntry, makeScheduledId, isValidDate } from '@/utils/scheduling';
 import { runCalendarSync, applyPullUpdates, applySkips, buildLocalEvents, parseIcs, EVENT_URL_PREFIX } from '@/utils/calendarSync';
 import { buildCalendar } from '@/utils/ics';
@@ -60,7 +60,7 @@ const ioFor = (uid, calendarId, { pro = false } = {}) => {
     makeId: () => makeScheduledId(),
     buildEntry: (f, id) => {
       const lists = DAYS.map((d) => snapshot.dayLists[d] || []);
-      if (countTasksForDay(f.date, lists, snapshot.scheduled) >= dailyTaskLimit(pro)) return null; // day is full: event stays calendar-only
+      if (dailyLimitFull(pro, countTasksForDay(f.date, lists, snapshot.scheduled))) return null; // free day is full: event stays calendar-only. Pro is never full.
       const e = buildScheduledEntry({ title: f.title, estimateMin: f.minutes, notes: f.notes || '', source: 'calendar' }, f.date, f.time, id);
       if (e) snapshot.scheduled = [...snapshot.scheduled, e];
       return e;
@@ -141,7 +141,7 @@ export const importIcs = async (uid, text, { pro = false } = {}) => {
   const p = parseIcs(text);
   if (!p.ok) return { ok: false, message: p.error };
   if (isShutdown()) return { ok: false, message: 'Paused until your next day starts.' };
-  const all = await loadAll(uid); const lists = DAYS.map((d) => all.dayLists[d] || []); const limit = dailyTaskLimit(pro);
+  const all = await loadAll(uid); const lists = DAYS.map((d) => all.dayLists[d] || []);
   const today = new Date().toLocaleDateString('en-CA');
   const sig = (title, date, time) => `${String(title).trim().toLowerCase()}|${date}|${time || ''}`;
   const seen = new Set(all.scheduled.map((e) => sig(e.title, e.scheduledDate, e.scheduledTime)));
@@ -151,7 +151,7 @@ export const importIcs = async (uid, text, { pro = false } = {}) => {
     if (!isValidDate(ev.date) || ev.date < today) { past += 1; continue; }
     const k = sig(ev.title, ev.date, ev.time);
     if (seen.has(k) || (ev.uid && uids.has(ev.uid))) { dup += 1; continue; }
-    if (countTasksForDay(ev.date, lists, [...all.scheduled, ...fresh]) >= limit) { full += 1; continue; }
+    if (dailyLimitFull(pro, countTasksForDay(ev.date, lists, [...all.scheduled, ...fresh]))) { full += 1; continue; }
     const e = buildScheduledEntry({ title: ev.title, estimateMin: ev.minutes || undefined, notes: ev.notes || '', icsUid: ev.uid ? ev.uid.slice(0, 120) : undefined, source: 'ics' }, ev.date, ev.time);
     if (!e) continue; Object.keys(e).forEach((x) => e[x] === undefined && delete e[x]);
     fresh.push(e); seen.add(k); if (ev.uid) uids.add(ev.uid); added += 1;

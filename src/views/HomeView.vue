@@ -281,7 +281,7 @@ import { checkDailyLimit } from '@/utils/taskLimits';
 import { defaultTransferDay, transferFits, MAX_TASKS_PER_DAY } from '@/utils/transfer';
 import { canUse } from '@/utils/pro';
 const _proRouter = _useRouter();
-// Daily task limit (config/pricing.js TASK_LIMITS): free 5/day, Pro 50/day safety max. Voice Review uses this same gate.
+// Daily task limit: free 5/day. Pro has none. Voice Review uses this same gate (addNewTask).
 const limitHit = ref(null); // { limit, count, pro, day } when the last add was blocked
 const goUpgradeForLimit = () => { if (rcProActive(auth.currentUser?.uid)) return; modalOpen.value = false; _proRouter.push({ path: '/paywall', query: { feature: 'taskLimit', from: '/home' } }); };
 // Limit data is prefetched when the add modal opens so Save does not wait on 8 Firestore reads.
@@ -289,7 +289,7 @@ let gateCache = null; // { at, pro, lists, extra: [] }
 const pendingAdds = new Map(); // taskKey -> task added in this session (a refetch started before the write landed would miss it; counting dedupes by key)
 const fetchGateData = async () => {
   const [ud, ...snaps] = await Promise.all([loadUserDoc(), ...days.map((d) => getDoc(doc(db, 'weeklyRoutines', `${userId.value}_${d.day}`)))]);
-  gateCache = { at: Date.now(), pro: isProUser(ud), lists: snaps.map((x) => (x.exists() ? x.data().tasks || [] : [])), extra: [] };
+  gateCache = { at: Date.now(), pro: isProUser(ud) || rcProActive(auth.currentUser && auth.currentUser.uid), lists: snaps.map((x) => (x.exists() ? x.data().tasks || [] : [])), extra: [] };
   return gateCache;
 };
 let gatePrefetch = null;
@@ -2153,9 +2153,12 @@ const addNewTask = async () => {
   try {
     if (!(await dailyLimitGate((newTask.value.sched?.on && newTask.value.sched.repeat === 'never' && newTask.value.sched.date) || getTodayId()))) {
       const l = limitHit.value;
-      if (!l.pro && !agentAdd.value) { goUpgradeForLimit(); return false; } // free user over the daily limit: open the paywall instead of an error
-      error.value = l.pro ? `Daily limit reached: ${l.limit} tasks per day on Pro.` : `Daily limit reached: free accounts can add ${l.limit} tasks per day.`;
-      return false;
+      if (l && l.pro) { limitHit.value = null; } // Pro has no daily cap; never block or mention one
+      else {
+        if (!agentAdd.value) { goUpgradeForLimit(); return false; } // free user over the daily limit: open the paywall instead of an error
+        error.value = `Daily limit reached: free accounts can add ${l.limit} tasks per day.`;
+        return false;
+      }
     }
   } catch (e) { console.error('limit check', e); error.value = 'Could not check your daily task limit, try again.'; return false; }
 
@@ -4532,7 +4535,8 @@ const assistantExecutor = createAssistantExecutor({
   limitRemaining: async () => {
     const g = gateCache && Date.now() - gateCache.at < 60000 ? gateCache : await fetchGateData();
     const r = checkDailyLimit(g.pro, getTodayId(), [...g.lists, g.extra, [...pendingAdds.values()]], scheduledList.value || []);
-    return Math.max(0, (Number(r.limit) || 5) - (Number(r.count) || 0));
+    if (g.pro || r.limit == null) return null; // Pro: the assistant must not invent a daily cap
+    return Math.max(0, r.limit - (Number(r.count) || 0));
   },
   stats: () => ({ streak: streak.value, points: pointsAccumulated.value, hours: eh.hoursPref.value,
     target: eh.lock.value ? eh.lock.value.target : previewDayTarget(todayTasksForTarget.value, eh.hoursPref.value, eh.stats.value).target,

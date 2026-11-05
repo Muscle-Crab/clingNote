@@ -17,9 +17,10 @@ export const countTasksForDay = (dayKey, weeklyLists = [], scheduled = []) => {
   return seen.size + sched;
 };
 
-// -> { ok, count, limit }
+// -> { ok, count, limit }. limit null = Pro, no daily cap (ok is always true).
 export const checkDailyLimit = (pro, dayKey, weeklyLists, scheduled, adding = 1) => {
   const limit = dailyTaskLimit(pro);
   const count = countTasksForDay(dayKey, weeklyLists, scheduled);
+  if (limit == null) return { ok: true, count, limit: null };
   return { ok: count + adding <= limit, count, limit };
 };
