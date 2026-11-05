@@ -49,7 +49,7 @@ import { localYMD } from '@/utils/localDate';
 import { recapText, breaksOn } from '@/utils/gamePlan';
 import { pillState, SHUT_ROUTES, PILL_ROUTES, SEEN_KEY } from '@/utils/eightHourChrome';
 import { speak } from '@/composables/useSpeech';
-import { hoursLabel, WARN_MINUTES, HOUR_OPTIONS } from '@/utils/eightHour';
+import { hoursLabel, WARN_MINUTES, SESSION_HOUR_OPTIONS } from '@/utils/eightHour';
 import { scheduleLocal } from '@/utils/localNotify';
 import { homeDayFor } from '@/utils/homeDay';
 import { lockIn } from '@/utils/lockIn';
@@ -114,8 +114,9 @@ watch(shutVisible, async (on) => {
 const recap = computed(() => { const s = eh.session.value; if (!shut.value || !s || nextOk.value) return '';
   let log = []; try { log = JSON.parse(localStorage.getItem('cn.gp.breakLog') || '[]'); } catch (e) { /* none */ }
   const b = breaksOn(log, eh.lock.value?.dayKey || localYMD()); return recapText({ points: shut.value.earned, sessionsDone: s.done, sessions: s.of, breaks: b.count, breakMin: b.min }); });
-const NEXT_HOUR_OPTIONS = HOUR_OPTIONS.filter((h) => h >= 5 && h <= 12);
-const sch = reactive({ hours: Math.min(12, Math.max(5, eh.hoursPref.value || 8)), err: '' });
+const NEXT_HOUR_OPTIONS = SESSION_HOUR_OPTIONS; // whole hours 5..12; half-hour day-length prefs are rejected by the server
+const seedHours = Number(eh.hoursPref.value);
+const sch = reactive({ hours: SESSION_HOUR_OPTIONS.includes(seedHours) ? seedHours : 8, err: '' });
 const goCard = () => { router.push({ name: 'home' }).then(() => setTimeout(() => document.querySelector('[data-test="eight-hour-card"]')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 250)).catch(() => {}); };
 const signOutNow = async () => { try { await signOut(auth); } finally { router.push('/login'); } };
 

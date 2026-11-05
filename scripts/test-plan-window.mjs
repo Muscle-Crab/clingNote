@@ -62,7 +62,7 @@ t('rules: shut day frozen except in-place, other days writable', () => {
 t('wiring: settings row + chrome + home', () => {
   const pf = src('src/views/Profile.vue'); assert.ok(pf.includes('v-if="false" class="pf-row pf-row--divided" data-test="plan-time-row"'), 'plan time row hidden');
   const ch = src('src/components/eighthour/EightHourChrome.vue'); assert.ok(!ch.includes('eh-plan-open') && !ch.includes('Plan next session') && !ch.includes('eh-sched-open') && ch.includes('Start next session'));
-  assert.ok(/startNextSession\(sch\.hours\)/.test(ch) && /h >= 5 && h <= 12/.test(ch) && !/type="time"|type="date"/.test(ch), 'only input: hours 5..12, starts now');
+  assert.ok(/startNextSession\(sch\.hours\)/.test(ch) && /SESSION_HOUR_OPTIONS/.test(ch) && !/HOUR_OPTIONS\.filter/.test(ch) && !/type="time"|type="date"/.test(ch), 'only whole hours 5..12, starts now');
   assert.ok(/requirePro\(router, 'lockIn'\)/.test(ch) && /openLockPaywall\(/.test(ch), 'Start next session opens the paywall when Pro is required');
   const hv = src('src/views/HomeView.vue'); assert.ok(hv.includes('canPlanDay') && !hv.includes('goTomorrowTab') && !hv.includes('planWin'));
   assert.ok(!/const toggleTaskCompletion[\s\S]{0,400}blockIfShut\(/.test(hv), 'completion must not be blocked by shutdown');
