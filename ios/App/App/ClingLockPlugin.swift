@@ -563,13 +563,16 @@ public class ClingLockPlugin: CAPPlugin, CAPBridgedPlugin {
     @available(iOS 16.0, *)
     static func iconBase64(_ id: String, _ token: ApplicationToken) -> String {
         if let hit = iconCache[id], !hit.isEmpty { return hit }
-        var b64 = ""
-        let draw = {
-            let r = ImageRenderer(content: Label(token).labelStyle(.iconOnly).frame(width: 48, height: 48))
-            r.scale = 2
-            if let data = r.uiImage?.pngData() { b64 = data.base64EncodedString() }
+        // ImageRenderer / Label / uiImage are MainActor-isolated. Being on the main thread is not enough for
+        // Swift 6; assumeIsolated is the sync assertion. Off the main thread, main.sync gets us there first.
+        let draw = { () -> String in
+            MainActor.assumeIsolated {
+                let r = ImageRenderer(content: Label(token).labelStyle(.iconOnly).frame(width: 48, height: 48))
+                r.scale = 2
+                return r.uiImage?.pngData()?.base64EncodedString() ?? ""
+            }
         }
-        if Thread.isMainThread { draw() } else { DispatchQueue.main.sync(execute: draw) }
+        let b64 = Thread.isMainThread ? draw() : DispatchQueue.main.sync(execute: draw)
         if !b64.isEmpty { iconCache[id] = b64 }
         return b64
     }
