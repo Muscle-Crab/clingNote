@@ -59,10 +59,38 @@ export const strictShield = ({ running = false, dayEndMs = 0, now = Date.now(), 
   return { ...off, windowMin };
 };
 
-// The pair the home bar shows: daily points against the required threshold (lock target). 210 >= 185 opens.
+// The pair the home bar shows: daily points against the required threshold (lock target).
 export const dayThresholdOpen = ({ earned = 0, required = 0 } = {}) => {
   const e = Number(earned) || 0; const r = Number(required) || 0;
   return r > 0 && e >= r;
+};
+export const SESSION_BASE_KEY = 'cn.session.base.v1';
+export const sessionId = (lock) => (!lock || !Number(lock.startMs) ? '' : `${lock.dayKey || ''}#${Number(lock.index) || 0}:${lock.startMs}`);
+// Points already on the board when THIS session started. A new startMs records a new baseline and does not inherit the previous unlock.
+export const noteSessionBase = (storage, lock, dayEarned) => {
+  const key = sessionId(lock);
+  const earned = Math.max(0, Number(dayEarned) || 0);
+  if (!key) return earned;
+  let saved = null;
+  try { saved = JSON.parse(storage.getItem(SESSION_BASE_KEY) || 'null'); } catch (e) { saved = null; }
+  if (saved && saved.key === key && Number.isFinite(Number(saved.earned))) return Math.max(0, Number(saved.earned));
+  try { storage.setItem(SESSION_BASE_KEY, JSON.stringify({ key, earned })); } catch (e) { /* ignore */ }
+  return earned;
+};
+// Opens only for the session that crossed the threshold, or that earned the requirement itself after it started.
+// A later session begins at the current daily total, so 210 already on the board does not open it.
+export const sessionUnlock = ({ dayEarned = 0, dayRequired = 0, earnedAtStart = 0, sessionEarned = null, sessionRequired = null } = {}) => {
+  const req = Number(sessionRequired != null ? sessionRequired : dayRequired) || 0;
+  const start = Math.max(0, Number(earnedAtStart) || 0);
+  const day = Math.max(0, Number(dayEarned) || 0);
+  const earned = sessionEarned == null ? Math.max(0, day - start) : Math.max(0, Number(sessionEarned) || 0);
+  if (!(req > 0)) return false;
+  return (start < req && day >= req) || earned >= req;
+};
+export const sessionShieldDecision = ({ enabled = true, running = false, now = Date.now(), endMs = 0, selectionCount = 1, unlockedToday = false, ...rest } = {}) => {
+  if (!enabled || selectionCount <= 0 || unlockedToday || !running || !(Number(endMs) > now)) return { want: false, phase: 'off', untilMs: 0 };
+  if (sessionUnlock(rest)) return { want: false, phase: 'open', untilMs: 0 };
+  return { want: true, phase: 'locked', untilMs: Number(endMs) || 0 };
 };
 // An unfinished morning checklist must not put the shield back once that threshold is open.
 export const checklistMayRelock = (shield) => !(shield && (shield.phase === 'open' || shield.phase === 'done'));

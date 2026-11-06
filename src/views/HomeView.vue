@@ -416,7 +416,7 @@ import { maybeAskTracking } from '@/utils/tracking';
 import { planLock, resumePending, untilFor, fmtDuration, joinNames, withTimeout, describeUnlock, describeLock } from '@/utils/appLockNames';
 import { planTaskUnlock } from '@/utils/taskAppUnlock';
 import LockGuideSheet from '@/components/home/LockGuideSheet.vue';
-import { normBossMode, emergencyAllowed, goalFor, strictShield, wakeAutoOn, dayEndNote, moodReply, dayThresholdOpen, checklistMayRelock } from '@/utils/strictDay';
+import { normBossMode, emergencyAllowed, goalFor, strictShield, wakeAutoOn, dayEndNote, moodReply, checklistMayRelock, noteSessionBase, sessionUnlock } from '@/utils/strictDay';
 import { LOCK_PREF, PENALTY_KEY, EMERGENCY_PENALTY, shouldShield, lockAction, busyToDay, mergePenalties, lastPenaltyDay } from '@/utils/appLock';
 import { previewDayTarget, requiredPoints } from '@/utils/dayTarget';
 const askOpen = ref(false); // Assistant sheet (✨ next to the bell, and the bubble in the task list header)
@@ -4148,15 +4148,17 @@ const strictPlan = (st) => {
   // The home bar is daily points against the required threshold (210/185). That pair opens the shield, not a smaller session tally.
   const dayEarned = Math.max(0, Number(pointsAccumulated.value) || 0);
   const dayRequired = Math.max(0, Number(dayRequiredPts.value) || 0);
-  const useDay = dayThresholdOpen({ earned: dayEarned, required: dayRequired }) || dayRequired > 0;
-  const earned = useDay ? dayEarned : (frozen ? ls.earned : ss ? ss.earned : dayEarned);
-  const goal = useDay ? dayRequired : (frozen ? ls.target : ss ? ss.target : strictGoal.value);
+  const earnedAtStart = noteSessionBase(localStorage, eh.lock.value, dayEarned);
+  const openNow = dayRequired > 0 && sessionUnlock({ dayEarned, dayRequired, earnedAtStart });
+  const sessionEarned = Math.max(0, dayEarned - earnedAtStart);
+  const earned = dayRequired > 0 ? (openNow ? dayRequired : sessionEarned) : (frozen ? ls.earned : ss ? ss.earned : dayEarned);
+  const goal = dayRequired > 0 ? dayRequired : (frozen ? ls.target : ss ? ss.target : strictGoal.value);
   if (eh.running.value && eh.lock.value && eh.lock.value.endMs) sd.dayEndMs = eh.lock.value.endMs;
   const keyed = !!(ss || ls); const sk = keyed ? strictSessionKey(ss) : ''; if (keyed) sd.goalAtBy = sd.goalAtBy || {};
   const goalAt = keyed ? sd.goalAtBy[sk] || 0 : sd.goalAt;
   if (!goalAt && goal > 0 && earned >= goal) { if (keyed) sd.goalAtBy[sk] = Date.now(); else sd.goalAt = Date.now(); }
   writeStrictDay(sd);
-  const allDone = frozen ? false : ss ? ss.total > 0 && ss.done >= ss.total : allTasksDone.value;
+  const allDone = dayRequired > 0 ? false : (frozen ? false : ss ? ss.total > 0 && ss.done >= ss.total : allTasksDone.value);
   let r = strictShield({ running: eh.running.value, dayEndMs: sd.dayEndMs, goal, earned, tasksDone: tasksDoneToday.value, goalAt: keyed ? sd.goalAtBy[sk] || 0 : sd.goalAt, claimedAt: (keyed ? (sd.claimedAtBy || {})[sk] : sd.claimedAt) || 0, selectionCount: st.selectionCount || 0, allDone,
     enabled: lockEnabled(), unlockedToday: lockUnlockedDay.value === localDateStr(), offDay: (offDates.value || []).includes(localDateStr()) });
   if (gpOn.value) { // game plan: optional friend-approved unlock window wins (only when enabled); otherwise social apps stay locked until the morning checklist is done
@@ -4212,25 +4214,27 @@ const syncAppLock = async () => {
   let endMs = sp ? sp.untilMs : eh.lock.value && eh.lock.value.endMs;
   // Simple mode: the running session's own goal and the points earned after its Start (not the day's points or open tasks).
   const ls = liveDebtSession();
+  const dayEarnedNow = Math.max(0, Number(pointsAccumulated.value) || 0);
+  const dayRequiredNow = Math.max(0, Number(dayRequiredPts.value) || 0);
+  const earnedAtStart = noteSessionBase(localStorage, eh.lock.value, dayEarnedNow);
+  const openNow = sessionUnlock({ dayEarned: dayEarnedNow, dayRequired: dayRequiredNow, earnedAtStart });
   let want = sp ? sp.want : shouldShield({ enabled: lockEnabled(), running: eh.running.value, endMs, selectionCount: st.selectionCount || 0,
-    earned: Math.max(ls ? ls.earned : 0, Number(pointsAccumulated.value) || 0), required: Math.max(ls ? ls.target : 0, Number(dayRequiredPts.value) || 0), openTasks: 1,
+    earned: Math.max(0, dayEarnedNow - earnedAtStart), required: dayRequiredNow || (ls ? ls.target : 0), openTasks: 1,
     unlockedToday: lockUnlockedDay.value === localDateStr() });
   // Missed-goal app lock (eightHour/{uid}.appLockDebt, server clock + device cache): a session that ended short of its points goal
   // keeps the picked apps locked after it ends. A LATER session reaching its own goal (same sessionGoal math as the server) lifts it
   // at once, before the server round trip; the server clears it on that progress call. No clock time, no streak / points change.
-  const dayOpen = dayThresholdOpen({ earned: pointsAccumulated.value || 0, required: dayRequiredPts.value || 0 });
   const debt = debtShield({ debt: eh.appLockDebt.value, now: Date.now(), session: liveDebtSession(), enabled: lockEnabled(), selectionCount: st.selectionCount || 0,
     unlockedToday: lockUnlockedDay.value === localDateStr(), friend: !!(sp && sp.phase === 'friend'), onBreak: !!(sp && sp.phase === 'break') });
   if (debt.cleared) { clearDebtLocal(debt.sessionKey); debtPaidNative(debt.sessionKey); eh.reportProgress(); }
-  else if (debt.want && !dayOpen) { want = true; endMs = Math.max(debt.untilMs, sp && sp.want ? sp.untilMs : 0); }
+  else if (debt.want && !openNow) { want = true; endMs = Math.max(debt.untilMs, sp && sp.want ? sp.untilMs : 0); }
   await syncDebtHold(st, !!(sp && sp.phase === 'friend'), !!(sp && sp.phase === 'break'));
   const sessionRunning = !!(eh.running.value && eh.lock.value && eh.lock.value.endMs > Date.now());
   const sessionEnded = eh.phase.value === 'ended' || !!(eh.lock.value && !eh.running.value && Date.now() >= eh.lock.value.endMs);
   const accessOpen = vaultAccessOpen({ focusRunning: focusTimerRunning(selectedDayRoutine.value, Date.now()), focusPaused: focusPaused(selectedDayRoutine.value), sessionRunning, sessionEnded });
-  const goalMet = dayOpen || !!(eh.lock.value && Number(eh.lock.value.target) > 0 && (Number(eh.lock.value.earned) || 0) >= Number(eh.lock.value.target));
+  const goalMet = openNow || !!(eh.lock.value && Number(eh.lock.value.target) > 0 && (Number(eh.lock.value.earned) || 0) >= Number(eh.lock.value.target));
   const idle = shieldBecauseTimerOff({ enabled: lockEnabled(), selectionCount: st.selectionCount || 0, accessOpen, unlockedToday: lockUnlockedDay.value === localDateStr(), onBreak: !!(sp && sp.phase === 'break'), goalMet, sessionEnded, now: Date.now() });
-  if (idle && !want && !dayOpen) { want = true; endMs = Math.max(endMs || 0, idle.untilMs); }
-  if (dayOpen) want = false;
+  if (idle && !want && !openNow) { want = true; endMs = Math.max(endMs || 0, idle.untilMs); }
   const fEnd = sp && sp.phase === 'break' ? 0 : focusShieldEnd({ dayWant: !!want, enabled: lockEnabled(), selectionCount: st.selectionCount || 0, locked: lockedFocus(selectedDayRoutine.value || []) });
   const act = lockAction({ want: !!(want || fEnd), endMs: fEnd || endMs, st });
   hardLocked.value = !!(want || fEnd);
