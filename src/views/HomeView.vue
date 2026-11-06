@@ -138,7 +138,7 @@
 
 
       <!-- ─── Task List ─── -->
-      <section v-if="canViewSelectedDayTasks"
+      <section v-if="canViewSelectedDayTasks" id="home-tasks"
                class="task-section">
         <GamePlanRow v-if="gpOn && isViewingToday" :text="gpText" :phase="gpPhase.phase" :review="gpReview"
                      :locked="hardLocked || gpGate" :gate="gpGate" :friend="(gp.friend && gp.friend.name) || ''" :friend-on="gp.friendUnlock" :unlock="gpUnlock" :penalty="gpPenaltyToday" :after-close="gpEarned.afterClose"

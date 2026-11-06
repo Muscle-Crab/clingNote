@@ -31,12 +31,12 @@ defineProps({ unlocked: { type: Boolean, default: false }, live: { type: Boolean
 </script>
 
 <style scoped>
-.vd { position: relative; width: 64px; height: 64px; flex: none; filter: drop-shadow(0 6px 10px rgba(0, 0, 0, .45)); }
-.vd-svg { display: block; width: 64px; height: 64px; }
+.vd { position: relative; width: 44px; height: 44px; flex: none; filter: drop-shadow(0 4px 6px rgba(0, 0, 0, .45)); }
+.vd-svg { display: block; width: 44px; height: 44px; }
 .vd-rotor { transform-origin: 40px 40px; }
 .vd--open .vd-rotor { animation: vd-turn 14s linear infinite; }
 .vd--live { filter: drop-shadow(0 0 8px rgba(214, 178, 94, .45)); }
-.vd-robot { position: absolute; left: 50%; top: 50%; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 6px; object-fit: cover; }
+.vd-robot { position: absolute; left: 50%; top: 50%; width: 16px; height: 16px; margin: -8px 0 0 -8px; border-radius: 4px; object-fit: cover; }
 @keyframes vd-turn { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) {
   .vd-rotor { animation: none; }
