@@ -379,6 +379,7 @@ import { sessionGoal, overtimeStamp, overtimeInfo, overtimePoints } from '@/util
 import { durationMs as ringDurationMs, overtimeMs as ringOvertimeMs, elapsedMs as ringElapsedMs } from '@/utils/timerRing';
 import { topicKey, recordActual, setEstimateHistory, estimateHistory } from '@/utils/personalEstimate';
 import { useEightHour, clearDebtLocal, syncAfterAuth, setDayLengthHours, loadDayLengthHours, promptSeenFor, markPromptSeen } from '@/composables/useEightHour';
+import { autoOpenDayPrompt, closeDayPrompt } from '@/utils/dayPrompt';
 import { countableIndexes, taskRange, hoursLabel, validSessionHours } from '@/utils/eightHour';
 import { estimateFor, chipValues, withAiEstimate } from '@/utils/taskEstimate';
 import { requestAiEstimate } from '@/utils/aiEstimate';
@@ -3726,13 +3727,16 @@ const reconcileWakeLock = async () => {
   catch (e) { console.warn('wake lock reconcile:', e && e.message); return false; }
   finally { ehStarting = false; }
 };
+const dayPromptState = () => ({ phase: eh.phase.value, running: eh.running.value, hasLock: !!eh.lock.value, scheduled: !!eh.phaseInfo.value.scheduled, dayKey: eh.phaseInfo.value.dayKey || '', promptSeen: promptSeenFor(), open: dayPromptOpen.value, signedIn: !!userId.value, lockIn: lockInToday.value, today: isToday(selectedDayIndex.value) });
 const maybeShowDayPrompt = async () => {
-  if (!userId.value || !lockInToday.value || eh.phase.value !== 'ready' || eh.lock.value || dayPromptOpen.value || !isToday(selectedDayIndex.value)) return;
+  if (closeDayPrompt(dayPromptState())) { dayPromptOpen.value = false; return; }
+  if (!autoOpenDayPrompt(dayPromptState())) return;
   if (await reconcileWakeLock()) return;
-  const dk = eh.phaseInfo.value.dayKey || '';
-  if (!dk || promptSeenFor() === dk) return; // once per day; the card's Start button reopens it
-  markPromptSeen(dk); openDayPrompt();
+  if (closeDayPrompt(dayPromptState())) { dayPromptOpen.value = false; return; } // a session can appear during the await
+  if (!autoOpenDayPrompt(dayPromptState())) return;
+  markPromptSeen(eh.phaseInfo.value.dayKey || ''); openDayPrompt();
 };
+watch(() => [eh.phase.value, eh.running.value, eh.lock.value && eh.lock.value.endMs], () => { if (closeDayPrompt(dayPromptState())) dayPromptOpen.value = false; });
 // Step 2 of a new session: the native picker, pre-filled with the last session's apps (App Group "lock.selection.lastUsed", else the
 // global selection, else empty). Saving makes it the shield's selection; Begin then records it as the new last-used one.
 const sessionAppsPick = ref(null);
