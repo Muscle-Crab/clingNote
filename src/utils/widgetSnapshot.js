@@ -1,5 +1,5 @@
 // Home-screen widget (iOS WidgetKit) data + deep links. Unit-tested in node (scripts/test-widget.js).
-import { timerShownOnWidget } from './dayList.js';
+import { timerShownOnWidget, isRemovedTask } from './dayList.js';
 // The web layer writes buildWidgetSnapshot(todayTasks) as JSON to the App Group (UserDefaults suite group.app.clingnote.ios, key
 // "widget.today") through the local ClingWidget Capacitor plugin; the Swift widget (ios/App/ClingNoteWidget) only reads it.
 // Tapping a task opens clingnote://task/<id>, which parseWidgetLink() turns into /home?task=<id> (HomeView card is highlighted).
@@ -36,7 +36,7 @@ export const chipText = (est, pts) => [fmtEstimate(est), num(pts) ? `${num(pts)}
 // estimate: (task) -> { minutes, points } as displayed on the card (HomeView TaskCard = chipValues). Written as est/pts, so the widget never recomputes.
 export const buildWidgetSnapshot = (tasks, { now = new Date(), dayName = '', pendingIds = [], lock = null, estimate = storedChip, ptsTarget = 0 } = {}) => {
   const pending = new Set(pendingIds); // widget taps not yet applied by the app: keep them shown as done
-  const list = (Array.isArray(tasks) ? tasks : []).filter((t) => t && typeof t.title === 'string' && t.title.trim());
+  const list = (Array.isArray(tasks) ? tasks : []).filter((t) => t && !isRemovedTask(t) && typeof t.title === 'string' && t.title.trim());
   const chip = (t) => { try { const c = estimate(t) || {}; return { est: num(c.minutes), pts: num(c.points) }; } catch (e) { const c = storedChip(t); return { est: c.minutes, pts: c.points }; } };
   const rows = list.map((t, i) => ({
     id: widgetTaskId(t), title: t.title.trim().slice(0, 80), ...chip(t),

@@ -42,6 +42,22 @@ export const timersChanged = (before, after) => (before || []).some((t, i) => t 
 
 export const withoutTask = (tasks, same) => (tasks || []).filter((t) => !same(t));
 
+// A removed task stays in the stored array (same length, same createdAt and points) so a ruleset that
+// rejects a shorter list still accepts the edit. The title is kept. Timer flags are cleared so a stuck
+// timer cannot keep focus running. Nothing here invents a name.
+export const isRemovedTask = (t) => !!(t && t.removed === true);
+export const visibleTasks = (tasks) => (tasks || []).filter((t) => t && !isRemovedTask(t));
+export const markTaskRemoved = (tasks, same) => (tasks || []).map((t) => (
+  t && same(t) ? { ...t, removed: true, timerActive: false, timerEndTime: null, timerPausedAt: null, timerStoppedAt: null, focusLock: false } : t
+));
+export const taskStillVisible = (tasks, same) => (tasks || []).some((t) => t && same(t) && !isRemovedTask(t));
+// Older published rules allow a same-length edit that does not change createdAt or points, and reject a shorter list.
+export const shorterList = (before, after) => (after || []).length < (before || []).length;
+export const sameLengthKeepsIdentity = (before, after) => (before || []).length === (after || []).length && (before || []).every((t, i) => {
+  const n = (after || [])[i];
+  return !!n && n.createdAt === t.createdAt && n.points === t.points;
+});
+
 export const deleteFailureMessage = (e) => {
   const code = String((e && e.code) || '');
   const msg = String((e && e.message) || '');

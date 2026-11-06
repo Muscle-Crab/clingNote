@@ -42,7 +42,7 @@ export const endOfDay = (nowMs) => { const d = new Date(nowMs); return new Date(
 // A missed goal has no clock-time lock here any more (the old 'missed' end + 2 h phase is gone): the missed-goal app lock
 // (appLockDebt, server + native DebtHold) keeps the picked apps locked until a later session reaches its goal.
 export const strictShield = ({ running = false, dayEndMs = 0, now = Date.now(), goal = 0, earned = 0, tasksDone = 0, goalAt = 0, claimedAt = 0, selectionCount = 0, enabled = true, unlockedToday = false, offDay = false, allDone = false, tuning = STRICT_TUNING } = {}) => {
-  const midnight = endOfDay(now); const off = { want: false, untilMs: 0, phase: 'off', windowMin: 0, unlockEndMs: 0 };
+  const off = { want: false, untilMs: 0, phase: 'off', windowMin: 0, unlockEndMs: 0 };
   if (!enabled || selectionCount <= 0 || unlockedToday || offDay || !dayEndMs) return off;
   // Every task finished counts as met even when the floor goal (minGoal) or a penalty keeps the points short of it.
   const met = (goal > 0 && earned >= goal) || !!allDone;
@@ -51,15 +51,21 @@ export const strictShield = ({ running = false, dayEndMs = 0, now = Date.now(), 
     return now < dayEndMs && running ? { ...off, want: true, untilMs: dayEndMs, phase: 'locked' } : off;
   }
   const windowMin = earnedWindowMin({ earned, goal, tasksDone }, tuning);
-  // Goal met and the day's time is over: everything opens (build 48 kept 'ready'/'relocked' locked until midnight).
-  // Before the end the banked window works as before, but the native lock ends at the day end, so iOS lifts it on its own.
-  if (now >= dayEndMs) return { ...off, phase: 'done', windowMin, unlockEndMs: claimedAt ? claimedAt + windowMin * 60000 : 0 };
-  const lockEnd = Math.min(midnight, dayEndMs);
-  if (!claimedAt) return lockEnd - now > 60000 ? { want: true, untilMs: lockEnd, phase: 'ready', windowMin, unlockEndMs: 0 } : { ...off, windowMin };
-  const unlockEndMs = claimedAt + windowMin * 60000;
-  if (now < unlockEndMs) return { want: false, untilMs: 0, phase: 'earned', windowMin, unlockEndMs };
-  return lockEnd - now > 60000 ? { want: true, untilMs: lockEnd, phase: 'relocked', windowMin, unlockEndMs } : { ...off, windowMin, unlockEndMs };
+  // Goal met and the day's time is over: everything opens.
+  if (now >= dayEndMs) return { ...off, phase: 'done', windowMin, unlockEndMs: 0 };
+  // The required threshold is already crossed: open now. A Start screen time tap is not required, and the shield
+  // does not stay up for the rest of the session.
+  if (running && now < dayEndMs) return { want: false, untilMs: 0, phase: 'open', windowMin, unlockEndMs: 0 };
+  return { ...off, windowMin };
 };
+
+// The pair the home bar shows: daily points against the required threshold (lock target). 210 >= 185 opens.
+export const dayThresholdOpen = ({ earned = 0, required = 0 } = {}) => {
+  const e = Number(earned) || 0; const r = Number(required) || 0;
+  return r > 0 && e >= r;
+};
+// An unfinished morning checklist must not put the shield back once that threshold is open.
+export const checklistMayRelock = (shield) => !(shield && (shield.phase === 'open' || shield.phase === 'done'));
 
 export const fmtMin = (m) => { const v = Math.max(0, Math.round(m)); return v >= 60 ? `${Math.floor(v / 60)}h${v % 60 ? ` ${v % 60}m` : ''}` : `${v}m`; };
 // Day-end notification text: points earned and screen time earned.

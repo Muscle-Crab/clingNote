@@ -41,6 +41,7 @@
         <p v-if="vault.reportNote" class="gp-line gp-vault-note" data-test="vault-report">{{ vault.reportNote }} <button type="button" class="gp-chip" data-test="vault-report-reload" @click="$emit('vault-report-reload')">Reload the report you sent</button></p>
         <p v-if="vault.reportNote && vault.awaiting" class="gp-line gp-vault-note" data-test="vault-awaiting">No reading for {{ vault.awaiting }} selected app{{ vault.awaiting === 1 ? '' : 's' }}. <button type="button" class="gp-chip" data-test="vault-sync" @click="$emit('vault-sync')">Sync thresholds</button></p>
         <p v-else-if="vault.awaiting" class="gp-line gp-vault-note" data-test="vault-awaiting">No Screen Time report yet for {{ vault.awaiting }} selected app{{ vault.awaiting === 1 ? '' : 's' }}. <button type="button" class="gp-chip" data-test="vault-sync" @click="$emit('vault-sync')">Sync thresholds</button></p>
+        <p v-if="unnamedCount" class="gp-line gp-vault-note" data-test="vault-name">{{ unnamedCount }} app{{ unnamedCount === 1 ? '' : 's' }} with no saved name. <button type="button" class="gp-chip" data-test="vault-name-apps" @click="$emit('vault-name-apps')">Name these apps</button></p>
         <details class="gp-report-edit" data-test="vault-report-edit">
           <summary>Update the report on this device</summary>
           <p class="gp-line">Paste names and times from the report. ClingNote cannot read that report by itself, and this list stays on this phone. Leave the period out when the report does not show one. An app with no line stays at no reading.</p>
@@ -98,12 +99,13 @@ const props = defineProps({
   breakBank: { type: Number, default: 0 }, breakMin: { type: Number, default: 10 }, breakOn: { type: Boolean, default: false }, gift: { type: Boolean, default: false },   screenReady: { type: Number, default: 0 }, ready: { type: String, default: '' }, history: { type: Array, default: () => [] },
   vault: { type: Object, default: null }, pointsGoal: { type: Number, default: 0 }, reportText: { type: String, default: '' },
 });
-defineEmits(['review', 'ask', 'share', 'take-break', 'end-break', 'claim-screen', 'vault-start', 'vault-stop', 'vault-sync', 'vault-report-reload', 'vault-report-save']);
+defineEmits(['review', 'ask', 'share', 'take-break', 'end-break', 'claim-screen', 'vault-start', 'vault-stop', 'vault-sync', 'vault-report-reload', 'vault-report-save', 'vault-name-apps']);
 const open = ref(false); const accepted = ref([]); const histOpen = ref(false); const vaultOpen = ref(false);
 const draft = ref('');
 watch(() => props.reportText, (v) => { draft.value = v || ''; }, { immediate: true });
 const attn = computed(() => !!props.review || (props.friendOn && props.unlock.status === 'approved'));
 const bayName = (a) => (!a || !String(a.label || '').trim() || /^app$/i.test(String(a.label).trim()) ? 'Unnamed' : a.label);
+const unnamedCount = computed(() => ((props.vault && props.vault.items) || []).filter((a) => { const s = String((a && a.label) || '').trim(); return !s || /^app$/i.test(s); }).length);
 const pricedBays = computed(() => ((props.vault && props.vault.items) || []).filter((a) => a && a.price != null));
 const cheapest = computed(() => pricedBays.value.find((a) => !a.open) || pricedBays.value[0] || null);
 const heaviest = computed(() => [...pricedBays.value].sort((a, b) => (Number(b.min) || 0) - (Number(a.min) || 0) || (b.boss ? 1 : 0) - (a.boss ? 1 : 0))[0] || null);

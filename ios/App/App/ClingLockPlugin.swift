@@ -289,11 +289,16 @@ public class ClingLockPlugin: CAPPlugin, CAPBridgedPlugin {
     @objc func pickNamedApps(_ call: CAPPluginCall) {
         guard #available(iOS 16.0, *) else { call.reject("iOS 16 required"); return }
         let suggest = (call.getArray("suggest") as? [String]) ?? []
+        let fromSelection = call.getBool("selection") ?? false
         DispatchQueue.main.async {
-            var sel = FamilyActivitySelection(); sel.applicationTokens = Set(AppLocks.apps().map { $0.token })
+            var tokens = Set(AppLocks.apps().map { $0.token })
+            if fromSelection { tokens.formUnion(Self.loadSelection().applicationTokens) }
+            var sel = FamilyActivitySelection(); sel.applicationTokens = tokens
             let model = PickerModel(selection: sel)
+            let catalog = VaultCatalog.apps().filter { VaultCatalog.realName($0.label).isEmpty == false }.map { LabeledApp(id: $0.id, label: $0.label, token: $0.token) }
+            let existing = AppLocks.apps() + catalog.filter { c in !AppLocks.apps().contains { $0.token == c.token } }
             var host: UIViewController?
-            let view = NamedPickerView(model: model, existing: AppLocks.apps(), suggest: suggest) { result in
+            let view = NamedPickerView(model: model, existing: existing, suggest: suggest) { result in
                 host?.dismiss(animated: true)
                 guard let result = result else { call.resolve(["saved": false, "apps": Self.appsPayload()]); return }
                 let previous = AppLocks.apps()

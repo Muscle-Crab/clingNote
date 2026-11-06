@@ -38,7 +38,7 @@ export const clingLock = {
   cancelScheduledLock: safe('ClingLock', Lock, (p, a) => p.cancelScheduledLock({ key: String((a && a.key) || '') }), { cancelled: false }),
   // per-app locks by user-confirmed label (src/utils/appLockNames.js resolves spoken names to these labels)
   labeledApps: safe('ClingLock', Lock, (p) => p.labeledApps(), { apps: [] }),
-  pickNamedApps: safe('ClingLock', Lock, (p, suggest = []) => p.pickNamedApps({ suggest }), { saved: false, apps: [] }),
+  pickNamedApps: safe('ClingLock', Lock, (p, opts = []) => { const o = Array.isArray(opts) ? { suggest: opts } : (opts || {}); return p.pickNamedApps({ suggest: o.suggest || [], selection: !!o.selection }); }, { saved: false, apps: [] }),
   lockApps: safe('ClingLock', Lock, (p, labels, untilMs = 0) => p.lockApps({ labels, untilMs }), { locked: [] }),
   unlockApps: safe('ClingLock', Lock, (p, labels = []) => p.unlockApps({ labels }), { unlocked: [] }),
   // per-task app unlock (src/utils/taskAppUnlock.js): pick apps a task needs; allow them while its timer runs; end re-locks

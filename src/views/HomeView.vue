@@ -144,7 +144,7 @@
         <GamePlanRow v-if="gpOn && isViewingToday" :text="gpText" :phase="gpPhase.phase" :review="gpReview"
                      :locked="hardLocked || gpGate" :gate="gpGate" :friend="(gp.friend && gp.friend.name) || ''" :friend-on="gp.friendUnlock" :unlock="gpUnlock" :penalty="gpPenaltyToday" :after-close="gpEarned.afterClose"
                      :break-bank="gpBank" :break-min="gpBreakStatus.min || 10" :gift="gpGift" :history="gpHistory" :break-on="gpPhase.phase === 'break'" :screen-ready="strictReadyMin" :ready="gpReady" :vault="gpVault" :points-goal="dayRequiredPts || 0"
-                     @review="gpApplyReview" @ask="gpAsk" @share="gpShare" @take-break="gpTakeBreak" @end-break="gpEndBreak" @claim-screen="claimScreenTime" @vault-start="vaultStart" @vault-stop="vaultStop" @vault-sync="syncVault" @vault-report-reload="reloadSentReport" :report-text="vaultReportText" @vault-report-save="saveVaultReportText" />
+                     @review="gpApplyReview" @ask="gpAsk" @share="gpShare" @take-break="gpTakeBreak" @end-break="gpEndBreak" @claim-screen="claimScreenTime" @vault-start="vaultStart" @vault-stop="vaultStop" @vault-sync="syncVault" @vault-report-reload="reloadSentReport" :report-text="vaultReportText" @vault-report-save="saveVaultReportText" @vault-name-apps="nameVaultApps" />
         <EmptyState v-if="dayTasks.length === 0" :show-add="true" :show-templates="isViewingToday && !!userId" :day-label="isViewingToday ? '' : formatScheduledDate(viewTabDate, todayStr)" :scheduled="isViewingToday ? 0 : (scheduledCounts[viewTabDate] || 0)" @add="onAddClick" @templates="openTemplates" />
 
 
@@ -249,7 +249,7 @@ import { useTaskViewPrefs } from '@/composables/useTaskViewPrefs';
 import { viewTasks, canReorder, applyManualOrder, normalizePrefs, visibleCount, shouldHandleShortcut } from '@/utils/taskView';
 import { ACTIVE_CAP, taskKey, activeCount, loadSummary, buildSchedule } from '@/utils/taskPlanning';
 import { localYMD, localYMDOffset, isStaleCompletion, pruneStaleDay } from '@/utils/localDate';
-import { clearExpiredTimers, timersChanged, withoutTask, deleteFailureMessage, dayReadFailure, tasksFromSnapshot } from '@/utils/dayList';
+import { clearExpiredTimers, timersChanged, withoutTask, markTaskRemoved, visibleTasks, taskStillVisible, deleteFailureMessage, dayReadFailure, tasksFromSnapshot } from '@/utils/dayList';
 import { getTodayId, formatSessionTime, getCurrentDate, formatTime, isToday } from '@/utils/dateTime';
 import { badges } from '@/utils/gamification';
 import { recordMonthlyToggle, awardFinishedMonth } from '@/composables/useMonthlyStats';
@@ -375,6 +375,7 @@ import { sessionApps } from '@/utils/sessionApps';
 import { debtShield, debtHoldPlan, turnOffBlocked, TURN_OFF_BLOCKED_MSG } from '@/utils/appLockDebt';
 import { vaultView, startPlan, stopWindows, unlockCelebration, freshUnlocks, focusTimerRunning, focusPaused, vaultAccessOpen, shieldBecauseTimerOff, vaultTimerPlan, vaultSessionReset } from '@/utils/pointsVault';
 import { adoptSentReport, replaceSnapshot, readSnapshot, writeSnapshot, reportFromRecord, SENT_REPORT_ROWS, sentReport, formatOwnerReport, parseOwnerReport, applyOwnerReport } from '@/utils/usageSnapshot';
+import { prepareVaultApps } from '@/utils/vaultNames';
 import robotPng from '@/assets/assistant-robot@2x.png';
 import PointsCelebration from '@/components/home/PointsCelebration.vue';
 import { sessionGoal, overtimeStamp, overtimeInfo, overtimePoints } from '@/utils/sessionGoal';
@@ -415,7 +416,7 @@ import { maybeAskTracking } from '@/utils/tracking';
 import { planLock, resumePending, untilFor, fmtDuration, joinNames, withTimeout, describeUnlock, describeLock } from '@/utils/appLockNames';
 import { planTaskUnlock } from '@/utils/taskAppUnlock';
 import LockGuideSheet from '@/components/home/LockGuideSheet.vue';
-import { normBossMode, emergencyAllowed, goalFor, strictShield, wakeAutoOn, dayEndNote, moodReply } from '@/utils/strictDay';
+import { normBossMode, emergencyAllowed, goalFor, strictShield, wakeAutoOn, dayEndNote, moodReply, dayThresholdOpen, checklistMayRelock } from '@/utils/strictDay';
 import { LOCK_PREF, PENALTY_KEY, EMERGENCY_PENALTY, shouldShield, lockAction, busyToDay, mergePenalties, lastPenaltyDay } from '@/utils/appLock';
 import { previewDayTarget, requiredPoints } from '@/utils/dayTarget';
 const askOpen = ref(false); // Assistant sheet (✨ next to the bell, and the bubble in the task list header)
@@ -1162,7 +1163,7 @@ const fetchSelectedDayRoutine = async () => {
         if (seq !== fetchSeq) return;
       }
 
-      selectedDayRoutine.value = tasks;
+      selectedDayRoutine.value = visibleTasks(tasks);
       dayLoadError.value = '';
     } else {
       selectedDayRoutine.value = [];
@@ -1298,12 +1299,25 @@ const deleteTask = async (index, { skipConfirm = false } = {}) => { // skipConfi
     let seriesScope = 'this';
     if (target.templateId && !skipConfirm) seriesScope = confirm('This task repeats.\n\nOK = delete this and all future occurrences\nCancel = delete only this one') ? 'future' : 'this';
     const hold = taskKey(target);
+    const same = (t) => sameTask(t, target);
     dayWriteHold.add(hold); // only while the write is in flight, so a confirm dialog does not freeze other tasks
     try {
-      if (target.scheduledId) scheduledList.value = await mutateScheduled(userId.value, (l) => deleteTaskScope(l, target, seriesScope, tabDays.value[selectedDayIndex.value]?.date || getTodayId()));
-      const next = await mutateDay(dayName, (tasks) => withoutTask(tasks, (t) => sameTask(t, target)));
+      // The day list is removed first. A running session, a met goal, a timer, or a focus lock is not a veto.
+      let next;
+      try { next = await mutateDay(dayName, (tasks) => withoutTask(tasks, same)); }
+      catch (e) {
+        if (String(e && e.code) !== 'permission-denied') throw e;
+        // A published ruleset can reject a shorter array while the session runs and still accept a same-length edit.
+        next = await mutateDay(dayName, (tasks) => markTaskRemoved(tasks, same));
+      }
+      if (taskStillVisible(next, same)) throw Object.assign(new Error('still-there'), { code: 'permission-denied' });
+      next = visibleTasks(next);
       selectedDayRoutine.value = next; // UI follows the committed list, never a local splice
       if (target) cancelTaskNotifications(target);
+      if (target.scheduledId) {
+        try { scheduledList.value = await mutateScheduled(userId.value, (l) => deleteTaskScope(l, target, seriesScope, tabDays.value[selectedDayIndex.value]?.date || getTodayId()), { allowWhenShut: true }); }
+        catch (e) { showNoteToast("The task was removed. Its repeat schedule could not be updated.", { error: true }); }
+      }
       if (removeAll) {
         for (const d of alsoDays) await mutateDay(d, (tasks) => withoutSeries(tasks, target));
       }
@@ -1922,7 +1936,7 @@ const watchSelectedDay = () => {
     if (dayWriteHold.size) return; // a delete is still settling: do not put a task back or replace a different one
     const tasks = clearExpiredTimers(snap.data().tasks || [], Date.now());
     if (tasks.some((t) => isStaleCompletion(t, idx))) return;
-    const next = tasksFromSnapshot(selectedDayRoutine.value || [], tasks, dayWriteHold.size > 0);
+    const next = tasksFromSnapshot(selectedDayRoutine.value || [], visibleTasks(tasks), dayWriteHold.size > 0);
     if (JSON.stringify(next) !== JSON.stringify(selectedDayRoutine.value || [])) selectedDayRoutine.value = next;
   }, () => {});
 };
@@ -4131,7 +4145,12 @@ const strictPlan = (st) => {
   // Coach mode: the shield judges the CURRENT session (its own target and in-session points, same math as the server), not the whole day.
   // A running session with a frozen goal (every mode): its own goal and the points earned after its Start, keyed by session.
   const ss = gpOn.value ? liveSession(gpSessions.value, Date.now()) : null; const ls = liveDebtSession(); const frozen = !!(ls && ls.frozen);
-  const earned = frozen ? ls.earned : ss ? ss.earned : pointsAccumulated.value || 0; const goal = frozen ? ls.target : ss ? ss.target : strictGoal.value;
+  // The home bar is daily points against the required threshold (210/185). That pair opens the shield, not a smaller session tally.
+  const dayEarned = Math.max(0, Number(pointsAccumulated.value) || 0);
+  const dayRequired = Math.max(0, Number(dayRequiredPts.value) || 0);
+  const useDay = dayThresholdOpen({ earned: dayEarned, required: dayRequired }) || dayRequired > 0;
+  const earned = useDay ? dayEarned : (frozen ? ls.earned : ss ? ss.earned : dayEarned);
+  const goal = useDay ? dayRequired : (frozen ? ls.target : ss ? ss.target : strictGoal.value);
   if (eh.running.value && eh.lock.value && eh.lock.value.endMs) sd.dayEndMs = eh.lock.value.endMs;
   const keyed = !!(ss || ls); const sk = keyed ? strictSessionKey(ss) : ''; if (keyed) sd.goalAtBy = sd.goalAtBy || {};
   const goalAt = keyed ? sd.goalAtBy[sk] || 0 : sd.goalAt;
@@ -4143,7 +4162,7 @@ const strictPlan = (st) => {
   if (gpOn.value) { // game plan: optional friend-approved unlock window wins (only when enabled); otherwise social apps stay locked until the morning checklist is done
     if (gp.value.friendUnlock && gpUnlock.value.untilMs > Date.now()) r = { ...r, want: false, phase: 'friend' };
     else if (GP.breakActive(gpBreak.value, Date.now()) && gpBreakOk()) r = { ...r, want: false, phase: 'break' };
-    else if (!r.want && gpGate.value && lockEnabled() && (st.selectionCount || 0) > 0 && lockUnlockedDay.value !== localDateStr()) r = { ...r, want: true, untilMs: gpPhase.value.closeMs, phase: 'checklist' };
+    else if (!r.want && checklistMayRelock(r) && gpGate.value && lockEnabled() && (st.selectionCount || 0) > 0 && lockUnlockedDay.value !== localDateStr()) r = { ...r, want: true, untilMs: gpPhase.value.closeMs, phase: 'checklist' };
   }
   strictState.value = r; strictReadyMin.value = r.phase === 'ready' ? r.windowMin : 0;
   if (sd.dayEndMs) { const n = dayEndNote({ earned, goal, tasksDone: tasksDoneToday.value }); const sig = JSON.stringify([sd.dayEndMs, n.title, r.unlockEndMs]);
@@ -4194,22 +4213,24 @@ const syncAppLock = async () => {
   // Simple mode: the running session's own goal and the points earned after its Start (not the day's points or open tasks).
   const ls = liveDebtSession();
   let want = sp ? sp.want : shouldShield({ enabled: lockEnabled(), running: eh.running.value, endMs, selectionCount: st.selectionCount || 0,
-    earned: ls ? ls.earned : 0, required: ls ? ls.target : 0, openTasks: 1,
+    earned: Math.max(ls ? ls.earned : 0, Number(pointsAccumulated.value) || 0), required: Math.max(ls ? ls.target : 0, Number(dayRequiredPts.value) || 0), openTasks: 1,
     unlockedToday: lockUnlockedDay.value === localDateStr() });
   // Missed-goal app lock (eightHour/{uid}.appLockDebt, server clock + device cache): a session that ended short of its points goal
   // keeps the picked apps locked after it ends. A LATER session reaching its own goal (same sessionGoal math as the server) lifts it
   // at once, before the server round trip; the server clears it on that progress call. No clock time, no streak / points change.
+  const dayOpen = dayThresholdOpen({ earned: pointsAccumulated.value || 0, required: dayRequiredPts.value || 0 });
   const debt = debtShield({ debt: eh.appLockDebt.value, now: Date.now(), session: liveDebtSession(), enabled: lockEnabled(), selectionCount: st.selectionCount || 0,
     unlockedToday: lockUnlockedDay.value === localDateStr(), friend: !!(sp && sp.phase === 'friend'), onBreak: !!(sp && sp.phase === 'break') });
   if (debt.cleared) { clearDebtLocal(debt.sessionKey); debtPaidNative(debt.sessionKey); eh.reportProgress(); }
-  else if (debt.want) { want = true; endMs = Math.max(debt.untilMs, sp && sp.want ? sp.untilMs : 0); }
+  else if (debt.want && !dayOpen) { want = true; endMs = Math.max(debt.untilMs, sp && sp.want ? sp.untilMs : 0); }
   await syncDebtHold(st, !!(sp && sp.phase === 'friend'), !!(sp && sp.phase === 'break'));
   const sessionRunning = !!(eh.running.value && eh.lock.value && eh.lock.value.endMs > Date.now());
   const sessionEnded = eh.phase.value === 'ended' || !!(eh.lock.value && !eh.running.value && Date.now() >= eh.lock.value.endMs);
   const accessOpen = vaultAccessOpen({ focusRunning: focusTimerRunning(selectedDayRoutine.value, Date.now()), focusPaused: focusPaused(selectedDayRoutine.value), sessionRunning, sessionEnded });
-  const goalMet = !!(eh.lock.value && Number(eh.lock.value.target) > 0 && (Number(eh.lock.value.earned) || 0) >= Number(eh.lock.value.target));
+  const goalMet = dayOpen || !!(eh.lock.value && Number(eh.lock.value.target) > 0 && (Number(eh.lock.value.earned) || 0) >= Number(eh.lock.value.target));
   const idle = shieldBecauseTimerOff({ enabled: lockEnabled(), selectionCount: st.selectionCount || 0, accessOpen, unlockedToday: lockUnlockedDay.value === localDateStr(), onBreak: !!(sp && sp.phase === 'break'), goalMet, sessionEnded, now: Date.now() });
-  if (idle && !want) { want = true; endMs = Math.max(endMs || 0, idle.untilMs); }
+  if (idle && !want && !dayOpen) { want = true; endMs = Math.max(endMs || 0, idle.untilMs); }
+  if (dayOpen) want = false;
   const fEnd = sp && sp.phase === 'break' ? 0 : focusShieldEnd({ dayWant: !!want, enabled: lockEnabled(), selectionCount: st.selectionCount || 0, locked: lockedFocus(selectedDayRoutine.value || []) });
   const act = lockAction({ want: !!(want || fEnd), endMs: fEnd || endMs, st });
   hardLocked.value = !!(want || fEnd);
@@ -4261,6 +4282,10 @@ const reloadSentReport = () => {
   try { keepVaultReport(replaceSnapshot(localStorage, SENT_REPORT_ROWS, adoptedAt)); }
   catch (e) { keepVaultReport(sentReport(adoptedAt)); }
 };
+const nameVaultApps = async () => {
+  const r = await clingLock.pickNamedApps({ selection: true });
+  if (r && r.saved) syncVault();
+};
 const saveVaultReportText = (text) => {
   const parsed = parseOwnerReport(text);
   if (!parsed.ok) { showNoteToast(parsed.error, { error: true }); return; }
@@ -4308,7 +4333,11 @@ const syncVault = () => { if (syncQueued) return vaultJob; syncQueued = true; re
   if (!lockAvailable()) return;
   vaultNow.value = Date.now(); if (vaultWindows.value.length && !vaultLoad().length) vaultWindows.value = []; // new day
   const savedBought = dayLoad(VAULT_BOUGHT_KEY); if (savedBought) vaultBought.value = savedBought; else if ((vaultBought.value || []).length) vaultBought.value = [];
-  const u = await clingLock.vaultUsage(); if (u && !u.error) vaultData.value = { days: u.days || {}, apps: u.apps || [] };
+  const u = await clingLock.vaultUsage(); if (u && !u.error) {
+    let named = [];
+    try { const lab = await clingLock.labeledApps(); named = (lab && lab.apps) || []; } catch (e) { named = []; }
+    vaultData.value = { days: u.days || {}, apps: prepareVaultApps(localStorage, u.apps || [], named) };
+  }
   clingLock.startUsage().catch(() => {}); // after the catalog sync inside vaultUsage, so Screen Time pings cover the chosen apps
   const stv = await clingLock.vaultState();
   const v = gpVault.value; const live = stv && stv.live; const gate = vaultAccessState();
