@@ -151,6 +151,8 @@ const signInWithGoogle = async () => {
       lastLogin: new Date(),
       onboardingComplete: false,
       lockInEnabled: true,
+      isPro: false,
+      plan: 'free',
     });
     if (kind === 'new') {
       syncAfterAuth().catch(() => {});
@@ -178,7 +180,7 @@ const signInWithAppleClick = async () => {
     // Apple only returns the name on the very first authorization, so store it now.
     const name = [a.givenName, a.familyName].filter(Boolean).join(' ') || user.displayName || (user.email || '').split('@')[0] || 'You';
     if (a.givenName && !user.displayName) { try { await updateProfile(user, { displayName: name }); } catch (e) { /* non-fatal */ } }
-    const kind = await settleNewUser(userRef, { id: user.uid, uid: user.uid, name, email: user.email || a.email || '', provider: 'apple.com', lastLogin: new Date(), createdAt: new Date(), onboardingComplete: false, lockInEnabled: true });
+    const kind = await settleNewUser(userRef, { id: user.uid, uid: user.uid, name, email: user.email || a.email || '', provider: 'apple.com', lastLogin: new Date(), createdAt: new Date(), onboardingComplete: false, lockInEnabled: true, isPro: false, plan: 'free' });
     if (kind === 'new') {
       syncAfterAuth().catch(() => {});
       router.push(afterNewAccount());

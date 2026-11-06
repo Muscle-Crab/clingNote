@@ -1,7 +1,7 @@
 import { initializeApp } from 'firebase/app';
 import { initializeFirestore, connectFirestoreEmulator } from 'firebase/firestore';
 import { getAnalytics } from "firebase/analytics";
-import { getAuth, connectAuthEmulator, initializeAuth, indexedDBLocalPersistence, inMemoryPersistence } from 'firebase/auth';
+import { getAuth, connectAuthEmulator, initializeAuth, browserLocalPersistence } from 'firebase/auth';
 import { isNative } from '@/utils/platform';
 import { getStorage } from "firebase/storage"; // Import Firebase Storage
 
@@ -23,9 +23,10 @@ const app = initializeApp(firebaseConfig);
 if (!isNative() && !EMU) { try { getAnalytics(app); } catch (e) { /* analytics is optional */ } } // not in the iOS shell: keeps the App Privacy label minimal
 // ignoreUndefinedProperties: a stray `undefined` field (e.g. legacy tasks without `status`) is dropped instead of failing the whole write.
 const db = initializeFirestore(app, { ignoreUndefinedProperties: true });
-// Native shell (capacitor://localhost): the default getAuth() adds the web popup/redirect resolver, which tries to load Google's gapi script and stalls auth init (blank first screen).
-// Native uses the Apple/email credential flows only, so initialise Auth without the resolver.
-const auth = isNative() ? initializeAuth(app, { persistence: [indexedDBLocalPersistence, inMemoryPersistence] }) : getAuth(app);
+// Native shell (clingnot://localhost): getAuth() pulls in the web popup resolver and stalls on gapi.
+// IndexedDB then in-memory persistence drops the session on this scheme (sign-in succeeds, next launch is signed out).
+// localStorage persistence keeps Apple/Google/email sessions across launches.
+const auth = isNative() ? initializeAuth(app, { persistence: browserLocalPersistence }) : getAuth(app);
 if (EMU) { connectAuthEmulator(auth, `http://127.0.0.1:${process.env.VUE_APP_EMU_AUTH_PORT || 9099}`, { disableWarnings: true }); connectFirestoreEmulator(db, '127.0.0.1', Number(process.env.VUE_APP_EMU_FS_PORT || 8085)); }
 const storage = getStorage(app); // Initialize Storage
 

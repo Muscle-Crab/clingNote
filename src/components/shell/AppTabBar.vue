@@ -10,7 +10,11 @@
 import { computed } from 'vue';
 import { useRoute } from 'vue-router';
 import { proNow, loadUserDoc } from '@/composables/usePro';
+import { auth } from '@/firebaseConfig';
+import { isNativeIOS } from '@/utils/platform';
+// Profile reads RevenueCat on its own mount. Home, Points, Upcoming and Community only watch proNow, so load it here too.
 loadUserDoc().catch(() => {});
+if (isNativeIOS() && auth.currentUser) import('@/utils/iap').then((m) => m.ensureIapUser(auth.currentUser)).catch(() => {});
 const props = defineProps({ uid: { type: String, default: null } });
 const route = useRoute();
 const I = {

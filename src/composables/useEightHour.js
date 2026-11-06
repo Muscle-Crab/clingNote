@@ -63,7 +63,10 @@ const call = async (action, body = {}, retried = false) => {
         const synced = await syncEntitlement(u2);
         if (synced && synced.isPro === true) return call(action, body, true);
       }
-    } catch (e) { /* still not Pro on the server */ }
+    } catch (e) {
+      // A missing RevenueCat secret is not "this person isn't Pro". Show that, don't leave the red Pro required line.
+      if (/server not configured/i.test(e?.message || '')) throw Object.assign(new Error('Server not configured'), { status: 500, code: 'server-config' });
+    }
   }
   if (!r.ok) throw Object.assign(new Error(data.error || `Request failed (${r.status})`), { status: r.status, code: data.code });
   return data;

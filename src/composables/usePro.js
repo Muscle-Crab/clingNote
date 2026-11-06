@@ -1,7 +1,7 @@
 // Pro gating helpers for components. Reads users/{uid} once and caches per uid.
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '@/firebaseConfig';
-import { canUse, isPro } from '@/utils/pro';
+import { canUse, isPro, accessPro } from '@/utils/pro';
 import { isNativeIOS } from '@/utils/platform';
 import { ref, watch } from 'vue';
 
@@ -16,14 +16,14 @@ export const withRcPro = (uid, data) => (rcProActive(uid) && !(data && data.isPr
 
 // Reactive "is Pro right now" for lock icons and tap gates (no await in click handlers). Updated by every loadUserDoc() and by RevenueCat.
 export const proNow = ref(false);
-const note = (d) => { proNow.value = isPro(d); return d; };
+const note = (d) => { const u = auth.currentUser; proNow.value = accessPro(d, u && rcProActive(u.uid)); return d; };
 watch(rcPro, () => { const u = auth.currentUser; if (u && rcProActive(u.uid)) proNow.value = true; });
 let cache = { uid: null, data: null, at: 0 };
 export async function loadUserDoc(force = false) {
   const u = auth.currentUser; if (!u) return null;
   if (!force && cache.uid === u.uid && Date.now() - cache.at < 60000) return note(withRcPro(u.uid, cache.data));
   try { const s = await getDoc(doc(db, 'users', u.uid)); cache = { uid: u.uid, data: s.exists() ? s.data() : {}, at: Date.now() }; }
-  catch (e) { console.error('pro check', e.message); return withRcPro(u.uid, cache.uid === u.uid ? cache.data : null); }
+  catch (e) { console.error('pro check', e.message); return note(withRcPro(u.uid, cache.uid === u.uid ? cache.data : null)); }
   return note(withRcPro(u.uid, cache.data));
 }
 // Drop the Firestore snapshot only. An active RevenueCat entitlement stays Pro: syncEntitlement()

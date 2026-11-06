@@ -105,6 +105,34 @@ const { entitlementUpdate, decideWrite, candidateUids, authOk } = require(path.j
     const { isProDoc } = require(path.join(__dirname, '../netlify/functions/lib/requirePro'));
     assert.equal(isProDoc(d.writes[0].d, NOW), true);
   });
+  await t('sync with no RevenueCat secret returns Server not configured and writes nothing', async () => {
+    const saved = process.env.REVENUECAT_SECRET_KEY;
+    delete process.env.REVENUECAT_SECRET_KEY;
+    try {
+      const verify = async () => ({ uid: UID });
+      const d = mkDeps(subOf({ product_identifier: 'clingnote_pro_monthly', expires_date: day(30) }), {});
+      const r = await sy._handler({ httpMethod: 'POST', headers: { authorization: 'Bearer good' } }, { ...d, verify });
+      assert.equal(r.statusCode, 500);
+      const body = JSON.parse(r.body);
+      assert.equal(body.error, 'Server not configured');
+      assert.equal(d.writes.length, 0);
+      assert.equal(d.calls.length, 0);
+      assert.ok(!/sk_|REVENUECAT_SECRET/.test(r.body));
+    } finally { if (saved === undefined) delete process.env.REVENUECAT_SECRET_KEY; else process.env.REVENUECAT_SECRET_KEY = saved; }
+  });
+  await t('gates agree: RevenueCat Pro unlocks Home; a free account stays locked', async () => {
+    const { accessPro, isPro } = await import(path.join(__dirname, '../src/utils/pro.js'));
+    const free = { isPro: false, plan: 'free' };
+    const monthly = { isPro: true, plan: 'monthly', proExpiresAt: day(30) };
+    const expired = { isPro: true, plan: 'monthly', proExpiresAt: day(-5) };
+    assert.equal(accessPro(free, false), false, 'unpaid');
+    assert.equal(accessPro(null, false), false, 'no doc');
+    assert.equal(accessPro(free, true), true, 'Profile-style RC Pro must unlock Home, Points, Upcoming, Community');
+    assert.equal(accessPro(monthly, false), true, 'server Pro');
+    assert.equal(accessPro(expired, false), false, 'expired server Pro is not Pro');
+    assert.equal(accessPro(expired, true), true, 'live RC entitlement covers an expired server row');
+    assert.equal(isPro(free), false);
+  });
   await t('client: purchase sync is not swallowed, and a 402 retries after sync says Pro', () => {
     const fs = require('fs');
     const iap = fs.readFileSync(path.join(__dirname, '../src/utils/iap.js'), 'utf8');
@@ -117,6 +145,11 @@ const { entitlementUpdate, decideWrite, candidateUids, authOk } = require(path.j
     assert.ok(/await identifyIapUser\(user\)/.test(iap) && iap.indexOf('await identifyIapUser(user)') < iap.indexOf('purchasePackage'), 'purchase logs into the Firebase uid before the sheet');
     assert.ok(/addCustomerInfoUpdateListener\(null,/.test(iap), 'listener is the callback form');
     assert.ok(/r\.status === 402 && !retried/.test(eh) && /syncEntitlement/.test(eh) && /synced\.isPro === true/.test(eh), '402 retries the original request only after the server says Pro');
+    assert.ok(/Server not configured/.test(eh), 'a missing RevenueCat secret is not shown as Pro required');
+    assert.ok(/accessPro\(/.test(pro), 'Home and Profile share one Pro answer');
+    assert.ok(/ensureIapUser\(auth\.currentUser\)/.test(fs.readFileSync(path.join(__dirname, '../src/components/shell/AppTabBar.vue'), 'utf8')));
+    assert.ok(/browserLocalPersistence/.test(fs.readFileSync(path.join(__dirname, '../src/firebaseConfig.js'), 'utf8')));
+    assert.ok(/isPro: false/.test(login) && /plan: 'free'/.test(login));
     assert.ok(/lockInEnabled: true/.test(login) && /lockInEnabled: true/.test(doc));
     assert.ok(/settleNewUser/.test(login) && /user doc create failed/.test(login), 'a failed users doc write does not fail sign-in');
     assert.ok(!/proNow\.value = false/.test(pro), 'clearing the Firestore cache must not clear RevenueCat Pro');
