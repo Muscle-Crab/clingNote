@@ -82,7 +82,8 @@ const syncUid = async (uid, deps = {}) => {
   const subscriber = await fetchSubscriber(uid, deps);
   const update = entitlementUpdate(subscriber, now);
   let toWrite = decideWrite(current, update, now);
-  if (!current && toWrite && toWrite.isPro) toWrite = { ...toWrite, lockInEnabled: true };
+  // Missing users/{uid}: merge-create it so assertPro can see Apple Pro. Do not clobber lockInEnabled on a doc that already exists.
+  if (!current && toWrite && toWrite.isPro) toWrite = { uid, lockInEnabled: true, createdAt: now, ...toWrite };
   if (toWrite) await io.write(uid, toWrite);
   const eff = toWrite || current || {};
   return { uid, isPro: toWrite ? !!toWrite.isPro : isProDoc(current, now), plan: eff.plan || null, wrote: !!toWrite };

@@ -54,9 +54,16 @@ const call = async (action, body = {}, retried = false) => {
   if (!/json/i.test(ct)) throw Object.assign(new Error('8-hour day service is unavailable'), { status: r.status, unavailable: true });
   const data = await r.json().catch(() => ({}));
   if (r.status === 404) throw Object.assign(new Error(data.error || '8-hour day service is unavailable'), { status: 404, unavailable: true });
-  // Paid on this phone but users/{uid}.isPro not written yet: mirror RevenueCat once, then retry. A second 402 stays a 402.
+  // Paid on this phone but users/{uid}.isPro not written yet: mirror RevenueCat once, then retry the SAME request. Retry only after the server says Pro; a failed sync stays a 402.
   if (r.status === 402 && !retried) {
-    try { const { syncEntitlement } = await import('@/utils/iap'); const u2 = auth.currentUser; if (u2) { await syncEntitlement(u2); return call(action, body, true); } } catch (e) { /* still not Pro on the server */ }
+    try {
+      const { syncEntitlement } = await import('@/utils/iap');
+      const u2 = auth.currentUser;
+      if (u2) {
+        const synced = await syncEntitlement(u2);
+        if (synced && synced.isPro === true) return call(action, body, true);
+      }
+    } catch (e) { /* still not Pro on the server */ }
   }
   if (!r.ok) throw Object.assign(new Error(data.error || `Request failed (${r.status})`), { status: r.status, code: data.code });
   return data;

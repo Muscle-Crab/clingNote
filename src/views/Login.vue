@@ -68,6 +68,7 @@ import { signInWithApple } from '@/utils/appleAuth';
 import { hasSeenTutorial, markTutorialSeen } from '@/utils/entryGuard';
 import { syncAfterAuth } from '@/composables/useEightHour';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { ensureUserDoc } from '@/utils/userDoc';
 import { auth, db } from '@/firebaseConfig';
 import { useRouter, useRoute } from 'vue-router';
 
@@ -80,6 +81,16 @@ const afterLogin = () => (typeof _rd === 'string' && _rd.startsWith('/') && !_rd
 const afterNewAccount = () => (hasSeenTutorial() ? '/onboarding' : { path: '/welcome', query: { new: '1' } });
 // Existing account: tutorial is for new users only. Also flush a wake pick cached before sign-up (a locked server plan always wins).
 const afterSignIn = () => { markTutorialSeen(); syncAfterAuth().catch(() => {}); };
+// Firebase auth can succeed while the users/{uid} write is denied or offline. That must not trap the person on the login screen.
+const settleNewUser = async (userRef, data) => {
+  let exists = false;
+  try { exists = (await getDoc(userRef)).exists(); }
+  catch (e) { console.warn('user doc read failed', e?.code || e?.message); return 'unknown'; }
+  if (exists) return 'existing';
+  try { await setDoc(userRef, data, { merge: true }); }
+  catch (e) { console.warn('user doc create failed', e?.code || e?.message); }
+  return 'new';
+};
 const email = ref(typeof useRoute().query.email === 'string' ? useRoute().query.email : '');
 const password = ref('');
 const isSubmitting = ref(false);
@@ -110,6 +121,7 @@ const loginUser = async () => {
     console.log('Successfully logged in user:', user.email);
     email.value = '';
     password.value = '';
+    try { await ensureUserDoc(user); } catch (e) { console.warn('user doc', e?.code || e?.message); }
     afterSignIn();
     router.push(afterLogin());
   } catch (error) {
@@ -130,30 +142,22 @@ const signInWithGoogle = async () => {
     console.log('Google sign-in successful:', user.email);
 
     const userRef = doc(db, 'users', user.uid);
-    const userSnap = await getDoc(userRef);
-
-    if (!userSnap.exists()) {
-      // First time sign-in — assign credits and hasPaid
-      await setDoc(userRef, {
-        uid: user.uid,
-        name: user.displayName,
-        email: user.email,
-        profilePicture: user.photoURL,
-        provider: user.providerId,
-        lastLogin: new Date(),
-        onboardingComplete: false,
-        lockInEnabled: true,
-      }, { merge: true });
+    const kind = await settleNewUser(userRef, {
+      uid: user.uid,
+      name: user.displayName,
+      email: user.email,
+      profilePicture: user.photoURL,
+      provider: user.providerId,
+      lastLogin: new Date(),
+      onboardingComplete: false,
+      lockInEnabled: true,
+    });
+    if (kind === 'new') {
       syncAfterAuth().catch(() => {});
       router.push(afterNewAccount());
       return;
-    } else {
-      // Returning user — update last login only
-      await setDoc(userRef, {
-        lastLogin: new Date(),
-      }, { merge: true });
-      console.log("✅ Existing user, last login updated.");
     }
+    try { await setDoc(userRef, { lastLogin: new Date() }, { merge: true }); } catch (e) { console.warn('last login', e?.code || e?.message); }
 
     afterSignIn();
     router.push(afterLogin());
@@ -171,17 +175,16 @@ const signInWithAppleClick = async () => {
     const a = await signInWithApple();
     const user = a.user;
     const userRef = doc(db, 'users', user.uid);
-    const userSnap = await getDoc(userRef);
     // Apple only returns the name on the very first authorization, so store it now.
     const name = [a.givenName, a.familyName].filter(Boolean).join(' ') || user.displayName || (user.email || '').split('@')[0] || 'You';
     if (a.givenName && !user.displayName) { try { await updateProfile(user, { displayName: name }); } catch (e) { /* non-fatal */ } }
-    if (!userSnap.exists()) {
-      await setDoc(userRef, { id: user.uid, uid: user.uid, name, email: user.email || a.email || '', provider: 'apple.com', lastLogin: new Date(), createdAt: new Date(), onboardingComplete: false, lockInEnabled: true }, { merge: true });
+    const kind = await settleNewUser(userRef, { id: user.uid, uid: user.uid, name, email: user.email || a.email || '', provider: 'apple.com', lastLogin: new Date(), createdAt: new Date(), onboardingComplete: false, lockInEnabled: true });
+    if (kind === 'new') {
       syncAfterAuth().catch(() => {});
       router.push(afterNewAccount());
       return;
     }
-    await setDoc(userRef, { lastLogin: new Date(), ...(a.givenName ? { name } : {}) }, { merge: true });
+    try { await setDoc(userRef, { lastLogin: new Date(), ...(a.givenName ? { name } : {}) }, { merge: true }); } catch (e) { console.warn('last login', e?.code || e?.message); }
     afterSignIn();
     router.push(afterLogin());
   } catch (error) {

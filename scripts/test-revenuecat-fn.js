@@ -11,7 +11,7 @@ const { entitlementUpdate, decideWrite, candidateUids, authOk } = require(path.j
   const subOf = (ent, subs = {}) => ({ subscriber: { entitlements: ent ? { pro: ent } : {}, subscriptions: subs } });
   const mkDeps = (subscriber, docs = { [UID]: { isPro: false } }) => {
     const writes = []; const calls = [];
-    return { writes, calls, now: NOW,
+    return { writes, calls, docs, now: NOW,
       fetch: async (url, opts) => { calls.push({ url, opts }); return { ok: true, json: async () => subscriber }; },
       io: { read: async (u) => docs[u] || null, write: async (u, d) => { writes.push({ u, d }); docs[u] = { ...docs[u], ...d }; } } };
   };
@@ -71,6 +71,28 @@ const { entitlementUpdate, decideWrite, candidateUids, authOk } = require(path.j
     const r = await sy._handler({ httpMethod: 'POST', headers: { authorization: 'Bearer good' }, body: JSON.stringify({ uid: 'attacker1234567' }) }, { ...d, verify });
     assert.equal(r.statusCode, 200); assert.deepEqual(JSON.parse(r.body), { isPro: true, plan: 'monthly', wrote: true }); assert.ok(d.calls[0].url.includes(UID)); assert.equal(d.writes[0].u, UID);
   });
+  await t('sync with an existing free doc writes isPro and does not reset Lock In', async () => {
+    const verify = async () => ({ uid: UID });
+    const d = mkDeps(subOf({ product_identifier: 'clingnote_pro_yearly', expires_date: day(300) }), { [UID]: { isPro: false, lockInEnabled: false, name: 'Ada' } });
+    const r = await sy._handler({ httpMethod: 'POST', headers: { authorization: 'Bearer good' } }, { ...d, verify });
+    assert.equal(r.statusCode, 200);
+    assert.equal(r.headers['Content-Type'], 'application/json');
+    assert.equal(JSON.parse(r.body).isPro, true);
+    assert.equal(d.writes.length, 1);
+    assert.equal(d.writes[0].d.isPro, true);
+    assert.equal(d.writes[0].d.plan, 'yearly');
+    assert.equal(d.writes[0].d.lockInEnabled, undefined);
+    assert.equal(d.docs[UID].lockInEnabled, false);
+    assert.equal(d.docs[UID].name, 'Ada');
+  });
+  await t('sync with no doc and no Apple entitlement does not create a user', async () => {
+    const verify = async () => ({ uid: UID });
+    const d = mkDeps(subOf(null), {});
+    const r = await sy._handler({ httpMethod: 'POST', headers: { authorization: 'Bearer good' } }, { ...d, verify });
+    assert.equal(r.statusCode, 200);
+    assert.deepEqual(JSON.parse(r.body), { isPro: false, plan: null, wrote: false });
+    assert.equal(d.writes.length, 0);
+  });
   await t('sync with no user doc still writes Pro and turns Lock In on', async () => {
     const verify = async () => ({ uid: UID });
     const d = mkDeps(subOf({ product_identifier: 'clingnote_pro_monthly', expires_date: day(30) }), {});
@@ -83,16 +105,35 @@ const { entitlementUpdate, decideWrite, candidateUids, authOk } = require(path.j
     const { isProDoc } = require(path.join(__dirname, '../netlify/functions/lib/requirePro'));
     assert.equal(isProDoc(d.writes[0].d, NOW), true);
   });
-  await t('client: purchase sync is not swallowed, and a 402 retries after sync', () => {
+  await t('client: purchase sync is not swallowed, and a 402 retries after sync says Pro', () => {
     const fs = require('fs');
     const iap = fs.readFileSync(path.join(__dirname, '../src/utils/iap.js'), 'utf8');
     const eh = fs.readFileSync(path.join(__dirname, '../src/composables/useEightHour.js'), 'utf8');
     const login = fs.readFileSync(path.join(__dirname, '../src/views/Login.vue'), 'utf8');
     const doc = fs.readFileSync(path.join(__dirname, '../src/utils/userDoc.js'), 'utf8');
-    assert.ok(/await syncEntitlement\(user\)/.test(iap) && /syncError/.test(iap));
-    assert.ok(/r\.status === 402 && !retried/.test(eh) && /syncEntitlement/.test(eh));
+    const pro = fs.readFileSync(path.join(__dirname, '../src/composables/usePro.js'), 'utf8');
+    const apple = fs.readFileSync(path.join(__dirname, '../src/utils/appleAuth.js'), 'utf8');
+    assert.ok(/await syncEntitlement\(user\)/.test(iap) && /syncError/.test(iap) && /entitled: active/.test(iap));
+    assert.ok(/await identifyIapUser\(user\)/.test(iap) && iap.indexOf('await identifyIapUser(user)') < iap.indexOf('purchasePackage'), 'purchase logs into the Firebase uid before the sheet');
+    assert.ok(/addCustomerInfoUpdateListener\(null,/.test(iap), 'listener is the callback form');
+    assert.ok(/r\.status === 402 && !retried/.test(eh) && /syncEntitlement/.test(eh) && /synced\.isPro === true/.test(eh), '402 retries the original request only after the server says Pro');
     assert.ok(/lockInEnabled: true/.test(login) && /lockInEnabled: true/.test(doc));
+    assert.ok(/settleNewUser/.test(login) && /user doc create failed/.test(login), 'a failed users doc write does not fail sign-in');
+    assert.ok(!/proNow\.value = false/.test(pro), 'clearing the Firestore cache must not clear RevenueCat Pro');
+    assert.ok(/sha256Hex/.test(apple) && !/crypto\.subtle/.test(apple), 'Apple nonce hash does not need crypto.subtle');
     assert.ok(/lockInEnabled === true/.test(fs.readFileSync(path.join(__dirname, '../src/utils/lockIn.js'), 'utf8')));
+  });
+  await t('customerInfo wrapper and Apple nonce hash', async () => {
+    const { customerInfoOf } = await import(path.join(__dirname, '../src/utils/customerInfo.js'));
+    const { sha256Hex } = await import(path.join(__dirname, '../src/utils/sha256.js'));
+    const info = { entitlements: { active: { pro: { productIdentifier: 'clingnote_pro_monthly' } } } };
+    assert.equal(customerInfoOf({ customerInfo: info }), info);
+    assert.equal(customerInfoOf(info), info);
+    assert.equal(customerInfoOf({ customerInfo: {} }), null);
+    assert.equal(customerInfoOf(null), null);
+    assert.equal(sha256Hex('abc'), 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
+    const subtle = Buffer.from(await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode('clingnote-nonce'))).toString('hex');
+    assert.equal(sha256Hex('clingnote-nonce'), subtle);
   });
   await t('client code never writes entitlement fields', () => {
     const fs = require('fs'); const src = fs.readFileSync(path.join(__dirname, '../src/utils/iap.js'), 'utf8'); assert.ok(!/setDoc|updateDoc|isPro\s*:/.test(src));
