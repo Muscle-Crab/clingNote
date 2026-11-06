@@ -26,32 +26,36 @@ t('estimates: computed on create, typed estimateMin never overwritten, stored va
 const tz = 'America/New_York'; const dayKey = '2026-10-23';
 const start = core.wakeInstant(dayKey, core.parseWake('07:00'), tz); const end = start + core.WINDOW_MS;
 const lock = { dayKey, dayName: 'Fri', startMs: start, endMs: end, wakeTime: '07:00', tz, earned: 40, target: 60 };
-t('shutUntil = next wake time; shut only after a started day ends; survives midnight', () => {
+t('shut flag lasts 14 days after the session end, not until the next wake', () => {
   const until = core.shutUntilMs(lock);
-  assert.strictEqual(until, core.wakeInstant('2026-10-24', core.parseWake('07:00'), tz));
+  assert.strictEqual(until, end + 14 * 24 * 3600000);
+  assert.notStrictEqual(until, core.wakeInstant('2026-10-24', core.parseWake('07:00'), tz));
   assert(!core.isShut(lock, end - 1)); assert(core.isShut(lock, end)); assert(core.isShut(lock, end + 6 * 3600000), 'still shut after midnight');
   assert(!core.isShut(lock, until)); assert(!core.isShut(null, end)); assert.strictEqual(core.nextDayKey('2026-12-31'), '2027-01-01');
+  assert.strictEqual(core.rulesShutUntilMs(lock), end, 'rules shutUntil is the session end, not the 14-day client flag');
 });
-t('guards: every task mutation refused while shut (add/edit/complete/timers), allowed again at wake', () => {
+t('guards: completions stay allowed while shut; the 14-day flag then lifts', () => {
   let now = end + 1000; lockMod.setLockSource(() => ({ lock, nowMs: now }));
   assert(lockMod.isShutdown());
-  assert.throws(() => lockMod.assertNotShut(), lockMod.isLockError);
-  assert.throws(() => lockMod.assertDayUnlocked('Sat', 'add'), lockMod.isLockError, 'any day, not only the locked one');
-  assert.throws(() => lockMod.assertPatchAllowed('Fri', { completed: true }), lockMod.isLockError, 'completion blocked');
-  assert.throws(() => lockMod.assertPatchAllowed('Sat', { timerStart: 1 }), lockMod.isLockError, 'timers blocked');
-  assert.throws(() => lockMod.assertTasksChangeAllowed('Fri', [], [{ title: 'x' }]), lockMod.isLockError);
+  lockMod.assertNotShut('Fri');
+  lockMod.assertDayUnlocked('Sat', 'add');
+  lockMod.assertPatchAllowed('Fri', { completed: true });
   now = core.shutUntilMs(lock); assert(!lockMod.isShutdown()); lockMod.assertPatchAllowed('Sat', { completed: true });
   lockMod.setLockSource(null); assert(!lockMod.isShutdown(), 'users who never started a day are never shut');
 });
 t('HomeView/useScheduledTasks/useEightHour wiring for the hard stop', () => {
   const h = read('src/views/HomeView.vue'); const c = (h.match(/if \(blockIfShut\(\)\) return/g) || []).length; assert(c >= 10, 'blockIfShut in task actions: ' + c);
+  const del = h.slice(h.indexOf('const deleteTask = async'), h.indexOf('const topIncompleteTaskIndex'));
+  assert(!/blockIfShut\(/.test(del) && !/blockIfLocked\(/.test(del), 'delete is not gated by the session');
   assert(/assertNotShut\(\)/.test(read('src/composables/useScheduledTasks.js')));
   const u = read('src/composables/useEightHour.js'); assert(/from '@\/utils\/ehLockCache'/.test(u) && /readLock\(/.test(u) && /shutdown/.test(u), 'cached lock keeps the stop across reloads (per-account cache since f4079de)');
-  const fn = read('netlify/functions/eight-hour-day.js'); assert(/shutUntil: ctx\.ts\(core\.shutUntilMs/.test(fn) && /core\.isShut\(/.test(fn));
+  const fn = read('netlify/functions/eight-hour-day.js'); assert(/shutUntil: ctx\.ts\(core\.rulesShutUntilMs/.test(fn) && /core\.isShut\(/.test(fn));
 });
-t('rules: shut day blocks weeklyRoutines writes (server time)', () => {
+t('rules: whole day doc stays frozen; task-list updates do not', () => {
   const r = read('firestore.rules'); assert(/function eightHourLock\(uid\)/.test(r));
-  assert(/function dayFrozen\(lk, dayName\)[\s\S]*?shutUntil > request\.time/.test(r)); assert(((r.match(/!dayFrozen\(eightHourLock\(/g) || []).length) >= 3);
+  assert(/function dayFrozen\(lk, dayName\)[\s\S]*?shutUntil > request\.time/.test(r));
+  assert.strictEqual((r.match(/!dayFrozen\(eightHourLock\(/g) || []).length, 2);
+  assert(/allow update: if isAuthenticated\(\) && request\.auth\.uid == routineId\.split\('_'\)\[0\];/.test(r));
 });
 
 t('settleDay: met => xp/coins/shield/badge; missed => coin penalty, shield saves streak at >=50%, warning after 3', () => {
@@ -97,7 +101,7 @@ t('pill state: countdown + target running, "Starts X" before, hidden with no pla
 });
 t('App/Card/Manager wiring', () => {
   assert(/<EightHourChrome \/>/.test(read('src/App.vue')));
-  const ch = read('src/components/eighthour/EightHourChrome.vue'); assert(/eh-shutdown/.test(ch) && /Come back tomorrow at/.test(ch) && /signOut/.test(ch) && /safe-area-inset-top/.test(ch));
+  const ch = read('src/components/eighthour/EightHourChrome.vue'); assert(/eh-shutdown/.test(ch) && /Start next session/.test(ch) && /signOut/.test(ch) && /safe-area-inset-top/.test(ch));
   const card = read('src/components/home/EightHourCard.vue'); assert(/eh-drain/.test(card) && /eh-history/.test(card) && /v-if="alert"/.test(card));
   const mv = read('src/views/ManagerView.vue'); assert(/managerAward/.test(mv) && /award\.eligible/.test(mv));
   assert(/data-test="est-chips"/.test(read('src/components/home/TaskCard.vue')));

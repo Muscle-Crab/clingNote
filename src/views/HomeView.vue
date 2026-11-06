@@ -140,6 +140,7 @@
       <!-- ─── Task List ─── -->
       <section v-if="canViewSelectedDayTasks" id="home-tasks"
                class="task-section">
+        <p v-if="dayLoadError" class="day-load-error" data-test="day-load-error" role="alert">{{ dayLoadError }}</p>
         <GamePlanRow v-if="gpOn && isViewingToday" :text="gpText" :phase="gpPhase.phase" :review="gpReview"
                      :locked="hardLocked || gpGate" :gate="gpGate" :friend="(gp.friend && gp.friend.name) || ''" :friend-on="gp.friendUnlock" :unlock="gpUnlock" :penalty="gpPenaltyToday" :after-close="gpEarned.afterClose"
                      :break-bank="gpBank" :break-min="gpBreakStatus.min || 10" :gift="gpGift" :history="gpHistory" :break-on="gpPhase.phase === 'break'" :screen-ready="strictReadyMin" :ready="gpReady" :vault="gpVault" :points-goal="dayRequiredPts || 0"
@@ -248,6 +249,7 @@ import { useTaskViewPrefs } from '@/composables/useTaskViewPrefs';
 import { viewTasks, canReorder, applyManualOrder, normalizePrefs, visibleCount, shouldHandleShortcut } from '@/utils/taskView';
 import { ACTIVE_CAP, taskKey, activeCount, loadSummary, buildSchedule } from '@/utils/taskPlanning';
 import { localYMD, localYMDOffset, isStaleCompletion, pruneStaleDay } from '@/utils/localDate';
+import { clearExpiredTimers, timersChanged, withoutTask, deleteFailureMessage, dayReadFailure, tasksFromSnapshot } from '@/utils/dayList';
 import { getTodayId, formatSessionTime, getCurrentDate, formatTime, isToday } from '@/utils/dateTime';
 import { badges } from '@/utils/gamification';
 import { recordMonthlyToggle, awardFinishedMonth } from '@/composables/useMonthlyStats';
@@ -1118,6 +1120,8 @@ const currentDate = computed(() => {
 let weeklyRoutines = [];
 
 let fetchSeq = 0; // rapid day switching: only the latest fetch may write the routine
+const dayLoadError = ref('');
+const dayWriteHold = new Set(); // task keys whose delete write has not settled; the listener must not replace the list
 const fetchSelectedDayRoutine = async () => {
   if (!userId.value || selectedDayIndex.value === -1) return;
   const seq = ++fetchSeq;
@@ -1136,6 +1140,16 @@ const fetchSelectedDayRoutine = async () => {
       // previous week -> incomplete again. Completions from the current occurrence (e.g. today) are never touched.
       // (The old check compared data.json's empty `date` with a UTC getTodayDate(), so it never ran.)
       const dayIdx = selectedDayIndex.value;
+      const nowMs = Date.now();
+      if (timersChanged(tasks, clearExpiredTimers(tasks, nowMs))) {
+        const cleared = clearExpiredTimers(tasks, nowMs);
+        try { tasks = await mutateDay(selectedDay.day, (live) => clearExpiredTimers(live, nowMs)); }
+        catch (e) {
+          console.warn('expired timer clear skipped:', e && (e.code || e.message));
+          tasks = cleared; // still drop the dead timer locally so a stuck timerActive cannot keep focus running
+        }
+        if (seq !== fetchSeq) return;
+      }
       if (!isDayLocked(selectedDay.day) && tasks.some((t) => isStaleCompletion(t, dayIdx))) { // (8-hour locked day is never reset)
         if (seq !== fetchSeq) return; // stale: no reset write for a day that is no longer selected
         const now = new Date();
@@ -1149,12 +1163,14 @@ const fetchSelectedDayRoutine = async () => {
       }
 
       selectedDayRoutine.value = tasks;
+      dayLoadError.value = '';
     } else {
       selectedDayRoutine.value = [];
+      dayLoadError.value = '';
     }
   } catch (error) {
     console.error('Error fetching tasks for the selected day:', error);
-    if (seq === fetchSeq) selectedDayRoutine.value = [];
+    if (seq === fetchSeq) dayLoadError.value = dayReadFailure(error, (selectedDayRoutine.value || []).length > 0);
   }
 };
 
@@ -1261,19 +1277,17 @@ const sortedSelectedDayRoutine = computed(() => {
 });
 
 const deleteTask = async (index, { skipConfirm = false } = {}) => { // skipConfirm: the assistant already showed its own confirm card
-  if (blockIfShut()) return false;
-  if (blockIfLocked()) return false;
+  // Delete is allowed in every session state, including a running lock-in and after it ends. Other actions keep their own gates.
   gateCache = null; gatePrefetch = null; pendingAdds.clear(); // a deleted task frees its slot under the daily limit (next check refetches)
   const confirmed = skipConfirm || confirm("Are you sure you want to delete this task?");
-  if (!confirmed) return;
+  if (!confirmed) return false;
   const dayName = days[selectedDayIndex.value].day;
-  const selectedDayDocRef = doc(db, 'weeklyRoutines', `${userId.value}_${dayName}`);
   const target = selectedDayRoutine.value[index];
-
+  if (!target || !userId.value) return false;
   try {
     // Tasks created for several weekdays (Daily / ticked days) are separate copies sharing createdAt+title: offer to remove them all.
     let alsoDays = [];
-    if (target && target.type === 'recurring' && target.createdAt) {
+    if (target.type === 'recurring' && target.createdAt) {
       const byDay = {};
       await Promise.all(days.map(async (d) => { if (d.day !== dayName) byDay[d.day] = await loadDayTasks(userId.value, d.day); }));
       alsoDays = seriesDays(byDay, target, dayName);
@@ -1282,24 +1296,27 @@ const deleteTask = async (index, { skipConfirm = false } = {}) => { // skipConfi
       confirm(`This task repeats on ${alsoDays.length} other day${alsoDays.length > 1 ? 's' : ''} (${alsoDays.join(', ')}).\n\nOK = delete it from all days\nCancel = delete only from this day`);
 
     let seriesScope = 'this';
-    if (target?.templateId && !skipConfirm) seriesScope = confirm('This task repeats.\n\nOK = delete this and all future occurrences\nCancel = delete only this one') ? 'future' : 'this';
-    if (target?.scheduledId) scheduledList.value = await mutateScheduled(userId.value, (l) => deleteTaskScope(l, target, seriesScope, tabDays.value[selectedDayIndex.value]?.date || getTodayId()));
-    if (target) cancelTaskNotifications(target);
-    selectedDayRoutine.value.splice(index, 1);
-    await updateDoc(selectedDayDocRef, {
-      tasks: selectedDayRoutine.value,
-      updatedAt: serverTimestamp()
-    });
-    if (removeAll) {
-      for (const d of alsoDays) {
-        const cur = await loadDayTasks(userId.value, d);
-        await updateDoc(doc(db, 'weeklyRoutines', `${userId.value}_${d}`), { tasks: withoutSeries(cur, target), updatedAt: serverTimestamp() });
+    if (target.templateId && !skipConfirm) seriesScope = confirm('This task repeats.\n\nOK = delete this and all future occurrences\nCancel = delete only this one') ? 'future' : 'this';
+    const hold = taskKey(target);
+    dayWriteHold.add(hold); // only while the write is in flight, so a confirm dialog does not freeze other tasks
+    try {
+      if (target.scheduledId) scheduledList.value = await mutateScheduled(userId.value, (l) => deleteTaskScope(l, target, seriesScope, tabDays.value[selectedDayIndex.value]?.date || getTodayId()));
+      const next = await mutateDay(dayName, (tasks) => withoutTask(tasks, (t) => sameTask(t, target)));
+      selectedDayRoutine.value = next; // UI follows the committed list, never a local splice
+      if (target) cancelTaskNotifications(target);
+      if (removeAll) {
+        for (const d of alsoDays) await mutateDay(d, (tasks) => withoutSeries(tasks, target));
       }
+      return true;
+    } finally {
+      dayWriteHold.delete(hold);
     }
-
-    console.log('Task deleted successfully');
-  } catch (error) {
-    console.error('Error deleting task:', error);
+  } catch (e) {
+    const msg = deleteFailureMessage(e);
+    console.error('Error deleting task:', e);
+    error.value = msg;
+    showNoteToast(msg, { error: true });
+    return false;
   }
 };
 // Computed property to get the index of the top-most incomplete task
@@ -1902,9 +1919,11 @@ const watchSelectedDay = () => {
   const idx = selectedDayIndex.value; const dayName = days[idx]?.day; if (!dayName) return;
   dayUnsub = onSnapshot(doc(db, 'weeklyRoutines', `${userId.value}_${dayName}`), (snap) => {
     if (snap.metadata.hasPendingWrites || snap.metadata.fromCache || idx !== selectedDayIndex.value || !snap.exists()) return;
-    const tasks = snap.data().tasks || [];
+    if (dayWriteHold.size) return; // a delete is still settling: do not put a task back or replace a different one
+    const tasks = clearExpiredTimers(snap.data().tasks || [], Date.now());
     if (tasks.some((t) => isStaleCompletion(t, idx))) return;
-    if (JSON.stringify(tasks) !== JSON.stringify(selectedDayRoutine.value || [])) selectedDayRoutine.value = tasks;
+    const next = tasksFromSnapshot(selectedDayRoutine.value || [], tasks, dayWriteHold.size > 0);
+    if (JSON.stringify(next) !== JSON.stringify(selectedDayRoutine.value || [])) selectedDayRoutine.value = next;
   }, () => {});
 };
 watch([userId, selectedDayIndex], watchSelectedDay);
@@ -4807,6 +4826,7 @@ onBeforeUnmount(() => clearInterval(coachTick));
 .rollover-banner { display: flex; align-items: center; gap: 6px; margin: 0 0 10px; padding: 10px 12px; border-radius: 14px; background: linear-gradient(90deg,#fff7ed,#fef3c7); border: 1px solid #fcd34d; }
 .rollover-banner__body { flex: 1; text-align: left; background: none; border: 0; font-weight: 600; font-size: 13.5px; color: #92400e; cursor: pointer; }
 .rollover-banner__x { background: none; border: 0; font-size: 20px; color: #92400e; cursor: pointer; padding: 0 4px; }
+.day-load-error { margin: 0 0 8px; padding: 8px 10px; border-radius: 10px; background: rgba(210, 153, 34, .16); color: var(--c-warning, #d29922); font-size: 13px; }
 .notification-popup {
   transition: opacity 0.5s ease-in-out;
 }

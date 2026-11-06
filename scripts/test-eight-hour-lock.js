@@ -79,7 +79,8 @@ lockMod.setLockSource(() => ({ lock: { dayName: 'Fri', startMs: start, endMs: en
   const home = read('src/views/HomeView.vue');
   const body = (name) => { const i = home.search(new RegExp(`const ${name} = async`)); assert.ok(i >= 0, name); const j = home.indexOf('\nconst ', i + 10); return home.slice(i, j); };
   await t('every list-changing HomeView action checks the lock', () => {
-    for (const fn of ['deleteTask', 'markTaskAsWontDo', 'undoWontDo', 'scheduleExistingTask']) assert.ok(/blockIfLocked\(/.test(body(fn)), fn);
+    for (const fn of ['markTaskAsWontDo', 'undoWontDo', 'scheduleExistingTask']) assert.ok(/blockIfLocked\(/.test(body(fn)), fn);
+    assert.ok(!/blockIfLocked\(/.test(body('deleteTask')) && !/blockIfShut\(/.test(body('deleteTask')), 'delete is allowed in every session state');
     assert.ok(/blockIfLocked\(currentDayIndex\)\s*\|\|\s*blockIfLocked\(targetDayIndex\)/.test(body('transferTask')), 'transfer checks both days');
     assert.ok(!/isDayLocked\(/.test(body('setTaskRepeat')), 'repeat edits allowed during lock-in');
     assert.ok(!/blockIfLocked\(/.test(body('updateTask')), 'edits allowed while locked');
