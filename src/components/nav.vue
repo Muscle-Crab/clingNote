@@ -32,16 +32,15 @@
       </router-link>
     </div>
 
+    <!-- Phone overlay only: a tap on the dimmed page closes the drawer. The panel itself is above this, so taps inside do not. -->
+    <button v-if="sidebarOpen && overlay" type="button" class="app-sidebar-scrim" data-test="nav-scrim" aria-label="Close menu" @click="onScrim"></button>
     <!-- Sidebar -->
     <aside :class="{ 'hidden': !sidebarOpen, 'block': sidebarOpen }"
-           class="app-sidebar fixed inset-y-0 left-0 z-50 w-64" aria-label="Main menu">
+           class="app-sidebar fixed inset-y-0 left-0 z-50 w-64" aria-label="Main menu" data-test="nav-sidebar" @click.stop>
       <div class="flex items-center justify-between p-4">
         <router-link to="/" class="flex items-center space-x-3 rtl:space-x-reverse">
           <span class="flex items-center space-x-3 rtl:space-x-reverse">
-            <picture>
-              <source type="image/webp" :srcset="navLogoWebp" />
-              <img :src="navLogo1x" :srcset="navLogoPng" width="32" height="32" class="app-nav-logo" data-test="nav-logo" alt="ClingNote logo"/>
-            </picture>
+            <img src="/app-icon-robot.png" width="32" height="32" class="app-nav-logo" data-test="nav-logo" alt="ClingNote" draggable="false"/>
             <span class="self-center text-xl font-semibold whitespace-nowrap">ClingNote</span>
           </span>
         </router-link>
@@ -144,14 +143,7 @@ import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { getMode, setMode, homeFor } from '@/utils/appMode';
 import AppStoreButton from '@/components/AppStoreButton.vue';
-import navLogo1x from '@/assets/clingnote-logo-128.png';
-import navLogo2x from '@/assets/clingnote-logo-128@2x.png';
-import navLogo3x from '@/assets/clingnote-logo-128@3x.png';
-import navLogoW1 from '@/assets/clingnote-logo-128.webp';
-import navLogoW2 from '@/assets/clingnote-logo-128@2x.webp';
-import navLogoW3 from '@/assets/clingnote-logo-128@3x.webp';
-const navLogoPng = `${navLogo1x} 1x, ${navLogo2x} 2x, ${navLogo3x} 3x`;
-const navLogoWebp = `${navLogoW1} 1x, ${navLogoW2} 2x, ${navLogoW3} 3x`;
+import { dismissSidebar } from '@/utils/sidebarDismiss';
 import { ugcHidden, isNativeIOS } from '@/utils/platform';
 const isIOS = isNativeIOS(); // iOS app: no admin About page, no Recovery Tracker (see docs/ios-app-review-notes.md)
 const hideUgc = ugcHidden(); // iOS app: no Rankings/community until report+block tools exist
@@ -182,6 +174,11 @@ const toggleSidebar = () => {
 const closeSidebar = () => {
   sidebarOpen.value = false;
 };
+// Responsive sidebar: open (and pushing the page) from 768px up, a closed overlay below; follows window resizes.
+const mq = typeof window !== 'undefined' && window.matchMedia ? window.matchMedia('(min-width: 768px)') : null;
+// Overlay (phone): the scrim is the only outside target. Wide layout keeps the sidebar pushed open, with no scrim.
+const overlay = ref(mq ? !mq.matches : (typeof window === 'undefined' || window.innerWidth < 768));
+const onScrim = () => { if (dismissSidebar({ where: 'scrim', overlay: overlay.value })) closeSidebar(); };
 
 const logout = async () => {
   try {
@@ -193,9 +190,7 @@ const logout = async () => {
   }
 };
 
-// Responsive sidebar: open (and pushing the page) from 768px up, a closed overlay below; follows window resizes.
-const mq = typeof window !== 'undefined' && window.matchMedia ? window.matchMedia('(min-width: 768px)') : null;
-const onMq = (e) => { sidebarOpen.value = e.matches; };
+const onMq = (e) => { overlay.value = !e.matches; sidebarOpen.value = e.matches; };
 const onEsc = (e) => { if (e.key === 'Escape' && !(mq && mq.matches)) sidebarOpen.value = false; };
 watch(sidebarOpen, (open) => { document.body.classList.toggle('sidebar-open', open); }, { immediate: true });
 watch(() => router.currentRoute.value.fullPath, () => { if (!(mq && mq.matches)) sidebarOpen.value = false; });
@@ -245,6 +240,7 @@ onMounted(() => {
 <style>
 /* side-nav brand icon: same continuous-corner rounding as the iOS home-screen icon (~22.37% of the side) */
 .app-nav-logo { width: 32px; height: 32px; border-radius: 7px; object-fit: cover; display: block; }
+.app-sidebar-scrim { position: fixed; inset: 0; z-index: 40; margin: 0; padding: 0; border: 0; background: rgba(4, 8, 18, .45); cursor: pointer; }
 .pl-nav-badge { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; margin-left: 8px; border-radius: 999px; background: #F87171; color: #fff; font-size: 11px; font-weight: 800; }
 .pl-nav-dot { position: absolute; top: 6px; right: 6px; width: 9px; height: 9px; border-radius: 50%; background: #F87171; box-shadow: 0 0 0 2px #070D1C; }
 /* From 768px up the open sidebar pushes the page instead of covering it; below that it is an overlay. */
