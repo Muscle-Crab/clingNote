@@ -1,5 +1,6 @@
 <template>
-  <!-- Points-vault price list (cheapest first): one slim row per chosen app, icon + points. No extra box. -->
+  <!-- Apps sit on a shelf inside the vault. Each row keeps that app's own icon. -->
+  <div class="gp-shelf" data-test="vault-shelf">
   <template v-for="a in items" :key="a.id + (a.open ? '-open' : '')">
     <p class="gp-line gp-vapp" :class="{ 'gp-vapp--open': a.open }" data-test="vault-app" :data-open="a.open ? '1' : '0'">
       <span class="gp-vico" data-test="vault-app-icon" aria-hidden="true">
@@ -8,28 +9,30 @@
         <span v-else class="gp-vletter">{{ initial(a.label) }}</span>
       </span>
       <span class="gp-vname">{{ a.label }}</span>
-      <span class="gp-vprice"><template v-if="a.awaiting || a.price == null">Awaiting Screen Time</template><template v-else><button v-if="a.buyable" type="button" class="gp-buy" data-test="vault-buy" @click="$emit('buy', a.id)">Buy</button><template v-else>{{ a.open ? 'Open' : (a.bought ? 'Bought' : '🔒') }}</template> {{ a.price }} pts · ~{{ a.tasks }} tasks<template v-if="toGo(a)"> · {{ toGo(a) }} to go</template></template></span>
+      <span class="gp-vprice"><template v-if="a.awaiting || a.price == null">Awaiting Screen Time<template v-if="a.thresholdMin != null"> · threshold on file, not used as the price</template></template><template v-else>{{ a.open ? 'Open' : '🔒' }}<template v-if="a.exact"> {{ reportMinutes(a.min) }} in the report you sent ·</template> {{ a.price }} pts · ~{{ a.tasks }} tasks<template v-if="toGo(a)"> · {{ toGo(a) }} to go</template></template></span>
     </p>
     <!-- detail (onboarding): weekly screen time + why this price, as plain lines under the app (no box) -->
     <p v-if="detail" class="gp-line gp-vsub" data-test="vault-app-week">{{ weeklyText(a) }}</p>
     <p v-if="detail" class="gp-line gp-vsub gp-vwhy" data-test="vault-app-why">{{ (why && why[a.id]) || priceWhy(a) }}</p>
   </template>
+  </div>
 </template>
 
 <script setup>
-import { weeklyText, priceWhy } from '@/utils/pointsVault';
+import { weeklyText, priceWhy, formatReportMinutes } from '@/utils/pointsVault';
 import { socialIcon } from '@/utils/socialIcons';
 const props = defineProps({ items: { type: Array, default: () => [] }, detail: { type: Boolean, default: false }, why: { type: Object, default: null }, points: { type: Number, default: 0 } });
-defineEmits(['buy']);
 const brand = (label) => socialIcon(label);
 const initial = (label) => { const s = String(label || 'App').trim(); return (s[0] || 'A').toUpperCase(); };
-const nextId = () => { const n = (props.items || []).find((a) => a && !a.bought && !a.awaiting && a.price != null); return n ? n.id : ''; };
-const toGo = (a) => (!a || a.awaiting || a.price == null || a.bought || a.open || a.buyable || a.id !== nextId() ? 0 : Math.max(0, a.price - (Number(props.points) || 0)));
+const reportMinutes = (min) => formatReportMinutes(min);
+const nextId = () => { const n = (props.items || []).find((a) => a && !a.awaiting && a.price != null && a.price > (Number(props.points) || 0)); return n ? n.id : ''; };
+const toGo = (a) => (!a || a.awaiting || a.price == null || a.open || a.id !== nextId() ? 0 : Math.max(0, a.price - (Number(props.points) || 0)));
 </script>
 
 <style scoped>
 .gp-line { margin: 0; }
-.gp-vapp { display: flex; gap: 8px; align-items: center; min-height: 28px; }
+.gp-shelf { display: grid; gap: 0; }
+.gp-vapp { display: flex; gap: 8px; align-items: center; min-height: 28px; padding: 3px 2px 7px; background-image: linear-gradient(90deg, transparent, rgba(168, 186, 222, .5) 8%, rgba(168, 186, 222, .5) 92%, transparent); background-size: 100% 1px; background-repeat: no-repeat; background-position: left bottom; }
 .gp-vico { flex: 0 0 22px; width: 22px; height: 22px; border-radius: 6px; overflow: hidden; display: grid; place-items: center; background: var(--c-border, #2a2a2e); }
 .gp-vimg, .gp-vbrand, .gp-vletter { width: 22px; height: 22px; display: grid; place-items: center; }
 .gp-vimg { object-fit: cover; border-radius: 6px; }

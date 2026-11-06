@@ -13,17 +13,23 @@
     <!-- Earned break / running break: shown on the collapsed row (no expand needed), same slim line, no box. -->
     <p v-if="breakBank > 0 && !breakOn && phase !== 'closed'" class="gp-line gp-bline" data-test="gp-break-line">Break earned: opens your apps, never costs points. <button type="button" class="gp-chip" data-test="gp-take-break" @click="$emit('take-break')">Take break ({{ Math.min(breakBank, breakMin) }}m)</button></p>
     <p v-if="breakOn" class="gp-line gp-bline" data-test="gp-break-on">Break running: all apps open, they lock again on their own. <button type="button" class="gp-chip" data-test="gp-end-break" @click="$emit('end-break')">End break now</button></p>
-    <!-- Points vault: one slim line (no box). Tap expands the price list, tap again collapses it. -->
+    <!-- Points vault: the mark is the door. The row stays the same slim line; the room inside is a shelf, not a shop table. -->
     <template v-if="vault">
-      <button type="button" class="gp-row gp-vault" data-test="vault-toggle" :aria-expanded="vaultOpen ? 'true' : 'false'" @click="vaultOpen = !vaultOpen">
-        <span class="gp-title" data-test="vault-text"><span class="gp-main">{{ vault.text }}</span></span>
-        <span class="gp-chev" aria-hidden="true">{{ vaultOpen ? '‹' : '›' }}</span>
-      </button>
-      <div v-if="vaultOpen" class="gp-body gp-vbody" data-test="vault-body">
+      <div class="gp-head">
+        <button type="button" class="gp-vault-btn" data-test="vault-toggle" :aria-expanded="vaultOpen ? 'true' : 'false'" :aria-label="vaultOpen ? 'Close the vault' : 'Open the vault'" @click="vaultOpen = !vaultOpen">
+          <VaultMark :open="vaultOpen" />
+        </button>
+        <button type="button" class="gp-row gp-vault" data-test="vault-status" :aria-expanded="vaultOpen ? 'true' : 'false'" @click="vaultOpen = !vaultOpen">
+          <span class="gp-title" data-test="vault-text"><span class="gp-main">{{ vault.text }}</span></span>
+          <span class="gp-chev" aria-hidden="true">{{ vaultOpen ? '‹' : '›' }}</span>
+        </button>
+      </div>
+      <div v-if="vaultOpen" class="gp-vault-room" data-test="vault-body">
         <p v-if="vault.debt" class="gp-line gp-warn" data-test="vault-debt">Vault closed: a missed goal keeps apps locked until a session hits its goal.</p>
-        <p v-if="vault.awaiting" class="gp-line" data-test="vault-awaiting">No Screen Time report for {{ vault.awaiting }} app{{ vault.awaiting === 1 ? '' : 's' }}. <button type="button" class="gp-chip" data-test="vault-sync" @click="$emit('vault-sync')">Sync Screen Time</button></p>
-        <VaultApps :items="vault.items" :points="vault.points" @buy="$emit('vault-buy', $event)" />
-        <p class="gp-line" data-test="vault-time">
+        <p v-if="vault.reportNote" class="gp-line gp-vault-note" data-test="vault-report">{{ vault.reportNote }} <button type="button" class="gp-chip" data-test="vault-report-reload" @click="$emit('vault-report-reload')">Reload the report you sent</button></p>
+        <p v-if="vault.awaiting" class="gp-line gp-vault-note" data-test="vault-awaiting">No exact report for {{ vault.awaiting }} selected app{{ vault.awaiting === 1 ? '' : 's' }}. <button type="button" class="gp-chip" data-test="vault-sync" @click="$emit('vault-sync')">Sync thresholds</button></p>
+        <VaultApps :items="vault.items" :points="vault.points" />
+        <p class="gp-line gp-vault-note" data-test="vault-time">
           <template v-if="vault.live">App time running: {{ vault.liveLeftMin }} min left. <button type="button" class="gp-chip" data-test="vault-stop" @click="$emit('vault-stop')">Stop</button></template>
           <template v-else>App time left: {{ vault.leftMin }} of {{ vault.earnedMin }} min (10 pts = 5 min).<button v-if="vault.canStart" type="button" class="gp-chip gp-vgo" data-test="vault-start" @click="$emit('vault-start')">Use {{ vault.leftMin }} min</button></template>
         </p>
@@ -61,6 +67,7 @@
 
 <script setup>
 import VaultApps from '@/components/vault/VaultApps.vue';
+import VaultMark from '@/components/vault/VaultMark.vue';
 import { computed, ref } from 'vue';
 const props = defineProps({
   text: { type: String, default: '' }, phase: { type: String, default: 'work' }, review: { type: Object, default: null },
@@ -70,7 +77,7 @@ const props = defineProps({
   breakBank: { type: Number, default: 0 }, breakMin: { type: Number, default: 10 }, breakOn: { type: Boolean, default: false }, gift: { type: Boolean, default: false }, screenReady: { type: Number, default: 0 }, ready: { type: String, default: '' }, history: { type: Array, default: () => [] },
   vault: { type: Object, default: null },
 });
-defineEmits(['review', 'ask', 'share', 'take-break', 'end-break', 'claim-screen', 'vault-start', 'vault-stop', 'vault-buy', 'vault-sync']);
+defineEmits(['review', 'ask', 'share', 'take-break', 'end-break', 'claim-screen', 'vault-start', 'vault-stop', 'vault-sync', 'vault-report-reload']);
 const open = ref(false); const accepted = ref([]); const histOpen = ref(false); const vaultOpen = ref(false);
 const attn = computed(() => !!props.review || (props.friendOn && props.unlock.status === 'approved'));
 </script>
@@ -93,6 +100,9 @@ const attn = computed(() => !!props.review || (props.friendOn && props.unlock.st
 .gp-btn:disabled { opacity: .5; cursor: default; }
 .gp-ask { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .gp-vapp { display: flex; gap: 6px; align-items: baseline; } .gp-vname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .gp-vprice { opacity: .8; font-variant-numeric: tabular-nums; }
-.gp-vbody { gap: 3px; } .gp-vgo { margin-left: 6px; }
+.gp-vault-btn { flex: none; width: 32px; height: 32px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 9px; background: var(--c-accent-soft, #10204A); color: var(--c-accent-text, #5B9BFF); cursor: pointer; box-shadow: inset 0 0 0 1px rgba(91, 155, 255, .4); }
+.gp-vault-btn[aria-expanded="true"] { box-shadow: inset 0 0 0 1px rgba(91, 155, 255, .75), 0 0 10px rgba(47, 111, 255, .35); }
+.gp-vault-room { margin: 2px 2px 6px; padding: 8px 8px 6px; border-radius: 14px; display: grid; gap: 6px; background: radial-gradient(120% 80% at 50% 0%, rgba(47, 111, 255, .16), transparent 55%), linear-gradient(180deg, rgba(12, 22, 48, .92), rgba(7, 13, 28, .72)); box-shadow: inset 0 0 0 1px rgba(91, 155, 255, .22); color: var(--c-text-2, #A9B4CC); }
+.gp-vault-note { font-size: .68rem; opacity: .85; } .gp-vgo { margin-left: 6px; }
 a { color: var(--c-accent-text, #5B9BFF); }
 </style>

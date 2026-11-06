@@ -1,7 +1,8 @@
 // Points vault: the day's points are the only currency (never stats.coins, and the session goal is not reduced).
-// Apps are bought one at a time, cheapest first. Crossing a price does not open anything; Buy releases that one app.
-// Every 10 points still buys 5 min of shared app time for apps already bought.
+// A priced app opens when the day's points reach its price. Points are not spent. There is no Buy tap.
+// Every 10 points still equals 5 min of shared app time for apps the threshold has opened.
 // Pure logic (tests: scripts/test-points-vault.mjs). Native half: VaultAllow / UsageLog in ios/App/Shared/LockShared.swift.
+import { matchReport, reportNote } from './usageSnapshot.js';
 
 export const POINTS_PER_SLICE = 10; export const MIN_PER_SLICE = 5;
 // Usage buckets (minutes), mirrored by UsageLog.thresholds (clingUsage threshold events). A day's value is the bucket's lower bound.
@@ -18,72 +19,80 @@ export const avgUsage = (days, appId, todayYmd, n = AVG_DAYS) => {
 };
 export const priceOf = (min) => Math.min(PRICE_CAP, round5(BASE_PRICE + PTS_PER_MIN * Math.max(0, Number(min) || 0)));
 export const tasksFor = (price) => Math.ceil((Number(price) || 0) / PTS_PER_TASK);
-// Prices only from recorded Screen Time (avgUsage). No name guess, no 60-minute fill, no copy of another app's minutes.
-// Window: up to 7 day-keys strictly before todayYmd. The heaviest measured app (first on a tie) is ×1.5.
-// Apps with no record stay awaiting and sort after every priced app, so they cannot unlock first.
-export const priceApps = (apps, days, todayYmd) => {
+// With a user report, only a unique selected label that matches one report row is priced, from those exact minutes.
+// Those minutes are the report total (period not shown), not a daily average and not a threshold bucket.
+// With no report, a price still comes from the on-device threshold average. No name guess and no 60-minute fill.
+// The heaviest priced app (first on a tie) is ×1.5. Unpriced apps sort last and cannot unlock first.
+export const priceApps = (apps, days, todayYmd, opts = null) => {
+  const report = opts && opts.report;
+  const matched = report ? matchReport(apps, report) : new Map();
   const rows = (apps || []).map((a, i) => ({ id: a.id, label: a.label || 'App', ord: i, avg: avgUsage(days, a.id, todayYmd) }));
   rows.forEach((r) => {
-    r.awaiting = r.avg == null; r.noData = r.awaiting; r.min = r.awaiting ? null : r.avg; r.price = r.awaiting ? null : priceOf(r.min);
+    const snap = matched.get(r.id);
+    r.thresholdMin = r.avg == null ? null : r.avg;
+    if (snap) {
+      r.exact = true; r.source = 'report'; r.awaiting = false; r.noData = false; r.min = snap.minutes; r.price = priceOf(r.min);
+    } else if (report) {
+      r.exact = false; r.source = r.avg == null ? '' : 'threshold'; r.awaiting = true; r.noData = true; r.min = null; r.price = null;
+    } else {
+      r.exact = false; r.source = r.avg == null ? '' : 'threshold'; r.awaiting = r.avg == null; r.noData = r.awaiting; r.min = r.awaiting ? null : r.avg; r.price = r.awaiting ? null : priceOf(r.min);
+    }
   });
   const measured = rows.filter((r) => !r.awaiting).sort((a, b) => b.min - a.min || a.ord - b.ord);
   if (measured.length) { measured[0].boss = true; measured[0].price = Math.min(PRICE_CAP, round5(measured[0].price * BOSS_MULT)); }
   rows.sort((a, b) => (a.awaiting - b.awaiting) || (a.price - b.price) || ((a.min || 0) - (b.min || 0)) || (a.ord - b.ord));
   return rows.map((r) => ({ ...r, boss: !!r.boss, tasks: r.price == null ? null : tasksFor(r.price) }));
 };
+export const formatReportMinutes = (min) => {
+  const n = Math.max(0, Math.round(Number(min) || 0)); const h = Math.floor(n / 60); const m = n % 60;
+  if (h && m) return `${h}h ${m}m`; if (h) return `${h}h`; return `${m}m`;
+};
 export const timeEarnedMin = (points) => Math.floor(Math.max(0, Number(points) || 0) / POINTS_PER_SLICE) * MIN_PER_SLICE;
 // Minutes used today from local windows [{ startMs, endMs }] (a running window counts up to now).
 export const spentMin = (windows, nowMs) => (windows || []).reduce((s, w) => s + Math.max(0, Math.min(Number(w.endMs) || 0, nowMs) - (Number(w.startMs) || 0)), 0) / 60000;
 export const liveWindow = (windows, nowMs) => (windows || []).find((w) => w.startMs <= nowMs && nowMs < w.endMs) || null;
 
-// The whole vault for the Home line. Points only: no task-count gate. priced = today's frozen prices (computed once per day).
+// The whole vault for the Home line. Points only: no task-count gate. priced = an explicit list (tests).
 // debt = a missed-goal lock is unpaid (no vault while it is).
-// bought = ids purchased today. open = that purchase is released right now (session or focus timer running).
-// buyable = the cheapest not-yet-bought app, and only when the day's points cover its own price and the timer is running.
-// wait = the session-end delay ({ untilMs, text }): the vault stays shut until it runs out (same clock as the next session).
-export const vaultView = ({ apps = [], days = {}, todayYmd = '', points = 0, priced = null, debt = false, windows = [], nowMs = Date.now(), wait = null, bought = [], accessOpen = false } = {}) => {
+// open = the day's points have reached that app's price, and a session or focus timer is running.
+// Every priced app at or under the points opens. A higher price stays locked. Points are not spent.
+// wait = the session-end delay ({ untilMs, text }): the vault stays shut until it runs out.
+export const vaultView = ({ apps = [], days = {}, todayYmd = '', points = 0, priced = null, report = null, debt = false, windows = [], nowMs = Date.now(), wait = null, bought = [], accessOpen = false } = {}) => {
   const held = !!(wait && Number(wait.untilMs) > nowMs);
   const p = Math.max(0, Number(points) || 0);   const ids = new Set((apps || []).map((a) => a.id));
   const owned = new Set(bought || []);
   const icons = new Map((apps || []).filter((a) => a && a.icon).map((a) => [a.id, a.icon]));
-  const base = priced && priced.length ? priced.filter((a) => ids.has(a.id)) : priceApps(apps, days, todayYmd);
-  let waiting = false;
+  const base = priced && priced.length ? priced.filter((a) => ids.has(a.id)) : priceApps(apps, days, todayYmd, report ? { report } : null);
   const items = base.map((a) => {
-    const isBought = owned.has(a.id);
     const awaiting = !!(a.awaiting || a.price == null);
-    const open = isBought && !debt && !held && !!accessOpen;
-    const buyable = !awaiting && !isBought && !waiting && !debt && !held && !!accessOpen && p >= a.price;
-    if (!awaiting && !isBought) waiting = true;
-    return { ...a, awaiting, icon: a.icon || icons.get(a.id) || '', bought: isBought, open, buyable };
+    const passed = !awaiting && p >= a.price;
+    const open = passed && !debt && !held && !!accessOpen;
+    return { ...a, awaiting, icon: a.icon || icons.get(a.id) || '', bought: owned.has(a.id), open, passed, buyable: false };
   });
   const openCount = items.filter((a) => a.open).length;
-  const next = items.find((a) => !a.bought && !a.awaiting);
+  const next = items.find((a) => !a.awaiting && a.price != null && p < a.price);
   const earned = timeEarnedMin(p); const used = Math.min(earned, spentMin(windows, nowMs));
   const leftMin = Math.max(0, Math.floor(earned - used));
   const live = liveWindow(windows, nowMs);
   const liveLeftMin = live ? Math.max(0, Math.ceil((live.endMs - nowMs) / 60000)) : 0;
   const canStart = !debt && !held && openCount > 0 && !live && leftMin >= 2;
-  const boughtIds = items.filter((a) => a.bought).map((a) => a.id);
+  const boughtIds = items.filter((a) => a.open).map((a) => a.id);
   const awaiting = items.filter((a) => a.awaiting).length;
-  return { items, debt, openCount, total: items.length, awaiting, nextPrice: next ? next.price : 0, points: p, earnedMin: earned, leftMin, live: !!live, liveLeftMin, canStart, boughtIds, text: held && items.length && !debt ? `🔒 Vault · ${wait.text || 'opens after the session delay'}` : rowText({ total: items.length, openCount, next, debt, live: !!live, liveLeftMin, points: p, awaiting }), held };
-};
-// Buy the next cheapest app only. Returns the new bought-id list. Does not deduct the day's points (the session goal stays).
-export const buyApp = (view, id) => {
-  const bought = (view && view.boughtIds) || [];
-  if (!view || view.debt || view.held) return { ok: false, reason: 'closed', bought };
-  const item = (view.items || []).find((a) => a && a.id === id);
-  if (!item || !item.buyable) return { ok: false, reason: 'not-buyable', bought };
-  return { ok: true, id, bought: [...bought, id] };
+  return { items, debt, openCount, total: items.length, awaiting, nextPrice: next ? next.price : 0, points: p, earnedMin: earned, leftMin, live: !!live, liveLeftMin, canStart, boughtIds, reportNote: report ? reportNote(report) : '', text: held && items.length && !debt ? `🔒 Vault · ${wait.text || 'opens after the session delay'}` : rowText({ total: items.length, openCount, next, debt, live: !!live, liveLeftMin, points: p, awaiting }), held };
 };
 // Onboarding vault step: weekly screen time, coarse (never fake precision), and a plain-words reason for the price.
 export const weeklyText = (r) => {
   if (!r || r.awaiting || r.min == null) return 'No Screen Time report yet';
-  const h = (Number(r.min) || 0) * 7 / 60; return h < 1 ? '<1 h/week' : `~${Math.round(h)} h/week`;
+  if (r.exact || r.source === 'report') return `${formatReportMinutes(r.min)} in the Screen Time report you sent`;
+  const h = (Number(r.min) || 0) * 7 / 60; const v = h < 1 ? '<1 h/week' : `~${Math.round(h)} h/week`;
+  return `${v} (threshold, not exact)`;
 };
 export const priceWhy = (r) => {
   if (!r || r.awaiting || r.price == null) return 'Waiting for this app\'s Screen Time before a price is set.';
-  const name = /^app$/i.test(String(r.label || '').trim()) || !r.label ? 'this app' : r.label; const h = Math.max(1, Math.round((Number(r.min) || 0) * 7 / 60)); const t = tasksFor(r.price);
-  return `You spend about ${h} hour${h === 1 ? '' : 's'} a week on ${name}, so it costs ${r.price} points, about ${t} task${t === 1 ? '' : 's'}.${r.boss ? ' It\'s your biggest time sink, so it\'s priced 1.5×.' : ''}`;
+  const name = /^app$/i.test(String(r.label || '').trim()) || !r.label ? 'this app' : r.label; const t = tasksFor(r.price);
+  if (r.exact || r.source === 'report') return `The Screen Time report you sent shows ${formatReportMinutes(r.min)} for ${name}, so it costs ${r.price} points, about ${t} task${t === 1 ? '' : 's'}.${r.boss ? ' It is the highest in that report, so it is priced 1.5×.' : ''} The report did not show its time period.`;
+  const h = Math.max(1, Math.round((Number(r.min) || 0) * 7 / 60));
+  return `Recorded thresholds average about ${h} hour${h === 1 ? '' : 's'} a week on ${name}, so it costs ${r.price} points, about ${t} task${t === 1 ? '' : 's'}.${r.boss ? ' It\'s your biggest time sink, so it\'s priced 1.5×.' : ''} This is a threshold, not an exact minute total.`;
 };
 export const costText = (price) => `${price} pts · ~${tasksFor(price)} tasks`;
 export const rowText = ({ total, openCount, next, debt, live, liveLeftMin, points = 0, awaiting = 0 }) => {
@@ -92,7 +101,7 @@ export const rowText = ({ total, openCount, next, debt, live, liveLeftMin, point
   if (!next && awaiting === total) return '🔒 Vault · no Screen Time report yet';
   const icon = openCount ? '🔓' : '🔒';
   const need = next ? Math.max(0, next.price - (Number(points) || 0)) : 0;
-  const tail = live ? ` · ${liveLeftMin} min left` : next ? (next.buyable ? ` · buy next for ${next.price} pts (~${tasksFor(next.price)} tasks)` : ` · ${need} pts to go · next app at ${next.price} pts (~${tasksFor(next.price)} tasks)`) : (openCount === total ? ' · all open' : ' · timer off');
+  const tail = live ? ` · ${liveLeftMin} min left` : next ? ` · ${need} pts to go · next app at ${next.price} pts (~${tasksFor(next.price)} tasks)` : (openCount ? (openCount === total ? ' · all open' : ' · priced apps open') : ' · timer off');
   return `${icon} Vault · ${openCount} of ${total} open${tail}`;
 };
 export const unlockText = (label) => `Vault unlocked: ${label} 🎉`;

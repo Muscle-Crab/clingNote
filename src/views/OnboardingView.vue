@@ -136,6 +136,7 @@ import RobotCoach from '@/components/robot/RobotCoach.vue';
 import VaultApps from '@/components/vault/VaultApps.vue';
 import { askAiQuiet } from '@/composables/useAi';
 import { vaultView } from '@/utils/pointsVault';
+import { adoptSentReport, sentReport } from '@/utils/usageSnapshot';
 import { localDateStr } from '@/utils/streak';
 
 // 'alarm' (iOS app only): optional wake-up alarm opt-in right after the day-start step. index STEPS.length = paywall
@@ -177,10 +178,11 @@ const ctaLabel = computed(() => (busy.value && STEPS[step.value] === 'applock' ?
 const vaultItems = ref([]); const vaultWhy = ref(null);
 // AI wording of each price (server task 'vault_why'); only when AI consent was already given (never prompts here). Any failure keeps the template line.
 const explainVault = async (items) => {
-  const apps = (items || []).filter((r) => r && r.price != null && r.min != null).map((r) => ({ id: r.id, label: r.label, hoursPerWeek: Math.max(1, Math.round(r.min * 7 / 60)), price: r.price, tasks: r.tasks, estimate: false, boss: !!r.boss }));
+  const apps = (items || []).filter((r) => r && r.price != null && r.min != null && !r.exact).map((r) => ({ id: r.id, label: r.label, hoursPerWeek: Math.max(1, Math.round(r.min * 7 / 60)), price: r.price, tasks: r.tasks, estimate: false, boss: !!r.boss }));
   if (!apps.length) return;
   const d = await askAiQuiet('vault_why', { apps }); if (d && d.lines) vaultWhy.value = d.lines; };
-const loadVault = async () => { try { const u = await clingLock.vaultUsage(); vaultItems.value = vaultView({ apps: (u && u.apps) || [], days: (u && u.days) || {}, todayYmd: localDateStr(), points: 0 }).items; explainVault(vaultItems.value); } catch (e) { vaultItems.value = []; } };
+const vaultReport = () => { try { return adoptSentReport(localStorage, new Date().toISOString()); } catch (e) { return sentReport(''); } };
+const loadVault = async () => { try { const u = await clingLock.vaultUsage(); vaultItems.value = vaultView({ apps: (u && u.apps) || [], days: (u && u.days) || {}, todayYmd: localDateStr(), points: 0, report: vaultReport() }).items; explainVault(vaultItems.value); } catch (e) { vaultItems.value = []; } };
 watch(step, (n) => { if (STEPS[n] === 'vault' && !vaultItems.value.length) loadVault(); }, { immediate: true });
 const toggle = (id) => { const i = a.goals.indexOf(id); i < 0 ? a.goals.push(id) : a.goals.splice(i, 1); };
 

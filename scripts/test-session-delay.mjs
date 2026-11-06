@@ -51,7 +51,6 @@ t('vault stays shut until the same delay runs out', () => {
   const v = vaultView({ apps, priced: apps, points: 500, nowMs: 9 * H, wait: w });
   assert.equal(v.canStart, false); assert.equal(v.openCount, 0); assert.equal(v.text, `🔒 Vault · ${w.text}`);
   const after = vaultView({ apps, priced: apps, points: 500, nowMs: 11 * H, wait: w, accessOpen: true });
-  assert.equal(after.openCount, 0); assert.equal(after.items[0].buyable, true);
-  assert.equal(vaultView({ apps, priced: apps, points: 500, nowMs: 11 * H, wait: w, bought: ['a'], accessOpen: true }).openCount, 1);
+  assert.equal(after.openCount, 1); assert.equal(after.points, 500);
 });
 console.log(`session-delay: ${n} passed`);
