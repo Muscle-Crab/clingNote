@@ -144,7 +144,7 @@
         <GamePlanRow v-if="gpOn && isViewingToday" :text="gpText" :phase="gpPhase.phase" :review="gpReview"
                      :locked="hardLocked || gpGate" :gate="gpGate" :friend="(gp.friend && gp.friend.name) || ''" :friend-on="gp.friendUnlock" :unlock="gpUnlock" :penalty="gpPenaltyToday" :after-close="gpEarned.afterClose"
                      :break-bank="gpBank" :break-min="gpBreakStatus.min || 10" :gift="gpGift" :history="gpHistory" :break-on="gpPhase.phase === 'break'" :screen-ready="strictReadyMin" :ready="gpReady" :vault="gpVault" :points-goal="dayRequiredPts || 0"
-                     @review="gpApplyReview" @ask="gpAsk" @share="gpShare" @take-break="gpTakeBreak" @end-break="gpEndBreak" @claim-screen="claimScreenTime" @vault-start="vaultStart" @vault-stop="vaultStop" @vault-sync="syncVault" @vault-report-reload="reloadSentReport" />
+                     @review="gpApplyReview" @ask="gpAsk" @share="gpShare" @take-break="gpTakeBreak" @end-break="gpEndBreak" @claim-screen="claimScreenTime" @vault-start="vaultStart" @vault-stop="vaultStop" @vault-sync="syncVault" @vault-report-reload="reloadSentReport" :report-text="vaultReportText" @vault-report-save="saveVaultReportText" />
         <EmptyState v-if="dayTasks.length === 0" :show-add="true" :show-templates="isViewingToday && !!userId" :day-label="isViewingToday ? '' : formatScheduledDate(viewTabDate, todayStr)" :scheduled="isViewingToday ? 0 : (scheduledCounts[viewTabDate] || 0)" @add="onAddClick" @templates="openTemplates" />
 
 
@@ -374,7 +374,7 @@ import DayStartPrompt from '@/components/eighthour/DayStartPrompt.vue';
 import { sessionApps } from '@/utils/sessionApps';
 import { debtShield, debtHoldPlan, turnOffBlocked, TURN_OFF_BLOCKED_MSG } from '@/utils/appLockDebt';
 import { vaultView, startPlan, stopWindows, unlockCelebration, freshUnlocks, focusTimerRunning, focusPaused, vaultAccessOpen, shieldBecauseTimerOff, vaultTimerPlan, vaultSessionReset } from '@/utils/pointsVault';
-import { adoptSentReport, replaceSnapshot, SENT_REPORT_ROWS, sentReport } from '@/utils/usageSnapshot';
+import { adoptSentReport, replaceSnapshot, readSnapshot, writeSnapshot, reportFromRecord, SENT_REPORT_ROWS, sentReport, formatOwnerReport, parseOwnerReport, applyOwnerReport } from '@/utils/usageSnapshot';
 import robotPng from '@/assets/assistant-robot@2x.png';
 import PointsCelebration from '@/components/home/PointsCelebration.vue';
 import { sessionGoal, overtimeStamp, overtimeInfo, overtimePoints } from '@/utils/sessionGoal';
@@ -4251,9 +4251,42 @@ const vaultAccessState = () => {
   if (focusRunning) tasks.forEach((t) => { const end = new Date(t && t.timerEndTime).getTime(); if (t && t.timerActive && !t.timerPausedAt && t.completed !== true && end > untilMs) untilMs = end; });
   return { accessOpen: vaultAccessOpen({ focusRunning, focusPaused: focusPaused(tasks), sessionRunning, sessionEnded }), untilMs };
 };
-const vaultReport = ref(sentReport(''));
-try { vaultReport.value = adoptSentReport(localStorage, new Date().toISOString()); } catch (e) { /* private mode: keep the in-memory copy */ }
-const reloadSentReport = () => { try { vaultReport.value = replaceSnapshot(localStorage, SENT_REPORT_ROWS, new Date().toISOString()); } catch (e) { vaultReport.value = sentReport(''); } };
+const vaultReport = ref(null);
+try { vaultReport.value = readSnapshot(localStorage); } catch (e) { /* private mode: hydrate fills it */ }
+const vaultReportText = computed(() => formatOwnerReport(vaultReport.value));
+const mirrorVaultReport = (report) => { if (report && report.rows && report.rows.length) clingLock.saveVaultReport(report).catch(() => {}); return report; };
+const keepVaultReport = (report) => { vaultReport.value = report; return mirrorVaultReport(report); };
+const reloadSentReport = () => {
+  const adoptedAt = new Date().toISOString();
+  try { keepVaultReport(replaceSnapshot(localStorage, SENT_REPORT_ROWS, adoptedAt)); }
+  catch (e) { keepVaultReport(sentReport(adoptedAt)); }
+};
+const saveVaultReportText = (text) => {
+  const parsed = parseOwnerReport(text);
+  if (!parsed.ok) { showNoteToast(parsed.error, { error: true }); return; }
+  const adoptedAt = new Date().toISOString();
+  let next;
+  try { next = applyOwnerReport(localStorage, parsed, adoptedAt); }
+  catch (e) { next = reportFromRecord({ ...parsed, adoptedAt }); }
+  keepVaultReport(next);
+  showNoteToast(parsed.error || 'Report saved on this device.');
+};
+const hydrateVaultReport = async () => {
+  let local = null;
+  try { local = readSnapshot(localStorage); } catch (e) { local = null; }
+  const native = await clingLock.readVaultReport();
+  const nativeReport = native && Array.isArray(native.rows) && native.rows.length ? reportFromRecord(native) : null;
+  if (nativeReport && nativeReport.rows.length && (!local || (Date.parse(nativeReport.adoptedAt) || 0) > (Date.parse(local.adoptedAt) || 0))) {
+    try { local = writeSnapshot(localStorage, nativeReport); } catch (e) { local = nativeReport; }
+  }
+  if (!local || !local.rows.length) {
+    const adoptedAt = new Date().toISOString();
+    try { local = adoptSentReport(localStorage, adoptedAt); } catch (e) { local = sentReport(adoptedAt); }
+  }
+  if (local && local.rows.length && (!nativeReport || (Date.parse(local.adoptedAt) || 0) >= (Date.parse(nativeReport.adoptedAt) || 0))) mirrorVaultReport(local);
+  vaultReport.value = local;
+};
+hydrateVaultReport();
 const gpVault = computed(() => { if (!lockAvailable() || !isViewingToday.value) return null; const gate = vaultAccessState();
   return vaultView({ apps: vaultData.value.apps || [], days: vaultData.value.days || {}, todayYmd: localDateStr(), points: dayVaultPoints.value,
     report: vaultReport.value, debt: vaultDebt.value, windows: vaultWindows.value, nowMs: vaultNow.value, wait: eh.wait && eh.wait.value, bought: vaultBought.value, accessOpen: gate.accessOpen }); });

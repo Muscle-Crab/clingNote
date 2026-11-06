@@ -6,10 +6,13 @@ import * as S from '../src/utils/usageSnapshot.js';
 let n = 0; const t = (name, fn) => { fn(); n += 1; console.log('ok -', name); };
 const today = '2026-11-03'; const week = ['2026-10-27', '2026-10-28', '2026-10-29', '2026-10-30', '2026-10-31', '2026-11-01', '2026-11-02'];
 const daysOf = (mins) => Object.fromEntries(week.map((d) => [d, { ...mins }])); // same minutes every day -> avg = bucket
-t('sample prices hit the formula', () => { for (const [m, p] of [[0, 80], [15, 110], [30, 140], [60, 200], [120, 320]]) assert.equal(V.priceOf(m), p, `${m} min`); });
+t('sample prices hit round5(30 + 2 × minutes), and a negative reading is not a price', () => {
+  for (const [m, p] of [[0, 30], [15, 60], [30, 90], [60, 150], [120, 270]]) assert.equal(V.priceOf(m), p, `${m} min`);
+  assert.equal(V.priceOf(-4), null); assert.equal(V.priceOf(Number.NaN), null);
+});
 t('boss = heaviest, round5(x1.5), capped 600', () => {
   const r = V.priceApps([{ id: 'a', label: 'App A' }, { id: 'b', label: 'App B' }], daysOf({ a: 30, b: 180 }), today);
-  assert.deepEqual(r.map((x) => [x.label, x.price, x.boss]), [['App A', 140, false], ['App B', 600, true]]);
+  assert.deepEqual(r.map((x) => [x.label, x.price, x.boss]), [['App A', 90, false], ['App B', 585, true]]);
   const big = V.priceApps([{ id: 'x', label: 'App X' }], daysOf({ x: 240 }), today); assert.equal(big[0].price, 600);
 });
 t('minutes use the bucket lower bound and the 7-day average', () => {
@@ -39,38 +42,38 @@ t('measured buckets set the ladder; crossing a price does not spend the points',
   const apps = [{ id: 'low', label: 'Low' }, { id: 'mid', label: 'Mid' }, { id: 'high', label: 'High' }, { id: 'none', label: 'None' }];
   const days = daysOf({ low: 15, mid: 30, high: 60 });
   const rows = V.priceApps(apps, days, today);
-  assert.deepEqual(rows.map((x) => [x.id, x.price, !!x.boss, !!x.awaiting]), [['low', 110, false, false], ['mid', 140, false, false], ['high', 300, true, false], ['none', null, false, true]]);
-  const v = V.vaultView({ apps, days, todayYmd: today, points: 110, accessOpen: true, nowMs: 0 });
-  assert.equal(v.points, 110); assert.equal(v.items.find((a) => a.id === 'low').open, true); assert.equal(v.items.find((a) => a.id === 'none').open, false);
+  assert.deepEqual(rows.map((x) => [x.id, x.price, !!x.boss, !!x.awaiting]), [['low', 60, false, false], ['mid', 90, false, false], ['high', 225, true, false], ['none', null, false, true]]);
+  const v = V.vaultView({ apps, days, todayYmd: today, points: 70, accessOpen: true, nowMs: 0 });
+  assert.equal(v.points, 70); assert.equal(v.items.find((a) => a.id === 'low').open, true); assert.equal(v.items.find((a) => a.id === 'none').open, false);
   assert.equal(v.items.find((a) => a.id === 'mid').open, false);
   const again = V.vaultView({ apps, days, todayYmd: today, points: v.points, accessOpen: true, nowMs: 0 });
-  assert.equal(again.points, 110); assert.equal(again.items.find((a) => a.id === 'low').open, true);
+  assert.equal(again.points, 70); assert.equal(again.items.find((a) => a.id === 'low').open, true);
 });
 t('no task gate: points open every reached app, cheapest first; copy', () => {
   const apps = [{ id: 'a', label: 'App A' }, { id: 'b', label: 'App B' }, { id: 'c', label: 'App C' }];
   const days = daysOf({ a: 10, b: 60, c: 120 });
-  let v = V.vaultView({ apps, days, todayYmd: today, points: 65, accessOpen: true, nowMs: 0 });
-  assert.equal(v.openCount, 0, '65 pts is not enough for the cheapest app');
-  assert.equal(v.text, '🔒 Vault · 0 of 3 open · 35 pts to go · next app at 100 pts (~5 tasks)');
-  v = V.vaultView({ apps, days, todayYmd: today, points: 100, accessOpen: true, nowMs: 0 });
+  let v = V.vaultView({ apps, days, todayYmd: today, points: 40, accessOpen: true, nowMs: 0 });
+  assert.equal(v.openCount, 0, '40 pts is not enough for the cheapest app');
+  assert.equal(v.text, '🔒 Vault · 0 of 3 open · 10 pts to go · next app at 50 pts (~3 tasks)');
+  v = V.vaultView({ apps, days, todayYmd: today, points: 50, accessOpen: true, nowMs: 0 });
   assert.equal(v.openCount, 1); assert.equal(v.items[0].label, 'App A'); assert.equal(v.items[1].open, false);
-  assert.equal(v.text, '🔓 Vault · 1 of 3 open · 100 pts to go · next app at 200 pts (~10 tasks)');
-  assert.equal(V.costText(200), '200 pts · ~10 tasks'); assert.equal(V.unlockText('App A'), 'Vault unlocked: App A 🎉');
-  v = V.vaultView({ apps, days, todayYmd: today, points: 200, accessOpen: true, nowMs: 0 });
-  assert.equal(v.openCount, 2); assert.equal(v.items[2].open, false); assert.equal(v.points, 200);
-  v = V.vaultView({ apps, days, todayYmd: today, points: 200, debt: true, accessOpen: true, nowMs: 0 }); assert.equal(v.openCount, 0);
+  assert.equal(v.text, '🔓 Vault · 1 of 3 open · 100 pts to go · next app at 150 pts (~8 tasks)');
+  assert.equal(V.costText(150), '150 pts · ~8 tasks'); assert.equal(V.unlockText('App A'), 'Vault unlocked: App A 🎉');
+  v = V.vaultView({ apps, days, todayYmd: today, points: 150, accessOpen: true, nowMs: 0 });
+  assert.equal(v.openCount, 2); assert.equal(v.items[2].open, false); assert.equal(v.points, 150);
+  v = V.vaultView({ apps, days, todayYmd: today, points: 150, debt: true, accessOpen: true, nowMs: 0 }); assert.equal(v.openCount, 0);
 });
-t('65 pts opens nothing; 105 opens only the cheapest', () => {
+t('25 pts opens nothing; 35 opens only the cheapest', () => {
   const apps = [0, 15, 30, 60, 120].map((m) => ({ id: 'm' + m, label: m + ' min' }));
   const days = daysOf({ m0: 0, m15: 15, m30: 30, m60: 60, m120: 120 });
   const prices = (pts) => V.vaultView({ apps, days, todayYmd: today, points: pts, accessOpen: true, nowMs: 0 });
-  let v = prices(65);
-  assert.deepEqual(v.items.map((a) => a.price), [80, 110, 140, 200, 480]);
+  let v = prices(25);
+  assert.deepEqual(v.items.map((a) => a.price), [30, 60, 90, 150, 405]);
   assert.equal(v.openCount, 0);
-  assert.equal(v.text, '🔒 Vault · 0 of 5 open · 15 pts to go · next app at 80 pts (~4 tasks)');
-  v = prices(105);
+  assert.equal(v.text, '🔒 Vault · 0 of 5 open · 5 pts to go · next app at 30 pts (~2 tasks)');
+  v = prices(35);
   assert.deepEqual(v.items.filter((a) => a.open).map((a) => a.id), ['m0']);
-  assert.equal(v.items.find((a) => a.id === 'm15').open, false); assert.equal(v.points, 105);
+  assert.equal(v.items.find((a) => a.id === 'm15').open, false); assert.equal(v.points, 35);
 });
 t('frozen daily prices win over new usage', () => {
   const apps = [{ id: 'a', label: 'App A' }]; const priced = [{ id: 'a', label: 'App A', price: 50, tasks: 3 }];
@@ -83,8 +86,8 @@ t('one celebration per app per day', () => { const v = { items: [{ id: 'a', open
 t('points release every app they have reached, and leave the next one shielded', () => {
   const apps = [{ id: 'a', label: 'App A' }, { id: 'b', label: 'App B' }];
   const days = daysOf({ a: 10, b: 60 });
-  let view = V.vaultView({ apps, days, todayYmd: today, points: 150, accessOpen: true, nowMs: 1000 });
-  assert.equal(view.items[0].open, true); assert.equal(view.items[1].open, false); assert.equal(view.points, 150);
+  let view = V.vaultView({ apps, days, todayYmd: today, points: 80, accessOpen: true, nowMs: 1000 });
+  assert.equal(view.items[0].open, true); assert.equal(view.items[1].open, false); assert.equal(view.points, 80);
   assert.ok(view.items[0].price < view.items[1].price);
   const plan = V.releasePlan({ view, already: [], nowMs: 1000, liveUntil: 0 });
   assert.deepEqual(plan.fresh, ['a']); assert.deepEqual(plan.ids, ['a']); assert.ok(plan.untilMs >= 1000 + 120000);
@@ -106,7 +109,7 @@ t('a new lock-in session clears the old list; points still open only the apps th
   const next = V.vaultSessionReset({ sessionKey: '2026-11-05#1:9000', storedKey: '2026-11-05#0:1000', bought: ['a', 'b'] });
   assert.equal(next.reset, true); assert.deepEqual(next.bought, []); assert.equal(next.sessionKey, '2026-11-05#1:9000');
   const apps = [{ id: 'a', label: 'A' }, { id: 'b', label: 'B' }];
-  const view = V.vaultView({ apps, days: daysOf({ a: 10, b: 60 }), todayYmd: today, points: 150, bought: next.bought, accessOpen: true, nowMs: 9000 });
+  const view = V.vaultView({ apps, days: daysOf({ a: 10, b: 60 }), todayYmd: today, points: 80, bought: next.bought, accessOpen: true, nowMs: 9000 });
   assert.deepEqual(view.items.filter((a) => a.open).map((a) => a.id), ['a']);
   const shield = V.vaultTimerPlan({ accessOpen: true, view, nativeLive: true, nativeIds: ['a', 'b'], nowMs: 9000 });
   assert.equal(shield.action, 'allow'); assert.deepEqual(shield.ids, ['a']);
@@ -117,7 +120,7 @@ t('a new lock-in session clears the old list; points still open only the apps th
   assert.match(plug, /sessionBegin[\s\S]{0,400}VaultAllow\.clearActive\(\)/);
 });
 t('no running timer closes a live vault; a running timer opens apps the points have reached', () => {
-  const low = V.vaultView({ apps: [{ id: 'a', label: 'A' }], days: daysOf({ a: 10 }), todayYmd: today, points: 50, accessOpen: true, nowMs: 1000 });
+  const low = V.vaultView({ apps: [{ id: 'a', label: 'A' }], days: daysOf({ a: 10 }), todayYmd: today, points: 20, accessOpen: true, nowMs: 1000 });
   assert.equal(low.openCount, 0);
   assert.equal(V.vaultTimerPlan({ accessOpen: true, view: low, nativeLive: false, nowMs: 1000 }).action, null);
   const earned = V.vaultView({ apps: [{ id: 'a', label: 'A' }], days: daysOf({ a: 10 }), todayYmd: today, points: 200, accessOpen: true, nowMs: 1000 });
@@ -146,7 +149,7 @@ t('vault rows carry the chosen app icon through frozen prices', () => {
 t('time: 10 pts = 5 min, start plan', () => { assert.equal(V.timeEarnedMin(95), 45);
   const v = V.vaultView({ apps: [{ id: 'a', label: 'A' }], days: daysOf({ a: 10 }), todayYmd: today, points: 200, accessOpen: true, nowMs: 1000 });
   assert.deepEqual(V.startPlan(v, 1000).ids, ['a']);
-  assert.equal(V.startPlan(V.vaultView({ apps: [{ id: 'a', label: 'A' }], days: daysOf({ a: 10 }), todayYmd: today, points: 50, accessOpen: true, nowMs: 1000 }), 1000), null); });
+  assert.equal(V.startPlan(V.vaultView({ apps: [{ id: 'a', label: 'A' }], days: daysOf({ a: 10 }), todayYmd: today, points: 20, accessOpen: true, nowMs: 1000 }), 1000), null); });
 t('one batched unlock celebration, native first then web fallback', () => {
   const a = [{ id: 'x', label: 'Any App', price: 50, icon: 'data:image/png;base64,xx' }, { id: 'y', label: 'Other', price: 90 }];
   assert.equal(V.unlockCelebration([]), null); assert.equal(V.unlockCelebration([a[0]]).title, 'Vault unlocked: Any App 🎉');
@@ -233,14 +236,14 @@ t('the supplied Screen Time report prices unique selected labels and leaves the 
   const days = daysOf({ ig: 240, fb: 60, ph: 60, m1: 60, m2: 60 });
   const rows = V.priceApps(apps, days, today, { report });
   assert.deepEqual(rows.filter((r) => r.price != null).map((r) => [r.id, r.min, r.price, !!r.boss, !!r.exact]), [
-    ['ig', 54, 190, false, true], ['yt', 411, 600, false, true], ['tt', 464, 600, false, true], ['wa', 473, 600, false, true], ['pg', 1150, 600, true, true],
+    ['ig', 54, 140, false, true], ['yt', 411, 600, false, true], ['tt', 464, 600, false, true], ['wa', 473, 600, false, true], ['pg', 1150, 600, true, true],
   ]);
-  for (const id of ['fb', 'ph', 'm1', 'm2']) { const row = rows.find((r) => r.id === id); assert.equal(row.price, null); assert.equal(row.exact, false); }
+  for (const id of ['fb', 'ph', 'm1', 'm2']) { const row = rows.find((r) => r.id === id); assert.equal(row.price, null); assert.equal(row.exact, false); assert.equal(row.noReading, true); assert.equal(V.weeklyText(row), 'No reading'); }
   assert.equal(rows.find((r) => r.id === 'ig').thresholdMin, 240);
   assert.equal(rows.find((r) => r.id === 'ig').icon, undefined);
   const pair = V.priceApps([{ id: 'msg', label: 'Messages' }, { id: 'pg2', label: 'PUBG MOBILE' }], {}, today, { report });
   const msg = pair.find((r) => r.id === 'msg');
-  assert.equal(msg.min, 70); assert.equal(msg.price, 220); assert.equal(msg.exact, true); assert.equal(msg.boss, false);
+  assert.equal(msg.min, 70); assert.equal(msg.price, 170); assert.equal(msg.exact, true); assert.equal(msg.boss, false);
   const dupReport = S.sentReport(''); dupReport.rows.push({ label: 'Instagram', minutes: 1 });
   assert.equal(V.priceApps([{ id: 'ig', label: 'Instagram' }], {}, today, { report: dupReport })[0].price, null);
   const v190 = V.vaultView({ apps, days, todayYmd: today, points: 190, report, accessOpen: true, nowMs: 0 });
@@ -259,6 +262,46 @@ t('the supplied Screen Time report prices unique selected labels and leaves the 
   const replaced = S.replaceSnapshot(mem, [{ label: 'Instagram', minutes: 54 }, { label: 'App', minutes: 60 }], '2026-11-06T13:00:00.000Z');
   assert.deepEqual(replaced.rows, [{ label: 'Instagram', minutes: 54 }]);
 });
+t('the real report prices observed minutes from least used up to PUBG, and an unknown app has no reading', () => {
+  const report = S.sentReport('2026-11-06T12:00:00.000Z');
+  assert.equal(report.period, null);
+  const apps = report.rows.map((r) => ({ id: r.label, label: r.label })).concat([{ id: 'fb', label: 'Facebook' }]);
+  const rows = V.priceApps(apps, {}, today, { report });
+  assert.deepEqual(rows.filter((r) => r.price != null).map((r) => [r.label, r.min, r.price]), [
+    ['ChatGPT', 37, 105], ['TestFlight', 45, 120], ['Photos', 47, 125], ['Instagram', 54, 140], ['Camera', 57, 145],
+    ['Messages', 70, 170], ['X', 86, 200], ['Maps', 110, 250], ['ClingNote', 342, 600], ['Grok Bot', 380, 600],
+    ['YouTube', 411, 600], ['TikTok', 464, 600], ['WhatsApp', 473, 600], ['PUBG MOBILE', 1150, 600],
+  ]);
+  assert.equal(rows[0].label, 'ChatGPT'); assert.equal(rows[rows.length - 2].label, 'PUBG MOBILE'); assert.equal(rows.at(-2).boss, true);
+  const fb = rows.find((r) => r.id === 'fb');
+  assert.equal(fb.noReading, true); assert.equal(fb.price, null); assert.equal(V.weeklyText(fb), 'No reading');
+  assert.match(V.priceWhy(rows.find((r) => r.label === 'ChatGPT')), /37m/);
+  assert.match(V.priceWhy(rows.find((r) => r.label === 'ChatGPT')), /not a daily average/);
+  const text = S.formatOwnerReport(report);
+  assert.match(text, /^ChatGPT 37m\n/); assert.match(text, /PUBG MOBILE 19h 10m$/);
+  const parsed = S.parseOwnerReport(text);
+  assert.equal(parsed.ok, true); assert.equal(parsed.period, null); assert.equal(parsed.rows.length, 14);
+  assert.equal(parsed.rows.find((r) => r.label === 'PUBG MOBILE').minutes, 1150);
+  assert.equal(parsed.rows.find((r) => r.label === 'WhatsApp').minutes, 473);
+  assert.equal(parsed.rows.find((r) => r.label === 'Maps').minutes, 110);
+  const withDays = S.parseOwnerReport(`period: 7 days\n${text}`);
+  assert.equal(withDays.period.days, 7);
+  const divided = V.priceApps([{ id: 'cg', label: 'ChatGPT' }, { id: 'pg', label: 'PUBG MOBILE' }], {}, today, { report: { ...report, period: withDays.period, rows: report.rows } });
+  assert.equal(divided.find((r) => r.id === 'cg').min, 37); assert.equal(divided.find((r) => r.id === 'cg').price, 40);
+  assert.equal(divided.find((r) => r.id === 'pg').min, 1150);
+  assert.equal(S.parseOwnerReport('Facebook\nNope -5').ok, false);
+  const none = V.priceApps([{ id: 'fb', label: 'Facebook' }, { id: 'ig', label: 'Instagram' }], daysOf({ fb: 60, ig: 60 }), today);
+  assert.ok(none.every((r) => r.price != null && r.noReading === false));
+  const missing = V.vaultView({ apps: [{ id: 'fb', label: 'Facebook' }], days: {}, todayYmd: today, points: 400, accessOpen: true, nowMs: 0 });
+  assert.equal(missing.items[0].price, null); assert.equal(missing.reportNote, '');
+  const home = fs.readFileSync(new URL('../src/views/HomeView.vue', import.meta.url), 'utf8');
+  const swift = fs.readFileSync(new URL('../ios/App/App/ClingLockPlugin.swift', import.meta.url), 'utf8');
+  assert.match(home, /parseOwnerReport/); assert.match(home, /saveVaultReport/);
+  assert.match(swift, /vault\.report\.v1/); assert.match(swift, /func saveVaultReport/); assert.match(swift, /func readVaultReport/);
+  const save = swift.slice(swift.indexOf('func saveVaultReport'), swift.indexOf('func startUsage'));
+  assert.doesNotMatch(save, /UsageLog\.record|forKey: "usage\.daily\.v1"/);
+  assert.match(swift.slice(swift.indexOf('func startUsage'), swift.indexOf('func vaultUsage')), /UsageLog\.ensure/);
+});
 const src = (await import('node:fs')).readFileSync(new URL('../src/utils/pointsVault.js', import.meta.url), 'utf8');
 t('no hardcoded app names in the logic', () => { assert.ok(!/pubg|instagram|youtube|tiktok/i.test(src)); });
 console.log(`points vault: ${n} passed`);
@@ -276,7 +319,7 @@ console.log(`points vault: ${n} passed`);
   assert.equal(V.weeklyText(r[0]), 'No Screen Time report yet');
   assert.match(V.priceWhy(r.find((x) => x.id === 'c')), /^Waiting for this app's Screen Time/);
   const d = { '2026-11-01': { a: 120, b: 30 }, '2026-11-02': { a: 90, b: 30 } }; const r2 = V.priceApps([{ id: 'a', label: 'TikTok' }, { id: 'b', label: 'Instagram' }], d, '2026-11-03');
-  const ig = r2.find((x) => x.id === 'b'); assert.equal(ig.price, 140); assert.equal(V.weeklyText(ig), '~4 h/week (threshold, not exact)'); assert.match(V.priceWhy(ig), /^Recorded thresholds average about 4 hours a week on Instagram, so it costs 140 points, about 7 tasks\./);
+  const ig = r2.find((x) => x.id === 'b'); assert.equal(ig.price, 90); assert.equal(V.weeklyText(ig), '~4 h/week (threshold, not exact)'); assert.match(V.priceWhy(ig), /^Recorded thresholds average about 4 hours a week on Instagram, so it costs 90 points, about 5 tasks\./);
   const { createRequire } = await import('node:module'); const { buildRequest } = createRequire(import.meta.url)('../netlify/functions/lib/aiPrompts.js');
   const q = buildRequest('vault_why', { apps: [{ id: 'a', label: 'TikTok', hoursPerWeek: 11, price: 315, tasks: 16, estimate: true, boss: true }] });
   assert.ok(q.body.messages[1].content.includes('"price":315') && /estimate/.test(q.body.messages[0].content));

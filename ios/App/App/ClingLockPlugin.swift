@@ -52,6 +52,8 @@ public class ClingLockPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "vaultState", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "startUsage", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "vaultUsage", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "readVaultReport", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "saveVaultReport", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "celebrateVault", returnType: CAPPluginReturnPromise),
     ]
 
@@ -540,7 +542,30 @@ public class ClingLockPlugin: CAPPlugin, CAPBridgedPlugin {
         let a = VaultAllow.active(); let nowMs = Date().timeIntervalSince1970 * 1000
         call.resolve(["ids": a?.ids ?? [], "untilMs": a?.until ?? 0, "live": a.map { VaultAllow.isLive(until: $0.until, nowMs: nowMs) } ?? false])
     }
+    /// Owner-supplied Screen Time rows. App Group vault.report.v1 only. Does not write usage.daily.v1 and does not read the iOS report.
+    @objc func readVaultReport(_ call: CAPPluginCall) {
+        guard #available(iOS 16.0, *) else { call.resolve(["rows": []]); return }
+        let d = LockShared.defaults?.dictionary(forKey: "vault.report.v1") ?? [:]
+        call.resolve(["adoptedAt": d["adoptedAt"] ?? "", "periodDays": d["periodDays"] ?? 0, "rows": d["rows"] ?? []])
+    }
+    @objc func saveVaultReport(_ call: CAPPluginCall) {
+        guard #available(iOS 16.0, *) else { call.resolve(["saved": false]); return }
+        var rows: [[String: Any]] = []
+        for item in call.getArray("rows") ?? [] {
+            guard let d = item as? [String: Any] else { continue }
+            let label = String(describing: d["label"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let minutes = (d["minutes"] as? NSNumber)?.intValue ?? Int(d["minutes"] as? Double ?? -1)
+            if label.isEmpty || label.lowercased() == "app" || minutes < 0 { continue }
+            rows.append(["label": label, "minutes": minutes])
+        }
+        var payload: [String: Any] = ["adoptedAt": call.getString("adoptedAt") ?? "", "rows": rows]
+        let days = call.getInt("periodDays") ?? 0
+        if days > 0 && days <= 366 { payload["periodDays"] = days }
+        LockShared.defaults?.set(payload, forKey: "vault.report.v1")
+        call.resolve(["saved": true, "count": rows.count])
+    }
     /// Starts / refreshes the daily "clingUsage" threshold monitor for the labeled apps (no-op when unchanged).
+    /// This records threshold buckets in usage.daily.v1. It does not read or replace the Screen Time report.
     @objc func startUsage(_ call: CAPPluginCall) {
         guard #available(iOS 16.0, *) else { call.resolve(["monitor": "unsupported"]); return }
         VaultCatalog.sync(selectionTokens: Self.loadSelection().applicationTokens, labeled: AppLocks.apps())

@@ -287,6 +287,7 @@ enum VaultAllow {
 enum UsageLog {
     static let activity = DeviceActivityName("clingUsage")
     static let key = "usage.daily.v1"          // ["yyyy-MM-dd": [appId: minutes]]
+    static let reportKey = "vault.report.v1"   // owner-supplied report rows. Never written by threshold events.
     static let sigKey = "usage.sig.v1"
     static let thresholds = [15, 30, 60, 120, 240]
     static let keepDays = 14

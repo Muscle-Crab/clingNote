@@ -39,7 +39,14 @@
         </header>
         <p v-if="vault.debt" class="gp-line gp-warn" data-test="vault-debt">Vault closed: a missed goal keeps apps locked until a session hits its goal.</p>
         <p v-if="vault.reportNote" class="gp-line gp-vault-note" data-test="vault-report">{{ vault.reportNote }} <button type="button" class="gp-chip" data-test="vault-report-reload" @click="$emit('vault-report-reload')">Reload the report you sent</button></p>
-        <p v-if="vault.awaiting" class="gp-line gp-vault-note" data-test="vault-awaiting">No exact report for {{ vault.awaiting }} selected app{{ vault.awaiting === 1 ? '' : 's' }}. <button type="button" class="gp-chip" data-test="vault-sync" @click="$emit('vault-sync')">Sync thresholds</button></p>
+        <p v-if="vault.reportNote && vault.awaiting" class="gp-line gp-vault-note" data-test="vault-awaiting">No reading for {{ vault.awaiting }} selected app{{ vault.awaiting === 1 ? '' : 's' }}. <button type="button" class="gp-chip" data-test="vault-sync" @click="$emit('vault-sync')">Sync thresholds</button></p>
+        <p v-else-if="vault.awaiting" class="gp-line gp-vault-note" data-test="vault-awaiting">No Screen Time report yet for {{ vault.awaiting }} selected app{{ vault.awaiting === 1 ? '' : 's' }}. <button type="button" class="gp-chip" data-test="vault-sync" @click="$emit('vault-sync')">Sync thresholds</button></p>
+        <details class="gp-report-edit" data-test="vault-report-edit">
+          <summary>Update the report on this device</summary>
+          <p class="gp-line">Paste names and times from the report. ClingNote cannot read that report by itself, and this list stays on this phone. Leave the period out when the report does not show one. An app with no line stays at no reading.</p>
+          <textarea v-model="draft" rows="8" spellcheck="false" data-test="vault-report-text" aria-label="Screen Time report"></textarea>
+          <button type="button" class="gp-chip" data-test="vault-report-save" @click="$emit('vault-report-save', draft)">Save this report</button>
+        </details>
         <VaultApps :items="vault.items" :points="vault.points" />
         <button type="button" class="vd-earn" data-test="vault-earn" @click="earnPoints">Earn more points</button>
         <p class="gp-line gp-vault-note" data-test="vault-time">
@@ -82,17 +89,19 @@
 import VaultApps from '@/components/vault/VaultApps.vue';
 import VaultMark from '@/components/vault/VaultMark.vue';
 import VaultDoor from '@/components/vault/VaultDoor.vue';
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 const props = defineProps({
   text: { type: String, default: '' }, phase: { type: String, default: 'work' }, review: { type: Object, default: null },
   locked: { type: Boolean, default: false },
   gate: { type: Boolean, default: false }, friend: { type: String, default: '' }, friendOn: { type: Boolean, default: false }, unlock: { type: Object, default: () => ({ status: '' }) },
   penalty: { type: Number, default: 0 }, afterClose: { type: Number, default: 0 }, minutes: { type: Array, default: () => [10, 20, 30] },
   breakBank: { type: Number, default: 0 }, breakMin: { type: Number, default: 10 }, breakOn: { type: Boolean, default: false }, gift: { type: Boolean, default: false },   screenReady: { type: Number, default: 0 }, ready: { type: String, default: '' }, history: { type: Array, default: () => [] },
-  vault: { type: Object, default: null }, pointsGoal: { type: Number, default: 0 },
+  vault: { type: Object, default: null }, pointsGoal: { type: Number, default: 0 }, reportText: { type: String, default: '' },
 });
-defineEmits(['review', 'ask', 'share', 'take-break', 'end-break', 'claim-screen', 'vault-start', 'vault-stop', 'vault-sync', 'vault-report-reload']);
+defineEmits(['review', 'ask', 'share', 'take-break', 'end-break', 'claim-screen', 'vault-start', 'vault-stop', 'vault-sync', 'vault-report-reload', 'vault-report-save']);
 const open = ref(false); const accepted = ref([]); const histOpen = ref(false); const vaultOpen = ref(false);
+const draft = ref('');
+watch(() => props.reportText, (v) => { draft.value = v || ''; }, { immediate: true });
 const attn = computed(() => !!props.review || (props.friendOn && props.unlock.status === 'approved'));
 const bayName = (a) => (!a || !String(a.label || '').trim() || /^app$/i.test(String(a.label).trim()) ? 'Unnamed' : a.label);
 const pricedBays = computed(() => ((props.vault && props.vault.items) || []).filter((a) => a && a.price != null));
@@ -143,6 +152,9 @@ const earnPoints = () => {
 .vd-earn { min-height: 40px; width: 100%; border: 0; border-radius: 999px; background: linear-gradient(180deg, #1ea36a, #0e7a45); color: #f4fff8; font: inherit; font-size: .85rem; font-weight: 750; cursor: pointer; box-shadow: 0 0 12px rgba(16, 160, 96, .35); }
 .vd-earn:focus-visible { outline: 2px solid #f6e2a8; outline-offset: 2px; }
 .gp-vault-note { font-size: .68rem; opacity: .85; } .gp-vgo { margin-left: 6px; }
+.gp-report-edit { font-size: .68rem; color: #d5dced; }
+.gp-report-edit summary { cursor: pointer; }
+.gp-report-edit textarea { width: 100%; box-sizing: border-box; min-height: 96px; margin: 6px 0; padding: 8px; border-radius: 8px; border: 1px solid rgba(214, 178, 94, .45); background: #0e141c; color: #e7edf8; font: inherit; font-size: .72rem; resize: vertical; }
 @media (prefers-reduced-motion: reduce) { .vd-gauge-fill { transition: none; } }
 a { color: var(--c-accent-text, #5B9BFF); }
 </style>

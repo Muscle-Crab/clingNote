@@ -51,6 +51,13 @@ export const clingLock = {
   vaultState: safe('ClingLock', Lock, (p) => p.vaultState(), { ids: [], untilMs: 0, live: false }),
   startUsage: safe('ClingLock', Lock, (p) => p.startUsage(), { monitor: 'unsupported' }),
   vaultUsage: safe('ClingLock', Lock, (p) => p.vaultUsage(), { days: {}, apps: [] }),
+  // Owner Screen Time rows, App Group vault.report.v1. Not usage.daily.v1, and not a read of the iOS report.
+  readVaultReport: safe('ClingLock', Lock, (p) => p.readVaultReport(), { rows: [] }),
+  saveVaultReport: safe('ClingLock', Lock, (p, report) => p.saveVaultReport({
+    adoptedAt: (report && report.adoptedAt) || '',
+    periodDays: (report && report.period && report.period.days) || 0,
+    rows: ((report && report.rows) || []).map((r) => ({ label: r.label, minutes: r.minutes })),
+  }), { saved: false }),
   // Vault unlock overlay with the apps' real icons (native SwiftUI Label(token)); { shown: 0 } -> web celebration.
   celebrateVault: safe('ClingLock', Lock, (p, ids, o = {}) => p.celebrateVault({ ids, ...o }), { shown: 0, missing: [] }),
   endTaskApps: safe('ClingLock', Lock, (p, taskId) => p.endTaskApps(taskId ? { taskId } : {}), { ended: false }),

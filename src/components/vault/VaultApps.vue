@@ -12,7 +12,8 @@
         <span class="gp-vname">{{ unnamed(a) ? 'Unnamed' : a.label }}</span>
         <span class="gp-vtag">{{ unnamed(a) ? 'No saved name' : (a.open ? 'Open' : (a.boss ? 'Most used' : (a.id === nextId() ? 'Next' : 'Locked'))) }}</span>
         <span class="gp-pill" :class="{ 'gp-pill--off': a.awaiting || a.price == null }">
-          <template v-if="a.awaiting || a.price == null">Not priced</template>
+          <template v-if="a.noReading">No reading</template>
+          <template v-else-if="a.awaiting || a.price == null">Not priced</template>
           <template v-else>{{ a.price }} points<template v-if="toGo(a)"> · {{ toGo(a) }} to go</template></template>
         </span>
         <p v-if="detail" class="gp-line gp-vsub" data-test="vault-app-week">{{ weeklyText(a) }}</p>
