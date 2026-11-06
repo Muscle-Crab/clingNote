@@ -8,7 +8,7 @@
         <span v-else class="gp-vletter">{{ initial(a.label) }}</span>
       </span>
       <span class="gp-vname">{{ a.label }}</span>
-      <span class="gp-vprice"><button v-if="a.buyable" type="button" class="gp-buy" data-test="vault-buy" @click="$emit('buy', a.id)">Buy</button><template v-else>{{ a.open ? 'Open' : (a.bought ? 'Bought' : '🔒') }}</template> {{ a.price }} pts · ~{{ a.tasks }} tasks<template v-if="toGo(a)"> · {{ toGo(a) }} to go</template></span>
+      <span class="gp-vprice"><template v-if="a.awaiting || a.price == null">Awaiting Screen Time</template><template v-else><button v-if="a.buyable" type="button" class="gp-buy" data-test="vault-buy" @click="$emit('buy', a.id)">Buy</button><template v-else>{{ a.open ? 'Open' : (a.bought ? 'Bought' : '🔒') }}</template> {{ a.price }} pts · ~{{ a.tasks }} tasks<template v-if="toGo(a)"> · {{ toGo(a) }} to go</template></template></span>
     </p>
     <!-- detail (onboarding): weekly screen time + why this price, as plain lines under the app (no box) -->
     <p v-if="detail" class="gp-line gp-vsub" data-test="vault-app-week">{{ weeklyText(a) }}</p>
@@ -23,8 +23,8 @@ const props = defineProps({ items: { type: Array, default: () => [] }, detail: {
 defineEmits(['buy']);
 const brand = (label) => socialIcon(label);
 const initial = (label) => { const s = String(label || 'App').trim(); return (s[0] || 'A').toUpperCase(); };
-const nextId = () => { const n = (props.items || []).find((a) => a && !a.bought); return n ? n.id : ''; };
-const toGo = (a) => (!a || a.bought || a.open || a.buyable || a.id !== nextId() ? 0 : Math.max(0, a.price - (Number(props.points) || 0)));
+const nextId = () => { const n = (props.items || []).find((a) => a && !a.bought && !a.awaiting && a.price != null); return n ? n.id : ''; };
+const toGo = (a) => (!a || a.awaiting || a.price == null || a.bought || a.open || a.buyable || a.id !== nextId() ? 0 : Math.max(0, a.price - (Number(props.points) || 0)));
 </script>
 
 <style scoped>

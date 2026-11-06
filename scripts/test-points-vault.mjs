@@ -23,10 +23,27 @@ t('order follows each user\u2019s usage, not names', () => {
 });
 t('tie for heaviest -> first in usage order is the boss', () => { const r = V.priceApps([{ id: 'a', label: 'App A' }, { id: 'b', label: 'App B' }], daysOf({ a: 60, b: 60 }), today);
   assert.equal(r.find((x) => x.boss).label, 'App A'); });
-t('no data -> median of the others, or 60 min', () => {
+t('no recorded minutes stay unpriced and do not take the 60-minute or median fill', () => {
   const r = V.priceApps([{ id: 'a', label: 'A' }, { id: 'b', label: 'B' }, { id: 'c', label: 'C' }, { id: 'n', label: 'N' }], daysOf({ a: 10, b: 30, c: 120 }), today);
-  assert.equal(r.find((x) => x.id === 'n').price, 140);
-  assert.equal(V.priceApps([{ id: 'n', label: 'N' }], {}, today)[0].price, 300); // 60 min -> 200, alone = boss x1.5
+  const n = r.find((x) => x.id === 'n');
+  assert.equal(n.awaiting, true); assert.equal(n.price, null); assert.equal(n.boss, false);
+  assert.ok(r.filter((x) => !x.awaiting).every((x) => x.price != null));
+  const none = V.priceApps([{ id: 'n', label: 'N' }, { id: 'm', label: 'M' }], {}, today);
+  assert.ok(none.every((x) => x.awaiting && x.price == null && x.tasks == null));
+  const view = V.vaultView({ apps: none.map((x) => ({ id: x.id, label: x.label })), days: {}, todayYmd: today, points: 300, accessOpen: true, nowMs: 0 });
+  assert.equal(view.awaiting, 2); assert.equal(view.text, '🔒 Vault · no Screen Time report yet');
+  assert.ok(view.items.every((x) => x.buyable === false));
+});
+t('measured buckets set the ladder; buying does not spend the points', () => {
+  const apps = [{ id: 'low', label: 'Low' }, { id: 'mid', label: 'Mid' }, { id: 'high', label: 'High' }, { id: 'none', label: 'None' }];
+  const days = daysOf({ low: 15, mid: 30, high: 60 });
+  const rows = V.priceApps(apps, days, today);
+  assert.deepEqual(rows.map((x) => [x.id, x.price, !!x.boss, !!x.awaiting]), [['low', 110, false, false], ['mid', 140, false, false], ['high', 300, true, false], ['none', null, false, true]]);
+  const v = V.vaultView({ apps, days, todayYmd: today, points: 110, accessOpen: true, nowMs: 0 });
+  assert.equal(v.points, 110); assert.equal(v.items.find((a) => a.id === 'low').buyable, true); assert.equal(v.items.find((a) => a.id === 'none').buyable, false);
+  const sale = V.buyApp(v, 'low'); assert.equal(sale.ok, true);
+  const after = V.vaultView({ apps, days, todayYmd: today, points: v.points, bought: sale.bought, accessOpen: true, nowMs: 0 });
+  assert.equal(after.points, 110); assert.equal(after.items.find((a) => a.id === 'low').open, true); assert.equal(after.items.find((a) => a.id === 'mid').buyable, false);
 });
 t('no task gate: points make the next app buyable, cheapest first; copy', () => {
   const apps = [{ id: 'a', label: 'App A' }, { id: 'b', label: 'App B' }, { id: 'c', label: 'App C' }];
@@ -151,14 +168,11 @@ console.log(`points vault: ${n} passed`);
   if (socialIcon('Duolingo') !== null) throw new Error('unknown app should fall back to letter tile');
   console.log('ok   vault pop-out social brand icons');
 }
-{ // onboarding vault step: typical estimates with no history, weekly text, price explanation, AI prompt
-  const { typicalMin } = await import('../src/utils/typicalUsage.js');
-  const r = V.priceApps([{ id: 'a', label: 'TikTok' }, { id: 'b', label: 'Instagram' }, { id: 'c', label: 'App' }], {}, '2026-11-03', typicalMin);
-  assert.equal(V.priceApps([{ id: 'a', label: 'TikTok' }], {}, '2026-11-03')[0].min, V.NO_DATA_MIN);
-  const tk = r.find((x) => x.id === 'a'); assert.equal(tk.min, 90); assert.ok(tk.boss && tk.noData); assert.equal(tk.price, Math.min(600, V.round5(V.priceOf(90) * 1.5)));
-  assert.equal(r.find((x) => x.id === 'c').min, V.NO_DATA_MIN);
-  assert.match(V.weeklyText(tk), /^~11 h\/week \(estimate, updates after a few days\)$/);
-  assert.match(V.priceWhy(r.find((x) => x.id === 'c')), /^Most people spend about 7 hours a week on this app, so/);
+{ // onboarding vault step: no history is unpriced; recorded days still explain the price
+  const r = V.priceApps([{ id: 'a', label: 'TikTok' }, { id: 'b', label: 'Instagram' }, { id: 'c', label: 'App' }], {}, '2026-11-03');
+  assert.ok(r.every((x) => x.awaiting && x.price == null));
+  assert.equal(V.weeklyText(r[0]), 'No Screen Time report yet');
+  assert.match(V.priceWhy(r.find((x) => x.id === 'c')), /^Waiting for this app's Screen Time/);
   const d = { '2026-11-01': { a: 120, b: 30 }, '2026-11-02': { a: 90, b: 30 } }; const r2 = V.priceApps([{ id: 'a', label: 'TikTok' }, { id: 'b', label: 'Instagram' }], d, '2026-11-03');
   const ig = r2.find((x) => x.id === 'b'); assert.equal(ig.price, 140); assert.equal(V.weeklyText(ig), '~4 h/week'); assert.equal(V.priceWhy(ig), 'You spend about 4 hours a week on Instagram, so it costs 140 points, about 7 tasks.');
   const { createRequire } = await import('node:module'); const { buildRequest } = createRequire(import.meta.url)('../netlify/functions/lib/aiPrompts.js');

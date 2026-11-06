@@ -143,7 +143,7 @@
         <GamePlanRow v-if="gpOn && isViewingToday" :text="gpText" :phase="gpPhase.phase" :review="gpReview"
                      :locked="hardLocked || gpGate" :gate="gpGate" :friend="(gp.friend && gp.friend.name) || ''" :friend-on="gp.friendUnlock" :unlock="gpUnlock" :penalty="gpPenaltyToday" :after-close="gpEarned.afterClose"
                      :break-bank="gpBank" :break-min="gpBreakStatus.min || 10" :gift="gpGift" :history="gpHistory" :break-on="gpPhase.phase === 'break'" :screen-ready="strictReadyMin" :ready="gpReady" :vault="gpVault"
-                     @review="gpApplyReview" @ask="gpAsk" @share="gpShare" @take-break="gpTakeBreak" @end-break="gpEndBreak" @claim-screen="claimScreenTime" @vault-start="vaultStart" @vault-stop="vaultStop" @vault-buy="buyVaultApp" />
+                     @review="gpApplyReview" @ask="gpAsk" @share="gpShare" @take-break="gpTakeBreak" @end-break="gpEndBreak" @claim-screen="claimScreenTime" @vault-start="vaultStart" @vault-stop="vaultStop" @vault-buy="buyVaultApp" @vault-sync="syncVault" />
         <EmptyState v-if="dayTasks.length === 0" :show-add="true" :show-templates="isViewingToday && !!userId" :day-label="isViewingToday ? '' : formatScheduledDate(viewTabDate, todayStr)" :scheduled="isViewingToday ? 0 : (scheduledCounts[viewTabDate] || 0)" @add="onAddClick" @templates="openTemplates" />
 
 
@@ -371,8 +371,7 @@ import { homeDay } from '@/utils/homeDay';
 import DayStartPrompt from '@/components/eighthour/DayStartPrompt.vue';
 import { sessionApps } from '@/utils/sessionApps';
 import { debtShield, debtHoldPlan, turnOffBlocked, TURN_OFF_BLOCKED_MSG } from '@/utils/appLockDebt';
-import { vaultView, startPlan, stopWindows, priceApps, newUnlocks, unlockCelebration, webFallback, focusTimerRunning, focusPaused, vaultAccessOpen, shieldBecauseTimerOff, vaultTimerPlan, buyApp, vaultSessionReset } from '@/utils/pointsVault';
-import { typicalMin } from '@/utils/typicalUsage';
+import { vaultView, startPlan, stopWindows, newUnlocks, unlockCelebration, webFallback, focusTimerRunning, focusPaused, vaultAccessOpen, shieldBecauseTimerOff, vaultTimerPlan, buyApp, vaultSessionReset } from '@/utils/pointsVault';
 import robotPng from '@/assets/assistant-robot@2x.png';
 import PointsCelebration from '@/components/home/PointsCelebration.vue';
 import { sessionGoal, overtimeStamp, overtimeInfo, overtimePoints } from '@/utils/sessionGoal';
@@ -4205,7 +4204,7 @@ const syncAppLock = async () => {
   syncVault();
 };
 // Points vault (src/utils/pointsVault.js): the day's points buy the apps the user chose, cheapest (least Screen Time) first.
-// Prices are round5(80 + 2 × average daily minutes), heaviest ×1.5, cap 600, frozen once per day. No task-count gate.
+// Prices are round5(80 + 2 × recorded daily minutes), heaviest ×1.5, cap 600, from the on-device usage log only. No task-count gate.
 // Buy releases that one app immediately, and only while the session or a focus timer is running. Otherwise the allowance is revoked and the shield comes back. Every 10 pts = 5 min of shared app time.
 // Never while a missed-goal lock is unpaid. Buying does not reduce the session goal: the price is a threshold on the day's points.
 // Tasks completed in the running session (else today) -> the N/8 cheer on the completion celebration.
@@ -4215,10 +4214,9 @@ const VAULT_WIN_KEY = 'cn.vault.windows.v1';
 const vaultLoad = () => { try { const v = JSON.parse(localStorage.getItem(VAULT_WIN_KEY) || '{}'); return v && v.day === localDateStr() ? v.windows || [] : []; } catch (e) { return []; } };
 const vaultWindows = ref(vaultLoad()); const vaultData = ref({ days: {}, apps: [] }); const vaultNow = ref(Date.now());
 const vaultSave = (w) => { vaultWindows.value = w; try { localStorage.setItem(VAULT_WIN_KEY, JSON.stringify({ day: localDateStr(), windows: w })); } catch (e) { /* ignore */ } };
-const VAULT_PRICE_KEY = 'cn.vault.prices.v1'; const VAULT_SEEN_KEY = 'cn.vault.celebrated.v1'; const VAULT_BOUGHT_KEY = 'cn.vault.bought.v1'; const VAULT_SESSION_KEY = 'cn.vault.session.v1';
+const VAULT_SEEN_KEY = 'cn.vault.celebrated.v1'; const VAULT_BOUGHT_KEY = 'cn.vault.bought.v1'; const VAULT_SESSION_KEY = 'cn.vault.session.v1';
 const dayLoad = (k) => { try { const v = JSON.parse(localStorage.getItem(k) || '{}'); return v && v.day === localDateStr() ? v.list : null; } catch (e) { return null; } };
 const daySave = (k, list) => { try { localStorage.setItem(k, JSON.stringify({ day: localDateStr(), list })); } catch (e) { /* ignore */ } };
-const vaultPriced = ref(dayLoad(VAULT_PRICE_KEY));
 const vaultBought = ref(dayLoad(VAULT_BOUGHT_KEY) || []);
 const vaultDebt = computed(() => turnOffBlocked({ debt: eh.appLockDebt.value, now: vaultNow.value, live: liveDebtSession() }));
 // Same day's points the home screen shows: size points in Coach, chip points otherwise. Not the session-only tally the shield uses for the goal.
@@ -4235,7 +4233,7 @@ const vaultAccessState = () => {
 };
 const gpVault = computed(() => { if (!lockAvailable() || !isViewingToday.value) return null; const gate = vaultAccessState();
   return vaultView({ apps: vaultData.value.apps || [], days: vaultData.value.days || {}, todayYmd: localDateStr(), points: dayVaultPoints.value,
-    priced: vaultPriced.value, debt: vaultDebt.value, windows: vaultWindows.value, nowMs: vaultNow.value, typical: typicalMin, wait: eh.wait && eh.wait.value, bought: vaultBought.value, accessOpen: gate.accessOpen }); });
+    debt: vaultDebt.value, windows: vaultWindows.value, nowMs: vaultNow.value, wait: eh.wait && eh.wait.value, bought: vaultBought.value, accessOpen: gate.accessOpen }); });
 const vaultSessionId = () => { const l = eh.lock.value; if (!eh.running.value || !l || !l.startMs) return ''; return `${l.dayKey || ''}#${Number(l.index) || 0}:${l.startMs}`; };
 const loadVaultSession = () => { try { return localStorage.getItem(VAULT_SESSION_KEY) || ''; } catch (e) { return ''; } };
 const saveVaultSession = (k) => { try { localStorage.setItem(VAULT_SESSION_KEY, k || ''); } catch (e) { /* ignore */ } };
@@ -4254,10 +4252,7 @@ const syncVault = () => { if (syncQueued) return vaultJob; syncQueued = true; re
   if (!lockAvailable()) return;
   vaultNow.value = Date.now(); if (vaultWindows.value.length && !vaultLoad().length) vaultWindows.value = []; // new day
   const savedBought = dayLoad(VAULT_BOUGHT_KEY); if (savedBought) vaultBought.value = savedBought; else if ((vaultBought.value || []).length) vaultBought.value = [];
-  const u = await clingLock.vaultUsage(); if (u && !u.error) { vaultData.value = { days: u.days || {}, apps: u.apps || [] };
-    // Prices are computed once per day (new apps picked later in the day get priced and appended).
-    const have = dayLoad(VAULT_PRICE_KEY) || []; const missing = (u.apps || []).filter((a) => !have.some((h) => h.id === a.id));
-    if (!have.length || missing.length) { const add = priceApps(have.length ? missing : u.apps || [], u.days || {}, localDateStr(), typicalMin); const list = [...have, ...add].sort((a, b) => a.price - b.price); daySave(VAULT_PRICE_KEY, list); vaultPriced.value = list; } }
+  const u = await clingLock.vaultUsage(); if (u && !u.error) vaultData.value = { days: u.days || {}, apps: u.apps || [] };
   clingLock.startUsage().catch(() => {}); // after the catalog sync inside vaultUsage, so Screen Time pings cover the chosen apps
   const stv = await clingLock.vaultState();
   const v = gpVault.value; const live = stv && stv.live; const gate = vaultAccessState();
