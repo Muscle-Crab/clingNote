@@ -148,9 +148,13 @@ t('time: 10 pts = 5 min, start plan', () => { assert.equal(V.timeEarnedMin(95), 
   assert.deepEqual(V.startPlan(v, 1000).ids, ['a']);
   assert.equal(V.startPlan(V.vaultView({ apps: [{ id: 'a', label: 'A' }], days: daysOf({ a: 10 }), todayYmd: today, points: 50, accessOpen: true, nowMs: 1000 }), 1000), null); });
 t('one batched unlock celebration, native first then web fallback', () => {
-  const a = [{ id: 'x', label: 'Any App', price: 50 }, { id: 'y', label: 'Other', price: 90 }];
+  const a = [{ id: 'x', label: 'Any App', price: 50, icon: 'data:image/png;base64,xx' }, { id: 'y', label: 'Other', price: 90 }];
   assert.equal(V.unlockCelebration([]), null); assert.equal(V.unlockCelebration([a[0]]).title, 'Vault unlocked: Any App 🎉');
-  const c = V.unlockCelebration(a); assert.equal(c.title, 'Vault unlocked: 2 apps 🎉'); assert.equal(c.sub, '90 pts reached'); assert.deepEqual(c.apps.map((x) => x.label), ['Any App', 'Other']);
+  const c = V.unlockCelebration(a); assert.equal(c.title, 'Vault unlocked: 2 apps 🎉'); assert.equal(c.sub, '90 pts reached'); assert.equal(c.ms, 1800); assert.equal(c.apps[0].icon, 'data:image/png;base64,xx'); assert.deepEqual(c.apps.map((x) => x.label), ['Any App', 'Other']);
+  const items = [{ id: 'a', open: true }, { id: 'b', open: true }, { id: 'c', open: false }];
+  assert.deepEqual(V.freshUnlocks(['a'], items, []).map((x) => x.id), ['b']);
+  assert.deepEqual(V.freshUnlocks([], items, ['a', 'b']).map((x) => x.id), []);
+  assert.equal(V.freshUnlocks(['a', 'b'], items, []).length, 0);
   assert.equal(V.webFallback(a, { shown: 0 }).length, 2); assert.equal(V.webFallback(a, null).length, 2);
   assert.deepEqual(V.webFallback(a, { shown: 1, missing: ['y'] }).map((x) => x.id), ['y']); assert.equal(V.webFallback(a, { shown: 2, missing: [] }).length, 0); });
 t('vault entry is a lock mark; app rows keep their own icons', () => {
@@ -186,6 +190,14 @@ t('vault entry is a lock mark; app rows keep their own icons', () => {
   assert.match(door, /app-icon-robot\.png/);
   assert.match(door, /prefers-reduced-motion/);
   assert.ok(!/instagram|tiktok|youtube|pubg/i.test(door + mark));
+  const pop = fs.readFileSync(new URL('../src/components/home/PointsCelebration.vue', import.meta.url), 'utf8');
+  const home = fs.readFileSync(new URL('../src/views/HomeView.vue', import.meta.url), 'utf8');
+  assert.match(pop, /data-test="vault-pop-dismiss"/);
+  assert.match(pop, /prefers-reduced-motion/);
+  assert.match(pop, />Open</);
+  assert.ok(!/15 min/.test(pop));
+  assert.match(home, /vaultUnlockArmed/);
+  assert.match(home, /freshUnlocks\(/);
   const tabs = fs.readFileSync(new URL('../src/components/shell/AppTabBar.vue', import.meta.url), 'utf8');
   assert.match(tabs, /label: 'Home'/);
   assert.match(tabs, /label: 'Profile'/);

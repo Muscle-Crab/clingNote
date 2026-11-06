@@ -109,7 +109,12 @@ export const unlockText = (label) => `Vault unlocked: ${label} 🎉`;
 // One celebration for everything that opened at once (native shows real icons; this is the web / no-token fallback).
 export const unlockTitle = (apps) => (apps.length === 1 ? unlockText(apps[0].label) : `Vault unlocked: ${apps.length} apps 🎉`);
 export const unlockCelebration = (apps) => (apps && apps.length ? { kind: 'vault', title: unlockTitle(apps), sub: `${Math.max(...apps.map((a) => Number(a.price) || 0))} pts reached`,
-  apps: apps.map((a) => ({ id: a.id, label: a.label || 'App' })), ms: 2400 + 350 * Math.min(apps.length, 6) } : null);
+  apps: apps.map((a) => ({ id: a.id, label: a.label || 'App', icon: a.icon || '' })), ms: 1800 } : null);
+// Newly open since the last view, and not already celebrated. One list, so several apps share one popup.
+export const freshUnlocks = (prevIds, items, seen) => {
+  const before = new Set(prevIds || []); const done = new Set(seen || []);
+  return (items || []).filter((a) => a && a.open && a.id && !before.has(a.id) && !done.has(a.id));
+};
 // After the native overlay (ClingLock.celebrateVault): apps it could not draw (no token / not presented) still get the web one.
 export const webFallback = (apps, res) => (res && Number(res.shown) > 0 ? (apps || []).filter((a) => (res.missing || []).includes(a.id)) : apps || []);
 export const newUnlocks = (view, seen) => (view ? view.items.filter((a) => a.open && !(seen || []).includes(a.id)) : []);
