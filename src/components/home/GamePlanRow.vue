@@ -25,6 +25,18 @@
         </button>
       </div>
       <div v-if="vaultOpen" class="gp-vault-room" data-test="vault-body">
+        <header class="vd-head" data-test="vault-door">
+          <VaultDoor :unlocked="vault.openCount > 0" :live="!!vault.live" />
+          <div class="vd-read">
+            <div class="vd-gauge" data-test="vault-gauge" role="meter" :aria-valuenow="vault.points || 0" :aria-valuemin="0" :aria-valuemax="gaugeMax" :aria-label="`Points ${vault.points || 0} of ${gaugeMax}`">
+              <span class="vd-gauge-fill" :style="{ width: gaugePct + '%' }"></span>
+              <span class="vd-gauge-label">{{ vault.points || 0 }}<template v-if="pointsGoal"> / {{ pointsGoal }}</template> pts</span>
+            </div>
+            <p v-if="cheapest" class="vd-line" data-test="vault-next">Next · {{ bayName(cheapest) }}<template v-if="cheapest.price != null"> · {{ cheapest.price }} pts</template></p>
+            <p v-if="heaviest && (!cheapest || heaviest.id !== cheapest.id)" class="vd-line" data-test="vault-last">Most used · {{ bayName(heaviest) }}</p>
+            <p v-if="breakLine" class="vd-line" data-test="vault-break">{{ breakLine }}</p>
+          </div>
+        </header>
         <p v-if="vault.debt" class="gp-line gp-warn" data-test="vault-debt">Vault closed: a missed goal keeps apps locked until a session hits its goal.</p>
         <p v-if="vault.reportNote" class="gp-line gp-vault-note" data-test="vault-report">{{ vault.reportNote }} <button type="button" class="gp-chip" data-test="vault-report-reload" @click="$emit('vault-report-reload')">Reload the report you sent</button></p>
         <p v-if="vault.awaiting" class="gp-line gp-vault-note" data-test="vault-awaiting">No exact report for {{ vault.awaiting }} selected app{{ vault.awaiting === 1 ? '' : 's' }}. <button type="button" class="gp-chip" data-test="vault-sync" @click="$emit('vault-sync')">Sync thresholds</button></p>
@@ -68,22 +80,34 @@
 <script setup>
 import VaultApps from '@/components/vault/VaultApps.vue';
 import VaultMark from '@/components/vault/VaultMark.vue';
+import VaultDoor from '@/components/vault/VaultDoor.vue';
 import { computed, ref } from 'vue';
 const props = defineProps({
   text: { type: String, default: '' }, phase: { type: String, default: 'work' }, review: { type: Object, default: null },
   locked: { type: Boolean, default: false },
   gate: { type: Boolean, default: false }, friend: { type: String, default: '' }, friendOn: { type: Boolean, default: false }, unlock: { type: Object, default: () => ({ status: '' }) },
   penalty: { type: Number, default: 0 }, afterClose: { type: Number, default: 0 }, minutes: { type: Array, default: () => [10, 20, 30] },
-  breakBank: { type: Number, default: 0 }, breakMin: { type: Number, default: 10 }, breakOn: { type: Boolean, default: false }, gift: { type: Boolean, default: false }, screenReady: { type: Number, default: 0 }, ready: { type: String, default: '' }, history: { type: Array, default: () => [] },
-  vault: { type: Object, default: null },
+  breakBank: { type: Number, default: 0 }, breakMin: { type: Number, default: 10 }, breakOn: { type: Boolean, default: false }, gift: { type: Boolean, default: false },   screenReady: { type: Number, default: 0 }, ready: { type: String, default: '' }, history: { type: Array, default: () => [] },
+  vault: { type: Object, default: null }, pointsGoal: { type: Number, default: 0 },
 });
 defineEmits(['review', 'ask', 'share', 'take-break', 'end-break', 'claim-screen', 'vault-start', 'vault-stop', 'vault-sync', 'vault-report-reload']);
 const open = ref(false); const accepted = ref([]); const histOpen = ref(false); const vaultOpen = ref(false);
 const attn = computed(() => !!props.review || (props.friendOn && props.unlock.status === 'approved'));
+const bayName = (a) => (!a || !String(a.label || '').trim() || /^app$/i.test(String(a.label).trim()) ? 'Unnamed' : a.label);
+const pricedBays = computed(() => ((props.vault && props.vault.items) || []).filter((a) => a && a.price != null));
+const cheapest = computed(() => pricedBays.value.find((a) => !a.open) || pricedBays.value[0] || null);
+const heaviest = computed(() => [...pricedBays.value].sort((a, b) => (Number(b.min) || 0) - (Number(a.min) || 0) || (b.boss ? 1 : 0) - (a.boss ? 1 : 0))[0] || null);
+const gaugeMax = computed(() => { const goal = Number(props.pointsGoal) || 0; if (goal > 0) return goal; const next = props.vault && Number(props.vault.nextPrice); return next > 0 ? next : Math.max(1, Number(props.vault && props.vault.points) || 0); });
+const gaugePct = computed(() => Math.max(0, Math.min(100, Math.round(((Number(props.vault && props.vault.points) || 0) / gaugeMax.value) * 100))));
+const breakLine = computed(() => {
+  if (props.breakOn) return 'Break running';
+  if (props.breakBank > 0) return `Break ready · ${Math.min(props.breakBank, props.breakMin)}m`;
+  return String(props.ready || '').replace(/^·\s*/, '').trim();
+});
 </script>
 
 <style scoped>
-.gp { margin: 0 0 4px; opacity: .6; } .gp:focus-within, .gp:hover { opacity: .85; }
+.gp { margin: 0 0 4px; opacity: .6; } .gp:focus-within, .gp:hover, .gp:has([data-test="vault-body"]) { opacity: 1; }
 .gp-row { width: 100%; display: flex; align-items: center; gap: 6px; min-height: 22px; padding: 0 2px; background: none; border: 0; color: var(--c-text-3, #7d7c78); font: inherit; font-size: .7rem; cursor: pointer; text-align: left; }
 .gp-link { display: block; width: 100%; text-align: left; background: none; border: 0; padding: 0; font: inherit; color: inherit; cursor: pointer; } .gp-hist { opacity: .8; }
 .gp-title { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; white-space: nowrap; } .gp-main { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; } .gp-ready { flex-shrink: 0; } /* the points never get cut: the break balance wraps to its own line when the row is full */
@@ -102,7 +126,14 @@ const attn = computed(() => !!props.review || (props.friendOn && props.unlock.st
 .gp-vapp { display: flex; gap: 6px; align-items: baseline; } .gp-vname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .gp-vprice { opacity: .8; font-variant-numeric: tabular-nums; }
 .gp-vault-btn { flex: none; width: 32px; height: 32px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 9px; background: var(--c-accent-soft, #10204A); color: var(--c-accent-text, #5B9BFF); cursor: pointer; box-shadow: inset 0 0 0 1px rgba(91, 155, 255, .4); }
 .gp-vault-btn[aria-expanded="true"] { box-shadow: inset 0 0 0 1px rgba(91, 155, 255, .75), 0 0 10px rgba(47, 111, 255, .35); }
-.gp-vault-room { margin: 2px 2px 6px; padding: 8px 8px 6px; border-radius: 14px; display: grid; gap: 6px; background: radial-gradient(120% 80% at 50% 0%, rgba(47, 111, 255, .16), transparent 55%), linear-gradient(180deg, rgba(12, 22, 48, .92), rgba(7, 13, 28, .72)); box-shadow: inset 0 0 0 1px rgba(91, 155, 255, .22); color: var(--c-text-2, #A9B4CC); }
+.gp-vault-room { margin: 2px 0 6px; padding: 8px; border-radius: 16px; display: grid; gap: 8px; max-width: 100%; overflow: hidden; box-sizing: border-box; color: var(--c-text-2, #A9B4CC); background-color: #0b1224; background-image: radial-gradient(1px 1px at 12% 18%, rgba(255,255,255,.45), transparent), radial-gradient(1px 1px at 72% 30%, rgba(255,255,255,.28), transparent), radial-gradient(1px 1px at 40% 70%, rgba(255,255,255,.2), transparent), radial-gradient(1.5px 1.5px at 86% 78%, rgba(214,178,94,.45), transparent), radial-gradient(120% 70% at 50% 0%, rgba(47,111,255,.2), transparent 58%), linear-gradient(180deg, #10192e, #070d1c); box-shadow: inset 0 0 0 1px rgba(214, 178, 94, .28), 0 8px 18px rgba(0, 0, 0, .28); }
+.vd-head { display: flex; gap: 10px; align-items: center; min-width: 0; }
+.vd-read { flex: 1; min-width: 0; display: grid; gap: 3px; }
+.vd-gauge { position: relative; height: 22px; border-radius: 11px; overflow: hidden; background: #0c1428; box-shadow: inset 0 0 0 1px rgba(214, 178, 94, .4); }
+.vd-gauge-fill { position: absolute; inset: 0 auto 0 0; width: 0; background: linear-gradient(90deg, #8a6a32, #f0e2b8); }
+.vd-gauge-label { position: relative; z-index: 1; display: flex; align-items: center; height: 100%; padding: 0 8px; font-size: .68rem; font-weight: 700; color: #f7f1df; font-variant-numeric: tabular-nums; }
+.vd-line { margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .68rem; color: var(--c-text, #F2F5FC); }
 .gp-vault-note { font-size: .68rem; opacity: .85; } .gp-vgo { margin-left: 6px; }
+@media (prefers-reduced-motion: reduce) { .vd-gauge-fill { transition: none; } }
 a { color: var(--c-accent-text, #5B9BFF); }
 </style>

@@ -142,7 +142,7 @@
                class="task-section">
         <GamePlanRow v-if="gpOn && isViewingToday" :text="gpText" :phase="gpPhase.phase" :review="gpReview"
                      :locked="hardLocked || gpGate" :gate="gpGate" :friend="(gp.friend && gp.friend.name) || ''" :friend-on="gp.friendUnlock" :unlock="gpUnlock" :penalty="gpPenaltyToday" :after-close="gpEarned.afterClose"
-                     :break-bank="gpBank" :break-min="gpBreakStatus.min || 10" :gift="gpGift" :history="gpHistory" :break-on="gpPhase.phase === 'break'" :screen-ready="strictReadyMin" :ready="gpReady" :vault="gpVault"
+                     :break-bank="gpBank" :break-min="gpBreakStatus.min || 10" :gift="gpGift" :history="gpHistory" :break-on="gpPhase.phase === 'break'" :screen-ready="strictReadyMin" :ready="gpReady" :vault="gpVault" :points-goal="dayRequiredPts || 0"
                      @review="gpApplyReview" @ask="gpAsk" @share="gpShare" @take-break="gpTakeBreak" @end-break="gpEndBreak" @claim-screen="claimScreenTime" @vault-start="vaultStart" @vault-stop="vaultStop" @vault-sync="syncVault" @vault-report-reload="reloadSentReport" />
         <EmptyState v-if="dayTasks.length === 0" :show-add="true" :show-templates="isViewingToday && !!userId" :day-label="isViewingToday ? '' : formatScheduledDate(viewTabDate, todayStr)" :scheduled="isViewingToday ? 0 : (scheduledCounts[viewTabDate] || 0)" @add="onAddClick" @templates="openTemplates" />
 

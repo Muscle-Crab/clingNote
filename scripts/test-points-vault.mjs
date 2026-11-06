@@ -167,7 +167,19 @@ t('vault entry is a lock mark; app rows keep their own icons', () => {
   assert.ok(!/width="1[0-9]{2,}|height="1[0-9]{2,}/.test(mark));
   assert.match(apps, /data-test="vault-shelf"/);
   assert.match(apps, /data-test="vault-app-icon"/);
+  assert.match(apps, /data-test="vault-climb"/);
+  assert.match(apps, /data-unnamed/);
+  assert.match(apps, /prefers-reduced-motion/);
   assert.ok(!/VaultMark|vault-mark/.test(apps));
+  const door = fs.readFileSync(new URL('../src/components/vault/VaultDoor.vue', import.meta.url), 'utf8');
+  assert.match(row, /data-test="vault-door"/);
+  assert.match(row, /data-test="vault-gauge"/);
+  assert.match(row, /data-test="vault-break"/);
+  assert.match(row, /data-test="vault-next"/);
+  assert.match(door, /v-for="n in 8"/);
+  assert.match(door, /app-icon-robot\.png/);
+  assert.match(door, /prefers-reduced-motion/);
+  assert.ok(!/instagram|tiktok|youtube|pubg/i.test(door + mark));
 });
 t('native overlay: plugin method registered, real icons via Label(token), no web icon fetch', () => {
   const sw = fs.readFileSync(new URL('../ios/App/App/ClingLockPlugin.swift', import.meta.url), 'utf8');
