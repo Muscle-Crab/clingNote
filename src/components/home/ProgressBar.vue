@@ -46,7 +46,7 @@
         <span class="streak-fx-label" data-test="streak-rank-label">{{ fxRank.name.toUpperCase() }} · DAY STREAK</span>
       </div>
       <p v-if="locked" class="foot-item foot-item--pts" data-test="pts-locked" role="button" tabindex="0" @click="$emit('pro')"><span class="coin" aria-hidden="true">★</span><strong>Points 🔒</strong></p>
-      <p v-else class="foot-item foot-item--pts"><span class="coin" aria-hidden="true">★</span><strong data-test="day-pts" :class="{ 'num-bump': bump.pts }">{{ target > 0 ? dayPtsLabel(Math.round(shownPts), target) : `${Math.round(shownPts)} pts` }}</strong></p>
+      <p v-else class="foot-item foot-item--pts"><span class="coin" aria-hidden="true">★</span><strong data-test="day-pts" :class="{ 'num-bump': bump.pts }">{{ target > 0 ? dayPtsLabel(Math.round(shownPts), target) : `${Math.round(shownPts)} pts` }}</strong><small v-if="pointsCaption" data-test="pts-caption">{{ pointsCaption }}</small><small v-if="todayPoints != null" data-test="today-pts">Today {{ todayPoints }}</small></p>
     </div>
   </div>
 </template>
@@ -80,6 +80,8 @@ const props = defineProps({
   points: { type: Number, default: 0 },
   target: { type: Number, default: 0 }, // boss day target (required); shown as earned/required
   sessionKey: { type: String, default: '' }, // a new session snaps the points, it does not tick down through the previous total
+  pointsCaption: { type: String, default: '' },
+  todayPoints: { type: Number, default: null },
   offToday: { type: Boolean, default: false }, // holiday mode: 🏖️ instead of 🔥
   hold: { type: Boolean, default: false }, // a full-screen overlay (reward/loss) is up: queue the streak level-up until it closes
   uid: { type: String, default: '' }, // last-seen plant stage / streak are remembered per user on this device

@@ -68,6 +68,9 @@ t('settleDay: met => xp/coins/shield/badge; missed => coin penalty, shield saves
   s = core.settleDay(s, { dayKey: 'd3', earned: 10, target: 60 }); assert.strictEqual(s.streak, 0); assert.strictEqual(s.lastPenalty.streakLost, true);
   s = core.settleDay(s, { dayKey: 'd4', earned: 0, target: 60 }); assert(s.warning, 'boss warning after 3 misses'); assert(s.coins >= 0, 'never negative');
   s = core.settleDay(s, { dayKey: 'd5', earned: 99, target: 60 }); assert.strictEqual(s.warning, ''); assert.strictEqual(s.missRun, 0);
+  const kept = core.settleDay({ streak: 4, coins: 10 }, { dayKey: 'd6', earned: 10, target: 200, done: 8 });
+  assert.strictEqual(kept.streak, 5, '8 completed tasks keep the streak');
+  assert.strictEqual(core.settleDay({ streak: 4, coins: 10 }, { dayKey: 'd7', earned: 10, target: 200, done: 3 }).streak, 0);
   assert(s.log.length <= 14); assert.strictEqual(core.penaltyForMiss(10, 3), 3);
 });
 

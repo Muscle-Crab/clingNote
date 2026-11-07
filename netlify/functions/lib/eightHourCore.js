@@ -29,10 +29,8 @@ const validSessionHours = (h) => { const n = Number(h); return Number.isInteger(
 const TASKS_PER_SESSION = 8;
 const SESSION_COOLDOWN_MS = 2 * 3600000;
 const sessionDone = (lock) => { if (!lock) return 0; const s = lock.session; return Number(s && s.done != null ? s.done : lock.done) || 0; };
-// Session-end delay (stacking): goal missed -> SESSION_COOLDOWN_MS (2 h) base; PLUS IMPORTANT_MISS_MS (30 min) for every IMPORTANT task
-// left unfinished at the session end (non-important misses add nothing). Goal met + important misses -> only the 30 min each.
-// "Goal" = the session's frozen points goal (session.target/earned, set at settle); a lock without a points goal falls back to main's
-// task-count rule (fewer than TASKS_PER_SESSION done). Missed = countsToward (not pending / won't-do), not active-later, not completed.
+// Next session wait: fewer than TASKS_PER_SESSION completed tasks waits 2h. Eight or more starts the next session immediately.
+// A short points goal and unfinished important tasks do not add waiting time. Those still matter for the missed-goal lock.
 const IMPORTANT_MISS_MS = 30 * 60000;
 const isImportant = (t) => !!t && (!!t.important || t.priority === 'high');
 const missedImportant = (tasks, dayKey) => (tasks || []).filter((t) => t && !t.completed && t.status !== 'pending' && t.status !== 'wontdo'
@@ -41,8 +39,8 @@ const missedImportant = (tasks, dayKey) => (tasks || []).filter((t) => t && !t.c
 const goalMissed = (lock) => { const s = (lock && lock.session) || {}; const tg = Number(s.target) || 0;
   return sessionDone(lock) < TASKS_PER_SESSION || (tg > 0 && !(Number(s.earned) >= tg)); };
 const delayParts = (lock) => { if (!lock || lock.placeholder || !lock.dayKey || !Number(lock.endMs)) return { goalMissed: false, important: 0, ms: 0 };
-  const g = goalMissed(lock); const imp = Math.max(0, Math.floor(Number(lock.session && lock.session.missedImportant) || 0));
-  return { goalMissed: g, important: imp, ms: (g ? SESSION_COOLDOWN_MS : 0) + imp * IMPORTANT_MISS_MS }; };
+  const few = sessionDone(lock) < TASKS_PER_SESSION;
+  return { goalMissed: few, important: 0, ms: few ? SESSION_COOLDOWN_MS : 0 }; };
 const fmtDur = (ms) => { const m = Math.round(ms / 60000); const h = Math.floor(m / 60); const r = m % 60; return h && r ? `${h}h ${r}m` : h ? `${h}h` : `${r}m`; };
 // '2h + 2 important × 30m' (or '2h', or '1 important × 30m').
 const delayBreakdown = ({ goalMissed: g, important: imp }) => [g ? fmtDur(SESSION_COOLDOWN_MS) : '', imp ? `${imp} important × ${fmtDur(IMPORTANT_MISS_MS)}` : ''].filter(Boolean).join(' + ');
@@ -53,7 +51,7 @@ const cooldownText = (lock, untilMs, tz) => { const d = delayParts(lock); const 
 // Live countdown line (shutdown screen + vault row): 'Next session in 3h12m · 6:30 PM (2h + 2 important × 30m)'.
 const waitText = (untilMs, nowMs, breakdown, tz) => { const left = Math.max(0, Number(untilMs) - Number(nowMs)); if (!left) return '';
   const m = Math.ceil(left / 60000); return `Next session in ${fmtDur(m * 60000)} · ${fmtCdClock(untilMs, tz)}${breakdown ? ` (${breakdown})` : ''}`; };
-const SESSION_HEADS_UP = `Hit your points goal and ${TASKS_PER_SESSION} tasks, or your next session waits ${SESSION_COOLDOWN_MS / 3600000}h, plus 30m per unfinished important task.`;
+const SESSION_HEADS_UP = `Finish ${TASKS_PER_SESSION} tasks and the next session can start right away. Fewer than ${TASKS_PER_SESSION} waits ${SESSION_COOLDOWN_MS / 3600000}h.`;
 const sessionMet = ({ earned = 0, target = 0 } = {}) => Number(target) > 0 && Number(earned) >= Number(target);
 // Session points goal: the AI (or this fallback) from the number of tasks that existed BEFORE the session was created + the chosen
 // hours; clamped to [GOAL_MIN, min(GOAL_MAX, the tasks' points)] in steps of 5 and frozen on the session's goal record at Start.
@@ -308,7 +306,9 @@ const SHIELD_MIN_RATIO = 0.5; // a shield only saves the streak when at least ha
 const settleDay = (statsIn, lock) => {
   const s = { ...defaultStats(), ...(statsIn || {}) };
   if (s.lastDay === lock.dayKey) return s; // already settled (idempotent)
-  const met = lock.target > 0 && lock.earned >= lock.target;
+  const pointsMet = lock.target > 0 && lock.earned >= lock.target;
+  const tasksKept = lock.done != null && Number(lock.done) >= TASKS_PER_SESSION;
+  const met = lock.done != null ? (tasksKept || pointsMet) : pointsMet;
   s.lastDay = lock.dayKey; s.lastResult = met ? 'met' : 'missed';
   s.lastReward = null; s.lastPenalty = null;
   if (met) {

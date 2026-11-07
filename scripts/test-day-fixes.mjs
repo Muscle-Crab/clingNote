@@ -1,7 +1,7 @@
 // Delete any time, keep the list when a day read fails, and drop dead focus timers from the widget.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { clearExpiredTimer, clearExpiredTimers, timerShownOnWidget, TIMER_OVERTIME_MS, deleteFailureMessage, writeFailureMessage, appendTask, dayReadFailure, tasksFromSnapshot, withoutTask, markTaskRemoved, visibleTasks, taskStillVisible, shorterList, sameLengthKeepsIdentity } from '../src/utils/dayList.js';
+import { clearExpiredTimer, clearExpiredTimers, timerShownOnWidget, TIMER_OVERTIME_MS, TIMER_CONNECTION_TOAST, deleteFailureMessage, writeFailureMessage, appendTask, patchTimerOnList, dayReadFailure, tasksFromSnapshot, withoutTask, markTaskRemoved, visibleTasks, taskStillVisible, shorterList, sameLengthKeepsIdentity } from '../src/utils/dayList.js';
 import { prepareVaultApps, isPlaceholderName } from '../src/utils/vaultNames.js';
 import { buildWidgetSnapshot } from '../src/utils/widgetSnapshot.js';
 import { hasRing } from '../src/utils/timerRing.js';
@@ -124,6 +124,27 @@ t('an active 7:04–1:04 session at 210/185 with a running timer still removes t
   assert.match(del, /markTaskRemoved/);
   assert.match(del, /taskStillVisible/);
   assert.equal(/strictGoal|gpGate|checklistDone/.test(del), false);
+});
+
+t('play starts the timer in place, and the connection sentence is only the offline error', () => {
+  const live = [{ id: 'a', createdAt: 'a', points: 10, title: 'Call EZ pass', scheduledFor: '2026-11-07' }];
+  const next = patchTimerOnList(live, (t) => t.id === 'a', { timerActive: true, timerStartedAt: 's', timerEndTime: 'e', timerDurationMinutes: 20, timerPausedAt: null, focusLock: false, timerPomo: null });
+  assert.equal(next[0].createdAt, 'a');
+  assert.equal(next[0].points, 10);
+  assert.equal(next[0].scheduledFor, '2026-11-07');
+  assert.equal(next[0].timerActive, true);
+  assert.equal(patchTimerOnList(live, (t) => t.id === 'missing', { timerActive: true }), null);
+  assert.equal(writeFailureMessage({ code: 'unavailable' }, 'Call EZ pass', 'start the timer for'), TIMER_CONNECTION_TOAST);
+  assert.equal(TIMER_CONNECTION_TOAST, 'Could not start the timer. Check your connection and try again.');
+  assert.notEqual(writeFailureMessage({ code: 'permission-denied' }, 'Call EZ pass', 'start the timer for'), TIMER_CONNECTION_TOAST);
+  assert.match(writeFailureMessage({ code: 'invalid-argument' }, 'Call EZ pass', 'start the timer for'), /can't be stored/);
+  const home = fs.readFileSync(new URL('../src/views/HomeView.vue', import.meta.url), 'utf8');
+  const start = home.slice(home.indexOf('const confirmDayStart'), home.indexOf('const todayTasksForTarget'));
+  assert.match(start, /await fetchSelectedDayRoutine\(\)/);
+  assert.match(start, /All done today/);
+  assert.match(start, /beginSessionGate/);
+  assert.match(home, /priceCap: sessionPriceCap/);
+  assert.match(home, /Completed today/);
 });
 
 t('a recurring add appends behind existing tasks and names a rejected save', () => {

@@ -67,7 +67,7 @@
         <DayStartPrompt v-if="dayPromptOpen" :initial-hours="eh.hoursPref.value" :now-ms="eh.nowMs" :tz="eh.plan.value?.tz || ''" :busy="ehBusy" :error="ehStartError" :tasks="todayTasksForTarget" :stats="eh.stats.value" :earned="pointsAccumulated || 0" @confirm="confirmDayStart" @skip="skipLockIn" :can-lock="lockAvailable()" :apps="sessionAppsPick" @pick-apps="pickSessionApps"><template #checkin><CheckinRow :value="checkin" @pick="saveCheckin" /></template></DayStartPrompt>
 
         <ProgressBar :locked="!proNow" @pro="gatePro(_proRouter, 'points')" :percentage="calculateCompletionPercentage()" :milestones="milestones" :done="completedTaskCount || 0" :total="dayTasks.length"
-                     :streak="streak" :streak-status="streakStatus" :streak-progress="streakProgress" :streak-min="DAILY_STREAK_MIN" :freezes="streakFreezes" :points="shownSessionPts" :target="shownSessionTarget" :session-key="sessionGateKey" :off-today="isViewingToday && offToday" :uid="userId || ''" :hold="!!rewardScreen || !!lossScreen" />
+                     :streak="streak" :streak-status="streakStatus" :streak-progress="streakProgress" :streak-min="DAILY_STREAK_MIN" :freezes="streakFreezes" :points="shownSessionPts" :target="shownSessionTarget" :session-key="sessionGateKey" :points-caption="sessionGate ? 'This session' : 'Today'" :today-points="sessionGate ? dailyPoints : null" :off-today="isViewingToday && offToday" :uid="userId || ''" :hold="!!rewardScreen || !!lossScreen" />
 
       </section>
       <ShutdownPrompt class="home-notice" :suggest="false" :open="shutdownOpen" :done="shutdownDone" :open-tasks="shutdownOpenTasks"
@@ -102,7 +102,7 @@
       <WontDoModal v-if="wontDoModalOpen" v-model:reason="wontDoReason" :strict="strictOn" @cancel="wontDoModalOpen = false" @confirm="markTaskAsWontDo" />
 
 
-      <TransferModal v-if="transferModalOpen" v-model:day="selectedTransferDay" v-model:reason="deferReason" :strict="strictOn" :carry-count="selectedDayRoutine?.[selectedTransferTaskIndex]?.carryCount || 0" :days="tabDays" :selected-day-index="selectedDayIndex" @close="closeTransferModal" @transfer="transferTask()" />
+      <TransferModal v-if="transferModalOpen" v-model:day="selectedTransferDay" :days="tabDays" :selected-day-index="selectedDayIndex" @close="closeTransferModal" @transfer="transferTask()" />
 
 
       <AddTaskModal v-if="modalOpen" :new-task="newTask" v-model:repeat-mode="repeatMode" v-model:show-advanced="showAdvanced"
@@ -188,7 +188,7 @@
           <div v-if="isViewingToday && completedTaskCount > 0" class="done-section">
             <button type="button" class="done-toggle" :aria-expanded="showCompleted ? 'true' : 'false'" @click="showCompleted = !showCompleted">
               <i class="fas" :class="showCompleted ? 'fa-chevron-down' : 'fa-chevron-right'" aria-hidden="true"></i>
-              <span>Completed ({{ completedTaskCount }})</span>
+              <span>Completed today ({{ completedTaskCount }})</span>
               <i class="fas done-eye" :class="showCompleted ? 'fa-eye' : 'fa-eye-slash'" aria-hidden="true"></i>
             </button>
             <div v-if="showCompleted" class="tasks-list tasks-list--done">
@@ -248,8 +248,8 @@ import { activeFromForDay, isHiddenOnDate, seriesDays, withoutSeries } from '@/u
 import { useTaskViewPrefs } from '@/composables/useTaskViewPrefs';
 import { viewTasks, canReorder, applyManualOrder, normalizePrefs, visibleCount, shouldHandleShortcut } from '@/utils/taskView';
 import { ACTIVE_CAP, taskKey, activeCount, loadSummary, buildSchedule } from '@/utils/taskPlanning';
-import { localYMD, localYMDOffset, isStaleCompletion, pruneStaleDay } from '@/utils/localDate';
-import { clearExpiredTimers, timersChanged, withoutTask, markTaskRemoved, visibleTasks, taskStillVisible, deleteFailureMessage, writeFailureMessage, appendTask, dayReadFailure, tasksFromSnapshot } from '@/utils/dayList';
+import { localYMD, localYMDOffset, isStaleCompletion, pruneStaleDay, rememberCompleted } from '@/utils/localDate';
+import { clearExpiredTimers, timersChanged, withoutTask, markTaskRemoved, visibleTasks, taskStillVisible, deleteFailureMessage, writeFailureMessage, appendTask, patchTimerOnList, dayReadFailure, tasksFromSnapshot } from '@/utils/dayList';
 import { getTodayId, formatSessionTime, getCurrentDate, formatTime, isToday } from '@/utils/dateTime';
 import { badges } from '@/utils/gamification';
 import { recordMonthlyToggle, awardFinishedMonth } from '@/composables/useMonthlyStats';
@@ -280,7 +280,7 @@ import { useRouter as _useRouter, onBeforeRouteLeave } from 'vue-router';
 import { requirePro, loadUserDoc, rcProActive, proNow, gatePro } from '@/composables/usePro';
 import { isPro as isProUser } from '@/utils/pro';
 import { checkDailyLimit } from '@/utils/taskLimits';
-import { defaultTransferDay, transferFits, MAX_TASKS_PER_DAY, moveKey, transferFailure } from '@/utils/transfer';
+import { defaultTransferDay, transferFits, MAX_TASKS_PER_DAY, moveKey, transferFailure, planMove } from '@/utils/transfer';
 import { canUse } from '@/utils/pro';
 const _proRouter = _useRouter();
 // Daily task limit: free 5/day. Pro has none. Voice Review uses this same gate (addNewTask).
@@ -416,7 +416,7 @@ import { maybeAskTracking } from '@/utils/tracking';
 import { planLock, resumePending, untilFor, fmtDuration, joinNames, withTimeout, describeUnlock, describeLock } from '@/utils/appLockNames';
 import { planTaskUnlock } from '@/utils/taskAppUnlock';
 import LockGuideSheet from '@/components/home/LockGuideSheet.vue';
-import { normBossMode, emergencyAllowed, goalFor, strictShield, wakeAutoOn, dayEndNote, moodReply, checklistMayRelock, readSessionGate, beginSessionGate, sessionUnlock } from '@/utils/strictDay';
+import { normBossMode, emergencyAllowed, goalFor, strictShield, wakeAutoOn, dayEndNote, moodReply, checklistMayRelock, readSessionGate, beginSessionGate, sessionUnlock, sessionId } from '@/utils/strictDay';
 import { LOCK_PREF, PENALTY_KEY, EMERGENCY_PENALTY, shouldShield, lockAction, busyToDay, mergePenalties, lastPenaltyDay } from '@/utils/appLock';
 import { previewDayTarget, requiredPoints, sessionTargetOf } from '@/utils/dayTarget';
 const askOpen = ref(false); // Assistant sheet (✨ next to the bell, and the bubble in the task list header)
@@ -827,7 +827,6 @@ const transferTask = async () => {
     return;
   }
 
-  if (strictOn.value && !validReason(deferReason.value)) return;
   const currentDayIndex = selectedDayIndex.value;
   const targetDayIndex = Number(selectedTransferDay.value);
   if (!Number.isInteger(targetDayIndex) || currentDayIndex === targetDayIndex) {
@@ -844,9 +843,10 @@ const transferTask = async () => {
 
   transferBusy = true;
   try {
-    // One transaction: remove by identity (Timestamp or ISO createdAt both match) and append. No separate read that can fail first.
+    // One transaction. A shorter source list is rejected while the day is locked ("This day can't be edited right now."),
+    // so the retry hides the task in place and appends it to tomorrow. Failure writes nothing.
     let rawTask = null; let full = false; let targetLen = 0;
-    const currentTasks = await trackWrite(runTransaction(db, async (tx) => {
+    const writeMove = (mode) => runTransaction(db, async (tx) => {
       const srcRef = doc(db, 'weeklyRoutines', `${userId.value}_${currentDay}`);
       const dstRef = doc(db, 'weeklyRoutines', `${userId.value}_${targetDay}`);
       const srcSnap = await tx.get(srcRef); const dstSnap = await tx.get(dstRef);
@@ -854,23 +854,25 @@ const transferTask = async () => {
       const dst = dstSnap.exists() ? [...(dstSnap.data().tasks || [])] : [];
       targetLen = dst.length;
       if (!transferFits(targetLen)) { full = true; rawTask = null; return null; }
-      const i = src.findIndex((t) => moveKey(t) === key);
-      if (i === -1) { rawTask = null; return null; } // not on this day: do not write a second copy
-      rawTask = src[i];
-      const task = dropUndefined(strictOn.value ? carryTask(rawTask) : rawTask);
-      const nextSrc = dropUndefined([...src.slice(0, i), ...src.slice(i + 1)]);
-      const nextDst = dropUndefined(dst.some((t) => moveKey(t) === key) ? dst : [...dst, task]);
-      tx.set(srcRef, { tasks: nextSrc, updatedAt: serverTimestamp() }, { merge: true });
-      tx.set(dstRef, { tasks: nextDst, updatedAt: serverTimestamp() }, { merge: true });
-      return nextSrc;
-    }));
-    if (full) { alert(`${targetDay} already has ${targetLen} tasks (limit ${MAX_TASKS_PER_DAY}).`); return; }
-    if (!rawTask) { closeTransferModal(); return; }
-    if (strictOn.value) {
-      logStrict('deferred', `${rawTask.title} → ${targetDay}: ${deferReason.value.trim()}`);
-      deferReason.value = '';
+      const plan = planMove(src, dst, key, mode);
+      if (!plan.ok) { rawTask = null; return null; }
+      rawTask = plan.raw;
+      const task = dropUndefined(strictOn.value ? carryTask(plan.raw) : plan.raw);
+      const nextDst = plan.nextDst.map((t) => (moveKey(t) === key ? { ...task, timerActive: false, timerEndTime: null, timerPausedAt: null, timerStoppedAt: null, focusLock: false } : t));
+      tx.set(srcRef, { tasks: dropUndefined(plan.nextSrc), updatedAt: serverTimestamp() }, { merge: true });
+      tx.set(dstRef, { tasks: dropUndefined(nextDst), updatedAt: serverTimestamp() }, { merge: true });
+      return plan.nextSrc;
+    });
+    let currentTasks;
+    try { currentTasks = await trackWrite(writeMove('remove')); }
+    catch (error) {
+      const code = String(error && error.code || '').replace(/^firestore\//, '');
+      if (code !== 'permission-denied') throw error;
+      currentTasks = await trackWrite(writeMove('tomb'));
     }
-    if (selectedDayIndex.value === currentDayIndex) selectedDayRoutine.value = currentTasks;
+    if (full) { alert(`${targetDay} already has ${targetLen} tasks (limit ${MAX_TASKS_PER_DAY}).`); return; }
+    if (!rawTask) { alert('That task is no longer on this day.'); return; }
+    if (selectedDayIndex.value === currentDayIndex) selectedDayRoutine.value = visibleTasks(currentTasks);
     transferNotification.value = `Task "${rawTask.title}" moved to ${targetDay}`;
     setTimeout(() => { transferNotification.value = null; }, 3000);
     closeTransferModal();
@@ -1155,18 +1157,20 @@ const fetchSelectedDayRoutine = async () => {
         if (seq !== fetchSeq) return; // stale: no reset write for a day that is no longer selected
         const now = new Date();
         // Day rollover: completed one-time tasks (incl. repeat-series copies) from an earlier day leave the list; recurring ones reset.
-        const resetStale = (list) => pruneStaleDay(list, dayIdx, now).map((t) => (isStaleCompletion(t, dayIdx, now)
+        const resetStale = (list) => { rememberCompleted(localStorage, (list || []).filter((t) => t && t.type === 'one-time' && isStaleCompletion(t, dayIdx, now))); return pruneStaleDay(list, dayIdx, now).map((t) => (isStaleCompletion(t, dayIdx, now)
           ? resetSubtasks({ ...t, completed: false, completedAt: null, timerActive: false, timerStartedAt: null, timerEndTime: null, timerStoppedAt: null })
-          : t));
+          : t)); };
         // A rejected write (e.g. shut 8-hour window, offline) must never hide the day's tasks: show the server copy as-is.
         try { tasks = await mutateDay(selectedDay.day, resetStale); } catch (e) { console.warn('old-week reset skipped:', e && (e.code || e.message)); }
         if (seq !== fetchSeq) return;
       }
 
       selectedDayRoutine.value = visibleTasks(tasks);
+      if (isViewingToday.value) todayListLoaded.value = true;
       dayLoadError.value = '';
     } else {
       selectedDayRoutine.value = [];
+      if (isViewingToday.value) todayListLoaded.value = true;
       dayLoadError.value = '';
     }
   } catch (error) {
@@ -1217,20 +1221,19 @@ const startTimer = async (opts = {}) => {
   const at = selectedTimerTaskIndex.value, before = selectedDayRoutine.value[at];
   selectedDayRoutine.value[at] = task;
 
-  // Patch this task on the stored list by identity. Writing the whole on-screen array can shift slots or send an
-  // undefined field, and a rules rejection is not a lost connection. Roll back the card if the write fails.
+  // Update this task in place with a normal write. A transaction reports "unavailable" even when the phone is online,
+  // and the old catch labeled every failure as a lost connection. Roll the card back if the write fails.
   try {
     const dayName = days[selectedDayIndex.value].day;
-    const saved = await mutateDay(dayName, (live) => {
-      const i = (live || []).findIndex((t) => sameTask(t, before));
-      if (i < 0) { const err = new Error('task missing from stored list'); err.code = 'not-found'; throw err; }
-      const next = live.slice();
-      const { timerActive, timerStartedAt, timerEndTime, timerDurationMinutes, timerPausedAt, focusLock, timerPomo, estimateMin, minutes, dueAt, dueTime } = task;
-      next[i] = { ...live[i], timerActive, timerStartedAt, timerEndTime, timerDurationMinutes, timerPausedAt, focusLock, timerPomo, ...(estimateMin ? { estimateMin } : {}), ...(minutes ? { minutes } : {}), ...(dueAt ? { dueAt } : {}), ...(dueTime ? { dueTime } : {}) };
-      return next;
-    });
+    const ref_ = doc(db, 'weeklyRoutines', `${userId.value}_${dayName}`);
+    const snap = await getDoc(ref_);
+    const live = snap.exists() ? [...(snap.data().tasks || [])] : [];
+    const { timerActive, timerStartedAt, timerEndTime, timerDurationMinutes, timerPausedAt, focusLock, timerPomo } = task;
+    const next = patchTimerOnList(live, (t) => sameTask(t, before), { timerActive, timerStartedAt, timerEndTime, timerDurationMinutes, timerPausedAt, focusLock, timerPomo });
+    if (!next) { const err = new Error('task missing from stored list'); err.code = 'not-found'; throw err; }
+    await updateDoc(ref_, { tasks: dropUndefined(next), updatedAt: serverTimestamp() });
     const idx = (selectedDayRoutine.value || []).findIndex((t) => sameTask(t, before));
-    if (idx >= 0) selectedDayRoutine.value[idx] = saved.find((t) => sameTask(t, before)) || task;
+    if (idx >= 0) selectedDayRoutine.value[idx] = next.find((t) => sameTask(t, before)) || task;
   } catch (e) {
     if (selectedDayRoutine.value[at] === task) selectedDayRoutine.value[at] = before;
     if (!lockMessage(e)) { console.error('start timer:', e); showNoteToast(writeFailureMessage(e, before && before.title, 'start the timer for'), { error: true }); }
@@ -3811,8 +3814,19 @@ const confirmDayStart = async (hours, opts = {}) => {
     { const plan = eh.plan.value; const n = countableIndexes(selectedDayRoutine.value || [], eh.phaseInfo.value.dayKey || '').length; const r = taskRange(hours);
       if (plan && n >= 1 && n <= r.max && plan.taskCount !== n) await eh.savePlan({ wakeTime: plan.wakeTime, taskCount: n }).catch((e) => console.warn('plan sync:', e && e.message)); }
     if (!validSessionHours(hours)) { ehStartError.value = 'Pick 5 to 12 whole hours.'; return; }
+    await fetchSelectedDayRoutine(); // today's saved progress first, so the baseline is not 0 from an empty list
+    const tasksNow = selectedDayRoutine.value || [];
+    const goal = sessionTargetOf(tasksNow, hours, eh.stats.value).target;
+    if (!(goal > 0)) { ehStartError.value = 'All done today'; return; }
+    const baseline = (tasksNow || []).filter((t) => t && t.completed && t.removed !== true).reduce((n, t) => n + overtimePoints(chipValues(t).points, t), 0);
+    const beforeKey = sessionId(eh.lock.value);
     await eh.startNow(hours, opts.blocks, { apps: opts.lock ? sessionAppsPick.value : null }); // evening mode: optional later blocks today (split day), fixed now
-    captureSessionGate(); // baseline + remaining-task target, before the shield sync or the next paint
+    const lock = eh.running.value ? eh.lock.value : null;
+    if (!lock || !lock.startMs) { ehStartError.value = 'Could not start the session.'; return; }
+    if (sessionId(lock) !== beforeKey || !readSessionGate(localStorage, lock)) {
+      beginSessionGate(localStorage, lock, baseline, goal);
+      sessionGateTick.value += 1;
+    }
     dayPromptOpen.value = false;
     // Begin = the shield goes up NOW on the picked apps (startLock applies at once); sessionBegin stores them as the last-used selection.
     if (opts.lock) await startHardLock({ sessionBegin: true });
@@ -3827,13 +3841,18 @@ const todayTasksForTarget = computed(() => (isViewingToday.value ? selectedDayRo
 // required day points: the locked boss target while the day runs, else the projection from today's tasks + chosen hours
 const dayRequiredPts = computed(() => requiredPoints({ lock: eh.running.value ? eh.lock.value : null, tasks: todayTasksForTarget.value, hours: eh.hoursPref.value, stats: eh.stats.value }));
 const sessionGateTick = ref(0);
-const readGate = () => (sessionGateTick.value, readSessionGate(localStorage, eh.running.value ? eh.lock.value : null));
+const todayListLoaded = ref(false);
+const readGate = () => (sessionGateTick.value, readSessionGate(localStorage, eh.lock.value || null));
 const captureSessionGate = () => {
-  const lock = eh.running.value ? eh.lock.value : null;
-  if (!lock || isLoading.value) return readSessionGate(localStorage, lock);
-  if (readSessionGate(localStorage, lock)) return readSessionGate(localStorage, lock);
-  const daily = Math.max(0, Number(pointsAccumulated.value) || 0);
-  const target = sessionTargetOf(todayTasksForTarget.value || [], lock.hours != null ? lock.hours : eh.hoursPref.value, eh.stats.value).target;
+  const lock = eh.lock.value || null;
+  if (!lock || !Number(lock.startMs)) return null;
+  const existing = readSessionGate(localStorage, lock);
+  if (existing) return existing;
+  if (!eh.running.value || isLoading.value || !todayListLoaded.value) return null;
+  const tasks = selectedDayRoutine.value || [];
+  const target = sessionTargetOf(tasks, lock.hours != null ? lock.hours : eh.hoursPref.value, eh.stats.value).target;
+  if (!(target > 0)) return null;
+  const daily = tasks.filter((t) => t && t.completed && t.removed !== true).reduce((n, t) => n + overtimePoints(chipValues(t).points, t), 0);
   const row = beginSessionGate(localStorage, lock, daily, target);
   sessionGateTick.value += 1;
   return row;
@@ -4366,12 +4385,12 @@ const hydrateVaultReport = async () => {
   if (local && local.rows.length && (!nativeReport || (Date.parse(local.adoptedAt) || 0) >= (Date.parse(nativeReport.adoptedAt) || 0))) mirrorVaultReport(local);
   vaultReport.value = local;
 };
-const todayPriceCap = computed(() => dayRequiredPts.value || 0);
+const sessionPriceCap = computed(() => { const t = sessionGate.value && Number(sessionGate.value.target); return t > 0 ? t : 0; });
 hydrateVaultReport();
 const gpVault = computed(() => { if (!lockAvailable() || !isViewingToday.value) return null; const gate = vaultAccessState();
   const sessionHeld = !!(sessionGate.value && !sessionGateOpen.value);
   const vaultPts = sessionHeld ? 0 : dayVaultPoints.value;
-  return vaultView({ apps: vaultData.value.apps || [], days: vaultData.value.days || {}, todayYmd: localDateStr(), points: vaultPts, priceCap: todayPriceCap.value,
+  return vaultView({ apps: vaultData.value.apps || [], days: vaultData.value.days || {}, todayYmd: localDateStr(), points: vaultPts, priceCap: sessionPriceCap.value,
     report: vaultReport.value, debt: vaultDebt.value, windows: vaultWindows.value, nowMs: vaultNow.value, wait: eh.wait && eh.wait.value, bought: vaultBought.value, accessOpen: gate.accessOpen && !sessionHeld }); });
 const vaultSessionId = () => { const l = eh.lock.value; if (!eh.running.value || !l || !l.startMs) return ''; return `${l.dayKey || ''}#${Number(l.index) || 0}:${l.startMs}`; };
 const loadVaultSession = () => { try { return localStorage.getItem(VAULT_SESSION_KEY) || ''; } catch (e) { return ''; } };

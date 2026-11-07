@@ -66,12 +66,29 @@ export const writeFailureMessage = (e, title, verb = 'save') => {
   if (code === 'permission-denied') return verb === 'delete'
     ? "Couldn't delete that task. This day's list rejected the change."
     : `Couldn't ${verb} ${name}. This day's list rejected the change.`;
-  if (code === 'unavailable' || code === 'deadline-exceeded' || /client is offline|network|failed to fetch/i.test(msg)) return `Couldn't ${verb} ${name}. Check your connection and try again.`;
+  if (code === 'unavailable' || code === 'deadline-exceeded' || /client is offline|network|failed to fetch/i.test(msg)) return String(verb).includes('timer') ? TIMER_CONNECTION_TOAST : `Couldn't ${verb} ${name}. Check your connection and try again.`;
   if (code === 'invalid-argument' || /unsupported field value|undefined/i.test(msg)) return `Couldn't ${verb} ${name}. A field on the task can't be stored.`;
   if (code === 'not-found') return `Couldn't ${verb} ${name}. This day's list is not there yet.`;
   return `Couldn't ${verb} ${name}. ${code || 'Try again.'}`;
 };
 export const appendTask = (list, task, same) => ((list || []).some(same) ? (list || []) : [...(list || []), task]);
+// The screenshot toast. It is only for a real offline write, never for a rules rejection or a bad field.
+export const TIMER_CONNECTION_TOAST = 'Could not start the timer. Check your connection and try again.';
+const TIMER_KEYS = ['timerActive', 'timerStartedAt', 'timerEndTime', 'timerDurationMinutes', 'timerPausedAt', 'focusLock', 'timerPomo'];
+// Same length, same createdAt and points. Returns null when the task is not on the stored list.
+export const patchTimerOnList = (list, same, patch) => {
+  const src = list || [];
+  const i = src.findIndex((t) => same(t));
+  if (i < 0) return null;
+  const prev = src[i];
+  const row = { ...prev };
+  TIMER_KEYS.forEach((k) => { if (patch && Object.prototype.hasOwnProperty.call(patch, k)) row[k] = patch[k]; });
+  row.createdAt = prev.createdAt;
+  row.points = prev.points;
+  const next = src.slice();
+  next[i] = row;
+  return next;
+};
 
 export const dayReadFailure = (e, hadList) => {
   const code = String((e && e.code) || '');

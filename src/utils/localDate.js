@@ -21,3 +21,18 @@ export const isStaleCompletion = (task, dayIdx, now = new Date()) => {
 // Day rollover for completed one-time tasks (incl. repeat-series copies, stored as one-time with templateId): they stay in the
 // Completed section all day and leave the list once completed before this weekday's latest local occurrence (i.e. after local midnight).
 export const pruneStaleDay = (tasks, dayIdx, now = new Date()) => (tasks || []).filter((t) => !(t && t.type === 'one-time' && isStaleCompletion(t, dayIdx, now)));
+// Completed one-time tasks leave the active list at rollover, but the record stays on this device.
+export const ARCHIVE_KEY = 'cn.completed.archive.v1';
+export const rememberCompleted = (storage, tasks) => {
+  const add = (tasks || []).filter((t) => t && t.title);
+  if (!add.length || !storage) return [];
+  let prev = [];
+  try { prev = JSON.parse(storage.getItem(ARCHIVE_KEY) || '[]'); } catch (e) { prev = []; }
+  if (!Array.isArray(prev)) prev = [];
+  const seen = new Set(prev.map((t) => `${t && t.id}|${t && t.createdAt}|${t && t.title}`));
+  const next = prev.slice();
+  add.forEach((t) => { const k = `${t.id}|${t.createdAt}|${t.title}`; if (!seen.has(k)) { seen.add(k); next.push({ id: t.id, title: t.title, createdAt: t.createdAt, completedAt: t.completedAt, points: t.points, type: t.type }); } });
+  const capped = next.slice(-200);
+  try { storage.setItem(ARCHIVE_KEY, JSON.stringify(capped)); } catch (e) { /* ignore */ }
+  return capped;
+};

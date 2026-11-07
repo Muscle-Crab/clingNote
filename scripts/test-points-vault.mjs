@@ -302,7 +302,7 @@ t('the real report prices observed minutes from least used up to PUBG, and an un
   assert.doesNotMatch(save, /UsageLog\.record|forKey: "usage\.daily\.v1"/);
   assert.match(swift.slice(swift.indexOf('func startUsage'), swift.indexOf('func vaultUsage')), /UsageLog\.ensure/);
 });
-t('today\'s requirement caps 600 and keeps no-reading cards in a stable order', () => {
+t('the active session goal caps 600, and a lower next session caps again', () => {
   const report = S.sentReport('');
   const apps = [
     { id: 'ig', label: 'Instagram' }, { id: 'yt', label: 'YouTube' }, { id: 'tt', label: 'TikTok' },
@@ -311,12 +311,13 @@ t('today\'s requirement caps 600 and keeps no-reading cards in a stable order', 
   ];
   const shuffled = [apps[6], apps[5], apps[4], apps[3], apps[2], apps[1], apps[0]];
   const priced = (list, cap) => V.priceApps(list, {}, today, { report, priceCap: cap });
-  const a = priced(apps, 165); const b = priced(shuffled, 165);
+  const a = priced(apps, 185); const b = priced(shuffled, 185);
   assert.deepEqual(a.map((x) => x.id), b.map((x) => x.id));
   assert.equal(a.find((x) => x.id === 'ig').price, 140);
-  assert.equal(a.find((x) => x.id === 'yt').price, 165);
-  assert.equal(a.find((x) => x.id === 'tt').price, 165);
-  assert.equal(a.find((x) => x.id === 'pg').price, 165);
+  assert.equal(a.find((x) => x.id === 'yt').price, 185);
+  assert.equal(a.find((x) => x.id === 'yt').min, 411);
+  assert.equal(a.find((x) => x.id === 'tt').price, 185);
+  assert.equal(a.find((x) => x.id === 'pg').price, 185);
   assert.equal(a.find((x) => x.id === 'fb').price, null);
   assert.equal(a.find((x) => x.id === 'fb').noReading, true);
   assert.equal(a.find((x) => x.id === 'tok-a').price, null);
@@ -325,19 +326,23 @@ t('today\'s requirement caps 600 and keeps no-reading cards in a stable order', 
   const open = a.filter((x) => x.price != null);
   assert.equal(open[open.length - 1].id, 'pg');
   assert.equal(open[open.length - 1].boss, true);
-  const view = V.vaultView({ apps, days: {}, todayYmd: today, points: 165, report, priceCap: 165, accessOpen: true, nowMs: 0 });
-  assert.equal(view.items.find((x) => x.id === 'yt').price, 165);
+  const view = V.vaultView({ apps, days: {}, todayYmd: today, points: 185, report, priceCap: 185, accessOpen: true, nowMs: 0 });
+  assert.equal(view.items.find((x) => x.id === 'yt').price, 185);
   assert.equal(view.items.find((x) => x.id === 'yt').open, true);
   assert.equal(view.items.find((x) => x.id === 'ig').open, true);
   assert.equal(view.items.find((x) => x.id === 'fb').open, false);
-  const at200 = priced(apps, 200);
-  assert.equal(at200.find((x) => x.id === 'ig').price, 140);
-  assert.equal(at200.find((x) => x.id === 'yt').price, 200);
-  const threshold = V.priceApps([{ id: 'a', label: 'A' }], daysOf({ a: 240 }), today, { priceCap: 165 });
-  assert.ok(threshold[0].price <= 165);
-  const uncapped = V.vaultView({ apps: [{ id: 'yt', label: 'YouTube' }], priced: [{ id: 'yt', label: 'YouTube', price: 600, min: 411 }], points: 165, priceCap: 165, accessOpen: true, todayYmd: today, nowMs: 0 });
-  assert.equal(uncapped.items[0].price, 165);
+  const second = priced(apps, 40);
+  assert.equal(second.find((x) => x.id === 'ig').price, 40);
+  assert.equal(second.find((x) => x.id === 'yt').price, 40);
+  assert.equal(second.find((x) => x.id === 'yt').min, 411);
+  assert.equal(second.find((x) => x.id === 'fb').price, null);
+  assert.deepEqual(second.map((x) => x.id), priced(shuffled, 40).map((x) => x.id));
+  const threshold = V.priceApps([{ id: 'a', label: 'A' }], daysOf({ a: 240 }), today, { priceCap: 185 });
+  assert.ok(threshold[0].price <= 185);
+  const uncapped = V.vaultView({ apps: [{ id: 'yt', label: 'YouTube' }], priced: [{ id: 'yt', label: 'YouTube', price: 600, min: 411 }], points: 185, priceCap: 185, accessOpen: true, todayYmd: today, nowMs: 0 });
+  assert.equal(uncapped.items[0].price, 185);
   assert.equal(uncapped.items[0].open, true);
+  assert.notEqual(uncapped.items[0].price, 600);
   const appsVue = fs.readFileSync(new URL('../src/components/vault/VaultApps.vue', import.meta.url), 'utf8');
   assert.match(appsVue, /:key="a.id"/);
   assert.doesNotMatch(appsVue, /a\.id \+ \(a\.open/);

@@ -24,7 +24,7 @@ export const priceOf = (min) => {
   return Math.min(PRICE_CAP, round5(BASE_PRICE + PTS_PER_MIN * n));
 };
 export const tasksFor = (price) => Math.ceil((Number(price) || 0) / PTS_PER_TASK);
-// Today's completion requirement caps every displayed price. 0 means no day target yet, so the formula cap (600) remains.
+// The active session's frozen points goal caps every displayed price. 0 means no session goal yet, so the formula cap (600) remains.
 export const boundPrice = (price, priceCap) => {
   if (price == null) return null;
   const day = Number(priceCap);

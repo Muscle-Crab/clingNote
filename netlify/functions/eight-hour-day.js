@@ -134,7 +134,7 @@ const settleIfOver = async (ctx, doc, now) => {
     : core.normDebt(doc.appLockDebt);
   // The streak/target settle once per day, on the day's FIRST block. Later blocks (evening mode) and empty scheduled blocks only write a history row.
   const counts = idx === 0 && !(lock.scheduled && !(lock.taskCount > 0)); // legacy locks (no index/taskCount) still settle
-  const stats = counts ? core.settleDay(doc.stats, { dayKey: lock.dayKey, earned, target: lock.target, allDone: (lock.totalPoints || 0) > 0 && earned >= lock.totalPoints }) : { ...core.defaultStats(), ...(doc.stats || {}) };
+  const stats = counts ? core.settleDay(doc.stats, { dayKey: lock.dayKey, earned, target: lock.target, done: grace ? grace.done : lock.done, allDone: (lock.totalPoints || 0) > 0 && earned >= lock.totalPoints }) : { ...core.defaultStats(), ...(doc.stats || {}) };
   const next = { ...doc, lock: settledLock, stats, appLockDebt: debt };
   await ctx.db.doc(`eightHour/${ctx.uid}`).set({ lock: lockWrite(ctx, settledLock), appLockDebt: debt, ...(counts ? { stats } : {}) }, { merge: true });
   const hid = idx === 0 ? lock.dayKey : core.sessionKey(lock.dayKey, idx);

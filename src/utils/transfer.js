@@ -13,9 +13,24 @@ export const createdStamp = (v) => {
   return Number.isFinite(n) ? String(n) : String(v);
 };
 export const moveKey = (t) => (!t ? '' : (t.id != null && t.id !== '' ? `id:${t.id}` : `${createdStamp(t.createdAt)}|${t.title || ''}`));
+// The moved copy keeps its identity and recurrence. A running timer does not follow it to the next day.
+export const movedTask = (t) => (!t ? t : { ...t, timerActive: false, timerStartedAt: null, timerEndTime: null, timerPausedAt: null, timerStoppedAt: null, focusLock: false, timerPomo: null });
+// remove = drop the source slot. tomb = same length, same createdAt and points, hidden, because a shorter list is rejected while the day is locked.
+export const planMove = (src, dst, key, mode = 'remove') => {
+  const from = src || []; const to = dst || [];
+  const i = from.findIndex((t) => moveKey(t) === key);
+  if (i < 0) return { ok: false, reason: 'missing' };
+  const raw = from[i];
+  const task = movedTask(raw);
+  const nextDst = to.some((t) => moveKey(t) === key) ? to.slice() : [...to, task];
+  const nextSrc = mode === 'tomb'
+    ? from.map((t, idx) => (idx === i ? { ...t, removed: true, timerActive: false, timerEndTime: null, timerPausedAt: null, timerStoppedAt: null, focusLock: false } : t))
+    : [...from.slice(0, i), ...from.slice(i + 1)];
+  return { ok: true, raw, nextSrc, nextDst };
+};
 // Only a real transport failure is "check your connection". A rules rejection is not the network.
 export const transferFailure = (e) => {
-  const code = String((e && e.code) || '');
+  const code = String((e && e.code) || '').replace(/^firestore\//, '');
   const msg = String((e && e.message) || '');
   if (code === 'permission-denied') return 'Couldn\'t move the task. This day can\'t be edited right now.';
   if (code === 'unavailable' || code === 'deadline-exceeded' || /client is offline|network|failed to fetch/i.test(msg)) return 'Couldn\'t move the task. Check your connection and try again.';

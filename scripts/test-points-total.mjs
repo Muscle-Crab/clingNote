@@ -23,7 +23,7 @@ t('8+ tasks -> next session right away', () => assert.equal(core.nextSessionStat
 t('<8 tasks -> 2h wait, then open', () => { const s = core.nextSessionState({ lock: { ...base, session: { done: 5 } }, nowMs: 9 * H });
   assert.equal(s.reason, 'cooldown'); assert.equal(s.untilMs, 10 * H); assert.match(s.message, /^Next session opens at .+ · 2h wait$/);
   assert.equal(core.nextSessionState({ lock: { ...base, session: { done: 5 } }, nowMs: 10 * H }).ok, true); });
-t('heads-up copy', () => assert.equal(core.SESSION_HEADS_UP, 'Hit your points goal and 8 tasks, or your next session waits 2h, plus 30m per unfinished important task.'));
+t('heads-up copy', () => assert.equal(core.SESSION_HEADS_UP, 'Finish 8 tasks and the next session can start right away. Fewer than 8 waits 2h.'));
 t('debt clears only with goal met AND 8 tasks', () => { const d = { sessionKey: 'k', sinceMs: 1 };
   assert.equal(core.debtCleared(d, { startMs: 2, target: 50, earned: 60, done: 7 }), false);
   assert.equal(core.debtCleared(d, { startMs: 2, target: 50, earned: 60, done: 8 }), true); });
