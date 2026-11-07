@@ -170,35 +170,48 @@ enum AppLocks {
 @available(iOS 16.0, *)
 enum VaultCatalog {
     static let key = "lock.vaultCatalog"
+    static let namesKey = "lock.vaultNames" // encoded-token -> confirmed name. Never a report guess.
     struct Item: Codable { var id: String; var label: String; var token: ApplicationToken }
     static func apps() -> [Item] {
         guard let d = LockShared.defaults?.data(forKey: key), let a = try? JSONDecoder().decode([Item].self, from: d) else { return [] }
         return a
     }
     static func save(_ a: [Item]) { if let d = try? JSONEncoder().encode(a) { LockShared.defaults?.set(d, forKey: key) } }
-    /// Rebuild from the current selection and named apps. A token already in the catalog keeps its id.
+    static func realName(_ s: String) -> String { let t = s.trimmingCharacters(in: .whitespacesAndNewlines); return (t.isEmpty || t.lowercased() == "app") ? "" : t }
+    static func tokenKey(_ token: ApplicationToken) -> String { ((try? JSONEncoder().encode(token)) ?? Data()).base64EncodedString() }
+    static func names() -> [String: String] { (LockShared.defaults?.dictionary(forKey: namesKey) as? [String: String]) ?? [:] }
+    static func remember(_ token: ApplicationToken, _ label: String) {
+        let n = realName(label); if n.isEmpty { return }
+        var m = names(); m[tokenKey(token)] = n; LockShared.defaults?.set(m, forKey: namesKey)
+    }
+    /// Rebuild from the current selection and named apps. A token already in the catalog keeps its id and any real name.
     static func sync(selectionTokens: Set<ApplicationToken>, labeled: [LabeledApp]) -> [Item] {
-        let prev = apps()
+        let prev = apps(); let known = names()
         var next: [Item] = []
         var seen = Set<ApplicationToken>()
         func add(_ token: ApplicationToken, preferLabel: String, preferId: String?) {
             if seen.contains(token) { return }
             seen.insert(token)
-            let named = preferLabel.trimmingCharacters(in: .whitespacesAndNewlines)
-            if let e = prev.first(where: { $0.token == token }) {
+            let named = realName(preferLabel)
+            let remembered = realName(known[tokenKey(token)] ?? "")
+            if let e = prev.first(where: { $0.token == token || (preferId?.isEmpty == false && $0.id == preferId) }) {
                 var c = e
-                if !named.isEmpty && named != "App" { c.label = named }
+                let keep = named.isEmpty ? (realName(c.label).isEmpty ? remembered : realName(c.label)) : named
+                if !keep.isEmpty { c.label = keep; remember(token, keep) }
                 next.append(c)
                 return
             }
             let id = (preferId?.isEmpty == false) ? preferId! : UUID().uuidString
-            next.append(Item(id: id, label: named.isEmpty ? "App" : named, token: token))
+            let label = named.isEmpty ? (remembered.isEmpty ? "App" : remembered) : named
+            if realName(label).isEmpty == false { remember(token, label) }
+            next.append(Item(id: id, label: label, token: token))
         }
         for t in selectionTokens {
             let lab = labeled.first(where: { $0.token == t })
             add(t, preferLabel: lab?.label ?? "", preferId: lab?.id)
         }
         for l in labeled { add(l.token, preferLabel: l.label, preferId: l.id) }
+        next.sort { $0.id < $1.id }
         save(next)
         return next
     }
@@ -287,6 +300,7 @@ enum VaultAllow {
 enum UsageLog {
     static let activity = DeviceActivityName("clingUsage")
     static let key = "usage.daily.v1"          // ["yyyy-MM-dd": [appId: minutes]]
+    static let reportKey = "vault.report.v1"   // owner-supplied report rows. Never written by threshold events.
     static let sigKey = "usage.sig.v1"
     static let thresholds = [15, 30, 60, 120, 240]
     static let keepDays = 14

@@ -18,9 +18,37 @@ const common = { running: true, dayEndMs: dayEnd, selectionCount: 3, enabled: tr
 // --- strict / coach daily shield
 t('met + time over: off (build 48 kept "ready" locked until midnight)', () => {
   for (const extra of [{}, { claimedAt: at(15, 10) }, { running: false }]) { const r = S.strictShield({ ...common, ...extra, now: dayEnd + 60000 }); assert.equal(r.want, false, JSON.stringify(extra)); assert.equal(r.phase, 'done'); } });
-t('met before the end: banked lock ends AT the day end, not midnight (iOS lifts it with the app closed)', () => {
-  const r = S.strictShield({ ...common, now: at(16) }); assert.equal(r.phase, 'ready'); assert.equal(r.untilMs, dayEnd);
-  const b = S.strictShield({ ...common, claimedAt: at(15), now: at(16, 30) }); assert.equal(b.phase, 'relocked'); assert.equal(b.untilMs, dayEnd); });
+t('met before the end: 210/185 opens now, the shield does not wait for a tap', () => {
+  const start = new Date(2026, 10, 6, 7, 4).getTime(); const end = new Date(2026, 10, 6, 13, 4).getTime();
+  const now = end - (33 * 60 + 45) * 1000;
+  const r = S.strictShield({ running: true, dayEndMs: end, now, selectionCount: 6, enabled: true, goal: 185, earned: 210, tasksDone: 15 });
+  assert.ok(now > start && now < end); assert.equal(r.phase, 'open'); assert.equal(r.want, false);
+  assert.equal(S.dayThresholdOpen({ earned: 210, required: 185 }), true);
+  assert.equal(S.checklistMayRelock(r), false);
+  assert.equal(S.strictShield({ running: true, dayEndMs: end, now, selectionCount: 6, enabled: true, goal: 185, earned: 184 }).phase, 'locked');
+  assert.equal(lockAction({ want: r.want, endMs: r.untilMs, st: { locked: true, until: end, monitoring: true }, now }), 'stop'); });
+t('second session at 210 daily starts at 0, relocks, and resume does not zero it or lift the shield', () => {
+  const end = new Date(2026, 10, 6, 19, 4).getTime(); const now = end - 2 * 3600000;
+  const mem = { bag: new Map(), getItem(k) { return this.bag.has(k) ? this.bag.get(k) : null; }, setItem(k, v) { this.bag.set(k, v); } };
+  const first = { dayKey: '2026-11-06', index: 0, startMs: new Date(2026, 10, 6, 7, 4).getTime() };
+  assert.equal(S.beginSessionGate(mem, first, 0, 185).earned, 0);
+  assert.equal(S.beginSessionGate(mem, first, 999, 1).target, 185);
+  const opened = S.sessionShieldDecision({ running: true, now, endMs: end, selectionCount: 6, dayEarned: 210, dayRequired: 185, earnedAtStart: 0 });
+  assert.equal(opened.want, false);
+  assert.equal(lockAction({ want: opened.want, endMs: opened.untilMs, st: { locked: true, until: end, monitoring: true }, now }), 'stop');
+  const second = { dayKey: '2026-11-06', index: 1, startMs: now - 60000 };
+  const gate = S.beginSessionGate(mem, second, 210, 40);
+  assert.equal(gate.earned, 210); assert.equal(gate.target, 40);
+  assert.equal(S.beginSessionGate(mem, second, 400, 5).target, 40);
+  assert.equal(Math.max(0, 210 - gate.earned), 0);
+  const relock = S.sessionShieldDecision({ running: true, now, endMs: end, selectionCount: 6, dayEarned: 210, sessionRequired: 40, earnedAtStart: 210 });
+  assert.equal(relock.want, true); assert.equal(relock.untilMs, end);
+  assert.equal(lockAction({ want: relock.want, endMs: relock.untilMs, st: { locked: false, until: 0, monitoring: false }, now }), 'start');
+  assert.equal(S.readSessionGate(mem, second).earned, 210);
+  assert.equal(lockAction({ want: relock.want, endMs: relock.untilMs, st: { locked: true, until: end, monitoring: true }, now }), 'none');
+  const earnedOwn = S.sessionShieldDecision({ running: true, now, endMs: end, selectionCount: 6, dayEarned: 250, sessionRequired: 40, earnedAtStart: 210 });
+  assert.equal(earnedOwn.want, false);
+});
 t('all tasks done counts as met even under the 50-pt floor goal / a penalty', () => {
   const r = S.strictShield({ ...common, goal: 50, earned: 20, allDone: true, now: dayEnd + 60000 }); assert.equal(r.want, false); assert.notEqual(r.phase, 'missed');
   assert.equal(S.strictShield({ ...common, goal: 50, earned: 20, now: dayEnd + 60000 }).want, false); }); // not all done: no timed strict lock (appLockDebt holds it)
@@ -45,8 +73,9 @@ t('cold start after the end: lockAction stops the leftover lock', () => {
   const r = S.strictShield({ ...common, running: false, now: dayEnd + 30 * 60000 });
   assert.equal(lockAction({ want: r.want, endMs: r.untilMs, st: { locked: true, until: S.endOfDay(dayEnd), monitoring: true }, now: dayEnd + 30 * 60000 }), 'stop');
   assert.equal(lockAction({ want: false, st: { locked: true, until: dayEnd + 2 * H, monitoring: false }, now: dayEnd + 30 * 60000 }), 'stop'); });
-t('before the end: an old midnight lock is shortened to the day end (start, not none)', () => {
-  const r = S.strictShield({ ...common, now: at(16) }); assert.equal(lockAction({ want: r.want, endMs: r.untilMs, st: { locked: true, until: S.endOfDay(at(16)), monitoring: true }, now: at(16) }), 'start'); });
+t('before the end, goal met: an existing shield is stopped', () => {
+  const r = S.strictShield({ ...common, now: at(16) }); assert.equal(r.phase, 'open'); assert.equal(r.want, false);
+  assert.equal(lockAction({ want: r.want, endMs: r.untilMs, st: { locked: true, until: S.endOfDay(at(16)), monitoring: true }, now: at(16) }), 'stop'); });
 
 // --- model of the native stores: every named store is cleared and status unlocked at the end
 const isRealEnd = (u, now) => u > 0 && u <= now + 90000; // LockEndAlertGate.isRealEnd
@@ -56,9 +85,10 @@ const stopLock = (N, now) => { N.stores.clingLock = null; N.st = { locked: false
 const blockStart = (N, k) => { N.st = { locked: true, until: Math.max(N.sched[k][1], N.st.until) }; N.stores.clingLock = 'shield'; };
 const cancelScheduled = (N, k, now) => { const e = N.sched[k]; delete N.sched[k]; N.acts.delete(k); if (e && e[0] <= now && now < e[1] && N.st.until <= e[1] + 60000) { N.st = { locked: false, until: 0 }; N.stores.clingLock = null; } };
 const lockEnd = (N, now) => { if (!isRealEnd(N.st.until, now)) return; N.stores.clingLock = null; N.stores.clingApps = null; N.acts.delete('clingLock'); N.st = { locked: false, until: 0 }; };
-t('native: day lock ends at the day end -> monitor clears .clingLock + .clingApps, status unlocked', () => {
-  const N = mkNative(); const r = S.strictShield({ ...common, now: at(16) }); startLock(N, r.untilMs); lockEnd(N, dayEnd);
-  assert.deepEqual([N.stores.clingLock, N.stores.clingApps, N.st.locked], [null, null, false]); });
+t('native: goal met before the end -> sync stops the shield', () => {
+  const N = mkNative(); startLock(N, dayEnd); const now = at(16); const r = S.strictShield({ ...common, now });
+  if (lockAction({ want: r.want, endMs: r.untilMs, st: { ...N.st, monitoring: true }, now }) === 'stop') stopLock(N, now);
+  assert.deepEqual([N.stores.clingLock, N.st.locked], [null, false]); });
 t('native: running 2 h grace block cancelled when met -> shield lifted (was left up: entry gone, intervalDidEnd saw 0)', () => {
   const N = mkNative(); N.sched.grace = [at(13), at(15)]; N.acts.add('grace'); blockStart(N, 'grace'); cancelScheduled(N, 'grace', at(13, 30));
   assert.deepEqual([N.stores.clingLock, N.st.locked, N.acts.size], [null, false, 0]); });

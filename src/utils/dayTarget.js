@@ -12,3 +12,9 @@ export const previewDayTarget = (tasks = [], hours, stats = {}) => {
   const rows = (tasks || []).filter((t) => t && t.title && !t.scheduledFuture).map((t) => { const c = chipValues(t); return { points: c.points, minutes: c.minutes }; });
   return dailyTarget(rows, stats || {}, clampHours(hours) * 60);
 };
+// Tasks still left for a new session. Completed history stays on the list and is not part of the new target.
+// Same exclusions as a countable day task: no title, a future scheduled copy, pending, won't-do, or a removed row.
+export const remainingEligible = (tasks = []) => (tasks || []).filter((t) => t && t.title && !t.completed && t.status !== 'pending' && t.status !== 'wontdo' && !t.scheduledFuture && t.removed !== true);
+// New session requirement: dailyTarget (eightHourCore) on the remaining tasks only.
+// total 0 -> target 0. A 0 target does not open the vault; there is nothing left to earn.
+export const sessionTargetOf = (tasks = [], hours, stats = {}) => previewDayTarget(remainingEligible(tasks), hours, stats);

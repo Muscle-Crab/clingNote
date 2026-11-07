@@ -79,6 +79,7 @@ const props = defineProps({
   freezes: { type: Number, default: 0 }, // held streak freeze days
   points: { type: Number, default: 0 },
   target: { type: Number, default: 0 }, // boss day target (required); shown as earned/required
+  sessionKey: { type: String, default: '' }, // a new session snaps the points, it does not tick down through the previous total
   offToday: { type: Boolean, default: false }, // holiday mode: 🏖️ instead of 🔥
   hold: { type: Boolean, default: false }, // a full-screen overlay (reward/loss) is up: queue the streak level-up until it closes
   uid: { type: String, default: '' }, // last-seen plant stage / streak are remembered per user on this device
@@ -113,6 +114,11 @@ const animate = (key, target, to, ms, k) => {
 };
 watch(pct, (v) => animate('pct', shownPct, v, 700, 'pct'));
 watch(() => props.done, (v) => animate('done', shownDone, v, 500, 'done'));
+watch(() => props.sessionKey, (next, prev) => {
+  if (!next || next === prev) return;
+  if (cancels.pts) cancels.pts();
+  shownPts.value = props.points;
+});
 watch(() => props.points, (to, from) => {
   const was = shownPts.value; animate('pts', shownPts, to, 900, 'pts');
   if (!settled || !(to > from)) return;

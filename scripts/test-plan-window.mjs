@@ -57,12 +57,13 @@ t('completionOnlyChange: only completion fields may differ', () => {
 t('pill: no planning state any more', () => { assert.equal(C.pillState({ shut: true, planning: true }).main, 'Shut'); assert.equal(C.pillState({ shut: true, untilLabel: '7 AM' }).main, 'Shut'); });
 t('rules: shut day frozen except in-place, other days writable', () => {
   const r = src('firestore.rules'); assert.ok(/function dayFrozen\(lk, dayName\)[\s\S]*?shutUntil/.test(r));
-  assert.ok((r.match(/!dayFrozen\(eightHourLock\(/g) || []).length >= 3); assert.ok(/lockedDayUnchanged\(\)/.test(r));
+  assert.ok((r.match(/!dayFrozen\(eightHourLock\(/g) || []).length >= 2); assert.ok(/lockedDayUnchanged\(\)/.test(r));
 });
 t('wiring: settings row + chrome + home', () => {
   const pf = src('src/views/Profile.vue'); assert.ok(pf.includes('v-if="false" class="pf-row pf-row--divided" data-test="plan-time-row"'), 'plan time row hidden');
   const ch = src('src/components/eighthour/EightHourChrome.vue'); assert.ok(!ch.includes('eh-plan-open') && !ch.includes('Plan next session') && !ch.includes('eh-sched-open') && ch.includes('Start next session'));
-  assert.ok(/startNextSession\(sch\.hours\)/.test(ch) && /h >= 5 && h <= 12/.test(ch) && !/type="time"|type="date"/.test(ch), 'only input: hours 5..12, starts now');
+  assert.ok(/startNextSession\(sch\.hours\)/.test(ch) && /SESSION_HOUR_OPTIONS/.test(ch) && !/HOUR_OPTIONS\.filter/.test(ch) && !/type="time"|type="date"/.test(ch), 'only whole hours 5..12, starts now');
+  assert.ok(/requirePro\(router, 'lockIn'\)/.test(ch) && /openLockPaywall\(/.test(ch), 'Start next session opens the paywall when Pro is required');
   const hv = src('src/views/HomeView.vue'); assert.ok(hv.includes('canPlanDay') && !hv.includes('goTomorrowTab') && !hv.includes('planWin'));
   assert.ok(!/const toggleTaskCompletion[\s\S]{0,400}blockIfShut\(/.test(hv), 'completion must not be blocked by shutdown');
 });

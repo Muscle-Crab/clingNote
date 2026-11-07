@@ -50,6 +50,7 @@ t('vault stays shut until the same delay runs out', () => {
   const apps = [{ id: 'a', label: 'A', price: 10 }]; const w = { untilMs: 11 * H, text: 'Next session in 2h · 11:00 AM (2h + 2 important × 30m)' };
   const v = vaultView({ apps, priced: apps, points: 500, nowMs: 9 * H, wait: w });
   assert.equal(v.canStart, false); assert.equal(v.openCount, 0); assert.equal(v.text, `🔒 Vault · ${w.text}`);
-  assert.equal(vaultView({ apps, priced: apps, points: 500, nowMs: 11 * H, wait: w }).openCount, 1);
+  const after = vaultView({ apps, priced: apps, points: 500, nowMs: 11 * H, wait: w, accessOpen: true });
+  assert.equal(after.openCount, 1); assert.equal(after.points, 500);
 });
 console.log(`session-delay: ${n} passed`);

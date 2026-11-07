@@ -49,12 +49,14 @@ import { localYMD } from '@/utils/localDate';
 import { recapText, breaksOn } from '@/utils/gamePlan';
 import { pillState, SHUT_ROUTES, PILL_ROUTES, SEEN_KEY } from '@/utils/eightHourChrome';
 import { speak } from '@/composables/useSpeech';
-import { hoursLabel, WARN_MINUTES, HOUR_OPTIONS } from '@/utils/eightHour';
+import { hoursLabel, WARN_MINUTES, SESSION_HOUR_OPTIONS } from '@/utils/eightHour';
 import { scheduleLocal } from '@/utils/localNotify';
 import { homeDayFor } from '@/utils/homeDay';
 import { lockIn } from '@/utils/lockIn';
 import { clingLock, lockAvailable } from '@/native/clingNative';
 import { getTodayId } from '@/utils/dateTime';
+import { requirePro, loadUserDoc } from '@/composables/usePro';
+import { canUse } from '@/utils/pro';
 
 const route = useRoute(); const router = useRouter();
 const eh = useEightHour();
@@ -95,14 +97,26 @@ const shutDone = computed(() => Number(shut.value && shut.value.session && shut.
 const shutMet = computed(() => !!(shut.value && shut.value.met) && shutDone.value >= PER_SESSION);
 const nextOk = computed(() => !!(eh.session.value && eh.session.value.canStart && !eh.st.data?.offline));
 const canPick = lockAvailable();
-const addApps = async () => { try { const a = await clingLock.requestAuthorization(); if (a.status === 'approved') await clingLock.pickApps(); } catch (e) { /* stays as is */ } };
-const doNextSession = async () => { sch.err = ''; try { await eh.startNextSession(sch.hours); } catch (e) { sch.err = e.message || 'Could not start the session'; } };
+const needsPro = (e) => !!(e && (e.status === 402 || /pro required/i.test(e.message || '')));
+const openLockPaywall = () => router.push({ path: '/paywall', query: { feature: 'lockIn', from: route.fullPath } });
+// Free accounts: Start next session / Add apps open the existing paywall (same path as Lock in on Home). A 402 from the server does too, so the red "Pro required" line is not the only way out.
+const addApps = async () => { if (!(await requirePro(router, 'lockIn'))) return; try { const a = await clingLock.requestAuthorization(); if (a.status === 'approved') await clingLock.pickApps(); } catch (e) { if (needsPro(e)) openLockPaywall(); } };
+const doNextSession = async () => { sch.err = ''; if (!(await requirePro(router, 'lockIn'))) return; try { await eh.startNextSession(sch.hours); } catch (e) { if (needsPro(e)) { openLockPaywall(); return; } sch.err = e.message || 'Could not start the session'; } };
+// The shutdown card is the only thing on screen. If this account cannot start a session, open the paywall once per ended session instead of leaving a dead "Pro required" label.
+let paywallFor = '';
+watch(shutVisible, async (on) => {
+  if (!on) return;
+  const d = await loadUserDoc(); if (canUse(d, 'lockIn')) return;
+  const l = eh.lock.value || {}; const key = `${l.dayKey || ''}:${l.index || 0}:${l.endMs || 0}`;
+  if (paywallFor === key) return; paywallFor = key; openLockPaywall();
+}, { immediate: true });
 // Day recap line: sessions done of chosen, breaks taken today (from the local break log; Home keeps it in sync with the account).
 const recap = computed(() => { const s = eh.session.value; if (!shut.value || !s || nextOk.value) return '';
   let log = []; try { log = JSON.parse(localStorage.getItem('cn.gp.breakLog') || '[]'); } catch (e) { /* none */ }
   const b = breaksOn(log, eh.lock.value?.dayKey || localYMD()); return recapText({ points: shut.value.earned, sessionsDone: s.done, sessions: s.of, breaks: b.count, breakMin: b.min }); });
-const NEXT_HOUR_OPTIONS = HOUR_OPTIONS.filter((h) => h >= 5 && h <= 12);
-const sch = reactive({ hours: Math.min(12, Math.max(5, eh.hoursPref.value || 8)), err: '' });
+const NEXT_HOUR_OPTIONS = SESSION_HOUR_OPTIONS; // whole hours 5..12; half-hour day-length prefs are rejected by the server
+const seedHours = Number(eh.hoursPref.value);
+const sch = reactive({ hours: SESSION_HOUR_OPTIONS.includes(seedHours) ? seedHours : 8, err: '' });
 const goCard = () => { router.push({ name: 'home' }).then(() => setTimeout(() => document.querySelector('[data-test="eight-hour-card"]')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 250)).catch(() => {}); };
 const signOutNow = async () => { try { await signOut(auth); } finally { router.push('/login'); } };
 

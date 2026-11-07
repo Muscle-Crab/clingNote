@@ -10,6 +10,7 @@ import { fnUrl } from '@/config/api';
 import * as core from '@/utils/eightHour';
 import { setLockSource } from '@/utils/eightHourLock';
 import { readLock, writeLock, lockFor } from '@/utils/ehLockCache';
+import { runningLock, authKeepsDay, shouldKeepServerDay } from '@/utils/dayPrompt';
 import { readDebtCache, writeDebtCache, cacheWithDebt, cacheCleared, mergeDebt } from '@/utils/appLockDebt';
 import { onAuthStateChanged } from 'firebase/auth';
 
@@ -46,7 +47,7 @@ export const readCachedPlan = () => { try { const p = JSON.parse(localStorage.ge
 export const cachePlan = (plan) => { try { localStorage.setItem(PLAN_KEY, JSON.stringify({ wakeTime: plan.wakeTime, taskCount: plan.taskCount, tz: plan.tz || deviceTz(), at: Date.now() })); } catch (e) { /* private mode */ } };
 export const clearCachedPlan = () => { try { localStorage.removeItem(PLAN_KEY); } catch (e) { /* ignore */ } };
 
-const call = async (action, body = {}) => {
+const call = async (action, body = {}, retried = false) => {
   const u = auth.currentUser; if (!u) throw Object.assign(new Error('Not signed in'), { status: 401 });
   const r = await fetch(fnUrl('eight-hour-day'), { method: 'POST', headers: { Authorization: `Bearer ${await u.getIdToken()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ action, ...body }) });
   const ct = (r.headers && r.headers.get && r.headers.get('content-type')) || '';
@@ -54,19 +55,55 @@ const call = async (action, body = {}) => {
   if (!/json/i.test(ct)) throw Object.assign(new Error('8-hour day service is unavailable'), { status: r.status, unavailable: true });
   const data = await r.json().catch(() => ({}));
   if (r.status === 404) throw Object.assign(new Error(data.error || '8-hour day service is unavailable'), { status: 404, unavailable: true });
+  // Paid on this phone but users/{uid}.isPro not written yet: mirror RevenueCat once, then retry the SAME request. Retry only after the server says Pro; a failed sync stays a 402.
+  if (r.status === 402 && !retried) {
+    try {
+      const { syncEntitlement } = await import('@/utils/iap');
+      const u2 = auth.currentUser;
+      if (u2) {
+        const synced = await syncEntitlement(u2);
+        if (synced && synced.isPro === true) return call(action, body, true);
+      }
+    } catch (e) {
+      // A missing RevenueCat secret is not "this person isn't Pro". Show that, don't leave the red Pro required line.
+      if (/server not configured/i.test(e?.message || '')) throw Object.assign(new Error('Server not configured'), { status: 500, code: 'server-config' });
+    }
+  }
   if (!r.ok) throw Object.assign(new Error(data.error || `Request failed (${r.status})`), { status: r.status, code: data.code });
   return data;
 };
-// Local fallback when the server function is unreachable/not deployed: plan only (from the device cache), never a lock
-// (locks are server-authoritative), so the card can still show the plan / setup instead of a dead "Retry".
+// Local fallback when the server function is unreachable. A session still inside its end time is restored from the device cache.
+// The plan-only fallback is only applied when no server day is already loaded.
 const isUnavailable = (e) => !!(e && (e.unavailable || e.name === 'TypeError' || /load failed|failed to fetch|network/i.test(e.message || '')));
 const localState = (plan) => ({ now: Date.now(), plan: plan ? { wakeTime: plan.wakeTime, taskCount: plan.taskCount, tz: plan.tz || deviceTz() } : null, lock: localLockToday(plan), stats: core.defaultStats(), offline: true });
 // Last started day, cached on the device so the hard stop survives a reload / app restart even when the server is unreachable.
-const curUid = () => (auth.currentUser && auth.currentUser.uid) || null;
-// Account switch / sign-out: drop the previous account's in-memory day so its lock can never shut the new account.
-try { onAuthStateChanged(auth, (u) => { const id = u ? u.uid : null; if (id !== st.uid) { st.uid = id; st.data = null; st.loaded = false; st.error = ''; } }); } catch (e) { /* ignore */ }
-// Offline: a day confirmed on THIS device (startNow with the function unreachable) is kept locally so countdown/shutdown still work.
-const localLockToday = (plan) => { const l = readLastLock(); if (!l || !l.local) return null; const tz = (plan && plan.tz) || l.tz || deviceTz(); return l.dayKey === core.dayKeyIn(tz, Date.now()) ? l : null; };
+// While Firebase briefly reports signed-out (localStorage restore, or a null then the same uid), keep that uid so the running lock stays visible.
+let authHold = null; let authHoldTimer = null;
+const curUid = () => (auth.currentUser && auth.currentUser.uid) || authHold || null;
+const dropDay = () => { authHold = null; st.uid = null; st.data = null; st.loaded = false; st.error = ''; };
+// Account switch: drop the previous account's day. A null flicker with a day already loaded does not.
+try { onAuthStateChanged(auth, (u) => {
+  const id = u ? u.uid : null;
+  if (id && authHoldTimer) { clearTimeout(authHoldTimer); authHoldTimer = null; }
+  if (authKeepsDay(st.uid, id, !!(st.loaded && st.data))) {
+    if (!id) {
+      authHold = st.uid;
+      if (!authHoldTimer) authHoldTimer = setTimeout(() => { authHoldTimer = null; if (!auth.currentUser) dropDay(); }, 2000);
+    } else authHold = null;
+    return;
+  }
+  if (authHoldTimer) { clearTimeout(authHoldTimer); authHoldTimer = null; }
+  authHold = null; st.uid = id; st.data = null; st.loaded = false; st.error = '';
+}); } catch (e) { /* ignore */ }
+// Offline: a session still before endMs (server cache or a local start) stays on screen. An ended server cache does not become a new day.
+const localLockToday = (plan) => {
+  const l = readLastLock(); if (!l) return null;
+  const now = Date.now();
+  if (runningLock(l, now)) return l;
+  if (!l.local) return null;
+  const tz = (plan && plan.tz) || l.tz || deviceTz();
+  return l.dayKey === core.dayKeyIn(tz, now) ? l : null;
+};
 export const readLastLock = () => readLock(curUid());
 const cacheLock = (l) => writeLock(curUid(), l);
 // The lock that decides the hard stop: the server's, else (offline / not loaded yet) the cached one. Never invents a lock.
@@ -97,8 +134,11 @@ export const refresh = async () => {
   if (st.loading) return st.data;
   st.loading = true; const me = curUid();
   try { const d = await call('state'); if (curUid() === me) apply(d); } catch (e) {
-    if (isUnavailable(e) && e.status !== 401) { apply(localState(readCachedPlan())); st.error = e.message || 'Offline'; }
-    else st.error = e.message || 'Could not load your day';
+    // A loaded server day survives one failed refresh. Replacing it with the no-lock fallback reopened the hours dialog over a running timer.
+    if (!shouldKeepServerDay(st.loaded, st.data)) {
+      if (isUnavailable(e) && e.status !== 401) { apply(localState(readCachedPlan())); st.error = e.message || 'Offline'; }
+      else st.error = e.message || 'Could not load your day';
+    }
   } finally { st.loading = false; }
   ensureTimers();
   return st.data;

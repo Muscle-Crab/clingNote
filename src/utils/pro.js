@@ -13,3 +13,6 @@ export const FREE_FEATURES = Object.freeze(['tasks', 'editTask', 'completeTask',
 export const PRO_FEATURES = Object.freeze(['aiCoach', 'ask', 'voice', 'breakdown', 'strictBoss', 'points', 'calendarFeed', 'calendar', 'community', 'friends',
   'lockIn', 'appLock', 'focus', 'timer', 'breaks', 'templates', 'background', 'checkin', 'widget', 'routines', 'unlimitedRoutines', 'discipline', 'recovery']);
 export const canUse = (userDoc, feature) => !ENFORCE_PAYWALL || FREE_FEATURES.includes(feature) || isPro(userDoc);
+// One answer for every gate. Firestore Pro and a live RevenueCat entitlement both count. Neither one alone is ignored.
+// rcActive must already be "this uid has the pro entitlement"; unpaid users pass false and stay locked.
+export const accessPro = (userDoc, rcActive) => isPro(userDoc) || !!rcActive;

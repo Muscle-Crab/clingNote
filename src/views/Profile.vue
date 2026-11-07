@@ -83,7 +83,7 @@
           <h2 class="pf-section">Preferences</h2>
           <section class="pf-card pf-card--flush pf-push"><PushSettings /></section>
           <section v-if="isOwn" class="pf-card pf-card--flush" data-test="lock-in-setting">
-            <label class="pf-row"><span class="pf-ico" aria-hidden="true">🔒</span><span class="pf-row-title">Lock-in<small class="pf-dl-sub">8-hour lock: a timed day that shuts the app at the end. Off by default; you can skip it on any day.</small></span>
+            <label class="pf-row"><span class="pf-ico" aria-hidden="true">🔒</span><span class="pf-row-title">Lock-in<small class="pf-dl-sub">8-hour lock: a timed day that shuts the app at the end. On for new accounts; turn it off here, or skip a single day.</small></span>
               <input type="checkbox" role="switch" class="pf-switch" data-test="lock-in-toggle" :checked="lockIn.enabled" :disabled="!lockIn.loaded" @change="onLockInToggle($event.target.checked)" /></label>
             <button type="button" class="pf-row pf-row--divided" data-test="locked-apps-row" :disabled="lockedApps.disabled || lockedAppsBusy" :aria-disabled="lockedApps.disabled" @click="onPickLockedApps"><span class="pf-ico" aria-hidden="true">📵</span><span class="pf-row-title">Locked apps<small class="pf-dl-sub" data-test="locked-apps-sub">{{ lockedApps.sub }}</small></span><span v-if="!lockedApps.disabled" class="pf-chev" aria-hidden="true">›</span></button>
             <label v-if="false" class="pf-row pf-row--divided" data-test="wake-lock-row"><span class="pf-ico" aria-hidden="true">🌅</span><span class="pf-row-title">Lock at wake-up<small class="pf-dl-sub" data-test="wake-lock-sub">{{ wakeLockSub }}</small></span>
