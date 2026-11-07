@@ -249,7 +249,7 @@ import { useTaskViewPrefs } from '@/composables/useTaskViewPrefs';
 import { viewTasks, canReorder, applyManualOrder, normalizePrefs, visibleCount, shouldHandleShortcut } from '@/utils/taskView';
 import { ACTIVE_CAP, taskKey, activeCount, loadSummary, buildSchedule } from '@/utils/taskPlanning';
 import { localYMD, localYMDOffset, isStaleCompletion, pruneStaleDay } from '@/utils/localDate';
-import { clearExpiredTimers, timersChanged, withoutTask, markTaskRemoved, visibleTasks, taskStillVisible, deleteFailureMessage, dayReadFailure, tasksFromSnapshot } from '@/utils/dayList';
+import { clearExpiredTimers, timersChanged, withoutTask, markTaskRemoved, visibleTasks, taskStillVisible, deleteFailureMessage, writeFailureMessage, appendTask, dayReadFailure, tasksFromSnapshot } from '@/utils/dayList';
 import { getTodayId, formatSessionTime, getCurrentDate, formatTime, isToday } from '@/utils/dateTime';
 import { badges } from '@/utils/gamification';
 import { recordMonthlyToggle, awardFinishedMonth } from '@/composables/useMonthlyStats';
@@ -531,7 +531,7 @@ const saveSelectedDayTasks = async () => {
   );
 
   await updateDoc(selectedDayDocRef, {
-    tasks: selectedDayRoutine.value,
+    tasks: dropUndefined(selectedDayRoutine.value),
     updatedAt: serverTimestamp(),
   });
 };
@@ -1217,11 +1217,23 @@ const startTimer = async (opts = {}) => {
   const at = selectedTimerTaskIndex.value, before = selectedDayRoutine.value[at];
   selectedDayRoutine.value[at] = task;
 
-  // A rejected save used to escape unhandled: the card showed running, then the next refresh put back the stored (stopped) copy, so the
-  // timer looked like it started and stopped at once. Roll back on purpose and say why.
-  try { await saveSelectedDayTasks(); } catch (e) {
+  // Patch this task on the stored list by identity. Writing the whole on-screen array can shift slots or send an
+  // undefined field, and a rules rejection is not a lost connection. Roll back the card if the write fails.
+  try {
+    const dayName = days[selectedDayIndex.value].day;
+    const saved = await mutateDay(dayName, (live) => {
+      const i = (live || []).findIndex((t) => sameTask(t, before));
+      if (i < 0) { const err = new Error('task missing from stored list'); err.code = 'not-found'; throw err; }
+      const next = live.slice();
+      const { timerActive, timerStartedAt, timerEndTime, timerDurationMinutes, timerPausedAt, focusLock, timerPomo, estimateMin, minutes, dueAt, dueTime } = task;
+      next[i] = { ...live[i], timerActive, timerStartedAt, timerEndTime, timerDurationMinutes, timerPausedAt, focusLock, timerPomo, ...(estimateMin ? { estimateMin } : {}), ...(minutes ? { minutes } : {}), ...(dueAt ? { dueAt } : {}), ...(dueTime ? { dueTime } : {}) };
+      return next;
+    });
+    const idx = (selectedDayRoutine.value || []).findIndex((t) => sameTask(t, before));
+    if (idx >= 0) selectedDayRoutine.value[idx] = saved.find((t) => sameTask(t, before)) || task;
+  } catch (e) {
     if (selectedDayRoutine.value[at] === task) selectedDayRoutine.value[at] = before;
-    if (!lockMessage(e)) { console.error('start timer:', e); showNoteToast('Could not start the timer. Check your connection and try again.', { error: true }); }
+    if (!lockMessage(e)) { console.error('start timer:', e); showNoteToast(writeFailureMessage(e, before && before.title, 'start the timer for'), { error: true }); }
     return false;
   }
   sfx('timerStart');
@@ -2274,13 +2286,15 @@ const addNewTask = async () => {
   }
 
   // Optimistic: show the task and close the modal right away, persist in the background, roll back on failure.
+  // Append so existing slots keep createdAt and points. sortOrder places the card (default First) without shifting those slots.
   const position = parseInt(newTask.value.position, 10);
   const copyFor = (selectedDay) => {
     const dayIdx = days.findIndex((d) => d.day === selectedDay.day);
     const activeFrom = newTask.value.selectedDays.length > 0 && task.type === 'recurring' && dayIdx !== selectedDayIndex.value && dayIdx >= 0 ? activeFromForDay(dayIdx) : '';
-    return activeFrom ? { ...task, activeFrom } : { ...task };
+    const row = activeFrom ? { ...task, activeFrom } : { ...task };
+    return { ...row, sortOrder: (Number.isNaN(position) ? 1e6 : position) - 0.5 };
   };
-  const insertAt = (list, copy) => { const l = [...list]; l.splice(Number.isNaN(position) ? l.length : position, 0, copy); return l; };
+  const insertAt = (list, copy) => appendTask(list, copy, (t) => taskKey(t) === taskKey(copy));
   const viewDay = days[selectedDayIndex.value].day;
   const key = taskKey(task);
   if (selectedDays.some((d) => d.day === viewDay)) selectedDayRoutine.value = insertAt(selectedDayRoutine.value || [], copyFor({ day: viewDay }));
@@ -2294,14 +2308,21 @@ const addNewTask = async () => {
   error.value = '';
   lastAddPersist = trackWrite((async () => {
     try {
-      await Promise.all(selectedDays.map((d) => mutateDay(d.day, (l) => (l.some((t) => taskKey(t) === key) ? l : insertAt(l, copyFor(d))))));
+      const refs = selectedDays.map((d) => doc(db, 'weeklyRoutines', `${userId.value}_${d.day}`));
+      await runTransaction(db, async (tx) => {
+        const snaps = await Promise.all(refs.map((r) => tx.get(r)));
+        snaps.forEach((snap, i) => {
+          const live = snap.exists() ? [...(snap.data().tasks || [])] : [];
+          const next = appendTask(live, copyFor(selectedDays[i]), (t) => taskKey(t) === key);
+          tx.set(refs[i], { tasks: dropUndefined(next), updatedAt: serverTimestamp() }, { merge: true });
+        });
+      });
     } catch (e) {
       console.error('Error adding task:', e);
       selectedDayRoutine.value = (selectedDayRoutine.value || []).filter((t) => taskKey(t) !== key);
       pendingAdds.delete(key);
       if (gateCache) gateCache.extra = gateCache.extra.filter((t) => taskKey(t) !== key);
-      error.value = `Could not save “${task.title}”. Please try again.`;
-      alert(error.value);
+      error.value = writeFailureMessage(e, task.title, 'save');
       return false;
     }
     try { if (hadReminder) await scheduleNotification(task, task.reminder); } catch (e) { console.error(e); }
@@ -4345,11 +4366,12 @@ const hydrateVaultReport = async () => {
   if (local && local.rows.length && (!nativeReport || (Date.parse(local.adoptedAt) || 0) >= (Date.parse(nativeReport.adoptedAt) || 0))) mirrorVaultReport(local);
   vaultReport.value = local;
 };
+const todayPriceCap = computed(() => dayRequiredPts.value || 0);
 hydrateVaultReport();
 const gpVault = computed(() => { if (!lockAvailable() || !isViewingToday.value) return null; const gate = vaultAccessState();
   const sessionHeld = !!(sessionGate.value && !sessionGateOpen.value);
-  const vaultPts = sessionGate.value ? (sessionHeld ? 0 : 1000000000) : dailyPoints.value;
-  return vaultView({ apps: vaultData.value.apps || [], days: vaultData.value.days || {}, todayYmd: localDateStr(), points: vaultPts,
+  const vaultPts = sessionHeld ? 0 : dayVaultPoints.value;
+  return vaultView({ apps: vaultData.value.apps || [], days: vaultData.value.days || {}, todayYmd: localDateStr(), points: vaultPts, priceCap: todayPriceCap.value,
     report: vaultReport.value, debt: vaultDebt.value, windows: vaultWindows.value, nowMs: vaultNow.value, wait: eh.wait && eh.wait.value, bought: vaultBought.value, accessOpen: gate.accessOpen && !sessionHeld }); });
 const vaultSessionId = () => { const l = eh.lock.value; if (!eh.running.value || !l || !l.startMs) return ''; return `${l.dayKey || ''}#${Number(l.index) || 0}:${l.startMs}`; };
 const loadVaultSession = () => { try { return localStorage.getItem(VAULT_SESSION_KEY) || ''; } catch (e) { return ''; } };

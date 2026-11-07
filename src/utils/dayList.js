@@ -58,13 +58,20 @@ export const sameLengthKeepsIdentity = (before, after) => (before || []).length 
   return !!n && n.createdAt === t.createdAt && n.points === t.points;
 });
 
-export const deleteFailureMessage = (e) => {
-  const code = String((e && e.code) || '');
+export const deleteFailureMessage = (e) => writeFailureMessage(e, '', 'delete');
+export const writeFailureMessage = (e, title, verb = 'save') => {
+  const name = title ? `“${title}”` : 'that task';
+  const code = String((e && e.code) || '').replace(/^firestore\//, '');
   const msg = String((e && e.message) || '');
-  if (code === 'permission-denied') return "Couldn't delete that task. This day's list rejected the change.";
-  if (code === 'unavailable' || code === 'deadline-exceeded' || /client is offline|network|failed to fetch/i.test(msg)) return "Couldn't delete that task. Check your connection and try again.";
-  return "Couldn't delete that task. Try again.";
+  if (code === 'permission-denied') return verb === 'delete'
+    ? "Couldn't delete that task. This day's list rejected the change."
+    : `Couldn't ${verb} ${name}. This day's list rejected the change.`;
+  if (code === 'unavailable' || code === 'deadline-exceeded' || /client is offline|network|failed to fetch/i.test(msg)) return `Couldn't ${verb} ${name}. Check your connection and try again.`;
+  if (code === 'invalid-argument' || /unsupported field value|undefined/i.test(msg)) return `Couldn't ${verb} ${name}. A field on the task can't be stored.`;
+  if (code === 'not-found') return `Couldn't ${verb} ${name}. This day's list is not there yet.`;
+  return `Couldn't ${verb} ${name}. ${code || 'Try again.'}`;
 };
+export const appendTask = (list, task, same) => ((list || []).some(same) ? (list || []) : [...(list || []), task]);
 
 export const dayReadFailure = (e, hadList) => {
   const code = String((e && e.code) || '');

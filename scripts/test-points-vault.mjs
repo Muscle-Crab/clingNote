@@ -302,6 +302,48 @@ t('the real report prices observed minutes from least used up to PUBG, and an un
   assert.doesNotMatch(save, /UsageLog\.record|forKey: "usage\.daily\.v1"/);
   assert.match(swift.slice(swift.indexOf('func startUsage'), swift.indexOf('func vaultUsage')), /UsageLog\.ensure/);
 });
+t('today\'s requirement caps 600 and keeps no-reading cards in a stable order', () => {
+  const report = S.sentReport('');
+  const apps = [
+    { id: 'ig', label: 'Instagram' }, { id: 'yt', label: 'YouTube' }, { id: 'tt', label: 'TikTok' },
+    { id: 'fb', label: 'Facebook' }, { id: 'pg', label: 'PUBG MOBILE' },
+    { id: 'tok-b', label: 'App' }, { id: 'tok-a', label: 'App' },
+  ];
+  const shuffled = [apps[6], apps[5], apps[4], apps[3], apps[2], apps[1], apps[0]];
+  const priced = (list, cap) => V.priceApps(list, {}, today, { report, priceCap: cap });
+  const a = priced(apps, 165); const b = priced(shuffled, 165);
+  assert.deepEqual(a.map((x) => x.id), b.map((x) => x.id));
+  assert.equal(a.find((x) => x.id === 'ig').price, 140);
+  assert.equal(a.find((x) => x.id === 'yt').price, 165);
+  assert.equal(a.find((x) => x.id === 'tt').price, 165);
+  assert.equal(a.find((x) => x.id === 'pg').price, 165);
+  assert.equal(a.find((x) => x.id === 'fb').price, null);
+  assert.equal(a.find((x) => x.id === 'fb').noReading, true);
+  assert.equal(a.find((x) => x.id === 'tok-a').price, null);
+  assert.equal(a.find((x) => x.id === 'tok-b').noReading, true);
+  assert.ok(a.findIndex((x) => x.id === 'tok-a') < a.findIndex((x) => x.id === 'tok-b'));
+  const open = a.filter((x) => x.price != null);
+  assert.equal(open[open.length - 1].id, 'pg');
+  assert.equal(open[open.length - 1].boss, true);
+  const view = V.vaultView({ apps, days: {}, todayYmd: today, points: 165, report, priceCap: 165, accessOpen: true, nowMs: 0 });
+  assert.equal(view.items.find((x) => x.id === 'yt').price, 165);
+  assert.equal(view.items.find((x) => x.id === 'yt').open, true);
+  assert.equal(view.items.find((x) => x.id === 'ig').open, true);
+  assert.equal(view.items.find((x) => x.id === 'fb').open, false);
+  const at200 = priced(apps, 200);
+  assert.equal(at200.find((x) => x.id === 'ig').price, 140);
+  assert.equal(at200.find((x) => x.id === 'yt').price, 200);
+  const threshold = V.priceApps([{ id: 'a', label: 'A' }], daysOf({ a: 240 }), today, { priceCap: 165 });
+  assert.ok(threshold[0].price <= 165);
+  const uncapped = V.vaultView({ apps: [{ id: 'yt', label: 'YouTube' }], priced: [{ id: 'yt', label: 'YouTube', price: 600, min: 411 }], points: 165, priceCap: 165, accessOpen: true, todayYmd: today, nowMs: 0 });
+  assert.equal(uncapped.items[0].price, 165);
+  assert.equal(uncapped.items[0].open, true);
+  const appsVue = fs.readFileSync(new URL('../src/components/vault/VaultApps.vue', import.meta.url), 'utf8');
+  assert.match(appsVue, /:key="a.id"/);
+  assert.doesNotMatch(appsVue, /a\.id \+ \(a\.open/);
+  const swift = fs.readFileSync(new URL('../ios/App/Shared/LockShared.swift', import.meta.url), 'utf8');
+  assert.match(swift, /next\.sort \{ \$0\.id < \$1\.id \}/);
+});
 const src = (await import('node:fs')).readFileSync(new URL('../src/utils/pointsVault.js', import.meta.url), 'utf8');
 t('no hardcoded app names in the logic', () => { assert.ok(!/pubg|instagram|youtube|tiktok/i.test(src)); });
 console.log(`points vault: ${n} passed`);

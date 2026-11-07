@@ -211,6 +211,7 @@ enum VaultCatalog {
             add(t, preferLabel: lab?.label ?? "", preferId: lab?.id)
         }
         for l in labeled { add(l.token, preferLabel: l.label, preferId: l.id) }
+        next.sort { $0.id < $1.id }
         save(next)
         return next
     }

@@ -24,6 +24,13 @@ export const priceOf = (min) => {
   return Math.min(PRICE_CAP, round5(BASE_PRICE + PTS_PER_MIN * n));
 };
 export const tasksFor = (price) => Math.ceil((Number(price) || 0) / PTS_PER_TASK);
+// Today's completion requirement caps every displayed price. 0 means no day target yet, so the formula cap (600) remains.
+export const boundPrice = (price, priceCap) => {
+  if (price == null) return null;
+  const day = Number(priceCap);
+  const cap = Number.isFinite(day) && day > 0 ? Math.min(PRICE_CAP, day) : PRICE_CAP;
+  return Math.min(price, cap);
+};
 const periodDaysOf = (report) => {
   const n = Math.round(Number(report && report.period && report.period.days));
   return Number.isFinite(n) && n > 0 ? n : 0;
@@ -35,9 +42,10 @@ const periodDaysOf = (report) => {
 // The heaviest priced app (first on a tie) is ×1.5. Unpriced apps sort last and cannot unlock first.
 export const priceApps = (apps, days, todayYmd, opts = null) => {
   const report = opts && opts.report;
+  const priceCap = opts && opts.priceCap;
   const matched = report ? matchReport(apps, report) : new Map();
   const daysN = periodDaysOf(report);
-  const rows = (apps || []).map((a, i) => ({ id: a.id, label: a.label || 'App', ord: i, avg: avgUsage(days, a.id, todayYmd) }));
+  const rows = (apps || []).map((a, i) => ({ id: a && a.id != null ? String(a.id) : `ord:${i}`, label: a.label || 'App', ord: i, avg: avgUsage(days, a.id, todayYmd) }));
   rows.forEach((r) => {
     const snap = matched.get(r.id);
     r.thresholdMin = r.avg == null ? null : r.avg;
@@ -53,9 +61,12 @@ export const priceApps = (apps, days, todayYmd, opts = null) => {
       r.exact = false; r.source = r.avg == null ? '' : 'threshold'; r.awaiting = price == null; r.noData = r.awaiting; r.min = r.awaiting ? null : r.avg; r.price = price;
     }
   });
-  const measured = rows.filter((r) => !r.awaiting && r.price != null).sort((a, b) => b.min - a.min || a.ord - b.ord);
-  if (measured.length) { measured[0].boss = true; measured[0].price = Math.min(PRICE_CAP, round5(measured[0].price * BOSS_MULT)); }
-  rows.sort((a, b) => (a.awaiting - b.awaiting) || (a.price - b.price) || ((a.min || 0) - (b.min || 0)) || (a.ord - b.ord));
+  rows.forEach((r) => { if (r.price != null) r.price = boundPrice(r.price, priceCap); });
+  const measured = rows.filter((r) => !r.awaiting && r.price != null).sort((a, b) => (b.min || 0) - (a.min || 0) || String(a.id).localeCompare(String(b.id)));
+  if (measured.length) { measured[0].boss = true; measured[0].price = boundPrice(round5(measured[0].price * BOSS_MULT), priceCap); }
+  const rank = (r) => (r.price == null ? Number.POSITIVE_INFINITY : r.price);
+  const usage = (r) => (r.min == null ? Number.POSITIVE_INFINITY : r.min);
+  rows.sort((a, b) => (a.awaiting - b.awaiting) || (rank(a) - rank(b)) || (usage(a) - usage(b)) || String(a.label || '').localeCompare(String(b.label || '')) || String(a.id).localeCompare(String(b.id)));
   return rows.map((r) => ({ ...r, boss: !!r.boss, noReading: !!r.noReading, tasks: r.price == null ? null : tasksFor(r.price) }));
 };
 export const formatReportMinutes = (min) => {
@@ -72,17 +83,18 @@ export const liveWindow = (windows, nowMs) => (windows || []).find((w) => w.star
 // open = the day's points have reached that app's price, and a session or focus timer is running.
 // Every priced app at or under the points opens. A higher price stays locked. Points are not spent.
 // wait = the session-end delay ({ untilMs, text }): the vault stays shut until it runs out.
-export const vaultView = ({ apps = [], days = {}, todayYmd = '', points = 0, priced = null, report = null, debt = false, windows = [], nowMs = Date.now(), wait = null, bought = [], accessOpen = false } = {}) => {
+export const vaultView = ({ apps = [], days = {}, todayYmd = '', points = 0, priced = null, report = null, priceCap = 0, debt = false, windows = [], nowMs = Date.now(), wait = null, bought = [], accessOpen = false } = {}) => {
   const held = !!(wait && Number(wait.untilMs) > nowMs);
   const p = Math.max(0, Number(points) || 0);   const ids = new Set((apps || []).map((a) => a.id));
   const owned = new Set(bought || []);
   const icons = new Map((apps || []).filter((a) => a && a.icon).map((a) => [a.id, a.icon]));
-  const base = priced && priced.length ? priced.filter((a) => ids.has(a.id)) : priceApps(apps, days, todayYmd, report ? { report } : null);
+  const base = priced && priced.length ? priced.filter((a) => ids.has(a.id)) : priceApps(apps, days, todayYmd, { ...(report ? { report } : {}), priceCap });
   const items = base.map((a) => {
-    const awaiting = !!(a.awaiting || a.price == null);
-    const passed = !awaiting && p >= a.price;
+    const price = boundPrice(a.price, priceCap);
+    const awaiting = !!(a.awaiting || price == null);
+    const passed = !awaiting && p >= price;
     const open = passed && !debt && !held && !!accessOpen;
-    return { ...a, awaiting, icon: a.icon || icons.get(a.id) || '', bought: owned.has(a.id), open, passed, buyable: false };
+    return { ...a, price, tasks: price == null ? null : tasksFor(price), awaiting, icon: a.icon || icons.get(a.id) || '', bought: owned.has(a.id), open, passed, buyable: false };
   });
   const openCount = items.filter((a) => a.open).length;
   const next = items.find((a) => !a.awaiting && a.price != null && p < a.price);

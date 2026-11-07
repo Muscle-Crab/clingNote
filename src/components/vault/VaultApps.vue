@@ -2,7 +2,7 @@
   <!-- Two-up metal plates. Cheapest first. Each plate keeps that app's own icon. -->
   <div class="gp-shelf" data-test="vault-shelf">
     <div class="gp-bays">
-      <article v-for="a in items" :key="a.id + (a.open ? '-open' : '')" class="gp-bay" :class="{ 'gp-bay--open': a.open, 'gp-bay--unnamed': unnamed(a), 'gp-bay--next': a.id === nextId() }" data-test="vault-app" :data-open="a.open ? '1' : '0'" :data-unnamed="unnamed(a) ? '1' : '0'">
+      <article v-for="a in items" :key="a.id" class="gp-bay" :class="{ 'gp-bay--open': a.open, 'gp-bay--unnamed': unnamed(a), 'gp-bay--next': a.id === nextId() }" data-test="vault-app" :data-open="a.open ? '1' : '0'" :data-unnamed="unnamed(a) ? '1' : '0'">
         <span class="gp-vico" data-test="vault-app-icon" aria-hidden="true">
           <img v-if="a.icon" class="gp-vimg" :src="a.icon" alt="" />
           <span v-else-if="!unnamed(a) && brand(a.label)" class="gp-vbrand" data-test="vault-app-brand" :style="{ background: brand(a.label).bg }"><svg viewBox="0 0 24 24" width="22" height="22" v-html="brand(a.label).svg"></svg></span>

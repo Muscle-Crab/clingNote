@@ -1,7 +1,7 @@
 // Delete any time, keep the list when a day read fails, and drop dead focus timers from the widget.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { clearExpiredTimer, clearExpiredTimers, timerShownOnWidget, TIMER_OVERTIME_MS, deleteFailureMessage, dayReadFailure, tasksFromSnapshot, withoutTask, markTaskRemoved, visibleTasks, taskStillVisible, shorterList, sameLengthKeepsIdentity } from '../src/utils/dayList.js';
+import { clearExpiredTimer, clearExpiredTimers, timerShownOnWidget, TIMER_OVERTIME_MS, deleteFailureMessage, writeFailureMessage, appendTask, dayReadFailure, tasksFromSnapshot, withoutTask, markTaskRemoved, visibleTasks, taskStillVisible, shorterList, sameLengthKeepsIdentity } from '../src/utils/dayList.js';
 import { prepareVaultApps, isPlaceholderName } from '../src/utils/vaultNames.js';
 import { buildWidgetSnapshot } from '../src/utils/widgetSnapshot.js';
 import { hasRing } from '../src/utils/timerRing.js';
@@ -124,6 +124,26 @@ t('an active 7:04–1:04 session at 210/185 with a running timer still removes t
   assert.match(del, /markTaskRemoved/);
   assert.match(del, /taskStillVisible/);
   assert.equal(/strictGoal|gpGate|checklistDone/.test(del), false);
+});
+
+t('a recurring add appends behind existing tasks and names a rejected save', () => {
+  const live = [{ id: 'keep', createdAt: 'a', points: 10, title: 'Make the bed' }];
+  const copy = { id: 'new', createdAt: 'b', points: 5, title: 'Create Instagram video', type: 'recurring' };
+  const next = appendTask(live, copy, (t) => t.createdAt === 'b');
+  assert.equal(next[0].createdAt, 'a');
+  assert.equal(next[0].points, 10);
+  assert.equal(next.length, 2);
+  assert.equal(appendTask(next, copy, (t) => t.createdAt === 'b').length, 2);
+  assert.match(writeFailureMessage({ code: 'permission-denied' }, 'Create Instagram video'), /rejected the change/);
+  assert.match(writeFailureMessage({ code: 'unavailable' }, 'Create Instagram video'), /connection/);
+  assert.match(writeFailureMessage({ code: 'invalid-argument' }, 'Create Instagram video'), /can't be stored/);
+  const home = fs.readFileSync(new URL('../src/views/HomeView.vue', import.meta.url), 'utf8');
+  const add = home.slice(home.indexOf('const addNewTask = async'), home.indexOf('let lastAddPersist'));
+  assert.equal(add.includes('alert('), false);
+  assert.match(add, /appendTask/);
+  assert.match(add, /runTransaction/);
+  const voice = home.slice(home.indexOf('const confirmVoiceItems'), home.indexOf('const relistenVoice'));
+  assert.match(voice, /finally \{ voiceBusy\.value = false; \}/);
 });
 
 t('six placeholder vault cards keep a saved name and drop one shared blocked icon', () => {
