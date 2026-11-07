@@ -27,25 +27,27 @@ t('met before the end: 210/185 opens now, the shield does not wait for a tap', (
   assert.equal(S.checklistMayRelock(r), false);
   assert.equal(S.strictShield({ running: true, dayEndMs: end, now, selectionCount: 6, enabled: true, goal: 185, earned: 184 }).phase, 'locked');
   assert.equal(lockAction({ want: r.want, endMs: r.untilMs, st: { locked: true, until: end, monitoring: true }, now }), 'stop'); });
-t('second session at 210/185 starts the native shield; returning does not unlock it', () => {
+t('second session at 210 daily starts at 0, relocks, and resume does not zero it or lift the shield', () => {
   const end = new Date(2026, 10, 6, 19, 4).getTime(); const now = end - 2 * 3600000;
   const mem = { bag: new Map(), getItem(k) { return this.bag.has(k) ? this.bag.get(k) : null; }, setItem(k, v) { this.bag.set(k, v); } };
   const first = { dayKey: '2026-11-06', index: 0, startMs: new Date(2026, 10, 6, 7, 4).getTime() };
-  assert.equal(S.noteSessionBase(mem, first, 0), 0);
+  assert.equal(S.beginSessionGate(mem, first, 0, 185).earned, 0);
+  assert.equal(S.beginSessionGate(mem, first, 999, 1).target, 185);
   const opened = S.sessionShieldDecision({ running: true, now, endMs: end, selectionCount: 6, dayEarned: 210, dayRequired: 185, earnedAtStart: 0 });
-  assert.equal(opened.phase, 'open'); assert.equal(opened.want, false);
+  assert.equal(opened.want, false);
   assert.equal(lockAction({ want: opened.want, endMs: opened.untilMs, st: { locked: true, until: end, monitoring: true }, now }), 'stop');
   const second = { dayKey: '2026-11-06', index: 1, startMs: now - 60000 };
-  assert.equal(S.noteSessionBase(mem, second, 210), 210);
-  assert.equal(S.noteSessionBase(mem, second, 210), 210);
-  const relock = S.sessionShieldDecision({ running: true, now, endMs: end, selectionCount: 6, dayEarned: 210, dayRequired: 185, earnedAtStart: 210 });
-  assert.equal(relock.want, true); assert.equal(relock.phase, 'locked'); assert.equal(relock.untilMs, end);
+  const gate = S.beginSessionGate(mem, second, 210, 40);
+  assert.equal(gate.earned, 210); assert.equal(gate.target, 40);
+  assert.equal(S.beginSessionGate(mem, second, 400, 5).target, 40);
+  assert.equal(Math.max(0, 210 - gate.earned), 0);
+  const relock = S.sessionShieldDecision({ running: true, now, endMs: end, selectionCount: 6, dayEarned: 210, sessionRequired: 40, earnedAtStart: 210 });
+  assert.equal(relock.want, true); assert.equal(relock.untilMs, end);
   assert.equal(lockAction({ want: relock.want, endMs: relock.untilMs, st: { locked: false, until: 0, monitoring: false }, now }), 'start');
+  assert.equal(S.readSessionGate(mem, second).earned, 210);
   assert.equal(lockAction({ want: relock.want, endMs: relock.untilMs, st: { locked: true, until: end, monitoring: true }, now }), 'none');
-  const low = S.sessionShieldDecision({ running: true, now, endMs: end, selectionCount: 6, dayEarned: 100, dayRequired: 185, earnedAtStart: 0 });
-  assert.equal(low.want, true); assert.equal(lockAction({ want: low.want, endMs: low.untilMs, st: { locked: false, until: 0 }, now }), 'start');
-  const earnedOwn = S.sessionShieldDecision({ running: true, now, endMs: end, selectionCount: 6, dayEarned: 400, dayRequired: 185, earnedAtStart: 210 });
-  assert.equal(earnedOwn.want, false); assert.equal(earnedOwn.phase, 'open');
+  const earnedOwn = S.sessionShieldDecision({ running: true, now, endMs: end, selectionCount: 6, dayEarned: 250, sessionRequired: 40, earnedAtStart: 210 });
+  assert.equal(earnedOwn.want, false);
 });
 t('all tasks done counts as met even under the 50-pt floor goal / a penalty', () => {
   const r = S.strictShield({ ...common, goal: 50, earned: 20, allDone: true, now: dayEnd + 60000 }); assert.equal(r.want, false); assert.notEqual(r.phase, 'missed');

@@ -67,7 +67,7 @@
         <DayStartPrompt v-if="dayPromptOpen" :initial-hours="eh.hoursPref.value" :now-ms="eh.nowMs" :tz="eh.plan.value?.tz || ''" :busy="ehBusy" :error="ehStartError" :tasks="todayTasksForTarget" :stats="eh.stats.value" :earned="pointsAccumulated || 0" @confirm="confirmDayStart" @skip="skipLockIn" :can-lock="lockAvailable()" :apps="sessionAppsPick" @pick-apps="pickSessionApps"><template #checkin><CheckinRow :value="checkin" @pick="saveCheckin" /></template></DayStartPrompt>
 
         <ProgressBar :locked="!proNow" @pro="gatePro(_proRouter, 'points')" :percentage="calculateCompletionPercentage()" :milestones="milestones" :done="completedTaskCount || 0" :total="dayTasks.length"
-                     :streak="streak" :streak-status="streakStatus" :streak-progress="streakProgress" :streak-min="DAILY_STREAK_MIN" :freezes="streakFreezes" :points="pointsAccumulated || 0" :target="isViewingToday ? dayRequiredPts : 0" :off-today="isViewingToday && offToday" :uid="userId || ''" :hold="!!rewardScreen || !!lossScreen" />
+                     :streak="streak" :streak-status="streakStatus" :streak-progress="streakProgress" :streak-min="DAILY_STREAK_MIN" :freezes="streakFreezes" :points="shownSessionPts" :target="shownSessionTarget" :session-key="sessionGateKey" :off-today="isViewingToday && offToday" :uid="userId || ''" :hold="!!rewardScreen || !!lossScreen" />
 
       </section>
       <ShutdownPrompt class="home-notice" :suggest="false" :open="shutdownOpen" :done="shutdownDone" :open-tasks="shutdownOpenTasks"
@@ -416,9 +416,9 @@ import { maybeAskTracking } from '@/utils/tracking';
 import { planLock, resumePending, untilFor, fmtDuration, joinNames, withTimeout, describeUnlock, describeLock } from '@/utils/appLockNames';
 import { planTaskUnlock } from '@/utils/taskAppUnlock';
 import LockGuideSheet from '@/components/home/LockGuideSheet.vue';
-import { normBossMode, emergencyAllowed, goalFor, strictShield, wakeAutoOn, dayEndNote, moodReply, checklistMayRelock, noteSessionBase, sessionUnlock } from '@/utils/strictDay';
+import { normBossMode, emergencyAllowed, goalFor, strictShield, wakeAutoOn, dayEndNote, moodReply, checklistMayRelock, readSessionGate, beginSessionGate, sessionUnlock } from '@/utils/strictDay';
 import { LOCK_PREF, PENALTY_KEY, EMERGENCY_PENALTY, shouldShield, lockAction, busyToDay, mergePenalties, lastPenaltyDay } from '@/utils/appLock';
-import { previewDayTarget, requiredPoints } from '@/utils/dayTarget';
+import { previewDayTarget, requiredPoints, sessionTargetOf } from '@/utils/dayTarget';
 const askOpen = ref(false); // Assistant sheet (✨ next to the bell, and the bubble in the task list header)
 const assistantListen = ref(false);
 const agentAdd = ref(false); // true while the assistant adds tasks: over-limit returns an error to the model instead of opening the paywall
@@ -3791,6 +3791,7 @@ const confirmDayStart = async (hours, opts = {}) => {
       if (plan && n >= 1 && n <= r.max && plan.taskCount !== n) await eh.savePlan({ wakeTime: plan.wakeTime, taskCount: n }).catch((e) => console.warn('plan sync:', e && e.message)); }
     if (!validSessionHours(hours)) { ehStartError.value = 'Pick 5 to 12 whole hours.'; return; }
     await eh.startNow(hours, opts.blocks, { apps: opts.lock ? sessionAppsPick.value : null }); // evening mode: optional later blocks today (split day), fixed now
+    captureSessionGate(); // baseline + remaining-task target, before the shield sync or the next paint
     dayPromptOpen.value = false;
     // Begin = the shield goes up NOW on the picked apps (startLock applies at once); sessionBegin stores them as the last-used selection.
     if (opts.lock) await startHardLock({ sessionBegin: true });
@@ -3804,6 +3805,32 @@ const confirmDayStart = async (hours, opts = {}) => {
 const todayTasksForTarget = computed(() => (isViewingToday.value ? selectedDayRoutine.value || [] : []));
 // required day points: the locked boss target while the day runs, else the projection from today's tasks + chosen hours
 const dayRequiredPts = computed(() => requiredPoints({ lock: eh.running.value ? eh.lock.value : null, tasks: todayTasksForTarget.value, hours: eh.hoursPref.value, stats: eh.stats.value }));
+const sessionGateTick = ref(0);
+const readGate = () => (sessionGateTick.value, readSessionGate(localStorage, eh.running.value ? eh.lock.value : null));
+const captureSessionGate = () => {
+  const lock = eh.running.value ? eh.lock.value : null;
+  if (!lock || isLoading.value) return readSessionGate(localStorage, lock);
+  if (readSessionGate(localStorage, lock)) return readSessionGate(localStorage, lock);
+  const daily = Math.max(0, Number(pointsAccumulated.value) || 0);
+  const target = sessionTargetOf(todayTasksForTarget.value || [], lock.hours != null ? lock.hours : eh.hoursPref.value, eh.stats.value).target;
+  const row = beginSessionGate(localStorage, lock, daily, target);
+  sessionGateTick.value += 1;
+  return row;
+};
+const sessionGate = computed(() => readGate());
+const sessionEarnedPts = computed(() => {
+  const g = sessionGate.value;
+  if (!g) return null;
+  return Math.max(0, Math.round((Number(pointsAccumulated.value) || 0) - g.earned));
+});
+const sessionTargetPts = computed(() => (sessionGate.value ? sessionGate.value.target : null));
+const sessionGateOpen = computed(() => {
+  const g = sessionGate.value;
+  return !!(g && sessionUnlock({ dayEarned: Number(pointsAccumulated.value) || 0, earnedAtStart: g.earned, sessionRequired: g.target }));
+});
+const shownSessionPts = computed(() => (sessionEarnedPts.value == null ? (pointsAccumulated.value || 0) : sessionEarnedPts.value));
+const shownSessionTarget = computed(() => (isViewingToday.value ? (sessionTargetPts.value == null ? dayRequiredPts.value : sessionTargetPts.value) : 0));
+const sessionGateKey = computed(() => (sessionGate.value && sessionGate.value.key) || '');
 
 // ---- Boss coach: spoken reactions, focus check-ins, overbooked warning, missed-streak roast (in-app only, respect the Boss voice toggle) ----
 const bossReact = (kind, title = '') => { if (voMuted.value || document.hidden) return; speakLive(reactionLine({ kind, title, seed: Date.now() })); };
@@ -4145,14 +4172,15 @@ const strictPlan = (st) => {
   // Coach mode: the shield judges the CURRENT session (its own target and in-session points, same math as the server), not the whole day.
   // A running session with a frozen goal (every mode): its own goal and the points earned after its Start, keyed by session.
   const ss = gpOn.value ? liveSession(gpSessions.value, Date.now()) : null; const ls = liveDebtSession(); const frozen = !!(ls && ls.frozen);
-  // The home bar is daily points against the required threshold (210/185). That pair opens the shield, not a smaller session tally.
+  // This session's bar is points earned after its start, against the target frozen from the tasks still left. The daily total stays on the account and does not open this session.
+  const gate = captureSessionGate();
   const dayEarned = Math.max(0, Number(pointsAccumulated.value) || 0);
-  const dayRequired = Math.max(0, Number(dayRequiredPts.value) || 0);
-  const earnedAtStart = noteSessionBase(localStorage, eh.lock.value, dayEarned);
-  const openNow = dayRequired > 0 && sessionUnlock({ dayEarned, dayRequired, earnedAtStart });
+  const dayRequired = gate ? gate.target : 0;
+  const earnedAtStart = gate ? gate.earned : dayEarned;
+  const openNow = !!(gate && sessionUnlock({ dayEarned, earnedAtStart, sessionRequired: gate.target }));
   const sessionEarned = Math.max(0, dayEarned - earnedAtStart);
-  const earned = dayRequired > 0 ? (openNow ? dayRequired : sessionEarned) : (frozen ? ls.earned : ss ? ss.earned : dayEarned);
-  const goal = dayRequired > 0 ? dayRequired : (frozen ? ls.target : ss ? ss.target : strictGoal.value);
+  const earned = gate ? (openNow ? gate.target : sessionEarned) : (frozen ? ls.earned : ss ? ss.earned : dayEarned);
+  const goal = gate ? gate.target : (frozen ? ls.target : ss ? ss.target : strictGoal.value);
   if (eh.running.value && eh.lock.value && eh.lock.value.endMs) sd.dayEndMs = eh.lock.value.endMs;
   const keyed = !!(ss || ls); const sk = keyed ? strictSessionKey(ss) : ''; if (keyed) sd.goalAtBy = sd.goalAtBy || {};
   const goalAt = keyed ? sd.goalAtBy[sk] || 0 : sd.goalAt;
@@ -4199,6 +4227,7 @@ const lockEnabled = () => { try { return localStorage.getItem(LOCK_PREF) === '1'
 let lockOn = null;
 const hardLocked = ref(false); // shield up now: the sergeant menu shows Emergency unlock
 const syncAppLock = async () => {
+  captureSessionGate();
   if (!lockAvailable()) return;
   await relockVaultForSession(); // a new lock-in drops earlier vault purchases before this sync can re-allow them
   let st = await clingLock.status();
@@ -4214,12 +4243,12 @@ const syncAppLock = async () => {
   let endMs = sp ? sp.untilMs : eh.lock.value && eh.lock.value.endMs;
   // Simple mode: the running session's own goal and the points earned after its Start (not the day's points or open tasks).
   const ls = liveDebtSession();
+  const gateNow = captureSessionGate();
   const dayEarnedNow = Math.max(0, Number(pointsAccumulated.value) || 0);
-  const dayRequiredNow = Math.max(0, Number(dayRequiredPts.value) || 0);
-  const earnedAtStart = noteSessionBase(localStorage, eh.lock.value, dayEarnedNow);
-  const openNow = sessionUnlock({ dayEarned: dayEarnedNow, dayRequired: dayRequiredNow, earnedAtStart });
+  const earnedAtStart = gateNow ? gateNow.earned : dayEarnedNow;
+  const openNow = !!(gateNow && sessionUnlock({ dayEarned: dayEarnedNow, earnedAtStart, sessionRequired: gateNow.target }));
   let want = sp ? sp.want : shouldShield({ enabled: lockEnabled(), running: eh.running.value, endMs, selectionCount: st.selectionCount || 0,
-    earned: Math.max(0, dayEarnedNow - earnedAtStart), required: dayRequiredNow || (ls ? ls.target : 0), openTasks: 1,
+    earned: Math.max(0, dayEarnedNow - earnedAtStart), required: gateNow ? gateNow.target : (ls ? ls.target : 0), openTasks: 1,
     unlockedToday: lockUnlockedDay.value === localDateStr() });
   // Missed-goal app lock (eightHour/{uid}.appLockDebt, server clock + device cache): a session that ended short of its points goal
   // keeps the picked apps locked after it ends. A LATER session reaching its own goal (same sessionGoal math as the server) lifts it
@@ -4265,7 +4294,8 @@ const daySave = (k, list) => { try { localStorage.setItem(k, JSON.stringify({ da
 const vaultBought = ref(dayLoad(VAULT_BOUGHT_KEY) || []);
 const vaultDebt = computed(() => turnOffBlocked({ debt: eh.appLockDebt.value, now: vaultNow.value, live: liveDebtSession() }));
 // Same day's points the home screen shows: size points in Coach, chip points otherwise. Not the session-only tally the shield uses for the goal.
-const dayVaultPoints = computed(() => (gpOn.value ? ((gpEarned.value && gpEarned.value.points) || 0) : (pointsAccumulated.value || 0)));
+const dailyPoints = computed(() => (gpOn.value ? ((gpEarned.value && gpEarned.value.points) || 0) : (pointsAccumulated.value || 0)));
+const dayVaultPoints = computed(() => (sessionEarnedPts.value == null ? dailyPoints.value : sessionEarnedPts.value));
 // Session countdown or a running focus timer, plus when that window ends. Bought apps stay released until then.
 const vaultAccessState = () => {
   const now = Date.now(); const lock = eh.lock.value; const tasks = selectedDayRoutine.value || [];
@@ -4317,8 +4347,10 @@ const hydrateVaultReport = async () => {
 };
 hydrateVaultReport();
 const gpVault = computed(() => { if (!lockAvailable() || !isViewingToday.value) return null; const gate = vaultAccessState();
-  return vaultView({ apps: vaultData.value.apps || [], days: vaultData.value.days || {}, todayYmd: localDateStr(), points: dayVaultPoints.value,
-    report: vaultReport.value, debt: vaultDebt.value, windows: vaultWindows.value, nowMs: vaultNow.value, wait: eh.wait && eh.wait.value, bought: vaultBought.value, accessOpen: gate.accessOpen }); });
+  const sessionHeld = !!(sessionGate.value && !sessionGateOpen.value);
+  const vaultPts = sessionGate.value ? (sessionHeld ? 0 : 1000000000) : dailyPoints.value;
+  return vaultView({ apps: vaultData.value.apps || [], days: vaultData.value.days || {}, todayYmd: localDateStr(), points: vaultPts,
+    report: vaultReport.value, debt: vaultDebt.value, windows: vaultWindows.value, nowMs: vaultNow.value, wait: eh.wait && eh.wait.value, bought: vaultBought.value, accessOpen: gate.accessOpen && !sessionHeld }); });
 const vaultSessionId = () => { const l = eh.lock.value; if (!eh.running.value || !l || !l.startMs) return ''; return `${l.dayKey || ''}#${Number(l.index) || 0}:${l.startMs}`; };
 const loadVaultSession = () => { try { return localStorage.getItem(VAULT_SESSION_KEY) || ''; } catch (e) { return ''; } };
 const saveVaultSession = (k) => { try { localStorage.setItem(VAULT_SESSION_KEY, k || ''); } catch (e) { /* ignore */ } };
@@ -4406,7 +4438,7 @@ const scheduleLaterLocks = async (st) => {
 };
 watch(() => [eh.running.value, eh.phase.value, eh.pendingBlocks.value.length, pointsAccumulated.value, dayVaultPoints.value, dayRequiredPts.value, streakProgress.value, lockUnlockedDay.value, bossMode.value, strictGoal.value, (selectedDayRoutine.value || []).map((t) => t && `${t.timerActive ? 1 : 0}:${t.timerPausedAt || ''}:${t.timerEndTime || ''}`).join(','), Math.floor(nowTick.value / 60000)], () => { syncAppLock(); });
 // A new session lock (e.g. session 2 started from the shutdown card) or a settled shutdown: re-sync once its doc has landed.
-watch(() => { const l = eh.lock.value || {}; const sh = eh.shutdown && eh.shutdown.value; return `${l.index}:${l.startMs}:${l.endMs}:${sh ? sh.opensAtMs || 1 : 0}`; }, () => { syncAppLock(); });
+watch(() => { const l = eh.lock.value || {}; const sh = eh.shutdown && eh.shutdown.value; return `${l.index}:${l.startMs}:${l.endMs}:${isLoading.value}:${(todayTasksForTarget.value || []).length}:${sh ? sh.opensAtMs || 1 : 0}`; }, () => { captureSessionGate(); syncAppLock(); });
 onMounted(() => { setTimeout(syncAppLock, 1200); });
 watch(() => { const d = eh.appLockDebt.value; return d ? d.sessionKey : ''; }, () => { syncAppLock(); }); // missed-goal lock set / paid (server or cache)
 // Emergency unlock (assistant tool + sergeant menu): stops the shield for today and books the point penalty.
@@ -4420,7 +4452,7 @@ const gpPenaltyNote = computed(() => { const p = gpPenalty.value; if (!p || !p.p
   return `−${p.points} pts on ${p.day === gpPhase.value.dayKey ? 'today' : p.day}: Screen Time access for ClingNote was turned off. Turn it back on in Settings → Screen Time.`; });
 const gpQuiet = computed(() => gpOn.value && gpPhase.value.phase === 'focus'); // in-app quiet: the boss panel and nudges wait for the break
 const gpGate = computed(() => gpOn.value && routineItems.value.length > 0 && !GP.checklistDone(routineItems.value) && gpPhase.value.phase !== 'closed');
-const gpText = computed(() => (gpGate.value && !['focus', 'break', 'late'].includes(gpPhase.value.phase) ? '🔒 Checklist first · ' : '') + GP.rowText(gpPhase.value, { earned: gpEarned.value.points, goal: strictGoal.value, label: gpSession.value ? SP.sessionLabel(gpSession.value, gp.value.sessions) : '' })
+const gpText = computed(() => (gpGate.value && !['focus', 'break', 'late'].includes(gpPhase.value.phase) ? '🔒 Checklist first · ' : '') + GP.rowText(gpPhase.value, { earned: sessionEarnedPts.value == null ? gpEarned.value.points : sessionEarnedPts.value, goal: sessionTargetPts.value == null ? strictGoal.value : sessionTargetPts.value, label: sessionEarnedPts.value == null && gpSession.value ? SP.sessionLabel(gpSession.value, gp.value.sessions) : '' })
 );
 // Break unlocked alert: once per break number per day ("Break 1 unlocked: 15 min"). Optional: nothing unlocks until the user
 // taps the 🎁 / Take break (Home line, or the notification's Take break action on iOS).
