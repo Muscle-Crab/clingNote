@@ -16,6 +16,19 @@ export const moveKey = (t) => (!t ? '' : (t.id != null && t.id !== '' ? `id:${t.
 // The moved copy keeps its identity and recurrence. A running timer does not follow it to the next day.
 export const movedTask = (t) => (!t ? t : { ...t, timerActive: false, timerStartedAt: null, timerEndTime: null, timerPausedAt: null, timerStoppedAt: null, focusLock: false, timerPomo: null });
 // remove = drop the source slot. tomb = same length, same createdAt and points, hidden, because a shorter list is rejected while the day is locked.
+// Both lists for one transaction. Today is tombstoned (same length, same createdAt and points). Tomorrow gains one copy.
+// Neither list is returned for writing until both are planned. A retry finds the copy already on tomorrow and does not add another.
+export const atomicMove = (src, dst, key, moving) => {
+  const plan = planMove(src || [], dst || [], key, 'tomb');
+  if (!plan.ok) return plan;
+  const already = (dst || []).some((t) => moveKey(t) === key);
+  if (already) return { ok: true, raw: plan.raw, nextSrc: plan.nextSrc, nextDst: (dst || []).slice(), added: false };
+  const task = movedTask(moving || plan.raw);
+  const nextDst = plan.nextDst.slice();
+  const i = nextDst.findIndex((t) => moveKey(t) === key);
+  if (i >= 0) nextDst[i] = task;
+  return { ok: true, raw: plan.raw, nextSrc: plan.nextSrc, nextDst, added: true };
+};
 export const planMove = (src, dst, key, mode = 'remove') => {
   const from = src || []; const to = dst || [];
   const i = from.findIndex((t) => moveKey(t) === key);

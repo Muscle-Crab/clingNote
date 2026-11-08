@@ -177,6 +177,16 @@ t('a recurring add appends behind existing tasks and names a rejected save', () 
   assert.equal(hidden.length, 1);
   assert.equal(hidden[0].removed, true);
   assert.equal(hidden[0].points, 10);
+  const dozen = Array.from({ length: 12 }, (_, i) => ({ id: 't' + i, createdAt: 'c' + i, points: 10 + i, title: 'Task ' + i }));
+  const renamed = identityCommit(dozen, dozen.map((t, i) => (i === 11 ? { ...t, title: 'Check email', points: 1 } : t)));
+  assert.equal(renamed.length, 12);
+  assert.equal(renamed[11].title, 'Check email');
+  assert.equal(renamed[11].points, 21);
+  assert.equal(renamed[0].createdAt, 'c0');
+  const pointed = identityCommit(dozen, dozen.map((t, i) => (i === 3 ? { ...t, points: 5, title: 'Edited' } : t)), { keepPoints: false });
+  assert.equal(pointed[3].points, 5);
+  assert.equal(pointed[3].title, 'Edited');
+  assert.equal(pointed[3].createdAt, 'c3');
   const voice = home.slice(home.indexOf('const confirmVoiceItems'), home.indexOf('const relistenVoice'));
   assert.match(voice, /finally \{ voiceBusy\.value = false; \}/);
 });

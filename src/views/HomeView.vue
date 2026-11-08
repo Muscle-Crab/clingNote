@@ -280,7 +280,7 @@ import { useRouter as _useRouter, onBeforeRouteLeave } from 'vue-router';
 import { requirePro, loadUserDoc, rcProActive, proNow, gatePro } from '@/composables/usePro';
 import { isPro as isProUser } from '@/utils/pro';
 import { checkDailyLimit } from '@/utils/taskLimits';
-import { defaultTransferDay, transferFits, MAX_TASKS_PER_DAY, moveKey, transferFailure, planMove, movedTask } from '@/utils/transfer';
+import { defaultTransferDay, transferFits, MAX_TASKS_PER_DAY, moveKey, transferFailure, atomicMove, movedTask } from '@/utils/transfer';
 import { canUse } from '@/utils/pro';
 const _proRouter = _useRouter();
 // Daily task limit: free 5/day. Pro has none. Voice Review uses this same gate (addNewTask).
@@ -837,31 +837,25 @@ const transferTask = async () => {
 
   transferBusy = true;
   try {
-    // Hide today in place and append tomorrow. A shorter today list is what the phone rejected
-    // ("This day can't be edited right now."). Tomorrow is saved first; if today fails, tomorrow is undone.
-    const srcLive = await loadDayTasks(userId.value, currentDay);
-    const plan = planMove(srcLive, [], key, 'tomb');
-    if (!plan.ok) { alert('That task is no longer on this day.'); return; }
-    const moving = movedTask(strictOn.value ? carryTask(plan.raw) : plan.raw);
-    let added = false;
-    await commitDayTasks(userId.value, targetDay, (live) => {
-      if ((live || []).some((t) => moveKey(t) === key)) return live;
-      added = true;
-      return [...(live || []), moving];
+    // One transaction: hide today in place and append tomorrow together. A shorter today list is what the phone rejected.
+    // If the transaction fails, neither day changes. There is no second write to undo.
+    const committed = await runTransaction(db, async (tx) => {
+      const srcRef = doc(db, 'weeklyRoutines', `${userId.value}_${currentDay}`);
+      const dstRef = doc(db, 'weeklyRoutines', `${userId.value}_${targetDay}`);
+      const srcSnap = await tx.get(srcRef);
+      const dstSnap = await tx.get(dstRef);
+      const src = srcSnap.exists() ? [...(srcSnap.data().tasks || [])] : [];
+      const dst = dstSnap.exists() ? [...(dstSnap.data().tasks || [])] : [];
+      const preview = atomicMove(src, dst, key);
+      if (!preview.ok) { const err = new Error('task missing from stored list'); err.code = 'not-found'; throw err; }
+      const moving = movedTask(strictOn.value ? carryTask(preview.raw) : preview.raw);
+      const plan = atomicMove(src, dst, key, moving);
+      tx.set(srcRef, { tasks: dropUndefined(plan.nextSrc), updatedAt: serverTimestamp() }, { merge: true });
+      tx.set(dstRef, { tasks: dropUndefined(plan.nextDst), updatedAt: serverTimestamp() }, { merge: true });
+      return plan;
     });
-    let currentTasks;
-    try {
-      currentTasks = await commitDayTasks(userId.value, currentDay, (live) => {
-        const again = planMove(live, [], key, 'tomb');
-        if (!again.ok) { const err = new Error('task missing from stored list'); err.code = 'not-found'; throw err; }
-        return again.nextSrc;
-      });
-    } catch (error) {
-      if (added) await commitDayTasks(userId.value, targetDay, (live) => (live || []).filter((t) => moveKey(t) !== key)).catch(() => {});
-      throw error;
-    }
-    if (selectedDayIndex.value === currentDayIndex) selectedDayRoutine.value = visibleTasks(currentTasks);
-    transferNotification.value = `Task "${plan.raw.title}" moved to ${targetDay}`;
+    if (selectedDayIndex.value === currentDayIndex) selectedDayRoutine.value = visibleTasks(committed.nextSrc);
+    transferNotification.value = `Task "${committed.raw.title}" moved to ${targetDay}`;
     setTimeout(() => { transferNotification.value = null; }, 3000);
     closeTransferModal();
   } catch (error) {
@@ -3569,8 +3563,10 @@ const patchTask = async (index, task, patch) => {
     let saved = patch.estimateMin !== undefined ? { ...patch, estimateMin: task.estimateMin } : patch;
     // re-estimate when the inputs change (only possible outside a running lock: estimateMin/title are locked fields there)
     if (['estimateMin', 'title', 'notes', 'priority'].some((k) => patch[k] !== undefined)) {
-      const e = estimateFor(task); Object.assign(task, e);
+      const e = estimateFor(task);
       const { points, createdAt, ...rest } = e;
+      Object.assign(task, rest);
+      if (patch.points !== undefined) task.points = points;
       saved = { ...saved, ...rest, ...(patch.points !== undefined ? { points } : {}) };
     }
     await patchStoredTask(userId.value, dayName, before, index, saved);
