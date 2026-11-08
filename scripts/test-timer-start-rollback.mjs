@@ -3,7 +3,7 @@ import assert from 'assert';
 import fs from 'fs';
 const hv = fs.readFileSync(new URL('../src/views/HomeView.vue', import.meta.url), 'utf8');
 const fn = hv.slice(hv.indexOf('const startTimer = async'), hv.indexOf("sfx('timerStart')", hv.indexOf('const startTimer = async')));
-assert.ok(/patchTimerOnList\(/.test(fn) && /updateDoc\(ref_/.test(fn), 'timer patches the stored task in place');
+assert.ok(/patchTimerOnList\(/.test(fn) && /commitDayTasks\(/.test(fn), 'timer patches the stored task in place');
 assert.ok(!/mutateDay\(dayName/.test(fn), 'timer start does not use a transaction');
 assert.ok(/selectedDayRoutine\.value\[at\] = before/.test(fn), 'rolls back to the stored copy');
 assert.ok(/lockMessage\(e\)/.test(fn) && /writeFailureMessage\(/.test(fn), 'tells the user the real write error');

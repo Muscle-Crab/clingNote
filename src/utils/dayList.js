@@ -72,6 +72,39 @@ export const writeFailureMessage = (e, title, verb = 'save') => {
   return `Couldn't ${verb} ${name}. ${code || 'Try again.'}`;
 };
 export const appendTask = (list, task, same) => ((list || []).some(same) ? (list || []) : [...(list || []), task]);
+const stamp = (v) => {
+  if (v == null || v === '') return '';
+  if (typeof v === 'object' && typeof v.toMillis === 'function') return String(v.toMillis());
+  if (typeof v === 'object' && Number.isFinite(Number(v.seconds))) return String(Math.round(Number(v.seconds) * 1000));
+  return String(v);
+};
+// Slot identity the live day rules compare: id when present, otherwise createdAt + title.
+export const slotKey = (t) => (!t ? '' : (t.id != null && t.id !== '' ? `id:${t.id}` : `${stamp(t.createdAt)}|${t.title || ''}`));
+const tombstoneSlot = (old) => ({ ...old, removed: true, timerActive: false, timerEndTime: null, timerPausedAt: null, timerStoppedAt: null, focusLock: false });
+// Rebuild a day list so every existing slot keeps its index, createdAt, and points.
+// A task missing from `desired` becomes a same-length tombstone (a shorter list is rejected while a session runs).
+// Tasks that were not on the stored list are appended. New tasks keep their own points.
+export const identityCommit = (before, desired, opts = {}) => {
+  const keepPoints = opts.keepPoints !== false;
+  const prev = before || [];
+  const want = desired || [];
+  const used = new Set();
+  const findWant = (old) => {
+    const k = slotKey(old);
+    let i = want.findIndex((t, idx) => !used.has(idx) && slotKey(t) === k);
+    if (i < 0 && old && old.createdAt != null) i = want.findIndex((t, idx) => !used.has(idx) && t && t.createdAt === old.createdAt && (t.title || '') === (old.title || ''));
+    if (i >= 0) used.add(i);
+    return i >= 0 ? want[i] : null;
+  };
+  const next = prev.map((old, i) => {
+    let neu = findWant(old);
+    if (!neu && want[i] && !used.has(i) && stamp(want[i].createdAt) === stamp(old && old.createdAt)) { neu = want[i]; used.add(i); }
+    if (!neu || neu.removed === true) return tombstoneSlot(old);
+    return { ...old, ...neu, createdAt: old.createdAt, ...(keepPoints ? { points: old.points } : {}) };
+  });
+  want.forEach((t, idx) => { if (!used.has(idx) && t && t.removed !== true) next.push(t); });
+  return next;
+};
 // The screenshot toast. It is only for a real offline write, never for a rules rejection or a bad field.
 export const TIMER_CONNECTION_TOAST = 'Could not start the timer. Check your connection and try again.';
 const TIMER_KEYS = ['timerActive', 'timerStartedAt', 'timerEndTime', 'timerDurationMinutes', 'timerPausedAt', 'focusLock', 'timerPomo'];

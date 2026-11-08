@@ -1,7 +1,7 @@
 // Delete any time, keep the list when a day read fails, and drop dead focus timers from the widget.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { clearExpiredTimer, clearExpiredTimers, timerShownOnWidget, TIMER_OVERTIME_MS, TIMER_CONNECTION_TOAST, deleteFailureMessage, writeFailureMessage, appendTask, patchTimerOnList, dayReadFailure, tasksFromSnapshot, withoutTask, markTaskRemoved, visibleTasks, taskStillVisible, shorterList, sameLengthKeepsIdentity } from '../src/utils/dayList.js';
+import { clearExpiredTimer, clearExpiredTimers, timerShownOnWidget, TIMER_OVERTIME_MS, TIMER_CONNECTION_TOAST, deleteFailureMessage, writeFailureMessage, appendTask, patchTimerOnList, identityCommit, dayReadFailure, tasksFromSnapshot, withoutTask, markTaskRemoved, visibleTasks, taskStillVisible, shorterList, sameLengthKeepsIdentity } from '../src/utils/dayList.js';
 import { prepareVaultApps, isPlaceholderName } from '../src/utils/vaultNames.js';
 import { buildWidgetSnapshot } from '../src/utils/widgetSnapshot.js';
 import { hasRing } from '../src/utils/timerRing.js';
@@ -70,7 +70,7 @@ t('HomeView deletes only after the write, and a failed day read does not blank t
   const del = home.slice(home.indexOf('const deleteTask = async'), home.indexOf('const topIncompleteTaskIndex'));
   assert.equal(del.includes('blockIfShut('), false);
   assert.equal(del.includes('blockIfLocked('), false);
-  assert.ok(del.indexOf('await mutateDay') < del.indexOf('selectedDayRoutine.value = next'));
+  assert.ok(del.indexOf('await commitDayTasks') < del.indexOf('selectedDayRoutine.value = next'));
   assert.match(del, /deleteFailureMessage/);
   const fetch = home.slice(home.indexOf('const fetchSelectedDayRoutine'), home.indexOf('const days = data.days'));
   const failed = fetch.slice(fetch.indexOf('Error fetching tasks'));
@@ -162,7 +162,21 @@ t('a recurring add appends behind existing tasks and names a rejected save', () 
   const add = home.slice(home.indexOf('const addNewTask = async'), home.indexOf('let lastAddPersist'));
   assert.equal(add.includes('alert('), false);
   assert.match(add, /appendTask/);
-  assert.match(add, /runTransaction/);
+  assert.match(add, /commitDayTasks/);
+  assert.equal(add.includes('Could not save “'), false);
+  const kept = [{ id: 'a', createdAt: 'a', points: 10, title: 'Keep' }];
+  const added = identityCommit(kept, [...kept, { id: 'b', createdAt: 'b', points: 5, title: 'Check email' }]);
+  assert.equal(added[0].createdAt, 'a');
+  assert.equal(added[0].points, 10);
+  assert.equal(added[1].title, 'Check email');
+  const titled = identityCommit(kept, [{ id: 'a', createdAt: 'changed', points: 99, title: 'Renamed' }]);
+  assert.equal(titled[0].title, 'Renamed');
+  assert.equal(titled[0].createdAt, 'a');
+  assert.equal(titled[0].points, 10);
+  const hidden = identityCommit(kept, []);
+  assert.equal(hidden.length, 1);
+  assert.equal(hidden[0].removed, true);
+  assert.equal(hidden[0].points, 10);
   const voice = home.slice(home.indexOf('const confirmVoiceItems'), home.indexOf('const relistenVoice'));
   assert.match(voice, /finally \{ voiceBusy\.value = false; \}/);
 });

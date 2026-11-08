@@ -243,7 +243,7 @@ import { weekStats, searchTasks, suggestNext, snoozeTo } from '@/utils/assistant
 import { rollNext, rollLine, keyOf as rollKey } from '@/utils/rollNext';
 import { ref, onMounted, onBeforeUnmount, computed, watch, reactive, nextTick } from 'vue';
 import { useSounds } from '@/composables/useSounds';
-import { patchStoredTask, loadDayTasks } from '@/composables/useDayPersistence';
+import { patchStoredTask, loadDayTasks, commitDayTasks } from '@/composables/useDayPersistence';
 import { activeFromForDay, isHiddenOnDate, seriesDays, withoutSeries } from '@/utils/repeat';
 import { useTaskViewPrefs } from '@/composables/useTaskViewPrefs';
 import { viewTasks, canReorder, applyManualOrder, normalizePrefs, visibleCount, shouldHandleShortcut } from '@/utils/taskView';
@@ -280,7 +280,7 @@ import { useRouter as _useRouter, onBeforeRouteLeave } from 'vue-router';
 import { requirePro, loadUserDoc, rcProActive, proNow, gatePro } from '@/composables/usePro';
 import { isPro as isProUser } from '@/utils/pro';
 import { checkDailyLimit } from '@/utils/taskLimits';
-import { defaultTransferDay, transferFits, MAX_TASKS_PER_DAY, moveKey, transferFailure, planMove } from '@/utils/transfer';
+import { defaultTransferDay, transferFits, MAX_TASKS_PER_DAY, moveKey, transferFailure, planMove, movedTask } from '@/utils/transfer';
 import { canUse } from '@/utils/pro';
 const _proRouter = _useRouter();
 // Daily task limit: free 5/day. Pro has none. Voice Review uses this same gate (addNewTask).
@@ -524,16 +524,10 @@ const saveSelectedDayTasks = async () => {
     assertTasksChangeAllowed(days[selectedDayIndex.value].day, old, selectedDayRoutine.value);
   }
 
-  const selectedDayDocRef = doc(
-      db,
-      "weeklyRoutines",
-      `${userId.value}_${days[selectedDayIndex.value].day}`
-  );
-
-  await updateDoc(selectedDayDocRef, {
-    tasks: dropUndefined(selectedDayRoutine.value),
-    updatedAt: serverTimestamp(),
-  });
+  const dayName = days[selectedDayIndex.value].day;
+  const wanted = selectedDayRoutine.value || [];
+  const saved = await commitDayTasks(userId.value, dayName, () => wanted);
+  selectedDayRoutine.value = visibleTasks(saved);
 };
 
 
@@ -843,37 +837,31 @@ const transferTask = async () => {
 
   transferBusy = true;
   try {
-    // One transaction. A shorter source list is rejected while the day is locked ("This day can't be edited right now."),
-    // so the retry hides the task in place and appends it to tomorrow. Failure writes nothing.
-    let rawTask = null; let full = false; let targetLen = 0;
-    const writeMove = (mode) => runTransaction(db, async (tx) => {
-      const srcRef = doc(db, 'weeklyRoutines', `${userId.value}_${currentDay}`);
-      const dstRef = doc(db, 'weeklyRoutines', `${userId.value}_${targetDay}`);
-      const srcSnap = await tx.get(srcRef); const dstSnap = await tx.get(dstRef);
-      const src = srcSnap.exists() ? [...(srcSnap.data().tasks || [])] : [];
-      const dst = dstSnap.exists() ? [...(dstSnap.data().tasks || [])] : [];
-      targetLen = dst.length;
-      if (!transferFits(targetLen)) { full = true; rawTask = null; return null; }
-      const plan = planMove(src, dst, key, mode);
-      if (!plan.ok) { rawTask = null; return null; }
-      rawTask = plan.raw;
-      const task = dropUndefined(strictOn.value ? carryTask(plan.raw) : plan.raw);
-      const nextDst = plan.nextDst.map((t) => (moveKey(t) === key ? { ...task, timerActive: false, timerEndTime: null, timerPausedAt: null, timerStoppedAt: null, focusLock: false } : t));
-      tx.set(srcRef, { tasks: dropUndefined(plan.nextSrc), updatedAt: serverTimestamp() }, { merge: true });
-      tx.set(dstRef, { tasks: dropUndefined(nextDst), updatedAt: serverTimestamp() }, { merge: true });
-      return plan.nextSrc;
+    // Hide today in place and append tomorrow. A shorter today list is what the phone rejected
+    // ("This day can't be edited right now."). Tomorrow is saved first; if today fails, tomorrow is undone.
+    const srcLive = await loadDayTasks(userId.value, currentDay);
+    const plan = planMove(srcLive, [], key, 'tomb');
+    if (!plan.ok) { alert('That task is no longer on this day.'); return; }
+    const moving = movedTask(strictOn.value ? carryTask(plan.raw) : plan.raw);
+    let added = false;
+    await commitDayTasks(userId.value, targetDay, (live) => {
+      if ((live || []).some((t) => moveKey(t) === key)) return live;
+      added = true;
+      return [...(live || []), moving];
     });
     let currentTasks;
-    try { currentTasks = await trackWrite(writeMove('remove')); }
-    catch (error) {
-      const code = String(error && error.code || '').replace(/^firestore\//, '');
-      if (code !== 'permission-denied') throw error;
-      currentTasks = await trackWrite(writeMove('tomb'));
+    try {
+      currentTasks = await commitDayTasks(userId.value, currentDay, (live) => {
+        const again = planMove(live, [], key, 'tomb');
+        if (!again.ok) { const err = new Error('task missing from stored list'); err.code = 'not-found'; throw err; }
+        return again.nextSrc;
+      });
+    } catch (error) {
+      if (added) await commitDayTasks(userId.value, targetDay, (live) => (live || []).filter((t) => moveKey(t) !== key)).catch(() => {});
+      throw error;
     }
-    if (full) { alert(`${targetDay} already has ${targetLen} tasks (limit ${MAX_TASKS_PER_DAY}).`); return; }
-    if (!rawTask) { alert('That task is no longer on this day.'); return; }
     if (selectedDayIndex.value === currentDayIndex) selectedDayRoutine.value = visibleTasks(currentTasks);
-    transferNotification.value = `Task "${rawTask.title}" moved to ${targetDay}`;
+    transferNotification.value = `Task "${plan.raw.title}" moved to ${targetDay}`;
     setTimeout(() => { transferNotification.value = null; }, 3000);
     closeTransferModal();
   } catch (error) {
@@ -1225,15 +1213,14 @@ const startTimer = async (opts = {}) => {
   // and the old catch labeled every failure as a lost connection. Roll the card back if the write fails.
   try {
     const dayName = days[selectedDayIndex.value].day;
-    const ref_ = doc(db, 'weeklyRoutines', `${userId.value}_${dayName}`);
-    const snap = await getDoc(ref_);
-    const live = snap.exists() ? [...(snap.data().tasks || [])] : [];
     const { timerActive, timerStartedAt, timerEndTime, timerDurationMinutes, timerPausedAt, focusLock, timerPomo } = task;
-    const next = patchTimerOnList(live, (t) => sameTask(t, before), { timerActive, timerStartedAt, timerEndTime, timerDurationMinutes, timerPausedAt, focusLock, timerPomo });
-    if (!next) { const err = new Error('task missing from stored list'); err.code = 'not-found'; throw err; }
-    await updateDoc(ref_, { tasks: dropUndefined(next), updatedAt: serverTimestamp() });
+    const saved = await commitDayTasks(userId.value, dayName, (live) => {
+      const next = patchTimerOnList(live, (t) => sameTask(t, before), { timerActive, timerStartedAt, timerEndTime, timerDurationMinutes, timerPausedAt, focusLock, timerPomo });
+      if (!next) { const err = new Error('task missing from stored list'); err.code = 'not-found'; throw err; }
+      return next;
+    });
     const idx = (selectedDayRoutine.value || []).findIndex((t) => sameTask(t, before));
-    if (idx >= 0) selectedDayRoutine.value[idx] = next.find((t) => sameTask(t, before)) || task;
+    if (idx >= 0) selectedDayRoutine.value[idx] = saved.find((t) => sameTask(t, before)) || task;
   } catch (e) {
     if (selectedDayRoutine.value[at] === task) selectedDayRoutine.value[at] = before;
     if (!lockMessage(e)) { console.error('start timer:', e); showNoteToast(writeFailureMessage(e, before && before.title, 'start the timer for'), { error: true }); }
@@ -1319,12 +1306,8 @@ const deleteTask = async (index, { skipConfirm = false } = {}) => { // skipConfi
     try {
       // The day list is removed first. A running session, a met goal, a timer, or a focus lock is not a veto.
       let next;
-      try { next = await mutateDay(dayName, (tasks) => withoutTask(tasks, same)); }
-      catch (e) {
-        if (String(e && e.code) !== 'permission-denied') throw e;
-        // A published ruleset can reject a shorter array while the session runs and still accept a same-length edit.
-        next = await mutateDay(dayName, (tasks) => markTaskRemoved(tasks, same));
-      }
+      // Hide in place. A shorter list is rejected while a session runs, so the first attempt is already the form the rules allow.
+      next = await commitDayTasks(userId.value, dayName, (tasks) => markTaskRemoved(tasks, same));
       if (taskStillVisible(next, same)) throw Object.assign(new Error('still-there'), { code: 'permission-denied' });
       next = visibleTasks(next);
       selectedDayRoutine.value = next; // UI follows the committed list, never a local splice
@@ -1415,29 +1398,20 @@ const toggleTaskCompletion = async (index) => {
   const before = selectedDayRoutine.value[index];
   selectedDayRoutine.value.splice(index, 1, task);
 
-  const selectedDayDocRef = doc(db, 'weeklyRoutines', `${userId.value}_${days[selectedDayIndex.value].day}`);
-
   try {
-    // Transaction + match by task identity (id, else createdAt|title) — never by array index, which shifts under concurrent edits.
-    await runTransaction(db, async (tx) => {
-      const snap = await tx.get(selectedDayDocRef);
-      if (!snap.exists()) return;
-      let tasks = [...(snap.data().tasks || [])];
+    // Update that task on the stored list. Existing slots keep createdAt and points, so a running session accepts the write.
+    await commitDayTasks(userId.value, days[selectedDayIndex.value].day, (tasks) => {
       const at = tasks.findIndex((t) => sameTask(t, task));
-      if (at < 0) return; // deleted/moved meanwhile: nothing to update
-
-      if (lockedToggle) {
-        // 8-hour lock: update in place; the array never shrinks and no locked field changes
-        tasks[at] = { ...tasks[at], completed: task.completed, completedAt: task.completedAt, completedFor: task.completedFor || null, timerActive: false, timerStoppedAt: task.timerStoppedAt };
-      } else {
-        tasks[at] = { ...tasks[at], ...task };
-      }
-
-      tx.update(selectedDayDocRef, { tasks, updatedAt: serverTimestamp() }); // in place: the array never shrinks (lockedDayUnchanged)
+      if (at < 0) return tasks;
+      const row = { ...tasks[at], completed: task.completed, completedAt: task.completedAt, completedFor: task.completedFor || null, timerActive: false, timerStoppedAt: task.timerStoppedAt };
+      const next = tasks.slice();
+      next[at] = row;
+      return next;
     });
     console.log("Task completion updated successfully");
   } catch (error) {
     console.error("Error updating task completion:", error);
+    showNoteToast(writeFailureMessage(error, task.title, 'save'), { error: true });
     const at = selectedDayRoutine.value.findIndex((t) => sameTask(t, task));
     if (at >= 0 && before) selectedDayRoutine.value.splice(at, 1, before); // write rejected: never lose the card, show the stored state
     return false;
@@ -2014,11 +1988,8 @@ const applyScheduleToTask = async (task, sched, scope, extra = null) => {
   scheduledList.value = await mutateScheduled(userId.value, (l) => { res = applyTaskSchedule({ list: l, task, sched, scope, dayDate: selectedDayDate.value }); return res.error ? l : res.list; });
   if (res.error) return res;
   if (res.task && extra) res.task = { ...res.task, ...extra };
-  const ref_ = doc(db, 'weeklyRoutines', `${userId.value}_${dayName}`);
-  const cur = (await getDoc(ref_)).data()?.tasks || [];
-  const next = res.task ? cur.map((t) => (taskKey(t) === key ? res.task : t)) : cur.filter((t) => taskKey(t) !== key);
-  await updateDoc(ref_, { tasks: next, updatedAt: serverTimestamp() });
-  selectedDayRoutine.value = next;
+  const next = await commitDayTasks(userId.value, dayName, (live) => (res.task ? live.map((t) => (taskKey(t) === key ? { ...t, ...res.task, createdAt: t.createdAt, points: t.points } : t)) : markTaskRemoved(live, (t) => taskKey(t) === key)));
+  selectedDayRoutine.value = visibleTasks(next);
   cancelTaskNotifications(task);
   await afterMaterialize();
   resyncNotifications();
@@ -2071,7 +2042,7 @@ const skipTaskToday = async (task) => {
   const before = scheduledList.value.filter((e) => e.id === task.templateId || e.templateId === task.templateId).map((e) => ({ ...e }));
   try {
     scheduledList.value = await mutateScheduled(userId.value, (l) => skipRoutineToday(l, task, today));
-    await mutateDay(dayName, (tasks) => tasks.filter((t) => !sameTask(t, task)));
+    await commitDayTasks(userId.value, dayName, (tasks) => markTaskRemoved(tasks, (t) => sameTask(t, task)));
     selectedDayRoutine.value = selectedDayRoutine.value.filter((t) => !sameTask(t, task));
     cancelTaskNotifications(task); resyncNotifications();
   } catch (e) { console.error('skip today', e); showRepeatToast('Could not skip — try again.', { error: true }); return; }
@@ -2153,14 +2124,12 @@ const scheduleExistingTask = async (index, task, { date, time }) => {
   try {
     scheduledList.value = await mutateScheduled(userId.value, (l) => [...l, entry]); // saved first, so a failure never loses the task
     const dayName = days[selectedDayIndex.value].day;
-    const ref_ = doc(db, 'weeklyRoutines', `${userId.value}_${dayName}`);
     const key = taskKey(task);
-    const cur = (await getDoc(ref_)).data()?.tasks || [];
-    await updateDoc(ref_, { tasks: cur.filter((t) => taskKey(t) !== key), updatedAt: serverTimestamp() });
+    await commitDayTasks(userId.value, dayName, (live) => markTaskRemoved(live, (t) => taskKey(t) === key));
     selectedDayRoutine.value = selectedDayRoutine.value.filter((t) => taskKey(t) !== key);
   } catch (e) {
     console.error('Error scheduling task:', e);
-    showNoteToast('Could not schedule this task. Check your connection and try again.', { error: true });
+    showNoteToast(writeFailureMessage(e, task && task.title, 'save'), { error: true });
   }
 };
 
@@ -2311,15 +2280,11 @@ const addNewTask = async () => {
   error.value = '';
   lastAddPersist = trackWrite((async () => {
     try {
-      const refs = selectedDays.map((d) => doc(db, 'weeklyRoutines', `${userId.value}_${d.day}`));
-      await runTransaction(db, async (tx) => {
-        const snaps = await Promise.all(refs.map((r) => tx.get(r)));
-        snaps.forEach((snap, i) => {
-          const live = snap.exists() ? [...(snap.data().tasks || [])] : [];
-          const next = appendTask(live, copyFor(selectedDays[i]), (t) => taskKey(t) === key);
-          tx.set(refs[i], { tasks: dropUndefined(next), updatedAt: serverTimestamp() }, { merge: true });
-        });
-      });
+      // One day at a time, appended on the stored list. A front insert shifts every slot and the live rules reject it.
+      // Append is idempotent for this task key, so a retry after a failed later day does not duplicate the days that saved.
+      for (const d of selectedDays) {
+        await commitDayTasks(userId.value, d.day, (live) => appendTask(live, copyFor(d), (t) => taskKey(t) === key));
+      }
     } catch (e) {
       console.error('Error adding task:', e);
       selectedDayRoutine.value = (selectedDayRoutine.value || []).filter((t) => taskKey(t) !== key);
@@ -3122,9 +3087,7 @@ const undoVoiceTask = async (entry) => {
   const key = `${entry.createdAt}|${entry.title}`;
   await lastAddPersist;
   try {
-    const ref_ = doc(db, 'weeklyRoutines', `${userId.value}_${entry.dayName}`);
-    const cur = (await getDoc(ref_)).data()?.tasks || [];
-    await updateDoc(ref_, { tasks: cur.filter((t) => taskKey(t) !== key), updatedAt: serverTimestamp() });
+    await commitDayTasks(userId.value, entry.dayName, (live) => markTaskRemoved(live, (t) => taskKey(t) === key));
     selectedDayRoutine.value = (selectedDayRoutine.value || []).filter((t) => taskKey(t) !== key);
     voiceAdded.value = voiceAdded.value.filter((e) => e.id !== entry.id);
   } catch (e) { console.error('Undo failed:', e); }
@@ -3605,7 +3568,11 @@ const patchTask = async (index, task, patch) => {
     if (patch.estimateMin !== undefined) task.estimateMin = Number(patch.estimateMin) || 0;
     let saved = patch.estimateMin !== undefined ? { ...patch, estimateMin: task.estimateMin } : patch;
     // re-estimate when the inputs change (only possible outside a running lock: estimateMin/title are locked fields there)
-    if (['estimateMin', 'title', 'notes', 'priority'].some((k) => patch[k] !== undefined)) { const e = estimateFor(task); Object.assign(task, e); saved = { ...saved, ...e }; }
+    if (['estimateMin', 'title', 'notes', 'priority'].some((k) => patch[k] !== undefined)) {
+      const e = estimateFor(task); Object.assign(task, e);
+      const { points, createdAt, ...rest } = e;
+      saved = { ...saved, ...rest, ...(patch.points !== undefined ? { points } : {}) };
+    }
     await patchStoredTask(userId.value, dayName, before, index, saved);
     return true;
   } catch (e) {
