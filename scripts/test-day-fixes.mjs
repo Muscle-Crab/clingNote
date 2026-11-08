@@ -164,6 +164,8 @@ t('a recurring add appends behind existing tasks and names a rejected save', () 
   assert.match(add, /appendTask/);
   assert.match(add, /commitDayTasks/);
   assert.equal(add.includes('Could not save “'), false);
+  assert.match(add, /newTask\.value = draft/);
+  assert.match(add, /if \(!voiceOpen\.value\) \{ newTask\.value = draft; modalOpen\.value = true; \}/);
   const kept = [{ id: 'a', createdAt: 'a', points: 10, title: 'Keep' }];
   const added = identityCommit(kept, [...kept, { id: 'b', createdAt: 'b', points: 5, title: 'Check email' }]);
   assert.equal(added[0].createdAt, 'a');

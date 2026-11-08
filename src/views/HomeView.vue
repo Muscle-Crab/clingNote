@@ -2267,6 +2267,7 @@ const addNewTask = async () => {
   if (gateCache) gateCache.extra.push(task);
   pendingAdds.set(key, task);
   const hadReminder = !!task.reminder;
+  const draft = { ...newTask.value, selectedDays: [...(newTask.value.selectedDays || [])], labels: newTask.value.labels, reminder: newTask.value.reminder ? { ...newTask.value.reminder } : newTask.value.reminder };
   newTask.value = blankTask();
   capWarning.value = false; capOverride.value = false;
   sfx('add');
@@ -2285,6 +2286,8 @@ const addNewTask = async () => {
       pendingAdds.delete(key);
       if (gateCache) gateCache.extra = gateCache.extra.filter((t) => taskKey(t) !== key);
       error.value = writeFailureMessage(e, task.title, 'save');
+      // Manual Add: put the typed task back. Voice review keeps its own row and must not also open the Add sheet.
+      if (!voiceOpen.value) { newTask.value = draft; modalOpen.value = true; }
       return false;
     }
     try { if (hadReminder) await scheduleNotification(task, task.reminder); } catch (e) { console.error(e); }
