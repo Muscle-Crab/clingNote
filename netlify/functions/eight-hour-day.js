@@ -46,6 +46,15 @@ const lockedEarned = (lock, tasks) => {
 // Tasks that count toward the day: the visible ones (recurring copies with a later activeFrom are hidden today).
 const pruneStale = (tasks, tz, dayKey) => tasks.filter((t) => { if (!t || t.type !== 'one-time' || !t.completed || !t.completedAt) return true;
   const ms = Date.parse(t.completedAt); return !Number.isFinite(ms) || core.dayKeyIn(tz, ms) >= dayKey; });
+const completedMs = (v) => {
+  if (v == null || v === '') return NaN;
+  if (typeof v === 'number') return v;
+  if (typeof v === 'object' && typeof v.toMillis === 'function') return v.toMillis();
+  if (typeof v === 'object' && Number.isFinite(Number(v.seconds))) return Number(v.seconds) * 1000;
+  if (typeof v === 'object' && Number.isFinite(Number(v._seconds))) return Number(v._seconds) * 1000;
+  const n = Date.parse(v);
+  return Number.isFinite(n) ? n : NaN;
+};
 const countable = (tasks, dayKey) => tasks.map((t, i) => ({ t, i })).filter(({ t }) => t && !(t.activeFrom && dayKey < t.activeFrom));
 
 // ── REQUIRES SERVER AI (OPENAI_API_KEY + user consent). Without them this returns null and the heuristic is used. ──
@@ -161,7 +170,8 @@ const view = (doc, now) => {
 const withSession = (doc, ud, now) => { const g = (ud && ud.gamePlan) || {}; const r = core.nextSessionState({ lock: doc.lock, sessions: g.sessions, gamePlan: g, nowMs: now, wakeTime: doc.plan && doc.plan.wakeTime });
   return { ...doc, _session: { canStart: r.ok, reason: r.reason || '', of: r.of, done: r.done, closeMs: r.closeMs || 0, untilMs: r.untilMs || 0, message: r.message || '', breakdown: r.breakdown || '' } }; };
 
-// Lock one block. index 0 = the day's main block: snapshot every countable task, reset completions, enforce the task range (strict).
+// Lock one block. index 0 = the day's main block: snapshot every countable task, clear only a recurring completion from an earlier local
+// day (the weekday doc is reused), and enforce the task range (strict). A completion from today stays: that is the points award.
 // index > 0 (a later block the same day): lock only the still-open tasks, keep completions, no minimum (0 open tasks = an empty block that
 // still shuts nothing early and settles neutrally). Scheduled blocks keep their FIXED start/end even when started late.
 const beginBlock = async (ctx, doc, { hours, startMs, endMs, dayKey, index, pending = [], strict, scheduled = false, apiKey = null, apps = null }) => {
@@ -215,7 +225,13 @@ const beginBlock = async (ctx, doc, { hours, startMs, endMs, dayKey, index, pend
     goal = { key: core.sessionKey(dayKey, index), points: target, source: targetSource, tasksBefore, hours, frozenMs: startMs };
   }
   const next = stored.map((t) => ({ ...t })); // identical order and size: the lock compares by index
-  rows.forEach(({ i }, n) => { next[i] = { ...next[i], ...(later ? {} : { completed: false, completedAt: null }), timerActive: false, points: est[n].points, complexity: est[n].complexity, estimateMin: est[n].minutes }; });
+  // Recurring rows live on the weekday doc. A completedAt from before today's dayKey (or none) is last week's flag, not today's award.
+  const staleRecurring = (t) => { if (!t || t.completed !== true || t.type === 'one-time') return false; const ms = completedMs(t.completedAt); return !Number.isFinite(ms) || core.dayKeyIn(tz, ms) < dayKey; };
+  rows.forEach(({ i }, n) => {
+    const prev = next[i];
+    const clear = !later && staleRecurring(prev);
+    next[i] = { ...prev, ...(clear ? { completed: false, completedAt: null } : {}), timerActive: false, points: est[n].points, complexity: est[n].complexity, estimateMin: est[n].minutes };
+  });
   const points = rows.map((_, n) => est[n].points);
   const lock = { hours, index, scheduled, placeholder: false, dayKey, dayName, tz, wakeTime: doc.plan.wakeTime, startMs, endMs, taskCount: rows.length, plannedCount: doc.plan.taskCount,
     indexes: rows.map(({ i }) => i), ids: rows.map(({ t }) => stableIdOf(t)), points, totalPoints: points.reduce((a, b) => a + b, 0), target, targetSource, goal, apps: apps || null, targetLevel: tgt.level, estimateSource: source, earned: 0, done: 0, settled: false,

@@ -379,6 +379,7 @@ import { prepareVaultApps } from '@/utils/vaultNames';
 import robotPng from '@/assets/assistant-robot@2x.png';
 import PointsCelebration from '@/components/home/PointsCelebration.vue';
 import { sessionGoal, overtimeStamp, overtimeInfo, overtimePoints } from '@/utils/sessionGoal';
+import { dayAward, sessionAward } from '@/utils/pointsAward';
 import { durationMs as ringDurationMs, overtimeMs as ringOvertimeMs, elapsedMs as ringElapsedMs } from '@/utils/timerRing';
 import { topicKey, recordActual, setEstimateHistory, estimateHistory } from '@/utils/personalEstimate';
 import { useEightHour, clearDebtLocal, syncAfterAuth, setDayLengthHours, loadDayLengthHours, promptSeenFor, markPromptSeen } from '@/composables/useEightHour';
@@ -1397,7 +1398,7 @@ const toggleTaskCompletion = async (index) => {
     await commitDayTasks(userId.value, days[selectedDayIndex.value].day, (tasks) => {
       const at = tasks.findIndex((t) => sameTask(t, task));
       if (at < 0) return tasks;
-      const row = { ...tasks[at], completed: task.completed, completedAt: task.completedAt, completedFor: task.completedFor || null, timerActive: false, timerStoppedAt: task.timerStoppedAt };
+      const row = { ...tasks[at], completed: task.completed, completedAt: task.completedAt, completedFor: task.completedFor || null, overDurSec: task.overDurSec ?? null, overSec: task.overSec ?? null, timerActive: false, timerStoppedAt: task.timerStoppedAt };
       const next = tasks.slice();
       next[at] = row;
       return next;
@@ -3784,7 +3785,7 @@ const confirmDayStart = async (hours, opts = {}) => {
     const tasksNow = selectedDayRoutine.value || [];
     const goal = sessionTargetOf(tasksNow, hours, eh.stats.value).target;
     if (!(goal > 0)) { ehStartError.value = 'All done today'; return; }
-    const baseline = (tasksNow || []).filter((t) => t && t.completed && t.removed !== true).reduce((n, t) => n + overtimePoints(chipValues(t).points, t), 0);
+    const baseline = awardOfList(tasksNow);
     const beforeKey = sessionId(eh.lock.value);
     await eh.startNow(hours, opts.blocks, { apps: opts.lock ? sessionAppsPick.value : null }); // evening mode: optional later blocks today (split day), fixed now
     const lock = eh.running.value ? eh.lock.value : null;
@@ -3818,7 +3819,7 @@ const captureSessionGate = () => {
   const tasks = selectedDayRoutine.value || [];
   const target = sessionTargetOf(tasks, lock.hours != null ? lock.hours : eh.hoursPref.value, eh.stats.value).target;
   if (!(target > 0)) return null;
-  const daily = tasks.filter((t) => t && t.completed && t.removed !== true).reduce((n, t) => n + overtimePoints(chipValues(t).points, t), 0);
+  const daily = awardOfList(tasks);
   const row = beginSessionGate(localStorage, lock, daily, target);
   sessionGateTick.value += 1;
   return row;
@@ -3827,7 +3828,7 @@ const sessionGate = computed(() => readGate());
 const sessionEarnedPts = computed(() => {
   const g = sessionGate.value;
   if (!g) return null;
-  return Math.max(0, Math.round((Number(pointsAccumulated.value) || 0) - g.earned));
+  return sessionAward(pointsAccumulated.value, g.earned);
 });
 const sessionTargetPts = computed(() => (sessionGate.value ? sessionGate.value.target : null));
 const sessionGateOpen = computed(() => {
@@ -4137,18 +4138,12 @@ watch(gpLoaded, (v) => { if (v) syncAppLock(); });
 const onAppLockChanged = () => syncAppLock(); // Settings "Locked apps" saved a new selection
 onMounted(() => window.addEventListener('cling:applock-changed', onAppLockChanged)); onBeforeUnmount(() => window.removeEventListener('cling:applock-changed', onAppLockChanged));
 if (process.env.VUE_APP_FIREBASE_EMULATORS === '1') window.__gpBreakEnd = (ms) => { if (gpBreak.value) gpBreakSave({ ...gpBreak.value, endMs: ms }); }; // local e2e hook only
-watch(() => gpOn.value && isViewingToday.value && gpEarned.value.points, (v) => { if (v !== false) pointsAccumulated.value = v; });
-// (moved below gpEarned: it read gpEarned before its const was initialised -> TDZ ReferenceError on an early routine change)
-// Update points when tasks are completed
-watch(
-    () => selectedDayRoutine.value,
-    (tasks) => {
-      // Coach game plan: size points (S10/M20/L40), nothing after the hard close, minus today's revoke penalty. Simple mode unchanged.
-      pointsAccumulated.value = gpOn.value && isViewingToday.value ? gpEarned.value.points
-        : (tasks || []).filter((task) => task.completed).reduce((n, t) => n + overtimePoints(chipValues(t).points, t), 0); // real points minus any overtime penalty (what the celebration credited)
-    },
-    { deep: true }
-);
+// Same number the session baseline subtracts. Coach uses size points and the close window. Simple mode uses the card chip.
+// Defined after gpEarned so the first read is not a TDZ error. confirmDayStart calls it only after setup.
+const awardOfList = (tasks) => (gpOn.value && isViewingToday.value
+  ? GP.earnedPoints(tasks || [], { closeMs: GP.pointsCloseMs(gpPhase.value.closeMs, eh.running.value ? eh.lock.value : null), estMinutes: (t) => chipValues(t).minutes, penalty: gpPenaltyToday.value }).points
+  : dayAward(tasks, (t) => chipValues(t).points));
+watch(() => awardOfList(selectedDayRoutine.value), (v) => { pointsAccumulated.value = v; });
 const gpGoalWhy = computed(() => { const g = gpGoal.value; return g.from === 'history' ? `90% of your 2-week median, capped at today's ${g.load} pts planned, never under ${g.min}.` : `80% of today's ${g.load} pts planned (needs 3 logged days for the 2-week median), never under ${g.min}.`; });
 const loadBossPrefs = () => loadUserDoc().then((d) => { const day = localDateStr(); bossMode.value = normBossMode(d && d.bossMode); emergencyOn.value = emergencyAllowed(d); gpLoad(d);
   goalOverride.value = d && d.pointsGoal && d.pointsGoal.day === day ? d.pointsGoal : null; todayMood.value = d && d.mood && d.mood.day === day ? d.mood.id : ''; }).catch(() => {});

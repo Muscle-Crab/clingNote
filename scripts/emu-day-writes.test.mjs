@@ -12,6 +12,9 @@ import { dropUndefined } from '../src/utils/firestoreSafe.js';
 
 const PORT = 8089;
 const repoRules = readFileSync(new URL('../firestore.rules', import.meta.url), 'utf8');
+// Read-only fetch of the deployed rules on 2026-11-08. Not a copy of firestore.rules and not published by this test.
+const deployedRules = readFileSync(new URL('./fixtures/deployed-firestore-20261108.rules', import.meta.url), 'utf8');
+if (!deployedRules.includes('|| lockedDayUnchanged()')) throw new Error('deployed weeklyRoutines update does not require lockedDayUnchanged');
 const OPEN = "allow update: if isAuthenticated() && request.auth.uid == routineId.split('_')[0];";
 if (!repoRules.includes(OPEN)) throw new Error('repo weeklyRoutines update line changed; fixture replace would miss');
 const fixtureRules = repoRules.replace(OPEN, `allow update: if isAuthenticated() && request.auth.uid == routineId.split('_')[0]
@@ -96,7 +99,7 @@ async function suite(label, env) {
       const live = (await getDoc(ref)).data().tasks;
       const desired = live.map((t) => (t.id === 't0' ? { ...t, points: 5 } : t));
       const write = updateDoc(ref, { tasks: dropUndefined(identityCommit(live, desired, { keepPoints: false })), updatedAt: serverTimestamp() });
-      if (label.startsWith('FIXTURE')) {
+      if (label.startsWith('FIXTURE') || label.startsWith('DEPLOYED')) {
         await denied(() => write);
       } else await write;
     });
@@ -114,9 +117,41 @@ async function suite(label, env) {
       const ref = doc(db, 'weeklyRoutines', `${U}_Sat`);
       const live = (await getDoc(ref)).data().tasks;
       const write = updateDoc(ref, { tasks: live.slice(0, -1), updatedAt: serverTimestamp() });
-      if (label.startsWith('FIXTURE')) {
+      if (label.startsWith('FIXTURE') || label.startsWith('DEPLOYED')) {
         await denied(() => write);
       } else await write;
+    });
+    await check(`${label} ${n}: completion keeps points and stores the award`, async () => {
+      await fresh();
+      const ref = doc(db, 'weeklyRoutines', `${U}_Sat`);
+      const live = (await getDoc(ref)).data().tasks;
+      const at = '2026-11-08T16:00:00.000Z';
+      const desired = live.map((t) => (t.id === 't0' ? { ...t, completed: true, completedAt: at, points: 999, overDurSec: null, overSec: null } : t));
+      await updateDoc(ref, { tasks: dropUndefined(identityCommit(live, desired)), updatedAt: serverTimestamp() });
+      const row = (await getDoc(ref)).data().tasks[0];
+      if (row.completed !== true || row.completedAt !== at || row.points !== tasks[0].points || row.createdAt !== tasks[0].createdAt) throw new Error('award drifted ' + JSON.stringify(row));
+      const retry = identityCommit((await getDoc(ref)).data().tasks, desired);
+      await updateDoc(ref, { tasks: dropUndefined(retry), updatedAt: serverTimestamp() });
+      const again = (await getDoc(ref)).data().tasks;
+      if (again.length !== live.length || again.filter((t) => t.completedAt === at).length !== 1) throw new Error('retry duplicated');
+    });
+  }
+
+  if (label.startsWith('DEPLOYED')) {
+    await check(`${label}: legacy zero points stays 0 while the completion is stored`, async () => {
+      const legacy = [{ id: 'z', title: 'Check email', createdAt: '2026-11-08T12:00:00.000Z', points: 0, completed: false, type: 'one-time' }];
+      await seedDocs('Sat', legacy);
+      const ref = doc(db, 'weeklyRoutines', `${U}_Sat`);
+      const live = (await getDoc(ref)).data().tasks;
+      const at = '2026-11-08T16:00:00.000Z';
+      const desired = live.map((t) => ({ ...t, completed: true, completedAt: at, points: 40 }));
+      await updateDoc(ref, { tasks: dropUndefined(identityCommit(live, desired)), updatedAt: serverTimestamp() });
+      const row = (await getDoc(ref)).data().tasks[0];
+      if (row.points !== 0 || row.completed !== true || row.completedAt !== at) throw new Error('legacy award ' + JSON.stringify(row));
+      const bumped = updateDoc(ref, { tasks: [{ ...row, points: 40 }], updatedAt: serverTimestamp() });
+      await denied(() => bumped);
+      const still = (await getDoc(ref)).data().tasks[0];
+      if (still.points !== 0 || still.completed !== true) throw new Error('points write changed the award');
     });
   }
 
@@ -203,9 +238,16 @@ async function suite(label, env) {
 
 const env = await initializeTestEnvironment({ projectId: 'demo-zztest', firestore: { host: '127.0.0.1', port: PORT, rules: repoRules } });
 await suite('REPO', env);
+const putRules = async (content, name) => {
+  const res = await fetch(`http://127.0.0.1:${PORT}/emulator/v1/projects/demo-zztest:securityRules`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ rules: { files: [{ name, content }] } }) });
+  if (!res.ok) throw new Error('rules upload ' + res.status + ' ' + (await res.text()).slice(0, 300));
+};
 await env.clearFirestore();
-await fetch(`http://127.0.0.1:${PORT}/emulator/v1/projects/demo-zztest:securityRules`, { method: 'PUT', body: JSON.stringify({ rules: { files: [{ content: fixtureRules }] } }) });
+await putRules(fixtureRules, 'fixture.rules');
 await suite('FIXTURE-strict-locked-day-NOT-LIVE', env);
+await env.clearFirestore();
+await putRules(deployedRules, 'deployed-firestore-20261108.rules');
+await suite('DEPLOYED-20261108-fetched-not-published', env);
 await check('raw Firestore client: getDoc while offline', async () => {
   const { initializeApp } = await import('firebase/app');
   const { initializeFirestore, connectFirestoreEmulator } = await import('firebase/firestore');
