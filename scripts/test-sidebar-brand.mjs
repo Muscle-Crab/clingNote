@@ -16,6 +16,9 @@ assert.ok(scrimAt > 0 && asideAt > scrimAt, 'scrim is a sibling in front of the 
 assert.ok(nav.includes('src="/app-icon-robot.png"') && nav.includes('data-test="nav-logo"') && nav.includes('alt="ClingNote"'));
 assert.ok(!nav.includes('clingnote-logo'), 'sidebar no longer uses the checkmark-and-leaf logo');
 assert.ok(nav.includes('@click.stop') && nav.includes('@click="onScrim"') && nav.includes('data-test="nav-close"'));
+assert.ok(nav.includes("e.key === 'Escape'"), 'Escape still closes the phone drawer');
+assert.ok(/app-sidebar-scrim[\s\S]*pointer-events:\s*auto/.test(nav), 'outside taps hit the scrim');
+assert.ok(/body\.sidebar-open\) \.app-topbar \{ z-index: 90/.test(nav), 'open drawer stacks above the day timer');
 assert.ok(fs.existsSync(new URL('../public/app-icon-robot.png', import.meta.url)), 'robot artwork already in the app');
 const iconSet = fs.readFileSync(new URL('../ios/App/App/Assets.xcassets/AppIcon.appiconset/Contents.json', import.meta.url), 'utf8');
 assert.ok(iconSet.includes('AppIcon-512@2x.png'), 'iOS app icon set is unchanged and still points at its own file');

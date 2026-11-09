@@ -6,12 +6,13 @@ export const SHUT_ROUTES = ['home', 'upcoming', 'rankings', 'discipline', 'procr
 export const SEEN_KEY = 'clingnote.ehSeen.v1';
 
 // wrapped/allDone come from Home's legacy day session (homeDay); lockInOn=false hides the plan pills (no lock offered at all).
-export const pillState = ({ phase, running, countdown, startsLabel, hasPlan, shut, untilLabel, earned = 0, target = 0, pace = null, hours = 8, wrapped = false, allDone = false, lockInOn = true, nextLabel = '' }) => {
+export const pillState = ({ phase, running, countdown, startsLabel, hasPlan, shut, untilLabel, earned = 0, target = 0, pace = null, hours = 8, wrapped = false, allDone = false, lockInOn = true, nextLabel = '', endsLabel = '' }) => {
   const hl = String(Math.round((Number(hours) || 8) * 2) / 2); // "6.5" -> "your 6.5-hour day"
   if (shut) return { kind: 'shut', main: 'Shut', sub: untilLabel ? `till ${untilLabel}` : '', aria: untilLabel ? `ClingNote is shut until ${untilLabel}` : 'Session done. Start a new session when you are ready' };
   if (running) {
     const risk = pace && target > 0 && earned < target && pace.leftMs <= 2 * 3600000;
-    return { kind: risk ? 'risk' : 'run', main: countdown, sub: target > 0 ? `${earned}/${target}` : '', aria: `${hl}-hour day: ${countdown} left, ${earned} of ${target} points` };
+    const ends = endsLabel ? `Ends ${endsLabel}` : '';
+    return { kind: risk ? 'risk' : 'run', main: countdown, sub: target > 0 ? `${earned}/${target}` : '', ends, aria: `${hl}-hour day: ${countdown} left${endsLabel ? `, ends at ${endsLabel}` : ''}, ${earned} of ${target} points` };
   }
   if (phase === 'gap' && nextLabel) return { kind: 'before', main: `Next ${nextLabel}`, sub: '', aria: `Next lock-in starts at ${nextLabel}` }; // evening mode: open until the next block
   if (wrapped) return { kind: 'done', main: 'Day wrapped', sub: '', aria: 'Day wrapped' };

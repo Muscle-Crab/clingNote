@@ -18,7 +18,8 @@
     <template v-else-if="view === 'planned'">
       <p v-if="stats.warning && !(eh.st.data && eh.st.data.offline)" class="eh-note eh-alert--boss" data-test="eh-alert">⚠️ {{ stats.warning }}</p>
       <div class="eh-line">
-        <p class="eh-big" data-test="eh-starts">Ready<small> · Ends {{ ends }}</small></p>
+        <p class="eh-big" data-test="eh-starts">Ready</p>
+        <p v-if="ends" class="eh-end" data-test="eh-ends"><span class="eh-end-k">Day ends</span><b>{{ ends }}</b></p>
         <button v-if="phase === 'ready' && inRange" class="eh-btn eh-btn--primary" data-test="eh-start" @click="$emit(locked ? 'pro' : 'start')">{{ locked ? 'Start 🔒' : 'Start' }}</button>
         <span v-else class="eh-badge">Not started</span>
       </div>
@@ -36,7 +37,8 @@
         <span class="eh-lock" data-test="eh-lock" title="Locked: window, tasks, points and target cannot change" aria-label="Locked">🔒</span>
         <p class="eh-clock" data-test="eh-countdown" role="timer">{{ countdown }}</p>
         <div class="eh-meta">
-          <span data-test="eh-times">{{ starts }} → <span data-test="eh-ends">Ends {{ ends }}</span></span>
+          <span data-test="eh-times">{{ starts }} →</span>
+          <span class="eh-end" data-test="eh-ends"><span class="eh-end-k">Day ends</span><b>{{ ends }}</b></span>
           <span data-test="eh-points">Goal {{ progress.earned }}/{{ lock.target }} pts</span> <span class="eh-n8" data-test="eh-session-tasks">· {{ Math.min(progress.done, PER) }}/{{ PER }} tasks this session</span>
         </div>
       </div>
@@ -136,7 +138,7 @@ const save = async () => {
 /* Compact strip (replaces the old big card). Sits between the day tabs and the progress card. */
 .eh { max-width: 100%; box-sizing: border-box; overflow-x: hidden; touch-action: pan-y; overscroll-behavior-x: none; background: var(--c-surface, #16181c); border: 1px solid var(--c-border, #2a2a2e); border-radius: 14px; padding: 6px 12px; margin: 6px 0; color: var(--c-text, #e6e6e6); }
 .eh--running { border-color: rgba(55,138,221,.55); padding: 4px 12px; }
-.eh-line { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 30px; }
+.eh-line { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; min-height: 30px; }
 .eh-line--run { justify-content: flex-start; gap: 10px; min-height: 40px; }
 .eh-title { font-size: .85rem; font-weight: 700; }
 .eh-lock { font-size: .9rem; opacity: .85; }
@@ -147,6 +149,13 @@ const save = async () => {
 .eh-meta { min-width: 0; flex-shrink: 1; white-space: normal; text-align: right; } .eh-meta [data-test=eh-points], .eh-meta [data-test=eh-ends] { white-space: nowrap; }
 .eh-meta--end { flex-wrap: wrap; justify-content: flex-end; column-gap: 10px; }
 .eh-clock { flex-shrink: 0; }
+.eh-end { display: flex; flex-direction: column; align-items: flex-end; margin: 0; min-width: 0; }
+.eh-end-k { font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #9fb7e0; line-height: 1.2; }
+.eh-end b { font-size: 1.2rem; font-weight: 800; color: #fff; line-height: 1.1; font-variant-numeric: tabular-nums; }
+@media (max-width: 380px) {
+  .eh-line--run { flex-wrap: wrap; }
+  .eh-end { align-items: flex-start; }
+}
 .eh-badge { font-size: .65rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--c-surface-2, #22252a); color: var(--c-text-2, #b0b0b0); text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; }
 .eh-badge--ok { background: rgba(60,180,110,.18); color: #3cb46e; }
 .eh-badge--miss { background: rgba(224,90,90,.18); color: #e05a5a; }

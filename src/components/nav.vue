@@ -240,7 +240,10 @@ onMounted(() => {
 <style>
 /* side-nav brand icon: same continuous-corner rounding as the iOS home-screen icon (~22.37% of the side) */
 .app-nav-logo { width: 32px; height: 32px; border-radius: 7px; object-fit: cover; display: block; }
-.app-sidebar-scrim { position: fixed; inset: 0; z-index: 40; margin: 0; padding: 0; border: 0; background: rgba(4, 8, 18, .45); cursor: pointer; }
+.app-sidebar-scrim { position: fixed; inset: 0; z-index: 70; margin: 0; padding: 0; border: 0; background: rgba(4, 8, 18, .45); cursor: pointer; pointer-events: auto; }
+.app-sidebar { z-index: 80; }
+.app-sidebar-close { position: relative; z-index: 2; }
+:global(body.sidebar-open) .app-topbar { z-index: 90; }
 .pl-nav-badge { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; margin-left: 8px; border-radius: 999px; background: #F87171; color: #fff; font-size: 11px; font-weight: 800; }
 .pl-nav-dot { position: absolute; top: 6px; right: 6px; width: 9px; height: 9px; border-radius: 50%; background: #F87171; box-shadow: 0 0 0 2px #070D1C; }
 /* From 768px up the open sidebar pushes the page instead of covering it; below that it is an overlay. */

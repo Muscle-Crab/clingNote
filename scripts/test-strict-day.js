@@ -91,6 +91,7 @@ t('celebrations: manager award first (voice line), then day result, each once', 
 });
 t('pill state: countdown + target running, "Starts X" before, hidden with no plan, Shut after', () => {
   assert.deepStrictEqual(chrome.pillState({ running: true, countdown: '03:00:00', earned: 10, target: 60, hasPlan: true }).sub, '10/60');
+  assert.strictEqual(chrome.pillState({ running: true, countdown: '03:00:00', earned: 10, target: 60, endsLabel: '3:44 PM' }).ends, 'Ends 3:44 PM');
   assert.strictEqual(chrome.pillState({ phase: 'before', startsLabel: '7:00 AM', hasPlan: true }).main, 'Starts 7:00 AM');
   assert.strictEqual(chrome.pillState({ phase: 'before', hasPlan: false }), null);
   assert.strictEqual(chrome.pillState({ shut: true, untilLabel: '7:00 AM' }).kind, 'shut');
