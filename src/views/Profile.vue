@@ -96,6 +96,8 @@
               <input type="checkbox" role="switch" class="pf-switch" data-test="auto-focus-toggle" :checked="autoFocus" @change="onAutoFocus($event.target.checked)" /></label>
             <label class="pf-row pf-row--divided" data-test="confirm-start-row"><span class="pf-ico" aria-hidden="true">⏱️</span><span class="pf-row-title">Confirm time before starting<small class="pf-dl-sub">Asks if the task fits its minutes when you press play</small></span>
               <input type="checkbox" role="switch" class="pf-switch" data-test="confirm-start-toggle" :checked="confirmStart" @change="onConfirmStart($event.target.checked)" /></label>
+            <label class="pf-row pf-row--divided" data-test="focus-mode-row"><span class="pf-ico" aria-hidden="true">🌿</span><span class="pf-row-title">Focus Mode<small class="pf-dl-sub">On: play opens a full-screen focus view and the timer starts immediately. Off: play starts the timer the same way it does today.</small></span>
+              <input type="checkbox" role="switch" class="pf-switch" data-test="focus-mode-toggle" :checked="focusMode" @change="onFocusMode($event.target.checked)" /></label>
           </section>
           <section v-if="isOwn" class="pf-card pf-card--flush" data-test="wake-alarm-setting">
             <label class="pf-row"><span class="pf-ico" aria-hidden="true">⏰</span><span class="pf-row-title">Wake-up alarm<small class="pf-dl-sub" data-test="wake-alarm-sub">{{ wakeOk ? 'ClingNote asks you each day if you want an alarm, then rings at your time, even on silent (iOS 26+). Off by default.' : 'iOS app only: install ClingNote on your iPhone to use it.' }}</small></span>
@@ -197,6 +199,8 @@ import * as GP from '@/utils/gamePlan';
 import { lockIn, loadLockIn, setLockInEnabled, setWakeAutoLock, setPlanOpenTime } from '@/utils/lockIn';
 import { wakeLockNote } from '@/utils/wakeLock';
 import { readAutoFocus, writeAutoFocus } from '@/utils/focusAutoStart';
+import { readFocusMode, writeFocusModeCache, saveFocusMode, focusModeFromDoc, subscribeFocusMode } from '@/utils/focusModePref';
+import { saveUserFields } from '@/utils/userDoc';
 loadLockIn(true).catch(() => {});
 import { wake, wakeSupported, loadWake, setWakeEnabled, setWakeTime, setWakePromptTime, setWakeDays } from '@/composables/useWakeAlarm';
 import { toMin } from '@/utils/wakeAlarm';
@@ -210,6 +214,17 @@ const autoFocus = ref(readAutoFocus(localStorage)); // per device (src/utils/foc
 const onAutoFocus = (on) => { writeAutoFocus(localStorage, on); autoFocus.value = !!on; };
 const confirmStart = ref(confirmStartOn(localStorage, auth.currentUser?.uid)); // per user (src/utils/startConfirm.js)
 const onConfirmStart = (on) => { setConfirmStart(localStorage, auth.currentUser?.uid, on); confirmStart.value = !!on; };
+const focusMode = ref(readFocusMode(localStorage, auth.currentUser?.uid)); // users/{uid}.focusMode; missing defaults on
+let focusModeRev = 0;
+const onFocusMode = async (on) => {
+  const rev = ++focusModeRev; const prev = focusMode.value; focusMode.value = !!on;
+  try { await saveFocusMode({ store: localStorage, uid: auth.currentUser?.uid, on, write: saveUserFields }); }
+  catch (e) { if (rev === focusModeRev) { focusMode.value = prev; writeFocusModeCache(localStorage, auth.currentUser?.uid, prev); } console.warn('focus mode', e && e.message); }
+};
+const onFocusModeEvent = (on) => { focusModeRev += 1; focusMode.value = !!on; };
+let stopFocusMode = () => {};
+onMounted(() => { stopFocusMode = subscribeFocusMode(onFocusModeEvent); });
+onBeforeUnmount(() => stopFocusMode());
 // B44 "Lock at wake-up": the picked apps lock at the wake time for the day length, even with ClingNote closed. Needs Screen Time + apps.
 const lockSt = ref({ authorization: 'unsupported', selectionCount: 0 });
 if (lockAvailable()) clingLock.status().then((r) => { if (r) lockSt.value = r; }).catch(() => {});
@@ -294,7 +309,7 @@ const onIcsImport = async (ev) => { const u = auth.currentUser; const f = ev.tar
 // B44 time blocking: users/{uid}.timeBlocks { start, end, days, focusMin }
 const tbOpen = ref(false); const tbBusy = ref(false); const tbSaved = ref(normBlocks(null)); const tbForm = ref({ ...normBlocks(null) });
 const tbSummary = computed(() => blocksSummary(tbSaved.value));
-const loadTimeBlocks = async () => { const u = auth.currentUser; if (!u) return; try { const snap = await getDoc(doc(db, 'users', u.uid)); tbSaved.value = normBlocks(snap.exists() ? snap.data().timeBlocks : null); { const d = snap.exists() ? snap.data() : {}; bossMode.value = d.bossMode === 'strict' ? 'strict' : 'simple'; emergencyOn.value = d.emergencyUnlock !== false; gpHas.value = !!(d.gamePlan && d.gamePlan.userSet); gpPlan.value = GP.normPlan(d.gamePlan, d.onboarding && d.onboarding.wakeTime); gpView(); } tbForm.value = { ...tbSaved.value }; } catch (e) { /* defaults */ } };
+const loadTimeBlocks = async () => { const u = auth.currentUser; if (!u) return; const rev = focusModeRev; try { const snap = await getDoc(doc(db, 'users', u.uid)); tbSaved.value = normBlocks(snap.exists() ? snap.data().timeBlocks : null); { const d = snap.exists() ? snap.data() : {}; bossMode.value = d.bossMode === 'strict' ? 'strict' : 'simple'; emergencyOn.value = d.emergencyUnlock !== false; gpHas.value = !!(d.gamePlan && d.gamePlan.userSet); gpPlan.value = GP.normPlan(d.gamePlan, d.onboarding && d.onboarding.wakeTime); gpView(); if (rev === focusModeRev) { focusMode.value = focusModeFromDoc(d); writeFocusModeCache(localStorage, u.uid, focusMode.value); } } tbForm.value = { ...tbSaved.value }; } catch (e) { /* defaults */ } };
 loadTimeBlocks();
 const bossMode = ref('simple'); const emergencyOn = ref(true);
 // Coach game plan settings (fixed week): schedule edits are queued and applied at the weekly review; the optional friend-approval toggle and friend's name apply now.

@@ -1,6 +1,7 @@
 <template>
   <div ref="scrollContainer" class="app-root" :class="[{ 'has-bg-anim': bgAnim !== 'none', 'is-dragging': isDraggingTask, 'reorder-active': isDraggingTask || reorderSettling }, appTheme ? 'theme-' + appTheme : '']">
     <BackgroundLayer :anim="bgAnim" :force-motion="bgPrefs.forceMotion" />
+    <FocusMode v-if="focusScreenTask" :task="focusScreenTask" :coach="focusCoach" :enabled="focusModeOn" @close="focusScreenKey = ''" @pause="focusScreenPause" @resume="focusScreenResume" @end="focusScreenEnd" @toggle-step="focusScreenToggle" @set-mode="focusScreenSetMode" />
     <div class="safe-top-scrim" aria-hidden="true"></div>
     <BackgroundPanel :open="showBackground" @close="showBackground = false" />
     <BreakPill v-if="(gpOn && isViewingToday) || bkDemo" :mode="bkDemo ? bkDemo.mode : bkMode" :min="bkDemo ? bkDemo.min : (gpBank || 20)" :left="bkDemo ? bkDemo.left : bkLeft" @take="gpTakeBreak" @collapse="bkCollapse" />
@@ -67,7 +68,7 @@
         <DayStartPrompt v-if="dayPromptOpen" :initial-hours="eh.hoursPref.value" :now-ms="eh.nowMs" :tz="eh.plan.value?.tz || ''" :busy="ehBusy" :error="ehStartError" :tasks="todayTasksForTarget" :stats="eh.stats.value" :earned="pointsAccumulated || 0" @confirm="confirmDayStart" @skip="skipLockIn" :can-lock="lockAvailable()" :apps="sessionAppsPick" @pick-apps="pickSessionApps"><template #checkin><CheckinRow :value="checkin" @pick="saveCheckin" /></template></DayStartPrompt>
 
         <ProgressBar :locked="!proNow" @pro="gatePro(_proRouter, 'points')" :percentage="calculateCompletionPercentage()" :milestones="milestones" :done="completedTaskCount || 0" :total="dayTasks.length"
-                     :streak="streak" :streak-status="streakStatus" :streak-progress="streakProgress" :streak-min="DAILY_STREAK_MIN" :freezes="streakFreezes" :points="shownSessionPts" :target="shownSessionTarget" :session-key="sessionGateKey" :points-caption="sessionGate ? 'This session' : 'Today'" :today-points="sessionGate ? dailyPoints : null" :off-today="isViewingToday && offToday" :uid="userId || ''" :hold="!!rewardScreen || !!lossScreen" />
+                     :streak="streak" :streak-status="streakStatus" :streak-progress="streakProgress" :streak-min="DAILY_STREAK_MIN" :freezes="streakFreezes" :points="shownCardPts" :target="shownSessionTarget" :session-key="sessionGateKey" :points-caption="sessionCardPts != null ? 'This session' : 'Today'" :today-points="sessionCardPts != null ? todayCardPts : null" :off-today="isViewingToday && offToday" :uid="userId || ''" :hold="!!rewardScreen || !!lossScreen" />
 
       </section>
       <ShutdownPrompt class="home-notice" :suggest="false" :open="shutdownOpen" :done="shutdownDone" :open-tasks="shutdownOpenTasks"
@@ -229,7 +230,7 @@
 </template>
 
 <script setup>
-import { addSubtask, subtasksOf } from '@/utils/subtasks';
+import { addSubtask, subtasksOf, toggleSubtask } from '@/utils/subtasks';
 import { parseAsk } from '@/utils/assistantFab';
 import PlanDaySheet from '@/components/home/PlanDaySheet.vue';
 import DayTemplatesSheet from '@/components/home/DayTemplatesSheet.vue';
@@ -263,6 +264,9 @@ import MorningReport from '@/components/home/MorningReport.vue';
 import TaskSections from '@/components/home/TaskSections.vue';
 import { sectionOf, sectionFromTime, sectionForCreate, isSection, mergeOrder } from '@/utils/taskSections';
 import BackgroundLayer from '@/components/background/BackgroundLayer.vue';
+import FocusMode from '@/components/home/FocusMode.vue';
+import { readFocusMode, writeFocusModeCache, saveFocusMode, focusModeFromDoc, subscribeFocusMode } from '@/utils/focusModePref';
+import { saveUserFields } from '@/utils/userDoc';
 import HeroAmbience from '@/components/background/HeroAmbience.vue';
 import { effectiveAnim } from '@/utils/heroAmbience';
 import BackgroundPanel from '@/components/background/BackgroundPanel.vue';
@@ -379,7 +383,7 @@ import { prepareVaultApps } from '@/utils/vaultNames';
 import robotPng from '@/assets/assistant-robot@2x.png';
 import PointsCelebration from '@/components/home/PointsCelebration.vue';
 import { sessionGoal, overtimeStamp, overtimeInfo, overtimePoints } from '@/utils/sessionGoal';
-import { dayAward, sessionAward } from '@/utils/pointsAward';
+import { dayAward, sessionAward, cardAward } from '@/utils/pointsAward';
 import { durationMs as ringDurationMs, overtimeMs as ringOvertimeMs, elapsedMs as ringElapsedMs } from '@/utils/timerRing';
 import { topicKey, recordActual, setEstimateHistory, estimateHistory } from '@/utils/personalEstimate';
 import { useEightHour, clearDebtLocal, syncAfterAuth, setDayLengthHours, loadDayLengthHours, promptSeenFor, markPromptSeen } from '@/composables/useEightHour';
@@ -465,6 +469,19 @@ const selectedTimerHours = ref(0);
 const selectedTimerMinutes = ref(5);
 
 const selectedTimerTaskIndex = ref(null);
+const focusScreenKey = ref('');
+const focusModeOn = ref(readFocusMode(localStorage, null)); // users/{uid}.focusMode; missing and the cache default are on
+let focusModeRev = 0;
+const onFocusModeEvent = (on) => { focusModeRev += 1; focusModeOn.value = !!on; writeFocusModeCache(localStorage, userId.value, focusModeOn.value); };
+let stopFocusMode = () => {};
+onMounted(() => { stopFocusMode = subscribeFocusMode(onFocusModeEvent); });
+onBeforeUnmount(() => stopFocusMode());
+const focusScreenTask = computed(() => {
+  if (!focusScreenKey.value) return null;
+  return (selectedDayRoutine.value || []).find((t) => t && taskKey(t) === focusScreenKey.value && t.timerActive && t.completed !== true) || null;
+});
+const focusCoach = computed(() => (gpOn.value && gpPhase.value && gpPhase.value.phase === 'focus' && Number(gpPhase.value.n) > 0
+  ? { n: gpPhase.value.n, of: gpPhase.value.of || 2 } : null));
 const nowTick = ref(Date.now());
 
 let timerInterval = null;
@@ -481,7 +498,7 @@ const launchTimer = async (index, mins, base = mins) => {
 const openTaskTimerModal = async (index) => {
   const t = selectedDayRoutine.value[index]; if (!t) return;
   const mins = chipValues(t).minutes || 25;
-  if (!confirmStartOn(localStorage, userId.value)) return launchTimer(index, mins);
+  if (focusModeOn.value || !confirmStartOn(localStorage, userId.value)) return launchTimer(index, mins); // Focus Mode on: no confirm sheet, the timer starts on this tap
   startConfirm.value = { index, title: t.title || 'this task', minutes: mins, base: mins, dontAsk: false };
   speakConfirm(confirmLine(t.title, mins));
 };
@@ -1226,6 +1243,7 @@ const startTimer = async (opts = {}) => {
 
   showTimerModal.value = false;
   selectedTimerTaskIndex.value = null;
+  if (!opts.lock && focusModeOn.value) focusScreenKey.value = taskKey(task); // on: the screen opens with the timer; off: play stays as it is; an auto-started lock never opens it
 
   startCountdownWatcher();
 };
@@ -3999,6 +4017,50 @@ const endFocusEarly = async (index) => {
   cancelLocal(timerKey(t)).catch(() => {}); focusTick(); syncAppLock();
   showNoteToast('Focus ended early.');
 };
+const focusScreenPause = () => {
+  const t = focusScreenTask.value; if (!t) return;
+  if (t.focusLock) { showNoteToast(focusLockMessage(t), { error: true }); return; }
+  return focusPatchTask(widgetTaskId(t), (row) => pausePatch(row, Date.now()));
+};
+const focusScreenResume = () => {
+  const t = focusScreenTask.value; if (!t || !t.timerPausedAt) return;
+  return focusPatchTask(widgetTaskId(t), (row) => resumePatch(row, Date.now()));
+};
+const focusScreenEnd = async () => {
+  const t = focusScreenTask.value; if (!t) { focusScreenKey.value = ''; return; }
+  const i = (selectedDayRoutine.value || []).findIndex((x) => sameTask(x, t));
+  if (i < 0) { focusScreenKey.value = ''; return; }
+  if (t.focusLock) {
+    await endFocusEarly(i);
+    const still = (selectedDayRoutine.value || []).find((x) => sameTask(x, t));
+    if (still && still.timerActive) return;
+  } else {
+    sfx('timerStop');
+    const before = selectedDayRoutine.value[i];
+    selectedDayRoutine.value.splice(i, 1, { ...before, ...endEarlyPatch() });
+    try { await saveSelectedDayTasks(); }
+    catch (e) {
+      const j = (selectedDayRoutine.value || []).findIndex((x) => sameTask(x, before));
+      if (j >= 0) selectedDayRoutine.value.splice(j, 1, before);
+      showNoteToast(writeFailureMessage(e, before.title, 'stop the timer for'), { error: true });
+      return;
+    }
+    cancelLocal(timerKey(before)).catch(() => {}); focusTick(); syncAppLock();
+  }
+  focusScreenKey.value = '';
+};
+const focusScreenToggle = (id) => {
+  const t = focusScreenTask.value; if (!t || !id) return;
+  const i = (selectedDayRoutine.value || []).findIndex((x) => sameTask(x, t));
+  if (i < 0) return;
+  onSubtaskPatch(i, selectedDayRoutine.value[i], { subtasks: toggleSubtask(subtasksOf(selectedDayRoutine.value[i]), id) });
+};
+const focusScreenSetMode = async (on) => {
+  const next = !!on; const prev = focusModeOn.value;
+  focusModeRev += 1; focusModeOn.value = next;
+  try { await saveFocusMode({ store: localStorage, uid: userId.value, on: next, write: saveUserFields }); if (!next) focusScreenKey.value = ''; }
+  catch (e) { focusModeOn.value = prev; writeFocusModeCache(localStorage, userId.value, prev); console.warn('focus mode', e && e.message); }
+};
 // Locked in: Home can't be left (sign-out still works); coming back to the app says what you are locked into.
 onBeforeRouteLeave((to) => {
   const lk = lockedFocus(selectedDayRoutine.value || []); if (!lk || /^\/(login|welcome)/.test(to.path || '')) return true;
@@ -4029,6 +4091,18 @@ const bossMode = ref('simple'); const emergencyOn = ref(true); const goalOverrid
 const isStrictMode = computed(() => bossMode.value === 'strict');
 const gp = ref(GP.normPlan({})); const gpBreak = ref(null); const gpBreakLog = ref([]); const gpLog = ref({}); const gpPenalty = ref(null); const gpLoaded = ref(false);
 const gpOn = computed(() => isStrictMode.value && strictAllowed.value); // game plan, points penalties and breaks are Pro
+// The progress card uses the lock strip's sessionGoal (points after Start) and the card value of finished tasks.
+// The shield still uses the session baseline below. A late baseline or the Screen Time penalty must not zero this card.
+const cardPointsOf = (t) => (gpOn.value ? GP.sizePoints(t, chipValues(t).minutes) : chipValues(t).points);
+const todayCardPts = computed(() => cardAward(isViewingToday.value ? (dayTasks.value || []) : [], cardPointsOf));
+const sessionCardPts = computed(() => {
+  const l = eh.lock.value;
+  if (!isViewingToday.value || !eh.running.value || !l || !(Number(l.startMs) > 0)) return null;
+  const end = Number(l.endMs) > Number(l.startMs) ? Number(l.endMs) : Number.POSITIVE_INFINITY;
+  const frozen = l.goal && Number(l.target) > 0 ? Number(l.target) : 0;
+  return sessionGoal(todayTasksForTarget.value || [], { n: 1, sessions: 1, startMs: Number(l.startMs), endMs: end, goal: frozen }, cardPointsOf).earned;
+});
+const shownCardPts = computed(() => (sessionCardPts.value == null ? todayCardPts.value : sessionCardPts.value));
 watch(gpOn, (on) => { GP.setSizeMode(on); if (!on) GP.setQuietWindows([]); }, { immediate: true });
 const gpLoad = (d) => {
   gp.value = GP.normPlan(d && d.gamePlan, d && d.onboarding && d.onboarding.wakeTime);
@@ -4143,10 +4217,12 @@ if (process.env.VUE_APP_FIREBASE_EMULATORS === '1') window.__gpBreakEnd = (ms) =
 const awardOfList = (tasks) => (gpOn.value && isViewingToday.value
   ? GP.earnedPoints(tasks || [], { closeMs: GP.pointsCloseMs(gpPhase.value.closeMs, eh.running.value ? eh.lock.value : null), estMinutes: (t) => chipValues(t).minutes, penalty: gpPenaltyToday.value }).points
   : dayAward(tasks, (t) => chipValues(t).points));
-watch(() => awardOfList(selectedDayRoutine.value), (v) => { pointsAccumulated.value = v; });
+watch(() => awardOfList(selectedDayRoutine.value), (v) => { pointsAccumulated.value = v; }, { immediate: true });
 const gpGoalWhy = computed(() => { const g = gpGoal.value; return g.from === 'history' ? `90% of your 2-week median, capped at today's ${g.load} pts planned, never under ${g.min}.` : `80% of today's ${g.load} pts planned (needs 3 logged days for the 2-week median), never under ${g.min}.`; });
 const loadBossPrefs = () => loadUserDoc().then((d) => { const day = localDateStr(); bossMode.value = normBossMode(d && d.bossMode); emergencyOn.value = emergencyAllowed(d); gpLoad(d);
-  goalOverride.value = d && d.pointsGoal && d.pointsGoal.day === day ? d.pointsGoal : null; todayMood.value = d && d.mood && d.mood.day === day ? d.mood.id : ''; }).catch(() => {});
+  goalOverride.value = d && d.pointsGoal && d.pointsGoal.day === day ? d.pointsGoal : null; todayMood.value = d && d.mood && d.mood.day === day ? d.mood.id : '';
+  if (focusModeRev === 0) { focusModeOn.value = focusModeFromDoc(d); writeFocusModeCache(localStorage, userId.value, focusModeOn.value); }
+}).catch(() => {});
 onMounted(loadBossPrefs);
 const effWakeAuto = computed(() => wakeAutoOn({ mode: bossMode.value, wakeAuto: lockIn.value.wakeAuto, dayKey: localDateStr(), offDates: offDates.value, skipDate: lockIn.value.skipDate }));
 const strictGoal = computed(() => (gpOn.value ? (goalOverride.value && Number(goalOverride.value.value) > 0 ? Math.round(Number(goalOverride.value.value)) : gpGoal.value.goal) : goalFor(todayTasksForTarget.value, goalOverride.value)));

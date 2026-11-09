@@ -24,7 +24,7 @@ ok(ai.applyAiEstimate({ title: 'x', estimateMin: 10 }, 42).estimateMin === 10, '
 const home = fs.readFileSync(path.join(sr.src, 'views/HomeView.vue'), 'utf8');
 const add = fs.readFileSync(path.join(sr.src, 'components/home/AddTaskModal.vue'), 'utf8');
 ok(!/nt-est/.test(add), 'no estimate picker in add-task');
-ok(/const openTaskTimerModal = async[\s\S]{0,400}await startTimer\(\)/.test(home), 'play starts countdown directly');
+ok(/const openTaskTimerModal = async[\s\S]{0,500}launchTimer\(index, mins\)/.test(home) && /const launchTimer = async[\s\S]{0,400}await startTimer\(\{ override: base \}\)/.test(home), 'play starts countdown directly');
 ok((home.match(/estimateFor\(/g) || []).length >= 2, 'estimate at creation (normal + scheduled)');
 // Distinct, realistic buckets for similar titles (rule-order / precedence guards)
 const table = { 'wash my car': 50, 'wash the car': 50, 'wash a car': 50, 'clean my car': 50, 'car wash': 15, 'drive-through car wash': 15,
