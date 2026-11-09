@@ -25,6 +25,7 @@
               <option value="yearly">Yearly</option>
             </select>
           </div>
+          <p v-if="error" class="reminder-error" data-test="reminder-error">{{ error }}</p>
           <div class="modal-footer" style="padding: 0; border: none; margin-top: 1rem;">
             <button @click="$emit('close')" type="button" class="btn-secondary">Cancel</button>
             <button type="submit" class="btn-primary">Save reminder</button>
@@ -40,6 +41,7 @@
 defineProps({
   reminder: { type: Object, required: true },
   taskTitle: { type: String, default: '' },
+  error: { type: String, default: '' },
 });
 defineEmits(['close', 'submit']);
 </script>
@@ -146,7 +148,12 @@ defineEmits(['close', 'submit']);
 .btn-secondary { background: var(--c-surface-2); color: var(--c-text-2); }
 .btn-secondary:hover { background: var(--c-border); color: var(--c-text); }
 .btn-primary:disabled, .btn-secondary:disabled { opacity: .5; cursor: not-allowed; }
-.field-input, .field-select, .field-textarea { background: var(--c-bg); border: 1px solid var(--c-border); border-radius: var(--r); padding: 6px 8px; font-size: var(--fs-md); }
+.field-input, .field-select, .field-textarea { background: var(--c-bg); border: 1px solid var(--c-border); border-radius: var(--r); padding: 6px 8px; font-size: var(--fs-md); width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box; }
+.field-group, .modal-body, form { min-width: 0; max-width: 100%; }
+input[type="date"].field-input, input[type="time"].field-input { display: block; width: 100%; max-width: 100%; min-width: 0; }
+.modal-box { min-width: 0; overflow-x: hidden; }
+.modal-footer { flex-wrap: wrap; max-width: 100%; }
+.reminder-error { margin: 0 0 0.75rem; color: #ff8d8d; font-size: 0.85rem; }
 .field-input:focus, .field-select:focus, .field-textarea:focus { border-color: var(--c-accent); box-shadow: 0 0 0 1px var(--c-accent); outline: none; }
 .field-label { font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--c-text-3); }
 @media (max-width: 600px) { .modal-backdrop { align-items: flex-end; padding: 0; } .modal-box { max-width: none; max-height: 92vh; } .modal-header, .modal-body, .modal-footer { padding-left: var(--sp-4); padding-right: var(--sp-4); } }

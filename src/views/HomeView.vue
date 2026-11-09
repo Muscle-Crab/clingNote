@@ -125,7 +125,7 @@
       <ImagePreview v-if="showImagePreview" :src="taskDetail.imageURL" @close="showImagePreview = false" />
 
 
-      <ReminderModal v-if="isModalOpen" :reminder="reminder" :task-title="selectedTaskTitle" @close="closeModal" @submit="handleAddReminder" />
+      <ReminderModal v-if="isModalOpen" :reminder="reminder" :task-title="selectedTaskTitle" :error="reminderError" @close="closeModal" @submit="handleAddReminder" />
 
 
       <AssistantSheet v-if="askOpen" :executor="assistantExecutor" :listen-on-open="assistantListen" @close="askOpen = false" />
@@ -323,7 +323,8 @@ const mutateDay = (dayName, fn) => runTransaction(db, async (tx) => {
 });
 const strictAllowed = ref(true); // false for free users once ENFORCE_PAYWALL is on
 loadUserDoc().then((d) => { strictAllowed.value = canUse(d, 'strictBoss'); }).catch(() => {});
-import { scheduleLocal, scheduleTimerDone, cancelLocal, timerKey, cancelTaskNotifications, taskKeyOf, notifId } from '@/utils/localNotify';
+import { scheduleLocal, scheduleTimerDone, scheduleReminder, cancelLocal, timerKey, cancelTaskNotifications, taskKeyOf, notifId } from '@/utils/localNotify';
+import { reminderCheck } from '@/utils/taskReminder';
 import { scheduleNotification, sendNotificationToPlayer, linkPushUser } from '@/composables/useNotifications';
 import { speak } from '@/composables/useSpeech';
 import { completionPercentage, computeTimeStats, daysLeftInYearFrom, heroTitleFor } from '@/utils/dayStats';
@@ -662,53 +663,32 @@ const reminder = ref({ date: "", time: "", repeat: "" });
 
 const selectedTaskIndex = ref(null);
 // Function to Download `.ics` File
+const reminderError = ref('');
 const handleAddReminder = async () => {
-  if (!reminder.value.date || !reminder.value.time) {
-    alert("Please enter both date and time!");
-    return;
-  }
-
-  if (selectedTaskIndex.value === null) {
-    alert("No task selected!");
-    return;
-  }
-
-  // Get the selected task
-  const task = { ...selectedDayRoutine.value[selectedTaskIndex.value] };
-  task.reminder = {
-    date: reminder.value.date,
-    time: reminder.value.time,
-    repeat: reminder.value.repeat || "",
-  };
-
-  // Update Firestore
+  const checked = reminderCheck(reminder.value, new Date());
+  if (!checked.ok) { reminderError.value = checked.error; showNoteToast(checked.error, { error: true }); return; }
+  const index = selectedTaskIndex.value;
+  const task = index == null ? null : selectedDayRoutine.value[index];
+  if (!task) { reminderError.value = 'No task selected.'; showNoteToast(reminderError.value, { error: true }); return; }
+  const saved = { date: checked.date, time: checked.time, repeat: reminder.value.repeat || '' };
   try {
-    const selectedDayDocRef = doc(db, 'weeklyRoutines', `${userId.value}_${days[selectedDayIndex.value].day}`);
-    const selectedDayDocSnapshot = await getDoc(selectedDayDocRef);
-
-    if (selectedDayDocSnapshot.exists()) {
-      let tasks = selectedDayDocSnapshot.data().tasks || [];
-      tasks[selectedTaskIndex.value] = task;
-
-      await updateDoc(selectedDayDocRef, {
-        tasks: tasks,
-        updatedAt: serverTimestamp()
-      });
-
-      selectedDayRoutine.value[selectedTaskIndex.value] = task;
-      console.log("Reminder added successfully to the task.");
-
-      // Schedule notification
-      await scheduleNotification(task, task.reminder);
+    if ((await editTask(index, task, { reminder: saved })) === false) {
+      reminderError.value = writeFailureMessage(null, task.title, 'save the reminder for');
+      showNoteToast(reminderError.value, { error: true });
+      return;
     }
+    const scheduled = await scheduleReminder(task, saved, `${task.title} at ${checked.time}`);
+    if (!scheduled) showNoteToast('Reminder saved on the task. The phone notification was not set. Allow notifications for ClingNote and pick a future time.', { error: true });
+    else showNoteToast(`Reminder set for ${checked.time}.`);
   } catch (error) {
-    console.error("Error updating task with reminder:", error);
+    console.error('Error updating task with reminder:', error);
+    reminderError.value = (error && error.message) || writeFailureMessage(error, task.title, 'save the reminder for');
+    showNoteToast(reminderError.value, { error: true });
     return;
   }
-
-  // Close Modal
   closeModal();
-  reminder.value = { date: "", time: "", repeat: "" };
+  reminder.value = { date: '', time: '', repeat: '' };
+  reminderError.value = '';
 };
 
 const daySession = ref({
@@ -1093,6 +1073,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onShortcutKey));
 const closeModal = () => {
   isModalOpen.value = false;
   reminder.value = { date: "", time: "", repeat: "" };
+  reminderError.value = '';
   modalOpen.value = false
 };
 const selectedDayIndex = ref(-1);
@@ -4964,16 +4945,21 @@ const saveDaysOff = async (list) => {
 };
 // Boss alarm: per-task alarm through the wake-alarm plugin (AlarmKit + WakeAlarm Live Activity on iOS); tap again to cancel
 const toggleTaskAlarm = async (task) => {
-  const i = agentIdx(task); if (i < 0) return;
   try {
+    const i = agentIdx(task);
     if (task.alarmAt) { if (task.alarmId) await clingAlarm.cancel(task.alarmId).catch(() => {}); await editTask(i, task, { alarmId: null, alarmAt: null }); showNoteToast('Alarm off.'); return; }
     if (!alarmPluginAvailable()) { showNoteToast('Alarms need the iPhone app.'); coachSignal('alarm-set'); return; }
     const auth = await clingAlarm.requestAuthorization().catch(() => ({})); if (auth && auth.status === 'denied') { showNoteToast('Alarm permission is off in Settings.', { error: true }); return; }
     const at = alarmAtFor(task, Date.now());
-    const r = await clingAlarm.scheduleOnce({ atMs: at, title: task.title, snoozeMinutes: SNOOZE_MINUTES, sound: ALARM_SOUND });
-    if (!r || !r.scheduled) { showNoteToast("Alarm couldn't be set.", { error: true }); return; }
-    await editTask(i, task, { alarmId: r.id || null, alarmAt: at }); sgSay(alarmLine(task, at)); coachSignal('alarm-set');
-  } catch (e) { console.error('task alarm', e); showRepeatToast('That did not work. Try again.', { error: true }); }
+    const r = await clingAlarm.scheduleOnce({ atMs: at.getTime(), title: task.title, snoozeMinutes: SNOOZE_MINUTES, sound: ALARM_SOUND });
+    if (!r || !r.scheduled) { showNoteToast(`Alarm couldn't be set. ${(r && (r.error || r.reason)) || 'The alarm plugin did not schedule it.'}`, { error: true }); return; }
+    if ((await editTask(i, task, { alarmId: r.id || null, alarmAt: at.getTime() })) === false) {
+      if (r.id) clingAlarm.cancel(r.id).catch(() => {});
+      showRepeatToast(`Couldn't save the alarm on “${task.title || 'that task'}”.`, { error: true });
+      return;
+    }
+    sgSay(alarmLine(task, at)); coachSignal('alarm-set');
+  } catch (e) { console.error('task alarm', e); showRepeatToast((e && e.message) || 'That did not work. Try again.', { error: true }); }
 };
 const onCoachEvt = (e) => coachSignal(e && e.detail);
 onMounted(() => window.addEventListener('cn:coach', onCoachEvt));
