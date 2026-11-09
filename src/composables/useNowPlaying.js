@@ -1,15 +1,22 @@
-// In-app media-session labels for focus music while ClingNote is on screen.
-// A looping silent clip used to register Web Audio music with Now Playing so iOS would keep the
-// process alive. UIBackgroundModes does not include audio, and no silent clip is played. Leaving
-// the app suspends the music. Lock-screen controls are not a background session. Voice lines
-// (useVoiceover) still clear their own media session when they end.
+// Lock-screen labels for focus music the user started. The audible source is the Web Audio synth.
+// No silent clip is loaded. The native plugin publishes the same title to MPNowPlayingInfoCenter.
 import { setMusicPlaying } from '../utils/audioSession.js';
 const base = (typeof process !== 'undefined' && process.env && process.env.BASE_URL) || '/';
 let active = false; let handlers = {};
 const ms = () => (typeof navigator !== 'undefined' && navigator.mediaSession) || null;
 const ACTIONS = ['play', 'pause', 'stop'];
 
+function pushNative(subtitle, state) {
+  try {
+    const C = typeof window !== 'undefined' && window.Capacitor;
+    const p = C && C.getPlatform && C.getPlatform() === 'ios' && C.Plugins && C.Plugins.ClingVoice;
+    if (!p || !p.updateNowPlaying) return;
+    const r = p.updateNowPlaying({ title: subtitle || 'Background music', artist: 'ClingNote', album: 'Focus music', playing: state === 'playing' });
+    if (r && r.catch) r.catch(() => {});
+  } catch (e) { /* web */ }
+}
 function meta(subtitle, state) {
+  pushNative(subtitle, state);
   const s = ms(); if (!s) return;
   try {
     const M = typeof window !== 'undefined' && window.MediaMetadata;

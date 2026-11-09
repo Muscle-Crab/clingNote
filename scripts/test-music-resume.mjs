@@ -30,6 +30,5 @@ assert.match(resumeFn, /foregroundPlan\(/);
 assert.doesNotMatch(resumeFn, /api\.play\(/);
 assert.doesNotMatch(resumeFn, /engine\.start\(/);
 assert.match(bg, /keepStep: keep/);
-assert.equal(readFileSync(new URL('../ios/App/App/Info.plist', import.meta.url), 'utf8').includes('<string>audio</string>'), false);
 assert.ok(KEY);
 console.log('test-music-resume: ok');

@@ -90,6 +90,17 @@ if (typeof window !== 'undefined') {
     import('@/utils/clingVoice').then(({ ClingVoice }) => {
       ClingVoice.addListener('audioRestored', () => setTimeout(() => { resumeAfterInterruption(); }, 250));
       ClingVoice.addListener('audioInterruption', (e) => { if (e && e.type === 'ended') setTimeout(() => { resumeAfterInterruption(); }, 400); });
+      ClingVoice.addListener('remoteCommand', (e) => {
+        const a = e && e.action;
+        if (a === 'pause') api.pause({ fromLockScreen: true });
+        else if (a === 'next') api.next();
+        else if (a === 'toggle' && playing.value && engine && engine.state === 'running') api.pause({ fromLockScreen: true });
+        else if (a === 'play' || a === 'toggle') api.play();
+      });
+      ClingVoice.addListener('routeChange', (e) => {
+        if (e && e.headphonesRemoved) api.pause({ fromLockScreen: true });
+        else if (prefs.musicOn) resumeAfterInterruption();
+      });
     }).catch(() => {});
   }
 }
@@ -149,6 +160,12 @@ const api = {
     return resumeFlight;
   },
   toggle() { return tapAction(playing.value, engine ? engine.state : 'none') === 'pause' ? api.pause() : api.play(); },
+  next() {
+    const r = pickNextTrack(TRACKS.map((t) => t.id), prefs.track, rotBag); rotBag = r.bag;
+    prefs.track = r.next; persist();
+    if (engine && (playing.value || prefs.musicOn)) { engine.crossfadeTo(r.next); npTitle(trackName()); armRotate(); }
+    else api.play();
+  },
   setTrack(id) { Object.assign(prefs, sanitize({ ...prefs, track: id })); persist(); if (engine && playing.value) { engine.setTrack(prefs.track); npTitle(trackName()); armRotate(); } },
   setAutoRotate(on) { Object.assign(prefs, sanitize({ ...prefs, autoRotate: !!on })); persist(); armRotate(); },
   setRotateMins(m) { Object.assign(prefs, sanitize({ ...prefs, rotateMins: Number(m) })); persist(); armRotate(); },

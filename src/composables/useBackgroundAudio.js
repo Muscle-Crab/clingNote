@@ -38,6 +38,7 @@ export const createEngine = () => {
   const AC = typeof window !== 'undefined' && (window.AudioContext || window.webkitAudioContext);
   if (!AC) return null;
   let ctx = null; let master = null; let analyser = null; let timer = 0; let nodes = []; let track = 'lofi'; let volume = 0.5; let playing = false;
+  let clock = null;
   let nextTime = 0; let step = 0; let nextCrackle = 0; let gen = 0; let onState = null;
   const data = new Uint8Array(256);
 
@@ -149,9 +150,14 @@ export const createEngine = () => {
       const keep = !!(opts && opts.keepStep) && step > 0;
       if (needsNewContext(ctx && ctx.state)) {
         if (ctx) { const old = ctx; teardownBeds(); try { old.close(); } catch (e) { /* gone */ } }
+        clock = null;
         ctx = new AC(); master = ctx.createGain(); master.gain.value = 0; analyser = ctx.createAnalyser(); analyser.fftSize = 512;
         master.connect(analyser); analyser.connect(ctx.destination);
         const mine = ctx; ctx.onstatechange = () => { if (ctx === mine && onState) onState(mine.state); };
+        // iOS freezes setInterval in the background. This node is silent (gain 0) and only calls schedule()
+        // on the audio thread so the audible synth keeps being queued. It is not a keepalive file.
+        const tick = ctx.createScriptProcessor(2048, 1, 1); const silent = ctx.createGain(); silent.gain.value = 0;
+        tick.onaudioprocess = () => { if (playing) schedule(); }; tick.connect(silent); silent.connect(ctx.destination); clock = tick;
       }
       let p = null; try { p = ctx.state !== 'running' ? ctx.resume() : null; } catch (e) { /* old Safari: no promise */ }
       try { const b = ctx.createBufferSource(); b.buffer = ctx.createBuffer(1, 1, 22050); b.connect(ctx.destination); b.start(0); } catch (e) { /* iOS unlock blip */ }
