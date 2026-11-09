@@ -1,7 +1,7 @@
 // Focus Mode is a view of the task timer that play already starts. It does not keep its own clock.
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { focusCountdown, focusRingFraction, focusSessionCard, focusSteps, focusSubtitle } from '../src/utils/focusScreen.js';
+import { focusClock, focusCountdown, focusEnded, focusPhaseLabel, focusRingFraction, focusRingShown, focusSessionCard, focusSteps, focusSubtitle } from '../src/utils/focusScreen.js';
 
 const start = Date.parse('2026-11-09T12:00:00Z');
 const task = {
@@ -22,6 +22,17 @@ assert.equal(focusSteps({ subtasks: [{ id: 'a', title: 'Outline', done: true }, 
 const paused = { ...task, timerPausedAt: new Date(now).toISOString() };
 assert.equal(focusCountdown(paused, start + 10 * 60000), '24:58', 'pause freezes the same end timestamp');
 
+const endAt = start + 25 * 60000;
+assert.equal(focusEnded(task, now), false);
+assert.equal(focusEnded(task, endAt), true, 'the stored end is the ended state');
+assert.equal(focusEnded(task, endAt + 30 * 60000), true, 'still ended if the app returns long after');
+assert.equal(focusClock(task, endAt + 30 * 60000), '00:00');
+assert.equal(focusPhaseLabel(task, endAt + 30 * 60000), "TIME'S UP");
+assert.equal(focusRingShown(task, endAt + 30 * 60000), 1, 'the ring is the full circle and does not keep shrinking');
+assert.equal(focusEnded(paused, start + 10 * 60000), false, 'a pause with time left is not over');
+assert.equal(focusClock(task, now), '24:58');
+assert.equal(focusPhaseLabel(task, now), 'FOCUS SESSION');
+
 const pomo = { ...task, timerPomo: { work: 25, brk: 5, rounds: 4, round: 1, phase: 'work' }, timerDurationMinutes: 25 };
 const card = focusSessionCard(pomo, { now: start + 6.25 * 60000 });
 assert.equal(card.label, '1 of 4 focus sessions');
@@ -41,6 +52,11 @@ assert.match(home, /focusScreenEnd[\s\S]{0,700}endEarlyPatch/);
 assert.match(home, /toggleSubtask\(subtasksOf/);
 assert.doesNotMatch(screen, /np-anchor|UIBackgroundModes|new Audio\(/);
 assert.match(screen, /focusCountdown\(props\.task/);
+assert.match(screen, /focusEnded\(props\.task/);
+assert.match(screen, /focusRingShown\(props\.task/);
+assert.match(screen, /visibilitychange/);
+assert.match(screen, /v-if="!ended"/);
+assert.match(screen, /data-test="focus-done"/);
 assert.match(screen, /import RobotAvatar from '@\/components\/home\/RobotAvatar\.vue'/);
 assert.match(screen, /data-test="focus-robot"/);
 assert.doesNotMatch(screen, /fm-leaf/);

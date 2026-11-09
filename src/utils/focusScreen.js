@@ -10,6 +10,17 @@ export const focusCountdown = (task, now = Date.now()) => fmtRemaining(ringRemai
 
 export const focusRingFraction = (task, now = Date.now()) => ringFraction(task, now);
 
+// The stored timer has reached timerEndTime. A pause freezes the remaining time, so a pause
+// with time still left is not over. No second clock: this is ringRemainingMs on the task.
+export const focusEnded = (task, now = Date.now()) => !!(task && task.timerEndTime) && ringRemainingMs(task, now) <= 0;
+
+// Ended: the ring is the full circle and stays there. Running: the remaining fraction.
+export const focusRingShown = (task, now = Date.now()) => (focusEnded(task, now) ? 1 : focusRingFraction(task, now));
+
+export const focusClock = (task, now = Date.now()) => (focusEnded(task, now) ? '00:00' : focusCountdown(task, now));
+
+export const focusPhaseLabel = (task, now = Date.now()) => (focusEnded(task, now) ? "TIME'S UP" : 'FOCUS SESSION');
+
 export const focusSubtitle = (task) => {
   const mins = Math.round(Number(task && task.timerDurationMinutes) || 0);
   const phase = task && task.timerPomo && task.timerPomo.phase;

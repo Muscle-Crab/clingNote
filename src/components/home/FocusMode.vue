@@ -15,15 +15,15 @@
     <h1 class="fm-title">Focus <span>Mode</span></h1>
     <p class="fm-lead">Deep work, less distraction.</p>
 
-    <div class="fm-ring" data-test="focus-ring" role="timer" :aria-label="(paused ? 'Paused, ' : '') + countdown + ' remaining'">
+    <div class="fm-ring" :class="{ 'fm-ring--ended': ended }" data-test="focus-ring" role="timer" :aria-label="ended ? 'Time\'s up' : ((paused ? 'Paused, ' : '') + countdown + ' remaining')">
       <svg viewBox="0 0 280 280" aria-hidden="true">
         <circle class="fm-track" cx="140" cy="140" r="124" />
         <circle class="fm-arc" cx="140" cy="140" r="124" :stroke-dasharray="dash.c" :stroke-dashoffset="dash.offset" />
       </svg>
       <div class="fm-face">
         <span class="fm-robot" data-test="focus-robot"><RobotAvatar /></span>
-        <p class="fm-time" data-test="focus-countdown">{{ countdown }}</p>
-        <p class="fm-caption">FOCUS SESSION</p>
+        <p class="fm-time" data-test="focus-countdown">{{ clock }}</p>
+        <p class="fm-caption" :class="{ 'fm-caption--ended': ended }" data-test="focus-caption">{{ phaseLabel }}</p>
       </div>
     </div>
 
@@ -38,7 +38,7 @@
     <button type="button" class="fm-music" data-test="focus-music" :aria-pressed="musicOn ? 'true' : 'false'" @click="toggleMusic">{{ musicOn ? '⏸ Pause focus music' : '▶ Play focus music' }}<small>{{ trackLabel }} · continues on the Home Screen</small></button>
 
     <div class="fm-controls">
-      <button type="button" class="fm-act fm-act--pause" :data-test="paused ? 'focus-resume' : 'focus-pause'" @click="$emit(paused ? 'resume' : 'pause')">
+      <button v-if="!ended" type="button" class="fm-act fm-act--pause" :data-test="paused ? 'focus-resume' : 'focus-pause'" @click="$emit(paused ? 'resume' : 'pause')">
         <svg v-if="!paused" class="fm-act-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
         <svg v-else class="fm-act-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
         {{ paused ? 'Resume' : 'Pause' }}
@@ -80,7 +80,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { ringDash } from '@/utils/timerRing';
-import { focusCountdown, focusDateLabel, focusRingFraction, focusSessionCard, focusSteps, focusSubtitle } from '@/utils/focusScreen';
+import { focusClock, focusCountdown, focusDateLabel, focusEnded, focusPhaseLabel, focusRingShown, focusSessionCard, focusSteps, focusSubtitle } from '@/utils/focusScreen';
 import { useBackground } from '@/composables/useBackground';
 import { TRACKS } from '@/utils/bgPrefs';
 import RobotAvatar from '@/components/home/RobotAvatar.vue';
@@ -97,11 +97,16 @@ defineEmits(['close', 'end', 'pause', 'resume', 'done', 'toggle-step', 'set-mode
 const now = ref(Date.now());
 const menu = ref(false);
 let iv = 0;
-onMounted(() => { iv = window.setInterval(() => { now.value = Date.now(); }, 250); });
-onBeforeUnmount(() => window.clearInterval(iv));
+const tick = () => { now.value = Date.now(); };
+const onVis = () => { if (document.visibilityState === 'visible') tick(); };
+onMounted(() => { iv = window.setInterval(tick, 250); document.addEventListener('visibilitychange', onVis); });
+onBeforeUnmount(() => { window.clearInterval(iv); document.removeEventListener('visibilitychange', onVis); });
 
 const paused = computed(() => !!(props.task && props.task.timerPausedAt));
+const ended = computed(() => focusEnded(props.task, now.value));
 const countdown = computed(() => focusCountdown(props.task, now.value));
+const clock = computed(() => focusClock(props.task, now.value));
+const phaseLabel = computed(() => focusPhaseLabel(props.task, now.value));
 const dateLabel = computed(() => focusDateLabel(new Date(now.value)));
 const subtitle = computed(() => focusSubtitle(props.task));
 const session = computed(() => focusSessionCard(props.task, { now: now.value, coach: props.coach }));
@@ -110,7 +115,7 @@ const bg = useBackground();
 const musicOn = computed(() => bg.playing.value);
 const trackLabel = computed(() => { const t = TRACKS.find((x) => x.id === bg.prefs.track); return t ? t.label : 'Focus music'; });
 const toggleMusic = () => bg.toggle();
-const dash = computed(() => ringDash(focusRingFraction(props.task, now.value), 124));
+const dash = computed(() => ringDash(focusRingShown(props.task, now.value), 124));
 </script>
 
 <style scoped>
@@ -133,11 +138,13 @@ const dash = computed(() => ringDash(focusRingFraction(props.task, now.value), 1
 .fm-ring svg { width: 100%; height: 100%; }
 .fm-track { fill: none; stroke: rgba(80, 140, 255, .22); stroke-width: 14; }
 .fm-arc { fill: none; stroke: #3d8bff; stroke-width: 14; stroke-linecap: round; transform: rotate(-90deg); transform-origin: 140px 140px; filter: drop-shadow(0 0 8px rgba(61, 139, 255, .85)); }
+.fm-ring--ended .fm-arc { filter: none; }
 .fm-face { position: absolute; inset: 18%; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center;
   background: radial-gradient(circle at 50% 40%, rgba(20, 50, 110, .35), rgba(4, 10, 24, .72) 70%); box-shadow: inset 0 0 0 1px rgba(120, 170, 255, .18); }
 .fm-robot { width: 64px; height: 64px; display: block; flex: none; }
 .fm-time { margin: 4px 0 0; font: 800 clamp(36px, 12vw, 52px)/1 Inter, sans-serif; letter-spacing: -.03em; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .fm-caption { margin: 6px 0 0; color: #9eb6de; font: 700 12px/1 Inter, sans-serif; letter-spacing: .16em; }
+.fm-caption--ended { color: #3dde7a; }
 .fm-task { display: flex; align-items: center; gap: 14px; margin: 8px 0 16px; min-width: 0; }
 .fm-task > div { min-width: 0; }
 .fm-badge, .fm-card-ico { width: 52px; height: 52px; border-radius: 16px; border: 1px solid rgba(150, 180, 255, .28); background: rgba(12, 24, 52, .72); display: inline-flex; align-items: center; justify-content: center; color: #d5e4ff; flex-shrink: 0; }
