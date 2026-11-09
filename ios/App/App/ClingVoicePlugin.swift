@@ -18,6 +18,7 @@ public class ClingVoicePlugin: CAPPlugin, CAPBridgedPlugin, AVSpeechSynthesizerD
         CAPPluginMethod(name: "releaseAudio", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "otherAudioPlaying", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setMusicPlaying", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "prepareForegroundMusic", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "ensureMix", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "recognitionAvailable", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "requestRecognitionPermission", returnType: CAPPluginReturnPromise),
@@ -31,6 +32,8 @@ public class ClingVoicePlugin: CAPPlugin, CAPBridgedPlugin, AVSpeechSynthesizerD
     private var remaining = 0
     /// Last value the web side reported: in-app focus music is playing (never deactivate the session under it).
     private var musicPlaying = false
+    /// Process-wide copy so foreground activation does not depend on which plugin instance JS calls.
+    static var userStartedMusic = false
     static let preferred = ["Evan", "Nathan", "Aaron", "Tom", "Reed", "Alex", "Fred"]
 
     override public func load() {
@@ -141,13 +144,28 @@ public class ClingVoicePlugin: CAPPlugin, CAPBridgedPlugin, AVSpeechSynthesizerD
     /// Web side (utils/audioSession.js) reports when the in-app focus music starts/stops.
     @objc func setMusicPlaying(_ call: CAPPluginCall) {
         let on = call.getBool("playing") ?? false
-        DispatchQueue.main.async { self.musicPlaying = on; call.resolve() }
+        DispatchQueue.main.async { self.musicPlaying = on; Self.userStartedMusic = on; call.resolve() }
     }
 
-    /// True when another app (music, podcast) is playing, so a foreground notification is not spoken over it.
+    /// App is in the foreground again and the user had started music. Activate the mixable session so Web Audio can resume.
+    /// No background mode: this runs only from a foreground resume, and only when music was already started.
+    @objc func prepareForegroundMusic(_ call: CAPPluginCall) {
+        DispatchQueue.main.async {
+            guard self.musicPlaying || Self.userStartedMusic else { call.resolve(["active": false]); return }
+            Self.reactivateIfUserMusic(); call.resolve(["active": true])
+        }
+    }
+
+    static func reactivateIfUserMusic() {
+        guard userStartedMusic else { return }
+        mixWithOthers()
+        try? AVAudioSession.sharedInstance().setActive(true)
+    }
+
+    /// True when another app (music, podcast) is playing. The silent switch is not another app:
+    /// treating it as one kept the session ambient, and the silent switch then muted the music on return.
     @objc func otherAudioPlaying(_ call: CAPPluginCall) {
-        let s = AVAudioSession.sharedInstance()
-        call.resolve(["playing": s.isOtherAudioPlaying || s.secondaryAudioShouldBeSilencedHint])
+        call.resolve(["playing": AVAudioSession.sharedInstance().isOtherAudioPlaying])
     }
 
     /// Lock-screen fix: after speech/audio ends or is cancelled, drop the "Now Playing" entry (ClingNote 0:01 / -0:00 player),

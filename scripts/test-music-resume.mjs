@@ -1,6 +1,8 @@
 import assert from 'assert';
 import { loadPrefs, savePrefs, KEY, tapAction, restoreFromBackup, DEFAULTS } from '../src/utils/bgPrefs.js';
+import { readFileSync } from 'fs';
 import { needsNewContext } from '../src/composables/useBackgroundAudio.js';
+import { foregroundPlan } from '../src/utils/musicResume.js';
 const mem = () => { const m = {}; return { getItem: (k) => (k in m ? m[k] : null), setItem: (k, v) => { m[k] = v; }, removeItem: (k) => { delete m[k]; } }; };
 // persistence: every music setting round-trips (simulated app close/reopen = fresh load from same storage)
 const st = mem(); const saved = { anim: 'rain', track: 'cafe-corner', volume: 0.35, forceMotion: false, musicOn: true, image: 'night', autoRotate: true, rotateMins: 30 };
@@ -16,5 +18,18 @@ for (const s of ['suspended', 'interrupted', 'closed', 'none']) assert.equal(tap
 assert.equal(tapAction(false, 'running'), 'play');
 for (const s of [undefined, 'closed', 'interrupted']) assert.equal(needsNewContext(s), true, 'recreate on ' + s);
 for (const s of ['running', 'suspended']) assert.equal(needsNewContext(s), false, 'reuse on ' + s);
+assert.equal(foregroundPlan({ musicOn: false, state: 'interrupted' }), 'idle');
+assert.equal(foregroundPlan({ musicOn: true, state: 'interrupted' }), 'resume', 'iOS background state resumes the same context');
+assert.equal(foregroundPlan({ musicOn: true, state: 'suspended' }), 'resume');
+assert.equal(foregroundPlan({ musicOn: true, state: 'running' }), 'rebuild');
+assert.equal(foregroundPlan({ musicOn: true, state: 'closed' }), 'gesture', 'a dead context waits for a tap');
+assert.equal(foregroundPlan({ musicOn: true, state: 'none' }), 'gesture');
+const bg = readFileSync(new URL('../src/composables/useBackground.js', import.meta.url), 'utf8');
+const resumeFn = bg.slice(bg.indexOf('resumeIfWanted() {'), bg.indexOf('toggle()'));
+assert.match(resumeFn, /foregroundPlan\(/);
+assert.doesNotMatch(resumeFn, /api\.play\(/);
+assert.doesNotMatch(resumeFn, /engine\.start\(/);
+assert.match(bg, /keepStep: keep/);
+assert.equal(readFileSync(new URL('../ios/App/App/Info.plist', import.meta.url), 'utf8').includes('<string>audio</string>'), false);
 assert.ok(KEY);
 console.log('test-music-resume: ok');

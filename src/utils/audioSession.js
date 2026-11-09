@@ -21,6 +21,14 @@ export const initAudioSession = () => { set('ambient'); call('ensureMix'); refre
 // Before sfx / voice playback: mixable web session + mixable native category.
 export const ensureAmbient = () => { if (!music || otherBusy) set('ambient'); call('ensureMix'); };
 // Also tells the native ClingVoice plugin, so it never deactivates the session under the music.
+// Foreground return: reactivate the mixable session only when this process already started music.
+// Does not create an audio context and does not declare a background mode.
+export const prepareForegroundPlayback = () => {
+  if (!music) return Promise.resolve(false);
+  const r = call('prepareForegroundMusic');
+  if (!r || !r.then) return Promise.resolve(false);
+  return r.then((x) => !!(x && x.active), () => false);
+};
 export const setMusicPlaying = (on) => {
   const was = music; music = !!on;
   set('ambient'); // start mixable; upgrade to 'playback' (lock-screen playback) only if nothing else is playing

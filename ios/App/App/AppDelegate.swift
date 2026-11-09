@@ -37,8 +37,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     }
 
     func applicationDidBecomeActive(_ application: UIApplication) {
-        // Coming back to the app: make sure the session is still mixable so the user's music (Spotify etc.) keeps playing.
+        // Coming back to the app: keep the session mixable, and reactivate it only if the user had started focus music.
         ClingVoicePlugin.mixWithOthers()
+        ClingVoicePlugin.reactivateIfUserMusic()
     }
 
     func applicationWillTerminate(_ application: UIApplication) {

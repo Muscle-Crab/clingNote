@@ -134,7 +134,7 @@ export const createEngine = () => {
   const teardownBeds = () => { nodes.forEach((n) => { try { n.stop && n.stop(); } catch (e) { /* already stopped */ } try { n.disconnect(); } catch (e) { /* gone */ } }); nodes = []; };
   const norm = (id) => (id === 'lofi-night' ? 'night' : id);
 
-  const begin = () => { teardownBeds(); step = 0; nextTime = ctx.currentTime + 0.08; nextCrackle = ctx.currentTime + 0.05; buildBeds(); schedule(); };
+  const begin = (keepStep = false) => { teardownBeds(); if (!keepStep) step = 0; nextTime = ctx.currentTime + 0.08; nextCrackle = ctx.currentTime + 0.05; buildBeds(); schedule(); };
 
   return {
     get playing() { return playing; },
@@ -143,9 +143,10 @@ export const createEngine = () => {
     // Must be called from a user gesture (tap/click)
     // Must be called from a user gesture (tap/click). Everything up to ctx.resume() runs synchronously so iOS
     // still sees the gesture (an await before resume() loses it). A closed/'interrupted' (iOS: call, Siri, other app) context is replaced.
-    start(id, vol) {
+    start(id, vol, opts = {}) {
       setMusicPlaying(true);
       track = norm(id || track); volume = vol ?? volume; gen += 1;
+      const keep = !!(opts && opts.keepStep) && step > 0;
       if (needsNewContext(ctx && ctx.state)) {
         if (ctx) { const old = ctx; teardownBeds(); try { old.close(); } catch (e) { /* gone */ } }
         ctx = new AC(); master = ctx.createGain(); master.gain.value = 0; analyser = ctx.createAnalyser(); analyser.fftSize = 512;
@@ -154,12 +155,16 @@ export const createEngine = () => {
       }
       let p = null; try { p = ctx.state !== 'running' ? ctx.resume() : null; } catch (e) { /* old Safari: no promise */ }
       try { const b = ctx.createBufferSource(); b.buffer = ctx.createBuffer(1, 1, 22050); b.connect(ctx.destination); b.start(0); } catch (e) { /* iOS unlock blip */ }
-      playing = true; begin(); clearInterval(timer); timer = setInterval(schedule, 250);
+      playing = true; begin(keep); clearInterval(timer); timer = setInterval(schedule, 250);
       master.gain.cancelScheduledValues(ctx.currentTime); master.gain.setValueAtTime(master.gain.value, ctx.currentTime); master.gain.linearRampToValueAtTime(volume * 0.9, ctx.currentTime + 0.6);
       return Promise.resolve(p).catch(() => {});
     },
-    // Try to un-suspend after returning to the app (may need a tap on iOS); returns the resulting state.
-    async resume() { if (!ctx || ctx.state === 'closed') return 'none'; try { await ctx.resume(); } catch (e) { /* needs a gesture */ } return ctx ? ctx.state : 'none'; },
+    // Try to un-suspend after returning to the app. "interrupted" is what iOS reports after backgrounding.
+    // Returns the resulting state. A hung resume is raced by the caller; this does not build a new context.
+    async resume() { if (!ctx || ctx.state === 'closed') return 'none'; try { if (ctx.state !== 'running') await ctx.resume(); } catch (e) { /* needs a gesture */ } return ctx ? ctx.state : 'none'; },
+    position() { return step; },
+    // iOS drops the looping beds while the context is backgrounded. Rebuild them and keep the step.
+    rebuild() { if (!ctx || ctx.state !== 'running' || !playing) return false; begin(step > 0); if (!timer) timer = setInterval(schedule, 250); return true; },
     set onStateChange(fn) { onState = fn; },
     setTrack(id) { track = norm(id); if (playing && ctx) begin(); },
     // Smooth change (auto-rotate): fade the mix down, swap the track at the bottom, fade back up to the saved volume. ~2.4s total.
@@ -178,7 +183,7 @@ export const createEngine = () => {
     // Fade out, clear timers, free the audio context. A start() during the fade wins (generation check), so play-right-after-pause works.
     async stop() {
       setMusicPlaying(false);
-      playing = false; clearInterval(timer); timer = 0;
+      playing = false; step = 0; clearInterval(timer); timer = 0;
       if (!ctx) return;
       const c = ctx; const m = master; const my = ++gen;
       try { m.gain.cancelScheduledValues(c.currentTime); m.gain.setValueAtTime(m.gain.value, c.currentTime); m.gain.linearRampToValueAtTime(0.0001, c.currentTime + 0.25); } catch (e) { /* closed */ }
