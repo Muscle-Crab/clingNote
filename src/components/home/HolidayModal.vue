@@ -136,4 +136,6 @@ const days = computed(() => offRange(from.value, to.value, props.today));
 .field-hint { margin: 4px 0 0; font-size: var(--fs-xs, 12px); color: var(--c-text-3, #9ca3af); }
 .hol-lead { font-size: 17px; margin: 0 0 .75rem; }
 .field-select { font-size: 18px; min-height: 48px; }
+.field-group { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; max-width: 100%; }
+input[type="date"].field-select { display: block; width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box; -webkit-appearance: none; appearance: none; }
 </style>

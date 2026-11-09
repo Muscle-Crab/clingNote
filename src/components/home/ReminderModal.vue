@@ -86,7 +86,7 @@ defineEmits(['close', 'submit']);
   justify-content: flex-end;
   gap: 0.75rem;
 }
-.field-group { margin-bottom: 1rem; }
+.field-group { display: grid; grid-template-columns: minmax(0, 1fr); width: 100%; max-width: 100%; min-width: 0; margin-bottom: 1rem; box-sizing: border-box; }
 .field-label { display: block; font-size: 0.78rem; font-weight: 500; color: var(--c-text-2, #9a9891); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.06em; }
 .field-input, .field-select {
   width: 100%;
@@ -149,9 +149,16 @@ defineEmits(['close', 'submit']);
 .btn-secondary:hover { background: var(--c-border); color: var(--c-text); }
 .btn-primary:disabled, .btn-secondary:disabled { opacity: .5; cursor: not-allowed; }
 .field-input, .field-select, .field-textarea { background: var(--c-bg); border: 1px solid var(--c-border); border-radius: var(--r); padding: 6px 8px; font-size: var(--fs-md); width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box; }
-.field-group, .modal-body, form { min-width: 0; max-width: 100%; }
-input[type="date"].field-input, input[type="time"].field-input { display: block; width: 100%; max-width: 100%; min-width: 0; }
-.modal-box { min-width: 0; overflow-x: hidden; }
+.field-group, .modal-body, form { min-width: 0; max-width: 100%; box-sizing: border-box; }
+input[type="date"].field-input, input[type="time"].field-input {
+  display: block; width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box;
+  -webkit-appearance: none; appearance: none; text-align: left;
+}
+input[type="date"].field-input::-webkit-date-and-time-value,
+input[type="time"].field-input::-webkit-date-and-time-value { min-width: 0; text-align: left; margin: 0; }
+input[type="date"].field-input::-webkit-datetime-edit,
+input[type="time"].field-input::-webkit-datetime-edit { display: inline-flex; min-width: 0; padding: 0; }
+.modal-box { width: 100%; min-width: 0; max-width: 100%; overflow-x: hidden; box-sizing: border-box; }
 .modal-footer { flex-wrap: wrap; max-width: 100%; }
 .reminder-error { margin: 0 0 0.75rem; color: #ff8d8d; font-size: 0.85rem; }
 .field-input:focus, .field-select:focus, .field-textarea:focus { border-color: var(--c-accent); box-shadow: 0 0 0 1px var(--c-accent); outline: none; }
