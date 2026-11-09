@@ -276,7 +276,7 @@ import * as BI from '@/utils/breakIndicator';
 import { useBackground } from '@/composables/useBackground';
 import { buildRecap, reportDue, prevDay } from '@/utils/dailyReport';
 import { monthKey, prevMonthKey } from '@/utils/ranking';
-import { recheckDay, countableDoneKeys, recheckChanges } from '@/utils/streak';
+import { recheckDay, todayDoneKeys, recheckChanges } from '@/utils/streak';
 import { applyTaskToggle, evaluateStreak, localDateStr, dayDiff, ALLOWED_GAP_DAYS, DAILY_STREAK_MIN, capStreak, lostReason, applyFreezes } from '@/utils/streak';
 import { pickTimerIntent } from '@/utils/siriIntents';
 import { askAi } from '@/composables/useAi';
@@ -1762,11 +1762,8 @@ const applyStreakState = (st) => {
   offDates.value = Array.isArray(st && st.offDates) ? st.offDates : [];
   try { localStorage.setItem(`streakCache_${userId.value}`, JSON.stringify(st)); } catch (e) { /* cache only */ }
 };
-// Start Day time in ms (null = unknown). Tasks completed before Start Day never count toward the streak.
-const dayStartMs = () => { const st = daySession.value.startTime; if (!st) return null; const ms = typeof st.toMillis === 'function' ? st.toMillis() : (st instanceof Date ? st.getTime() : Date.parse(st)); return Number.isFinite(ms) ? ms : null; };
-const completedAfterStart = (t) => { if (!daySession.value.started) return false; const s = dayStartMs(); const at = t && t.completedAt ? Date.parse(t.completedAt) : NaN; return s == null || !Number.isFinite(at) || at >= s; };
-// Automatic streak recheck (B41): runs when the gate clears, the day starts, today's tasks change, on a timer, on resume /
-// visibility, not only on the next task tap. Same rules: only tasks done after Start Day, only when the gate allows it.
+// Automatic streak recheck (B41): runs when the gate clears, today's tasks change, on a timer, on resume /
+// visibility, not only on the next task tap. Today's finished tasks count the same way the daily progress does.
 // B43: past the deadline the recheck still counts work completed before it (endMs), so the gate ignores "missed today"
 // there; a tap after the deadline still goes through streakGateNow() and never counts.
 const recheckWindow = (today, now = new Date()) => {
@@ -1778,19 +1775,23 @@ const recheckWindow = (today, now = new Date()) => {
 };
 let recheckBusy = false; let recheckAgain = false;
 const recheckStreak = async (why = '') => {
-  if (!userId.value || !isViewingToday.value || !daySession.value.started) return false;
+  if (!userId.value || !isViewingToday.value) return false;
   if (recheckBusy) { recheckAgain = true; return false; }
   recheckBusy = true;
   try {
     if (['timer', 'visible', 'resume'].includes(why)) { try { discState.value = await loadDisciplineState(userId.value); } catch (e) { /* keep the last known gate */ } } // boss cleared on another device
     const today = localDateStr(); const gap = streakGap(); const { gate, endMs } = recheckWindow(today);
     const tasks = (selectedDayRoutine.value || []).filter((t) => t && isTaskVisibleOn(t, today));
+    const finished = todayDoneKeys(tasks, taskKey);
+    const late = new Set(endMs == null ? [] : tasks.filter((t) => { const at = t && t.completedAt ? Date.parse(t.completedAt) : NaN; return Number.isFinite(at) && at > endMs; }).map((t) => taskKey(t)).filter(Boolean));
+    const onList = new Set(tasks.map((t) => taskKey(t)).filter(Boolean));
     const ref0 = doc(db, 'streaks', userId.value);
     const prevStreak = streak.value;
     const next = await runTransaction(db, async (tx) => {
       const snap = await tx.get(ref0); const cur = snap.exists() ? snap.data() : null;
-      const prevDone = cur && cur.dayDate === today && Array.isArray(cur.dayDone) ? cur.dayDone : [];
-      const { keys, drop } = countableDoneKeys(tasks, { started: true, startMs: dayStartMs(), endMs, keyOf: taskKey, prevDone });
+      const prev = new Set(cur && cur.dayDate === today && Array.isArray(cur.dayDone) ? cur.dayDone : []);
+      const keys = finished.filter((k) => !late.has(k) || prev.has(k));
+      const drop = [...onList].filter((k) => !finished.includes(k));
       const n = recheckDay(cur, today, { keys, drop, gate }, gap);
       if (!recheckChanges(cur, n, today)) return null;
       tx.set(ref0, { ...n, updatedAt: serverTimestamp() }, { merge: true });
@@ -1810,7 +1811,7 @@ const updateStreakOnCompletion = async (task) => {
   const streakDocRef = doc(db, 'streaks', userId.value);
   try {
     // Transaction: two quick toggles (or two devices) can no longer read the same doc and overwrite each other's update.
-    const toggle = { key: taskKey(task), completed: !!task.completed && completedAfterStart(task), pending: task.status === 'pending', gate: streakGateNow() && !!daySession.value.started }; // only tasks done after Start Day count
+    const toggle = { key: taskKey(task), completed: !!task.completed, pending: task.status === 'pending', gate: streakGateNow() };
     const today = localDateStr(), gap = streakGap();
     const next = await runTransaction(db, async (tx) => {
       const snap = await tx.get(streakDocRef);
@@ -4099,8 +4100,8 @@ const bossMode = ref('simple'); const emergencyOn = ref(true); const goalOverrid
 const isStrictMode = computed(() => bossMode.value === 'strict');
 const gp = ref(GP.normPlan({})); const gpBreak = ref(null); const gpBreakLog = ref([]); const gpLog = ref({}); const gpPenalty = ref(null); const gpLoaded = ref(false);
 const gpOn = computed(() => isStrictMode.value && strictAllowed.value); // game plan, points penalties and breaks are Pro
-// The progress card uses the lock strip's sessionGoal (points after Start) and the card value of finished tasks.
-// The shield still uses the session baseline below. A late baseline or the Screen Time penalty must not zero this card.
+// The progress card and the shield use the same sessionGoal pair (points finished inside this session, against the
+// target on the card). A baseline taken after the work must not leave the shield up while the card shows the goal met.
 const cardPointsOf = (t) => (gpOn.value ? GP.sizePoints(t, chipValues(t).minutes) : chipValues(t).points);
 const todayCardPts = computed(() => cardAward(isViewingToday.value ? (dayTasks.value || []) : [], cardPointsOf));
 const sessionCardPts = computed(() => {
@@ -4111,6 +4112,13 @@ const sessionCardPts = computed(() => {
   return sessionGoal(todayTasksForTarget.value || [], { n: 1, sessions: 1, startMs: Number(l.startMs), endMs: end, goal: frozen }, cardPointsOf).earned;
 });
 const shownCardPts = computed(() => (sessionCardPts.value == null ? todayCardPts.value : sessionCardPts.value));
+// Null when no session is on the card. Otherwise the same earned/required pair the card prints.
+const shieldFromCard = () => {
+  if (sessionCardPts.value == null) return null;
+  const earned = Number(sessionCardPts.value) || 0;
+  const required = Number(shownSessionTarget.value) || 0;
+  return { earned, required, met: sessionUnlock({ sessionEarned: earned, sessionRequired: required }) };
+};
 watch(gpOn, (on) => { GP.setSizeMode(on); if (!on) GP.setQuietWindows([]); }, { immediate: true });
 const gpLoad = (d) => {
   gp.value = GP.normPlan(d && d.gamePlan, d && d.onboarding && d.onboarding.wakeTime);
@@ -4259,13 +4267,14 @@ const strictPlan = (st) => {
   const ss = gpOn.value ? liveSession(gpSessions.value, Date.now()) : null; const ls = liveDebtSession(); const frozen = !!(ls && ls.frozen);
   // This session's bar is points earned after its start, against the target frozen from the tasks still left. The daily total stays on the account and does not open this session.
   const gate = captureSessionGate();
+  const card = shieldFromCard();
   const dayEarned = Math.max(0, Number(pointsAccumulated.value) || 0);
-  const dayRequired = gate ? gate.target : 0;
   const earnedAtStart = gate ? gate.earned : dayEarned;
-  const openNow = !!(gate && sessionUnlock({ dayEarned, earnedAtStart, sessionRequired: gate.target }));
+  const openNow = card ? card.met : !!(gate && sessionUnlock({ dayEarned, earnedAtStart, sessionRequired: gate.target }));
   const sessionEarned = Math.max(0, dayEarned - earnedAtStart);
-  const earned = gate ? (openNow ? gate.target : sessionEarned) : (frozen ? ls.earned : ss ? ss.earned : dayEarned);
-  const goal = gate ? gate.target : (frozen ? ls.target : ss ? ss.target : strictGoal.value);
+  const earned = card ? card.earned : (gate ? (openNow ? gate.target : sessionEarned) : (frozen ? ls.earned : ss ? ss.earned : dayEarned));
+  const dayRequired = card ? card.required : (gate ? gate.target : 0);
+  const goal = card ? card.required : (gate ? gate.target : (frozen ? ls.target : ss ? ss.target : strictGoal.value));
   if (eh.running.value && eh.lock.value && eh.lock.value.endMs) sd.dayEndMs = eh.lock.value.endMs;
   const keyed = !!(ss || ls); const sk = keyed ? strictSessionKey(ss) : ''; if (keyed) sd.goalAtBy = sd.goalAtBy || {};
   const goalAt = keyed ? sd.goalAtBy[sk] || 0 : sd.goalAt;
@@ -4329,11 +4338,12 @@ const syncAppLock = async () => {
   // Simple mode: the running session's own goal and the points earned after its Start (not the day's points or open tasks).
   const ls = liveDebtSession();
   const gateNow = captureSessionGate();
+  const card = shieldFromCard();
   const dayEarnedNow = Math.max(0, Number(pointsAccumulated.value) || 0);
   const earnedAtStart = gateNow ? gateNow.earned : dayEarnedNow;
-  const openNow = !!(gateNow && sessionUnlock({ dayEarned: dayEarnedNow, earnedAtStart, sessionRequired: gateNow.target }));
+  const openNow = card ? card.met : !!(gateNow && sessionUnlock({ dayEarned: dayEarnedNow, earnedAtStart, sessionRequired: gateNow.target }));
   let want = sp ? sp.want : shouldShield({ enabled: lockEnabled(), running: eh.running.value, endMs, selectionCount: st.selectionCount || 0,
-    earned: Math.max(0, dayEarnedNow - earnedAtStart), required: gateNow ? gateNow.target : (ls ? ls.target : 0), openTasks: 1,
+    earned: card ? card.earned : Math.max(0, dayEarnedNow - earnedAtStart), required: card ? card.required : (gateNow ? gateNow.target : (ls ? ls.target : 0)), openTasks: 1,
     unlockedToday: lockUnlockedDay.value === localDateStr() });
   // Missed-goal app lock (eightHour/{uid}.appLockDebt, server clock + device cache): a session that ended short of its points goal
   // keeps the picked apps locked after it ends. A LATER session reaching its own goal (same sessionGoal math as the server) lifts it
@@ -4349,7 +4359,7 @@ const syncAppLock = async () => {
   const goalMet = openNow || !!(eh.lock.value && Number(eh.lock.value.target) > 0 && (Number(eh.lock.value.earned) || 0) >= Number(eh.lock.value.target));
   const idle = shieldBecauseTimerOff({ enabled: lockEnabled(), selectionCount: st.selectionCount || 0, accessOpen, unlockedToday: lockUnlockedDay.value === localDateStr(), onBreak: !!(sp && sp.phase === 'break'), goalMet, sessionEnded, now: Date.now() });
   if (idle && !want && !openNow) { want = true; endMs = Math.max(endMs || 0, idle.untilMs); }
-  const fEnd = sp && sp.phase === 'break' ? 0 : focusShieldEnd({ dayWant: !!want, enabled: lockEnabled(), selectionCount: st.selectionCount || 0, locked: lockedFocus(selectedDayRoutine.value || []) });
+  const fEnd = (sp && sp.phase === 'break') || openNow ? 0 : focusShieldEnd({ dayWant: !!want, enabled: lockEnabled(), selectionCount: st.selectionCount || 0, locked: lockedFocus(selectedDayRoutine.value || []) });
   const act = lockAction({ want: !!(want || fEnd), endMs: fEnd || endMs, st });
   hardLocked.value = !!(want || fEnd);
   if (act === 'start') {
