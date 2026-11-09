@@ -180,7 +180,7 @@ export const createEngine = () => {
         master.gain.cancelScheduledValues(t1); master.gain.setValueAtTime(0.0001, t1); master.gain.linearRampToValueAtTime(volume * 0.9, t1 + half);
       }, half * 1000);
     },
-    setVolume(v) { volume = v; if (ctx && master) { master.gain.cancelScheduledValues(ctx.currentTime); master.gain.setValueAtTime(master.gain.value, ctx.currentTime); master.gain.setTargetAtTime(v * 0.9, ctx.currentTime, 0.05); } },
+    setVolume(v) { volume = Math.max(0, Math.min(1, Number(v) || 0)); if (ctx && master) { const t = ctx.currentTime; master.gain.cancelScheduledValues(t); master.gain.setValueAtTime(volume * 0.9, t); } },
     // Fade out, clear timers, free the audio context
     // Fade out, clear timers, free the audio context. A start() during the fade wins (generation check), so play-right-after-pause works.
     async stop() {
