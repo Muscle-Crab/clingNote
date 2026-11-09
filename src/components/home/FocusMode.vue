@@ -35,8 +35,6 @@
       </div>
     </div>
 
-    <button type="button" class="fm-music" data-test="focus-music" :aria-pressed="musicOn ? 'true' : 'false'" @click="toggleMusic">{{ musicOn ? '⏸ Pause focus music' : '▶ Play focus music' }}<small>{{ trackLabel }} · continues on the Home Screen</small></button>
-
     <div class="fm-controls">
       <button v-if="!ended" type="button" class="fm-act fm-act--pause" :data-test="paused ? 'focus-resume' : 'focus-pause'" @click="$emit(paused ? 'resume' : 'pause')">
         <svg v-if="!paused" class="fm-act-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
@@ -81,8 +79,6 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { ringDash } from '@/utils/timerRing';
 import { focusClock, focusCountdown, focusDateLabel, focusEnded, focusPhaseLabel, focusRingShown, focusSessionCard, focusSteps, focusSubtitle } from '@/utils/focusScreen';
-import { useBackground } from '@/composables/useBackground';
-import { TRACKS } from '@/utils/bgPrefs';
 import RobotAvatar from '@/components/home/RobotAvatar.vue';
 
 const props = defineProps({
@@ -111,10 +107,6 @@ const dateLabel = computed(() => focusDateLabel(new Date(now.value)));
 const subtitle = computed(() => focusSubtitle(props.task));
 const session = computed(() => focusSessionCard(props.task, { now: now.value, coach: props.coach }));
 const steps = computed(() => focusSteps(props.task));
-const bg = useBackground();
-const musicOn = computed(() => bg.playing.value);
-const trackLabel = computed(() => { const t = TRACKS.find((x) => x.id === bg.prefs.track); return t ? t.label : 'Focus music'; });
-const toggleMusic = () => bg.toggle();
 const dash = computed(() => ringDash(focusRingShown(props.task, now.value), 124));
 </script>
 
@@ -151,8 +143,6 @@ const dash = computed(() => ringDash(focusRingShown(props.task, now.value), 124)
 .fm-badge svg, .fm-card-ico svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .fm-task h2 { margin: 0; font: 800 22px/1.15 Inter, sans-serif; overflow-wrap: anywhere; }
 .fm-task p { margin: 4px 0 0; color: #a9b8d4; font: 500 14px/1.3 Inter, sans-serif; overflow-wrap: anywhere; }
-.fm-music { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 100%; max-width: 100%; margin: 0 0 14px; min-height: 52px; padding: 10px 14px; border-radius: 16px; border: 1px solid rgba(140, 190, 255, .45); background: rgba(20, 50, 110, .55); color: #fff; font: 800 16px/1.2 Inter, sans-serif; }
-.fm-music small { font: 600 12px/1.3 Inter, sans-serif; color: #c5d7ff; }
 .fm-controls { display: flex; align-items: stretch; gap: 12px; margin-bottom: 18px; }
 .fm-act { flex: 1 1 0; min-width: 0; height: 64px; border: 0; border-radius: 999px; font: 800 20px/1 Inter, sans-serif; display: inline-flex; align-items: center; justify-content: center; gap: 10px; }
 .fm-act-ico { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }

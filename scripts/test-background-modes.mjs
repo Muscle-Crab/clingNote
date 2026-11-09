@@ -1,4 +1,4 @@
-// Background audio is declared only for user-started focus music. Remote notifications stay.
+// Focus music is not a background mode. Remote notifications stay. No plist may declare audio.
 // No other plist may declare audio, and nothing may load a silent keepalive clip.
 // Parses the plist with Python's plistlib (the same XML the Xcode target packages via INFOPLIST_FILE).
 import assert from 'node:assert/strict';
@@ -31,7 +31,7 @@ assert.ok(plists.some((p) => p.endsWith('ios/App/App/Info.plist')), 'app Info.pl
 const parsed = JSON.parse(execFileSync('python3', ['-c', py, ...plists], { encoding: 'utf8' }));
 const app = parsed.find((row) => row.path.endsWith('ios/App/App/Info.plist'));
 assert.ok(app, 'app plist parsed');
-assert.deepEqual(app.modes, ['remote-notification', 'audio'], 'app background modes are remote notifications and user music');
+assert.deepEqual(app.modes, ['remote-notification'], 'app background modes are remote notifications only');
 for (const row of parsed) {
   const modes = row.modes || [];
   if (!row.path.endsWith('ios/App/App/Info.plist')) assert.ok(!modes.includes('audio'), `${row.path} must not declare background audio`);
@@ -47,8 +47,8 @@ const audio = readFileSync('src/composables/useBackgroundAudio.js', 'utf8');
 assert.doesNotMatch(audio, /np-anchor|createScriptProcessor/);
 assert.match(audio, /queueAhead\(seconds = 90\)/);
 assert.match(readFileSync('src/composables/useBackground.js', 'utf8'), /engine\.queueAhead\(90\)/);
-assert.match(readFileSync('src/views/HomeView.vue', 'utf8'), /data-test="focus-music-toggle"/);
-assert.match(readFileSync('src/components/home/FocusMode.vue', 'utf8'), /data-test="focus-music"/);
+assert.doesNotMatch(readFileSync('src/views/HomeView.vue', 'utf8'), /data-test="focus-music-toggle"|Play focus music/);
+assert.doesNotMatch(readFileSync('src/components/home/FocusMode.vue', 'utf8'), /data-test="focus-music"|Play focus music/);
 const pbx = readFileSync('ios/App/App.xcodeproj/project.pbxproj', 'utf8');
 assert.equal(pbx.match(/INFOPLIST_FILE = App\/Info\.plist;/g).length, 2, 'Debug and Release use App/Info.plist');
 assert.ok(!/INFOPLIST_KEY_UIBackgroundModes/.test(pbx), 'no generated background-mode build setting');
@@ -68,4 +68,4 @@ assert.ok(pbx.includes('CODE_SIGN_ENTITLEMENTS = App/App.entitlements;'));
 assert.ok(pbx.includes('CODE_SIGN_ENTITLEMENTS = ClingLockMonitor/ClingLockMonitor.entitlements;'));
 assert.ok(pbx.includes('CODE_SIGN_ENTITLEMENTS = ClingShieldConfig/ClingShieldConfig.entitlements;'));
 assert.ok(!readFileSync('ios/App/ClingNoteWidget/ClingNoteWidget.entitlements', 'utf8').includes('family-controls'), 'widget does not claim Family Controls');
-console.log('background modes: user-music audio plus remote-notification, no silent clip, entitlements files present');
+console.log('background modes: remote-notification only, no focus-music pill, entitlements files present');

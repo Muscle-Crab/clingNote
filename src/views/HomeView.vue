@@ -30,7 +30,6 @@
             <h1 class="hero-title">{{ heroTitleParts.lead }}<span class="hero-accent">{{ heroTitleParts.accent }}</span></h1>
             <p class="hero-sub">{{ daysLeftInYear }} days left this year</p>
             <button type="button" class="bg-pill" data-test="open-background-pill" aria-label="Background: animation and music" @click="gatePro(_proRouter, 'background') && (showBackground = true)">🎧 Background<span class="bg-pill-sub">picture · snow · rain · music</span></button>
-            <button type="button" class="bg-pill" data-test="focus-music-toggle" :aria-pressed="bgApi.playing.value ? 'true' : 'false'" @click="bgApi.toggle()">{{ bgApi.playing.value ? '⏸ Pause focus music' : '▶ Play focus music' }}<span class="bg-pill-sub">keeps playing on the Home Screen and lock screen</span></button>
           </div>
           <div ref="heroMenuEl" class="hero-menu">
             <button type="button" class="hero-menu-btn" :aria-label="noticeCount ? noticeCount + ' updates and day menu' : 'Day menu'" :aria-expanded="menuOpen ? 'true' : 'false'" @click="menuOpen = !menuOpen">
@@ -2886,11 +2885,6 @@ const bgPrefs = bgApi.prefs;
 // Weather must fit the picture (no rain/snow on sunny scenes): the saved choice is kept, but only a compatible one is shown.
 const bgImg = computed(() => bgApi.shownImage.value); // 'auto' -> current time-of-day scene; a manual pick wins
 const bgAnim = computed(() => effectiveAnim(bgImg.value, bgPrefs.anim));
-// Returning to the app (cold start or back from the background): bring back the music the user had on.
-const resumeBgMusic = () => { try { bgApi.resumeIfWanted(); } catch (e) { /* audio is optional */ } };
-const onBgVisible = () => { if (document.visibilityState === 'visible') resumeBgMusic(); };
-onMounted(() => { resumeBgMusic(); document.addEventListener('visibilitychange', onBgVisible); });
-onBeforeUnmount(() => document.removeEventListener('visibilitychange', onBgVisible));
 const menuOpen = ref(false); // closed by default; closes on outside tap / Escape / route change
 const heroMenuEl = ref(null);
 const noticeCount = computed(() => {
