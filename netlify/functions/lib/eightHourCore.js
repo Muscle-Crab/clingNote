@@ -9,6 +9,21 @@
 const DAY_HOURS = Object.freeze({ min: 3, max: 12, step: 0.5, default: 8 });
 const clampHours = (h) => { const n = Number(h); if (h === null || h === undefined || h === '' || !Number.isFinite(n)) return DAY_HOURS.default; return Math.min(DAY_HOURS.max, Math.max(DAY_HOURS.min, Math.round(n / DAY_HOURS.step) * DAY_HOURS.step)); };
 const hoursMs = (h) => clampHours(h) * 3600000;
+// When the session ends: the moment it started, plus its length. Not midnight and not a fixed clock.
+// A later startMs, or a different length, moves the end. Stored endMs is only a fallback when the start is missing.
+const sessionEndMs = ({ startMs, hours, endMs, nowMs } = {}) => {
+  const start = Number(startMs);
+  const end = Number(endMs);
+  const hasStart = Number.isFinite(start) && start > 0;
+  const hasEnd = Number.isFinite(end) && end > 0;
+  let h = Number(hours);
+  if (!(Number.isFinite(h) && h > 0) && hasStart && hasEnd && end > start) h = (end - start) / 3600000;
+  if (hasStart && Number.isFinite(h) && h > 0) return start + hoursMs(h);
+  if (hasEnd) return end;
+  const now = Number(nowMs);
+  if (Number.isFinite(now) && now > 0) return now + hoursMs(hours);
+  return 0;
+};
 const hoursLabel = (h) => { const n = clampHours(h); return Number.isInteger(n) ? `${n}` : `${Math.floor(n)}.5`; }; // "8", "6.5"
 const WINDOW_MS = hoursMs(DAY_HOURS.default);
 const WINDOW_MIN = DAY_HOURS.default * 60;
@@ -373,7 +388,7 @@ module.exports = {
   SESSION_HOURS, validSessionHours, sessionMet, GOAL_MIN, GOAL_MAX, goalRange, clampGoal, fallbackGoal, eightTaskFloor, flooredGoal,
   WINDOW_MS, WINDOW_MIN, MAX_TASKS_PER_DAY, MIN_TASKS_PER_HOUR, taskRange, LOCK_IDENTITY_SLOTS, WEEKDAYS, WAKE_PICKER_PRESELECT, START_MODE, TARGET_LEVELS, LOCKED_FIELDS,
   clamp, round5, parseWake, fmtWake, validTz, partsIn, dayKeyIn, dayNameIn, wakeInstant, evaluatePhase,
-  countdownParts, fmtCountdown, fmtClock, fmtWakeLabel,
+  countdownParts, fmtCountdown, fmtClock, fmtWakeLabel, sessionEndMs,
   overtimePoints, complexityFromMinutes, complexityFromText, pointsFor, estimateTask, levelRatio, dailyTarget,
   lockedChangeAllowed, nextDayKey, shutUntilMs, SHUT_CAP_MS, isShut, rulesShutUntilMs,
   DEBT_CAP_MS, normDebt, debtUntilMs, debtActive, debtCleared, debtAfterSettle,

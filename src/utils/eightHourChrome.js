@@ -19,7 +19,7 @@ export const pillState = ({ phase, running, countdown, startsLabel, hasPlan, shu
   if (allDone) return { kind: 'done', main: 'All done', sub: '', aria: 'All tasks done today' };
   if (!hasPlan || !lockInOn) return null;
   if (phase === 'before') return { kind: 'before', main: `Starts ${startsLabel}`, sub: '', aria: `${hl}-hour day starts at ${startsLabel}` };
-  if (phase === 'ready' && countdown && countdown !== '00:00:00') return { kind: 'run', main: countdown, sub: 'add tasks', aria: `${hl}-hour day: ${countdown} left, started at your wake time` };
+  if (phase === 'ready' && countdown && countdown !== '00:00:00') return { kind: 'run', main: countdown, sub: 'add tasks', ends: endsLabel ? `Ends ${endsLabel}` : '', aria: `${hl}-hour day: ${countdown} left${endsLabel ? `, ends at ${endsLabel}` : ''}` };
   if (phase === 'ready') return { kind: 'before', main: 'Ready to start', sub: '', aria: `${hl}-hour day ready to start` };
   return null; // ended without a started day / loading: nothing to show
 };

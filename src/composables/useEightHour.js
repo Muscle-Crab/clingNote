@@ -196,12 +196,18 @@ export const useEightHour = () => {
   const lock = computed(() => (lockRaw.value && lockRaw.value.dayKey === phaseInfo.value.dayKey ? lockRaw.value : null));
   const remainingMs = computed(() => ((running.value || (phase.value === 'ready' && core.START_MODE === 'wake' && phaseInfo.value.endMs)) ? Math.max(0, phaseInfo.value.endMs - (tick.value, nowMs())) : 0));
   const countdown = computed(() => core.fmtCountdown(remainingMs.value));
-  // "Ends 3:00 PM": real end while running/ended; otherwise now + the chosen hours (what it will be if you confirm now)
+  // Clock time the session ends. sessionEndMs is start + the session's hours (eightHourCore), so a new start moves it.
   const endsLabel = computed(() => {
     const tz = plan.value?.tz || deviceTz();
-    if (lock.value && running.value) return core.fmtClock(lock.value.endMs, tz);
-    if (phaseInfo.value.phase === 'ready') return core.fmtClock((tick.value, nowMs()) + core.hoursMs(hoursPref.value), tz);
-    return '';
+    const l = lock.value;
+    const ph = phaseInfo.value;
+    const hours = l && l.hours != null ? l.hours : (ph && ph.hours != null ? ph.hours : undefined);
+    const ms = core.sessionEndMs(l && Number(l.startMs) > 0
+      ? { startMs: l.startMs, hours, endMs: l.endMs }
+      : ph && Number(ph.startMs) > 0
+        ? { startMs: ph.startMs, hours: hours != null ? hours : hoursPref.value, endMs: ph.endMs }
+        : { nowMs: (tick.value, nowMs()), hours: hoursPref.value });
+    return ms ? core.fmtClock(ms, tz) : '';
   });
   // "7:00 AM": the real (locked) start while running/ended; otherwise the planned wake time
   const startsLabel = computed(() => {
