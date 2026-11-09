@@ -21,7 +21,7 @@
         <circle class="fm-arc" cx="140" cy="140" r="124" :stroke-dasharray="dash.c" :stroke-dashoffset="dash.offset" />
       </svg>
       <div class="fm-face">
-        <svg class="fm-leaf" viewBox="0 0 48 48" aria-hidden="true"><path d="M24 40c0-14 8-22 18-24-2 16-10 24-18 24z"/><path d="M24 40C24 26 16 16 6 14c2 16 10 24 18 26z"/><path d="M24 40V18"/></svg>
+        <span class="fm-robot" data-test="focus-robot"><RobotAvatar /></span>
         <p class="fm-time" data-test="focus-countdown">{{ countdown }}</p>
         <p class="fm-caption">FOCUS SESSION</p>
       </div>
@@ -83,6 +83,7 @@ import { ringDash } from '@/utils/timerRing';
 import { focusCountdown, focusDateLabel, focusRingFraction, focusSessionCard, focusSteps, focusSubtitle } from '@/utils/focusScreen';
 import { useBackground } from '@/composables/useBackground';
 import { TRACKS } from '@/utils/bgPrefs';
+import RobotAvatar from '@/components/home/RobotAvatar.vue';
 
 const props = defineProps({
   task: { type: Object, required: true },
@@ -134,7 +135,7 @@ const dash = computed(() => ringDash(focusRingFraction(props.task, now.value), 1
 .fm-arc { fill: none; stroke: #3d8bff; stroke-width: 14; stroke-linecap: round; transform: rotate(-90deg); transform-origin: 140px 140px; filter: drop-shadow(0 0 8px rgba(61, 139, 255, .85)); }
 .fm-face { position: absolute; inset: 18%; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center;
   background: radial-gradient(circle at 50% 40%, rgba(20, 50, 110, .35), rgba(4, 10, 24, .72) 70%); box-shadow: inset 0 0 0 1px rgba(120, 170, 255, .18); }
-.fm-leaf { width: 36px; height: 36px; stroke: #7ec8ff; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.fm-robot { width: 64px; height: 64px; display: block; flex: none; }
 .fm-time { margin: 4px 0 0; font: 800 clamp(36px, 12vw, 52px)/1 Inter, sans-serif; letter-spacing: -.03em; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .fm-caption { margin: 6px 0 0; color: #9eb6de; font: 700 12px/1 Inter, sans-serif; letter-spacing: .16em; }
 .fm-task { display: flex; align-items: center; gap: 14px; margin: 8px 0 16px; min-width: 0; }
