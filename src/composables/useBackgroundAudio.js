@@ -38,7 +38,6 @@ export const createEngine = () => {
   const AC = typeof window !== 'undefined' && (window.AudioContext || window.webkitAudioContext);
   if (!AC) return null;
   let ctx = null; let master = null; let analyser = null; let timer = 0; let nodes = []; let track = 'lofi'; let volume = 0.5; let playing = false;
-  let clock = null;
   let nextTime = 0; let step = 0; let nextCrackle = 0; let gen = 0; let onState = null;
   const data = new Uint8Array(256);
 
@@ -79,9 +78,9 @@ export const createEngine = () => {
     while (nextCrackle < until) { burst(nextCrackle, 0.025 + Math.random() * 0.04, 0.05 + Math.random() * 0.12, 1500 + Math.random() * 1500, 7000); nextCrackle += 0.04 + Math.random() * (track === 'fireside' ? 0.5 : 2.2); }
   };
 
-  const schedule = () => {
+  const schedule = (aheadSec = 1.2) => {
     if (!ctx || !playing) return;
-    const horizon = ctx.currentTime + 1.2;
+    const horizon = ctx.currentTime + Math.max(0.2, Number(aheadSec) || 1.2);
     if (track === 'fireside') { if (nextCrackle < ctx.currentTime) nextCrackle = ctx.currentTime + 0.05; crackles(horizon); return; }
     const st = STYLES[track];
     if (st) {
@@ -150,14 +149,9 @@ export const createEngine = () => {
       const keep = !!(opts && opts.keepStep) && step > 0;
       if (needsNewContext(ctx && ctx.state)) {
         if (ctx) { const old = ctx; teardownBeds(); try { old.close(); } catch (e) { /* gone */ } }
-        clock = null;
         ctx = new AC(); master = ctx.createGain(); master.gain.value = 0; analyser = ctx.createAnalyser(); analyser.fftSize = 512;
         master.connect(analyser); analyser.connect(ctx.destination);
         const mine = ctx; ctx.onstatechange = () => { if (ctx === mine && onState) onState(mine.state); };
-        // iOS freezes setInterval in the background. This node is silent (gain 0) and only calls schedule()
-        // on the audio thread so the audible synth keeps being queued. It is not a keepalive file.
-        const tick = ctx.createScriptProcessor(2048, 1, 1); const silent = ctx.createGain(); silent.gain.value = 0;
-        tick.onaudioprocess = () => { if (playing) schedule(); }; tick.connect(silent); silent.connect(ctx.destination); clock = tick;
       }
       let p = null; try { p = ctx.state !== 'running' ? ctx.resume() : null; } catch (e) { /* old Safari: no promise */ }
       try { const b = ctx.createBufferSource(); b.buffer = ctx.createBuffer(1, 1, 22050); b.connect(ctx.destination); b.start(0); } catch (e) { /* iOS unlock blip */ }
@@ -169,6 +163,8 @@ export const createEngine = () => {
     // Returns the resulting state. A hung resume is raced by the caller; this does not build a new context.
     async resume() { if (!ctx || ctx.state === 'closed') return 'none'; try { if (ctx.state !== 'running') await ctx.resume(); } catch (e) { /* needs a gesture */ } return ctx ? ctx.state : 'none'; },
     position() { return step; },
+    // Queue audible notes onto the audio clock before iOS freezes timers. No silent node is added.
+    queueAhead(seconds = 90) { if (!playing || !ctx) return 0; const cap = Math.min(180, Math.max(1, Number(seconds) || 90)); schedule(cap); return cap; },
     // iOS drops the looping beds while the context is backgrounded. Rebuild them and keep the step.
     rebuild() { if (!ctx || ctx.state !== 'running' || !playing) return false; begin(step > 0); if (!timer) timer = setInterval(schedule, 250); return true; },
     set onStateChange(fn) { onState = fn; },

@@ -30,6 +30,7 @@
             <h1 class="hero-title">{{ heroTitleParts.lead }}<span class="hero-accent">{{ heroTitleParts.accent }}</span></h1>
             <p class="hero-sub">{{ daysLeftInYear }} days left this year</p>
             <button type="button" class="bg-pill" data-test="open-background-pill" aria-label="Background: animation and music" @click="gatePro(_proRouter, 'background') && (showBackground = true)">🎧 Background<span class="bg-pill-sub">picture · snow · rain · music</span></button>
+            <button type="button" class="bg-pill" data-test="focus-music-toggle" :aria-pressed="bgApi.playing.value ? 'true' : 'false'" @click="bgApi.toggle()">{{ bgApi.playing.value ? '⏸ Pause focus music' : '▶ Play focus music' }}<span class="bg-pill-sub">keeps playing on the Home Screen and lock screen</span></button>
           </div>
           <div ref="heroMenuEl" class="hero-menu">
             <button type="button" class="hero-menu-btn" :aria-label="noticeCount ? noticeCount + ' updates and day menu' : 'Day menu'" :aria-expanded="menuOpen ? 'true' : 'false'" @click="menuOpen = !menuOpen">

@@ -110,7 +110,10 @@ const armTap = () => {
   window.addEventListener('pointerdown', once, true); window.addEventListener('touchend', once, true);
 };
 if (typeof document !== 'undefined') {
-  const back = () => { if (document.visibilityState === 'visible') api.resumeIfWanted(); };
+  const back = () => {
+    if (document.visibilityState === 'visible') api.resumeIfWanted();
+    else if (prefs.musicOn && engine && engine.playing) engine.queueAhead(90);
+  };
   document.addEventListener('visibilitychange', back); window.addEventListener('pageshow', back);
   import('@capacitor/app').then(({ App }) => {
     if (!Capacitor.isNativePlatform()) return;
