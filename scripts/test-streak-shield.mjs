@@ -34,8 +34,8 @@ assert.equal(shouldShield({ enabled: true, running: true, endMs: Date.now() + 36
 
 const home = readFileSync(new URL('../src/views/HomeView.vue', import.meta.url), 'utf8');
 assert.match(home, /const card = shieldFromCard\(\)/);
-assert.match(home, /const openNow = card \? card\.met :/);
-assert.match(home, /\|\| openNow \? 0 : focusShieldEnd/);
+assert.match(home, /endedGoalMet\(eh\.lock\.value/);
+assert.match(home, /decideShield\(\{/);
 assert.match(home, /todayDoneKeys\(tasks, taskKey\)/);
 assert.doesNotMatch(home, /completedAfterStart\(task\)/);
 console.log('streak and shield: done today follows the list, 264/260 opens the apps');

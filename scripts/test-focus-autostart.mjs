@@ -64,7 +64,8 @@ t('lock-screen pause on a locked focus is refused; activity carries locked', () 
 });
 t('wiring', () => {
   const home = rd('src/views/HomeView.vue');
-  for (const s of ['autoStartFocus', 'drainFocusFilter', 'endFocusEarly', 'onBeforeRouteLeave', 'focusShieldEnd', '@end-focus']) assert.ok(home.includes(s), s);
+  for (const s of ['autoStartFocus', 'drainFocusFilter', 'endFocusEarly', 'onBeforeRouteLeave', '@end-focus']) assert.ok(home.includes(s), s);
+  assert.ok(fs.readFileSync(new URL('../src/utils/sessionShield.js', import.meta.url), 'utf8').includes('focusShieldEnd'), 'a met session does not keep the focus shield');
   assert.ok(rd('src/components/home/TaskCard.vue').includes('focus-lock-btn'));
   assert.ok(rd('src/views/Profile.vue').includes('auto-focus-toggle'));
   const nat = rd('src/native/clingNative.js'); assert.ok(nat.includes('getFocusFilter') && nat.includes('ackFocusFilter'));

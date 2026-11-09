@@ -86,8 +86,9 @@ const finish = (db, i) => { Object.assign(day(db).tasks[i], { completed: true, c
 
 // ---- wiring (existing UI text only: the shutdown line falls back to "Goal missed · 20/60 pts"; Start next session) ----
 { const hv = src('src/views/HomeView.vue'); const ue = src('src/composables/useEightHour.js'); const ch = src('src/components/eighthour/EightHourChrome.vue');
-  ok(/debtShield\(\{ debt: eh\.appLockDebt\.value/.test(hv) && /clearDebtLocal\(debt\.sessionKey\)/.test(hv) && /eh\.reportProgress\(\)/.test(hv), 'syncAppLock uses the debt');
-  ok(/want = true; endMs = Math\.max\(debt\.untilMs/.test(hv), 'debt keeps the shield on');
+  const shield = src('src/utils/sessionShield.js');
+  ok(/debtShield\(\{ debt/.test(shield) && /clearDebtLocal\(decision\.debtKey\)/.test(hv) && /eh\.reportProgress\(\)/.test(hv), 'syncAppLock uses the debt');
+  ok(/debtResult\.want && !openNow/.test(shield), 'debt keeps the shield on');
   ok(/const liveDebtSession[\s\S]{0,400}sessionGoal\(todayTasksForTarget\.value/.test(hv), 'client goal = server sessionGoal math');
   ok(/missed: false, opensAtMs: 0/.test(ue) && /cacheDebt\(d\)/.test(ue) && /appLockDebt,/.test(ue), 'useEightHour caches + exposes the debt');
   ok(ch.includes("'Goal missed'") && ch.includes('Start next session'), 'existing UI text'); }
@@ -119,6 +120,6 @@ const finish = (db, i) => { Object.assign(day(db).tasks[i], { completed: true, c
   ok(tail.indexOf('DebtHold.keepShieldIfHeld()') > 0 && tail.indexOf('DebtHold.keepShieldIfHeld()') < tail.indexOf('notifyLockEnded()'), 'session lock end keeps the shield while a hold is active');
   ok((ex.match(/if DebtHold\.keepShieldIfHeld\(\) \{/g) || []).length >= 3, 'scheduled-block and wake-lock ends also keep it');
   ok(/activity == DebtHold\.activity \{ \/\/ only the 14-day safety cap[\s\S]{0,1400}isRealEnd\(untilMs: e\.untilMs/.test(ex), 'hold end: only a real cap end lifts it');
-  ok(/const syncDebtHold[\s\S]{0,1200}clingLock\.armDebtHold\(p\)[\s\S]{0,300}clingLock\.clearDebtHold\(\)/.test(hv) && /await syncDebtHold\(st/.test(hv) && !/gpOn\.value[^\n]*syncDebtHold/.test(hv), 'HomeView syncs the hold for every user (no Coach gate)');
-  ok(!/gpGraceSchedule/.test(hv) && /debtPaidNative\(debt\.sessionKey\)/.test(hv), 'Coach-only grace schedule gone; paid debt clears natively'); }
+  ok(/const syncDebtHold[\s\S]{0,1200}clingLock\.armDebtHold\(plan\)[\s\S]{0,300}clingLock\.clearDebtHold\(\)/.test(hv) && /await syncDebtHold\(decision\.hold\)/.test(hv) && !/gpOn\.value[^\n]*syncDebtHold/.test(hv), 'HomeView syncs the hold for every user (no Coach gate)');
+  ok(!/gpGraceSchedule/.test(hv) && /debtPaidNative\(decision\.debtKey\)/.test(hv), 'Coach-only grace schedule gone; paid debt clears natively'); }
 console.log(`app lock debt: ${pass} checks passed`);

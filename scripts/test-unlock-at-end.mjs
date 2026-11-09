@@ -100,6 +100,6 @@ t('native: cold start sync stops a leftover midnight lock', () => { const N = mk
 const hv = src('src/views/HomeView.vue'); const pl = src('ios/App/App/ClingLockPlugin.swift');
 t('wiring: allDone passed, per-session claim, missed-goal lock via appLockDebt (no 2 h grace), cancel after end, native cancel lifts', () => {
   assert(/strictShield\(\{[^\n]*allDone/.test(hv)); assert(hv.includes('claimedAtBy')); assert(!hv.includes('grace.want && free')); assert(!hv.includes('ehs.missed'));
-  assert(hv.includes('debtShield({ debt: eh.appLockDebt.value')); assert(hv.includes('debtHoldPlan({ debt: eh.appLockDebt.value'));
+  assert(hv.includes('decideShield({')); assert(src('src/utils/sessionShield.js').includes('debtHoldPlan({'));
   assert(/func cancelScheduledLock[\s\S]{0,1400}clearShield\(\)/.test(pl)); });
 console.log(`unlock-at-end: ${n} passed`);

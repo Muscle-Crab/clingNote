@@ -378,8 +378,9 @@ import { wakeLockPlan, shouldReconcileWake } from '@/utils/wakeLock';
 import { homeDay } from '@/utils/homeDay';
 import DayStartPrompt from '@/components/eighthour/DayStartPrompt.vue';
 import { sessionApps } from '@/utils/sessionApps';
-import { debtShield, debtHoldPlan, turnOffBlocked, TURN_OFF_BLOCKED_MSG } from '@/utils/appLockDebt';
-import { vaultView, startPlan, stopWindows, unlockCelebration, freshUnlocks, focusTimerRunning, focusPaused, vaultAccessOpen, shieldBecauseTimerOff, vaultTimerPlan, vaultSessionReset } from '@/utils/pointsVault';
+import { turnOffBlocked, TURN_OFF_BLOCKED_MSG } from '@/utils/appLockDebt';
+import { vaultView, startPlan, stopWindows, unlockCelebration, freshUnlocks, focusTimerRunning, focusPaused, vaultAccessOpen, vaultTimerPlan, vaultSessionReset } from '@/utils/pointsVault';
+import { decideShield, endedGoalMet } from '@/utils/sessionShield';
 import { adoptSentReport, replaceSnapshot, readSnapshot, writeSnapshot, reportFromRecord, SENT_REPORT_ROWS, sentReport, formatOwnerReport, parseOwnerReport, applyOwnerReport } from '@/utils/usageSnapshot';
 import { prepareVaultApps } from '@/utils/vaultNames';
 import robotPng from '@/assets/assistant-robot@2x.png';
@@ -424,7 +425,7 @@ import { planLock, resumePending, untilFor, fmtDuration, joinNames, withTimeout,
 import { planTaskUnlock } from '@/utils/taskAppUnlock';
 import LockGuideSheet from '@/components/home/LockGuideSheet.vue';
 import { normBossMode, emergencyAllowed, goalFor, strictShield, wakeAutoOn, dayEndNote, moodReply, checklistMayRelock, readSessionGate, beginSessionGate, sessionUnlock, sessionId } from '@/utils/strictDay';
-import { LOCK_PREF, PENALTY_KEY, EMERGENCY_PENALTY, shouldShield, lockAction, busyToDay, mergePenalties, lastPenaltyDay } from '@/utils/appLock';
+import { LOCK_PREF, PENALTY_KEY, EMERGENCY_PENALTY, busyToDay, mergePenalties, lastPenaltyDay } from '@/utils/appLock';
 import { previewDayTarget, requiredPoints, sessionTargetOf } from '@/utils/dayTarget';
 const askOpen = ref(false); // Assistant sheet (✨ next to the bell, and the bubble in the task list header)
 const assistantListen = ref(false);
@@ -449,7 +450,7 @@ import { doc, setDoc, serverTimestamp, getDoc, updateDoc, getFirestore, runTrans
 const modalOpen = ref(false);
 import { deleteObject } from "firebase/storage";
 import { widgetTaskId } from '@/utils/widgetSnapshot';
-import { readAutoFocus, readList, writeList, AUTO_FIRED_KEY, FILTER_APPLIED_KEY, dueAutoFocus, nextFocusIndex, reduceFilterEvents, lockedFocus, lockMessage as focusLockMessage, endEarlyPatch, focusShieldEnd, taskMinutes } from '@/utils/focusAutoStart';
+import { readAutoFocus, readList, writeList, AUTO_FIRED_KEY, FILTER_APPLIED_KEY, dueAutoFocus, nextFocusIndex, reduceFilterEvents, lockedFocus, lockMessage as focusLockMessage, endEarlyPatch, taskMinutes } from '@/utils/focusAutoStart';
 import { reconcileFocusActions, pausePatch, resumePatch, focusActivityState, focusContentSig } from '@/utils/focusActions';
 
 const currentTime = ref([]);
@@ -4268,13 +4269,15 @@ const strictPlan = (st) => {
   // This session's bar is points earned after its start, against the target frozen from the tasks still left. The daily total stays on the account and does not open this session.
   const gate = captureSessionGate();
   const card = shieldFromCard();
+  const ended = !eh.running.value && endedGoalMet(eh.lock.value, Date.now());
   const dayEarned = Math.max(0, Number(pointsAccumulated.value) || 0);
   const earnedAtStart = gate ? gate.earned : dayEarned;
-  const openNow = card ? card.met : !!(gate && sessionUnlock({ dayEarned, earnedAtStart, sessionRequired: gate.target }));
+  const openNow = ended || (card ? card.met : !!(gate && sessionUnlock({ dayEarned, earnedAtStart, sessionRequired: gate.target })));
   const sessionEarned = Math.max(0, dayEarned - earnedAtStart);
-  const earned = card ? card.earned : (gate ? (openNow ? gate.target : sessionEarned) : (frozen ? ls.earned : ss ? ss.earned : dayEarned));
-  const dayRequired = card ? card.required : (gate ? gate.target : 0);
-  const goal = card ? card.required : (gate ? gate.target : (frozen ? ls.target : ss ? ss.target : strictGoal.value));
+  const sess = eh.lock.value && eh.lock.value.session;
+  const earned = ended ? Number(sess && sess.earned != null ? sess.earned : eh.lock.value.earned) || 0 : (card ? card.earned : (gate ? (openNow ? gate.target : sessionEarned) : (frozen ? ls.earned : ss ? ss.earned : dayEarned)));
+  const dayRequired = ended ? Number(sess && sess.target) || Number(eh.lock.value && eh.lock.value.target) || 0 : (card ? card.required : (gate ? gate.target : 0));
+  const goal = ended ? dayRequired : (card ? card.required : (gate ? gate.target : (frozen ? ls.target : ss ? ss.target : strictGoal.value)));
   if (eh.running.value && eh.lock.value && eh.lock.value.endMs) sd.dayEndMs = eh.lock.value.endMs;
   const keyed = !!(ss || ls); const sk = keyed ? strictSessionKey(ss) : ''; if (keyed) sd.goalAtBy = sd.goalAtBy || {};
   const goalAt = keyed ? sd.goalAtBy[sk] || 0 : sd.goalAt;
@@ -4298,12 +4301,11 @@ const strictPlan = (st) => {
 // Native half of the missed-goal lock, for every user (not just Coach): iOS holds the shield past a short session's end with the app
 // closed or force-quit (DebtHold, DeviceActivity "clingDebt"), and only a later session reaching its goal clears it (debtHoldPlan).
 let holdSig = '';
-const syncDebtHold = async (st, friend, onBreak) => {
-  const p = debtHoldPlan({ debt: eh.appLockDebt.value, known: !!eh.debtKnown.value, live: liveDebtSession(), now: Date.now(), enabled: lockEnabled(), selectionCount: st.selectionCount || 0,
-    unlockedToday: lockUnlockedDay.value === localDateStr(), friend, onBreak });
-  const sig = JSON.stringify(p); if (sig === holdSig) return; holdSig = sig;
-  if (p.action === 'arm') { const r = await clingLock.armDebtHold(p); if (!r || r.monitor !== 'ok') { holdSig = ''; console.warn('[clingLock] armDebtHold', r && r.monitor); } }
-  else if (p.action === 'clear') await clingLock.clearDebtHold();
+const syncDebtHold = async (p) => {
+  const plan = p || { action: 'none' };
+  const sig = JSON.stringify(plan); if (sig === holdSig) return; holdSig = sig;
+  if (plan.action === 'arm') { const r = await clingLock.armDebtHold(plan); if (!r || r.monitor !== 'ok') { holdSig = ''; console.warn('[clingLock] armDebtHold', r && r.monitor); } }
+  else if (plan.action === 'clear') await clingLock.clearDebtHold();
 };
 // The running session's own goal for the missed-goal lock (same math + tasks as the server's sessionGrace).
 // Only points earned after the session's Start count; a lock with a frozen goal record (l.goal) is judged on lock.target.
@@ -4334,40 +4336,26 @@ const syncAppLock = async () => {
   if (!isViewingToday.value) return;
   gpAuthCheck(st);
   const sp = isStrictMode.value ? strictPlan(st) : null;
-  let endMs = sp ? sp.untilMs : eh.lock.value && eh.lock.value.endMs;
-  // Simple mode: the running session's own goal and the points earned after its Start (not the day's points or open tasks).
-  const ls = liveDebtSession();
-  const gateNow = captureSessionGate();
-  const card = shieldFromCard();
-  const dayEarnedNow = Math.max(0, Number(pointsAccumulated.value) || 0);
-  const earnedAtStart = gateNow ? gateNow.earned : dayEarnedNow;
-  const openNow = card ? card.met : !!(gateNow && sessionUnlock({ dayEarned: dayEarnedNow, earnedAtStart, sessionRequired: gateNow.target }));
-  let want = sp ? sp.want : shouldShield({ enabled: lockEnabled(), running: eh.running.value, endMs, selectionCount: st.selectionCount || 0,
-    earned: card ? card.earned : Math.max(0, dayEarnedNow - earnedAtStart), required: card ? card.required : (gateNow ? gateNow.target : (ls ? ls.target : 0)), openTasks: 1,
-    unlockedToday: lockUnlockedDay.value === localDateStr() });
-  // Missed-goal app lock (eightHour/{uid}.appLockDebt, server clock + device cache): a session that ended short of its points goal
-  // keeps the picked apps locked after it ends. A LATER session reaching its own goal (same sessionGoal math as the server) lifts it
-  // at once, before the server round trip; the server clears it on that progress call. No clock time, no streak / points change.
-  const debt = debtShield({ debt: eh.appLockDebt.value, now: Date.now(), session: liveDebtSession(), enabled: lockEnabled(), selectionCount: st.selectionCount || 0,
-    unlockedToday: lockUnlockedDay.value === localDateStr(), friend: !!(sp && sp.phase === 'friend'), onBreak: !!(sp && sp.phase === 'break') });
-  if (debt.cleared) { clearDebtLocal(debt.sessionKey); debtPaidNative(debt.sessionKey); eh.reportProgress(); }
-  else if (debt.want && !openNow) { want = true; endMs = Math.max(debt.untilMs, sp && sp.want ? sp.untilMs : 0); }
-  await syncDebtHold(st, !!(sp && sp.phase === 'friend'), !!(sp && sp.phase === 'break'));
-  const sessionRunning = !!(eh.running.value && eh.lock.value && eh.lock.value.endMs > Date.now());
-  const sessionEnded = eh.phase.value === 'ended' || !!(eh.lock.value && !eh.running.value && Date.now() >= eh.lock.value.endMs);
-  const accessOpen = vaultAccessOpen({ focusRunning: focusTimerRunning(selectedDayRoutine.value, Date.now()), focusPaused: focusPaused(selectedDayRoutine.value), sessionRunning, sessionEnded });
-  const goalMet = openNow || !!(eh.lock.value && Number(eh.lock.value.target) > 0 && (Number(eh.lock.value.earned) || 0) >= Number(eh.lock.value.target));
-  const idle = shieldBecauseTimerOff({ enabled: lockEnabled(), selectionCount: st.selectionCount || 0, accessOpen, unlockedToday: lockUnlockedDay.value === localDateStr(), onBreak: !!(sp && sp.phase === 'break'), goalMet, sessionEnded, now: Date.now() });
-  if (idle && !want && !openNow) { want = true; endMs = Math.max(endMs || 0, idle.untilMs); }
-  const fEnd = (sp && sp.phase === 'break') || openNow ? 0 : focusShieldEnd({ dayWant: !!want, enabled: lockEnabled(), selectionCount: st.selectionCount || 0, locked: lockedFocus(selectedDayRoutine.value || []) });
-  const act = lockAction({ want: !!(want || fEnd), endMs: fEnd || endMs, st });
-  hardLocked.value = !!(want || fEnd);
+  // The running card, or the ended session's own result. A met session stays open through the wait
+  // for the next one. A missed session keeps the missed-goal hold, including across a relaunch.
+  const decision = decideShield({
+    now: Date.now(), enabled: lockEnabled(), selectionCount: st.selectionCount || 0,
+    unlockedToday: lockUnlockedDay.value === localDateStr(), onBreak: !!(sp && sp.phase === 'break'), friend: !!(sp && sp.phase === 'friend'),
+    running: !!eh.running.value, endMs: sp ? sp.untilMs : (eh.lock.value && eh.lock.value.endMs) || 0,
+    strictWant: sp ? sp.want : null, lock: eh.lock.value, card: shieldFromCard(), gate: captureSessionGate(),
+    dayEarned: Math.max(0, Number(pointsAccumulated.value) || 0), debt: eh.appLockDebt.value, known: !!eh.debtKnown.value,
+    focusLocked: lockedFocus(selectedDayRoutine.value || []), native: st,
+  });
+  if (decision.debtCleared) { clearDebtLocal(decision.debtKey); debtPaidNative(decision.debtKey); eh.reportProgress(); }
+  await syncDebtHold(decision.hold);
+  const act = decision.action; const endMs = decision.endMs;
+  hardLocked.value = !!decision.want;
   if (act === 'start') {
-    lockOn = fEnd || endMs; const r = await clingLock.startLock(fEnd || endMs, fEnd ? 'ClingNote focus' : 'ClingNote lock-in');
+    lockOn = endMs; const r = await clingLock.startLock(endMs, decision.focus ? 'ClingNote focus' : 'ClingNote lock-in');
     console.info('[clingLock] startLock', r && r.monitor);
     if (r && r.monitor && r.monitor !== 'ok') { lockOn = null; error.value = "App lock couldn't be scheduled, so apps stay unlocked for now."; }
   } else if (act === 'stop') { lockOn = null; await clingLock.stopLock(); }
-  else if (want) lockOn = endMs;
+  else if (decision.want) lockOn = endMs;
   scheduleLaterLocks(st);
   syncWakeLock(st);
   syncVault();

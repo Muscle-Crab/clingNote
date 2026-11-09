@@ -54,7 +54,7 @@ t('wiring: strictShield 2 h, server settle -> appLockDebt, eh shutdown, native c
   const sd = src('src/utils/strictDay.js'); assert(!/MISS_GRACE_MS/.test(sd) && !/phase: 'missed'/.test(sd));
   const fn = src('netlify/functions/eight-hour-day.js'); assert(/sessionGrace\(countable\(pruneStale/.test(fn) && /core\.debtAfterSettle\(doc\.appLockDebt/.test(fn) && /core\.debtCleared\(debt/.test(fn) && /graceUntilMs: Number\(l\.graceUntilMs\)/.test(fn));
   assert(/missed: false, opensAtMs: 0/.test(src('src/composables/useEightHour.js')));
-  const h = src('src/views/HomeView.vue'); assert(!/grace\.want && free/.test(h) && /debtShield\(\{ debt: eh\.appLockDebt\.value/.test(h) && /clingLock\.armDebtHold\(p\)/.test(h) && !/gpGraceSchedule/.test(h));
+  const h = src('src/views/HomeView.vue'); const sh = src('src/utils/sessionShield.js'); assert(!/grace\.want && free/.test(h) && /debtShield\(\{ debt/.test(sh) && /clingLock\.armDebtHold\(plan\)/.test(h) && !/gpGraceSchedule/.test(h));
   const sw = src('ios/App/App/ClingLockPlugin.swift'); assert(/name: "cancelScheduledLock"/.test(sw) && /stopMonitoring\(\[ScheduledLocks\.name\(key\)\]\)/.test(sw));
   assert(/name: "clearBreakOffer"/.test(sw) && /\(o\["v"\] as\? Int\) == 2/.test(sw) && /guard close > nowMs/.test(sw));
 });
