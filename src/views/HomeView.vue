@@ -1,7 +1,7 @@
 <template>
   <div ref="scrollContainer" class="app-root" :class="[{ 'has-bg-anim': bgAnim !== 'none', 'is-dragging': isDraggingTask, 'reorder-active': isDraggingTask || reorderSettling }, appTheme ? 'theme-' + appTheme : '']">
     <BackgroundLayer :anim="bgAnim" :force-motion="bgPrefs.forceMotion" />
-    <FocusMode v-if="focusScreenTask" :task="focusScreenTask" :coach="focusCoach" :enabled="focusModeOn" @close="focusScreenKey = ''" @pause="focusScreenPause" @resume="focusScreenResume" @end="focusScreenEnd" @toggle-step="focusScreenToggle" @set-mode="focusScreenSetMode" />
+    <FocusMode v-if="focusScreenTask" :task="focusScreenTask" :coach="focusCoach" :enabled="focusModeOn" :busy="focusDoneBusy" :error="focusDoneError" @close="focusScreenKey = ''" @pause="focusScreenPause" @resume="focusScreenResume" @end="focusScreenEnd" @done="focusScreenComplete" @toggle-step="focusScreenToggle" @set-mode="focusScreenSetMode" />
     <div class="safe-top-scrim" aria-hidden="true"></div>
     <BackgroundPanel :open="showBackground" @close="showBackground = false" />
     <BreakPill v-if="(gpOn && isViewingToday) || bkDemo" :mode="bkDemo ? bkDemo.mode : bkMode" :min="bkDemo ? bkDemo.min : (gpBank || 20)" :left="bkDemo ? bkDemo.left : bkLeft" @take="gpTakeBreak" @collapse="bkCollapse" />
@@ -472,6 +472,8 @@ const selectedTimerMinutes = ref(5);
 
 const selectedTimerTaskIndex = ref(null);
 const focusScreenKey = ref('');
+const focusDoneBusy = ref(false);
+const focusDoneError = ref('');
 const focusModeOn = ref(readFocusMode(localStorage, null)); // users/{uid}.focusMode; missing and the cache default are on
 let focusModeRev = 0;
 const onFocusModeEvent = (on) => { focusModeRev += 1; focusModeOn.value = !!on; writeFocusModeCache(localStorage, userId.value, focusModeOn.value); };
@@ -480,7 +482,12 @@ onMounted(() => { stopFocusMode = subscribeFocusMode(onFocusModeEvent); });
 onBeforeUnmount(() => stopFocusMode());
 const focusScreenTask = computed(() => {
   if (!focusScreenKey.value) return null;
-  return (selectedDayRoutine.value || []).find((t) => t && taskKey(t) === focusScreenKey.value && t.timerActive && t.completed !== true) || null;
+  const list = selectedDayRoutine.value || [];
+  const live = list.find((t) => t && taskKey(t) === focusScreenKey.value && t.timerActive && t.completed !== true);
+  if (live) return live;
+  // Stay up while Done is saving, so a rejected write can show its error on this screen.
+  if (focusDoneBusy.value) return list.find((t) => t && taskKey(t) === focusScreenKey.value) || null;
+  return null;
 });
 const focusCoach = computed(() => (gpOn.value && gpPhase.value && gpPhase.value.phase === 'focus' && Number(gpPhase.value.n) > 0
   ? { n: gpPhase.value.n, of: gpPhase.value.of || 2 } : null));
@@ -4030,6 +4037,25 @@ const focusScreenEnd = async () => {
     cancelLocal(timerKey(before)).catch(() => {}); focusTick(); syncAppLock();
   }
   focusScreenKey.value = '';
+};
+// Done uses the Home checkbox path (points, streak, vault, timer stop). A failed write stays on this screen.
+const focusScreenComplete = async () => {
+  if (focusDoneBusy.value) return;
+  const t = focusScreenTask.value;
+  if (!t) { focusDoneError.value = 'That task is no longer here.'; showNoteToast(focusDoneError.value, { error: true }); focusScreenKey.value = ''; return; }
+  const i = (selectedDayRoutine.value || []).findIndex((x) => sameTask(x, t));
+  if (i < 0) { focusDoneError.value = 'That task is no longer on this day.'; showNoteToast(focusDoneError.value, { error: true }); return; }
+  if (selectedDayRoutine.value[i].completed) { focusScreenKey.value = ''; return; }
+  focusDoneBusy.value = true; focusDoneError.value = '';
+  try {
+    const ok = await toggleTaskCompletion(i);
+    if (ok === false) { focusDoneError.value = 'Could not save this task. It is still open.'; return; }
+    focusScreenKey.value = '';
+  } catch (e) {
+    const msg = writeFailureMessage(e, t.title, 'complete');
+    focusDoneError.value = msg;
+    showNoteToast(msg, { error: true });
+  } finally { focusDoneBusy.value = false; }
 };
 const focusScreenToggle = (id) => {
   const t = focusScreenTask.value; if (!t || !id) return;

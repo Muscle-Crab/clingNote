@@ -1,5 +1,6 @@
 <template>
-  <section class="fm" data-test="focus-mode" role="dialog" aria-label="Focus Mode">
+  <Teleport to="body">
+  <section class="fm" data-test="focus-mode" role="dialog" aria-modal="true" aria-label="Focus Mode">
     <header class="fm-top">
       <button type="button" class="fm-icon" data-test="focus-back" aria-label="Back" @click="$emit('close')"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
       <p class="fm-pill"><span class="fm-dot" aria-hidden="true"></span> Focus Mode</p>
@@ -37,11 +38,17 @@
     <button type="button" class="fm-music" data-test="focus-music" :aria-pressed="musicOn ? 'true' : 'false'" @click="toggleMusic">{{ musicOn ? '⏸ Pause focus music' : '▶ Play focus music' }}<small>{{ trackLabel }} · continues on the Home Screen</small></button>
 
     <div class="fm-controls">
-      <button type="button" class="fm-side" data-test="focus-end" @click="$emit('end')"><span class="fm-side-ico" aria-hidden="true"></span>End</button>
-      <button v-if="!paused" type="button" class="fm-pause" data-test="focus-pause" @click="$emit('pause')"><span aria-hidden="true">❚❚</span> Pause</button>
-      <button v-else type="button" class="fm-pause" data-test="focus-resume" @click="$emit('resume')">Play</button>
-      <button type="button" class="fm-side" data-test="focus-play" :disabled="!paused" @click="paused && $emit('resume')"><span class="fm-play" aria-hidden="true"></span>Play</button>
+      <button type="button" class="fm-act fm-act--pause" :data-test="paused ? 'focus-resume' : 'focus-pause'" @click="$emit(paused ? 'resume' : 'pause')">
+        <svg v-if="!paused" class="fm-act-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
+        <svg v-else class="fm-act-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+        {{ paused ? 'Resume' : 'Pause' }}
+      </button>
+      <button type="button" class="fm-act fm-act--done" data-test="focus-done" :disabled="busy" :aria-busy="busy ? 'true' : 'false'" @click="$emit('done')">
+        <svg class="fm-act-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.2 4.2L19 7.5"/></svg>
+        Done
+      </button>
     </div>
+    <p v-if="error" class="fm-error" role="alert" data-test="focus-error">{{ error }}</p>
 
     <article class="fm-card" data-test="focus-session">
       <span class="fm-card-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></svg></span>
@@ -67,6 +74,7 @@
       </div>
     </article>
   </section>
+  </Teleport>
 </template>
 
 <script setup>
@@ -80,8 +88,10 @@ const props = defineProps({
   task: { type: Object, required: true },
   coach: { type: Object, default: null },
   enabled: { type: Boolean, default: true },
+  busy: { type: Boolean, default: false },
+  error: { type: String, default: '' },
 });
-defineEmits(['close', 'end', 'pause', 'resume', 'toggle-step', 'set-mode']);
+defineEmits(['close', 'end', 'pause', 'resume', 'done', 'toggle-step', 'set-mode']);
 
 const now = ref(Date.now());
 const menu = ref(false);
@@ -103,9 +113,9 @@ const dash = computed(() => ringDash(focusRingFraction(props.task, now.value), 1
 </script>
 
 <style scoped>
-.fm { position: fixed; z-index: 86; left: 0; right: 0; top: 0; bottom: calc(64px + env(safe-area-inset-bottom)); overflow: auto;
-  padding: calc(12px + env(safe-area-inset-top)) 16px 24px; color: #e8eefc;
-  background: linear-gradient(180deg, rgba(6, 14, 32, .55), rgba(6, 12, 28, .78) 28%, rgba(5, 10, 24, .88));
+.fm { position: fixed; z-index: 200; inset: 0; overflow: auto;
+  padding: calc(12px + env(safe-area-inset-top)) 16px calc(24px + env(safe-area-inset-bottom)); color: #e8eefc;
+  background: linear-gradient(180deg, #060e20, #060c1c 28%, #050a18);
   font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
 .fm-top { display: flex; align-items: center; justify-content: space-between; position: relative; }
 .fm-icon { width: 42px; height: 42px; border-radius: 50%; border: 1px solid rgba(160, 190, 255, .28); background: rgba(10, 20, 44, .55); color: #d5e2ff; display: inline-flex; align-items: center; justify-content: center; }
@@ -129,19 +139,21 @@ const dash = computed(() => ringDash(focusRingFraction(props.task, now.value), 1
 .fm-caption { margin: 6px 0 0; color: #9eb6de; font: 700 12px/1 Inter, sans-serif; letter-spacing: .16em; }
 .fm-task { display: flex; align-items: center; gap: 14px; margin: 8px 0 16px; min-width: 0; }
 .fm-task > div { min-width: 0; }
-.fm-badge, .fm-side, .fm-card-ico { width: 52px; height: 52px; border-radius: 16px; border: 1px solid rgba(150, 180, 255, .28); background: rgba(12, 24, 52, .72); display: inline-flex; align-items: center; justify-content: center; color: #d5e4ff; flex-shrink: 0; }
+.fm-badge, .fm-card-ico { width: 52px; height: 52px; border-radius: 16px; border: 1px solid rgba(150, 180, 255, .28); background: rgba(12, 24, 52, .72); display: inline-flex; align-items: center; justify-content: center; color: #d5e4ff; flex-shrink: 0; }
 .fm-badge svg, .fm-card-ico svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .fm-task h2 { margin: 0; font: 800 22px/1.15 Inter, sans-serif; overflow-wrap: anywhere; }
 .fm-task p { margin: 4px 0 0; color: #a9b8d4; font: 500 14px/1.3 Inter, sans-serif; overflow-wrap: anywhere; }
 .fm-music { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 100%; max-width: 100%; margin: 0 0 14px; min-height: 52px; padding: 10px 14px; border-radius: 16px; border: 1px solid rgba(140, 190, 255, .45); background: rgba(20, 50, 110, .55); color: #fff; font: 800 16px/1.2 Inter, sans-serif; }
 .fm-music small { font: 600 12px/1.3 Inter, sans-serif; color: #c5d7ff; }
-.fm-controls { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 16px; margin-bottom: 18px; }
-.fm-side { width: 64px; height: 64px; flex-direction: column; gap: 2px; font: 600 12px/1 Inter, sans-serif; color: #d5e4ff; background: rgba(12, 24, 52, .72); }
-.fm-side-ico { width: 14px; height: 14px; border-radius: 3px; background: currentColor; }
-.fm-play { width: 0; height: 0; border-style: solid; border-width: 7px 0 7px 12px; border-color: transparent transparent transparent currentColor; margin-left: 2px; }
-.fm-pause { min-width: 0; flex: 1 1 140px; max-width: 220px; height: 64px; border: 0; border-radius: 999px; color: #fff; font: 800 20px/1 Inter, sans-serif; display: inline-flex; align-items: center; justify-content: center; gap: 10px;
-  background: linear-gradient(180deg, #3d8bff, #1f5dff); box-shadow: 0 0 0 1px rgba(140, 190, 255, .45), 0 10px 28px rgba(40, 100, 255, .45); }
-.fm-pause:disabled, .fm-side:disabled { opacity: .45; }
+.fm-controls { display: flex; align-items: stretch; gap: 12px; margin-bottom: 18px; }
+.fm-act { flex: 1 1 0; min-width: 0; height: 64px; border: 0; border-radius: 999px; font: 800 20px/1 Inter, sans-serif; display: inline-flex; align-items: center; justify-content: center; gap: 10px; }
+.fm-act-ico { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.fm-act--pause .fm-act-ico { fill: currentColor; stroke: none; }
+.fm-act--pause { background: #d7e8ff; color: #1d4ed8; }
+.fm-act--done { background: #d8f5e3; color: #128a3e; }
+.fm-act--done .fm-act-ico { stroke-width: 2.8; }
+.fm-act:disabled { opacity: .55; }
+.fm-error { margin: -6px 0 14px; padding: 10px 12px; border-radius: 12px; background: #3d1218; color: #ffd0d0; font: 600 14px/1.35 Inter, sans-serif; }
 .fm-card { display: flex; gap: 12px; align-items: flex-start; margin: 0 0 12px; padding: 14px; border-radius: 22px; border: 1px solid rgba(140, 175, 255, .28); background: rgba(8, 16, 38, .72); min-width: 0; }
 .fm-card-copy { flex: 1; min-width: 0; }
 .fm-card h3 { margin: 0; font: 800 16px/1.2 Inter, sans-serif; }
