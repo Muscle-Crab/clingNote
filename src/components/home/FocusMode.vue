@@ -139,7 +139,7 @@ const dash = computed(() => ringDash(focusRingFraction(props.task, now.value), 1
 .fm-side { width: 64px; height: 64px; flex-direction: column; gap: 2px; font: 600 12px/1 Inter, sans-serif; color: #d5e4ff; background: rgba(12, 24, 52, .72); }
 .fm-side-ico { width: 14px; height: 14px; border-radius: 3px; background: currentColor; }
 .fm-play { width: 0; height: 0; border-style: solid; border-width: 7px 0 7px 12px; border-color: transparent transparent transparent currentColor; margin-left: 2px; }
-.fm-pause { min-width: 0; flex: 1 1 140px; max-width: 220px; height: 64px; border: 0; border-radius: 999px; color: #fff; font: 800 20px/1 Inter, sans-serif; display: inline-flex; align-items: center; justify-content: center; gap: 10px; }
+.fm-pause { min-width: 0; flex: 1 1 140px; max-width: 220px; height: 64px; border: 0; border-radius: 999px; color: #fff; font: 800 20px/1 Inter, sans-serif; display: inline-flex; align-items: center; justify-content: center; gap: 10px;
   background: linear-gradient(180deg, #3d8bff, #1f5dff); box-shadow: 0 0 0 1px rgba(140, 190, 255, .45), 0 10px 28px rgba(40, 100, 255, .45); }
 .fm-pause:disabled, .fm-side:disabled { opacity: .45; }
 .fm-card { display: flex; gap: 12px; align-items: flex-start; margin: 0 0 12px; padding: 14px; border-radius: 22px; border: 1px solid rgba(140, 175, 255, .28); background: rgba(8, 16, 38, .72); min-width: 0; }
