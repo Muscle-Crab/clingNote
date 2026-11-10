@@ -1,7 +1,7 @@
 <template>
   <div ref="scrollContainer" class="app-root" :class="[{ 'has-bg-anim': bgAnim !== 'none', 'is-dragging': isDraggingTask, 'reorder-active': isDraggingTask || reorderSettling }, appTheme ? 'theme-' + appTheme : '']">
     <BackgroundLayer :anim="bgAnim" :force-motion="bgPrefs.forceMotion" />
-    <FocusMode v-if="focusScreenTask" :task="focusScreenTask" :coach="focusCoach" :enabled="focusModeOn" :busy="focusDoneBusy" :error="focusDoneError" @close="focusScreenKey = ''" @pause="focusScreenPause" @resume="focusScreenResume" @end="focusScreenEnd" @done="focusScreenComplete" @toggle-step="focusScreenToggle" @set-mode="focusScreenSetMode" />
+        <FocusMode v-if="focusScreenTask" :task="focusScreenTask" :coach="focusCoach" :enabled="focusModeOn" :busy="focusDoneBusy" :error="focusDoneError" @close="dismissFocusScreen" @pause="focusScreenPause" @resume="focusScreenResume" @end="focusScreenEnd" @done="focusScreenComplete" @toggle-step="focusScreenToggle" @set-mode="focusScreenSetMode" />
     <div class="safe-top-scrim" aria-hidden="true"></div>
     <BackgroundPanel :open="showBackground" @close="showBackground = false" />
     <BreakPill v-if="(gpOn && isViewingToday) || bkDemo" :mode="bkDemo ? bkDemo.mode : bkMode" :min="bkDemo ? bkDemo.min : (gpBank || 20)" :left="bkDemo ? bkDemo.left : bkLeft" @take="gpTakeBreak" @collapse="bkCollapse" />
@@ -266,6 +266,7 @@ import { sectionOf, sectionFromTime, sectionForCreate, isSection, mergeOrder } f
 import BackgroundLayer from '@/components/background/BackgroundLayer.vue';
 import FocusMode from '@/components/home/FocusMode.vue';
 import { readFocusMode, writeFocusModeCache, saveFocusMode, focusModeFromDoc, subscribeFocusMode } from '@/utils/focusModePref';
+import { readFocusTimer, writeFocusTimer, clearFocusTimer, closeFocusScreen, recordFromTask, restoreFocusScreen, taskFromRecord, mergeSavedTimer } from '@/utils/focusTimerStore';
 import { saveUserFields } from '@/utils/userDoc';
 import HeroAmbience from '@/components/background/HeroAmbience.vue';
 import { effectiveAnim } from '@/utils/heroAmbience';
@@ -480,18 +481,58 @@ const onFocusModeEvent = (on) => { focusModeRev += 1; focusModeOn.value = !!on; 
 let stopFocusMode = () => {};
 onMounted(() => { stopFocusMode = subscribeFocusMode(onFocusModeEvent); });
 onBeforeUnmount(() => stopFocusMode());
+const savedFocusTimer = () => readFocusTimer(localStorage);
+const withSavedTimer = (tasks) => mergeSavedTimer(tasks, savedFocusTimer(), Date.now());
+const rememberTimer = (task, focusOpen) => {
+  const rec = recordFromTask(task, { focusOpen: !!focusOpen });
+  if (rec) writeFocusTimer(localStorage, rec);
+};
+const dismissFocusScreen = () => {
+  focusScreenKey.value = '';
+  closeFocusScreen(localStorage);
+};
+const stopFocusTimerRecord = () => { focusScreenKey.value = ''; clearFocusTimer(localStorage); };
+// Open again after background, a WebView reload, or a cold launch. A refresh must not clear it.
+const reopenFocusScreen = () => {
+  nowTick.value = Date.now();
+  const rec = savedFocusTimer();
+  if (restoreFocusScreen(rec)) focusScreenKey.value = rec.taskKey;
+};
 const focusScreenTask = computed(() => {
   if (!focusScreenKey.value) return null;
   const list = selectedDayRoutine.value || [];
-  const live = list.find((t) => t && taskKey(t) === focusScreenKey.value && t.timerActive && t.completed !== true);
-  if (live) return live;
+  const saved = savedFocusTimer();
+  const live = list.find((t) => t && taskKey(t) === focusScreenKey.value && t.completed !== true);
+  if (live && (live.timerActive || (saved && saved.taskKey === focusScreenKey.value))) {
+    if (saved && saved.taskKey === focusScreenKey.value && saved.timerEndTime) {
+      return { ...live, timerActive: true, timerStartedAt: saved.timerStartedAt || live.timerStartedAt, timerEndTime: saved.timerEndTime, timerPausedAt: saved.timerPausedAt || null, timerDurationMinutes: saved.timerDurationMinutes || live.timerDurationMinutes };
+    }
+    if (live.timerActive) return live;
+  }
   // Stay up while Done is saving, so a rejected write can show its error on this screen.
   if (focusDoneBusy.value) return list.find((t) => t && taskKey(t) === focusScreenKey.value) || null;
+  // The list is still loading, or a day refresh dropped the timer. The saved end keeps the screen up, including at 00:00.
+  if (saved && saved.focusOpen && saved.taskKey === focusScreenKey.value) return taskFromRecord(saved);
   return null;
 });
 const focusCoach = computed(() => (gpOn.value && gpPhase.value && gpPhase.value.phase === 'focus' && Number(gpPhase.value.n) > 0
   ? { n: gpPhase.value.n, of: gpPhase.value.of || 2 } : null));
 const nowTick = ref(Date.now());
+let focusRestoreHandle = null;
+onMounted(() => {
+  reopenFocusScreen();
+  document.addEventListener('visibilitychange', onFocusScreenVisible);
+  window.addEventListener('pageshow', reopenFocusScreen);
+  window.addEventListener('cn:app-resume', reopenFocusScreen);
+  import('@capacitor/app').then(({ App }) => App.addListener('resume', reopenFocusScreen)).then((h) => { focusRestoreHandle = h; }).catch(() => {});
+});
+onBeforeUnmount(() => {
+  document.removeEventListener('visibilitychange', onFocusScreenVisible);
+  window.removeEventListener('pageshow', reopenFocusScreen);
+  window.removeEventListener('cn:app-resume', reopenFocusScreen);
+  try { if (focusRestoreHandle && focusRestoreHandle.remove) focusRestoreHandle.remove(); } catch (e) { /* ignore */ }
+});
+const onFocusScreenVisible = () => { if (document.visibilityState === 'visible') reopenFocusScreen(); };
 
 let timerInterval = null;
 
@@ -554,7 +595,7 @@ const saveSelectedDayTasks = async () => {
   const dayName = days[selectedDayIndex.value].day;
   const wanted = selectedDayRoutine.value || [];
   const saved = await commitDayTasks(userId.value, dayName, () => wanted);
-  selectedDayRoutine.value = visibleTasks(saved);
+  selectedDayRoutine.value = withSavedTimer(visibleTasks(saved));
 };
 
 
@@ -1154,7 +1195,7 @@ const fetchSelectedDayRoutine = async () => {
         if (seq !== fetchSeq) return;
       }
 
-      selectedDayRoutine.value = visibleTasks(tasks);
+      selectedDayRoutine.value = withSavedTimer(visibleTasks(tasks));
       if (isViewingToday.value) todayListLoaded.value = true;
       dayLoadError.value = '';
     } else {
@@ -1209,6 +1250,9 @@ const startTimer = async (opts = {}) => {
 
   const at = selectedTimerTaskIndex.value, before = selectedDayRoutine.value[at];
   selectedDayRoutine.value[at] = task;
+  const openFocus = !opts.lock && !!focusModeOn.value;
+  rememberTimer(task, openFocus);
+  if (openFocus) focusScreenKey.value = taskKey(task);
 
   // Update this task in place with a normal write. A transaction reports "unavailable" even when the phone is online,
   // and the old catch labeled every failure as a lost connection. Roll the card back if the write fails.
@@ -1221,9 +1265,11 @@ const startTimer = async (opts = {}) => {
       return next;
     });
     const idx = (selectedDayRoutine.value || []).findIndex((t) => sameTask(t, before));
-    if (idx >= 0) selectedDayRoutine.value[idx] = saved.find((t) => sameTask(t, before)) || task;
+    if (idx >= 0) selectedDayRoutine.value[idx] = withSavedTimer([saved.find((t) => sameTask(t, before)) || task])[0];
   } catch (e) {
     if (selectedDayRoutine.value[at] === task) selectedDayRoutine.value[at] = before;
+    clearFocusTimer(localStorage);
+    if (openFocus) focusScreenKey.value = '';
     if (!lockMessage(e)) { console.error('start timer:', e); showNoteToast(writeFailureMessage(e, before && before.title, 'start the timer for'), { error: true }); }
     return false;
   }
@@ -1232,7 +1278,7 @@ const startTimer = async (opts = {}) => {
 
   showTimerModal.value = false;
   selectedTimerTaskIndex.value = null;
-  if (!opts.lock && focusModeOn.value) focusScreenKey.value = taskKey(task); // on: the screen opens with the timer; off: play stays as it is; an auto-started lock never opens it
+  // The screen was opened above, before the save, so a reload during the write still restores it.
 
   startCountdownWatcher();
 };
@@ -1928,7 +1974,7 @@ const watchSelectedDay = () => {
     if (dayWriteHold.size) return; // a delete is still settling: do not put a task back or replace a different one
     const tasks = clearExpiredTimers(snap.data().tasks || [], Date.now());
     if (tasks.some((t) => isStaleCompletion(t, idx))) return;
-    const next = tasksFromSnapshot(selectedDayRoutine.value || [], visibleTasks(tasks), dayWriteHold.size > 0);
+    const next = tasksFromSnapshot(selectedDayRoutine.value || [], withSavedTimer(visibleTasks(tasks)), dayWriteHold.size > 0);
     if (JSON.stringify(next) !== JSON.stringify(selectedDayRoutine.value || [])) selectedDayRoutine.value = next;
   }, () => {});
 };
@@ -3913,6 +3959,7 @@ const focusPatchTask = async (taskId, mk) => {
   const i = selectedDayRoutine.value.findIndex((t) => t && widgetTaskId(t) === taskId); if (i < 0) return false;
   const t = { ...selectedDayRoutine.value[i], ...mk(selectedDayRoutine.value[i]) };
   selectedDayRoutine.value.splice(i, 1, t);
+  if (t.timerActive && t.timerEndTime) rememberTimer(t, focusScreenKey.value === taskKey(t) || !!(savedFocusTimer() && savedFocusTimer().focusOpen && savedFocusTimer().taskKey === taskKey(t)));
   await saveSelectedDayTasks();
   if (t.timerPausedAt) cancelLocal(timerKey(t)).catch(() => {}); else scheduleTimerDone(t);
   return true;
@@ -3998,6 +4045,7 @@ const endFocusEarly = async (index) => {
   const t = selectedDayRoutine.value[index]; if (!t || !lockedFocus([t])) return;
   if (!window.confirm(`End focus on “${t.title}” early? The timer stops and the task stays open (no points).`)) return;
   selectedDayRoutine.value.splice(index, 1, { ...t, ...endEarlyPatch() });
+  if (savedFocusTimer() && savedFocusTimer().taskKey === taskKey(t)) stopFocusTimerRecord();
   await saveSelectedDayTasks().catch((e) => console.warn('end focus not saved:', e));
   cancelLocal(timerKey(t)).catch(() => {}); focusTick(); syncAppLock();
   showNoteToast('Focus ended early.');
@@ -4012,9 +4060,9 @@ const focusScreenResume = () => {
   return focusPatchTask(widgetTaskId(t), (row) => resumePatch(row, Date.now()));
 };
 const focusScreenEnd = async () => {
-  const t = focusScreenTask.value; if (!t) { focusScreenKey.value = ''; return; }
+  const t = focusScreenTask.value; if (!t) { stopFocusTimerRecord(); return; }
   const i = (selectedDayRoutine.value || []).findIndex((x) => sameTask(x, t));
-  if (i < 0) { focusScreenKey.value = ''; return; }
+  if (i < 0) { stopFocusTimerRecord(); return; }
   if (t.focusLock) {
     await endFocusEarly(i);
     const still = (selectedDayRoutine.value || []).find((x) => sameTask(x, t));
@@ -4032,21 +4080,21 @@ const focusScreenEnd = async () => {
     }
     cancelLocal(timerKey(before)).catch(() => {}); focusTick(); syncAppLock();
   }
-  focusScreenKey.value = '';
+  stopFocusTimerRecord();
 };
 // Done uses the Home checkbox path (points, streak, vault, timer stop). A failed write stays on this screen.
 const focusScreenComplete = async () => {
   if (focusDoneBusy.value) return;
   const t = focusScreenTask.value;
-  if (!t) { focusDoneError.value = 'That task is no longer here.'; showNoteToast(focusDoneError.value, { error: true }); focusScreenKey.value = ''; return; }
+  if (!t) { focusDoneError.value = 'That task is no longer here.'; showNoteToast(focusDoneError.value, { error: true }); stopFocusTimerRecord(); return; }
   const i = (selectedDayRoutine.value || []).findIndex((x) => sameTask(x, t));
   if (i < 0) { focusDoneError.value = 'That task is no longer on this day.'; showNoteToast(focusDoneError.value, { error: true }); return; }
-  if (selectedDayRoutine.value[i].completed) { focusScreenKey.value = ''; return; }
+  if (selectedDayRoutine.value[i].completed) { stopFocusTimerRecord(); return; }
   focusDoneBusy.value = true; focusDoneError.value = '';
   try {
     const ok = await toggleTaskCompletion(i);
     if (ok === false) { focusDoneError.value = 'Could not save this task. It is still open.'; return; }
-    focusScreenKey.value = '';
+    stopFocusTimerRecord();
   } catch (e) {
     const msg = writeFailureMessage(e, t.title, 'complete');
     focusDoneError.value = msg;
@@ -4062,7 +4110,7 @@ const focusScreenToggle = (id) => {
 const focusScreenSetMode = async (on) => {
   const next = !!on; const prev = focusModeOn.value;
   focusModeRev += 1; focusModeOn.value = next;
-  try { await saveFocusMode({ store: localStorage, uid: userId.value, on: next, write: saveUserFields }); if (!next) focusScreenKey.value = ''; }
+  try { await saveFocusMode({ store: localStorage, uid: userId.value, on: next, write: saveUserFields }); if (!next) dismissFocusScreen(); }
   catch (e) { focusModeOn.value = prev; writeFocusModeCache(localStorage, userId.value, prev); console.warn('focus mode', e && e.message); }
 };
 // Locked in: Home can't be left (sign-out still works); coming back to the app says what you are locked into.

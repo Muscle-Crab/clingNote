@@ -32,7 +32,8 @@ assert.equal(focusModeFromDoc({ focusMode: false }), false, 'the saved profile t
 const home = readFileSync(new URL('../src/views/HomeView.vue', import.meta.url), 'utf8');
 const profile = readFileSync(new URL('../src/views/Profile.vue', import.meta.url), 'utf8');
 const rules = readFileSync(new URL('../firestore.rules', import.meta.url), 'utf8');
-assert.match(home, /if \(!opts\.lock && focusModeOn\.value\) focusScreenKey\.value = taskKey\(task\)/);
+assert.match(home, /const openFocus = !opts\.lock && !!focusModeOn\.value/);
+assert.match(home, /if \(openFocus\) focusScreenKey\.value = taskKey\(task\)/);
 assert.match(home, /focusModeOn\.value \|\| !confirmStartOn/);
 assert.match(profile, /data-test="focus-mode-row"/);
 assert.match(profile, /Focus Mode/);

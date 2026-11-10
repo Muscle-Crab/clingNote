@@ -43,7 +43,8 @@ assert.equal(coach.label, '1 of 2 focus sessions');
 
 const home = readFileSync(new URL('../src/views/HomeView.vue', import.meta.url), 'utf8');
 const screen = readFileSync(new URL('../src/components/home/FocusMode.vue', import.meta.url), 'utf8');
-assert.match(home, /if \(!opts\.lock && focusModeOn\.value\) focusScreenKey\.value = taskKey\(task\)/);
+assert.match(home, /const openFocus = !opts\.lock && !!focusModeOn\.value/);
+assert.match(home, /if \(openFocus\) focusScreenKey\.value = taskKey\(task\)/);
 assert.match(home, /focusModeOn\.value \|\| !confirmStartOn\(localStorage, userId\.value\)\) return launchTimer\(index, mins\)/);
 assert.match(screen, /set-mode/);
 assert.match(home, /focusScreenPause[\s\S]{0,240}pausePatch/);
@@ -54,7 +55,7 @@ assert.doesNotMatch(screen, /np-anchor|UIBackgroundModes|new Audio\(/);
 assert.match(screen, /focusCountdown\(props\.task/);
 assert.match(screen, /focusEnded\(props\.task/);
 assert.match(screen, /focusRingShown\(props\.task/);
-assert.match(screen, /visibilitychange/);
+assert.match(screen, /bindWallClock/);
 assert.match(screen, /v-if="!ended"/);
 assert.match(screen, /data-test="focus-done"/);
 assert.match(screen, /import RobotAvatar from '@\/components\/home\/RobotAvatar\.vue'/);

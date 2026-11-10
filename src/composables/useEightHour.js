@@ -12,6 +12,7 @@ import { setLockSource } from '@/utils/eightHourLock';
 import { readLock, writeLock, lockFor } from '@/utils/ehLockCache';
 import { runningLock, authKeepsDay, shouldKeepServerDay } from '@/utils/dayPrompt';
 import { readDebtCache, writeDebtCache, cacheWithDebt, cacheCleared, mergeDebt } from '@/utils/appLockDebt';
+import { bindWallClock } from '@/utils/timerClock';
 import { onAuthStateChanged } from 'firebase/auth';
 
 const st = reactive({ uid: null, loaded: false, loading: false, error: '', data: null, offset: 0, busy: false });
@@ -127,7 +128,12 @@ const dueCheck = () => {
 const ensureTimers = () => {
   if (!timer) timer = setInterval(() => { tick.value = nowMs(); dueCheck(); }, 1000);
   if (!syncTimer) syncTimer = setInterval(() => { if (auth.currentUser) refresh().catch(() => {}); }, 5 * 60 * 1000);
-  if (!visHooked && typeof document !== 'undefined') { visHooked = true; document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && auth.currentUser) refresh().catch(() => {}); }); }
+  if (!visHooked && typeof document !== 'undefined') {
+    visHooked = true;
+    const poke = () => { tick.value = nowMs(); };
+    bindWallClock(poke);
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && auth.currentUser) refresh().catch(() => {}); });
+  }
 };
 
 export const refresh = async () => {

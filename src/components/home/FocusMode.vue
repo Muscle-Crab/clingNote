@@ -79,6 +79,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { ringDash } from '@/utils/timerRing';
 import { focusClock, focusCountdown, focusDateLabel, focusEnded, focusPhaseLabel, focusRingShown, focusSessionCard, focusSteps, focusSubtitle } from '@/utils/focusScreen';
+import { bindWallClock } from '@/utils/timerClock';
 import RobotAvatar from '@/components/home/RobotAvatar.vue';
 
 const props = defineProps({
@@ -93,10 +94,10 @@ defineEmits(['close', 'end', 'pause', 'resume', 'done', 'toggle-step', 'set-mode
 const now = ref(Date.now());
 const menu = ref(false);
 let iv = 0;
+let unbindClock = () => {};
 const tick = () => { now.value = Date.now(); };
-const onVis = () => { if (document.visibilityState === 'visible') tick(); };
-onMounted(() => { iv = window.setInterval(tick, 250); document.addEventListener('visibilitychange', onVis); });
-onBeforeUnmount(() => { window.clearInterval(iv); document.removeEventListener('visibilitychange', onVis); });
+onMounted(() => { iv = window.setInterval(tick, 250); unbindClock = bindWallClock(tick); });
+onBeforeUnmount(() => { window.clearInterval(iv); unbindClock(); });
 
 const paused = computed(() => !!(props.task && props.task.timerPausedAt));
 const ended = computed(() => focusEnded(props.task, now.value));
