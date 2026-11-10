@@ -2,6 +2,7 @@ import fs from 'node:fs';
 // Points vault: formula prices from the user's own usage, ascending unlock order, no task gate. Generic labels only.
 import assert from 'node:assert/strict';
 import * as V from '../src/utils/pointsVault.js';
+import { decideShield } from '../src/utils/sessionShield.js';
 import * as S from '../src/utils/usageSnapshot.js';
 let n = 0; const t = (name, fn) => { fn(); n += 1; console.log('ok -', name); };
 const today = '2026-11-03'; const week = ['2026-10-27', '2026-10-28', '2026-10-29', '2026-10-30', '2026-10-31', '2026-11-01', '2026-11-02'];
@@ -61,7 +62,7 @@ t('no task gate: points open every reached app, cheapest first; copy', () => {
   assert.equal(V.costText(150), '150 pts · ~8 tasks'); assert.equal(V.unlockText('App A'), 'Vault unlocked: App A 🎉');
   v = V.vaultView({ apps, days, todayYmd: today, points: 150, accessOpen: true, nowMs: 0 });
   assert.equal(v.openCount, 2); assert.equal(v.items[2].open, false); assert.equal(v.points, 150);
-  v = V.vaultView({ apps, days, todayYmd: today, points: 150, debt: true, accessOpen: true, nowMs: 0 }); assert.equal(v.openCount, 0);
+  v = V.vaultView({ apps, days, todayYmd: today, points: 150, debt: true, accessOpen: false, nowMs: 0 }); assert.equal(v.openCount, 2, 'a missed goal and a stopped timer do not close an app the bank has paid for');
 });
 t('25 pts opens nothing; 35 opens only the cheapest', () => {
   const apps = [0, 15, 30, 60, 120].map((m) => ({ id: 'm' + m, label: m + ' min' }));
@@ -96,11 +97,11 @@ t('points release every app they have reached, and leave the next one shielded',
   const extend = V.vaultTimerPlan({ accessOpen: true, view, nativeLive: true, nativeIds: ['a'], nowMs: 1000, liveUntil: 1000 + 5 * 60000, accessUntil: 1000 + 36 * 60000 });
   assert.equal(extend.action, 'allow'); assert.equal(extend.untilMs, 1000 + 36 * 60000);
   assert.equal(V.releasePlan({ view, already: ['a'], nowMs: 1000 }), null);
-  assert.equal(V.releasePlan({ view: { ...view, debt: true }, already: [], nowMs: 1000 }), null);
+  assert.deepEqual(V.releasePlan({ view: { ...view, debt: true }, already: [], nowMs: 1000 }).fresh, ['a']);
   const both = V.vaultView({ apps, days, todayYmd: today, points: 400, accessOpen: true, nowMs: 1000 });
   assert.equal(both.openCount, 2); assert.equal(both.points, 400);
   const held = V.vaultView({ apps: [{ id: 'a', label: 'A' }], days: daysOf({ a: 10 }), todayYmd: today, points: 200, accessOpen: true, nowMs: 1000, wait: { untilMs: 5000, text: 'wait' } });
-  assert.equal(held.openCount, 0); assert.equal(V.releasePlan({ view: held, nowMs: 1000 }), null);
+  assert.equal(held.openCount, 0, 'the between-session delay keeps the vault shut'); assert.equal(V.releasePlan({ view: held, nowMs: 1000 }), null);
 });
 t('a new lock-in session clears the old list; points still open only the apps they reach', () => {
   const same = V.vaultSessionReset({ sessionKey: '2026-11-05#0:1000', storedKey: '2026-11-05#0:1000', bought: ['a'] });
@@ -116,6 +117,7 @@ t('a new lock-in session clears the old list; points still open only the apps th
   const home = fs.readFileSync(new URL('../src/views/HomeView.vue', import.meta.url), 'utf8');
   const plug = fs.readFileSync(new URL('../ios/App/App/ClingLockPlugin.swift', import.meta.url), 'utf8');
   assert.match(home, /await relockVaultForSession\(\)/);
+  assert.doesNotMatch(home, /sessionHeld/, 'the session goal no longer zeros the bank or blocks a priced release');
   assert.match(home, /vaultSessionReset\(\{ sessionKey: vaultSessionId\(\)/);
   assert.match(plug, /sessionBegin[\s\S]{0,400}VaultAllow\.clearActive\(\)/);
 });
@@ -127,7 +129,7 @@ t('no running timer closes a live vault; a running timer opens apps the points h
   assert.equal(earned.openCount, 1); assert.equal(earned.points, 200);
   const view = V.vaultView({ apps: [{ id: 'a', label: 'A' }], days: daysOf({ a: 10 }), todayYmd: today, points: 200, accessOpen: true, windows: [{ startMs: 0, endMs: 5000 }], nowMs: 1000 });
   assert.equal(view.live, true); assert.equal(view.items[0].open, true);
-  assert.equal(V.vaultTimerPlan({ accessOpen: false, view, nativeLive: true, nowMs: 1000 }).action, 'close');
+  assert.equal(V.vaultTimerPlan({ accessOpen: false, view, nativeLive: true, nowMs: 1000 }).action, 'allow');
   assert.equal(V.vaultAccessOpen({ sessionEnded: true, focusRunning: true }), false);
   assert.equal(V.vaultAccessOpen({ focusPaused: true, sessionRunning: true }), false);
   assert.equal(V.vaultAccessOpen({ sessionRunning: true }), true);
@@ -136,7 +138,7 @@ t('no running timer closes a live vault; a running timer opens apps the points h
   const again = V.vaultTimerPlan({ accessOpen: true, view: { ...view, live: false }, nativeLive: false, nowMs: 1000 });
   assert.equal(again.action, 'allow'); assert.deepEqual(again.ids, ['a']); assert.ok(again.untilMs >= 1000 + 120000);
   const off = V.vaultView({ apps: [{ id: 'a', label: 'A' }], days: daysOf({ a: 10 }), todayYmd: today, points: 200, accessOpen: false, nowMs: 1000 });
-  assert.equal(off.items[0].open, false);
+  assert.equal(off.items[0].open, true, 'the price, not the session timer, decides the release');
   assert.equal(V.shieldBecauseTimerOff({ enabled: true, selectionCount: 2, sessionEnded: true, now: 1000 }).want, true);
   assert.equal(V.shieldBecauseTimerOff({ enabled: true, selectionCount: 2, sessionEnded: true, goalMet: true, now: 1000 }), null);
 });
@@ -348,6 +350,26 @@ t('the active session goal caps 600, and a lower next session caps again', () =>
   assert.doesNotMatch(appsVue, /a\.id \+ \(a\.open/);
   const swift = fs.readFileSync(new URL('../ios/App/Shared/LockShared.swift', import.meta.url), 'utf8');
   assert.match(swift, /next\.sort \{ \$0\.id < \$1\.id \}/);
+});
+t('each app releases at its own price, cheapest first, capped by the frozen session goal', () => {
+  const apps = [{ id: 'fb', label: 'Facebook' }, { id: 'tt', label: 'TikTok' }];
+  const days = daysOf({ fb: 30, tt: 60 });
+  assert.equal(V.priceOf(30), 90); assert.equal(V.priceOf(60), 150);
+  const below = V.vaultView({ apps, days, todayYmd: today, points: 89, priceCap: 200, nowMs: 0 });
+  assert.equal(below.items.find((a) => a.id === 'fb').open, false, 'one point under the price stays shielded');
+  const exact = V.vaultView({ apps, days, todayYmd: today, points: 90, priceCap: 200, nowMs: 0 });
+  assert.deepEqual(exact.items.filter((a) => a.open).map((a) => a.id), ['fb']);
+  assert.equal(exact.items[0].price, 90); assert.equal(exact.items[1].price, 200); assert.equal(exact.items[1].open, false);
+  const capped = V.vaultView({ apps, days, todayYmd: today, points: 99, priceCap: 100, nowMs: 0 });
+  assert.equal(capped.items.find((a) => a.id === 'tt').price, 100);
+  assert.equal(capped.items.find((a) => a.id === 'tt').open, false);
+  const atCap = V.vaultView({ apps, days, todayYmd: today, points: 100, priceCap: 100, nowMs: 0 });
+  assert.equal(atCap.items.every((a) => a.open), true);
+  const reset = V.vaultSessionReset({ sessionKey: '2026-11-10#1:1', storedKey: '2026-11-10#0:1', bought: ['fb'] });
+  assert.equal(reset.reset, true); assert.deepEqual(reset.bought, []);
+  assert.equal(V.vaultSessionReset({ sessionKey: '', storedKey: '2026-11-10#0:1', bought: ['fb'] }).reset, false);
+  const met = decideShield({ enabled: true, selectionCount: 2, running: true, endMs: 9e12, now: 1000, card: { earned: 100, required: 100, met: true } });
+  assert.equal(met.openNow, true); assert.equal(met.want, false, 'meeting the session points goal unlocks every app without waiting on a vault price');
 });
 const src = (await import('node:fs')).readFileSync(new URL('../src/utils/pointsVault.js', import.meta.url), 'utf8');
 t('no hardcoded app names in the logic', () => { assert.ok(!/pubg|instagram|youtube|tiktok/i.test(src)); });

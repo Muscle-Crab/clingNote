@@ -267,8 +267,8 @@ enum TaskAllow {
 
 /// Points vault (src/utils/pointsVault.js): apps the user opened with the day's points, for the shared app time bought with them
 /// (every 10 points = 5 min). Same shape as TaskAllow: App Group ["ids": [LabeledApp.id], "until": ms] + one DeviceActivity
-/// ("clingVault", >= 15 min window, start backdated) whose intervalDidEnd re-shields with the app closed. Never while a missed-goal
-/// hold is active (refused here and in JS). A live break already opens everything and is unaffected.
+/// ("clingVault", >= 15 min window, start backdated) whose intervalDidEnd re-shields with the app closed. A priced
+/// release stays open through a missed-goal hold; the next session's Begin clears it. A live break already opens everything.
 @available(iOS 16.0, *)
 extension DeviceActivityName { static let clingVault = Self("clingVault") }
 @available(iOS 16.0, *)
@@ -280,7 +280,7 @@ enum VaultAllow {
     }
     static func isLive(until: Double, nowMs: Double) -> Bool { until > nowMs }
     static func allowed(now: Double = Date().timeIntervalSince1970 * 1000) -> Set<ApplicationToken> {
-        guard let a = active(), isLive(until: a.until, nowMs: now), !DebtHold.isActive(nowMs: now) else { return [] }
+        guard let a = active(), isLive(until: a.until, nowMs: now) else { return [] }
         let ids = Set(a.ids)
         let tokens = AppLocks.apps().filter { ids.contains($0.id) }.map { $0.token } + VaultCatalog.apps().filter { ids.contains($0.id) }.map { $0.token }
         return Set(tokens)

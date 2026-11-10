@@ -142,7 +142,7 @@
       <section v-if="canViewSelectedDayTasks" id="home-tasks"
                class="task-section">
         <p v-if="dayLoadError" class="day-load-error" data-test="day-load-error" role="alert">{{ dayLoadError }}</p>
-        <GamePlanRow v-if="gpOn && isViewingToday" :text="gpText" :phase="gpPhase.phase" :review="gpReview"
+        <GamePlanRow v-if="isViewingToday && (gpOn || gpVault)" :coach="gpOn" :text="gpText" :phase="gpPhase.phase" :review="gpReview"
                      :locked="hardLocked || gpGate" :gate="gpGate" :friend="(gp.friend && gp.friend.name) || ''" :friend-on="gp.friendUnlock" :unlock="gpUnlock" :penalty="gpPenaltyToday" :after-close="gpEarned.afterClose"
                      :break-bank="gpBank" :break-min="gpBreakStatus.min || 10" :gift="gpGift" :history="gpHistory" :break-on="gpPhase.phase === 'break'" :screen-ready="strictReadyMin" :ready="gpReady" :vault="gpVault" :points-goal="dayRequiredPts || 0"
                      @review="gpApplyReview" @ask="gpAsk" @share="gpShare" @take-break="gpTakeBreak" @end-break="gpEndBreak" @claim-screen="claimScreenTime" @vault-start="vaultStart" @vault-stop="vaultStop" @vault-sync="syncVault" @vault-report-reload="reloadSentReport" :report-text="vaultReportText" @vault-report-save="saveVaultReportText" @vault-name-apps="nameVaultApps" />
@@ -378,7 +378,7 @@ import { homeDay } from '@/utils/homeDay';
 import DayStartPrompt from '@/components/eighthour/DayStartPrompt.vue';
 import { sessionApps } from '@/utils/sessionApps';
 import { turnOffBlocked, TURN_OFF_BLOCKED_MSG } from '@/utils/appLockDebt';
-import { vaultView, startPlan, stopWindows, unlockCelebration, freshUnlocks, focusTimerRunning, focusPaused, vaultAccessOpen, vaultTimerPlan, vaultSessionReset } from '@/utils/pointsVault';
+import { vaultView, startPlan, stopWindows, unlockCelebration, freshUnlocks, vaultTimerPlan, vaultSessionReset } from '@/utils/pointsVault';
 import { decideShield, endedGoalMet } from '@/utils/sessionShield';
 import { adoptSentReport, replaceSnapshot, readSnapshot, writeSnapshot, reportFromRecord, SENT_REPORT_ROWS, sentReport, formatOwnerReport, parseOwnerReport, applyOwnerReport } from '@/utils/usageSnapshot';
 import { prepareVaultApps } from '@/utils/vaultNames';
@@ -4369,20 +4369,9 @@ const VAULT_SEEN_KEY = 'cn.vault.celebrated.v1'; const VAULT_BOUGHT_KEY = 'cn.va
 const dayLoad = (k) => { try { const v = JSON.parse(localStorage.getItem(k) || '{}'); return v && v.day === localDateStr() ? v.list : null; } catch (e) { return null; } };
 const daySave = (k, list) => { try { localStorage.setItem(k, JSON.stringify({ day: localDateStr(), list })); } catch (e) { /* ignore */ } };
 const vaultBought = ref(dayLoad(VAULT_BOUGHT_KEY) || []);
-const vaultDebt = computed(() => turnOffBlocked({ debt: eh.appLockDebt.value, now: vaultNow.value, live: liveDebtSession() }));
-// Same day's points the home screen shows: size points in Coach, chip points otherwise. Not the session-only tally the shield uses for the goal.
+// Same day's points the home screen shows: size points in Coach, chip points otherwise. While a session gate exists, the bank is this session's points, so a new session starts the bank over.
 const dailyPoints = computed(() => (gpOn.value ? ((gpEarned.value && gpEarned.value.points) || 0) : (pointsAccumulated.value || 0)));
 const dayVaultPoints = computed(() => (sessionEarnedPts.value == null ? dailyPoints.value : sessionEarnedPts.value));
-// Session countdown or a running focus timer, plus when that window ends. Bought apps stay released until then.
-const vaultAccessState = () => {
-  const now = Date.now(); const lock = eh.lock.value; const tasks = selectedDayRoutine.value || [];
-  const sessionRunning = !!(eh.running.value && lock && lock.endMs > now);
-  const sessionEnded = eh.phase.value === 'ended' || !!(lock && !eh.running.value && now >= lock.endMs);
-  const focusRunning = focusTimerRunning(tasks, now);
-  let untilMs = sessionRunning ? Number(lock.endMs) || 0 : 0;
-  if (focusRunning) tasks.forEach((t) => { const end = new Date(t && t.timerEndTime).getTime(); if (t && t.timerActive && !t.timerPausedAt && t.completed !== true && end > untilMs) untilMs = end; });
-  return { accessOpen: vaultAccessOpen({ focusRunning, focusPaused: focusPaused(tasks), sessionRunning, sessionEnded }), untilMs };
-};
 const vaultReport = ref(null);
 try { vaultReport.value = readSnapshot(localStorage); } catch (e) { /* private mode: hydrate fills it */ }
 const vaultReportText = computed(() => formatOwnerReport(vaultReport.value));
@@ -4422,13 +4411,11 @@ const hydrateVaultReport = async () => {
   if (local && local.rows.length && (!nativeReport || (Date.parse(local.adoptedAt) || 0) >= (Date.parse(nativeReport.adoptedAt) || 0))) mirrorVaultReport(local);
   vaultReport.value = local;
 };
-const sessionPriceCap = computed(() => { const t = sessionGate.value && Number(sessionGate.value.target); return t > 0 ? t : 0; });
+const sessionPriceCap = computed(() => { const t = sessionGate.value && Number(sessionGate.value.target); if (t > 0) return t; const l = eh.lock.value; return l && Number(l.target) > 0 ? Number(l.target) : 0; });
 hydrateVaultReport();
-const gpVault = computed(() => { if (!lockAvailable() || !isViewingToday.value) return null; const gate = vaultAccessState();
-  const sessionHeld = !!(sessionGate.value && !sessionGateOpen.value);
-  const vaultPts = sessionHeld ? 0 : dayVaultPoints.value;
-  return vaultView({ apps: vaultData.value.apps || [], days: vaultData.value.days || {}, todayYmd: localDateStr(), points: vaultPts, priceCap: sessionPriceCap.value,
-    report: vaultReport.value, debt: vaultDebt.value, windows: vaultWindows.value, nowMs: vaultNow.value, wait: eh.wait && eh.wait.value, bought: vaultBought.value, accessOpen: gate.accessOpen && !sessionHeld }); });
+const gpVault = computed(() => { if (!lockAvailable() || !isViewingToday.value) return null;
+  return vaultView({ apps: vaultData.value.apps || [], days: vaultData.value.days || {}, todayYmd: localDateStr(), points: dayVaultPoints.value, priceCap: sessionPriceCap.value,
+    report: vaultReport.value, debt: false, windows: vaultWindows.value, nowMs: vaultNow.value, wait: eh.wait && eh.wait.value, bought: vaultBought.value, accessOpen: true }); });
 const vaultSessionId = () => { const l = eh.lock.value; if (!eh.running.value || !l || !l.startMs) return ''; return `${l.dayKey || ''}#${Number(l.index) || 0}:${l.startMs}`; };
 const loadVaultSession = () => { try { return localStorage.getItem(VAULT_SESSION_KEY) || ''; } catch (e) { return ''; } };
 const saveVaultSession = (k) => { try { localStorage.setItem(VAULT_SESSION_KEY, k || ''); } catch (e) { /* ignore */ } };
@@ -4454,10 +4441,10 @@ const syncVault = () => { if (syncQueued) return vaultJob; syncQueued = true; re
   }
   clingLock.startUsage().catch(() => {}); // after the catalog sync inside vaultUsage, so Screen Time pings cover the chosen apps
   const stv = await clingLock.vaultState();
-  const v = gpVault.value; const live = stv && stv.live; const gate = vaultAccessState();
-  // No running session or focus timer: take bought apps back off the shield. A running session keeps each purchase released.
-  const plan = vaultTimerPlan({ accessOpen: gate.accessOpen, view: v, nativeLive: !!live, nativeIds: (stv && stv.ids) || [], nowMs: Date.now(), liveUntil: live ? Number(stv.untilMs) || 0 : 0, accessUntil: gate.untilMs });
-  if (plan.action === 'close' || (live && v && v.debt)) {
+  const v = gpVault.value; const live = stv && stv.live;
+  // A priced app stays released after this session. The next session Begin is what takes the hole back (vaultSessionReset).
+  const plan = vaultTimerPlan({ accessOpen: true, view: v, nativeLive: !!live, nativeIds: (stv && stv.ids) || [], nowMs: Date.now(), liveUntil: live ? Number(stv.untilMs) || 0 : 0, accessUntil: Date.now() + 14 * 86400000 });
+  if (plan.action === 'close') {
     await clingLock.endVaultApps(); vaultSave(stopWindows(vaultWindows.value, Date.now())); vaultNow.value = Date.now();
   } else if (!live && v && v.live) vaultSave(stopWindows(vaultWindows.value, Date.now()));
   else if (plan.action === 'allow') {

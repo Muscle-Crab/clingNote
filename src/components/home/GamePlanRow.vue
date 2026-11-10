@@ -1,7 +1,7 @@
 <template>
   <!-- Coach game plan: ONE compact tappable row (same look as the routine row). Expands inline for the close picker, weekly review and (optional) friend unlock. -->
   <div class="gp" data-test="gp-row" :data-phase="phase">
-    <div class="gp-head">
+    <div v-if="coach" class="gp-head">
     <button type="button" class="gp-row" data-test="gp-toggle" :aria-expanded="open ? 'true' : 'false'" @click="open = !open">
       <span class="gp-title" data-test="gp-text"><span class="gp-main">{{ text }}</span><span v-if="ready" class="gp-ready" data-test="gp-ready">&nbsp;{{ ready }}</span></span>
       <span v-if="attn" class="gp-dot" data-test="gp-attn" aria-label="Needs you"></span>
@@ -11,8 +11,8 @@
     <button v-if="gift" type="button" class="gp-gift" data-test="gp-gift" :aria-label="`Take your ${Math.min(breakBank, breakMin)} minute break`" :title="`Take break (${Math.min(breakBank, breakMin)}m)`" @click.stop="$emit('take-break')">🎁</button>
     </div>
     <!-- Earned break / running break: shown on the collapsed row (no expand needed), same slim line, no box. -->
-    <p v-if="breakBank > 0 && !breakOn && phase !== 'closed'" class="gp-line gp-bline" data-test="gp-break-line">Break earned: opens your apps, never costs points. <button type="button" class="gp-chip" data-test="gp-take-break" @click="$emit('take-break')">Take break ({{ Math.min(breakBank, breakMin) }}m)</button></p>
-    <p v-if="breakOn" class="gp-line gp-bline" data-test="gp-break-on">Break running: all apps open, they lock again on their own. <button type="button" class="gp-chip" data-test="gp-end-break" @click="$emit('end-break')">End break now</button></p>
+    <p v-if="coach && breakBank > 0 && !breakOn && phase !== 'closed'" class="gp-line gp-bline" data-test="gp-break-line">Break earned: opens your apps, never costs points. <button type="button" class="gp-chip" data-test="gp-take-break" @click="$emit('take-break')">Take break ({{ Math.min(breakBank, breakMin) }}m)</button></p>
+    <p v-if="coach && breakOn" class="gp-line gp-bline" data-test="gp-break-on">Break running: all apps open, they lock again on their own. <button type="button" class="gp-chip" data-test="gp-end-break" @click="$emit('end-break')">End break now</button></p>
     <!-- Points vault: the mark is the door. The row stays the same slim line; the room inside is a shelf, not a shop table. -->
     <template v-if="vault">
       <div class="gp-head">
@@ -92,7 +92,7 @@ import VaultMark from '@/components/vault/VaultMark.vue';
 import VaultDoor from '@/components/vault/VaultDoor.vue';
 import { computed, ref, watch } from 'vue';
 const props = defineProps({
-  text: { type: String, default: '' }, phase: { type: String, default: 'work' }, review: { type: Object, default: null },
+  text: { type: String, default: '' }, phase: { type: String, default: 'work' }, review: { type: Object, default: null }, coach: { type: Boolean, default: true },
   locked: { type: Boolean, default: false },
   gate: { type: Boolean, default: false }, friend: { type: String, default: '' }, friendOn: { type: Boolean, default: false }, unlock: { type: Object, default: () => ({ status: '' }) },
   penalty: { type: Number, default: 0 }, afterClose: { type: Number, default: 0 }, minutes: { type: Array, default: () => [10, 20, 30] },

@@ -514,13 +514,13 @@ public class ClingLockPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     // ---- points vault (VaultAllow / UsageLog in Shared/LockShared.swift; logic in src/utils/pointsVault.js) ----
-    /// Opens the given labeled apps (ids) until untilMs = the shared app time bought with points. >= 15 min DeviceActivity window
-    /// (backdated start); its intervalDidEnd re-shields with the app closed. Refused while a missed-goal hold is active.
+    /// Opens the given labeled apps (ids) until untilMs. >= 15 min DeviceActivity window (backdated start); its
+    /// intervalDidEnd re-shields with the app closed. A missed-goal hold does not block this: one app can be released
+    /// at its own price before the session goal, and it stays released until the next session Begin clears it.
     @objc func allowVaultApps(_ call: CAPPluginCall) {
         guard #available(iOS 16.0, *) else { call.resolve(["allowed": 0]); return }
         let ids = (call.getArray("ids") as? [String]) ?? []; let untilMs = call.getDouble("untilMs") ?? 0
         let nowMs = Date().timeIntervalSince1970 * 1000
-        if DebtHold.isActive(nowMs: nowMs) { call.resolve(["allowed": 0, "reason": "debt"]); return }
         guard !ids.isEmpty, untilMs > nowMs + 60_000 else { call.resolve(["allowed": 0]); return }
         VaultAllow.setActive(ids, until: untilMs)
         let until = Date(timeIntervalSince1970: untilMs / 1000)
