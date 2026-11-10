@@ -80,10 +80,9 @@ await t('server: missed goal => debt hold until a LATER session meets its goal',
   clock = r.body.lock.endMs + 60000; r = await call(db, { action: 'state' }); assert.equal(r.body.appLockDebt.sessionKey, '2026-10-23#0');
   clock += 3 * H; r = await call(db, { action: 'state' }); assert.ok(r.body.appLockDebt, 'no time-based unlock');
   r = await call(db, { action: 'nextSession', hours: 5 }); const tgt = r.body.lock.target; assert.ok(r.body.appLockDebt);
-  let i = 0; while ((i + 1) * 20 < tgt) { clock += 60000; finish(db, i++); r = await call(db, { action: 'progress' }); assert.ok(r.body.appLockDebt, 'short of the goal: still held'); }
+  let i = 0; while ((i + 1) * 20 < tgt) { clock += 60000; finish(db, i++); r = await call(db, { action: 'progress' }); assert.ok(r.body.appLockDebt, 'short of the points goal: still held'); }
   clock += 60000; finish(db, i++); r = await call(db, { action: 'progress' });
-  while (i < core.TASKS_PER_SESSION) { assert.ok(r.body.appLockDebt, 'goal met but fewer than 8 tasks: still held'); clock += 60000; finish(db, i++); r = await call(db, { action: 'progress' }); }
-  assert.equal(r.body.appLockDebt, null, 'later session met goal AND 8 tasks: released');
+  assert.equal(r.body.appLockDebt, null, 'later session met its points goal: released');
 });
 
 await t('server: bad hours refused (start + nextSession)', async () => {

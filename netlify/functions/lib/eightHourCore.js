@@ -368,13 +368,14 @@ const nativeSegment = (startMs, untilMs, nowMs) => {
   return { startMs: start, endMs, last: endMs >= untilMs };
 };
 const debtActive = (d, nowMs) => { const x = normDebt(d); return !!x && nowMs < x.sinceMs + DEBT_CAP_MS; };
-// s = { startMs, target, earned }: a session started at/after the miss that has reached its goal (target > 0) pays the debt.
-const debtCleared = (d, s) => { const x = normDebt(d); return !!x && !!s && sessionMet(s) && Number(s.done) >= TASKS_PER_SESSION && Number(s.startMs) >= x.sinceMs; };
+// s = { startMs, target, earned }: a later session pays the debt when its points reach its frozen goal.
+// Task count does not matter. A session that started before the miss cannot pay it.
+const debtCleared = (d, s) => { const x = normDebt(d); return !!x && !!s && sessionMet(s) && Number(s.startMs) >= x.sinceMs; };
 // After a session settles. s = { sessionKey, startMs, endMs, target, earned, met }. No goal (target <= 0) never creates or pays a debt.
 const debtAfterSettle = (prev, s) => {
   const p = normDebt(prev);
   if (!s || !(Number(s.target) > 0)) return p;
-  if (s.met) return p && !debtCleared(p, s) ? p : null; // paying an old debt also needs TASKS_PER_SESSION tasks (debtCleared)
+  if (s.met) return p && !debtCleared(p, s) ? p : null; // points met on a later session pays it (debtCleared)
   if (p && p.sessionKey === s.sessionKey) return p; // same session settled again: unchanged
   return { sessionKey: s.sessionKey, target: Number(s.target), earned: Number(s.earned) || 0, sinceMs: Number(s.endMs) };
 };

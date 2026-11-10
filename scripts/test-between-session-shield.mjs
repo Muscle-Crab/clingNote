@@ -107,6 +107,21 @@ extension(now + 30 * 60000);
 assert.equal(d.hold.action, 'arm');
 assert.equal(shielded(), true, 'a missed session stays shielded across relaunch');
 
+// Points alone open the apps. Two finished tasks at the goal unlock immediately; eight tasks still short do not.
+const few = { dayKey: '2026-11-09', index: 0, startMs: start, endMs: end, target: 225, session: { earned: 225, target: 225, done: 2, met: true } };
+d = sync({ running: true, endMs: end, lock: few, card: { earned: 225, required: 225, met: true }, debt: { sessionKey: '2026-11-08#0', target: 100, earned: 10, sinceMs: start - H } }, start + 2 * H);
+assert.equal(d.openNow, true);
+assert.equal(d.hold.action, 'clear', 'hitting the points goal clears clingnote.debtHold.v1 immediately');
+assert.equal(shielded(), false);
+now = end + 60 * 1000;
+d = sync({ running: false, endMs: end, lock: { ...few, settled: true }, card: null, debt: null }, now);
+assert.equal(d.endedMet, true);
+assert.equal(shielded(), false, 'ending the session does not lock apps that already met the points goal');
+const shortTasks = { dayKey: '2026-11-09', index: 0, startMs: start, endMs: end, target: 225, session: { earned: 100, target: 225, done: 8, met: false } };
+d = sync({ running: true, endMs: end, lock: shortTasks, card: { earned: 100, required: 225, met: false } }, start + 3 * H);
+assert.equal(d.openNow, false);
+assert.equal(d.hold.action, 'arm', 'eight tasks below the points goal stay shielded');
+
 const home = readFileSync(new URL('../src/views/HomeView.vue', import.meta.url), 'utf8');
 assert.match(home, /decideShield\(\{/);
 assert.match(home, /endedGoalMet\(eh\.lock\.value/);
