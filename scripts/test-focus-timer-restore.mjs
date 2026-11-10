@@ -6,7 +6,7 @@ import { pausePatch } from '../src/utils/focusActions.js';
 import { focusClock, focusPhaseLabel } from '../src/utils/focusScreen.js';
 import {
   clearFocusTimer, closeFocusScreen, mergeSavedTimer, pickTimerRecord, readFocusTimer, readout, recordFromTask, remainingMs,
-  restoreFocusScreen, sessionRemainingMs, taskFromRecord, timerView, writeFocusTimer,
+  restoreFocusScreen, resumeSavedPlay, sessionRemainingMs, taskFromRecord, timerView, writeFocusTimer,
 } from '../src/utils/focusTimerStore.js';
 import { fmtRemaining, ringRemainingMs } from '../src/utils/timerRing.js';
 import { buildWidgetSnapshot } from '../src/utils/widgetSnapshot.js';
@@ -100,6 +100,39 @@ assert.equal(widget.tE, readout(revivedModel, mid).end, 'widget uses the saved e
 const live = focusActivityState(reloaded[0], { now: mid });
 assert.equal(live.endsAtMs, readout(revivedModel, mid).end, 'Live Activity uses the saved end');
 assert.equal(focusClock(reloaded[0], mid), fmtRemaining(readout(revivedModel, mid).remaining), 'Focus Mode shows the card clock');
+
+// Leave Focus Mode, then press play: the card and Focus Mode keep the same remaining time.
+const playing = { id: 't1', title: 'Read', createdAt: 'c1', timerActive: true, timerDurationMinutes: 50, timerStartedAt: new Date(start).toISOString(), timerEndTime: new Date(endMs).toISOString() };
+const leftOpen = recordFromTask(playing, { focusOpen: true, savedAt: start });
+const leftStore = memory();
+writeFocusTimer(leftStore, leftOpen);
+const closed = closeFocusScreen(leftStore);
+assert.equal(closed.focusOpen, false, 'Back only closes the screen');
+assert.equal(closed.timerEndTime, playing.timerEndTime, 'Back keeps the saved end');
+const again = resumeSavedPlay(playing, closed, mid);
+assert.ok(again, 'play reopens the started timer');
+assert.equal(again.timerEndTime, playing.timerEndTime, 'play does not write a new end');
+assert.equal(again.timerStartedAt, playing.timerStartedAt, 'play does not restart from zero');
+assert.equal(readout(again, mid).remaining, readout(playing, mid).remaining, 'card and Focus Mode keep the same remaining time');
+assert.equal(fmtRemaining(readout(again, mid).remaining), '40:00');
+assert.notEqual(readout(again, mid).remaining, 0);
+const pausedPlay = { ...playing, ...pausePatch(playing, mid) };
+const pausedAgain = resumeSavedPlay(pausedPlay, recordFromTask(pausedPlay, { focusOpen: false }), mid + 15 * M);
+assert.equal(pausedAgain.timerEndTime, pausedPlay.timerEndTime, 'play does not unpause or move the end');
+assert.equal(pausedAgain.timerPausedAt, pausedPlay.timerPausedAt);
+assert.equal(readout(pausedAgain, mid + 15 * M).remaining, 40 * M, 'play after pause keeps the frozen time');
+const upTask = { ...playing, timerEndTime: new Date(start).toISOString() };
+const up = resumeSavedPlay(upTask, null, mid);
+assert.ok(up, 'time\'s up still reopens');
+assert.equal(up.timerEndTime, upTask.timerEndTime, 'time\'s up is not replaced with a new clock');
+assert.equal(readout(up, mid).remaining, 0);
+assert.equal(resumeSavedPlay({ ...playing, completed: true }, closed, mid), null, 'Done does not bring the timer back');
+assert.equal(resumeSavedPlay({ ...playing, focusEndedEarlyAt: new Date(mid).toISOString(), timerActive: false, timerEndTime: null }, closed, mid), null, 'End session does not bring the timer back');
+const fm = fs.readFileSync(new URL('../src/components/home/FocusMode.vue', import.meta.url), 'utf8');
+const card = fs.readFileSync(new URL('../src/components/home/TaskCard.vue', import.meta.url), 'utf8');
+assert.doesNotMatch(fm, /Restart|Start again|Reset timer/);
+assert.doesNotMatch(card, /Restart|Start again|Reset timer/);
+assert.match(fs.readFileSync(new URL('../src/views/HomeView.vue', import.meta.url), 'utf8'), /resumeSavedPlay\(before0, savedFocusTimer\(\)/);
 
 const home = fs.readFileSync(new URL('../src/views/HomeView.vue', import.meta.url), 'utf8');
 const watcher = home.slice(home.indexOf('const startCountdownWatcher'), home.indexOf('onMounted(', home.indexOf('const startCountdownWatcher')));

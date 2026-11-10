@@ -266,7 +266,7 @@ import { sectionOf, sectionFromTime, sectionForCreate, isSection, mergeOrder } f
 import BackgroundLayer from '@/components/background/BackgroundLayer.vue';
 import FocusMode from '@/components/home/FocusMode.vue';
 import { readFocusMode, writeFocusModeCache, saveFocusMode, focusModeFromDoc, subscribeFocusMode } from '@/utils/focusModePref';
-import { FOCUS_TIMER_KEY, readFocusTimer, writeFocusTimer, clearFocusTimer, closeFocusScreen, recordFromTask, restoreFocusScreen, taskFromRecord, mergeSavedTimer, sameTimerTask, pickTimerRecord } from '@/utils/focusTimerStore';
+import { FOCUS_TIMER_KEY, readFocusTimer, writeFocusTimer, clearFocusTimer, closeFocusScreen, recordFromTask, restoreFocusScreen, taskFromRecord, mergeSavedTimer, sameTimerTask, pickTimerRecord, resumeSavedPlay } from '@/utils/focusTimerStore';
 import { saveUserFields } from '@/utils/userDoc';
 import HeroAmbience from '@/components/background/HeroAmbience.vue';
 import { effectiveAnim } from '@/utils/heroAmbience';
@@ -1240,6 +1240,35 @@ const startTimer = async (opts = {}) => {
   { const lk = lockedFocus(selectedDayRoutine.value || []); // auto-started focus: no other timer until it ends / is ended early
     if (lk && lk !== selectedDayRoutine.value[selectedTimerTaskIndex.value]) { showNoteToast(focusLockMessage(lk), { error: true }); selectedTimerTaskIndex.value = null; return false; }
     if (lk) { selectedTimerTaskIndex.value = null; return false; } }
+
+  const at0 = selectedTimerTaskIndex.value;
+  const before0 = selectedDayRoutine.value[at0];
+  const continued = resumeSavedPlay(before0, savedFocusTimer(), Date.now());
+  if (continued) {
+    const openFocus = !opts.lock && !!focusModeOn.value;
+    const shown = (continued.timerEndTime === before0.timerEndTime && (continued.timerPausedAt || null) === (before0.timerPausedAt || null) && continued.timerStartedAt === before0.timerStartedAt) ? before0 : continued;
+    if (shown !== before0) {
+      selectedDayRoutine.value[at0] = shown;
+      try {
+        const dayName = days[selectedDayIndex.value].day;
+        const { timerActive, timerStartedAt, timerEndTime, timerDurationMinutes, timerPausedAt, focusLock, timerPomo } = shown;
+        await commitDayTasks(userId.value, dayName, (live) => {
+          const next = patchTimerOnList(live, (t) => sameTask(t, before0), { timerActive, timerStartedAt, timerEndTime, timerDurationMinutes, timerPausedAt, focusLock, timerPomo });
+          if (!next) { const err = new Error('task missing from stored list'); err.code = 'not-found'; throw err; }
+          return next;
+        });
+      } catch (e) {
+        if (selectedDayRoutine.value[at0] === shown) selectedDayRoutine.value[at0] = before0;
+        if (!lockMessage(e)) showNoteToast(writeFailureMessage(e, before0 && before0.title, 'keep the timer for'), { error: true });
+        return false;
+      }
+    }
+    rememberTimer(shown, openFocus);
+    if (openFocus) focusScreenKey.value = taskKey(shown);
+    showTimerModal.value = false;
+    selectedTimerTaskIndex.value = null;
+    return true;
+  }
 
   const pomo = !!(opts && opts.pomo === true);
   const totalMinutes = pomo ? POMO.work :

@@ -32,6 +32,31 @@ export const sameTimerTask = (t, rec) => {
   const rc = ms(rec.createdAt);
   return !!tc && tc === rc && (t.title || '') === (rec.title || '');
 };
+// Play after the timer has started only reopens Focus Mode. It does not write a new start or end,
+// does not unpause, and does not turn time's up into a fresh clock. Done and End session clear it.
+export const resumeSavedPlay = (task, saved, now = Date.now()) => {
+  if (!task || task.completed === true || task.focusEndedEarlyAt || task.timerStoppedAt) return null;
+  const fromSaved = saved && sameTimerTask(task, saved) && saved.timerEndTime ? saved : null;
+  const src = fromSaved ? {
+    ...task,
+    timerActive: fromSaved.timerActive !== false,
+    timerStartedAt: fromSaved.timerStartedAt || task.timerStartedAt,
+    timerEndTime: fromSaved.timerEndTime,
+    timerPausedAt: fromSaved.timerPausedAt || task.timerPausedAt || null,
+    timerDurationMinutes: fromSaved.timerDurationMinutes || task.timerDurationMinutes,
+  } : task;
+  const end = ms(src.timerEndTime);
+  const paused = ms(src.timerPausedAt);
+  if (!end || (!src.timerActive && !paused)) return null;
+  return {
+    ...src,
+    timerActive: true,
+    timerStartedAt: src.timerStartedAt,
+    timerEndTime: src.timerEndTime,
+    timerPausedAt: src.timerPausedAt || null,
+    timerDurationMinutes: src.timerDurationMinutes,
+  };
+};
 // localStorage is wiped on some iOS cold launches. The native backup is the same record.
 export const pickTimerRecord = (localRaw, backupRaw) => {
   const parse = (raw) => {
