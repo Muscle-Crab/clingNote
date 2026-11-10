@@ -35,6 +35,11 @@
       </div>
     </div>
 
+    <div class="fm-tracks" data-test="focus-tracks" role="radiogroup" aria-label="Music">
+      <button type="button" class="fm-track-play" data-test="focus-track-play" :aria-pressed="musicOn ? 'true' : 'false'" @click="bg.toggle()">{{ musicOn ? 'Pause' : 'Play' }}</button>
+      <button v-for="t in TRACKS" :key="t.id" type="button" role="radio" class="fm-track" :class="{ on: bg.prefs.track === t.id }" :aria-checked="bg.prefs.track === t.id ? 'true' : 'false'" :data-test="'focus-track-' + t.id" @click="pickFocusTrack(bg, t.id)">{{ t.label }}</button>
+    </div>
+
     <div class="fm-controls">
       <button v-if="!ended" type="button" class="fm-act fm-act--pause" :data-test="paused ? 'focus-resume' : 'focus-pause'" @click="$emit(paused ? 'resume' : 'pause')">
         <svg v-if="!paused" class="fm-act-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
@@ -80,6 +85,8 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { ringDash } from '@/utils/timerRing';
 import { focusClock, focusCountdown, focusDateLabel, focusEnded, focusPhaseLabel, focusRingShown, focusSessionCard, focusSteps, focusSubtitle } from '@/utils/focusScreen';
 import { bindWallClock } from '@/utils/timerClock';
+import { useBackground } from '@/composables/useBackground';
+import { TRACKS, pickFocusTrack } from '@/utils/bgPrefs';
 import RobotAvatar from '@/components/home/RobotAvatar.vue';
 
 const props = defineProps({
@@ -108,6 +115,8 @@ const dateLabel = computed(() => focusDateLabel(new Date(now.value)));
 const subtitle = computed(() => focusSubtitle(props.task));
 const session = computed(() => focusSessionCard(props.task, { now: now.value, coach: props.coach }));
 const steps = computed(() => focusSteps(props.task));
+const bg = useBackground();
+const musicOn = computed(() => bg.playing.value);
 const dash = computed(() => ringDash(focusRingShown(props.task, now.value), 124));
 </script>
 
@@ -144,6 +153,11 @@ const dash = computed(() => ringDash(focusRingShown(props.task, now.value), 124)
 .fm-badge svg, .fm-card-ico svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .fm-task h2 { margin: 0; font: 800 22px/1.15 Inter, sans-serif; overflow-wrap: anywhere; }
 .fm-task p { margin: 4px 0 0; color: #a9b8d4; font: 500 14px/1.3 Inter, sans-serif; overflow-wrap: anywhere; }
+.fm-tracks { display: flex; gap: 8px; overflow-x: auto; margin: 0 0 14px; padding-bottom: 2px; scrollbar-width: none; }
+.fm-tracks::-webkit-scrollbar { display: none; }
+.fm-track, .fm-track-play { flex: 0 0 auto; min-height: 36px; padding: 0 12px; border-radius: 999px; border: 1px solid rgba(140, 190, 255, .35); background: rgba(12, 24, 52, .72); color: #d5e4ff; font: 700 13px/1 Inter, sans-serif; }
+.fm-track.on { border-color: #3d8bff; background: rgba(30, 70, 150, .85); color: #fff; }
+.fm-track-play { background: #d7e8ff; color: #1d4ed8; border-color: transparent; }
 .fm-controls { display: flex; align-items: stretch; gap: 12px; margin-bottom: 18px; }
 .fm-act { flex: 1 1 0; min-width: 0; height: 64px; border: 0; border-radius: 999px; font: 800 20px/1 Inter, sans-serif; display: inline-flex; align-items: center; justify-content: center; gap: 10px; }
 .fm-act-ico { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
