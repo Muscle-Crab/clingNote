@@ -6,7 +6,7 @@
 //    There is deliberately NO device TTS / speechSynthesis fallback (that was the robotic default voice).
 // iOS WKWebView needs a user gesture before audio: unlock() on the first tap primes ONE shared <audio> element,
 // after which later src swaps can play without a fresh gesture. Mute is remembered in localStorage ("Robot voice" setting).
-import { ensureAmbient, musicPlaying } from '../utils/audioSession.js';
+import { audioRestored, ensureAmbient, musicPlaying } from '../utils/audioSession.js';
 import { ref } from 'vue';
 import { SCRIPTS } from '@/voiceover/scripts';
 import { PHRASE_KEYS, phraseKey, liveChunks, MAX_LIVE_CHARS } from '@/voiceover/phrases';
@@ -35,7 +35,7 @@ export const RELEASE_DELAY_MS = 700;
 export function releaseMedia() {
   const a = audio;
   if (a) { try { a.onplaying = null; a.onended = null; a.onerror = null; a.pause(); a.removeAttribute('src'); a.load(); } catch (e) { /* ignore */ } }
-  if (musicHolds()) return; // focus music owns the widget (title ClingNote / Focus music); leave it and the session alone
+  if (musicHolds() || musicPlaying()) { audioRestored('voice'); return; } // the MP3 ducked Web Audio; resume that context, leave the session up
   try { const ms = typeof navigator !== 'undefined' && navigator.mediaSession; if (ms) { ms.metadata = null; ms.playbackState = 'none'; } } catch (e) { /* ignore */ }
   if (releaseTimer) clearTimeout(releaseTimer);
   const my = token;

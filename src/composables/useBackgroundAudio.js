@@ -1,6 +1,6 @@
 // Procedural background music (no audio files, nothing copyrighted): everything is synthesized with the Web Audio API.
 // Audio only starts from a user tap (createEngine().start() is called from a click handler) and stops cleanly (fade out, timers cleared, context closed).
-import { setMusicPlaying } from '../utils/audioSession.js';
+import { markMusicAudible, setMusicPlaying, sharedAudioContext } from '../utils/audioSession.js';
 const MIDI = (n) => 440 * Math.pow(2, (n - 69) / 12);
 const CHORDS = {
   lofi: [[60, 64, 67, 71], [57, 60, 64, 67], [53, 57, 60, 64], [55, 59, 62, 65]], // Cmaj7 Am7 Fmaj7 G7
@@ -148,12 +148,15 @@ export const createEngine = () => {
       track = norm(id || track); volume = vol ?? volume; gen += 1;
       const keep = !!(opts && opts.keepStep) && step > 0;
       if (needsNewContext(ctx && ctx.state)) {
-        if (ctx) { const old = ctx; teardownBeds(); try { old.close(); } catch (e) { /* gone */ } }
-        ctx = new AC(); master = ctx.createGain(); master.gain.value = 0; analyser = ctx.createAnalyser(); analyser.fftSize = 512;
+        teardownBeds();
+        ctx = sharedAudioContext({ fresh: true });
+        if (!ctx) return Promise.resolve();
+        master = ctx.createGain(); master.gain.value = 0; analyser = ctx.createAnalyser(); analyser.fftSize = 512;
         master.connect(analyser); analyser.connect(ctx.destination);
         const mine = ctx; ctx.onstatechange = () => { if (ctx === mine && onState) onState(mine.state); };
       }
       let p = null; try { p = ctx.state !== 'running' ? ctx.resume() : null; } catch (e) { /* old Safari: no promise */ }
+      markMusicAudible(true);
       try { const b = ctx.createBufferSource(); b.buffer = ctx.createBuffer(1, 1, 22050); b.connect(ctx.destination); b.start(0); } catch (e) { /* iOS unlock blip */ }
       playing = true; begin(keep); clearInterval(timer); timer = setInterval(schedule, 250);
       master.gain.cancelScheduledValues(ctx.currentTime); master.gain.setValueAtTime(master.gain.value, ctx.currentTime); master.gain.linearRampToValueAtTime(volume * 0.9, ctx.currentTime + 0.6);
@@ -184,6 +187,7 @@ export const createEngine = () => {
     // Fade out, clear timers, free the audio context
     // Fade out, clear timers, free the audio context. A start() during the fade wins (generation check), so play-right-after-pause works.
     async stop() {
+      markMusicAudible(false);
       setMusicPlaying(false);
       playing = false; step = 0; clearInterval(timer); timer = 0;
       if (!ctx) return;
