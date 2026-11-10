@@ -2,7 +2,7 @@
 import { reactive, ref, watch, computed } from 'vue';
 import { msUntilNextPeriod } from '@/utils/daytimeBg';
 import { refreshOtherAudio, otherAudioBusy, setMusicContext, prepareForegroundPlayback } from '@/utils/audioSession';
-import { foregroundPlan } from '@/utils/musicResume';
+import { foregroundPlan, shouldRebuild } from '@/utils/musicResume';
 import { loadPrefs, savePrefs, sanitize, DEFAULTS, loadCustomImage, saveCustomImage, clearCustomImage, effectiveImage, TRACKS, pickNextTrack, tapAction, restoreFromBackup, KEY } from '@/utils/bgPrefs';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import { applyBackgroundImage, fileToBackgroundDataUrl } from '@/utils/bgImage';
@@ -65,7 +65,7 @@ if (typeof window !== 'undefined') {
 
 // A blip (confirm dialog, notification schedule, a sound effect) suspends the AudioContext. That is not a user pause.
 // Do not pause the Now Playing anchor here: pausing it deactivates the iOS session and the music stays silent.
-let resumeAt = 0; let resumeFlight = null; let resumedAt = 0;
+let resumeAt = 0; let resumeFlight = null; let resumedAt = 0; let heardState = 'none';
 const syncReal = () => {
   if (!prefs.musicOn) return;
   if (engine && engine.playing && engine.state === 'running') return;
@@ -74,7 +74,8 @@ const syncReal = () => {
   resumeAfterInterruption();
 };
 const onCtxState = (st) => {
-  if (st === 'running') { if (prefs.musicOn && engine && engine.playing && !playing.value) { playing.value = true; npStart(trackName(), lockHandlers()); armRotate(); } return; }
+  const prev = heardState; heardState = st || 'none';
+  if (st === 'running') { if (prefs.musicOn && engine && engine.playing && !playing.value) { playing.value = true; npStart(trackName(), lockHandlers()); armRotate(); } if (shouldRebuild(prev, st) && engine && engine.rebuild) engine.rebuild(); return; }
   setTimeout(syncReal, 400);
 };
 // Only the music's own pause button (or lock-screen pause) stops it. Anything else that took the audio (dictation, TTS,
@@ -153,10 +154,11 @@ const api = {
     const finish = (how) => { resumeFlight = null; return how; };
     resumeFlight = prepareForegroundPlayback().catch(() => false).then(() => {
       const plan = foregroundPlan({ musicOn: true, state: engine ? engine.state : 'none' });
-      if (plan === 'gesture' || !engine) { playing.value = false; stopRotate(); refreshOtherAudio().then((busy) => { if (!busy) armTap(); }); return finish('needs-tap'); }
-      const waited = plan === 'rebuild' ? Promise.resolve('running') : Promise.race([engine.resume(), new Promise((r) => setTimeout(() => r('timeout'), 1200))]);
+      if (plan === 'gesture' || !engine) { refreshOtherAudio().then((busy) => { if (!busy) armTap(); }); return finish('needs-tap'); }
+      if (plan === 'keep') { resumedAt = Date.now(); return finish('playing'); }
+      const waited = Promise.race([engine.resume(), new Promise((r) => setTimeout(() => r('timeout'), 1200))]);
       return waited.then(() => {
-        if (!(engine && engine.state === 'running')) { playing.value = false; stopRotate(); refreshOtherAudio().then((busy) => { if (!busy) armTap(); }); return finish('needs-tap'); }
+        if (!(engine && engine.state === 'running')) { refreshOtherAudio().then((busy) => { if (!busy) armTap(); }); return finish('needs-tap'); }
         engine.rebuild(); playing.value = true; resumedAt = Date.now(); npStart(trackName(), lockHandlers()); armRotate(); return finish('playing');
       });
     });

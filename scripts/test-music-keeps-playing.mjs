@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import * as A from '../src/utils/audioSession.js';
-import { foregroundPlan } from '../src/utils/musicResume.js';
+import { foregroundPlan, shouldRebuild } from '../src/utils/musicResume.js';
 
 const read = (p) => fs.readFileSync(new URL(p, import.meta.url), 'utf8');
 const plugin = {
@@ -55,5 +55,53 @@ assert.match(bg, /addEventListener\('cn:audio-restored'/);
 assert.equal(foregroundPlan({ musicOn: true, state: 'interrupted' }), 'resume', 'dictation ends by resuming the same context');
 assert.equal(foregroundPlan({ musicOn: false, state: 'interrupted' }), 'idle');
 assert.doesNotMatch(read('../ios/App/App/Info.plist'), /<string>audio<\/string>/, 'no background audio mode');
+
+function audioParam() {
+  const p = { value: 0, setValueAtTime(v) { p.value = v; }, exponentialRampToValueAtTime(v) { p.value = v; }, linearRampToValueAtTime(v) { p.value = v; }, cancelScheduledValues() {} };
+  return p;
+}
+function audioNode() {
+  return { connect() { return this; }, disconnect() {}, start() {}, stop() {}, frequency: audioParam(), detune: audioParam(), gain: audioParam(), Q: audioParam(), type: '', buffer: null, loop: false, fftSize: 0, getByteTimeDomainData(a) { if (a) a.fill(128); } };
+}
+class FakeAudioContext {
+  constructor() { FakeAudioContext.made += 1; this.state = 'suspended'; this.currentTime = 1; this.sampleRate = 8000; this.destination = audioNode(); this.onstatechange = null; }
+  resume() { this.state = 'running'; this.resumes = (this.resumes || 0) + 1; if (this.onstatechange) this.onstatechange(); return Promise.resolve(); }
+  suspend() { this.state = 'suspended'; FakeAudioContext.suspends += 1; return Promise.resolve(); }
+  close() { this.state = 'closed'; FakeAudioContext.closes += 1; return Promise.resolve(); }
+  createGain() { FakeAudioContext.gains += 1; const n = audioNode(); if (!FakeAudioContext.master) FakeAudioContext.master = n; return n; }
+  createOscillator() { FakeAudioContext.osc += 1; return audioNode(); }
+  createBiquadFilter() { return audioNode(); }
+  createAnalyser() { return audioNode(); }
+  createBufferSource() { return audioNode(); }
+  createBuffer() { return { getChannelData: () => new Float32Array(16) }; }
+}
+FakeAudioContext.made = 0; FakeAudioContext.closes = 0; FakeAudioContext.suspends = 0; FakeAudioContext.osc = 0; FakeAudioContext.gains = 0; FakeAudioContext.master = null;
+window.AudioContext = FakeAudioContext;
+const { createEngine } = await import('../src/composables/useBackgroundAudio.js');
+const player = createEngine();
+await player.start('lofi', 0.5);
+assert.equal(player.state, 'running', 'Play resumes the audio context');
+assert.ok(FakeAudioContext.osc > 0, 'Play schedules audible notes');
+assert.equal(FakeAudioContext.closes, 0, 'Play does not close the context');
+assert.equal(FakeAudioContext.made, 1, 'Play uses one context');
+const firstCtx = FakeAudioContext.made;
+await player.stop();
+assert.equal(FakeAudioContext.closes, 0, 'pause keeps the context so the next Play can resume it');
+await player.start('fireside', 0.5);
+assert.equal(FakeAudioContext.made, firstCtx, 'the next Play reuses the same context');
+assert.equal(player.state, 'running');
+assert.ok(player.context.resumes >= 2, 'the second Play resumes audio inside the tap');
+player.setVolume(1);
+assert.equal(FakeAudioContext.master.gain.value, 0.9, 'dragging the slider sets the live gain');
+const before = FakeAudioContext.osc;
+player.crossfadeTo('night', 0.05);
+await new Promise((r) => setTimeout(r, 80));
+assert.ok(FakeAudioContext.osc > before, 'a crossfade keeps scheduling notes');
+assert.equal(FakeAudioContext.master.gain.value, 0.9, 'a crossfade does not leave the gain at silence');
+assert.equal(shouldRebuild('interrupted', 'running'), true);
+assert.equal(shouldRebuild('running', 'running'), false, 'a running blip does not restart the graph');
+assert.equal(foregroundPlan({ musicOn: true, state: 'running' }), 'keep');
+assert.equal(foregroundPlan({ musicOn: true, state: 'interrupted' }), 'resume');
+await player.stop();
 
 console.log('music keeps playing: sounds, notifications, first tap, dictation');

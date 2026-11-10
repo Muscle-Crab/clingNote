@@ -15,8 +15,9 @@ const CHORDS = {
 };
 
 // Extra lo-fi styles, all procedural (original, no samples): chord set, tempo, drums, timbre and ambience bed.
-// A context we can't reuse: none yet, closed, or iOS 'interrupted' (resume() often never settles there).
-export const needsNewContext = (state) => !state || state === 'closed' || state === 'interrupted';
+// Reuse a suspended or interrupted context and resume() it inside the Play tap.
+// Closing it and constructing another one in the same turn leaves iOS silent.
+export const needsNewContext = (state) => !state || state === 'closed';
 
 export const STYLES = {
   'lofi-rain': { chords: 'night', bpm: 66, drums: true, comp: false, wave: 'triangle', cut: 1300, mel: 0.3, bed: 'rain' },
@@ -135,6 +136,16 @@ export const createEngine = () => {
   const norm = (id) => (id === 'lofi-night' ? 'night' : id);
 
   const begin = (keepStep = false) => { teardownBeds(); if (!keepStep) step = 0; nextTime = ctx.currentTime + 0.08; nextCrackle = ctx.currentTime + 0.05; buildBeds(); schedule(); };
+  // The audible level, written at the audio clock's "now". A ramp scheduled before an interruption
+  // is already in the past, so the value itself has to be set or the fade stays at silence.
+  const punchGain = () => {
+    if (!ctx || !master) return 0;
+    const target = Math.max(0, Math.min(1, Number(volume) || 0)) * 0.9;
+    const t = ctx.currentTime;
+    master.gain.cancelScheduledValues(t);
+    master.gain.setValueAtTime(target, t);
+    return target;
+  };
 
   return {
     get playing() { return playing; },
@@ -144,21 +155,26 @@ export const createEngine = () => {
     // Must be called from a user gesture (tap/click). Everything up to ctx.resume() runs synchronously so iOS
     // still sees the gesture (an await before resume() loses it). A closed/'interrupted' (iOS: call, Siri, other app) context is replaced.
     start(id, vol, opts = {}) {
-      setMusicPlaying(true);
       track = norm(id || track); volume = vol ?? volume; gen += 1;
       const keep = !!(opts && opts.keepStep) && step > 0;
       if (needsNewContext(ctx && ctx.state)) {
         teardownBeds();
-        ctx = sharedAudioContext({ fresh: true });
+        ctx = sharedAudioContext();
         if (!ctx) return Promise.resolve();
         master = ctx.createGain(); master.gain.value = 0; analyser = ctx.createAnalyser(); analyser.fftSize = 512;
         master.connect(analyser); analyser.connect(ctx.destination);
-        const mine = ctx; ctx.onstatechange = () => { if (ctx === mine && onState) onState(mine.state); };
+        const mine = ctx;
+        ctx.onstatechange = () => { if (ctx === mine && onState) onState(mine.state); };
       }
+      setMusicPlaying(true);
+      playing = true;
       let p = null; try { p = ctx.state !== 'running' ? ctx.resume() : null; } catch (e) { /* old Safari: no promise */ }
       markMusicAudible(true);
       try { const b = ctx.createBufferSource(); b.buffer = ctx.createBuffer(1, 1, 22050); b.connect(ctx.destination); b.start(0); } catch (e) { /* iOS unlock blip */ }
-      playing = true; begin(keep); clearInterval(timer); timer = setInterval(schedule, 250);
+      const arm = () => { if (playing && ctx && ctx.state === 'running') begin(keep); };
+      if (ctx.state === 'running') arm();
+      else if (p && p.then) p.then(arm);
+      clearInterval(timer); timer = setInterval(schedule, 250);
       master.gain.cancelScheduledValues(ctx.currentTime); master.gain.setValueAtTime(master.gain.value, ctx.currentTime); master.gain.linearRampToValueAtTime(volume * 0.9, ctx.currentTime + 0.6);
       return Promise.resolve(p).catch(() => {});
     },
@@ -169,21 +185,26 @@ export const createEngine = () => {
     // Queue audible notes onto the audio clock before iOS freezes timers. No silent node is added.
     queueAhead(seconds = 90) { if (!playing || !ctx) return 0; const cap = Math.min(180, Math.max(1, Number(seconds) || 90)); schedule(cap); return cap; },
     // iOS drops the looping beds while the context is backgrounded. Rebuild them and keep the step.
-    rebuild() { if (!ctx || ctx.state !== 'running' || !playing) return false; begin(step > 0); if (!timer) timer = setInterval(schedule, 250); return true; },
+    rebuild() { if (!ctx || ctx.state !== 'running' || !playing) return false; begin(step > 0); punchGain(); if (!timer) timer = setInterval(schedule, 250); return true; },
     set onStateChange(fn) { onState = fn; },
-    setTrack(id) { track = norm(id); if (playing && ctx) begin(); },
-    // Smooth change (auto-rotate): fade the mix down, swap the track at the bottom, fade back up to the saved volume. ~2.4s total.
+    setTrack(id) { track = norm(id); if (playing && ctx) { begin(true); punchGain(); } },
+    // Smooth change (auto-rotate): fade the mix down, swap the track, then put the gain back.
+    // The end level is set directly so a clock jump cannot leave the fade parked at silence.
     crossfadeTo(id, secs = 2.4) {
       if (!playing || !ctx) { track = norm(id); return; }
-      const half = secs / 2; const t0 = ctx.currentTime; const my = gen;
+      const half = secs / 2; const t0 = ctx.currentTime; const my = gen; const target = Math.max(0, Math.min(1, Number(volume) || 0)) * 0.9;
       master.gain.cancelScheduledValues(t0); master.gain.setValueAtTime(master.gain.value, t0); master.gain.linearRampToValueAtTime(0.0001, t0 + half);
       setTimeout(() => {
         if (!playing || !ctx || gen !== my) return; // paused/restarted meanwhile: that action wins
-        track = norm(id); begin(); const t1 = ctx.currentTime;
-        master.gain.cancelScheduledValues(t1); master.gain.setValueAtTime(0.0001, t1); master.gain.linearRampToValueAtTime(volume * 0.9, t1 + half);
+        track = norm(id); begin(true);
+        const t1 = ctx.currentTime;
+        master.gain.cancelScheduledValues(t1);
+        master.gain.setValueAtTime(0.0001, t1);
+        master.gain.linearRampToValueAtTime(target, t1 + half);
+        master.gain.setValueAtTime(target, t1);
       }, half * 1000);
     },
-    setVolume(v) { volume = Math.max(0, Math.min(1, Number(v) || 0)); if (ctx && master) { const t = ctx.currentTime; master.gain.cancelScheduledValues(t); master.gain.setValueAtTime(volume * 0.9, t); } },
+    setVolume(v) { volume = Math.max(0, Math.min(1, Number(v) || 0)); return punchGain(); },
     // Fade out, clear timers, free the audio context
     // Fade out, clear timers, free the audio context. A start() during the fade wins (generation check), so play-right-after-pause works.
     async stop() {
@@ -194,9 +215,9 @@ export const createEngine = () => {
       const c = ctx; const m = master; const my = ++gen;
       try { m.gain.cancelScheduledValues(c.currentTime); m.gain.setValueAtTime(m.gain.value, c.currentTime); m.gain.linearRampToValueAtTime(0.0001, c.currentTime + 0.25); } catch (e) { /* closed */ }
       await new Promise((r) => setTimeout(r, 300));
-      if (gen !== my || ctx !== c) return; // restarted meanwhile
-      teardownBeds(); ctx = null; master = null; analyser = null;
-      try { await c.close(); } catch (e) { /* already closed */ }
+      if (gen !== my) return; // restarted meanwhile: that play() owns this context
+      teardownBeds();
+      try { await c.suspend(); } catch (e) { /* already stopped */ }
     },
     // 0..1 loudness of what is actually being output (used for the "is it making sound" check)
     level() { if (!analyser) return 0; analyser.getByteTimeDomainData(data); let s = 0; for (let i = 0; i < data.length; i++) { const v = (data[i] - 128) / 128; s += v * v; } return Math.sqrt(s / data.length); },

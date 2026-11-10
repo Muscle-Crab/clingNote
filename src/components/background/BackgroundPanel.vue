@@ -42,7 +42,7 @@
         <div class="bgp-play">
           <button type="button" class="bgp-playbtn" data-test="bg-play" :disabled="!bg.audioSupported" @click="bg.toggle()">{{ bg.playing.value ? '⏸ Pause music' : '▶ Play music' }}</button>
           <label class="bgp-vol">🔈
-            <span class="bgp-vol-hit" data-test="bg-volume-hit" @pointerdown="volDown" @pointermove="volMove" @pointerup="volUp" @pointercancel="volUp" @lostpointercapture="volUp" @wheel.prevent="volWheel">
+            <span class="bgp-vol-hit" data-test="bg-volume-hit" @pointerdown="volDown" @touchstart="volDown" @pointermove="volMove" @wheel.prevent="volWheel">
               <input type="range" min="0" max="1" step="0.05" :value="bg.prefs.volume" aria-label="Volume" data-test="bg-volume" @input="bg.setVolume($event.target.value)" />
             </span>
           </label>
@@ -97,17 +97,37 @@ onBeforeUnmount(() => clearInterval(iv));
 // The tall track captures the pointer (finger, pen, or mouse) so the drag keeps setting the gain.
 import { volumeFromX, nudgeVolume } from '@/utils/bgPrefs';
 let volDragging = false;
-const volAt = (e) => bg.setVolume(volumeFromX(e.clientX, e.currentTarget.getBoundingClientRect()));
+let volEl = null;
+const pointX = (e) => (e.touches && e.touches[0] ? e.touches[0].clientX : e.clientX);
+const volAt = (e) => { const x = pointX(e); if (x == null || !volEl) return; bg.setVolume(volumeFromX(x, volEl.getBoundingClientRect())); };
+const endDrag = () => {
+  volDragging = false;
+  window.removeEventListener('pointermove', onWinMove);
+  window.removeEventListener('pointerup', endDrag);
+  window.removeEventListener('pointercancel', endDrag);
+  window.removeEventListener('touchmove', onWinTouch);
+  window.removeEventListener('touchend', endDrag);
+  window.removeEventListener('touchcancel', endDrag);
+};
+const onWinMove = (e) => { if (!volDragging) return; e.preventDefault(); volAt(e); };
+const onWinTouch = (e) => { if (!volDragging) return; e.preventDefault(); volAt(e); };
 const volDown = (e) => {
+  if (volDragging) return;
   if (e.button != null && e.button !== 0) return;
   volDragging = true;
-  e.currentTarget.setPointerCapture?.(e.pointerId);
-  e.preventDefault();
+  volEl = e.currentTarget;
+  try { if (e.pointerId != null) e.currentTarget.setPointerCapture(e.pointerId); } catch (err) { /* the window listeners still follow the finger */ }
+  window.addEventListener('pointermove', onWinMove, { passive: false });
+  window.addEventListener('pointerup', endDrag);
+  window.addEventListener('pointercancel', endDrag);
+  window.addEventListener('touchmove', onWinTouch, { passive: false });
+  window.addEventListener('touchend', endDrag);
+  window.addEventListener('touchcancel', endDrag);
   volAt(e);
 };
-const volMove = (e) => { if (!volDragging) return; e.preventDefault(); volAt(e); };
-const volUp = (e) => { volDragging = false; try { e.currentTarget.releasePointerCapture?.(e.pointerId); } catch (err) { /* already released */ } };
+const volMove = (e) => { if (!volDragging) return; onWinMove(e); };
 const volWheel = (e) => bg.setVolume(nudgeVolume(bg.prefs.volume, e.deltaY || -e.deltaX));
+onBeforeUnmount(endDrag);
 </script>
 
 <style>

@@ -47,11 +47,11 @@ export const musicPlaying = () => music;
 // context cannot suspend the music (iOS does that on every new AudioContext).
 let musicCtx = () => null;
 export const setMusicContext = (fn) => { musicCtx = typeof fn === 'function' ? fn : () => null; };
-// One AudioContext for the whole app. A second one suspends the music context on iOS.
-export const sharedAudioContext = ({ fresh = false } = {}) => {
+// One AudioContext for the whole app. Never close a live one to replace it: on iOS the
+// replacement stays suspended and Play produces silence. Resume the same context from the tap.
+export const sharedAudioContext = () => {
   try {
-    if (!fresh && sharedCtx && sharedCtx.state !== 'closed' && sharedCtx.state !== 'interrupted') return sharedCtx;
-    if (sharedCtx && sharedCtx.state !== 'closed') { try { sharedCtx.close(); } catch (e) { /* gone */ } }
+    if (sharedCtx && sharedCtx.state !== 'closed') return sharedCtx;
     const AC = typeof window !== 'undefined' && (window.AudioContext || window.webkitAudioContext);
     if (!AC) return null;
     sharedCtx = new AC();
