@@ -38,41 +38,53 @@ const noiseBuffer = (ctx, seconds, kind = 'white') => {
 export const createEngine = () => {
   const AC = typeof window !== 'undefined' && (window.AudioContext || window.webkitAudioContext);
   if (!AC) return null;
-  let ctx = null; let master = null; let analyser = null; let timer = 0; let nodes = []; let track = 'lofi'; let volume = 0.5; let playing = false;
-  let nextTime = 0; let step = 0; let nextCrackle = 0; let gen = 0; let onState = null;
+  let ctx = null; let master = null; let analyser = null; let timer = 0; let live = []; let track = 'lofi'; let volume = 0.5; let playing = false;
+  let nextTime = 0; let step = 0; let nextCrackle = 0; let gen = 0; let fadeTimer = 0; let onState = null;
   const data = new Uint8Array(256);
 
-  const track$ = (n) => { nodes.push(n); return n; };
+  // Every oscillator and buffer source for the current track. A later track must stop these
+  // before it starts, or the already-scheduled notes keep sounding over the new one.
+  const hold = (n) => { if (n) { try { n.__gen = gen; n.__track = track; } catch (e) { /* sealed node */ } live.push(n); } return n; };
+  const halt = () => {
+    const batch = live; live = [];
+    for (const n of batch) {
+      try { if (typeof n.stop === 'function') n.stop(0); } catch (e) { /* already stopped */ }
+      try { if (typeof n.disconnect === 'function') n.disconnect(); } catch (e) { /* gone */ }
+      try { if (n && n.buffer) n.buffer = null; } catch (e) { /* released */ }
+      try { if (n && typeof n.src === 'string') n.src = ''; } catch (e) { /* no element */ }
+    }
+  };
+  const cancelFade = () => { if (fadeTimer) { clearTimeout(fadeTimer); fadeTimer = 0; } };
   const env = (g, t, a, peak, d) => { g.gain.cancelScheduledValues(t); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak), t + a); g.gain.exponentialRampToValueAtTime(0.0001, t + a + d); };
 
   const note = (freq, t, dur, peak, type = 'triangle', cutoff = 1800) => {
-    const o = ctx.createOscillator(); const o2 = ctx.createOscillator(); const g = ctx.createGain(); const f = ctx.createBiquadFilter();
+    const o = hold(ctx.createOscillator()); const o2 = hold(ctx.createOscillator()); const g = hold(ctx.createGain()); const f = hold(ctx.createBiquadFilter());
     o.type = type; o2.type = 'sine'; o.frequency.value = freq; o2.frequency.value = freq * 2; o.detune.value = (Math.random() - 0.5) * 12;
     f.type = 'lowpass'; f.frequency.value = cutoff; g.gain.value = 0;
-    const g2 = ctx.createGain(); g2.gain.value = 0.18; o2.connect(g2); g2.connect(f); o.connect(f); f.connect(g); g.connect(master);
+    const g2 = hold(ctx.createGain()); g2.gain.value = 0.18; o2.connect(g2); g2.connect(f); o.connect(f); f.connect(g); g.connect(master);
     env(g, t, 0.02, peak, dur); o.start(t); o2.start(t); o.stop(t + dur + 0.1); o2.stop(t + dur + 0.1);
   };
   const pad = (freq, t, dur, peak) => {
-    const g = ctx.createGain(); const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 700; g.gain.value = 0.0001;
-    [-7, 0, 7].forEach((c) => { const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = freq; o.detune.value = c; o.connect(f); o.start(t); o.stop(t + dur + 0.2); });
+    const g = hold(ctx.createGain()); const f = hold(ctx.createBiquadFilter()); f.type = 'lowpass'; f.frequency.value = 700; g.gain.value = 0.0001;
+    [-7, 0, 7].forEach((c) => { const o = hold(ctx.createOscillator()); o.type = 'sawtooth'; o.frequency.value = freq; o.detune.value = c; o.connect(f); o.start(t); o.stop(t + dur + 0.2); });
     f.connect(g); g.connect(master);
     g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(peak, t + dur * 0.4); g.gain.linearRampToValueAtTime(0.0001, t + dur);
   };
   const burst = (t, dur, peak, hp, lp, kind = 'white') => {
-    const s = ctx.createBufferSource(); s.buffer = noiseBuffer(ctx, Math.max(0.05, dur + 0.05), kind); const g = ctx.createGain(); g.gain.value = 0.0001;
-    const f1 = ctx.createBiquadFilter(); f1.type = 'highpass'; f1.frequency.value = hp; const f2 = ctx.createBiquadFilter(); f2.type = 'lowpass'; f2.frequency.value = lp;
+    const s = hold(ctx.createBufferSource()); s.buffer = noiseBuffer(ctx, Math.max(0.05, dur + 0.05), kind); const g = hold(ctx.createGain()); g.gain.value = 0.0001;
+    const f1 = hold(ctx.createBiquadFilter()); f1.type = 'highpass'; f1.frequency.value = hp; const f2 = hold(ctx.createBiquadFilter()); f2.type = 'lowpass'; f2.frequency.value = lp;
     s.connect(f1); f1.connect(f2); f2.connect(g); g.connect(master); env(g, t, 0.003, peak, dur); s.start(t); s.stop(t + dur + 0.06);
   };
-  const kick = (t) => { const o = ctx.createOscillator(); const g = ctx.createGain(); o.frequency.setValueAtTime(130, t); o.frequency.exponentialRampToValueAtTime(42, t + 0.14); g.gain.value = 0.0001; o.connect(g); g.connect(master); env(g, t, 0.004, 0.55, 0.22); o.start(t); o.stop(t + 0.3); };
+  const kick = (t) => { const o = hold(ctx.createOscillator()); const g = hold(ctx.createGain()); o.frequency.setValueAtTime(130, t); o.frequency.exponentialRampToValueAtTime(42, t + 0.14); g.gain.value = 0.0001; o.connect(g); g.connect(master); env(g, t, 0.004, 0.55, 0.22); o.start(t); o.stop(t + 0.3); };
 
   const vinyl = () => { // continuous dust bed
-    const s = track$(ctx.createBufferSource()); s.buffer = noiseBuffer(ctx, 3, 'white'); s.loop = true;
-    const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 3200; f.Q.value = 0.6; const g = ctx.createGain(); g.gain.value = 0.012;
+    const s = hold(ctx.createBufferSource()); s.buffer = noiseBuffer(ctx, 3, 'white'); s.loop = true;
+    const f = hold(ctx.createBiquadFilter()); f.type = 'bandpass'; f.frequency.value = 3200; f.Q.value = 0.6; const g = hold(ctx.createGain()); g.gain.value = 0.012;
     s.connect(f); f.connect(g); g.connect(master); s.start();
   };
   const rumble = (gainV) => { // low fire/air bed
-    const s = track$(ctx.createBufferSource()); s.buffer = noiseBuffer(ctx, 4, 'brown'); s.loop = true;
-    const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 420; const g = ctx.createGain(); g.gain.value = gainV;
+    const s = hold(ctx.createBufferSource()); s.buffer = noiseBuffer(ctx, 4, 'brown'); s.loop = true;
+    const f = hold(ctx.createBiquadFilter()); f.type = 'lowpass'; f.frequency.value = 420; const g = hold(ctx.createGain()); g.gain.value = gainV;
     s.connect(f); f.connect(g); g.connect(master); s.start();
   };
   const crackles = (until) => { // random pops
@@ -128,14 +140,13 @@ export const createEngine = () => {
     if (track === 'fireside') rumble(0.28);
     const st = STYLES[track];
     if (st && st.bed === 'vinyl') vinyl();
-    if (st && st.bed === 'rain') { const r = track$(ctx.createBufferSource()); r.buffer = noiseBuffer(ctx, 3, 'white'); r.loop = true; const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 2200; const g = ctx.createGain(); g.gain.value = 0.05; r.connect(f); f.connect(g); g.connect(master); r.start(); }
-    if (st && st.bed === 'cafe') { vinyl(); const r = track$(ctx.createBufferSource()); r.buffer = noiseBuffer(ctx, 4, 'brown'); r.loop = true; const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 520; f.Q.value = 0.8; const g = ctx.createGain(); g.gain.value = 0.12; r.connect(f); f.connect(g); g.connect(master); r.start(); }
+    if (st && st.bed === 'rain') { const r = hold(ctx.createBufferSource()); r.buffer = noiseBuffer(ctx, 3, 'white'); r.loop = true; const f = hold(ctx.createBiquadFilter()); f.type = 'lowpass'; f.frequency.value = 2200; const g = hold(ctx.createGain()); g.gain.value = 0.05; r.connect(f); f.connect(g); g.connect(master); r.start(); }
+    if (st && st.bed === 'cafe') { vinyl(); const r = hold(ctx.createBufferSource()); r.buffer = noiseBuffer(ctx, 4, 'brown'); r.loop = true; const f = hold(ctx.createBiquadFilter()); f.type = 'bandpass'; f.frequency.value = 520; f.Q.value = 0.8; const g = hold(ctx.createGain()); g.gain.value = 0.12; r.connect(f); f.connect(g); g.connect(master); r.start(); }
     if (track === 'ambient') rumble(0.05);
   };
-  const teardownBeds = () => { nodes.forEach((n) => { try { n.stop && n.stop(); } catch (e) { /* already stopped */ } try { n.disconnect(); } catch (e) { /* gone */ } }); nodes = []; };
   const norm = (id) => (id === 'lofi-night' ? 'night' : id);
 
-  const begin = (keepStep = false) => { teardownBeds(); if (!keepStep) step = 0; nextTime = ctx.currentTime + 0.08; nextCrackle = ctx.currentTime + 0.05; buildBeds(); schedule(); };
+  const begin = (keepStep = false) => { halt(); if (!keepStep) step = 0; nextTime = ctx.currentTime + 0.08; nextCrackle = ctx.currentTime + 0.05; buildBeds(); schedule(); };
   // The audible level, written at the audio clock's "now". A ramp scheduled before an interruption
   // is already in the past, so the value itself has to be set or the fade stays at silence.
   const punchGain = () => {
@@ -155,10 +166,11 @@ export const createEngine = () => {
     // Must be called from a user gesture (tap/click). Everything up to ctx.resume() runs synchronously so iOS
     // still sees the gesture (an await before resume() loses it). A closed/'interrupted' (iOS: call, Siri, other app) context is replaced.
     start(id, vol, opts = {}) {
-      track = norm(id || track); volume = vol ?? volume; gen += 1;
+      cancelFade();
+      track = norm(id || track); volume = vol ?? volume; const my = ++gen;
       const keep = !!(opts && opts.keepStep) && step > 0;
+      halt();
       if (needsNewContext(ctx && ctx.state)) {
-        teardownBeds();
         ctx = sharedAudioContext();
         if (!ctx) return Promise.resolve();
         master = ctx.createGain(); master.gain.value = 0; analyser = ctx.createAnalyser(); analyser.fftSize = 512;
@@ -170,10 +182,10 @@ export const createEngine = () => {
       playing = true;
       let p = null; try { p = ctx.state !== 'running' ? ctx.resume() : null; } catch (e) { /* old Safari: no promise */ }
       markMusicAudible(true);
-      try { const b = ctx.createBufferSource(); b.buffer = ctx.createBuffer(1, 1, 22050); b.connect(ctx.destination); b.start(0); } catch (e) { /* iOS unlock blip */ }
-      const arm = () => { if (playing && ctx && ctx.state === 'running') begin(keep); };
+      try { const b = hold(ctx.createBufferSource()); b.buffer = ctx.createBuffer(1, 1, 22050); b.connect(ctx.destination); b.start(0); } catch (e) { /* iOS unlock blip */ }
+      const arm = () => { if (gen !== my || !playing || !ctx || ctx.state !== 'running') return; begin(keep); };
       if (ctx.state === 'running') arm();
-      else if (p && p.then) p.then(arm);
+      else if (p && p.then) p.then(() => { if (ctx && ctx.state === 'running') arm(); });
       clearInterval(timer); timer = setInterval(schedule, 250);
       master.gain.cancelScheduledValues(ctx.currentTime); master.gain.setValueAtTime(master.gain.value, ctx.currentTime); master.gain.linearRampToValueAtTime(volume * 0.9, ctx.currentTime + 0.6);
       return Promise.resolve(p).catch(() => {});
@@ -185,18 +197,24 @@ export const createEngine = () => {
     // Queue audible notes onto the audio clock before iOS freezes timers. No silent node is added.
     queueAhead(seconds = 90) { if (!playing || !ctx) return 0; const cap = Math.min(180, Math.max(1, Number(seconds) || 90)); schedule(cap); return cap; },
     // iOS drops the looping beds while the context is backgrounded. Rebuild them and keep the step.
-    rebuild() { if (!ctx || ctx.state !== 'running' || !playing) return false; begin(step > 0); punchGain(); if (!timer) timer = setInterval(schedule, 250); return true; },
+    rebuild() { if (!ctx || ctx.state !== 'running' || !playing) return false; cancelFade(); gen += 1; begin(step > 0); punchGain(); if (!timer) timer = setInterval(schedule, 250); return true; },
     set onStateChange(fn) { onState = fn; },
-    setTrack(id) { track = norm(id); if (playing && ctx) { begin(true); punchGain(); } },
+    setTrack(id) { cancelFade(); gen += 1; track = norm(id); if (playing && ctx) { begin(true); punchGain(); } },
     // Smooth change (auto-rotate): fade the mix down, swap the track, then put the gain back.
     // The end level is set directly so a clock jump cannot leave the fade parked at silence.
+    // A newer setTrack, crossfade, play, or rebuild cancels this timer. Its callback also
+    // checks the generation so a stale swap can never start after a newer track was chosen.
     crossfadeTo(id, secs = 2.4) {
-      if (!playing || !ctx) { track = norm(id); return; }
-      const half = secs / 2; const t0 = ctx.currentTime; const my = gen; const target = Math.max(0, Math.min(1, Number(volume) || 0)) * 0.9;
+      cancelFade();
+      const my = ++gen;
+      const next = norm(id);
+      if (!playing || !ctx) { track = next; return; }
+      const half = Math.max(0, Number(secs) || 0) / 2; const t0 = ctx.currentTime; const target = Math.max(0, Math.min(1, Number(volume) || 0)) * 0.9;
       master.gain.cancelScheduledValues(t0); master.gain.setValueAtTime(master.gain.value, t0); master.gain.linearRampToValueAtTime(0.0001, t0 + half);
-      setTimeout(() => {
-        if (!playing || !ctx || gen !== my) return; // paused/restarted meanwhile: that action wins
-        track = norm(id); begin(true);
+      fadeTimer = setTimeout(() => {
+        fadeTimer = 0;
+        if (!playing || !ctx || gen !== my) return; // a newer track change already won
+        track = next; begin(true);
         const t1 = ctx.currentTime;
         master.gain.cancelScheduledValues(t1);
         master.gain.setValueAtTime(0.0001, t1);
@@ -210,13 +228,13 @@ export const createEngine = () => {
     async stop() {
       markMusicAudible(false);
       setMusicPlaying(false);
-      playing = false; step = 0; clearInterval(timer); timer = 0;
+      playing = false; step = 0; clearInterval(timer); timer = 0; cancelFade();
       if (!ctx) return;
       const c = ctx; const m = master; const my = ++gen;
       try { m.gain.cancelScheduledValues(c.currentTime); m.gain.setValueAtTime(m.gain.value, c.currentTime); m.gain.linearRampToValueAtTime(0.0001, c.currentTime + 0.25); } catch (e) { /* closed */ }
       await new Promise((r) => setTimeout(r, 300));
       if (gen !== my) return; // restarted meanwhile: that play() owns this context
-      teardownBeds();
+      halt();
       try { await c.suspend(); } catch (e) { /* already stopped */ }
     },
     // 0..1 loudness of what is actually being output (used for the "is it making sound" check)
