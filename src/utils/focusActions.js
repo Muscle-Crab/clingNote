@@ -4,11 +4,12 @@
 // in-app), so points are awarded once. Pure (only widgetSnapshot), unit-tested in node: scripts/test-focus-actions.mjs.
 import { widgetTaskId } from './widgetSnapshot.js';
 import { pomoLabel } from './pomodoro.js';
+import { timerMillis } from './timerRing.js';
 
 export const FOCUS_MAX_AGE_MS = 12 * 3600 * 1000; // an action older than this (or from the future) is ignored
 export const APPLIED_KEEP = 200;
 const KINDS = ['pause', 'resume', 'done'];
-const ms = (v) => { if (v == null || v === '') return 0; const n = typeof v === 'number' ? v : new Date(v).getTime(); return Number.isFinite(n) ? n : 0; };
+const ms = timerMillis;
 
 export const actionId = (a) => (a && a.id ? String(a.id) : `${a && a.kind}:${a && a.taskId}@${a && a.ts}`);
 

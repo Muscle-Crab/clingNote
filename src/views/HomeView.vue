@@ -266,7 +266,7 @@ import { sectionOf, sectionFromTime, sectionForCreate, isSection, mergeOrder } f
 import BackgroundLayer from '@/components/background/BackgroundLayer.vue';
 import FocusMode from '@/components/home/FocusMode.vue';
 import { readFocusMode, writeFocusModeCache, saveFocusMode, focusModeFromDoc, subscribeFocusMode } from '@/utils/focusModePref';
-import { readFocusTimer, writeFocusTimer, clearFocusTimer, closeFocusScreen, recordFromTask, restoreFocusScreen, taskFromRecord, mergeSavedTimer } from '@/utils/focusTimerStore';
+import { FOCUS_TIMER_KEY, readFocusTimer, writeFocusTimer, clearFocusTimer, closeFocusScreen, recordFromTask, restoreFocusScreen, taskFromRecord, mergeSavedTimer, sameTimerTask, pickTimerRecord } from '@/utils/focusTimerStore';
 import { saveUserFields } from '@/utils/userDoc';
 import HeroAmbience from '@/components/background/HeroAmbience.vue';
 import { effectiveAnim } from '@/utils/heroAmbience';
@@ -483,15 +483,25 @@ onMounted(() => { stopFocusMode = subscribeFocusMode(onFocusModeEvent); });
 onBeforeUnmount(() => stopFocusMode());
 const savedFocusTimer = () => readFocusTimer(localStorage);
 const withSavedTimer = (tasks) => mergeSavedTimer(tasks, savedFocusTimer(), Date.now());
+const backupTimer = (rec) => {
+  import('@capacitor/core').then(({ Capacitor, registerPlugin }) => {
+    if (!Capacitor.isNativePlatform() || !Capacitor.isPluginAvailable('Preferences')) return;
+    const Prefs = registerPlugin('Preferences');
+    const op = rec ? Prefs.set({ key: FOCUS_TIMER_KEY, value: JSON.stringify(rec) }) : Prefs.remove({ key: FOCUS_TIMER_KEY });
+    if (op && op.catch) op.catch(() => {});
+  }).catch(() => {});
+};
 const rememberTimer = (task, focusOpen) => {
   const rec = recordFromTask(task, { focusOpen: !!focusOpen });
-  if (rec) writeFocusTimer(localStorage, rec);
+  if (!rec) return;
+  writeFocusTimer(localStorage, rec);
+  backupTimer(rec);
 };
 const dismissFocusScreen = () => {
   focusScreenKey.value = '';
-  closeFocusScreen(localStorage);
+  backupTimer(closeFocusScreen(localStorage));
 };
-const stopFocusTimerRecord = () => { focusScreenKey.value = ''; clearFocusTimer(localStorage); };
+const stopFocusTimerRecord = () => { focusScreenKey.value = ''; clearFocusTimer(localStorage); backupTimer(null); };
 // Open again after background, a WebView reload, or a cold launch. A refresh must not clear it.
 const reopenFocusScreen = () => {
   nowTick.value = Date.now();
@@ -502,7 +512,7 @@ const focusScreenTask = computed(() => {
   if (!focusScreenKey.value) return null;
   const list = selectedDayRoutine.value || [];
   const saved = savedFocusTimer();
-  const live = list.find((t) => t && taskKey(t) === focusScreenKey.value && t.completed !== true);
+  const live = list.find((t) => t && t.completed !== true && (taskKey(t) === focusScreenKey.value || (saved && sameTimerTask(t, saved))));
   if (live && (live.timerActive || (saved && saved.taskKey === focusScreenKey.value))) {
     if (saved && saved.taskKey === focusScreenKey.value && saved.timerEndTime) {
       return { ...live, timerActive: true, timerStartedAt: saved.timerStartedAt || live.timerStartedAt, timerEndTime: saved.timerEndTime, timerPausedAt: saved.timerPausedAt || null, timerDurationMinutes: saved.timerDurationMinutes || live.timerDurationMinutes };
@@ -525,6 +535,16 @@ onMounted(() => {
   window.addEventListener('pageshow', reopenFocusScreen);
   window.addEventListener('cn:app-resume', reopenFocusScreen);
   import('@capacitor/app').then(({ App }) => App.addListener('resume', reopenFocusScreen)).then((h) => { focusRestoreHandle = h; }).catch(() => {});
+  import('@capacitor/core').then(async ({ Capacitor, registerPlugin }) => {
+    if (!Capacitor.isNativePlatform() || !Capacitor.isPluginAvailable('Preferences')) return;
+    const { value } = await registerPlugin('Preferences').get({ key: FOCUS_TIMER_KEY });
+    if (readFocusTimer(localStorage) || !value) return;
+    const picked = pickTimerRecord(null, value);
+    if (!picked) return;
+    try { localStorage.setItem(FOCUS_TIMER_KEY, JSON.stringify(picked)); } catch (e) { /* ignore */ }
+    selectedDayRoutine.value = withSavedTimer(selectedDayRoutine.value || []);
+    reopenFocusScreen();
+  }).catch(() => {});
 });
 onBeforeUnmount(() => {
   document.removeEventListener('visibilitychange', onFocusScreenVisible);
@@ -1167,7 +1187,7 @@ const fetchSelectedDayRoutine = async () => {
     if (seq !== fetchSeq) return; // a newer day was selected meanwhile
 
     if (selectedDayDocSnapshot.exists()) {
-      let tasks = selectedDayDocSnapshot.data().tasks || [];
+      let tasks = withSavedTimer(selectedDayDocSnapshot.data().tasks || []);
 
       // Old-week reset: a task completed before this weekday's most recent (local) occurrence is left over from a
       // previous week -> incomplete again. Completions from the current occurrence (e.g. today) are never touched.
@@ -1972,7 +1992,7 @@ const watchSelectedDay = () => {
   dayUnsub = onSnapshot(doc(db, 'weeklyRoutines', `${userId.value}_${dayName}`), (snap) => {
     if (snap.metadata.hasPendingWrites || snap.metadata.fromCache || idx !== selectedDayIndex.value || !snap.exists()) return;
     if (dayWriteHold.size) return; // a delete is still settling: do not put a task back or replace a different one
-    const tasks = clearExpiredTimers(snap.data().tasks || [], Date.now());
+    const tasks = clearExpiredTimers(withSavedTimer(snap.data().tasks || []), Date.now());
     if (tasks.some((t) => isStaleCompletion(t, idx))) return;
     const next = tasksFromSnapshot(selectedDayRoutine.value || [], withSavedTimer(visibleTasks(tasks)), dayWriteHold.size > 0);
     if (JSON.stringify(next) !== JSON.stringify(selectedDayRoutine.value || [])) selectedDayRoutine.value = next;

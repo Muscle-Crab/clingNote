@@ -2,13 +2,11 @@
 // A timer is shown only while it is active or paused and its end is still ahead or inside a short overtime.
 // An end from a previous day is not a running timer. Pure (tests: scripts/test-day-fixes.mjs).
 
+import { timerMillis } from './timerRing.js';
+
 export const TIMER_OVERTIME_MS = 2 * 60 * 60 * 1000;
 
-const ms = (v) => {
-  if (v == null || v === '') return 0;
-  const n = typeof v === 'number' ? v : new Date(v).getTime();
-  return Number.isFinite(n) ? n : 0;
-};
+const ms = timerMillis;
 
 export const timerShownOnWidget = (t, nowMs = Date.now()) => {
   if (!t || t.completed === true) return false;

@@ -2,18 +2,44 @@
 // and a cold launch. Remaining time is always the saved end minus now (a pause freezes it).
 // Nothing here counts ticks. Tests: scripts/test-focus-timer-restore.mjs.
 
+import { timerMillis } from './timerRing.js';
+
 export const FOCUS_TIMER_KEY = 'clingnote.focusTimer.v1';
 export const TIMER_OVERTIME_MS = 2 * 60 * 60 * 1000;
 
-const ms = (v) => {
-  if (v == null || v === '') return 0;
-  const n = typeof v === 'number' ? v : Date.parse(v);
-  return Number.isFinite(n) ? n : 0;
-};
+const ms = timerMillis;
 
 const storeOf = (store) => store || (typeof localStorage !== 'undefined' ? localStorage : null);
 
-export const taskKeyOf = (t) => `${(t && t.createdAt) || ''}|${(t && t.title) || ''}`;
+export const taskKeyOf = (t) => {
+  if (!t) return '|';
+  const c = t.createdAt;
+  const id = (c && typeof c === 'object') ? (timerMillis(c) || '') : (c == null ? '' : String(c));
+  return `${id}|${t.title || ''}`;
+};
+// The card, Focus Mode, the ring, the widget and the Live Activity all read this.
+// Remaining time is the saved end, frozen at the pause instant. It is never the 30-minute estimate.
+export const readout = (t, now = Date.now()) => {
+  const end = ms(t && t.timerEndTime);
+  const paused = ms(t && t.timerPausedAt);
+  return { end, paused, remaining: end ? Math.max(0, end - (paused || now)) : 0 };
+};
+export const sameTimerTask = (t, rec) => {
+  if (!t || !rec) return false;
+  if (rec.taskId && t.id && String(t.id) === String(rec.taskId)) return true;
+  if (rec.taskKey && taskKeyOf(t) === rec.taskKey) return true;
+  const tc = ms(t.createdAt);
+  const rc = ms(rec.createdAt);
+  return !!tc && tc === rc && (t.title || '') === (rec.title || '');
+};
+// localStorage is wiped on some iOS cold launches. The native backup is the same record.
+export const pickTimerRecord = (localRaw, backupRaw) => {
+  const parse = (raw) => {
+    if (!raw) return null;
+    try { const r = typeof raw === 'string' ? JSON.parse(raw) : raw; return r && r.taskKey && r.timerEndTime ? r : null; } catch (e) { return null; }
+  };
+  return parse(localRaw) || parse(backupRaw);
+};
 
 export const readFocusTimer = (store) => {
   const ls = storeOf(store);
@@ -123,7 +149,7 @@ export const mergeSavedTimer = (tasks, rec, now = Date.now()) => {
   const keep = paused || rec.focusOpen || (end > 0 && now <= end + TIMER_OVERTIME_MS);
   if (!keep) return tasks || [];
   return (tasks || []).map((t) => {
-    if (!t || taskKeyOf(t) !== rec.taskKey) return t;
+    if (!sameTimerTask(t, rec)) return t;
     if (t.completed === true || t.focusEndedEarlyAt || t.timerStoppedAt) return t;
     const serverStart = ms(t.timerStartedAt);
     const savedStart = ms(rec.timerStartedAt);

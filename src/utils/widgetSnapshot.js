@@ -1,5 +1,6 @@
 // Home-screen widget (iOS WidgetKit) data + deep links. Unit-tested in node (scripts/test-widget.js).
 import { timerShownOnWidget, isRemovedTask } from './dayList.js';
+import { timerMillis } from './timerRing.js';
 // The web layer writes buildWidgetSnapshot(todayTasks) as JSON to the App Group (UserDefaults suite group.app.clingnote.ios, key
 // "widget.today") through the local ClingWidget Capacitor plugin; the Swift widget (ios/App/ClingNoteWidget) only reads it.
 // Tapping a task opens clingnote://task/<id>, which parseWidgetLink() turns into /home?task=<id> (HomeView card is highlighted).
@@ -63,7 +64,7 @@ export const buildWidgetSnapshot = (tasks, { now = new Date(), dayName = '', pen
 // Task timer for the widget countdown ring (ms since epoch, 0 = none; Swift decodes as optional). Only a timer that is set.
 function timerFields(t, nowMs) {
   if (!timerShownOnWidget(t, nowMs)) return {};
-  const ms = (v) => { const n = v ? new Date(v).getTime() : 0; return Number.isFinite(n) && n > 0 ? n : 0; };
+  const ms = (v) => { const n = timerMillis(v); return n > 0 ? n : 0; };
   const tE = ms(t.timerEndTime);
   // tS = effective start (end - set duration): timerEndTime moves on resume, so the widget's count-up excludes paused time.
   let tS = tE && Number(t.timerDurationMinutes) > 0 ? tE - Number(t.timerDurationMinutes) * 60000 : ms(t.timerStartedAt);
