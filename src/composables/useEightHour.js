@@ -175,6 +175,8 @@ export const startNow = async (hours, blocks, opts = {}) => {
 // Evening mode: fix later lock-in block(s) [{ time: 'HH:MM', hours }]. Server-only (no offline fallback: a schedule must be server-checked).
 // "Start new session" from the shutdown screen: starts the next session NOW (server-checked, no clock window, no session cap).
 export const startNextSession = async (hours) => { st.busy = true; try { const d = await call('nextSession', hours ? { hours } : {}); apply(d); return d; } finally { st.busy = false; } };
+// End the running session now. The server settles it; a new session is not started here.
+export const endSession = async () => { st.busy = true; try { const d = await call('end'); apply(d); return d; } finally { st.busy = false; } };
 export const reportProgress = async () => { try { apply(await call('progress')); } catch (e) { /* server recounts at the end of the window anyway */ } };
 
 // After sign-up / sign-in: fetch the server state and, if the account has no plan yet, save the wake time picked in onboarding.
@@ -250,7 +252,7 @@ export const useEightHour = () => {
     return { untilMs: s.untilMs, breakdown: s.breakdown || '', text: core.waitText(s.untilMs, now, s.breakdown || '', plan.value?.tz || deviceTz()) }; });
   const debtKnown = computed(() => !!(st.loaded && st.data && !st.data.offline && st.uid === curUid() && Object.prototype.hasOwnProperty.call(st.data, 'appLockDebt')));
   const appLockDebt = computed(() => (debtRev.value, mergeDebt({ server: st.data && st.data.appLockDebt, serverKnown: debtKnown.value, cache: readDebtCache(curUid()) })));
-  return { st, appLockDebt, debtKnown, dayHours, nextBlock, pendingBlocks, startNextSession, session, wait, warning, hoursPref, data, plan, lock, phase, phaseInfo, running, remainingMs, countdown, endsLabel, startsLabel, stats, shutdown, reward: computed(() => st.data?.reward || ''),
+  return { st, appLockDebt, debtKnown, dayHours, nextBlock, pendingBlocks, startNextSession, endSession, session, wait, warning, hoursPref, data, plan, lock, phase, phaseInfo, running, remainingMs, countdown, endsLabel, startsLabel, stats, shutdown, reward: computed(() => st.data?.reward || ''),
     refresh, savePlan, startNow, reportProgress, nowMs };
 };
 

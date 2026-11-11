@@ -48,6 +48,9 @@ export const clingLock = {
   // Points vault (src/utils/pointsVault.js): open labeled apps for the shared app time; on-device usage buckets for the prices.
   allowVaultApps: safe('ClingLock', Lock, (p, ids, untilMs) => p.allowVaultApps({ ids, untilMs }), { allowed: 0 }),
   endVaultApps: safe('ClingLock', Lock, (p) => p.endVaultApps(), { ended: false }),
+  // Session goal met: App Group lock.goalRelease. The monitor leaves every shield down until the day changes or Begin clears it.
+  markGoalRelease: safe('ClingLock', Lock, (p, { day, untilMs, session } = {}) => p.markGoalRelease({ day, untilMs, session }), { marked: false }),
+  clearGoalRelease: safe('ClingLock', Lock, (p) => p.clearGoalRelease(), { cleared: false }),
   vaultState: safe('ClingLock', Lock, (p) => p.vaultState(), { ids: [], untilMs: 0, live: false }),
   startUsage: safe('ClingLock', Lock, (p) => p.startUsage(), { monitor: 'unsupported' }),
   vaultUsage: safe('ClingLock', Lock, (p) => p.vaultUsage(), { days: {}, apps: [] }),

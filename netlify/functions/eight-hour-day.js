@@ -291,6 +291,20 @@ const actions = {
     const { blockHours, ...rest } = body; void blockHours; return actions.start(ctx, rest);
   },
 
+  // End the running session now (goal prompt or End session). The countdown stops; the next one does not start by itself.
+  async end(ctx) {
+    let doc = await loadDoc(ctx);
+    const lock = doc.lock;
+    if (!lock || lock.placeholder || !(ctx.now >= lock.startMs && ctx.now < lock.endMs)) {
+      doc = await settleIfOver(ctx, doc, ctx.now);
+      return view(withSession(doc, await userDoc(ctx), ctx.now), ctx.now);
+    }
+    const ended = { ...lock, endMs: ctx.now };
+    await ctx.db.doc(`eightHour/${ctx.uid}`).set({ lock: lockWrite(ctx, ended) }, { merge: true });
+    doc = await settleIfOver(ctx, { ...doc, lock: ended }, ctx.now);
+    return view(withSession(doc, await userDoc(ctx), ctx.now), ctx.now);
+  },
+
   // Set/update wake time + planned task count. Refused while the window runs; the wake time is also frozen once it has passed today (the countdown is about to begin).
   async plan(ctx, body) {
     let doc = await loadDoc(ctx);

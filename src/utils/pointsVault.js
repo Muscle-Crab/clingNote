@@ -31,6 +31,19 @@ export const boundPrice = (price, priceCap) => {
   const cap = Number.isFinite(day) && day > 0 ? Math.min(PRICE_CAP, day) : PRICE_CAP;
   return Math.min(price, cap);
 };
+// Frozen session goal (the price cap). 0 is "no session goal", so the price ladder stays as it is.
+export const sessionGoalReached = (points, goal) => {
+  const g = Number(goal) || 0;
+  return g > 0 && Math.max(0, Number(points) || 0) >= g;
+};
+// Goal met: the native allowance lasts until local midnight (the day reset). Otherwise a priced
+// hole stays until the next session Begin clears it (the 14-day safety cap).
+export const releaseUntilMs = (nowMs, goalMet) => {
+  const now = Number(nowMs) || 0;
+  if (!goalMet) return now + 14 * 86400000;
+  const d = new Date(now);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1).getTime();
+};
 const periodDaysOf = (report) => {
   const n = Math.round(Number(report && report.period && report.period.days));
   return Number.isFinite(n) && n > 0 ? n : 0;
@@ -81,11 +94,14 @@ export const liveWindow = (windows, nowMs) => (windows || []).find((w) => w.star
 // The whole vault for the Home line. Points only: no task-count gate. priced = an explicit list (tests).
 // A missed goal does not close an app the bank has reached. The between-session delay does: wait.untilMs
 // keeps the vault shut until that clock runs out (vaultSessionReset is the separate new-session clear).
-// open = the bank has reached that app's price. The session goal, the task count, and whether the
-// session timer is still running do not gate it. A higher price stays locked. Points are not spent.
+// open = the bank has reached that app's price, unless the frozen session goal is met: then every
+// selected app opens, including a higher raw price and an app with no Screen Time reading.
+// Before the goal, a higher price stays locked. Points are not spent. The between-session delay
+// (wait.untilMs) still keeps the vault shut. The session timer does not gate a price the bank reached.
 export const vaultView = ({ apps = [], days = {}, todayYmd = '', points = 0, priced = null, report = null, priceCap = 0, debt = false, windows = [], nowMs = Date.now(), wait = null, bought = [], accessOpen = false } = {}) => {
   const held = !!(wait && Number(wait.untilMs) > nowMs);
   const p = Math.max(0, Number(points) || 0);   const ids = new Set((apps || []).map((a) => a.id));
+  const goalMet = sessionGoalReached(p, priceCap);
   const owned = new Set(bought || []);
   const icons = new Map((apps || []).filter((a) => a && a.icon).map((a) => [a.id, a.icon]));
   const base = priced && priced.length ? priced.filter((a) => ids.has(a.id)) : priceApps(apps, days, todayYmd, { ...(report ? { report } : {}), priceCap });
@@ -93,19 +109,19 @@ export const vaultView = ({ apps = [], days = {}, todayYmd = '', points = 0, pri
     const price = boundPrice(a.price, priceCap);
     const awaiting = !!(a.awaiting || price == null);
     const passed = !awaiting && p >= price;
-    const open = passed && !held;
+    const open = (goalMet || passed) && !held;
     return { ...a, price, tasks: price == null ? null : tasksFor(price), awaiting, icon: a.icon || icons.get(a.id) || '', bought: owned.has(a.id), open, passed, buyable: false };
   });
   const openCount = items.filter((a) => a.open).length;
-  const next = items.find((a) => !a.awaiting && a.price != null && p < a.price);
+  const next = goalMet ? undefined : items.find((a) => !a.awaiting && a.price != null && p < a.price);
   const earned = timeEarnedMin(p); const used = Math.min(earned, spentMin(windows, nowMs));
   const leftMin = Math.max(0, Math.floor(earned - used));
   const live = liveWindow(windows, nowMs);
   const liveLeftMin = live ? Math.max(0, Math.ceil((live.endMs - nowMs) / 60000)) : 0;
   const canStart = !debt && !held && openCount > 0 && !live && leftMin >= 2;
   const boughtIds = items.filter((a) => a.open).map((a) => a.id);
-  const awaiting = items.filter((a) => a.awaiting).length;
-  return { items, debt, openCount, total: items.length, awaiting, nextPrice: next ? next.price : 0, points: p, earnedMin: earned, leftMin, live: !!live, liveLeftMin, canStart, boughtIds, reportNote: report ? reportNote(report) : '', text: held && items.length ? `🔒 Vault · ${wait.text || 'opens after the session delay'}` : rowText({ total: items.length, openCount, next, debt: false, live: !!live, liveLeftMin, points: p, awaiting, hasReport: !!report }), held };
+  const awaiting = items.filter((a) => a.awaiting && !a.open).length;
+  return { items, debt, goalMet, openCount, total: items.length, awaiting, nextPrice: next ? next.price : 0, points: p, earnedMin: earned, leftMin, live: !!live, liveLeftMin, canStart, boughtIds, reportNote: report ? reportNote(report) : '', text: held && items.length ? `🔒 Vault · ${wait.text || 'opens after the session delay'}` : rowText({ total: items.length, openCount, next, debt: false, live: !!live, liveLeftMin, points: p, awaiting, hasReport: !!report }), held };
 };
 // Onboarding vault step: weekly screen time, coarse (never fake precision), and a plain-words reason for the price.
 export const weeklyText = (r) => {
@@ -129,7 +145,7 @@ export const priceWhy = (r) => {
 export const costText = (price) => `${price} pts · ~${tasksFor(price)} tasks`;
 export const rowText = ({ total, openCount, next, debt, live, liveLeftMin, points = 0, awaiting = 0, hasReport = false }) => {
   if (!total) return '🔒 Vault · pick apps to lock first';
-  if (!next && awaiting === total) return hasReport ? '🔒 Vault · no reading for the selected apps' : '🔒 Vault · no Screen Time report yet';
+  if (!openCount && !next && awaiting === total) return hasReport ? '🔒 Vault · no reading for the selected apps' : '🔒 Vault · no Screen Time report yet';
   const icon = openCount ? '🔓' : '🔒';
   const need = next ? Math.max(0, next.price - (Number(points) || 0)) : 0;
   const tail = live ? ` · ${liveLeftMin} min left` : next ? ` · ${need} pts to go · next app at ${next.price} pts (~${tasksFor(next.price)} tasks)` : (openCount ? (openCount === total ? ' · all open' : ' · priced apps open') : ' · timer off');

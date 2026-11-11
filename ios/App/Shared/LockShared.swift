@@ -142,6 +142,7 @@ enum AppLocks {
     /// Drops expired entries, then shields exactly the still-locked tokens.
     static func apply(now: Double = Date().timeIntervalSince1970 * 1000) {
         if BreakState.isLive(now: now) { store.shield.applications = nil; return } // earned break: every app open until it ends
+        if GoalRelease.isLive(nowMs: now) { store.shield.applications = nil; return } // session goal met: stay open until the day rolls or a new session clears it
         var l = locked(); l = l.filter { $0.value == 0 || $0.value > now }; saveLocked(l)
         let tokens = Set(apps().filter { l[$0.id] != nil }.map { $0.token }).subtracting(TaskAllow.allowed(now: now)).subtracting(VaultAllow.allowed(now: now))
         store.shield.applications = tokens.isEmpty ? nil : tokens
@@ -337,11 +338,45 @@ enum UsageLog {
     }
 }
 
+/// Session goal met: every ClingNote shield stays down until local midnight or the next session Begin.
+/// App Group lock.goalRelease = { day, until, session }. The monitor honors it with the app killed.
+@available(iOS 16.0, *)
+enum GoalRelease {
+    static let key = "lock.goalRelease"
+    static func entry() -> (day: String, until: Double, session: String)? {
+        guard let d = LockShared.defaults?.dictionary(forKey: key) else { return nil }
+        let day = d["day"] as? String ?? ""
+        let until = (d["until"] as? Double) ?? Double((d["until"] as? Int) ?? 0)
+        let session = d["session"] as? String ?? ""
+        guard !day.isEmpty, until > 0 else { return nil }
+        return (day, until, session)
+    }
+    static func isLive(nowMs: Double = Date().timeIntervalSince1970 * 1000, today: String = WakeLock.ymd(Date())) -> Bool {
+        guard let e = entry() else { return false }
+        return e.day == today && e.until > nowMs
+    }
+    static func mark(day: String, untilMs: Double, session: String) {
+        LockShared.defaults?.set(["day": day, "until": untilMs, "session": session], forKey: key)
+    }
+    static func clear() { LockShared.defaults?.removeObject(forKey: key) }
+    /// True when the goal release is live: both shields are cleared and the caller must not put them back.
+    static func liftIfLive(nowMs: Double = Date().timeIntervalSince1970 * 1000) -> Bool {
+        guard isLive(nowMs: nowMs) else { return false }
+        let store = ManagedSettingsStore(named: .clingLock)
+        store.shield.applications = nil
+        store.shield.applicationCategories = nil
+        store.shield.webDomains = nil
+        AppLocks.store.shield.applications = nil
+        return true
+    }
+}
+
 /// Lock-in shield (store .clingLock) from the saved selection, minus the running task's allowed apps.
 @available(iOS 16.0, *)
 enum LockIn {
     static func shield() {
         let store = ManagedSettingsStore(named: .clingLock)
+        if GoalRelease.liftIfLive() { return }
         if BreakState.isLive() { store.shield.applications = nil; store.shield.applicationCategories = nil; store.shield.webDomains = nil; return }
         guard let d = LockShared.defaults?.data(forKey: LockShared.selectionTokensKey),
               let sel = try? JSONDecoder().decode(LockSelectionTokens.self, from: d) else { return }

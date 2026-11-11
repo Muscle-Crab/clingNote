@@ -49,6 +49,8 @@ public class ClingLockPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "debtHoldStatus", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "allowVaultApps", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "endVaultApps", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "markGoalRelease", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "clearGoalRelease", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "vaultState", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "startUsage", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "vaultUsage", returnType: CAPPluginReturnPromise),
@@ -140,7 +142,7 @@ public class ClingLockPlugin: CAPPlugin, CAPBridgedPlugin {
         // Begin of a session: the selection it locks becomes the "last used" one that seeds the next session's picker.
         if call.getBool("sessionBegin") ?? false, let data = LockShared.defaults?.data(forKey: LockShared.selectionKey) { LockShared.defaults?.set(data, forKey: LockShared.lastUsedSelectionKey) }
         // Same Begin drops any vault allowance first. applyShield subtracts VaultAllow, so a previous session's buys would stay open.
-        if call.getBool("sessionBegin") ?? false { VaultAllow.clearActive(); DeviceActivityCenter().stopMonitoring([.clingVault]) }
+        if call.getBool("sessionBegin") ?? false { VaultAllow.clearActive(); DeviceActivityCenter().stopMonitoring([.clingVault]); GoalRelease.clear() }
         Self.applyShield()
         LockShared.defaults?.set(["locked": true, "until": untilMs, "label": call.getString("label") ?? ""], forKey: LockShared.stateKey)
         AppLocks.cleanupExpired()
@@ -534,6 +536,26 @@ public class ClingLockPlugin: CAPPlugin, CAPBridgedPlugin {
         }
         TaskAllow.reapply()
         call.resolve(["allowed": ids.count, "untilMs": untilMs, "monitor": "ok"])
+    }
+    /// Session goal met. Remember it in the App Group and drop every shield, including after a force-quit.
+    /// A new session Begin or the next local day clears it (GoalRelease.isLive).
+    @objc func markGoalRelease(_ call: CAPPluginCall) {
+        guard #available(iOS 16.0, *) else { call.resolve(["marked": false]); return }
+        let day = call.getString("day") ?? ""
+        let untilMs = call.getDouble("untilMs") ?? 0
+        let session = call.getString("session") ?? ""
+        let nowMs = Date().timeIntervalSince1970 * 1000
+        guard !day.isEmpty, untilMs > nowMs else { call.resolve(["marked": false]); return }
+        GoalRelease.mark(day: day, untilMs: untilMs, session: session)
+        _ = GoalRelease.liftIfLive(nowMs: nowMs)
+        LockShared.defaults?.set(["locked": false, "until": 0], forKey: LockShared.stateKey)
+        DeviceActivityCenter().stopMonitoring([.clingLock])
+        call.resolve(["marked": true, "untilMs": untilMs])
+    }
+    @objc func clearGoalRelease(_ call: CAPPluginCall) {
+        guard #available(iOS 16.0, *) else { call.resolve(["cleared": false]); return }
+        GoalRelease.clear()
+        call.resolve(["cleared": true])
     }
     @objc func endVaultApps(_ call: CAPPluginCall) {
         guard #available(iOS 16.0, *) else { call.resolve(["ended": false]); return }

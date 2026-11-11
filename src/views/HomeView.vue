@@ -63,6 +63,7 @@
 
         <WakeAlarmPrompt v-if="isViewingToday" />
         <EightHourCard v-if="lockInToday || eh.lock.value" :tasks="ehTasks" :start-error="ehStartError" @retry="syncAfterAuth" @start="openDayPrompt" :locked="!proNow && !eh.lock.value" @pro="gatePro(_proRouter, 'lockIn')" />
+        <SessionEndPrompt v-if="isViewingToday" :running="sessionRunning" :prompt="showEndPrompt" :points="shownSessionPts" :goal="shownSessionTarget" @end="endSessionManual" @keep="keepSessionGoing" />
         <PlanDaySheet v-if="planOpen" :tasks="dayTasks" :busy="planBusy" :error="planError" @previewed="onPlanPreviewed" @confirm="onPlanConfirm" @close="planOpen = false" />
         <DayTemplatesSheet v-if="tplOpen" :templates="dayTemplates" :task-count="templateItemCount" :busy="tplBusy" :error="tplError" :note="tplNote" @apply="applyDayTemplate" @save="saveDayTemplate" @remove="removeDayTemplate" @close="tplOpen = false" />
         <DayStartPrompt v-if="dayPromptOpen" :initial-hours="eh.hoursPref.value" :now-ms="eh.nowMs" :tz="eh.plan.value?.tz || ''" :busy="ehBusy" :error="ehStartError" :tasks="todayTasksForTarget" :stats="eh.stats.value" :earned="pointsAccumulated || 0" @confirm="confirmDayStart" @skip="skipLockIn" :can-lock="lockAvailable()" :apps="sessionAppsPick" @pick-apps="pickSessionApps"><template #checkin><CheckinRow :value="checkin" @pick="saveCheckin" /></template></DayStartPrompt>
@@ -377,9 +378,11 @@ import { lockIn, loadLockIn, skipLockInToday } from '@/utils/lockIn';
 import { wakeLockPlan, shouldReconcileWake } from '@/utils/wakeLock';
 import { homeDay } from '@/utils/homeDay';
 import DayStartPrompt from '@/components/eighthour/DayStartPrompt.vue';
+import SessionEndPrompt from '@/components/home/SessionEndPrompt.vue';
+import { endPrompt, timerExpiry } from '@/utils/sessionFlow';
 import { sessionApps } from '@/utils/sessionApps';
 import { turnOffBlocked, TURN_OFF_BLOCKED_MSG } from '@/utils/appLockDebt';
-import { vaultView, startPlan, stopWindows, unlockCelebration, freshUnlocks, vaultTimerPlan, vaultSessionReset } from '@/utils/pointsVault';
+import { vaultView, startPlan, stopWindows, unlockCelebration, freshUnlocks, vaultTimerPlan, vaultSessionReset, releaseUntilMs } from '@/utils/pointsVault';
 import { decideShield, endedGoalMet } from '@/utils/sessionShield';
 import { adoptSentReport, replaceSnapshot, readSnapshot, writeSnapshot, reportFromRecord, SENT_REPORT_ROWS, sentReport, formatOwnerReport, parseOwnerReport, applyOwnerReport } from '@/utils/usageSnapshot';
 import { prepareVaultApps } from '@/utils/vaultNames';
@@ -3936,6 +3939,12 @@ const sessionGateOpen = computed(() => {
 const shownSessionPts = computed(() => (sessionEarnedPts.value == null ? (pointsAccumulated.value || 0) : sessionEarnedPts.value));
 const shownSessionTarget = computed(() => (isViewingToday.value ? (sessionTargetPts.value == null ? dayRequiredPts.value : sessionTargetPts.value) : 0));
 const sessionGateKey = computed(() => (sessionGate.value && sessionGate.value.key) || '');
+const END_CHOICE_KEY = 'cn.session.endChoice.v1';
+const readEndChoice = (key) => { try { const v = JSON.parse(localStorage.getItem(END_CHOICE_KEY) || 'null'); return v && v.key === key ? v.choice : ''; } catch (e) { return ''; } };
+const writeEndChoice = (key, choice) => { try { localStorage.setItem(END_CHOICE_KEY, JSON.stringify({ key, choice })); } catch (e) { /* ignore */ } };
+const endChoice = ref('');
+const skipAutoKey = ref('');
+watch(sessionGateKey, (k) => { endChoice.value = readEndChoice(k); }, { immediate: true });
 
 // ---- Boss coach: spoken reactions, focus check-ins, overbooked warning, missed-streak roast (in-app only, respect the Boss voice toggle) ----
 const bossReact = (kind, title = '') => { if (voMuted.value || document.hidden) return; speakLive(reactionLine({ kind, title, seed: Date.now() })); };
@@ -4211,6 +4220,9 @@ const shieldFromCard = () => {
   const required = Number(shownSessionTarget.value) || 0;
   return { earned, required, met: sessionUnlock({ sessionEarned: earned, sessionRequired: required }) };
 };
+const sessionMetNow = () => { const card = shieldFromCard(); return !!(card && card.met); };
+const sessionRunning = computed(() => !!eh.running.value);
+const showEndPrompt = computed(() => endPrompt({ met: sessionMetNow(), running: sessionRunning.value, sessionKey: sessionGateKey.value, choice: endChoice.value }).show);
 watch(gpOn, (on) => { GP.setSizeMode(on); if (!on) GP.setQuietWindows([]); }, { immediate: true });
 const gpLoad = (d) => {
   gp.value = GP.normPlan(d && d.gamePlan, d && d.onboarding && d.onboarding.wakeTime);
@@ -4413,13 +4425,26 @@ const debtPaidNative = (sessionKey = '') => { const day = String(sessionKey).spl
 const lockEnabled = () => { try { return localStorage.getItem(LOCK_PREF) === '1'; } catch (e) { return false; } };
 let lockOn = null;
 const hardLocked = ref(false); // shield up now: the sergeant menu shows Emergency unlock
+// Goal met: write the App Group flag and release every vault app until local midnight.
+// stopLock is inside markGoalRelease, so a break ending or a force-quit cannot put the shield back.
+const persistGoalRelease = async () => {
+  if (!lockAvailable() || !sessionMetNow()) return;
+  const l = eh.lock.value;
+  const day = localDateStr();
+  const untilMs = releaseUntilMs(Date.now(), true);
+  const session = (l && l.startMs) ? `${l.dayKey || ''}#${Number(l.index) || 0}:${l.startMs}` : sessionGateKey.value;
+  await clingLock.markGoalRelease({ day, untilMs, session });
+  const ids = (gpVault.value && gpVault.value.items || []).map((a) => a && a.id).filter(Boolean);
+  if (ids.length) await clingLock.allowVaultApps(ids, untilMs);
+  lockOn = null; hardLocked.value = false;
+};
 const syncAppLock = async () => {
   captureSessionGate();
   if (!lockAvailable()) return;
   await relockVaultForSession(); // a new lock-in drops earlier vault purchases before this sync can re-allow them
   let st = await clingLock.status();
   if (gpOn.value && gpLoaded.value) { await gpBreakReconcile(); if (await gpVoidBreak()) st = await clingLock.status(); st = await gpBreakRelock(st); }
-  if (holdLockAction(gpBreak.value, Date.now()) && gpBreakOk()) { hardLocked.value = false; return; } // native break live: shields are off, lock state kept for the re-lock
+  if (holdLockAction(gpBreak.value, Date.now()) && gpBreakOk()) { hardLocked.value = false; if (sessionMetNow()) await persistGoalRelease(); return; } // break lifts shields; a met goal must stay open when the break ends, app killed or not
   // Expired shield / app locks are cleared on open or foreground whichever day is shown (labeledApps drops expired entries natively).
   // ...then carry on in the same sync (refreshed status), so a new session's shield goes up now instead of on the next open.
   if (st.locked && Number(st.until) > 0 && Number(st.until) <= Date.now()) { lockOn = null; await clingLock.stopLock(); clingLock.labeledApps(); st = await clingLock.status(); }
@@ -4441,7 +4466,8 @@ const syncAppLock = async () => {
   await syncDebtHold(decision.hold);
   const act = decision.action; const endMs = decision.endMs;
   hardLocked.value = !!decision.want;
-  if (act === 'start') {
+  if (decision.openNow) await persistGoalRelease();
+  else if (act === 'start') {
     lockOn = endMs; const r = await clingLock.startLock(endMs, decision.focus ? 'ClingNote focus' : 'ClingNote lock-in');
     console.info('[clingLock] startLock', r && r.monitor);
     if (r && r.monitor && r.monitor !== 'ok') { lockOn = null; error.value = "App lock couldn't be scheduled, so apps stay unlocked for now."; }
@@ -4540,7 +4566,7 @@ const syncVault = () => { if (syncQueued) return vaultJob; syncQueued = true; re
   const stv = await clingLock.vaultState();
   const v = gpVault.value; const live = stv && stv.live;
   // A priced app stays released after this session. The next session Begin is what takes the hole back (vaultSessionReset).
-  const plan = vaultTimerPlan({ accessOpen: true, view: v, nativeLive: !!live, nativeIds: (stv && stv.ids) || [], nowMs: Date.now(), liveUntil: live ? Number(stv.untilMs) || 0 : 0, accessUntil: Date.now() + 14 * 86400000 });
+  const plan = vaultTimerPlan({ accessOpen: true, view: v, nativeLive: !!live, nativeIds: (stv && stv.ids) || [], nowMs: Date.now(), liveUntil: live ? Number(stv.untilMs) || 0 : 0, accessUntil: releaseUntilMs(Date.now(), !!(v && v.goalMet)) });
   if (plan.action === 'close') {
     await clingLock.endVaultApps(); vaultSave(stopWindows(vaultWindows.value, Date.now())); vaultNow.value = Date.now();
   } else if (!live && v && v.live) vaultSave(stopWindows(vaultWindows.value, Date.now()));
@@ -4707,6 +4733,67 @@ watch(nowTick, async () => {
   if (left === 0) { gpUnlockSet({ ...u, status: 'open', left: 0, untilMs: Date.now() + u.minutes * 60000 }); if (lockAvailable()) { lockOn = null; await clingLock.stopLock(); } hardLocked.value = false; syncAppLock(); }
 });
 // Hard lock chosen at day start: pick apps once if needed, turn the lock on, the shield runs until the day ends (shouldShield/endMs).
+const keepSessionGoing = () => { const key = sessionGateKey.value; if (!key) return; endChoice.value = 'keep'; writeEndChoice(key, 'keep'); };
+const endSessionManual = async () => {
+  const key = sessionId(eh.lock.value) || sessionGateKey.value;
+  skipAutoKey.value = key;
+  if (key) { endChoice.value = 'end'; writeEndChoice(key, 'end'); }
+  try { await eh.endSession(); await clingLock.clearGoalRelease(); }
+  catch (e) { showNoteToast((e && e.message) || 'Could not end the session.', { error: true }); }
+};
+let nextFlight = false;
+const maybeAutoNext = async () => {
+  if (nextFlight || ehStarting) return;
+  const l = eh.lock.value;
+  if (!l || !lockInToday.value) return;
+  if (l.dayKey && l.dayKey !== localDateStr()) return; // a new calendar day is the rollover path
+  const s = eh.session.value;
+  const plan = timerExpiry({ now: Date.now(), endMs: l.endMs, running: eh.running.value, canStart: !!(s && s.canStart), cooldownUntil: (eh.wait.value && eh.wait.value.untilMs) || (s && s.untilMs) || 0, sessionKey: sessionId(l), skipKey: skipAutoKey.value });
+  if (!plan.startNext) return;
+  nextFlight = true;
+  try {
+    await eh.startNextSession(l.hours || eh.hoursPref.value);
+    if (lockEnabled()) await startHardLock({ sessionBegin: true });
+    else await clingLock.clearGoalRelease();
+  } catch (e) { console.warn('auto next session', e && e.message); }
+  finally { nextFlight = false; }
+};
+const applyDayRollover = async () => {
+  if (nextFlight || ehStarting || !eh.st.loaded) return;
+  const l0 = eh.lock.value;
+  const today0 = localDateStr();
+  if (eh.running.value && l0 && l0.dayKey === today0) return;
+  nextFlight = true;
+  try {
+    await clingLock.clearGoalRelease();
+    const l = eh.lock.value;
+    const today = today0;
+    if (eh.running.value && l && l.dayKey && l.dayKey !== today) {
+      skipAutoKey.value = sessionId(l);
+      try { await eh.endSession(); } catch (e) { console.warn('day rollover end', e && e.message); }
+    }
+    try { await fetchSelectedDayRoutine(); } catch (e) { /* the next start fetches again */ }
+    if (!lockInToday.value || eh.running.value || eh.phase.value !== 'ready') return;
+    const hours = validSessionHours(eh.hoursPref.value) ? eh.hoursPref.value : 8;
+    await confirmDayStart(hours, { lock: lockEnabled() });
+  } finally { nextFlight = false; }
+};
+const DAY_SEEN_KEY = 'cn.session.daySeen.v1';
+let dayIv = null;
+const checkDayRollover = () => {
+  if (!eh.st.loaded) return;
+  const d = localDateStr();
+  let prev = '';
+  try { prev = localStorage.getItem(DAY_SEEN_KEY) || ''; } catch (e) { prev = ''; }
+  const lockDay = (eh.lock.value && eh.lock.value.dayKey) || '';
+  const crossed = (prev && prev !== d) || (!prev && lockDay && lockDay < d);
+  try { localStorage.setItem(DAY_SEEN_KEY, d); } catch (e) { /* ignore */ }
+  if (crossed) applyDayRollover();
+};
+watch(() => [eh.running.value, eh.lock.value && eh.lock.value.endMs, eh.session.value && eh.session.value.canStart, eh.wait.value && eh.wait.value.untilMs], () => { maybeAutoNext(); });
+watch(() => eh.st.loaded, (ok) => { if (ok) checkDayRollover(); });
+onMounted(() => { dayIv = setInterval(checkDayRollover, 20000); checkDayRollover(); });
+onBeforeUnmount(() => clearInterval(dayIv));
 const startHardLock = async (o = {}) => {
   try {
     if (!lockAvailable()) return;
