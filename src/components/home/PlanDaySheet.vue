@@ -69,7 +69,9 @@ const layout = () => {
 .pds-head { display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 10px; }
 .pds-bot { width: 40px; height: 40px; flex: none; }
 .pds-field { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 0 10px; font-weight: 600; text-align: left; }
-.pds-input { height: 44px; min-width: 140px; font-size: 16px; font-weight: 700; text-align: center; border-radius: 12px; background: var(--c-surface-2, #22252a); color: inherit; border: 1px solid var(--c-border, #2a2a2e); padding: 0 10px; }
+.pds-field { min-width: 0; }
+.pds-input { height: 44px; width: min(160px, 100%); max-width: 100%; min-width: 0; box-sizing: border-box; font-size: 16px; font-weight: 700; text-align: center; border-radius: 12px; background: var(--c-surface-2, #22252a); color: inherit; border: 1px solid var(--c-border, #2a2a2e); padding: 0 10px; }
+.pds-input[type="time"] { -webkit-appearance: none; appearance: none; }
 .pds-list { list-style: none; margin: 0 0 10px; padding: 0; text-align: left; }
 .pds-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; background: var(--c-surface-2, #22252a); margin-bottom: 6px; }
 .pds-row--kept { opacity: .85; }

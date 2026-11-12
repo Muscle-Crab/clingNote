@@ -46,6 +46,15 @@ const lockedEarned = (lock, tasks) => {
 // Tasks that count toward the day: the visible ones (recurring copies with a later activeFrom are hidden today).
 const pruneStale = (tasks, tz, dayKey) => tasks.filter((t) => { if (!t || t.type !== 'one-time' || !t.completed || !t.completedAt) return true;
   const ms = Date.parse(t.completedAt); return !Number.isFinite(ms) || core.dayKeyIn(tz, ms) >= dayKey; });
+const completedMs = (v) => {
+  if (v == null || v === '') return NaN;
+  if (typeof v === 'number') return v;
+  if (typeof v === 'object' && typeof v.toMillis === 'function') return v.toMillis();
+  if (typeof v === 'object' && Number.isFinite(Number(v.seconds))) return Number(v.seconds) * 1000;
+  if (typeof v === 'object' && Number.isFinite(Number(v._seconds))) return Number(v._seconds) * 1000;
+  const n = Date.parse(v);
+  return Number.isFinite(n) ? n : NaN;
+};
 const countable = (tasks, dayKey) => tasks.map((t, i) => ({ t, i })).filter(({ t }) => t && !(t.activeFrom && dayKey < t.activeFrom));
 
 // ── REQUIRES SERVER AI (OPENAI_API_KEY + user consent). Without them this returns null and the heuristic is used. ──
@@ -134,7 +143,7 @@ const settleIfOver = async (ctx, doc, now) => {
     : core.normDebt(doc.appLockDebt);
   // The streak/target settle once per day, on the day's FIRST block. Later blocks (evening mode) and empty scheduled blocks only write a history row.
   const counts = idx === 0 && !(lock.scheduled && !(lock.taskCount > 0)); // legacy locks (no index/taskCount) still settle
-  const stats = counts ? core.settleDay(doc.stats, { dayKey: lock.dayKey, earned, target: lock.target, allDone: (lock.totalPoints || 0) > 0 && earned >= lock.totalPoints }) : { ...core.defaultStats(), ...(doc.stats || {}) };
+  const stats = counts ? core.settleDay(doc.stats, { dayKey: lock.dayKey, earned, target: lock.target, done: grace ? grace.done : lock.done, allDone: (lock.totalPoints || 0) > 0 && earned >= lock.totalPoints }) : { ...core.defaultStats(), ...(doc.stats || {}) };
   const next = { ...doc, lock: settledLock, stats, appLockDebt: debt };
   await ctx.db.doc(`eightHour/${ctx.uid}`).set({ lock: lockWrite(ctx, settledLock), appLockDebt: debt, ...(counts ? { stats } : {}) }, { merge: true });
   const hid = idx === 0 ? lock.dayKey : core.sessionKey(lock.dayKey, idx);
@@ -161,7 +170,8 @@ const view = (doc, now) => {
 const withSession = (doc, ud, now) => { const g = (ud && ud.gamePlan) || {}; const r = core.nextSessionState({ lock: doc.lock, sessions: g.sessions, gamePlan: g, nowMs: now, wakeTime: doc.plan && doc.plan.wakeTime });
   return { ...doc, _session: { canStart: r.ok, reason: r.reason || '', of: r.of, done: r.done, closeMs: r.closeMs || 0, untilMs: r.untilMs || 0, message: r.message || '', breakdown: r.breakdown || '' } }; };
 
-// Lock one block. index 0 = the day's main block: snapshot every countable task, reset completions, enforce the task range (strict).
+// Lock one block. index 0 = the day's main block: snapshot every countable task, clear only a recurring completion from an earlier local
+// day (the weekday doc is reused), and enforce the task range (strict). A completion from today stays: that is the points award.
 // index > 0 (a later block the same day): lock only the still-open tasks, keep completions, no minimum (0 open tasks = an empty block that
 // still shuts nothing early and settles neutrally). Scheduled blocks keep their FIXED start/end even when started late.
 const beginBlock = async (ctx, doc, { hours, startMs, endMs, dayKey, index, pending = [], strict, scheduled = false, apiKey = null, apps = null }) => {
@@ -215,7 +225,13 @@ const beginBlock = async (ctx, doc, { hours, startMs, endMs, dayKey, index, pend
     goal = { key: core.sessionKey(dayKey, index), points: target, source: targetSource, tasksBefore, hours, frozenMs: startMs };
   }
   const next = stored.map((t) => ({ ...t })); // identical order and size: the lock compares by index
-  rows.forEach(({ i }, n) => { next[i] = { ...next[i], ...(later ? {} : { completed: false, completedAt: null }), timerActive: false, points: est[n].points, complexity: est[n].complexity, estimateMin: est[n].minutes }; });
+  // Recurring rows live on the weekday doc. A completedAt from before today's dayKey (or none) is last week's flag, not today's award.
+  const staleRecurring = (t) => { if (!t || t.completed !== true || t.type === 'one-time') return false; const ms = completedMs(t.completedAt); return !Number.isFinite(ms) || core.dayKeyIn(tz, ms) < dayKey; };
+  rows.forEach(({ i }, n) => {
+    const prev = next[i];
+    const clear = !later && staleRecurring(prev);
+    next[i] = { ...prev, ...(clear ? { completed: false, completedAt: null } : {}), timerActive: false, points: est[n].points, complexity: est[n].complexity, estimateMin: est[n].minutes };
+  });
   const points = rows.map((_, n) => est[n].points);
   const lock = { hours, index, scheduled, placeholder: false, dayKey, dayName, tz, wakeTime: doc.plan.wakeTime, startMs, endMs, taskCount: rows.length, plannedCount: doc.plan.taskCount,
     indexes: rows.map(({ i }) => i), ids: rows.map(({ t }) => stableIdOf(t)), points, totalPoints: points.reduce((a, b) => a + b, 0), target, targetSource, goal, apps: apps || null, targetLevel: tgt.level, estimateSource: source, earned: 0, done: 0, settled: false,
@@ -273,6 +289,20 @@ const actions = {
     const st = core.nextSessionState({ lock: doc.lock, nowMs: ctx.now });
     if (st.reason === 'running') throw fail(409, 'A session is already running.', { code: 'running' });
     const { blockHours, ...rest } = body; void blockHours; return actions.start(ctx, rest);
+  },
+
+  // End the running session now (goal prompt or End session). The countdown stops; the next one does not start by itself.
+  async end(ctx) {
+    let doc = await loadDoc(ctx);
+    const lock = doc.lock;
+    if (!lock || lock.placeholder || !(ctx.now >= lock.startMs && ctx.now < lock.endMs)) {
+      doc = await settleIfOver(ctx, doc, ctx.now);
+      return view(withSession(doc, await userDoc(ctx), ctx.now), ctx.now);
+    }
+    const ended = { ...lock, endMs: ctx.now };
+    await ctx.db.doc(`eightHour/${ctx.uid}`).set({ lock: lockWrite(ctx, ended) }, { merge: true });
+    doc = await settleIfOver(ctx, { ...doc, lock: ended }, ctx.now);
+    return view(withSession(doc, await userDoc(ctx), ctx.now), ctx.now);
   },
 
   // Set/update wake time + planned task count. Refused while the window runs; the wake time is also frozen once it has passed today (the countdown is about to begin).

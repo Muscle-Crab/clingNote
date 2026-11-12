@@ -46,7 +46,7 @@
         <span class="streak-fx-label" data-test="streak-rank-label">{{ fxRank.name.toUpperCase() }} · DAY STREAK</span>
       </div>
       <p v-if="locked" class="foot-item foot-item--pts" data-test="pts-locked" role="button" tabindex="0" @click="$emit('pro')"><span class="coin" aria-hidden="true">★</span><strong>Points 🔒</strong></p>
-      <p v-else class="foot-item foot-item--pts"><span class="coin" aria-hidden="true">★</span><strong data-test="day-pts" :class="{ 'num-bump': bump.pts }">{{ target > 0 ? dayPtsLabel(Math.round(shownPts), target) : `${Math.round(shownPts)} pts` }}</strong></p>
+      <p v-else class="foot-item foot-item--pts"><span class="coin" aria-hidden="true">★</span><span class="pts-copy"><strong data-test="day-pts" :class="{ 'num-bump': bump.pts }">{{ target > 0 ? dayPtsLabel(Math.round(shownPts), target) : `${Math.round(shownPts)} pts` }}</strong><small v-if="pointsCaption" data-test="pts-caption">{{ pointsCaption }}</small><small v-if="todayPoints != null" data-test="today-pts">Today {{ todayPoints }}</small></span></p>
     </div>
   </div>
 </template>
@@ -79,6 +79,9 @@ const props = defineProps({
   freezes: { type: Number, default: 0 }, // held streak freeze days
   points: { type: Number, default: 0 },
   target: { type: Number, default: 0 }, // boss day target (required); shown as earned/required
+  sessionKey: { type: String, default: '' }, // a new session snaps the points, it does not tick down through the previous total
+  pointsCaption: { type: String, default: '' },
+  todayPoints: { type: Number, default: null },
   offToday: { type: Boolean, default: false }, // holiday mode: 🏖️ instead of 🔥
   hold: { type: Boolean, default: false }, // a full-screen overlay (reward/loss) is up: queue the streak level-up until it closes
   uid: { type: String, default: '' }, // last-seen plant stage / streak are remembered per user on this device
@@ -113,6 +116,11 @@ const animate = (key, target, to, ms, k) => {
 };
 watch(pct, (v) => animate('pct', shownPct, v, 700, 'pct'));
 watch(() => props.done, (v) => animate('done', shownDone, v, 500, 'done'));
+watch(() => props.sessionKey, (next, prev) => {
+  if (!next || next === prev) return;
+  if (cancels.pts) cancels.pts();
+  shownPts.value = props.points;
+});
 watch(() => props.points, (to, from) => {
   const was = shownPts.value; animate('pts', shownPts, to, 900, 'pts');
   if (!settled || !(to > from)) return;
@@ -208,7 +216,11 @@ defineExpose({ skipAnims });
 .foot-icon { position: relative; }
 .foot-freeze { position: absolute; left: 50%; top: 100%; transform: translate(-50%, 1px); padding: 0 4px; border-radius: 999px; font-size: 10px; line-height: 15px; font-weight: 700; white-space: nowrap; color: #9AD8FF; background: var(--c-surface-2, #12203F); border: 1px solid var(--c-border-strong, #2A3C66); }
 .foot-item--risk small { color: var(--c-warn); }
+.foot-item--pts { min-width: 0; align-items: flex-start; }
 .foot-item--pts strong { color: #F5C542; }
+.pts-copy { display: flex; flex-direction: column; min-width: 0; line-height: 1.2; }
+.pts-copy strong, .pts-copy small { white-space: nowrap; }
+.pts-copy small { font-size: var(--fs-xs); color: var(--c-text-3); }
 .coin { width: 22px; height: 22px; border-radius: 50%; display: inline-grid; place-items: center; font-size: 12px; color: #7A4B00; background: radial-gradient(circle at 35% 30%, #FFE08A, #E0A21B); }
 @media (max-width: 400px) { .progress-ring { width: 80px; height: 80px; } }
 /* ── live animations ── */

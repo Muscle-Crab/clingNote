@@ -67,7 +67,7 @@ t('Swift ringStops/sat/light/step match JS', () => {
   assert.deepEqual(pairs, RING_STOPS);
   assert.match(sw, new RegExp(`ringSat = ${RING_SAT / 100}, ringLight = ${RING_LIGHT / 100}`));
   assert.match(sw, new RegExp(`widgetStep = ${WIDGET_STEP}, widgetMaxSteps = ${WIDGET_MAX_STEPS}`));
-  assert.match(sw, /ProgressView\(timerInterval:/); assert.match(sw, /Text\(s, style: \.timer\)/); // count-up elapsed text
+  assert.match(sw, /ProgressView\(timerInterval:/); assert.match(sw, /Text\(timerInterval: s\.\.\.Date\.distantFuture, countsDown: false\)/); // count-up from the saved start
   assert.match(fs.readFileSync('ios/App/ClingNoteWidget/MatchupWidget.swift', 'utf8'), /timerStepDates\(snap\.tasks/);
 });
 t('widget snapshot carries timer start/end/paused only when set', () => {

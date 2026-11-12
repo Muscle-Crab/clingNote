@@ -1,0 +1,495 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // TIGHT ruleset + paywall hardening: isPro/plan/proExpiresAt/stripe* are written only by Netlify functions (admin SDK).
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Helper function to check if user owns the document
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && request.auth.token.admin == true;
+    }
+
+
+    // ── Manager & Pal ──
+    function palPairId(a, b) { return a < b ? a + '_' + b : b + '_' + a; }
+    function isPalOf(uid) {
+      return isAuthenticated() && request.auth.uid != uid
+        && exists(/databases/$(database)/documents/pals/$(palPairId(request.auth.uid, uid)));
+    }
+
+    // ── 8-hour day lock helpers (see match /weeklyRoutines and /eightHour below) ──
+    function eightHourPath(uid) {
+      return /databases/$(database)/documents/eightHour/$(uid);
+    }
+    // The day doc is frozen (in place only) while the window runs (startAt <= now < endAt) and, for the lock's weekday, during the hard
+    // stop after it (endAt <= now < shutUntil, written by the function). Other day docs stay writable during the shutdown so completions on
+    // any day and tomorrow's planning window work; the window's local-time bounds are enforced by the app (rules have no user time zone).
+    // One get() and one pass: the old separate locked/shut helpers re-read the doc many times and, together with the slot checks, pushed
+    // big days past Firestore's 1000-expression limit (every locked-day write was then denied and the app reverted the change).
+    function eightHourLock(uid) {
+      return exists(eightHourPath(uid)) ? get(eightHourPath(uid)).data.get('lock', {}) : {};
+    }
+    function dayFrozen(lk, dayName) {
+      return lk != null && lk.get('dayName', '') == dayName && lk.get('startAt', null) != null && lk.get('endAt', null) != null
+        && lk.startAt <= request.time
+        && (lk.endAt > request.time || (lk.get('shutUntil', null) != null && lk.shutUntil > request.time));
+    }
+    // Slots 0..49 compared in size-gated blocks (rules cannot loop). Only the slots that exist are evaluated: comparing all 50 slots on every
+    // write ran past Firestore's 1000-expression limit with ~11+ tasks, so EVERY locked-day write (complete, timer) was denied.
+    function lockedDayUnchanged() {
+      let o = resource.data.get('tasks', []);
+      let n = request.resource.data.get('tasks', []);
+      // adds allowed (append only), deletes blocked: every existing slot must be unchanged
+      return n.size() >= o.size() && o.size() <= 50 && lockedSlots(o, n, o.size());
+    }
+    function lockedSlots0(o, n, k) {
+      return k <= 0 || (k >= 10 ? (!n[0].diff(o[0]).affectedKeys().hasAny(['createdAt', 'points']) && !n[1].diff(o[1]).affectedKeys().hasAny(['createdAt', 'points']) && !n[2].diff(o[2]).affectedKeys().hasAny(['createdAt', 'points']) && !n[3].diff(o[3]).affectedKeys().hasAny(['createdAt', 'points']) && !n[4].diff(o[4]).affectedKeys().hasAny(['createdAt', 'points']) && !n[5].diff(o[5]).affectedKeys().hasAny(['createdAt', 'points']) && !n[6].diff(o[6]).affectedKeys().hasAny(['createdAt', 'points']) && !n[7].diff(o[7]).affectedKeys().hasAny(['createdAt', 'points']) && !n[8].diff(o[8]).affectedKeys().hasAny(['createdAt', 'points']) && !n[9].diff(o[9]).affectedKeys().hasAny(['createdAt', 'points'])) : (!n[0].diff(o[0]).affectedKeys().hasAny(['createdAt', 'points']) && (k <= 1 || !n[1].diff(o[1]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 2 || !n[2].diff(o[2]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 3 || !n[3].diff(o[3]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 4 || !n[4].diff(o[4]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 5 || !n[5].diff(o[5]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 6 || !n[6].diff(o[6]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 7 || !n[7].diff(o[7]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 8 || !n[8].diff(o[8]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 9 || !n[9].diff(o[9]).affectedKeys().hasAny(['createdAt', 'points']))));
+    }
+    function lockedSlots1(o, n, k) {
+      return k <= 10 || (k >= 20 ? (!n[10].diff(o[10]).affectedKeys().hasAny(['createdAt', 'points']) && !n[11].diff(o[11]).affectedKeys().hasAny(['createdAt', 'points']) && !n[12].diff(o[12]).affectedKeys().hasAny(['createdAt', 'points']) && !n[13].diff(o[13]).affectedKeys().hasAny(['createdAt', 'points']) && !n[14].diff(o[14]).affectedKeys().hasAny(['createdAt', 'points']) && !n[15].diff(o[15]).affectedKeys().hasAny(['createdAt', 'points']) && !n[16].diff(o[16]).affectedKeys().hasAny(['createdAt', 'points']) && !n[17].diff(o[17]).affectedKeys().hasAny(['createdAt', 'points']) && !n[18].diff(o[18]).affectedKeys().hasAny(['createdAt', 'points']) && !n[19].diff(o[19]).affectedKeys().hasAny(['createdAt', 'points'])) : (!n[10].diff(o[10]).affectedKeys().hasAny(['createdAt', 'points']) && (k <= 11 || !n[11].diff(o[11]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 12 || !n[12].diff(o[12]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 13 || !n[13].diff(o[13]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 14 || !n[14].diff(o[14]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 15 || !n[15].diff(o[15]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 16 || !n[16].diff(o[16]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 17 || !n[17].diff(o[17]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 18 || !n[18].diff(o[18]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 19 || !n[19].diff(o[19]).affectedKeys().hasAny(['createdAt', 'points']))));
+    }
+    function lockedSlots2(o, n, k) {
+      return k <= 20 || (k >= 30 ? (!n[20].diff(o[20]).affectedKeys().hasAny(['createdAt', 'points']) && !n[21].diff(o[21]).affectedKeys().hasAny(['createdAt', 'points']) && !n[22].diff(o[22]).affectedKeys().hasAny(['createdAt', 'points']) && !n[23].diff(o[23]).affectedKeys().hasAny(['createdAt', 'points']) && !n[24].diff(o[24]).affectedKeys().hasAny(['createdAt', 'points']) && !n[25].diff(o[25]).affectedKeys().hasAny(['createdAt', 'points']) && !n[26].diff(o[26]).affectedKeys().hasAny(['createdAt', 'points']) && !n[27].diff(o[27]).affectedKeys().hasAny(['createdAt', 'points']) && !n[28].diff(o[28]).affectedKeys().hasAny(['createdAt', 'points']) && !n[29].diff(o[29]).affectedKeys().hasAny(['createdAt', 'points'])) : (!n[20].diff(o[20]).affectedKeys().hasAny(['createdAt', 'points']) && (k <= 21 || !n[21].diff(o[21]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 22 || !n[22].diff(o[22]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 23 || !n[23].diff(o[23]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 24 || !n[24].diff(o[24]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 25 || !n[25].diff(o[25]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 26 || !n[26].diff(o[26]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 27 || !n[27].diff(o[27]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 28 || !n[28].diff(o[28]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 29 || !n[29].diff(o[29]).affectedKeys().hasAny(['createdAt', 'points']))));
+    }
+    function lockedSlots3(o, n, k) {
+      return k <= 30 || (k >= 40 ? (!n[30].diff(o[30]).affectedKeys().hasAny(['createdAt', 'points']) && !n[31].diff(o[31]).affectedKeys().hasAny(['createdAt', 'points']) && !n[32].diff(o[32]).affectedKeys().hasAny(['createdAt', 'points']) && !n[33].diff(o[33]).affectedKeys().hasAny(['createdAt', 'points']) && !n[34].diff(o[34]).affectedKeys().hasAny(['createdAt', 'points']) && !n[35].diff(o[35]).affectedKeys().hasAny(['createdAt', 'points']) && !n[36].diff(o[36]).affectedKeys().hasAny(['createdAt', 'points']) && !n[37].diff(o[37]).affectedKeys().hasAny(['createdAt', 'points']) && !n[38].diff(o[38]).affectedKeys().hasAny(['createdAt', 'points']) && !n[39].diff(o[39]).affectedKeys().hasAny(['createdAt', 'points'])) : (!n[30].diff(o[30]).affectedKeys().hasAny(['createdAt', 'points']) && (k <= 31 || !n[31].diff(o[31]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 32 || !n[32].diff(o[32]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 33 || !n[33].diff(o[33]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 34 || !n[34].diff(o[34]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 35 || !n[35].diff(o[35]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 36 || !n[36].diff(o[36]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 37 || !n[37].diff(o[37]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 38 || !n[38].diff(o[38]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 39 || !n[39].diff(o[39]).affectedKeys().hasAny(['createdAt', 'points']))));
+    }
+    function lockedSlots4(o, n, k) {
+      return k <= 40 || (k >= 50 ? (!n[40].diff(o[40]).affectedKeys().hasAny(['createdAt', 'points']) && !n[41].diff(o[41]).affectedKeys().hasAny(['createdAt', 'points']) && !n[42].diff(o[42]).affectedKeys().hasAny(['createdAt', 'points']) && !n[43].diff(o[43]).affectedKeys().hasAny(['createdAt', 'points']) && !n[44].diff(o[44]).affectedKeys().hasAny(['createdAt', 'points']) && !n[45].diff(o[45]).affectedKeys().hasAny(['createdAt', 'points']) && !n[46].diff(o[46]).affectedKeys().hasAny(['createdAt', 'points']) && !n[47].diff(o[47]).affectedKeys().hasAny(['createdAt', 'points']) && !n[48].diff(o[48]).affectedKeys().hasAny(['createdAt', 'points']) && !n[49].diff(o[49]).affectedKeys().hasAny(['createdAt', 'points'])) : (!n[40].diff(o[40]).affectedKeys().hasAny(['createdAt', 'points']) && (k <= 41 || !n[41].diff(o[41]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 42 || !n[42].diff(o[42]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 43 || !n[43].diff(o[43]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 44 || !n[44].diff(o[44]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 45 || !n[45].diff(o[45]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 46 || !n[46].diff(o[46]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 47 || !n[47].diff(o[47]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 48 || !n[48].diff(o[48]).affectedKeys().hasAny(['createdAt', 'points'])) && (k <= 49 || !n[49].diff(o[49]).affectedKeys().hasAny(['createdAt', 'points']))));
+    }
+    function lockedSlots(o, n, k) {
+      return lockedSlots0(o, n, k) && lockedSlots1(o, n, k) && lockedSlots2(o, n, k) && lockedSlots3(o, n, k) && lockedSlots4(o, n, k);
+    }
+
+    // Fields only the server (Stripe webhook / AI function, admin SDK) may change
+    function billingKeys() {
+      return ['hasPaid', 'premium', 'credits', 'subscription', 'subscriptionId', 'subscriptionStatus', 'stripeCustomerId', 'admin', 'role',
+              'proExpiresAt', 'stripeSubscriptionId', 'stripeStatus', 'stripePriceId', 'stripeSessionId', 'stripe', 'proUpdatedAt',
+              'proSource', 'cancelAtPeriodEnd', 'iapProductId', 'iapStore', 'iapEnvironment'];
+    }
+    // isPro / plan: clients may only ever write the free defaults, and never on a doc that is currently Pro.
+    function freeDefaultsOnly() {
+      return request.resource.data.get('isPro', false) == false
+        && request.resource.data.get('plan', 'free') == 'free';
+    }
+    function proFieldsOk() {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['isPro', 'plan'])
+        || (resource.data.get('isPro', false) != true && freeDefaultsOnly());
+    }
+
+    // Post interactions by other users (comments/reactions/read markers). Firestore rules cannot loop over the comments array, so this
+    // guarantees what is checkable: a new comment must carry the caller's own userId, at most one comment is added/removed per write
+    // (no mass wipe), and reactions / readComments can only be changed under the caller's own uid key.
+    function commentsChangeOk() {
+      let oldC = resource.data.get('comments', []);
+      let newC = request.resource.data.get('comments', []);
+      return newC.size() == oldC.size()
+        || (newC.size() == oldC.size() + 1 && newC[oldC.size()].userId == request.auth.uid)
+        || newC.size() == oldC.size() - 1;
+    }
+    function ownMapKeyOnly(field) {
+      return request.resource.data.get(field, {}).diff(resource.data.get(field, {})).affectedKeys().hasOnly([request.auth.uid]);
+    }
+    // Pickup game admins: the same designated list as src/views/Pickup.vue (verified email only, so nobody can claim it by registering the address).
+    function isPickupAdmin() {
+      return isAuthenticated() && request.auth.token.email_verified == true
+        && request.auth.token.email in ['ds7513635@gmail.com', 'pablo.novoa89@gmail.com', 'lordsarfo123@gmail.com', 'ideastogether@yahoo.com', 'testing@gmail.com'];
+    }
+    function isCaptain() {
+      return isAuthenticated() && exists(/databases/$(database)/documents/captains/$(request.auth.uid));
+    }
+
+    // Users collection - private to the owner. Other users' names/avatars come from /publicProfiles.
+    // Scheduled / recurring tasks (users/{uid}.scheduledTasks = { tasks: [...], updatedAt }); written only by the owner.
+    function schedOk() {
+      return !('scheduledTasks' in request.resource.data)
+        || (request.resource.data.scheduledTasks is map
+            && request.resource.data.scheduledTasks.keys().hasOnly(['tasks', 'updatedAt'])
+            && (!('tasks' in request.resource.data.scheduledTasks)
+                || (request.resource.data.scheduledTasks.tasks is list && request.resource.data.scheduledTasks.tasks.size() <= 300)));
+    }
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      // Signup may set the starter 15 credits, nothing else billing-related
+      allow create: if isOwner(userId)
+        && request.resource.data.keys().hasAny(billingKeys().removeAll(['credits'])) == false
+        && freeDefaultsOnly()
+        && (!('credits' in request.resource.data) || request.resource.data.credits == 15)
+        && schedOk();
+      allow update: if isOwner(userId)
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(billingKeys())
+        && proFieldsOk()
+        && schedOk();
+      allow delete: if isOwner(userId) || isAdmin();
+    }
+
+    // Public profile (name, avatar, pickup attendance) readable by signed-in users
+    match /publicProfiles/{userId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isOwner(userId)
+        && request.resource.data.keys().hasOnly(['name', 'avatarURL', 'attending', 'updatedAt']);
+      // Pickup board: any signed-in user may toggle attendance only
+      allow update: if isAuthenticated()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['attending']);
+      allow delete: if isOwner(userId) || isAdmin();
+    }
+
+    // Posts collection
+    match /posts/{postId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update: if isAuthenticated() && (
+        (resource.data.userId == request.auth.uid && request.resource.data.userId == request.auth.uid)
+        || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['comments', 'reactions', 'readComments'])
+            && commentsChangeOk() && ownMapKeyOnly('reactions') && ownMapKeyOnly('readComments')));
+      allow delete: if isAuthenticated() && request.auth.uid == resource.data.userId;
+    }
+
+    // Rooms collection - owner (user_id) edits/approves/deletes; others may only append a join request
+    match /rooms/{roomId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.resource.data.user_id == request.auth.uid
+        && request.resource.data.approvedUsers == [request.auth.uid];
+      allow update: if isAuthenticated() && (
+        (resource.data.user_id == request.auth.uid && request.resource.data.user_id == request.auth.uid)
+        || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['requests'])
+            && request.resource.data.requests.size() == resource.data.requests.size() + 1
+            && !(request.auth.uid in resource.data.approvedUsers)));
+      allow delete: if isAuthenticated() && resource.data.user_id == request.auth.uid;
+    }
+
+    // Tasks collection - unused by the app
+    match /tasks/{taskId} {
+      allow read, write: if false;
+    }
+
+    // Weekly Routines - routineId format: {userId}_{dayName}
+    // While the owner's 8-hour window is running (eightHour/{uid}.lock, written only by the eight-hour-day function), today's day doc is LOCKED:
+    // adds (append only) and edits are allowed, but the first 50 slots (= MAX_TASKS_PER_DAY) keep createdAt/points (no delete / swap / reorder / re-point).
+    // Completing tasks, timers, notes and subtasks stay editable. Rules cannot loop, so slots 0..49 are compared explicitly (the app caps a day at 50 tasks; lockedSlots0..4 only evaluate the slots that exist, keeping a full 50-task day under the 1000-expression limit).
+    match /weeklyRoutines/{routineId} {
+      allow read: if isAuthenticated() && (request.auth.uid == routineId.split('_')[0]);  // pals/managers see tasks only via the manager-pal function (private tasks stripped)
+      allow create: if isAuthenticated() && request.auth.uid == routineId.split('_')[0] && !dayFrozen(eightHourLock(routineId.split('_')[0]), routineId.split('_')[1]);
+      allow update: if isAuthenticated() && request.auth.uid == routineId.split('_')[0]
+        && (!dayFrozen(eightHourLock(routineId.split('_')[0]), routineId.split('_')[1]) || lockedDayUnchanged());
+      allow delete: if isAuthenticated() && request.auth.uid == routineId.split('_')[0] && !dayFrozen(eightHourLock(routineId.split('_')[0]), routineId.split('_')[1]);
+    }
+
+    // 8-hour day state (plan, lock, stats): readable by the owner, written ONLY by the Netlify function (admin SDK bypasses rules).
+    match /eightHour/{uid} {
+      allow read: if isOwner(uid);
+      allow write: if false;
+      match /history/{dayKey} {
+        allow read: if isOwner(uid);
+        allow write: if false;
+      }
+    }
+
+    // Captains collection
+    // read: any signed-in user. create/delete (assign / reset captains): pickup admins. update (picks, turn): admins or the captains themselves.
+    match /captains/{captainId} {
+      allow read: if isAuthenticated();
+      allow create, delete: if isPickupAdmin();
+      allow update: if isPickupAdmin() || isCaptain();
+    }
+
+    // Game collection (incl. game/turnState)
+    match /game/{gameId} {
+      allow read: if isAuthenticated();
+      allow write: if isPickupAdmin() || isCaptain();
+    }
+
+    // Streaks - doc id is the uid
+    match /streaks/{userId} {
+      allow read, write: if isOwner(userId);
+    }
+
+    // Won't Do Tasks - users can only access their own
+    match /wontDoTasks/{userId_day} {
+      allow read, write: if isAuthenticated() && 
+        request.auth.uid == userId_day.split("_")[0];
+    }
+    
+    // Daily Reports - users can only access their own
+    match /dailyReports/{reportId} {
+      allow read, write: if isAuthenticated() &&
+        request.auth.uid == reportId.split('_')[0];
+    }
+    
+    // NoFap subcollection
+    match /users/{userId}/nofap/{docId} {
+      allow read, write: if isOwner(userId);
+    }
+    
+    // Meals collection
+    match /meals/{mealId} {
+      allow read, update, delete: if isAuthenticated() && request.auth.uid == resource.data.userId;
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+    }
+    
+    // User Settings
+    match /userSettings/{userId} {
+      allow read, write: if isOwner(userId);
+    }
+    
+    // ===== NEW GAMIFICATION COLLECTIONS =====
+    
+    // User Ranks - users can read/write their own rank data
+    match /userRanks/{userId} {
+      allow read, write: if isOwner(userId);
+    }
+    
+    // Badges/Achievements - users can read/write their own badges
+    match /badges/{userId} {
+      allow read, write: if isOwner(userId);
+    }
+    
+    // ===== ADDED (streak-fix release): paths not covered by existing rules =====
+
+    // Monthly ranking: public leaderboard summary. Authed users read opted-in entries (+ always their own); owner writes.
+    match /monthlyStats/{month}/users/{uid} {
+      allow read: if isAuthenticated() && (resource.data.optIn == true || request.auth.uid == uid);
+      allow write: if isOwner(uid) && month.matches('^[0-9]{4}-[0-9]{2}$');
+    }
+
+    // Monthly ranking: per-user private detail (task keys, point adjustments)
+    match /monthlyStats/{month}/private/{uid} {
+      allow read, write: if isOwner(uid);
+    }
+
+    // Discipline Mode state (deadline settlement, log, boss, breaks, XP, theme, freezes)
+    match /discipline/{uid} {
+      allow read, write: if isOwner(uid);
+    }
+
+    // Calendar feed tokens: owner creates/deletes own token; only the server (admin SDK) reads them
+    match /icsTokens/{token} {
+      allow create: if isAuthenticated() && token.matches('^[a-f0-9]{48}$')
+                    && request.resource.data.uid == request.auth.uid;
+      allow delete: if isAuthenticated() && resource.data.uid == request.auth.uid;
+      allow read, update: if false;
+    }
+
+    // ===== Manager & Pal (netlify/functions/manager-pal.js writes everything except pal DMs and the read flag) =====
+    // Manager link state: owner reads; only the function writes. Token itself is never stored (managerLinks is keyed by sha256(token)).
+    match /managers/{uid} {
+      allow read: if isOwner(uid);
+      allow write: if false;
+    }
+    // Signed-in manager <-> user connection. Created/removed only by the manager-pal function (admin SDK).
+    match /managerConnections/{connId} {
+      allow read: if isAuthenticated() && (request.auth.uid == resource.data.ownerUid || request.auth.uid == resource.data.managerUid);
+      allow write: if false;
+    }
+    match /managerLinks/{hash} { allow read, write: if false; }
+    // Friend-approved early unlock (Coach mode): written only by the friend-unlock function; tokens are stored hashed.
+    match /unlockRequests/{hash} { allow read, write: if false; }
+    // Block + Report (App Store 1.2): written only by the manager-pal function.
+    match /blocks/{blockId} { allow read: if isAuthenticated() && request.auth.uid == resource.data.blockerUid; allow write: if false; }
+    match /reports/{reportId} { allow read, write: if false; }
+    match /palInvites/{code} { allow read, write: if false; }
+    // Manager nudges + DMs (both directions). Owner reads and may only flip `read`.
+    match /users/{uid}/managerChat/{msgId} {
+      allow read: if isOwner(uid);
+      allow update: if isOwner(uid) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']) && request.resource.data.read is bool;
+      allow create, delete: if false;
+    }
+    // Pal pair: created by the function on accept; either member reads or removes it.
+    match /pals/{pairId} {
+      allow read: if isAuthenticated() && request.auth.uid in resource.data.members;
+      allow delete: if isAuthenticated() && request.auth.uid in resource.data.members;
+      allow create, update: if false;
+      match /messages/{msgId} {
+        function palMember() { return isAuthenticated() && request.auth.uid in get(/databases/$(database)/documents/pals/$(pairId)).data.members; }
+        allow read: if palMember();
+        allow create: if palMember()
+          && request.resource.data.keys().hasOnly(['from', 'text', 'createdAt'])
+          && request.resource.data.from == request.auth.uid
+          && request.resource.data.text is string && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 1000
+          && request.resource.data.createdAt == request.time;
+        allow update, delete: if false;
+      }
+    }
+
+    // ── Community (feed, comments, likes, group chat, follows, notifications, reports, blocks) ──
+    // Moderation per App Store 1.2: reports collection, per-user blocks, admin delete; the profanity filter and rate limits run client-side.
+    function cmAdmin() {
+      return isAuthenticated() && request.auth.token.email_verified == true && request.auth.token.email == 'ds7513635@gmail.com';
+    }
+    function cmProfileOk(d) {
+      return d.uid == request.auth.uid
+        && d.name is string && d.name.size() <= 40 && !d.name.matches('.*@.*')
+        && d.avatar is string && d.avatar.size() <= 2048 && (d.avatar == '' || d.avatar.matches('https://.*'));
+    }
+    function cmImagesOk(l, max) {
+      return l is list && l.size() <= max
+        && (l.size() < 1 || (l[0] is string && l[0].matches('https://firebasestorage\\.googleapis\\.com/.*') && l[0].size() <= 2048))
+        && (l.size() < 2 || (l[1] is string && l[1].matches('https://firebasestorage\\.googleapis\\.com/.*') && l[1].size() <= 2048))
+        && (l.size() < 3 || (l[2] is string && l[2].matches('https://firebasestorage\\.googleapis\\.com/.*') && l[2].size() <= 2048))
+        && (l.size() < 4 || (l[3] is string && l[3].matches('https://firebasestorage\\.googleapis\\.com/.*') && l[3].size() <= 2048));
+    }
+    function cmStatsOk(s) {
+      return s == null || (s is map && s.keys().hasOnly(['tasksDone', 'points', 'streak', 'milestone', 'icon', 'badges'])
+        && s.tasksDone is int && s.tasksDone >= 0 && s.tasksDone <= 100000
+        && s.points is int && s.points >= 0 && s.points <= 100000
+        && s.streak is int && s.streak >= 0 && s.streak <= 100000
+        && s.milestone is string && s.milestone.size() <= 30
+        && (!('icon' in s) || (s.icon is string && s.icon.size() <= 8))
+        && (!('badges' in s) || (s.badges is list && s.badges.size() <= 3)));
+    }
+    function cmBlockedBy(owner) {
+      return exists(/databases/$(database)/documents/users/$(owner)/blocks/$(request.auth.uid));
+    }
+    match /communityPosts/{postId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated()
+        && request.resource.data.keys().hasOnly(['uid', 'name', 'avatar', 'title', 'text', 'images', 'stats', 'likeCount', 'commentCount', 'createdAt'])
+        && cmProfileOk(request.resource.data)
+        && (!('title' in request.resource.data) || (request.resource.data.title is string && request.resource.data.title.size() <= 120))
+        && request.resource.data.text is string && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 2000
+        && cmImagesOk(request.resource.data.images, 4)
+        && cmStatsOk(request.resource.data.stats)
+        && request.resource.data.likeCount == 0 && request.resource.data.commentCount == 0
+        && request.resource.data.createdAt == request.time;
+      // Counters only, each paired with the like/comment doc written in the same transaction/batch.
+      allow update: if isAuthenticated() && (
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likeCount'])
+          && ((request.resource.data.likeCount == resource.data.likeCount + 1
+               && !exists(/databases/$(database)/documents/communityPosts/$(postId)/likes/$(request.auth.uid))
+               && existsAfter(/databases/$(database)/documents/communityPosts/$(postId)/likes/$(request.auth.uid)))
+           || (request.resource.data.likeCount == resource.data.likeCount - 1
+               && exists(/databases/$(database)/documents/communityPosts/$(postId)/likes/$(request.auth.uid))
+               && !existsAfter(/databases/$(database)/documents/communityPosts/$(postId)/likes/$(request.auth.uid)))))
+        || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['commentCount'])
+          && (request.resource.data.commentCount == resource.data.commentCount + 1
+              || (request.resource.data.commentCount == resource.data.commentCount - 1 && request.resource.data.commentCount >= 0))));
+      allow delete: if isOwner(resource.data.uid) || cmAdmin();
+      match /likes/{likerId} {
+        allow read: if isAuthenticated();
+        allow create: if isOwner(likerId) && request.resource.data.keys().hasOnly(['uid', 'createdAt'])
+          && request.resource.data.uid == likerId && request.resource.data.createdAt == request.time
+          && getAfter(/databases/$(database)/documents/communityPosts/$(postId)).data.likeCount == get(/databases/$(database)/documents/communityPosts/$(postId)).data.likeCount + 1;
+        allow delete: if isOwner(likerId)
+          && (!existsAfter(/databases/$(database)/documents/communityPosts/$(postId))
+              || getAfter(/databases/$(database)/documents/communityPosts/$(postId)).data.likeCount == get(/databases/$(database)/documents/communityPosts/$(postId)).data.likeCount - 1);
+        allow update: if false;
+      }
+      match /comments/{commentId} {
+        allow read: if isAuthenticated();
+        allow create: if isAuthenticated()
+          && request.resource.data.keys().hasOnly(['uid', 'name', 'avatar', 'text', 'createdAt'])
+          && cmProfileOk(request.resource.data)
+          && request.resource.data.text is string && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 500
+          && request.resource.data.createdAt == request.time
+          && getAfter(/databases/$(database)/documents/communityPosts/$(postId)).data.commentCount == get(/databases/$(database)/documents/communityPosts/$(postId)).data.commentCount + 1;
+        allow delete: if (isOwner(resource.data.uid) || cmAdmin()
+          || (isAuthenticated() && get(/databases/$(database)/documents/communityPosts/$(postId)).data.uid == request.auth.uid));
+        allow update: if false;
+      }
+    }
+    match /communityChat/{msgId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated()
+        && request.resource.data.keys().hasOnly(['uid', 'name', 'avatar', 'text', 'image', 'createdAt'])
+        && cmProfileOk(request.resource.data)
+        && request.resource.data.text is string && request.resource.data.text.size() <= 1000
+        && request.resource.data.image is string && request.resource.data.image.size() <= 2048
+        && (request.resource.data.image == '' || request.resource.data.image.matches('https://firebasestorage\\.googleapis\\.com/.*'))
+        && (request.resource.data.text.size() > 0 || request.resource.data.image.size() > 0)
+        && request.resource.data.createdAt == request.time;
+      allow update: if false;
+      allow delete: if isOwner(resource.data.uid) || cmAdmin();
+    }
+    match /follows/{followId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated()
+        && followId == request.auth.uid + '_' + request.resource.data.to
+        && request.resource.data.keys().hasOnly(['from', 'to', 'createdAt'])
+        && request.resource.data.from == request.auth.uid
+        && request.resource.data.to is string && request.resource.data.to != request.auth.uid && request.resource.data.to.size() <= 128
+        && request.resource.data.createdAt == request.time;
+      allow delete: if isOwner(resource.data.from);
+      allow update: if false;
+    }
+    match /reports/{reportId} {
+      allow create: if isAuthenticated()
+        && request.resource.data.keys().hasOnly(['reporter', 'targetType', 'targetId', 'targetUid', 'postId', 'reason', 'status', 'createdAt'])
+        && request.resource.data.reporter == request.auth.uid
+        && request.resource.data.targetType in ['post', 'comment', 'chat', 'user']
+        && request.resource.data.targetId is string && request.resource.data.targetId.size() > 0 && request.resource.data.targetId.size() <= 128
+        && request.resource.data.targetUid is string && request.resource.data.targetUid.size() <= 128
+        && request.resource.data.postId is string && request.resource.data.postId.size() <= 128
+        && request.resource.data.reason is string && request.resource.data.reason.size() <= 300
+        && request.resource.data.status == 'open'
+        && request.resource.data.createdAt == request.time;
+      // Community admin may only touch Community reports (targetType set, no manager-pal `scope`); manager-pal reports stay server-only.
+      allow read, update, delete: if cmAdmin() && ('targetType' in resource.data) && !('scope' in resource.data);
+    }
+    // Blocks + community prefs (EULA acceptance, notification toggles): private to the owner.
+    match /users/{userId}/blocks/{otherId} {
+      allow read, delete: if isOwner(userId);
+      allow create: if isOwner(userId) && otherId != userId && request.resource.data.keys().hasOnly(['createdAt']) && request.resource.data.createdAt == request.time;
+      allow update: if false;
+    }
+    // Display-safe public community profile (streak, best streak, badges). Owner-written, computed client-side.
+    match /communityProfiles/{uid} {
+      allow read: if isAuthenticated();
+      allow create, update: if isOwner(uid)
+        && request.resource.data.keys().hasOnly(['name', 'avatar', 'streak', 'bestStreak', 'badges', 'updatedAt'])
+        && request.resource.data.name is string && request.resource.data.name.size() <= 40 && !request.resource.data.name.matches('.*@.*')
+        && request.resource.data.avatar is string && request.resource.data.avatar.size() <= 2048 && (request.resource.data.avatar == '' || request.resource.data.avatar.matches('https://.*'))
+        && request.resource.data.streak is int && request.resource.data.streak >= 0 && request.resource.data.streak <= 100000
+        && request.resource.data.bestStreak is int && request.resource.data.bestStreak >= request.resource.data.streak && request.resource.data.bestStreak <= 100000
+        && request.resource.data.badges is list && request.resource.data.badges.size() <= 30;
+      allow delete: if isOwner(uid) || cmAdmin();
+    }
+    match /users/{userId}/community/prefs {
+      allow read: if isOwner(userId);
+      allow create, update: if isOwner(userId)
+        && request.resource.data.keys().hasOnly(['eulaVersion', 'eulaAcceptedAt', 'notif', 'ach', 'updatedAt'])
+        && (!('ach' in request.resource.data) || request.resource.data.ach is map)
+        && (!('eulaVersion' in request.resource.data) || request.resource.data.eulaVersion is int)
+        && (!('notif' in request.resource.data) || (request.resource.data.notif is map && request.resource.data.notif.keys().hasOnly(['follow', 'like', 'comment', 'share', 'post'])));
+      allow delete: if isOwner(userId);
+    }
+    // In-app notifications: written by the actor (never as someone else, never to self, never when the recipient blocked them).
+    match /users/{userId}/notifications/{notifId} {
+      allow read, delete: if isOwner(userId);
+      allow update: if isOwner(userId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']) && request.resource.data.read is bool;
+      allow create: if isAuthenticated() && request.auth.uid != userId && !cmBlockedBy(userId)
+        && request.resource.data.keys().hasOnly(['type', 'from', 'fromName', 'postId', 'text', 'read', 'createdAt'])
+        && request.resource.data.type in ['follow', 'like', 'comment', 'share', 'post']
+        && request.resource.data.from == request.auth.uid
+        && request.resource.data.fromName is string && request.resource.data.fromName.size() <= 40
+        && (request.resource.data.postId == null || (request.resource.data.postId is string && request.resource.data.postId.size() <= 128))
+        && request.resource.data.text is string && request.resource.data.text.size() <= 140
+        && request.resource.data.read == false
+        && request.resource.data.createdAt == request.time;
+    }
+
+    // B39 mood check-in: users/{uid}/dailyCheckins/{YYYY-MM-DD} = { mood: 1..5, energy: 'low'|'med'|'high', date, at }. Owner only.
+    match /users/{userId}/dailyCheckins/{date} {
+      allow read, delete: if isOwner(userId);
+      allow create, update: if isOwner(userId)
+        && date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && request.resource.data.keys().hasOnly(['mood', 'energy', 'date', 'at'])
+        && (!('mood' in request.resource.data) || (request.resource.data.mood is int && request.resource.data.mood >= 1 && request.resource.data.mood <= 5))
+        && (!('energy' in request.resource.data) || request.resource.data.energy in ['low', 'med', 'high'])
+        && (!('date' in request.resource.data) || request.resource.data.date == date)
+        && (!('at' in request.resource.data) || request.resource.data.at is timestamp);
+    }
+
+    // Default deny all other collections
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

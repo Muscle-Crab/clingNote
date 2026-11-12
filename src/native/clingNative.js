@@ -38,7 +38,7 @@ export const clingLock = {
   cancelScheduledLock: safe('ClingLock', Lock, (p, a) => p.cancelScheduledLock({ key: String((a && a.key) || '') }), { cancelled: false }),
   // per-app locks by user-confirmed label (src/utils/appLockNames.js resolves spoken names to these labels)
   labeledApps: safe('ClingLock', Lock, (p) => p.labeledApps(), { apps: [] }),
-  pickNamedApps: safe('ClingLock', Lock, (p, suggest = []) => p.pickNamedApps({ suggest }), { saved: false, apps: [] }),
+  pickNamedApps: safe('ClingLock', Lock, (p, opts = []) => { const o = Array.isArray(opts) ? { suggest: opts } : (opts || {}); return p.pickNamedApps({ suggest: o.suggest || [], selection: !!o.selection }); }, { saved: false, apps: [] }),
   lockApps: safe('ClingLock', Lock, (p, labels, untilMs = 0) => p.lockApps({ labels, untilMs }), { locked: [] }),
   unlockApps: safe('ClingLock', Lock, (p, labels = []) => p.unlockApps({ labels }), { unlocked: [] }),
   // per-task app unlock (src/utils/taskAppUnlock.js): pick apps a task needs; allow them while its timer runs; end re-locks
@@ -48,9 +48,19 @@ export const clingLock = {
   // Points vault (src/utils/pointsVault.js): open labeled apps for the shared app time; on-device usage buckets for the prices.
   allowVaultApps: safe('ClingLock', Lock, (p, ids, untilMs) => p.allowVaultApps({ ids, untilMs }), { allowed: 0 }),
   endVaultApps: safe('ClingLock', Lock, (p) => p.endVaultApps(), { ended: false }),
+  // Session goal met: App Group lock.goalRelease. The monitor leaves every shield down until the day changes or Begin clears it.
+  markGoalRelease: safe('ClingLock', Lock, (p, { day, untilMs, session } = {}) => p.markGoalRelease({ day, untilMs, session }), { marked: false }),
+  clearGoalRelease: safe('ClingLock', Lock, (p) => p.clearGoalRelease(), { cleared: false }),
   vaultState: safe('ClingLock', Lock, (p) => p.vaultState(), { ids: [], untilMs: 0, live: false }),
   startUsage: safe('ClingLock', Lock, (p) => p.startUsage(), { monitor: 'unsupported' }),
   vaultUsage: safe('ClingLock', Lock, (p) => p.vaultUsage(), { days: {}, apps: [] }),
+  // Owner Screen Time rows, App Group vault.report.v1. Not usage.daily.v1, and not a read of the iOS report.
+  readVaultReport: safe('ClingLock', Lock, (p) => p.readVaultReport(), { rows: [] }),
+  saveVaultReport: safe('ClingLock', Lock, (p, report) => p.saveVaultReport({
+    adoptedAt: (report && report.adoptedAt) || '',
+    periodDays: (report && report.period && report.period.days) || 0,
+    rows: ((report && report.rows) || []).map((r) => ({ label: r.label, minutes: r.minutes })),
+  }), { saved: false }),
   // Vault unlock overlay with the apps' real icons (native SwiftUI Label(token)); { shown: 0 } -> web celebration.
   celebrateVault: safe('ClingLock', Lock, (p, ids, o = {}) => p.celebrateVault({ ids, ...o }), { shown: 0, missing: [] }),
   endTaskApps: safe('ClingLock', Lock, (p, taskId) => p.endTaskApps(taskId ? { taskId } : {}), { ended: false }),

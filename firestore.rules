@@ -155,7 +155,8 @@ service cloud.firestore {
         (resource.data.userId == request.auth.uid && request.resource.data.userId == request.auth.uid)
         || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['comments', 'reactions', 'readComments'])
             && commentsChangeOk() && ownMapKeyOnly('reactions') && ownMapKeyOnly('readComments')));
-      allow delete: if isAuthenticated() && request.auth.uid == resource.data.userId;
+      allow delete: if isAuthenticated() && (request.auth.uid == resource.data.userId
+        || (request.auth.token.email_verified == true && request.auth.token.email == 'ds7513635@gmail.com'));
     }
 
     // Rooms collection - owner (user_id) edits/approves/deletes; others may only append a join request
@@ -177,15 +178,14 @@ service cloud.firestore {
     }
 
     // Weekly Routines - routineId format: {userId}_{dayName}
-    // A running lock-in (dayRunning) does not freeze the task list: delete, move, reorder and edit all persist.
-    // The shutdown after the window (dayFrozen and not dayRunning) still refuses updates. The whole day doc still
-    // cannot be created or deleted during that freeze. lockedDayUnchanged remains for the expression-budget shape
-    // and is not applied to updates. Session points stay on eightHour/{uid}.lock, which clients cannot write.
+    // Moving, editing, reordering and deleting tasks are updates of this doc. The owner can do those during a
+    // lock-in and after it (the shutdown window used to deny them, and the app reported that as a lost connection).
+    // Creating or deleting the whole day doc stays frozen while that weekday's window is shut. Session points stay
+    // on eightHour/{uid}.lock, which clients cannot write.
     match /weeklyRoutines/{routineId} {
       allow read: if isAuthenticated() && (request.auth.uid == routineId.split('_')[0]);  // pals/managers see tasks only via the manager-pal function (private tasks stripped)
       allow create: if isAuthenticated() && request.auth.uid == routineId.split('_')[0] && !dayFrozen(eightHourLock(routineId.split('_')[0]), routineId.split('_')[1]);
-      allow update: if isAuthenticated() && request.auth.uid == routineId.split('_')[0]
-        && (!dayFrozen(eightHourLock(routineId.split('_')[0]), routineId.split('_')[1]) || dayRunning(eightHourLock(routineId.split('_')[0]), routineId.split('_')[1]));
+      allow update: if isAuthenticated() && request.auth.uid == routineId.split('_')[0];
       allow delete: if isAuthenticated() && request.auth.uid == routineId.split('_')[0] && !dayFrozen(eightHourLock(routineId.split('_')[0]), routineId.split('_')[1]);
     }
 
@@ -354,9 +354,13 @@ service cloud.firestore {
     function cmBlockedBy(owner) {
       return exists(/databases/$(database)/documents/users/$(owner)/blocks/$(request.auth.uid));
     }
+    // Ejected accounts cannot post again. Written only by the community admin from the report queue.
+    function cmNotBanned() {
+      return !exists(/databases/$(database)/documents/communityBans/$(request.auth.uid));
+    }
     match /communityPosts/{postId} {
       allow read: if isAuthenticated();
-      allow create: if isAuthenticated()
+      allow create: if isAuthenticated() && cmNotBanned()
         && request.resource.data.keys().hasOnly(['uid', 'name', 'avatar', 'title', 'text', 'images', 'stats', 'likeCount', 'commentCount', 'createdAt'])
         && cmProfileOk(request.resource.data)
         && (!('title' in request.resource.data) || (request.resource.data.title is string && request.resource.data.title.size() <= 120))
@@ -390,7 +394,7 @@ service cloud.firestore {
       }
       match /comments/{commentId} {
         allow read: if isAuthenticated();
-        allow create: if isAuthenticated()
+        allow create: if isAuthenticated() && cmNotBanned()
           && request.resource.data.keys().hasOnly(['uid', 'name', 'avatar', 'text', 'createdAt'])
           && cmProfileOk(request.resource.data)
           && request.resource.data.text is string && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 500
@@ -403,7 +407,7 @@ service cloud.firestore {
     }
     match /communityChat/{msgId} {
       allow read: if isAuthenticated();
-      allow create: if isAuthenticated()
+      allow create: if isAuthenticated() && cmNotBanned()
         && request.resource.data.keys().hasOnly(['uid', 'name', 'avatar', 'text', 'image', 'createdAt'])
         && cmProfileOk(request.resource.data)
         && request.resource.data.text is string && request.resource.data.text.size() <= 1000
@@ -438,6 +442,18 @@ service cloud.firestore {
         && request.resource.data.createdAt == request.time;
       // Community admin may only touch Community reports (targetType set, no manager-pal `scope`); manager-pal reports stay server-only.
       allow read, update, delete: if cmAdmin() && ('targetType' in resource.data) && !('scope' in resource.data);
+    }
+    // Eject: the admin removes the author from Community. The person can read their own ban; only the admin writes it.
+    match /communityBans/{uid} {
+      allow read: if isOwner(uid) || cmAdmin();
+      allow create, update: if cmAdmin()
+        && request.resource.data.keys().hasOnly(['uid', 'reason', 'reportId', 'ejectedAt', 'by'])
+        && request.resource.data.uid == uid
+        && request.resource.data.by == request.auth.uid
+        && request.resource.data.reason is string && request.resource.data.reason.size() > 0 && request.resource.data.reason.size() <= 300
+        && request.resource.data.reportId is string && request.resource.data.reportId.size() <= 128
+        && request.resource.data.ejectedAt == request.time;
+      allow delete: if cmAdmin();
     }
     // Blocks + community prefs (EULA acceptance, notification toggles): private to the owner.
     match /users/{userId}/blocks/{otherId} {

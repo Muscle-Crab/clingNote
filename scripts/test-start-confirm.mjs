@@ -13,7 +13,7 @@ t('on by default; "Don\'t ask again" is per user; Settings turns it back on', ()
 t('adjust clamps 5..600', () => { assert.equal(m.adjustMinutes(20, 5), 25); assert.equal(m.adjustMinutes(5, -5), 5); assert.equal(m.adjustMinutes(600, 5), 600); });
 t('wiring: play asks unless off, Skip = current time, Start = adjusted, speech stopped; Settings row', () => {
   const h = fs.readFileSync(new URL('../src/views/HomeView.vue', import.meta.url), 'utf8');
-  assert.match(h, /if \(!confirmStartOn\(localStorage, userId\.value\)\) return launchTimer\(index, mins\);/);
+  assert.match(h, /if \(focusModeOn\.value \|\| !confirmStartOn\(localStorage, userId\.value\)\) return launchTimer\(index, mins\)/);
   assert.match(h, /speakConfirm\(confirmLine\(t\.title, mins\)\)/); assert.match(h, /stopConfirm\(\); startConfirm\.value = null;\n  if \(c\.dontAsk\) setConfirmStart\(localStorage, userId\.value, false\);/);
   assert.match(h, /launchTimer\(c\.index, useAdjusted \? c\.minutes : c\.base, c\.base\)/); assert.match(h, /@skip="finishStartConfirm\(false\)"/);
   const sh = fs.readFileSync(new URL('../src/components/home/StartConfirmSheet.vue', import.meta.url), 'utf8'); assert.match(sh, /Don't ask again/); assert.match(sh, /start-confirm-skip/);

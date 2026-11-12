@@ -82,7 +82,7 @@ t('wiring: tick awaits the recheck before settling, passes qualifies', () => {
   const i = home.indexOf("await recheckStreak('settle')"); const j = home.indexOf('await settleDeadlines(');
   assert.ok(i > 0 && j > i); assert.match(home.slice(j, j + 400), /qualifies: \(d, st, sd\) => storedDayQualifies/);
 });
-t('wiring: recheck uses the deadline window (endMs)', () => assert.match(home, /const \{ gate, endMs \} = recheckWindow\(today\)/) || assert.match(home, /startMs: dayStartMs\(\), endMs,/));
+t('wiring: recheck uses the deadline window (endMs)', () => { assert.match(home, /const \{ gate, endMs \} = recheckWindow\(today\)/); assert.match(home, /at > endMs/); });
 t('wiring: settle credits qualifying days instead of killing the streak', () => { assert.match(disc, /ok && await creditDay\(uid, d\)/); assert.match(disc, /dayDiff\(d, today\) <= 1/); });
 t('wiring: first-run defaults never overwrite a stored deadline', () => assert.match(disc, /const fresh = await tx\.get\(settingsRef\(uid\)\); const cur = fresh\.exists\(\) \? fresh\.data\(\)\.discipline : null;\n\s*if \(cur\) return normSettings\(cur\);/));
 console.log(`streak-settle: ${n} ok`);

@@ -18,7 +18,8 @@
     <template v-else-if="view === 'planned'">
       <p v-if="stats.warning && !(eh.st.data && eh.st.data.offline)" class="eh-note eh-alert--boss" data-test="eh-alert">⚠️ {{ stats.warning }}</p>
       <div class="eh-line">
-        <p class="eh-big" data-test="eh-starts">Ready<small> · Ends {{ ends }}</small></p>
+        <p class="eh-big" data-test="eh-starts">Ready</p>
+        <p v-if="ends" class="eh-end" data-test="eh-ends"><span class="eh-end-k">Day ends</span><b>{{ ends }}</b></p>
         <button v-if="phase === 'ready' && inRange" class="eh-btn eh-btn--primary" data-test="eh-start" @click="$emit(locked ? 'pro' : 'start')">{{ locked ? 'Start 🔒' : 'Start' }}</button>
         <span v-else class="eh-badge">Not started</span>
       </div>
@@ -36,14 +37,15 @@
         <span class="eh-lock" data-test="eh-lock" title="Locked: window, tasks, points and target cannot change" aria-label="Locked">🔒</span>
         <p class="eh-clock" data-test="eh-countdown" role="timer">{{ countdown }}</p>
         <div class="eh-meta">
-          <span data-test="eh-times">{{ starts }} → <span data-test="eh-ends">Ends {{ ends }}</span></span>
-          <span data-test="eh-points">Goal {{ progress.earned }}/{{ lock.target }} pts</span> <span class="eh-n8" data-test="eh-session-tasks">· {{ Math.min(progress.done, PER) }}/{{ PER }} tasks this session</span>
+          <span data-test="eh-times">{{ starts }} →</span>
+          <span class="eh-end" data-test="eh-ends"><span class="eh-end-k">Day ends</span><b>{{ ends }}</b></span>
+          <span data-test="eh-points">Goal {{ progress.earned }}/{{ goalPts }} pts</span> <span class="eh-n8" data-test="eh-session-tasks">· {{ Math.min(progress.done, PER) }}/{{ PER }} tasks this session</span>
         </div>
       </div>
       <!-- draining bar: time left (track) vs points earned (fill); the pace marker is where points should be by now -->
       <div class="eh-drain" data-test="eh-drain" :aria-label="`${pace.timePct}% of time left, ${pace.pointsPct}% of target earned`">
         <span class="eh-drain-time" :style="{ width: pace.timePct + '%' }"></span><span class="eh-drain-pts" :style="{ width: pace.pointsPct + '%' }"></span>
-        <span class="eh-drain-pace" :style="{ left: Math.min(100, Math.round((pace.expected / Math.max(1, lock.target)) * 100)) + '%' }"></span>
+        <span class="eh-drain-pace" :style="{ left: Math.min(100, Math.round((pace.expected / Math.max(1, goalPts)) * 100)) + '%' }"></span>
       </div>
       <!-- at most ONE pressure line. The server notice belongs to the last SETTLED day, never to the running one
            (it said "0 of 30" from an earlier day under today's 0/260 header). -->
@@ -54,7 +56,7 @@
     <template v-else-if="view === 'ended'">
       <div class="eh-line">
         <span class="eh-badge" :class="met ? 'eh-badge--ok' : 'eh-badge--miss'" data-test="eh-result">{{ met ? 'Goal met' : 'Goal missed' }}</span>
-        <div class="eh-meta eh-meta--end"><span data-test="eh-points">Goal {{ progress.earned }}/{{ lock.target }} pts</span> <span class="eh-n8" data-test="eh-session-tasks">· {{ Math.min(progress.done, PER) }}/{{ PER }} tasks this session</span><span>🔥 {{ stats.streak }} day streak</span></div>
+        <div class="eh-meta eh-meta--end"><span data-test="eh-points">Goal {{ progress.earned }}/{{ goalPts }} pts</span> <span class="eh-n8" data-test="eh-session-tasks">· {{ Math.min(progress.done, PER) }}/{{ PER }} tasks this session</span><span>🔥 {{ stats.streak }} day streak</span></div>
       </div>
       <p v-if="met && reward" class="eh-note eh-note--ok" data-test="eh-reward">{{ reward }}</p>
       <p v-if="stats.notice && stats.lastDay === lock.dayKey" class="eh-note" data-test="eh-notice">{{ stats.notice }}</p>
@@ -110,19 +112,27 @@ const needMore = computed(() => Math.max(0, range.value.min - taskTotal.value));
 const overBy = computed(() => Math.max(0, taskTotal.value - range.value.max));
 const inRange = computed(() => needMore.value === 0 && overBy.value === 0);
 // A session with a frozen goal record counts only the points earned AFTER its Start (same sessionGoal math as the server / shield).
+const goalPts = computed(() => {
+  const l = lock.value;
+  if (!l || l.placeholder) return 0;
+  if (Number(l.target) > 0) return Math.round(Number(l.target));
+  if (l.goal && Number(l.goal.points) > 0) return Math.round(Number(l.goal.points));
+  return 0;
+});
 const progress = computed(() => { const l = lock.value; if (!l) return { earned: 0, done: 0, total: 0 };
-  if (l.goal && Number(l.target) > 0) { const g = sessionGoal(props.tasks || [], { n: 1, sessions: 1, startMs: l.startMs, endMs: l.endMs, goal: Number(l.target) }); return { earned: g.earned, done: g.done, total: g.total }; }
+  const frozen = Number(l.target) > 0 ? Number(l.target) : (l.goal && Number(l.goal.points) > 0 ? Number(l.goal.points) : 0);
+  if (l.goal && frozen > 0) { const g = sessionGoal(props.tasks || [], { n: 1, sessions: 1, startMs: l.startMs, endMs: l.endMs, goal: frozen }); return { earned: g.earned, done: g.done, total: g.total }; }
   return progressOf({ dayKey: l.dayKey, points: l.points, ids: l.ids || undefined, indexes: l.indexes || undefined }, props.tasks); });
-const pct = computed(() => (lock.value && lock.value.target > 0 ? Math.min(100, Math.round((progress.value.earned / lock.value.target) * 100)) : 0));
-const pace = computed(() => (lock.value ? paceOf({ earned: progress.value.earned, target: lock.value.target || 0, startMs: lock.value.startMs, endMs: lock.value.endMs, nowMs: (countdown.value, eh.nowMs()) }) : { timePct: 0, pointsPct: 0, expected: 0, behindBy: 0, leftMs: 0 }));
-const alert = computed(() => (lock.value ? topAlert({ offline: !!(eh.st.data && eh.st.data.offline), running: phase.value === 'running', earned: progress.value.earned, target: lock.value.target || 0, startMs: lock.value.startMs, endMs: lock.value.endMs, nowMs: (countdown.value, eh.nowMs()), streak: stats.value.streak || 0, warning: stats.value.warning || '' }) : null));
+const pct = computed(() => (goalPts.value > 0 ? Math.min(100, Math.round((progress.value.earned / goalPts.value) * 100)) : 0));
+const pace = computed(() => (lock.value ? paceOf({ earned: progress.value.earned, target: goalPts.value || 0, startMs: lock.value.startMs, endMs: lock.value.endMs, nowMs: (countdown.value, eh.nowMs()) }) : { timePct: 0, pointsPct: 0, expected: 0, behindBy: 0, leftMs: 0 }));
+const alert = computed(() => (lock.value ? topAlert({ offline: !!(eh.st.data && eh.st.data.offline), running: phase.value === 'running', earned: progress.value.earned, target: goalPts.value || 0, startMs: lock.value.startMs, endMs: lock.value.endMs, nowMs: (countdown.value, eh.nowMs()), streak: stats.value.streak || 0, warning: stats.value.warning || '' }) : null));
 const level = computed(() => levelOf(stats.value.xp || 0));
 const fmtDay = (ms) => { try { return new Date(ms).toLocaleDateString([], { month: 'short', day: 'numeric' }); } catch (e) { return ''; } };
 const badges = computed(() => [
   ...(stats.value.awards || []).filter((a) => a.badge).map((a) => ({ k: 'a' + a.at, ...badgeLabel(a.badge), from: a.from || 'Manager', date: fmtDay(a.at), note: a.note || '', title: badgeLabel(a.badge).name })),
   ...(stats.value.badges || []).map((id) => ({ k: 'b' + id, ...badgeLabel(id), title: badgeLabel(id).name })),
 ]);
-const met = computed(() => (lock.value ? progress.value.earned >= lock.value.target : false));
+const met = computed(() => (goalPts.value > 0 ? progress.value.earned >= goalPts.value : false));
 
 const save = async () => {
   msg.value = '';
@@ -136,7 +146,7 @@ const save = async () => {
 /* Compact strip (replaces the old big card). Sits between the day tabs and the progress card. */
 .eh { max-width: 100%; box-sizing: border-box; overflow-x: hidden; touch-action: pan-y; overscroll-behavior-x: none; background: var(--c-surface, #16181c); border: 1px solid var(--c-border, #2a2a2e); border-radius: 14px; padding: 6px 12px; margin: 6px 0; color: var(--c-text, #e6e6e6); }
 .eh--running { border-color: rgba(55,138,221,.55); padding: 4px 12px; }
-.eh-line { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 30px; }
+.eh-line { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; min-height: 30px; }
 .eh-line--run { justify-content: flex-start; gap: 10px; min-height: 40px; }
 .eh-title { font-size: .85rem; font-weight: 700; }
 .eh-lock { font-size: .9rem; opacity: .85; }
@@ -147,6 +157,13 @@ const save = async () => {
 .eh-meta { min-width: 0; flex-shrink: 1; white-space: normal; text-align: right; } .eh-meta [data-test=eh-points], .eh-meta [data-test=eh-ends] { white-space: nowrap; }
 .eh-meta--end { flex-wrap: wrap; justify-content: flex-end; column-gap: 10px; }
 .eh-clock { flex-shrink: 0; }
+.eh-end { display: flex; flex-direction: column; align-items: flex-end; margin: 0; min-width: 0; }
+.eh-end-k { font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #9fb7e0; line-height: 1.2; }
+.eh-end b { font-size: 1.2rem; font-weight: 800; color: #fff; line-height: 1.1; font-variant-numeric: tabular-nums; }
+@media (max-width: 380px) {
+  .eh-line--run { flex-wrap: wrap; }
+  .eh-end { align-items: flex-start; }
+}
 .eh-badge { font-size: .65rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--c-surface-2, #22252a); color: var(--c-text-2, #b0b0b0); text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; }
 .eh-badge--ok { background: rgba(60,180,110,.18); color: #3cb46e; }
 .eh-badge--miss { background: rgba(224,90,90,.18); color: #e05a5a; }

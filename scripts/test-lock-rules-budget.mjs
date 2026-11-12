@@ -8,7 +8,7 @@ assert.ok(!/eightHourLocked|eightHourShut|lockedSlotSame/.test(r), 'old per-call
 const lockFn = r.slice(r.indexOf('function eightHourLock('), r.indexOf('function dayFrozen('));
 assert.equal((lockFn.match(/get\(eightHourPath/g) || []).length, 1, 'eightHourLock must read the lock doc once');
 const routines = r.slice(r.indexOf('match /weeklyRoutines/'), r.indexOf('}', r.indexOf('allow delete', r.indexOf('match /weeklyRoutines/'))));
-assert.equal((routines.match(/dayFrozen\(eightHourLock\(/g) || []).length, 3, 'create/update/delete each use one dayFrozen(eightHourLock())');
+assert.equal((routines.match(/dayFrozen\(eightHourLock\(/g) || []).length, 2, 'create and delete still check dayFrozen once; updates stay allowed so a move is not denied');
 const seen = new Map();
 for (let c = 0; c < 5; c++) {
   const m = r.match(new RegExp(`function lockedSlots${c}\\(o, n, k\\) \\{\\s*return k <= ${c * 10} \\|\\| \\(k >= ${c * 10 + 10} \\? \\(([^]*?)\\) : \\(([^]*?)\\)\\);`));

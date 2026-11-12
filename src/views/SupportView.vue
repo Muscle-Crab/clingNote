@@ -14,7 +14,6 @@
 <script setup>
 import { computed } from 'vue';
 import { auth } from '@/firebaseConfig';
-
-const EMAIL = 'musclecrabs@gmail.com';
+import { SUPPORT_EMAIL as EMAIL } from '@/config/support';
 const deletePath = computed(() => (auth.currentUser ? `/profile/${auth.currentUser.uid}?delete=1` : '/login'));
 </script>

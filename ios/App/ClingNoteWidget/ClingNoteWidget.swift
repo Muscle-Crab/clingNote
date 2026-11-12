@@ -118,7 +118,8 @@ struct TaskTimerText: View {
         let frozen = Text(up >= 3600 ? String(format: "%d:%02d:%02d", up / 3600, (up % 3600) / 60, up % 60) : String(format: "%02d:%02d", up / 60, up % 60))
             .monospacedDigit().foregroundColor(color)
         if task.hasTimer, task.timerPaused == nil, let s = task.timerStart, s <= date {
-            Text(s, style: .timer).monospacedDigit().foregroundColor(color)
+            // Anchored to the saved start, not a tick counter, so backgrounding cannot restart it at 0:00.
+            Text(timerInterval: s...Date.distantFuture, countsDown: false).monospacedDigit().foregroundColor(color)
         } else { frozen }
     }
 }

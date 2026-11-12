@@ -18,6 +18,7 @@
         <div class="ob-row"><span class="em">✅</span><div><b>Tasks earn points</b><small>A medium task is about 20 pts. Every 10 pts buys you 5 minutes.</small></div></div>
         <div class="ob-row"><span class="em">💸</span><div><b>Your top apps cost the most</b><small>Each app's price follows how much you used it this past week (30 pts + 2 per daily minute).</small></div></div>
         <div class="ob-row"><span class="em">🔓</span><div><b>The vault opens as you earn</b><small>Pass an app's price and it unlocks, right on your phone.</small></div></div>
+        <div class="ob-row" data-test="ob-play-unlock"><span class="em">▶️</span><div><b>Play opens one app</b><small>On a task, choose the app, then tap play. That app opens for the task. Start a session and hit its points goal to open the rest.</small></div></div>
         <div class="ob-row"><span class="em">🔥</span><div><b>8 tasks a session</b><small>Hit 8 to keep your streak alive. Earn breaks along the way.</small></div></div>
         <div class="ob-row"><span class="em">🤖</span><div><b>An AI coach in your corner</b><small>Plans your day, sizes your tasks, and cheers you on.</small></div></div>
       </section>
@@ -33,7 +34,7 @@
       </section>
 
       <section v-else-if="STEPS[step] === 'age'" class="ob-sec" data-test="ob-age">
-        <p class="ob-k">Quick check</p><h1 class="ob-h">How old <span>are you?</span></h1><p class="ob-p">Just your age. You must be 13 or older to use ClingNote.</p>
+        <p class="ob-k">Quick check</p><h1 class="ob-h">How old <span>are you?</span></h1><p class="ob-p">Just your age. You must be 13 or older to use ClingNote. Community posts are only for people 18 or older.</p>
         <div class="ob-age">
           <button type="button" class="ob-step" aria-label="Younger" @click="bumpAge(-1)">−</button>
           <input type="number" inputmode="numeric" min="1" max="100" v-model.number="a.age" placeholder="—" aria-label="Your age" data-test="ob-age-input" />
@@ -88,6 +89,7 @@
         <div class="ob-bell">🔒</div>
         <p class="ob-k">Step {{ stepNo('applock') }}</p><h1 class="ob-h">Lock your <span>distractions</span></h1>
         <p class="ob-p">Pick apps to block while you're locked in. They unlock when your tasks or points goal are done, or when your hours end. Optional, and you can change it later. Only apps on this iPhone are listed: find Instagram under Social and PUBG Mobile under Games, or search for them.</p>
+        <p class="ob-p" data-test="ob-session-goal">Tap Start to begin a session. Its points goal freezes then, and these apps open when you hit it. For one task, choose its app and tap play.</p>
         <p v-if="a.appLock" class="ob-p">{{ a.appLock }}</p>
       </section>
 
@@ -133,10 +135,10 @@ import { defaultAlarmTime, DEFAULT_ALARM_TIME } from '@/utils/wakeAlarm';
 import { clearProCache } from '@/composables/usePro';
 import { fmtWakeLabel } from '@/utils/eightHour';
 import RobotCoach from '@/components/robot/RobotCoach.vue';
-import { typicalMin } from '@/utils/typicalUsage';
 import VaultApps from '@/components/vault/VaultApps.vue';
 import { askAiQuiet } from '@/composables/useAi';
 import { vaultView } from '@/utils/pointsVault';
+import { adoptSentReport, sentReport } from '@/utils/usageSnapshot';
 import { localDateStr } from '@/utils/streak';
 
 // 'alarm' (iOS app only): optional wake-up alarm opt-in right after the day-start step. index STEPS.length = paywall
@@ -177,10 +179,12 @@ const ctaLabel = computed(() => (busy.value && STEPS[step.value] === 'applock' ?
 // Vault step: the apps just picked, with 0 pts earned = all locked, cheapest first (prices from on-device usage, same as Home).
 const vaultItems = ref([]); const vaultWhy = ref(null);
 // AI wording of each price (server task 'vault_why'); only when AI consent was already given (never prompts here). Any failure keeps the template line.
-const explainVault = async (items) => { if (!items.length) return;
-  const apps = items.map((r) => ({ id: r.id, label: r.label, hoursPerWeek: Math.max(1, Math.round(r.min * 7 / 60)), price: r.price, tasks: r.tasks, estimate: !!r.noData, boss: !!r.boss }));
+const explainVault = async (items) => {
+  const apps = (items || []).filter((r) => r && r.price != null && r.min != null && !r.exact).map((r) => ({ id: r.id, label: r.label, hoursPerWeek: Math.max(1, Math.round(r.min * 7 / 60)), price: r.price, tasks: r.tasks, estimate: false, boss: !!r.boss }));
+  if (!apps.length) return;
   const d = await askAiQuiet('vault_why', { apps }); if (d && d.lines) vaultWhy.value = d.lines; };
-const loadVault = async () => { try { const u = await clingLock.vaultUsage(); vaultItems.value = vaultView({ apps: (u && u.apps) || [], days: (u && u.days) || {}, todayYmd: localDateStr(), points: 0, typical: typicalMin }).items; explainVault(vaultItems.value); } catch (e) { vaultItems.value = []; } };
+const vaultReport = () => { try { return adoptSentReport(localStorage, new Date().toISOString()); } catch (e) { return sentReport(''); } };
+const loadVault = async () => { try { const u = await clingLock.vaultUsage(); vaultItems.value = vaultView({ apps: (u && u.apps) || [], days: (u && u.days) || {}, todayYmd: localDateStr(), points: 0, report: vaultReport() }).items; explainVault(vaultItems.value); } catch (e) { vaultItems.value = []; } };
 watch(step, (n) => { if (STEPS[n] === 'vault' && !vaultItems.value.length) loadVault(); }, { immediate: true });
 const toggle = (id) => { const i = a.goals.indexOf(id); i < 0 ? a.goals.push(id) : a.goals.splice(i, 1); };
 

@@ -26,9 +26,9 @@
 </template>
 <script setup>
 import { ref, computed, watch } from 'vue';
+import { SUPPORT_EMAIL as SUPPORT } from '@/config/support';
 const props = defineProps({ open: { type: Boolean, default: false }, message: { type: Object, default: null }, who: { type: String, default: '' }, canBlock: { type: Boolean, default: false }, send: { type: Function, required: true } });
 defineEmits(['close']);
-const SUPPORT = 'musclecrabs@gmail.com';
 const REASONS = [{ id: 'harassment', l: 'Harassment or bullying' }, { id: 'inappropriate', l: 'Inappropriate' }, { id: 'spam', l: 'Spam' }, { id: 'other', l: 'Something else' }];
 const reason = ref('harassment'); const alsoBlock = ref(false); const busy = ref(false); const done = ref(false); const blocked = ref(false); const error = ref(''); const reportId = ref('');
 watch(() => props.open, (o) => { if (o) { reason.value = 'harassment'; alsoBlock.value = false; done.value = false; blocked.value = false; error.value = ''; } });

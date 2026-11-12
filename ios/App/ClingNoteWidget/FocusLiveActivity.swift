@@ -73,7 +73,8 @@ struct FocusTimeText: View {
             if state.paused {
                 Text(FocusFormat.clock(state.elapsedSec ?? max(0, d - (state.remainingSec ?? 0))))
             } else {
-                Text(state.endsAt.addingTimeInterval(-TimeInterval(d)), style: .timer)
+                // Same saved start the app uses (end minus the set duration). A view refresh must not restart at 0:00.
+                Text(timerInterval: state.endsAt.addingTimeInterval(-TimeInterval(d))...Date.distantFuture, countsDown: false)
             }
         } else if state.paused {
             Text(FocusFormat.clock(state.remainingSec ?? 0))

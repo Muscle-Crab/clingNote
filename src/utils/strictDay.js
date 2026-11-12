@@ -42,7 +42,7 @@ export const endOfDay = (nowMs) => { const d = new Date(nowMs); return new Date(
 // A missed goal has no clock-time lock here any more (the old 'missed' end + 2 h phase is gone): the missed-goal app lock
 // (appLockDebt, server + native DebtHold) keeps the picked apps locked until a later session reaches its goal.
 export const strictShield = ({ running = false, dayEndMs = 0, now = Date.now(), goal = 0, earned = 0, tasksDone = 0, goalAt = 0, claimedAt = 0, selectionCount = 0, enabled = true, unlockedToday = false, offDay = false, allDone = false, tuning = STRICT_TUNING } = {}) => {
-  const midnight = endOfDay(now); const off = { want: false, untilMs: 0, phase: 'off', windowMin: 0, unlockEndMs: 0 };
+  const off = { want: false, untilMs: 0, phase: 'off', windowMin: 0, unlockEndMs: 0 };
   if (!enabled || selectionCount <= 0 || unlockedToday || offDay || !dayEndMs) return off;
   // Every task finished counts as met even when the floor goal (minGoal) or a penalty keeps the points short of it.
   const met = (goal > 0 && earned >= goal) || !!allDone;
@@ -51,15 +51,74 @@ export const strictShield = ({ running = false, dayEndMs = 0, now = Date.now(), 
     return now < dayEndMs && running ? { ...off, want: true, untilMs: dayEndMs, phase: 'locked' } : off;
   }
   const windowMin = earnedWindowMin({ earned, goal, tasksDone }, tuning);
-  // Goal met and the day's time is over: everything opens (build 48 kept 'ready'/'relocked' locked until midnight).
-  // Before the end the banked window works as before, but the native lock ends at the day end, so iOS lifts it on its own.
-  if (now >= dayEndMs) return { ...off, phase: 'done', windowMin, unlockEndMs: claimedAt ? claimedAt + windowMin * 60000 : 0 };
-  const lockEnd = Math.min(midnight, dayEndMs);
-  if (!claimedAt) return lockEnd - now > 60000 ? { want: true, untilMs: lockEnd, phase: 'ready', windowMin, unlockEndMs: 0 } : { ...off, windowMin };
-  const unlockEndMs = claimedAt + windowMin * 60000;
-  if (now < unlockEndMs) return { want: false, untilMs: 0, phase: 'earned', windowMin, unlockEndMs };
-  return lockEnd - now > 60000 ? { want: true, untilMs: lockEnd, phase: 'relocked', windowMin, unlockEndMs } : { ...off, windowMin, unlockEndMs };
+  // Goal met and the day's time is over: everything opens.
+  if (now >= dayEndMs) return { ...off, phase: 'done', windowMin, unlockEndMs: 0 };
+  // The required threshold is already crossed: open now. A Start screen time tap is not required, and the shield
+  // does not stay up for the rest of the session.
+  if (running && now < dayEndMs) return { want: false, untilMs: 0, phase: 'open', windowMin, unlockEndMs: 0 };
+  return { ...off, windowMin };
 };
+
+// The pair the home bar shows: daily points against the required threshold (lock target).
+export const dayThresholdOpen = ({ earned = 0, required = 0 } = {}) => {
+  const e = Number(earned) || 0; const r = Number(required) || 0;
+  return r > 0 && e >= r;
+};
+export const SESSION_BASE_KEY = 'cn.session.base.v1';
+export const sessionId = (lock) => (!lock || !Number(lock.startMs) ? '' : `${lock.dayKey || ''}#${Number(lock.index) || 0}:${lock.startMs}`);
+// Points already on the board when THIS session started. A new startMs records a new baseline and does not inherit the previous unlock.
+export const noteSessionBase = (storage, lock) => {
+  const row = readSessionGate(storage, lock);
+  return row ? row.earned : 0;
+};
+// Opens only when points earned AFTER this session's baseline reach this session's own requirement.
+// Points already on the board at the start do not count. A requirement of 0 (nothing left to do) does not open.
+export const sessionUnlock = ({ dayEarned = 0, dayRequired = 0, earnedAtStart = 0, sessionEarned = null, sessionRequired = null } = {}) => {
+  const req = Number(sessionRequired != null ? sessionRequired : dayRequired) || 0;
+  const start = Math.max(0, Number(earnedAtStart) || 0);
+  const day = Math.max(0, Number(dayEarned) || 0);
+  const earned = sessionEarned == null ? Math.max(0, day - start) : Math.max(0, Number(sessionEarned) || 0);
+  if (!(req > 0)) return false;
+  return earned >= req;
+};
+export const readSessionGate = (storage, lock) => {
+  const key = sessionId(lock);
+  if (!key || !storage) return null;
+  let saved = null;
+  try { saved = JSON.parse(storage.getItem(SESSION_BASE_KEY) || 'null'); } catch (e) { saved = null; }
+  if (!saved || saved.key !== key || !Number.isFinite(Number(saved.earned))) return null;
+  return { key, earned: Math.max(0, Number(saved.earned)), target: Math.max(0, Math.round(Number(saved.target) || 0)) };
+};
+// Written once, at a successful new session start. A second call for the same session keeps the first baseline and target.
+// A failed write returns null. Callers must not treat the day's points as this session when nothing was saved:
+// that missing baseline is what opened the vault before Start had a number to subtract.
+export const beginSessionGate = (storage, lock, dayEarned, target) => {
+  const existing = readSessionGate(storage, lock);
+  if (existing) return existing;
+  const key = sessionId(lock);
+  if (!key || !storage || typeof storage.setItem !== 'function') return null;
+  const row = { key, earned: Math.max(0, Number(dayEarned) || 0), target: Math.max(0, Math.round(Number(target) || 0)) };
+  try { storage.setItem(SESSION_BASE_KEY, JSON.stringify(row)); } catch (e) { return null; }
+  return readSessionGate(storage, lock);
+};
+// A baseline of 0 saved before the task list arrived counts every earlier completion as this session
+// and opens the vault. Raise it to the points finished before Start. Never lower a real baseline.
+export const healSessionGate = (storage, lock, preStartEarned) => {
+  const row = readSessionGate(storage, lock);
+  const prior = Math.max(0, Math.round(Number(preStartEarned) || 0));
+  if (!row || !(prior > row.earned)) return row;
+  const key = sessionId(lock);
+  if (!key || !storage || typeof storage.setItem !== 'function') return row;
+  try { storage.setItem(SESSION_BASE_KEY, JSON.stringify({ ...row, earned: prior })); } catch (e) { return row; }
+  return readSessionGate(storage, lock) || row;
+};
+export const sessionShieldDecision = ({ enabled = true, running = false, now = Date.now(), endMs = 0, selectionCount = 1, unlockedToday = false, ...rest } = {}) => {
+  if (!enabled || selectionCount <= 0 || unlockedToday || !running || !(Number(endMs) > now)) return { want: false, phase: 'off', untilMs: 0 };
+  if (sessionUnlock(rest)) return { want: false, phase: 'open', untilMs: 0 };
+  return { want: true, phase: 'locked', untilMs: Number(endMs) || 0 };
+};
+// An unfinished morning checklist must not put the shield back once that threshold is open.
+export const checklistMayRelock = (shield) => !(shield && (shield.phase === 'open' || shield.phase === 'done'));
 
 export const fmtMin = (m) => { const v = Math.max(0, Math.round(m)); return v >= 60 ? `${Math.floor(v / 60)}h${v % 60 ? ` ${v % 60}m` : ''}` : `${v}m`; };
 // Day-end notification text: points earned and screen time earned.

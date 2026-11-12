@@ -1,4 +1,6 @@
-// Home-screen widget (iOS WidgetKit) data + deep links. Pure (no imports) so it is unit-tested in node (scripts/test-widget.js).
+// Home-screen widget (iOS WidgetKit) data + deep links. Unit-tested in node (scripts/test-widget.js).
+import { timerShownOnWidget, isRemovedTask } from './dayList.js';
+import { timerMillis } from './timerRing.js';
 // The web layer writes buildWidgetSnapshot(todayTasks) as JSON to the App Group (UserDefaults suite group.app.clingnote.ios, key
 // "widget.today") through the local ClingWidget Capacitor plugin; the Swift widget (ios/App/ClingNoteWidget) only reads it.
 // Tapping a task opens clingnote://task/<id>, which parseWidgetLink() turns into /home?task=<id> (HomeView card is highlighted).
@@ -35,11 +37,11 @@ export const chipText = (est, pts) => [fmtEstimate(est), num(pts) ? `${num(pts)}
 // estimate: (task) -> { minutes, points } as displayed on the card (HomeView TaskCard = chipValues). Written as est/pts, so the widget never recomputes.
 export const buildWidgetSnapshot = (tasks, { now = new Date(), dayName = '', pendingIds = [], lock = null, estimate = storedChip, ptsTarget = 0 } = {}) => {
   const pending = new Set(pendingIds); // widget taps not yet applied by the app: keep them shown as done
-  const list = (Array.isArray(tasks) ? tasks : []).filter((t) => t && typeof t.title === 'string' && t.title.trim());
+  const list = (Array.isArray(tasks) ? tasks : []).filter((t) => t && !isRemovedTask(t) && typeof t.title === 'string' && t.title.trim());
   const chip = (t) => { try { const c = estimate(t) || {}; return { est: num(c.minutes), pts: num(c.points) }; } catch (e) { const c = storedChip(t); return { est: c.minutes, pts: c.points }; } };
   const rows = list.map((t, i) => ({
     id: widgetTaskId(t), title: t.title.trim().slice(0, 80), ...chip(t),
-    done: t.completed === true || pending.has(widgetTaskId(t)), time: timeOf(t), ...timerFields(t), _run: !!(t.timerActive && t.completed !== true), _i: i,
+    done: t.completed === true || pending.has(widgetTaskId(t)), time: timeOf(t), ...timerFields(t, now.getTime()), _run: !!(t.timerActive && t.completed !== true && timerShownOnWidget(t, now.getTime())), _i: i,
   }));
   // Running timers first (same as the app list, utils/taskView.pinRunning), then open; open tasks with a start time by time, then the rest in list order; done last in list order.
   rows.sort((a, b) => (b._run - a._run) || (a.done - b.done) || (!a.done && ((!a.time - !b.time) || (a.time && b.time && a.time.localeCompare(b.time)))) || (a._i - b._i));
@@ -60,12 +62,13 @@ export const buildWidgetSnapshot = (tasks, { now = new Date(), dayName = '', pen
 };
 
 // Task timer for the widget countdown ring (ms since epoch, 0 = none; Swift decodes as optional). Only a timer that is set.
-function timerFields(t) {
-  const ms = (v) => { const n = v ? new Date(v).getTime() : 0; return Number.isFinite(n) && n > 0 ? n : 0; };
+function timerFields(t, nowMs) {
+  if (!timerShownOnWidget(t, nowMs)) return {};
+  const ms = (v) => { const n = timerMillis(v); return n > 0 ? n : 0; };
   const tE = ms(t.timerEndTime);
   // tS = effective start (end - set duration): timerEndTime moves on resume, so the widget's count-up excludes paused time.
   let tS = tE && Number(t.timerDurationMinutes) > 0 ? tE - Number(t.timerDurationMinutes) * 60000 : ms(t.timerStartedAt);
-  return tE && tS && tE > tS && t.completed !== true ? { tS, tE, tP: ms(t.timerPausedAt) } : {};
+  return tE && tS && tE > tS ? { tS, tE, tP: ms(t.timerPausedAt) } : {};
 }
 
 function lockFields(lock, dayName, now) {

@@ -137,6 +137,18 @@ export const lostReason = (state, today, min = DAILY_STREAK_MIN) => {
 };
 
 // ---- Automatic recheck (B41) ----
+// Today's finished tasks, the same set the daily progress count uses (completed, not pending, not won't-do).
+// The legacy Start Day clock is not a filter: a task finished during the session still counts when that
+// older start time is missing or later than the work.
+export const todayDoneKeys = (tasks, keyOf) => {
+  if (!Array.isArray(tasks) || !keyOf) return [];
+  const keys = [];
+  for (const t of tasks) {
+    if (!t || !t.completed || t.status === 'pending' || t.status === 'wontdo') continue;
+    const k = keyOf(t); if (k) keys.push(k);
+  }
+  return keys;
+};
 // Tasks completed today that may count toward the streak: done, not pending, and completed after Start Day.
 // A task with no completedAt counts only if it was already counted (legacy data); nothing counts before Start Day.
 // startMs = Start Day time in ms (null = started, time unknown). `prevDone` = keys already in today's dayDone.

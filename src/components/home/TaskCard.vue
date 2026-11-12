@@ -124,7 +124,7 @@
                       <button v-if="focusLocked" type="button" class="task-play task-play--locked" data-test="focus-lock-btn" title="Focus locked. Tap to end early" aria-label="Focus locked. Tap to end focus early" @click.stop="$emit('end-focus')">
                         <i class="fas fa-lock"></i>
                       </button>
-                      <button v-else type="button" class="task-play" :class="{ 'task-play--primary': upNext }" title="Start focus timer" aria-label="Start focus timer" @click.stop="$emit('timer')">
+                      <button v-else type="button" class="task-play" :class="{ 'task-play--primary': upNext }" title="Tap play. An app you chose for this task opens until the timer ends." aria-label="Tap play. An app you chose for this task opens until the timer ends." @click.stop="$emit('timer')">
                         <i class="fas fa-play"></i>
                       </button>
                     </div>

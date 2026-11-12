@@ -1,7 +1,7 @@
 // Community (feed + group chat): pure helpers only, no Firebase. Tested by scripts/test-community.js.
 export const ADMIN_EMAIL = 'ds7513635@gmail.com';
 export const LIMITS = { title: 120, text: 2000, comment: 500, chat: 1000, reason: 300, fanout: 500 };
-export const EULA_VERSION = 1;
+export const EULA_VERSION = 2; // 2: terms state there is no tolerance for objectionable content or abusive users
 export const NOTIF_TYPES = ['follow', 'like', 'comment', 'share', 'post'];
 export const DEFAULT_NOTIF_PREFS = { follow: true, like: true, comment: true, share: true, post: true };
 export const SHARE_BASE = 'https://clingnot.netlify.app';
