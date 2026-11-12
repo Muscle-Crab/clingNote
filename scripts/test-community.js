@@ -216,11 +216,20 @@ await t('a report is remove + eject, and it is overdue 24 hours later', () => {
   const at = Date.parse('2026-11-11T20:00:00Z');
   assert.equal(S.reportOverdue(at, at + 23 * 3600000), false);
   assert.equal(S.reportOverdue(at, at + 24 * 3600000), true);
-  assert.equal(S.CONTACT_EMAIL, 'support@clingnote.app');
+  assert.equal(S.CONTACT_EMAIL, 'musclecrabs@gmail.com');
+  assert.equal(S.CONTACT_LINE.includes('musclecrabs@gmail.com'), true);
 });
 await t('terms state there is no tolerance for objectionable content, and the EULA version moved', () => {
   const terms = fs.readFileSync(path.join(__dirname, '../src/views/TermsandCondition.vue'), 'utf8');
   assert.match(terms, /no tolerance for objectionable content or abusive users/);
+  assert.match(terms, /SUPPORT_EMAIL/);
+  assert.doesNotMatch(terms, /support@clingnote\.app/);
+  for (const rel of ['../src/config/support.js', '../src/views/SupportView.vue', '../src/components/pals/ReportDialog.vue', '../src/views/privacy-policy.vue']) {
+    const text = fs.readFileSync(path.join(__dirname, rel), 'utf8');
+    assert.doesNotMatch(text, /support@clingnote\.app/, rel);
+    assert.match(text, /SUPPORT_EMAIL/, rel);
+  }
+  assert.match(fs.readFileSync(path.join(__dirname, '../src/config/support.js'), 'utf8'), /musclecrabs@gmail\.com/);
   assert.equal(C.EULA_VERSION, 2);
   const view = fs.readFileSync(path.join(__dirname, '../src/views/CommunityView.vue'), 'utf8');
   assert.match(view, /data-test="cm-age"/); assert.match(view, /data-test="cm-contact"/);

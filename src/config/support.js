@@ -1,2 +1,2 @@
-// Single source for the support contact. NOTE: the clingnote.app mailbox/DNS must be created by the owner before App Store submission.
-export const SUPPORT_EMAIL = 'support@clingnote.app';
+// Single in-app contact. Community, Terms, Support, privacy, and report mailtos all use this address.
+export const SUPPORT_EMAIL = 'musclecrabs@gmail.com';
