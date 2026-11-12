@@ -39,6 +39,7 @@ t('nextSessionState: cooldown reason, until, message + breakdown', () => {
   assert.equal(core.nextSessionState({ lock: miss(2), nowMs: 10 * H }).ok, true);
 });
 t('waitText countdown', () => assert.match(core.waitText(11 * H, 9 * H, '2h + 2 important × 30m', 'UTC'), /^Next session in 2h · 11:00 AM \(2h \+ 2 important × 30m\)$/));
+t('waitText does not repeat the same duration', () => assert.equal(core.waitText(11 * H, 9 * H, '2h', 'UTC'), 'Next session in 2h · 11:00 AM'));
 const fn = fs.readFileSync(new URL('../netlify/functions/eight-hour-day.js', import.meta.url), 'utf8');
 t('server settle stores missedImportant on the session', () => assert.match(fn, /missedImportant: missImp/));
 t('client _session carries the breakdown', () => assert.match(fn, /breakdown: r\.breakdown/));

@@ -429,7 +429,7 @@ import { planTaskUnlock } from '@/utils/taskAppUnlock';
 import LockGuideSheet from '@/components/home/LockGuideSheet.vue';
 import { normBossMode, emergencyAllowed, goalFor, strictShield, wakeAutoOn, dayEndNote, moodReply, checklistMayRelock, readSessionGate, beginSessionGate, sessionUnlock, sessionId } from '@/utils/strictDay';
 import { LOCK_PREF, PENALTY_KEY, EMERGENCY_PENALTY, busyToDay, mergePenalties, lastPenaltyDay } from '@/utils/appLock';
-import { previewDayTarget, requiredPoints, sessionTargetOf } from '@/utils/dayTarget';
+import { previewDayTarget, requiredPoints, sessionTargetOf, displayedSessionGoal } from '@/utils/dayTarget';
 const askOpen = ref(false); // Assistant sheet (✨ next to the bell, and the bubble in the task list header)
 const assistantListen = ref(false);
 const agentAdd = ref(false); // true while the assistant adds tasks: over-limit returns an error to the model instead of opening the paywall
@@ -3884,13 +3884,14 @@ const confirmDayStart = async (hours, opts = {}) => {
     if (!validSessionHours(hours)) { ehStartError.value = 'Pick 5 to 12 whole hours.'; return; }
     await fetchSelectedDayRoutine(); // today's saved progress first, so the baseline is not 0 from an empty list
     const tasksNow = selectedDayRoutine.value || [];
-    const goal = sessionTargetOf(tasksNow, hours, eh.stats.value).target;
-    if (!(goal > 0)) { ehStartError.value = 'All done today'; return; }
+    const preview = sessionTargetOf(tasksNow, hours, eh.stats.value).target;
+    if (!(preview > 0)) { ehStartError.value = 'All done today'; return; }
     const baseline = awardOfList(tasksNow);
     const beforeKey = sessionId(eh.lock.value);
     await eh.startNow(hours, opts.blocks, { apps: opts.lock ? sessionAppsPick.value : null }); // evening mode: optional later blocks today (split day), fixed now
     const lock = eh.running.value ? eh.lock.value : null;
     if (!lock || !lock.startMs) { ehStartError.value = 'Could not start the session.'; return; }
+    const goal = displayedSessionGoal(lock, preview);
     if (sessionId(lock) !== beforeKey || !readSessionGate(localStorage, lock)) {
       beginSessionGate(localStorage, lock, baseline, goal);
       sessionGateTick.value += 1;
@@ -3918,7 +3919,8 @@ const captureSessionGate = () => {
   if (existing) return existing;
   if (!eh.running.value || isLoading.value || !todayListLoaded.value) return null;
   const tasks = selectedDayRoutine.value || [];
-  const target = sessionTargetOf(tasks, lock.hours != null ? lock.hours : eh.hoursPref.value, eh.stats.value).target;
+  const preview = sessionTargetOf(tasks, lock.hours != null ? lock.hours : eh.hoursPref.value, eh.stats.value).target;
+  const target = displayedSessionGoal(lock, preview);
   if (!(target > 0)) return null;
   const daily = awardOfList(tasks);
   const row = beginSessionGate(localStorage, lock, daily, target);
@@ -3931,10 +3933,16 @@ const sessionEarnedPts = computed(() => {
   if (!g) return null;
   return sessionAward(pointsAccumulated.value, g.earned);
 });
-const sessionTargetPts = computed(() => (sessionGate.value ? sessionGate.value.target : null));
+// Frozen session goal (lock.target) wins over the local dailyTarget preview stored on the gate.
+const sessionTargetPts = computed(() => {
+  const gate = sessionGate.value;
+  const shown = displayedSessionGoal(eh.lock.value, gate ? gate.target : 0);
+  if (shown > 0) return shown;
+  return gate ? gate.target : null;
+});
 const sessionGateOpen = computed(() => {
   const g = sessionGate.value;
-  return !!(g && sessionUnlock({ dayEarned: Number(pointsAccumulated.value) || 0, earnedAtStart: g.earned, sessionRequired: g.target }));
+  return !!(g && sessionUnlock({ dayEarned: Number(pointsAccumulated.value) || 0, earnedAtStart: g.earned, sessionRequired: sessionTargetPts.value }));
 });
 const shownSessionPts = computed(() => (sessionEarnedPts.value == null ? (pointsAccumulated.value || 0) : sessionEarnedPts.value));
 const shownSessionTarget = computed(() => (isViewingToday.value ? (sessionTargetPts.value == null ? dayRequiredPts.value : sessionTargetPts.value) : 0));
@@ -5034,6 +5042,8 @@ const assistantExecutor = createAssistantExecutor({
     const u = auth.currentUser; if (!u) return { error: 'Not signed in.' };
     const C = await import('@/composables/useCommunity'); const cu = await import('@/utils/community');
     let prefs = {}; try { prefs = await C.loadPrefs(u.uid); } catch (e) { /* ignore */ }
+    const gate = await C.communityPostGate(u.uid);
+    if (!gate.ok) return { error: gate.error };
     const eula = Number(prefs.eulaVersion) >= cu.EULA_VERSION || localStorage.getItem(`cm.eula.${u.uid}`) === String(cu.EULA_VERSION);
     if (!eula) return { error: 'The user must accept the Community rules first: open the Community page once.' };
     let name = cu.displayNameOf(u.displayName); let avatar = cu.safeAvatar(u.photoURL);

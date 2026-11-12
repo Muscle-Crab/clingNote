@@ -12,6 +12,7 @@
     <h2 class="text-xl font-semibold mb-2 text-gray-800 dark:text-gray-200">2. Prohibited Activities</h2>
     <p class="mb-4 text-gray-600 dark:text-gray-400">
       You agree not to misuse the app by intentionally spreading malware, spamming, or violating any laws.
+      There is no tolerance for objectionable content or abusive users. In Community you may not post or send harassment, hate, sexual content, threats, violence, spam, or anything illegal. Objectionable language is filtered. You can report content, block users, and remove posts from your feed immediately. We review reports within 24 hours, remove the offending content, and eject the user who posted it. To report inappropriate activity, email <a href="mailto:support@clingnote.app" class="text-blue-600 hover:underline">support@clingnote.app</a>. Community is for people 18 and older.
     </p>
 
     <h2 class="text-xl font-semibold mb-2 text-gray-800 dark:text-gray-200">3. Subscriptions and Purchases</h2>
@@ -44,5 +45,5 @@
 <script setup>
 import { isNativeIOS } from '@/utils/platform';
 const ios = isNativeIOS(); // other purchase methods are not mentioned inside the iOS app (App Store 3.1.1)
-const lastUpdated = 'October 23, 2026';
+const lastUpdated = 'November 12, 2026';
 </script>

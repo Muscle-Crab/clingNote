@@ -12,6 +12,7 @@ import { setLockSource } from '@/utils/eightHourLock';
 import { readLock, writeLock, lockFor } from '@/utils/ehLockCache';
 import { runningLock, authKeepsDay, shouldKeepServerDay } from '@/utils/dayPrompt';
 import { readDebtCache, writeDebtCache, cacheWithDebt, cacheCleared, mergeDebt } from '@/utils/appLockDebt';
+import { displayedSessionGoal } from '@/utils/dayTarget';
 import { bindWallClock } from '@/utils/timerClock';
 import { onAuthStateChanged } from 'firebase/auth';
 
@@ -232,10 +233,12 @@ export const useEightHour = () => {
   const shutdown = computed(() => {
     const l = shutLock(); const now = (tick.value, nowMs());
     if (!l || !core.isShut(l, now)) return null;
-    return { untilMs: 0, untilLabel: '', earned: l.earned || 0, target: l.target || 0, done: l.done || 0, total: l.taskCount || 0, met: (l.target || 0) > 0 && (l.earned || 0) >= l.target,
-      // Per-session rule (server settle): the session's own target/earned. A miss no longer opens the apps at a clock time
-      // (no "end + 2 h"): they stay locked until a later session hits its goal (appLockDebt), so missed/opensAt stay empty.
-      ...(l.session ? { session: l.session, met: !!l.session.met, earned: l.session.earned, target: l.session.target, missed: false, opensAtMs: 0, opensAtLabel: '' } : {}) };
+    // Same goal the in-session counter prints (displayedSessionGoal): the target frozen at Start, not a later sum.
+    const earned = l.session && l.session.earned != null ? Number(l.session.earned) || 0 : Number(l.earned) || 0;
+    const target = displayedSessionGoal(l, 0);
+    return { untilMs: 0, untilLabel: '', earned, target, done: l.done || 0, total: l.taskCount || 0, met: target > 0 && earned >= target,
+      // A miss no longer opens the apps at a clock time: they stay locked until a later session hits its goal (appLockDebt).
+      ...(l.session ? { session: l.session, missed: false, opensAtMs: 0, opensAtLabel: '' } : {}) };
   });
   // Next scheduled block (evening mode), shown as "Next 6:00 PM" while the app is open in the gap.
   const nextBlock = computed(() => {

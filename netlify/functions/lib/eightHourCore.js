@@ -65,7 +65,9 @@ const cooldownText = (lock, untilMs, tz) => { const d = delayParts(lock); const 
   return `Next session opens at ${fmtCdClock(untilMs, tz)} · ${fmtDur(d.ms)} wait${b.includes('+') || d.important ? ` (${b})` : ''}`; };
 // Live countdown line (shutdown screen + vault row): 'Next session in 3h12m · 6:30 PM (2h + 2 important × 30m)'.
 const waitText = (untilMs, nowMs, breakdown, tz) => { const left = Math.max(0, Number(untilMs) - Number(nowMs)); if (!left) return '';
-  const m = Math.ceil(left / 60000); return `Next session in ${fmtDur(m * 60000)} · ${fmtCdClock(untilMs, tz)}${breakdown ? ` (${breakdown})` : ''}`; };
+  const m = Math.ceil(left / 60000); const dur = fmtDur(m * 60000);
+  const extra = breakdown && breakdown !== dur ? ` (${breakdown})` : '';
+  return `Next session in ${dur} · ${fmtCdClock(untilMs, tz)}${extra}`; };
 const SESSION_HEADS_UP = `Finish ${TASKS_PER_SESSION} tasks and the next session can start right away. Fewer than ${TASKS_PER_SESSION} waits ${SESSION_COOLDOWN_MS / 3600000}h.`;
 const sessionMet = ({ earned = 0, target = 0 } = {}) => Number(target) > 0 && Number(earned) >= Number(target);
 // Session points goal: the AI (or this fallback) from the number of tasks that existed BEFORE the session was created + the chosen

@@ -33,7 +33,7 @@
       </section>
 
       <section v-else-if="STEPS[step] === 'age'" class="ob-sec" data-test="ob-age">
-        <p class="ob-k">Quick check</p><h1 class="ob-h">How old <span>are you?</span></h1><p class="ob-p">Just your age. You must be 13 or older to use ClingNote.</p>
+        <p class="ob-k">Quick check</p><h1 class="ob-h">How old <span>are you?</span></h1><p class="ob-p">Just your age. You must be 13 or older to use ClingNote. Community posts are only for people 18 or older.</p>
         <div class="ob-age">
           <button type="button" class="ob-step" aria-label="Younger" @click="bumpAge(-1)">−</button>
           <input type="number" inputmode="numeric" min="1" max="100" v-model.number="a.age" placeholder="—" aria-label="Your age" data-test="ob-age-input" />

@@ -190,10 +190,42 @@ await t('rules: communityProfiles + stats badges + prefs.ach prepared', () => {
 // rules file sanity (static): community collections present, default deny kept last, admin email only via verified token
 await t('firestore.rules + storage.rules contain the community sections', () => {
   const r = fs.readFileSync(path.join(__dirname, '../firestore.rules'), 'utf8');
-  for (const m of ['/communityPosts/{postId}', '/likes/{likerId}', '/comments/{commentId}', '/communityChat/{msgId}', '/follows/{followId}', '/reports/{reportId}', '/users/{userId}/blocks/{otherId}', '/users/{userId}/notifications/{notifId}', 'cmBlockedBy']) assert.ok(r.includes(m), m);
+  for (const m of ['/communityPosts/{postId}', '/likes/{likerId}', '/comments/{commentId}', '/communityChat/{msgId}', '/follows/{followId}', '/reports/{reportId}', '/communityBans/{uid}', '/users/{userId}/blocks/{otherId}', '/users/{userId}/notifications/{notifId}', 'cmBlockedBy', 'cmNotBanned']) assert.ok(r.includes(m), m);
   assert.ok(r.lastIndexOf('match /{document=**}') > r.indexOf('/communityPosts/'));
   const s = fs.readFileSync(path.join(__dirname, '../storage.rules'), 'utf8');
   assert.ok(s.includes('/community/{uid}/{fileName}') && s.includes('5 * 1024 * 1024'));
+});
+const { load } = require('./lib/srcRequire');
+const S = load('utils/communitySafety.js');
+await t('age gate: under 18 blocked, 18+ and an explicit confirm pass, a stored under-18 age cannot be clicked past', () => {
+  assert.equal(S.UGC_MIN_AGE, 18);
+  assert.deepEqual(S.ugcAgeDecision({ age: 16, confirmed: true }), { ok: false, reason: 'under' });
+  assert.deepEqual(S.ugcAgeDecision({ age: 18 }), { ok: true, reason: 'age' });
+  assert.deepEqual(S.ugcAgeDecision({ confirmed: true }), { ok: true, reason: 'confirmed' });
+  assert.deepEqual(S.ugcAgeDecision({}), { ok: false, reason: 'need-confirm' });
+});
+await t('filter hides profanity and the viewer\'s own words; a clean post stays', () => {
+  assert.equal(S.contentVisible({ text: 'finished my list', name: 'Ann' }), true);
+  assert.equal(S.contentVisible({ text: 'what the fuck' }), false);
+  assert.equal(S.contentVisible({ text: 'buy grapes', name: 'Ann' }, ['grape']), false);
+  assert.deepEqual(S.filterVisible([{ id: 1, text: 'ok' }, { id: 2, text: 'shit' }], []).map((x) => x.id), [1]);
+});
+await t('a report is remove + eject, and it is overdue 24 hours later', () => {
+  const plan = S.moderationPlan({ targetType: 'post', targetUid: 'u1' });
+  assert.equal(plan.remove, true); assert.equal(plan.eject, true); assert.equal(plan.withinHours, 24);
+  const at = Date.parse('2026-11-11T20:00:00Z');
+  assert.equal(S.reportOverdue(at, at + 23 * 3600000), false);
+  assert.equal(S.reportOverdue(at, at + 24 * 3600000), true);
+  assert.equal(S.CONTACT_EMAIL, 'support@clingnote.app');
+});
+await t('terms state there is no tolerance for objectionable content, and the EULA version moved', () => {
+  const terms = fs.readFileSync(path.join(__dirname, '../src/views/TermsandCondition.vue'), 'utf8');
+  assert.match(terms, /no tolerance for objectionable content or abusive users/);
+  assert.equal(C.EULA_VERSION, 2);
+  const view = fs.readFileSync(path.join(__dirname, '../src/views/CommunityView.vue'), 'utf8');
+  assert.match(view, /data-test="cm-age"/); assert.match(view, /data-test="cm-contact"/);
+  assert.match(view, /data-test="cm-flag"/); assert.match(view, /data-test="cm-hide"/);
+  assert.match(view, /data-test="cm-filter"/); assert.match(view, /Remove and eject/);
 });
 console.log(`\n${n} community tests passed`);
 })().catch((e) => { console.error(e); process.exit(1); });

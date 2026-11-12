@@ -1,7 +1,20 @@
 <template>
   <div class="cm-page" data-test="community">
+    <!-- Age gate (Guideline 1.2): Community is 18+. A stored age under 18 cannot be clicked past. -->
+    <section v-if="ready && ageBlock" class="cm-card cm-eula" data-test="cm-age-block">
+      <h2>Community is for adults 18+</h2>
+      <p>ClingNote Community is only for people 18 or older. You can keep using the rest of ClingNote.</p>
+      <p class="cm-contact" data-test="cm-contact">Report inappropriate activity: <a :href="'mailto:' + CONTACT">{{ CONTACT }}</a>. We review reports within 24 hours.</p>
+    </section>
+    <section v-else-if="ready && !ageOk" class="cm-card cm-eula" data-test="cm-age">
+      <h2>Community is for adults 18+</h2>
+      <p>You must be 18 or older to view or post here. There is no tolerance for objectionable content or abusive users.</p>
+      <label class="cm-check"><input type="checkbox" v-model="ageTick" data-test="cm-age-check" /> I am 18 or older</label>
+      <button class="cm-btn" :disabled="!ageTick || busy" @click="confirmAge" data-test="cm-age-accept">Continue</button>
+      <p class="cm-contact" data-test="cm-contact">Report inappropriate activity: <a :href="'mailto:' + CONTACT">{{ CONTACT }}</a>. We review reports within 24 hours.</p>
+    </section>
     <!-- EULA / community rules gate (App Store 1.2): must accept before any content is shown -->
-    <section v-if="ready && !eulaOk" class="cm-card cm-eula" data-test="cm-eula">
+    <section v-else-if="ready && !eulaOk" class="cm-card cm-eula" data-test="cm-eula">
       <h2>Welcome to the ClingNote Community</h2>
       <p>Before you join, please agree to our community terms:</p>
       <ul>
@@ -11,8 +24,9 @@
         <li>Reported content is reviewed within 24 hours; offending content is removed and its author may be banned.</li>
         <li>Never share personal contact details. Your email is never shown.</li>
       </ul>
-      <label class="cm-check"><input type="checkbox" v-model="eulaTick" data-test="cm-eula-check" /> I agree to the <router-link to="/terms">Terms &amp; Conditions (EULA)</router-link> and these community rules.</label>
+      <label class="cm-check"><input type="checkbox" v-model="eulaTick" data-test="cm-eula-check" /> I agree to the <router-link to="/terms">Terms &amp; Conditions (EULA)</router-link>. There is no tolerance for objectionable content or abusive users.</label>
       <button class="cm-btn" :disabled="!eulaTick || busy" @click="acceptEula" data-test="cm-eula-accept">Agree &amp; enter</button>
+      <p class="cm-contact" data-test="cm-contact">Report inappropriate activity: <a :href="'mailto:' + CONTACT">{{ CONTACT }}</a>. We review reports within 24 hours.</p>
     </section>
 
     <template v-else-if="ready">
@@ -25,8 +39,19 @@
           <button role="tab" :class="{ on: tab === 'feed' }" @click="tab = 'feed'" data-test="cm-tab-feed">Feed</button>
           <button role="tab" :class="{ on: tab === 'chat' }" @click="openChat" data-test="cm-tab-chat">Chat</button>
         </div>
-        <button v-if="isAdmin" class="cm-chip" @click="adminMode = !adminMode" data-test="cm-admin">{{ adminMode ? 'Admin: on' : 'Admin' }}</button>
+        <button v-if="isAdmin" class="cm-chip" @click="toggleAdmin" data-test="cm-admin">{{ adminMode ? 'Close reports' : 'Reports' }}</button>
       </header>
+      <p class="cm-contact" data-test="cm-contact">Report inappropriate activity: <a :href="'mailto:' + CONTACT">{{ CONTACT }}</a>. We review reports within 24 hours.</p>
+      <section v-if="adminMode" class="cm-card" data-test="cm-reports">
+        <strong>Open reports</strong>
+        <p class="cm-muted">Remove the content and eject the account within 24 hours.</p>
+        <p v-if="!reports.length" class="cm-muted">No open reports.</p>
+        <article v-for="r in reports" :key="r.id" class="cm-report" data-test="cm-report-row">
+          <div><b>{{ r.targetType }}</b> · {{ r.reason }} <span class="cm-muted">· {{ reportWhen(r) }}</span></div>
+          <button class="cm-btn" :disabled="busy" @click="actReport(r)" data-test="cm-report-act">Remove and eject</button>
+          <p v-if="r._err" class="cm-error">{{ r._err }}</p>
+        </article>
+      </section>
       <p v-if="error && !composeOpen" class="cm-error" role="alert">{{ error }}</p>
       <p v-if="toast" class="cm-toast" role="status">{{ toast }}</p>
 
@@ -69,6 +94,7 @@
           <button :class="{ on: sort === 'foryou' && !onlyFollowing }" @click="sort = 'foryou'; onlyFollowing = false" data-test="cm-foryou">For you</button>
           <button v-if="following.size || onlyFollowing" :class="{ on: onlyFollowing }" @click="onlyFollowing = !onlyFollowing" data-test="cm-following">Following</button>
           <button :class="{ on: sort === 'new' && !onlyFollowing }" @click="sort = 'new'; onlyFollowing = false" data-test="cm-newest">Newest</button>
+          <input v-model="filterText" class="cm-filter" type="search" placeholder="Filter words" aria-label="Filter objectionable words" data-test="cm-filter" />
         </div>
 
         <p v-if="!feed.length && feedLoaded" class="cm-muted cm-empty">{{ onlyFollowing ? 'No posts from people you follow yet.' : 'No posts yet. Be the first to share your progress!' }}</p>
@@ -85,6 +111,9 @@
           <div class="cm-actions">
             <button class="cm-heart" :class="{ on: liked[p.id], pop: popping === p.id }" @click="like(p)" :aria-pressed="liked[p.id] ? 'true' : 'false'" aria-label="Like" data-test="cm-like"><svg class="h" viewBox="0 0 24 24" width="17" height="17" :fill="liked[p.id] ? '#F0506E' : 'none'" :stroke="liked[p.id] ? '#F0506E' : 'currentColor'" stroke-width="1.9" aria-hidden="true"><path d="M12 20.3s-7.8-4.6-7.8-10.3A4.4 4.4 0 0 1 12 7.4 4.4 4.4 0 0 1 19.8 10c0 5.7-7.8 10.3-7.8 10.3Z"/></svg> {{ p.likeCount || 0 }}</button>
             <button @click="toggleComments(p)" aria-label="Comments"><svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor" aria-hidden="true"><path d="M12 3.5c-4.9 0-8.8 3.4-8.8 7.6 0 2.2 1.1 4.2 2.9 5.6l-.7 3.4 3.7-1.9c.9.3 1.9.4 2.9.4 4.9 0 8.8-3.4 8.8-7.5S16.9 3.5 12 3.5Z"/></svg> {{ p.commentCount || 0 }}</button>
+            <button v-if="p.uid !== uid" @click="flagPost(p)" data-test="cm-flag">Report</button>
+            <button v-if="p.uid !== uid" @click="hidePost(p)" data-test="cm-hide">Remove</button>
+            <button v-else @click="menuFor = { kind: 'post', item: p }; removeItem()">Delete</button>
             <button @click="share(p)"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 5h5v5M19 5l-8 8M18 14v4a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h4"/></svg> Share</button>
             <button @click="copyLink(p)"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1"/></svg> Copy link</button>
           </div>
@@ -170,6 +199,7 @@ import { getPublicProfile } from '@/composables/usePublicProfile';
 import * as C from '@/composables/useCommunity';
 import { BADGES, topBadges, badgeInfo } from '@/utils/badges';
 import { LIMITS, EULA_VERSION, NOTIF_TYPES, DEFAULT_NOTIF_PREFS, validateText, displayNameOf, safeAvatar, progressText, filterBlocked, sortFeed, filterFollowing, chatOrder, mergeById, toggleLikeState, createRateLimiter, postLink, shareTextFor, visibleNotifs, unreadCount, isAdminEmail, tsMs } from '@/utils/community';
+import { CONTACT_EMAIL, contentVisible, reportOverdue } from '@/utils/communitySafety';
 import { timeAgo } from '@/utils/pals';
 import { isNative } from '@/utils/platform';
 import AvatarImg from '@/components/common/AvatarImg.vue';
@@ -206,16 +236,22 @@ const PREF_LABEL = { follow: 'New followers', like: 'Likes on my posts', comment
 const NOTIF_ICON = { follow: '👤', like: '❤️', comment: '💬', share: '↗', post: '📝' };
 
 const route = useRoute();
+const CONTACT = CONTACT_EMAIL;
 const ready = ref(false); const eulaOk = ref(false); const eulaTick = ref(false);
+const ageOk = ref(false); const ageBlock = ref(false); const ageTick = ref(false);
 const uid = ref(''); const me = reactive({ uid: '', name: '', avatar: '' }); const isAdmin = ref(false); const adminMode = ref(false);
 const tab = ref(route.query.tab === 'chat' ? 'chat' : 'feed');
 const busy = ref(false); const error = ref(''); const toast = ref('');
 const blocked = ref(new Set()); const following = ref(new Set());
 const hidden = ref(new Set(JSON.parse(localStorage.getItem('cm.hidden') || '[]')));
+const hiddenComments = ref(new Set(JSON.parse(localStorage.getItem('cm.hiddenComments') || '[]')));
+const hiddenChat = ref(new Set(JSON.parse(localStorage.getItem('cm.hiddenChat') || '[]')));
+const filterText = ref(localStorage.getItem('cm.filter') || '');
+const reports = ref([]);
 const posts = ref([]); const morePostsList = ref([]); const feedCursor = ref(null); const feedLoaded = ref(false);
 const sort = ref('foryou'); const composeOpen = ref(false); const CAPTION_MAX = 500;
 const openCompose = () => { error.value = ''; composeOpen.value = true; };
-const onCreatePost = () => { if (eulaOk.value && tab.value === 'feed') openCompose(); else if (eulaOk.value) { tab.value = 'feed'; openCompose(); } };
+const onCreatePost = () => { if (!(eulaOk.value && ageOk.value)) return; if (tab.value === 'feed') openCompose(); else { tab.value = 'feed'; openCompose(); } };
 onMounted(() => window.addEventListener('cn:create-post', onCreatePost)); onBeforeUnmount(() => window.removeEventListener('cn:create-post', onCreatePost));
 const closeCompose = () => { if (!busy.value) composeOpen.value = false; }; const onlyFollowing = ref(false); const liked = reactive({}); const popping = ref(''); const highlight = ref(route.query.post || '');
 const openComments = ref(''); const comments = ref([]); const commentText = ref('');
@@ -232,13 +268,15 @@ const flash = (m) => { toast.value = m; setTimeout(() => { if (toast.value === m
 const fail = (e, m) => { console.warn(e); error.value = m || 'Something went wrong. Please try again.'; setTimeout(() => (error.value = ''), 4000); };
 const gate = (action) => { const r = limiter.check(action); if (!r.ok) { error.value = r.error; setTimeout(() => (error.value = ''), 3000); return false; } return true; };
 
+const words = computed(() => filterText.value);
+const keep = (it) => contentVisible(it, words.value);
 const feed = computed(() => {
-  let list = filterBlocked(mergeById(posts.value, morePostsList.value), blocked.value).filter((p) => !hidden.value.has(p.id));
+  let list = filterBlocked(mergeById(posts.value, morePostsList.value), blocked.value).filter((p) => !hidden.value.has(p.id) && keep(p));
   if (onlyFollowing.value) list = filterFollowing(list, following.value, uid.value);
   return sortFeed(list, sort.value);
 });
-const chat = computed(() => chatOrder(filterBlocked(mergeById(chatOlder.value, chatLive.value), blocked.value)).filter((m) => m.text)); // photo-only legacy messages are hidden (photos removed)
-const shownComments = computed(() => filterBlocked(comments.value, blocked.value));
+const chat = computed(() => chatOrder(filterBlocked(mergeById(chatOlder.value, chatLive.value), blocked.value)).filter((m) => m.text && !hiddenChat.value.has(m.id) && keep(m))); // photo-only legacy messages are hidden (photos removed)
+const shownComments = computed(() => filterBlocked(comments.value, blocked.value).filter((c) => !hiddenComments.value.has(c.id) && keep(c)));
 watch(() => [...feed.value.map((p) => p.uid), ...comments.value.map((c) => c.uid)], (u) => loadCProf(u));
 const shownNotifs = computed(() => visibleNotifs(notifs.value, blocked.value, notifPrefs));
 const unread = computed(() => unreadCount(shownNotifs.value));
@@ -254,8 +292,16 @@ async function boot(u) {
   let prefs = {};
   try { prefs = await C.loadPrefs(u.uid); } catch (e) { /* rules not deployed yet */ }
   eulaOk.value = Number(prefs.eulaVersion) >= EULA_VERSION || localStorage.getItem(`cm.eula.${u.uid}`) === String(EULA_VERSION);
+  const access = await C.loadUgcAccess(u.uid);
+  ageOk.value = access.ok; ageBlock.value = access.reason === 'under';
   Object.assign(notifPrefs, prefs.notif || {});
   ready.value = true;
+  if (ageOk.value && eulaOk.value) start();
+}
+async function confirmAge() {
+  if (!ageTick.value) return;
+  busy.value = true;
+  try { await C.confirmUgcAge(uid.value); ageOk.value = true; ageBlock.value = false; } finally { busy.value = false; }
   if (eulaOk.value) start();
 }
 async function acceptEula() {
@@ -357,10 +403,32 @@ async function removeItem() {
 function startReport(targetType) { const { item, post } = menuFor.value; reporting.value = { targetType, targetId: targetType === 'user' ? item.uid : item.id, targetUid: item.uid, postId: post ? post.id : '' }; reportReason.value = ''; menuFor.value = null; }
 async function sendReport() {
   if (!gate('report')) return;
-  try { await C.report(me, { ...reporting.value, reason: reportReason.value }); limiter.hit('report'); flash('Thanks. Our team reviews reports within 24 hours.'); } catch (e) { fail(e, 'Could not send the report.'); }
+  const rep = reporting.value;
+  try {
+    await C.report(me, { ...rep, reason: reportReason.value }); limiter.hit('report');
+    if (rep.targetType === 'post') hidePost({ id: rep.targetId }, true);
+    else if (rep.targetType === 'comment') hideComment(rep.targetId);
+    else if (rep.targetType === 'chat') hideChat(rep.targetId);
+    flash(rep.targetType === 'user' ? 'Thanks. Our team reviews reports within 24 hours.' : 'Reported and removed from your feed. We review reports within 24 hours.');
+  } catch (e) { fail(e, 'Could not send the report.'); }
   reporting.value = null;
 }
-function hidePost(p) { hidden.value = new Set([...hidden.value, p.id]); localStorage.setItem('cm.hidden', JSON.stringify([...hidden.value].slice(-500))); menuFor.value = null; flash('Post hidden'); }
+function remember(setRef, key, id) { setRef.value = new Set([...setRef.value, id]); localStorage.setItem(key, JSON.stringify([...setRef.value].slice(-500))); }
+function hidePost(p, quiet = false) { remember(hidden, 'cm.hidden', p.id); menuFor.value = null; if (!quiet) flash('Removed from your feed'); }
+function hideComment(id) { remember(hiddenComments, 'cm.hiddenComments', id); }
+function hideChat(id) { remember(hiddenChat, 'cm.hiddenChat', id); }
+function flagPost(p) { menuFor.value = { kind: 'post', item: p }; startReport('post'); }
+async function toggleAdmin() { adminMode.value = !adminMode.value; if (adminMode.value) await loadReports(); }
+async function loadReports() { try { reports.value = await C.loadOpenReports(); } catch (e) { fail(e, 'Could not load reports.'); } }
+function reportWhen(r) { return reportOverdue(r.createdAt) ? 'overdue' : 'due within 24h'; }
+async function actReport(r) {
+  busy.value = true;
+  try {
+    const out = await C.actOnReport(r);
+    if (out.ejectError) { r._err = `${out.ejectError} The content was removed. Eject needs the community ban rules deployed.`; reports.value = reports.value.map((x) => (x.id === r.id ? { ...x, _err: r._err } : x)); }
+    else { reports.value = reports.value.filter((x) => x.id !== r.id); flash('Removed and ejected'); }
+  } catch (e) { fail(e, 'Could not act on that report.'); } finally { busy.value = false; }
+}
 async function doBlock(other, name) {
   menuFor.value = null;
   if (!confirm(`Block ${displayNameOf(name)}? You will no longer see their posts, comments or messages, and they can't notify you.`)) return;
@@ -394,6 +462,7 @@ async function onNotifs(list) {
 async function openNotif(n) { showNotifs.value = false; if (!n.read) C.markRead(uid.value, n.id).catch(() => {}); if (n.postId) { tab.value = 'feed'; highlight.value = n.postId; focusPost(n.postId); } else if (n.type === 'follow') openProfile({ uid: n.from, name: n.fromName }); }
 async function readAll() { try { await C.markAllRead(uid.value, notifs.value); } catch (e) { fail(e); } }
 async function setPref(t, v) { notifPrefs[t] = v; try { await C.savePrefs(uid.value, { notif: { ...notifPrefs } }); } catch (e) { fail(e); } }
+watch(filterText, (v) => { try { localStorage.setItem('cm.filter', v || ''); } catch (e) { /* ignore */ } });
 watch(() => route.query.post, (id) => { if (id && started) { tab.value = 'feed'; highlight.value = id; focusPost(id); } });
 </script>
 
@@ -424,6 +493,10 @@ watch(() => route.query.post, (id) => { if (id && started) { tab.value = 'feed';
 .cm-eula h2 { font-size: 1.2rem; font-weight: 700; margin: 0 0 6px; }
 .cm-eula ul { margin: 8px 0 12px 18px; list-style: disc; font-size: .9rem; line-height: 1.45; }
 .cm-eula a { color: var(--c-primary, #6366f1); text-decoration: underline; }
+.cm-contact { margin: 8px 0 0; font-size: .85rem; color: var(--cm-dim, #8A9BC0); }
+.cm-contact a { color: #7FA6FF; text-decoration: underline; }
+.cm-filter { flex: 1; min-width: 120px; min-height: 36px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--cm-line, #1B2A4C); background: var(--cm-card, #0E1A36); color: #EAF0FF; font-size: 14px; }
+.cm-report { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--cm-line, #1B2A4C); }
 .cm-composer .cm-row { margin-top: 10px; }
 .cm-quick { width: 100%; padding: 10px; border-radius: 12px; background: var(--c-primary-soft, #eef2ff); color: var(--c-primary, #6366f1); font-weight: 700; }
 .cm-filters { display: flex; gap: 6px; margin-top: 12px; overflow-x: auto; }

@@ -18,3 +18,16 @@ export const remainingEligible = (tasks = []) => (tasks || []).filter((t) => t &
 // New session requirement: dailyTarget (eightHourCore) on the remaining tasks only.
 // total 0 -> target 0. A 0 target does not open the vault; there is nothing left to earn.
 export const sessionTargetOf = (tasks = [], hours, stats = {}) => previewDayTarget(remainingEligible(tasks), hours, stats);
+// The points goal the in-session counter and the wrap-up screen both show for one session.
+// Frozen at Start on lock.target (eightHourCore.flooredGoal: at least 8 × the average points of the
+// unfinished tasks). Settle copies that number onto lock.session.target. A local dailyTarget preview
+// (sessionTargetOf) is a different number — it can be about half the frozen goal — and must not replace it.
+// lock.target wins over lock.session.target so a later sum cannot double the goal the session already showed.
+export const displayedSessionGoal = (lock, preview = 0) => {
+  if (lock && !lock.placeholder) {
+    if (Number(lock.target) > 0) return Math.round(Number(lock.target));
+    if (lock.session && Number(lock.session.target) > 0) return Math.round(Number(lock.session.target));
+  }
+  const n = Math.round(Number(preview) || 0);
+  return n > 0 ? n : 0;
+};

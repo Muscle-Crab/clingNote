@@ -90,5 +90,5 @@ export async function shareAchievement() {
     if (ach.pending.perfectDate) { ctx.autoPostDate = today; const s = { ...lsGet(ctx.uid), autoPostDate: today }; lsSet(ctx.uid, s); try { await C.savePrefs(ctx.uid, { ach: s }); } catch (e) { /* ignore */ } }
     C.notifyFollowers(me, id, t.text).catch(() => {});
     dismiss(); ach.toast = { text: 'Shared to Community 🎉', postId: id }; setTimeout(() => { if (ach.toast && ach.toast.postId === id) ach.toast = null; }, 6000);
-  } catch (e) { console.warn(e); ach.error = 'Could not post. Please try again.'; } finally { ach.busy = false; }
+  } catch (e) { console.warn(e); ach.error = (e && e.message) || 'Could not post. Please try again.'; } finally { ach.busy = false; }
 }

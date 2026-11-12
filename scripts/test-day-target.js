@@ -49,4 +49,21 @@ const held = vaultView({ apps: [{ id: 'x', label: 'Messages' }], priced, points:
 ok(held.items[0].open === false, 'vault stays shut at session 0 even though the day already has 210');
 const opened = vaultView({ apps: [{ id: 'x', label: 'Messages' }], priced, points: 210, accessOpen: true, todayYmd: '2026-11-06', nowMs: 0 });
 ok(opened.items[0].open === true, 'the same app opens only when this session is allowed to spend its own points');
+// Live counter and wrap-up must print the frozen session goal, not a dailyTarget preview that can be half of it.
+const openPts = Array(8).fill(20);
+const frozen = core.flooredGoal(core.fallbackGoal({ tasksBefore: 8, hours: 5, totalPoints: 160 }), openPts, 160);
+const preview = core.dailyTarget(Array(8).fill({ points: 10, minutes: 0 }), { targetLevel: 4 }, 5 * 60);
+ok(core.eightTaskFloor(openPts) === 160 && frozen === 160, '8 × average 20 is the frozen goal 160');
+ok(preview.target === 80, 'chip-point dailyTarget preview is 80, half the frozen goal');
+const { displayedSessionGoal } = load('utils/dayTarget.js');
+const lock = { goal: { points: frozen, source: 'fallback' }, target: frozen, earned: 40 };
+ok(displayedSessionGoal(lock, preview.target) === 160, 'in-session counter shows the frozen goal, not the 80 preview');
+ok(displayedSessionGoal({ ...lock, session: { target: frozen, earned: 85, met: false } }, preview.target) === 160, 'wrap-up shows the same 160');
+ok(displayedSessionGoal({ goal: { points: 80 }, target: 80, session: { target: 160, earned: 85 } }, 80) === 80, 'a doubled session.target does not replace the frozen goal');
+const home = require('fs').readFileSync(require('path').join(__dirname, '../src/views/HomeView.vue'), 'utf8');
+const shut = require('fs').readFileSync(require('path').join(__dirname, '../src/composables/useEightHour.js'), 'utf8');
+ok(home.includes('displayedSessionGoal(lock, preview)') && home.includes('displayedSessionGoal(eh.lock.value'), 'live counter reads the frozen goal');
+ok(shut.includes('displayedSessionGoal(l, 0)'), 'wrap-up reads the same helper');
+const prompt = require('fs').readFileSync(require('path').join(__dirname, '../src/components/eighthour/DayStartPrompt.vue'), 'utf8');
+ok(prompt.includes('core.flooredGoal(') && !/goalPreview = computed\(\(\) => core\.fallbackGoal\(/.test(prompt), 'the start prompt previews the floored goal, not the unfloored fallback');
 console.log(`test-day-target: ${pass} passed`);

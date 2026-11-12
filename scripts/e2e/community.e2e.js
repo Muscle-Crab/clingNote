@@ -18,7 +18,7 @@ const img = (i) => `https://firebasestorage.googleapis.com/v0/b/demo/o/community
 
 async function seedUser(email, name) {
   const u = await admin.auth().createUser({ email, password: 'zztest-pass-123', displayName: name });
-  await db.doc(`users/${u.uid}`).set({ uid: u.uid, name, email, onboardingComplete: true, paywallSeenAt: new Date(), isPro: true, plan: 'lifetime' });
+  await db.doc(`users/${u.uid}`).set({ uid: u.uid, name, email, onboardingComplete: true, paywallSeenAt: new Date(), isPro: true, plan: 'lifetime', age: 21 });
   await db.doc(`publicProfiles/${u.uid}`).set({ name });
   return u.uid;
 }
@@ -112,7 +112,7 @@ async function seedUser(email, name) {
   const dstr = (k) => { const d = new Date(); d.setDate(d.getDate() - k); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
   const counted = [6, 5, 4, 3, 2, 1, 0].map(dstr);
   await db.doc(`streaks/${zed}`).set({ streak: 5, bestStreak: 5, lastCompletionDate: dstr(0), dayDate: dstr(0), dayDone: ['a', 'b', 'c', 'd', 'e', 'f'], counted });
-  await db.doc(`users/${zed}/community/prefs`).set({ eulaVersion: 1 });
+  await db.doc(`users/${zed}/community/prefs`).set({ eulaVersion: 2 });
   const z = await br.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
   await z.addInitScript(() => { localStorage.setItem('clingnote.tutorialSeen.v1', '1'); });
   await z.route('**/.netlify/functions/**', (r) => r.fulfill({ status: 200, json: {} }));

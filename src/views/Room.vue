@@ -266,6 +266,12 @@
                   </button>
                 </template>
               </div>
+              <p class="text-xs text-gray-400 mb-2">Report inappropriate activity: <a class="underline" :href="'mailto:' + roomContact">{{ roomContact }}</a></p>
+              <div class="mb-3 inline-flex gap-3 text-sm" v-if="post.userId !== currentUser?.uid">
+                <button type="button" class="text-amber-300" @click="reportRoomPost(post)">Report</button>
+                <button type="button" class="text-red-300" @click="blockRoomUser(post)">Block</button>
+                <button type="button" class="text-gray-300" @click="hideRoomPost(post)">Remove</button>
+              </div>
               <div class="mb-4" v-if="post.userId === currentUser?.uid">
                 <div class="inline-flex space-x-2">
                   <button @click="showCreatePostModal(post)" class="text-blue-400 focus:outline-none flex items-center">
@@ -408,6 +414,9 @@ import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import { demoVideo } from '@/utils/landingMedia';
 import { openExternal } from '@/utils/openExternal';
+import { validateText, LIMITS } from '@/utils/community';
+import { CONTACT_EMAIL, contentVisible } from '@/utils/communitySafety';
+import { report as reportContent, block as blockUser } from '@/composables/useCommunity';
 const audioRef = ref(null);
 const previewUrl = ref('');
 const fileToUpload = ref(null);
@@ -466,6 +475,10 @@ const editingPost = ref(null);
 const commentInput = ref({});
 const searchQuery = ref('');
 const filteredPosts = ref([]);
+const roomContact = CONTACT_EMAIL;
+const roomHidden = ref(new Set(JSON.parse(localStorage.getItem('cm.roomHidden') || '[]')));
+const roomBlocked = ref(new Set(JSON.parse(localStorage.getItem('cm.roomBlocked') || '[]')));
+const showRoomPost = (p) => p && !roomHidden.value.has(p.id) && !roomBlocked.value.has(p.userId) && contentVisible({ text: `${p.topic || ''}\n${p.message || ''}` });
 const filteredParticipants = ref([]);
 
 
@@ -487,7 +500,7 @@ onMounted(() => {
     });
     posts.sort((a, b) => b.timestamp - a.timestamp);
     selectedRoom.value.posts = posts;
-    filteredPosts.value = posts;
+    filteredPosts.value = posts.filter(showRoomPost);
   });
   return unsubscribe;
 });
@@ -659,6 +672,15 @@ const createNewPost = async () => {
     isCreatingPost = false;
     return;
   }
+  const topicOk = validateText(newPost.value.topic, LIMITS.title);
+  const messageOk = validateText(newPost.value.message || '', LIMITS.text, { allowEmpty: true });
+  if (!topicOk.ok || !messageOk.ok) {
+    alert((topicOk.error || messageOk.error));
+    isCreatingPost = false;
+    return;
+  }
+  newPost.value.topic = topicOk.text;
+  newPost.value.message = messageOk.text || '';
 
   let mediaUrl = '';
   if (fileToUpload.value) {
@@ -737,11 +759,27 @@ const updatePost = async () => {
   closeModal();
 };
 
+const hideRoomPost = (post) => { roomHidden.value = new Set([...roomHidden.value, post.id]); localStorage.setItem('cm.roomHidden', JSON.stringify([...roomHidden.value])); filteredPosts.value = filteredPosts.value.filter((p) => p.id !== post.id); };
+const blockRoomUser = async (post) => {
+  const me = currentUser.value && currentUser.value.uid; if (!me || !post.userId) return;
+  roomBlocked.value = new Set([...roomBlocked.value, post.userId]); localStorage.setItem('cm.roomBlocked', JSON.stringify([...roomBlocked.value]));
+  filteredPosts.value = filteredPosts.value.filter((p) => p.userId !== post.userId);
+  try { await blockUser(me, post.userId); } catch (e) { console.warn(e); }
+};
+const reportRoomPost = async (post) => {
+  const me = currentUser.value; if (!me) return;
+  const reason = window.prompt('Why are you reporting this post?', 'Something objectionable');
+  if (!reason) return;
+  try { await reportContent({ uid: me.uid, name: me.displayName || 'Member' }, { targetType: 'post', targetId: post.id, targetUid: post.userId || '', reason }); hideRoomPost(post); alert('Reported and removed from your feed. We review reports within 24 hours.'); }
+  catch (e) { console.warn(e); alert('Could not send the report.'); }
+};
 const addComment = async (post) => {
   const userId = currentUser.value ? currentUser.value?.uid : null;
+  const clean = validateText(commentInput.value[post.id], LIMITS.comment);
+  if (!clean.ok) { alert(clean.error); return; }
   const comment = {
     userId,
-    message: commentInput.value[post.id],
+    message: clean.text,
     timestamp: new Date().toLocaleTimeString(),
     id: generateUniqueId()
   };
