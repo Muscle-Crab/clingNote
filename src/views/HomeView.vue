@@ -429,7 +429,7 @@ import { planTaskUnlock } from '@/utils/taskAppUnlock';
 import LockGuideSheet from '@/components/home/LockGuideSheet.vue';
 import { normBossMode, emergencyAllowed, goalFor, strictShield, wakeAutoOn, dayEndNote, moodReply, checklistMayRelock, readSessionGate, beginSessionGate, healSessionGate, sessionUnlock, sessionId } from '@/utils/strictDay';
 import { LOCK_PREF, PENALTY_KEY, EMERGENCY_PENALTY, busyToDay, mergePenalties, lastPenaltyDay } from '@/utils/appLock';
-import { previewDayTarget, requiredPoints, sessionTargetOf, displayedSessionGoal } from '@/utils/dayTarget';
+import { requiredPoints, sessionTargetOf, displayedSessionGoal } from '@/utils/dayTarget';
 const askOpen = ref(false); // Assistant sheet (✨ next to the bell, and the bubble in the task list header)
 const assistantListen = ref(false);
 const agentAdd = ref(false); // true while the assistant adds tasks: over-limit returns an error to the model instead of opening the paywall
@@ -3909,7 +3909,7 @@ const confirmDayStart = async (hours, opts = {}) => {
 // ── ClingNote assistant (AssistantSheet): tool calls run through the same handlers as the buttons above ──
 const todayTasksForTarget = computed(() => (isViewingToday.value ? selectedDayRoutine.value || [] : []));
 // required day points: the locked boss target while the day runs, else the projection from today's tasks + chosen hours
-const dayRequiredPts = computed(() => requiredPoints({ lock: eh.running.value ? eh.lock.value : null, tasks: todayTasksForTarget.value, hours: eh.hoursPref.value, stats: eh.stats.value }));
+const dayRequiredPts = computed(() => requiredPoints({ lock: eh.lock.value, tasks: todayTasksForTarget.value, hours: eh.hoursPref.value, stats: eh.stats.value }));
 const sessionGateTick = ref(0);
 const todayListLoaded = ref(false);
 // localStorage can throw. The hold keeps the Start baseline so the day's earlier points are not treated as this session.
@@ -3995,7 +3995,7 @@ const focusSpoken = new Map(); // task key -> Set(marks)
 // Lock-screen Live Activity: running OR paused timer (paused = frozen remaining time + "Paused"), points toward today's target and
 // time left in the 8-hour day. A new activity per timer session; content updates (pause, points, day) go through updateFocusActivity.
 const focusTask = () => (selectedDayRoutine.value || []).find((x) => x && x.timerActive && x.timerEndTime && x.completed !== true);
-const focusLiveState = (t) => focusActivityState(t, { ptsDone: pointsAccumulated.value, ptsTarget: dayRequiredPts.value || 0, dayEndMs: (eh.running.value && eh.lock.value && eh.lock.value.endMs) || 0,
+const focusLiveState = (t) => focusActivityState(t, { ptsDone: shownSessionPts.value, ptsTarget: shownSessionTarget.value || 0, dayEndMs: (eh.running.value && eh.lock.value && eh.lock.value.endMs) || 0,
   appsUnlocked: taskAllow.value && t && taskAllow.value.taskId === widgetTaskId(t) ? taskAllow.value.count || 0 : 0 });
 // ---- Per-task app unlock (utils/taskAppUnlock.js; native TaskAllow). Apps a task needs come off the shields while its timer runs and
 // re-lock on complete / end early / pause / timer end (natively via the "clingTask" DeviceActivity end, also when the app is killed).
@@ -4044,7 +4044,7 @@ onMounted(() => { focusIv = setInterval(focusTick, 15000); });
 // Start/end the lock-screen Live Activity the moment a timer starts/stops (any path: timer modal, card, assistant, widget), not on the
 // next 15 s poll: ActivityKit only allows Activity.request while the app is in the foreground, so a user who locks the phone right after
 // tapping Start used to get no Live Activity (build 36). Also re-check when the app is about to go to the background.
-const activeTimerSig = computed(() => { const t = focusTask(); return t ? `${taskKey(t)}|${t.timerEndTime}|${t.timerPausedAt || ''}|${pointsAccumulated.value}/${dayRequiredPts.value || 0}|${(eh.lock.value && eh.lock.value.endMs) || 0}` : ''; });
+const activeTimerSig = computed(() => { const t = focusTask(); return t ? `${taskKey(t)}|${t.timerEndTime}|${t.timerPausedAt || ''}|${shownSessionPts.value}/${shownSessionTarget.value || 0}|${(eh.lock.value && eh.lock.value.endMs) || 0}` : ''; });
 watch(activeTimerSig, () => { try { focusTick(); } catch (e) { console.warn('focus live', e && e.message); } syncTaskApps(); });
 watch(() => (selectedDayRoutine.value || []).map((t) => (t && t.completed ? 1 : 0)).join(''), () => { syncTaskApps(); });
 watch(() => JSON.stringify(taskAllow.value || null), () => { try { focusTick(); } catch (e) { /* ignore */ } }); // lock-screen "🔓 N apps"
@@ -4242,7 +4242,7 @@ const sessionCardPts = computed(() => {
   const l = eh.lock.value;
   if (!isViewingToday.value || !eh.running.value || !l || !(Number(l.startMs) > 0)) return null;
   const end = Number(l.endMs) > Number(l.startMs) ? Number(l.endMs) : Number.POSITIVE_INFINITY;
-  const frozen = l.goal && Number(l.target) > 0 ? Number(l.target) : 0;
+  const frozen = displayedSessionGoal(l, 0);
   return sessionGoal(todayTasksForTarget.value || [], { n: 1, sessions: 1, startMs: Number(l.startMs), endMs: end, goal: frozen }, cardPointsOf).earned;
 });
 const shownCardPts = computed(() => (sessionCardPts.value == null ? todayCardPts.value : sessionCardPts.value));
@@ -4455,8 +4455,8 @@ const syncDebtHold = async (p) => {
 // The running session's own goal for the missed-goal lock (same math + tasks as the server's sessionGrace).
 // Only points earned after the session's Start count; a lock with a frozen goal record (l.goal) is judged on lock.target.
 const liveDebtSession = () => { const l = eh.lock.value; if (!eh.running.value || !l || !l.startMs) return null;
-  const sessions = Number(gp.value && gp.value.sessions) === 1 ? 1 : 2; const frozen = !!(l.goal && Number(l.target) > 0);
-  const g = sessionGoal(todayTasksForTarget.value || [], { n: Math.min((Number(l.index) || 0) + 1, sessions), sessions, startMs: l.startMs, endMs: l.endMs, goal: frozen ? Number(l.target) : 0 });
+  const sessions = Number(gp.value && gp.value.sessions) === 1 ? 1 : 2; const frozen = displayedSessionGoal(l, 0);
+  const g = sessionGoal(todayTasksForTarget.value || [], { n: Math.min((Number(l.index) || 0) + 1, sessions), sessions, startMs: l.startMs, endMs: l.endMs, goal: frozen });
   return { sessionKey: `${l.dayKey}#${Number(l.index) || 0}`, startMs: l.startMs, endMs: l.endMs, target: g.target, earned: g.earned, done: g.done, frozen }; };
 // Per-session key for the local goal / claim stamps: `${dayKey}#${index}` (the session), plus `s${n}` for a Coach window inside it.
 const strictSessionKey = (ss) => { const l = eh.lock.value; const base = l && l.dayKey ? `${l.dayKey}#${Number(l.index) || 0}` : (ss ? ss.dayKey : localDateStr()); return ss ? `${base}s${ss.n}` : base; };
@@ -4576,7 +4576,7 @@ const hydrateVaultReport = async () => {
   if (local && local.rows.length && (!nativeReport || (Date.parse(local.adoptedAt) || 0) >= (Date.parse(nativeReport.adoptedAt) || 0))) mirrorVaultReport(local);
   vaultReport.value = local;
 };
-const sessionPriceCap = computed(() => { const t = sessionGate.value && Number(sessionGate.value.target); if (t > 0) return t; const l = eh.lock.value; return l && Number(l.target) > 0 ? Number(l.target) : 0; });
+const sessionPriceCap = computed(() => { const frozen = displayedSessionGoal(eh.lock.value, 0); if (frozen > 0) return frozen; const t = sessionGate.value && Number(sessionGate.value.target); return t > 0 ? t : 0; });
 hydrateVaultReport();
 const gpVault = computed(() => { if (!lockAvailable() || !isViewingToday.value) return null;
   return vaultView({ apps: vaultData.value.apps || [], days: vaultData.value.days || {}, todayYmd: localDateStr(), points: dayVaultPoints.value, priceCap: sessionPriceCap.value,
@@ -4976,8 +4976,8 @@ const assistantExecutor = createAssistantExecutor({
     return Math.max(0, r.limit - (Number(r.count) || 0));
   },
   stats: () => ({ streak: streak.value, points: pointsAccumulated.value, hours: eh.hoursPref.value,
-    target: eh.lock.value ? eh.lock.value.target : previewDayTarget(todayTasksForTarget.value, eh.hoursPref.value, eh.stats.value).target,
-    lock: eh.lock.value ? { endsAt: eh.endsLabel.value || '', earned: eh.lock.value.earned || 0, target: eh.lock.value.target || 0 } : null,
+    target: displayedSessionGoal(eh.lock.value, sessionTargetOf(todayTasksForTarget.value, eh.hoursPref.value, eh.stats.value).target),
+    lock: eh.lock.value ? { endsAt: eh.endsLabel.value || '', earned: eh.lock.value.earned || 0, target: displayedSessionGoal(eh.lock.value, 0) } : null,
     upcoming: scheduledList.value || [], lockApps: lockAvailable() ? lockAppsCache.value : null, settings: { sounds: !!soundEnabled.value, boss_voice: !voMuted.value, spoken_replies: !!assistantSession.speak.value }, route: '/home' }),
   addTask: async (it) => {
     error.value = '';

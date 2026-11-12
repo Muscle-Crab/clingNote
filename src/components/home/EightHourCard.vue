@@ -39,13 +39,13 @@
         <div class="eh-meta">
           <span data-test="eh-times">{{ starts }} →</span>
           <span class="eh-end" data-test="eh-ends"><span class="eh-end-k">Day ends</span><b>{{ ends }}</b></span>
-          <span data-test="eh-points">Goal {{ progress.earned }}/{{ lock.target }} pts</span> <span class="eh-n8" data-test="eh-session-tasks">· {{ Math.min(progress.done, PER) }}/{{ PER }} tasks this session</span>
+          <span data-test="eh-points">Goal {{ progress.earned }}/{{ goalPts }} pts</span> <span class="eh-n8" data-test="eh-session-tasks">· {{ Math.min(progress.done, PER) }}/{{ PER }} tasks this session</span>
         </div>
       </div>
       <!-- draining bar: time left (track) vs points earned (fill); the pace marker is where points should be by now -->
       <div class="eh-drain" data-test="eh-drain" :aria-label="`${pace.timePct}% of time left, ${pace.pointsPct}% of target earned`">
         <span class="eh-drain-time" :style="{ width: pace.timePct + '%' }"></span><span class="eh-drain-pts" :style="{ width: pace.pointsPct + '%' }"></span>
-        <span class="eh-drain-pace" :style="{ left: Math.min(100, Math.round((pace.expected / Math.max(1, lock.target)) * 100)) + '%' }"></span>
+        <span class="eh-drain-pace" :style="{ left: Math.min(100, Math.round((pace.expected / Math.max(1, goalPts)) * 100)) + '%' }"></span>
       </div>
       <!-- at most ONE pressure line. The server notice belongs to the last SETTLED day, never to the running one
            (it said "0 of 30" from an earlier day under today's 0/260 header). -->
@@ -56,7 +56,7 @@
     <template v-else-if="view === 'ended'">
       <div class="eh-line">
         <span class="eh-badge" :class="met ? 'eh-badge--ok' : 'eh-badge--miss'" data-test="eh-result">{{ met ? 'Goal met' : 'Goal missed' }}</span>
-        <div class="eh-meta eh-meta--end"><span data-test="eh-points">Goal {{ progress.earned }}/{{ lock.target }} pts</span> <span class="eh-n8" data-test="eh-session-tasks">· {{ Math.min(progress.done, PER) }}/{{ PER }} tasks this session</span><span>🔥 {{ stats.streak }} day streak</span></div>
+        <div class="eh-meta eh-meta--end"><span data-test="eh-points">Goal {{ progress.earned }}/{{ goalPts }} pts</span> <span class="eh-n8" data-test="eh-session-tasks">· {{ Math.min(progress.done, PER) }}/{{ PER }} tasks this session</span><span>🔥 {{ stats.streak }} day streak</span></div>
       </div>
       <p v-if="met && reward" class="eh-note eh-note--ok" data-test="eh-reward">{{ reward }}</p>
       <p v-if="stats.notice && stats.lastDay === lock.dayKey" class="eh-note" data-test="eh-notice">{{ stats.notice }}</p>
@@ -112,19 +112,27 @@ const needMore = computed(() => Math.max(0, range.value.min - taskTotal.value));
 const overBy = computed(() => Math.max(0, taskTotal.value - range.value.max));
 const inRange = computed(() => needMore.value === 0 && overBy.value === 0);
 // A session with a frozen goal record counts only the points earned AFTER its Start (same sessionGoal math as the server / shield).
+const goalPts = computed(() => {
+  const l = lock.value;
+  if (!l || l.placeholder) return 0;
+  if (Number(l.target) > 0) return Math.round(Number(l.target));
+  if (l.goal && Number(l.goal.points) > 0) return Math.round(Number(l.goal.points));
+  return 0;
+});
 const progress = computed(() => { const l = lock.value; if (!l) return { earned: 0, done: 0, total: 0 };
-  if (l.goal && Number(l.target) > 0) { const g = sessionGoal(props.tasks || [], { n: 1, sessions: 1, startMs: l.startMs, endMs: l.endMs, goal: Number(l.target) }); return { earned: g.earned, done: g.done, total: g.total }; }
+  const frozen = Number(l.target) > 0 ? Number(l.target) : (l.goal && Number(l.goal.points) > 0 ? Number(l.goal.points) : 0);
+  if (l.goal && frozen > 0) { const g = sessionGoal(props.tasks || [], { n: 1, sessions: 1, startMs: l.startMs, endMs: l.endMs, goal: frozen }); return { earned: g.earned, done: g.done, total: g.total }; }
   return progressOf({ dayKey: l.dayKey, points: l.points, ids: l.ids || undefined, indexes: l.indexes || undefined }, props.tasks); });
-const pct = computed(() => (lock.value && lock.value.target > 0 ? Math.min(100, Math.round((progress.value.earned / lock.value.target) * 100)) : 0));
-const pace = computed(() => (lock.value ? paceOf({ earned: progress.value.earned, target: lock.value.target || 0, startMs: lock.value.startMs, endMs: lock.value.endMs, nowMs: (countdown.value, eh.nowMs()) }) : { timePct: 0, pointsPct: 0, expected: 0, behindBy: 0, leftMs: 0 }));
-const alert = computed(() => (lock.value ? topAlert({ offline: !!(eh.st.data && eh.st.data.offline), running: phase.value === 'running', earned: progress.value.earned, target: lock.value.target || 0, startMs: lock.value.startMs, endMs: lock.value.endMs, nowMs: (countdown.value, eh.nowMs()), streak: stats.value.streak || 0, warning: stats.value.warning || '' }) : null));
+const pct = computed(() => (goalPts.value > 0 ? Math.min(100, Math.round((progress.value.earned / goalPts.value) * 100)) : 0));
+const pace = computed(() => (lock.value ? paceOf({ earned: progress.value.earned, target: goalPts.value || 0, startMs: lock.value.startMs, endMs: lock.value.endMs, nowMs: (countdown.value, eh.nowMs()) }) : { timePct: 0, pointsPct: 0, expected: 0, behindBy: 0, leftMs: 0 }));
+const alert = computed(() => (lock.value ? topAlert({ offline: !!(eh.st.data && eh.st.data.offline), running: phase.value === 'running', earned: progress.value.earned, target: goalPts.value || 0, startMs: lock.value.startMs, endMs: lock.value.endMs, nowMs: (countdown.value, eh.nowMs()), streak: stats.value.streak || 0, warning: stats.value.warning || '' }) : null));
 const level = computed(() => levelOf(stats.value.xp || 0));
 const fmtDay = (ms) => { try { return new Date(ms).toLocaleDateString([], { month: 'short', day: 'numeric' }); } catch (e) { return ''; } };
 const badges = computed(() => [
   ...(stats.value.awards || []).filter((a) => a.badge).map((a) => ({ k: 'a' + a.at, ...badgeLabel(a.badge), from: a.from || 'Manager', date: fmtDay(a.at), note: a.note || '', title: badgeLabel(a.badge).name })),
   ...(stats.value.badges || []).map((id) => ({ k: 'b' + id, ...badgeLabel(id), title: badgeLabel(id).name })),
 ]);
-const met = computed(() => (lock.value ? progress.value.earned >= lock.value.target : false));
+const met = computed(() => (goalPts.value > 0 ? progress.value.earned >= goalPts.value : false));
 
 const save = async () => {
   msg.value = '';

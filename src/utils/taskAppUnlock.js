@@ -34,7 +34,7 @@ export const planTaskUnlock = (current, tasks, opts = {}) => {
 
 // One-line label for the task-sheet row (and the assistant). count: apps picked for this task; active: is it unlocked now.
 export const taskAppsRowLabel = (count = 0, { active = false, untilMs = 0 } = {}) => {
-  if (!count) return 'Apps this task needs: none';
+  if (!count) return 'Choose an app, then tap play. It opens for this task (none chosen yet).';
   const n = `${count} app${count === 1 ? '' : 's'}`;
   if (!active) return `Apps this task needs: ${n} · unlocked while its timer runs`;
   const t = untilMs ? new Date(untilMs).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '';

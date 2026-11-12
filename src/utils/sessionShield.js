@@ -12,12 +12,18 @@ import { focusShieldEnd } from './focusAutoStart.js';
 export const endedGoalMet = (lock, now = Date.now()) => {
   if (!lock || lock.placeholder || !(Number(lock.endMs) > 0) || Number(now) < Number(lock.endMs)) return false;
   const s = lock.session;
+  // The frozen Start goal is the only bar. A session.target that sums the whole day (200)
+  // must not keep the apps locked after this session's own goal (80) was met.
+  const frozen = Number(lock.target) > 0 ? Math.round(Number(lock.target)) : (lock.goal && Number(lock.goal.points) > 0 ? Math.round(Number(lock.goal.points)) : 0);
+  if (frozen > 0) {
+    const earned = s && s.earned != null ? Number(s.earned) : Number(lock.earned) || 0;
+    return earned >= frozen;
+  }
   if (s && (Number(s.target) > 0 || s.met === true)) {
     const target = Number(s.target) || 0;
     return s.met === true || (target > 0 && Number(s.earned) >= target);
   }
-  const target = Number(lock.target) || 0;
-  return target > 0 && Number(lock.earned) >= target;
+  return false;
 };
 
 // The ended session, shaped for the missed-goal hold. Null while it is still running or the goal was missed.

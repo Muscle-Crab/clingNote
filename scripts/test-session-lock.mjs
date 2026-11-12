@@ -73,6 +73,23 @@ await t('server: Begin stores apps + frozen goal; met session 1, then session 2 
   assert.ok(r.body.lock.target <= (12 - need) * 20, 'goal clamped to what is still open');
 });
 
+await t('server: a later session freezes its own goal, not the day total', async () => {
+  const db = mkDb({ 'weeklyRoutines/u1_Fri': { tasks: 'abcdefghij'.split('').map(T) } }); // 10 × 20 = 200
+  clock = at('2026-10-23T12:00:00Z'); await call(db, { action: 'plan', taskCount: 10, tz: TZ });
+  clock = at('2026-10-23T13:00:00Z');
+  let r = await call(db, { action: 'start', hours: 5 });
+  assert.equal(r.code, 200);
+  const first = r.body.lock.target;
+  assert.ok(first >= 160 && first <= 200, 'first session goal is its own floor, not a later session');
+  for (let i = 0; i < 6; i++) { clock += 60000; finish(db, i); }
+  clock = r.body.lock.endMs + 3 * H;
+  r = await call(db, { action: 'nextSession', hours: 5 });
+  assert.equal(r.code, 200, r.body.error || 'session 2 starts after the wait');
+  assert.equal(r.body.lock.index, 1);
+  assert.equal(r.body.lock.target, 80, '4 open tasks × 20 = 80, not the 200 day total');
+  assert.equal(r.body.lock.goal.points, 80, 'the frozen record matches the unlock bar');
+});
+
 await t('server: missed goal => debt hold until a LATER session meets its goal', async () => {
   const db = mkDb({ 'weeklyRoutines/u1_Fri': { tasks: 'abcdefghijklmn'.split('').map((c) => T(c)) } });
   clock = at('2026-10-23T12:00:00Z'); await call(db, { action: 'plan', taskCount: 14, tz: TZ });

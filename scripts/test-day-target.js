@@ -55,7 +55,7 @@ const frozen = core.flooredGoal(core.fallbackGoal({ tasksBefore: 8, hours: 5, to
 const preview = core.dailyTarget(Array(8).fill({ points: 10, minutes: 0 }), { targetLevel: 4 }, 5 * 60);
 ok(core.eightTaskFloor(openPts) === 160 && frozen === 160, '8 × average 20 is the frozen goal 160');
 ok(preview.target === 80, 'chip-point dailyTarget preview is 80, half the frozen goal');
-const { displayedSessionGoal } = load('utils/dayTarget.js');
+const { displayedSessionGoal, requiredPoints } = load('utils/dayTarget.js');
 const lock = { goal: { points: frozen, source: 'fallback' }, target: frozen, earned: 40 };
 ok(displayedSessionGoal(lock, preview.target) === 160, 'in-session counter shows the frozen goal, not the 80 preview');
 ok(displayedSessionGoal({ ...lock, session: { target: frozen, earned: 85, met: false } }, preview.target) === 160, 'wrap-up shows the same 160');
@@ -66,4 +66,28 @@ ok(home.includes('displayedSessionGoal(lock, preview)') && home.includes('displa
 ok(shut.includes('displayedSessionGoal(l, 0)'), 'wrap-up reads the same helper');
 const prompt = require('fs').readFileSync(require('path').join(__dirname, '../src/components/eighthour/DayStartPrompt.vue'), 'utf8');
 ok(prompt.includes('core.flooredGoal(') && !/goalPreview = computed\(\(\) => core\.fallbackGoal\(/.test(prompt), 'the start prompt previews the floored goal, not the unfloored fallback');
+// First session and a later session. A day-level total of 200 must not become the score or the unlock bar.
+const dayTasks = [
+  ...Array.from({ length: 6 }, (_, i) => ({ title: 'Done ' + i, estimateMin: 30, points: 20, completed: true })),
+  ...Array.from({ length: 4 }, (_, i) => ({ title: 'Open ' + i, estimateMin: 30, points: 20, completed: false })),
+];
+const dayWide = previewDayTarget(dayTasks, 8, {});
+ok(dayWide.total === 200, 'the whole day is 200 pts, finished work included');
+const first = { goal: { points: 160 }, target: 160, earned: 60 };
+ok(displayedSessionGoal(first, dayWide.target) === 160, 'first session score is its own frozen goal, not the 200 day total');
+ok(requiredPoints({ lock: first, tasks: dayTasks, hours: 8, stats: {} }) === 160, 'first session lock and unlock threshold is 160');
+ok(sessionUnlock({ sessionEarned: 60, sessionRequired: 160 }) === false, '60 does not open apps on a 160 goal');
+ok(sessionUnlock({ sessionEarned: 160, sessionRequired: 160 }) === true, 'meeting 160 opens the first session');
+const second = { goal: { points: 80 }, target: 80, session: { target: 200, earned: 60, met: false } };
+ok(displayedSessionGoal(second, dayWide.target) === 80, 'second session score is 80, not 200');
+ok(requiredPoints({ lock: second, tasks: dayTasks, hours: 8, stats: {} }) === 80, 'second session lock and unlock threshold is 80');
+ok(sessionUnlock({ sessionEarned: 60, sessionRequired: displayedSessionGoal(second, 200) }) === false, '60/80 stays locked');
+ok(sessionUnlock({ sessionEarned: 80, sessionRequired: displayedSessionGoal(second, 200) }) === true, '80 opens the apps, a 200 bar does not');
+const afterWait = { goal: { points: 80 }, target: 80 };
+ok(displayedSessionGoal(afterWait, 200) === 80, 'a session after the 2-hour wait still uses 80');
+const immediate = { goal: { points: 80 }, target: 80 };
+ok(displayedSessionGoal(immediate, 200) === 80, 'a session that starts right after 8 tasks still uses 80');
+const ob = require('fs').readFileSync(require('path').join(__dirname, '../src/views/OnboardingView.vue'), 'utf8');
+ok(ob.includes('data-test="ob-play-unlock"') && ob.includes('On a task, choose the app, then tap play.'), 'onboarding welcome teaches the play-button unlock');
+ok(ob.includes('data-test="ob-session-goal"') && ob.includes('Tap Start to begin a session.'), 'onboarding lock step teaches the session goal');
 console.log(`test-day-target: ${pass} passed`);

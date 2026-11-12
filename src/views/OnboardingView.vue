@@ -18,6 +18,7 @@
         <div class="ob-row"><span class="em">✅</span><div><b>Tasks earn points</b><small>A medium task is about 20 pts. Every 10 pts buys you 5 minutes.</small></div></div>
         <div class="ob-row"><span class="em">💸</span><div><b>Your top apps cost the most</b><small>Each app's price follows how much you used it this past week (30 pts + 2 per daily minute).</small></div></div>
         <div class="ob-row"><span class="em">🔓</span><div><b>The vault opens as you earn</b><small>Pass an app's price and it unlocks, right on your phone.</small></div></div>
+        <div class="ob-row" data-test="ob-play-unlock"><span class="em">▶️</span><div><b>Play opens one app</b><small>On a task, choose the app, then tap play. That app opens for the task. Start a session and hit its points goal to open the rest.</small></div></div>
         <div class="ob-row"><span class="em">🔥</span><div><b>8 tasks a session</b><small>Hit 8 to keep your streak alive. Earn breaks along the way.</small></div></div>
         <div class="ob-row"><span class="em">🤖</span><div><b>An AI coach in your corner</b><small>Plans your day, sizes your tasks, and cheers you on.</small></div></div>
       </section>
@@ -88,6 +89,7 @@
         <div class="ob-bell">🔒</div>
         <p class="ob-k">Step {{ stepNo('applock') }}</p><h1 class="ob-h">Lock your <span>distractions</span></h1>
         <p class="ob-p">Pick apps to block while you're locked in. They unlock when your tasks or points goal are done, or when your hours end. Optional, and you can change it later. Only apps on this iPhone are listed: find Instagram under Social and PUBG Mobile under Games, or search for them.</p>
+        <p class="ob-p" data-test="ob-session-goal">Tap Start to begin a session. Its points goal freezes then, and these apps open when you hit it. For one task, choose its app and tap play.</p>
         <p v-if="a.appLock" class="ob-p">{{ a.appLock }}</p>
       </section>
 
