@@ -379,7 +379,7 @@ import { wakeLockPlan, shouldReconcileWake } from '@/utils/wakeLock';
 import { homeDay } from '@/utils/homeDay';
 import DayStartPrompt from '@/components/eighthour/DayStartPrompt.vue';
 import SessionEndPrompt from '@/components/home/SessionEndPrompt.vue';
-import { endPrompt, timerExpiry } from '@/utils/sessionFlow';
+import { endPrompt } from '@/utils/sessionFlow';
 import { sessionApps } from '@/utils/sessionApps';
 import { turnOffBlocked, TURN_OFF_BLOCKED_MSG } from '@/utils/appLockDebt';
 import { vaultView, startPlan, stopWindows, unlockCelebration, freshUnlocks, vaultTimerPlan, vaultSessionReset, releaseUntilMs } from '@/utils/pointsVault';
@@ -388,7 +388,7 @@ import { adoptSentReport, replaceSnapshot, readSnapshot, writeSnapshot, reportFr
 import { prepareVaultApps } from '@/utils/vaultNames';
 import robotPng from '@/assets/assistant-robot@2x.png';
 import PointsCelebration from '@/components/home/PointsCelebration.vue';
-import { sessionGoal, overtimeStamp, overtimeInfo, overtimePoints } from '@/utils/sessionGoal';
+import { sessionGoal, doneAtMs, overtimeStamp, overtimeInfo, overtimePoints } from '@/utils/sessionGoal';
 import { dayAward, sessionAward, cardAward } from '@/utils/pointsAward';
 import { durationMs as ringDurationMs, overtimeMs as ringOvertimeMs, elapsedMs as ringElapsedMs } from '@/utils/timerRing';
 import { topicKey, recordActual, setEstimateHistory, estimateHistory } from '@/utils/personalEstimate';
@@ -427,7 +427,7 @@ import { maybeAskTracking } from '@/utils/tracking';
 import { planLock, resumePending, untilFor, fmtDuration, joinNames, withTimeout, describeUnlock, describeLock } from '@/utils/appLockNames';
 import { planTaskUnlock } from '@/utils/taskAppUnlock';
 import LockGuideSheet from '@/components/home/LockGuideSheet.vue';
-import { normBossMode, emergencyAllowed, goalFor, strictShield, wakeAutoOn, dayEndNote, moodReply, checklistMayRelock, readSessionGate, beginSessionGate, sessionUnlock, sessionId } from '@/utils/strictDay';
+import { normBossMode, emergencyAllowed, goalFor, strictShield, wakeAutoOn, dayEndNote, moodReply, checklistMayRelock, readSessionGate, beginSessionGate, healSessionGate, sessionUnlock, sessionId } from '@/utils/strictDay';
 import { LOCK_PREF, PENALTY_KEY, EMERGENCY_PENALTY, busyToDay, mergePenalties, lastPenaltyDay } from '@/utils/appLock';
 import { previewDayTarget, requiredPoints, sessionTargetOf, displayedSessionGoal } from '@/utils/dayTarget';
 const askOpen = ref(false); // Assistant sheet (✨ next to the bell, and the bubble in the task list header)
@@ -3894,6 +3894,7 @@ const confirmDayStart = async (hours, opts = {}) => {
     const goal = displayedSessionGoal(lock, preview);
     if (sessionId(lock) !== beforeKey || !readSessionGate(localStorage, lock)) {
       beginSessionGate(localStorage, lock, baseline, goal);
+      writeSessionGate(lock, baseline, goal);
       sessionGateTick.value += 1;
     }
     dayPromptOpen.value = false;
@@ -3911,20 +3912,52 @@ const todayTasksForTarget = computed(() => (isViewingToday.value ? selectedDayRo
 const dayRequiredPts = computed(() => requiredPoints({ lock: eh.running.value ? eh.lock.value : null, tasks: todayTasksForTarget.value, hours: eh.hoursPref.value, stats: eh.stats.value }));
 const sessionGateTick = ref(0);
 const todayListLoaded = ref(false);
-const readGate = () => (sessionGateTick.value, readSessionGate(localStorage, eh.lock.value || null));
+// localStorage can throw. The hold keeps the Start baseline so the day's earlier points are not treated as this session.
+let gateHold = null;
+let preStartAward = () => 0;
+const readGate = () => {
+  const lock = eh.lock.value || null;
+  const stored = (sessionGateTick.value, readSessionGate(localStorage, lock));
+  if (stored) { gateHold = stored; return stored; }
+  const key = sessionId(lock);
+  return gateHold && key && gateHold.key === key ? gateHold : null;
+};
+const holdGate = (row) => { if (row && row.key) gateHold = row; return row || null; };
+const writeSessionGate = (lock, earned, target) => {
+  const saved = beginSessionGate(localStorage, lock, earned, target);
+  if (saved) return holdGate(saved);
+  const key = sessionId(lock);
+  if (!key) return null;
+  return holdGate({ key, earned: Math.max(0, Number(earned) || 0), target: Math.max(0, Math.round(Number(target) || 0)) });
+};
+const listReadyForGate = (lock) => {
+  if (isLoading.value || !todayListLoaded.value) return false;
+  const tasks = selectedDayRoutine.value || [];
+  if ((Number(lock && lock.taskCount) || 0) > 0 && !tasks.length) return false;
+  return true;
+};
 const captureSessionGate = () => {
   const lock = eh.lock.value || null;
   if (!lock || !Number(lock.startMs)) return null;
-  const existing = readSessionGate(localStorage, lock);
+  if (listReadyForGate(lock)) {
+    const before = readSessionGate(localStorage, lock);
+    const healed = healSessionGate(localStorage, lock, preStartAward(lock));
+    if (healed) {
+      holdGate(healed);
+      if (!before || healed.earned !== before.earned) sessionGateTick.value += 1;
+      return healed;
+    }
+  }
+  const existing = readGate();
   if (existing) return existing;
-  if (!eh.running.value || isLoading.value || !todayListLoaded.value) return null;
+  if (!eh.running.value || !listReadyForGate(lock)) return null;
   const tasks = selectedDayRoutine.value || [];
   const preview = sessionTargetOf(tasks, lock.hours != null ? lock.hours : eh.hoursPref.value, eh.stats.value).target;
   const target = displayedSessionGoal(lock, preview);
   if (!(target > 0)) return null;
   const daily = awardOfList(tasks);
-  const row = beginSessionGate(localStorage, lock, daily, target);
-  sessionGateTick.value += 1;
+  const row = writeSessionGate(lock, daily, target);
+  if (row) sessionGateTick.value += 1;
   return row;
 };
 const sessionGate = computed(() => readGate());
@@ -3951,7 +3984,6 @@ const END_CHOICE_KEY = 'cn.session.endChoice.v1';
 const readEndChoice = (key) => { try { const v = JSON.parse(localStorage.getItem(END_CHOICE_KEY) || 'null'); return v && v.key === key ? v.choice : ''; } catch (e) { return ''; } };
 const writeEndChoice = (key, choice) => { try { localStorage.setItem(END_CHOICE_KEY, JSON.stringify({ key, choice })); } catch (e) { /* ignore */ } };
 const endChoice = ref('');
-const skipAutoKey = ref('');
 watch(sessionGateKey, (k) => { endChoice.value = readEndChoice(k); }, { immediate: true });
 
 // ---- Boss coach: spoken reactions, focus check-ins, overbooked warning, missed-streak roast (in-app only, respect the Boss voice toggle) ----
@@ -4062,20 +4094,13 @@ watch(() => [eh.running.value, isViewingToday.value, (selectedDayRoutine.value |
 });
 // ---- Focus mode auto-start + focus lock (src/utils/focusAutoStart.js; iOS Focus filter: ClingIntents.swift ClingFocusFilter) ----
 // Auto-start = Profile > Preferences "Auto-start focus" (per device). Triggers: a task's start time arriving while the app is open, and
-// the iPhone Focus turning on (queued natively, drained here on launch/foreground). Both go through confirmDayStart / startTimer.
+// the iPhone Focus turning on (queued natively, drained here on launch/foreground). Both start the focus timer only.
+// They do not start a lock-in session. That still needs Start / Start Day / Start Session.
 let autoFocusBusy = false;
 const autoStartFocus = async (reason, { index = -1, minutes = 0, key = '' } = {}) => {
   if (autoFocusBusy || !userId.value || !isViewingToday.value || isShutdown()) return false; autoFocusBusy = true;
   try {
     if (daySession.value.ended) return false; // day already wrapped up: nothing auto-starts
-    // Start the day too (no prompts): the 8-hour day when Lock-in is on, else the plain day session; the task list shows behind it.
-    if (lockInToday.value && !eh.running.value) {
-      if (eh.phase.value === 'none') {
-        const d = new Date(); const wakeTime = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-        await eh.savePlan({ wakeTime, taskCount: Math.max(1, countableIndexes(selectedDayRoutine.value || [], eh.phaseInfo.value.dayKey || '').length) });
-      }
-      if (eh.phase.value === 'ready' && !eh.phaseInfo.value.scheduled) await confirmDayStart(eh.hoursPref.value, { lock: lockEnabled() });
-    } else if (!daySession.value.started) { await startDay(); }
     const list = selectedDayRoutine.value || []; if (lockedFocus(list)) return false;
     const i = index >= 0 ? index : nextFocusIndex(list); const t = list[i]; if (!t) return false;
     if (key) { const f = readList(localStorage, AUTO_FIRED_KEY); writeList(localStorage, AUTO_FIRED_KEY, [...f, key]); }
@@ -4345,6 +4370,15 @@ if (process.env.VUE_APP_FIREBASE_EMULATORS === '1') window.__gpBreakEnd = (ms) =
 const awardOfList = (tasks) => (gpOn.value && isViewingToday.value
   ? GP.earnedPoints(tasks || [], { closeMs: GP.pointsCloseMs(gpPhase.value.closeMs, eh.running.value ? eh.lock.value : null), estMinutes: (t) => chipValues(t).minutes, penalty: gpPenaltyToday.value }).points
   : dayAward(tasks, (t) => chipValues(t).points));
+preStartAward = (lock) => {
+  const start = Number(lock && lock.startMs) || 0;
+  if (!(start > 0)) return 0;
+  const prior = (selectedDayRoutine.value || []).filter((t) => {
+    const ms = doneAtMs(t);
+    return Number.isFinite(ms) && ms > 0 && ms < start;
+  });
+  return awardOfList(prior);
+};
 watch(() => awardOfList(selectedDayRoutine.value), (v) => { pointsAccumulated.value = v; }, { immediate: true });
 const gpGoalWhy = computed(() => { const g = gpGoal.value; return g.from === 'history' ? `90% of your 2-week median, capped at today's ${g.load} pts planned, never under ${g.min}.` : `80% of today's ${g.load} pts planned (needs 3 logged days for the 2-week median), never under ${g.min}.`; });
 const loadBossPrefs = () => loadUserDoc().then((d) => { const day = localDateStr(); bossMode.value = normBossMode(d && d.bossMode); emergencyOn.value = emergencyAllowed(d); gpLoad(d);
@@ -4500,9 +4534,9 @@ const VAULT_SEEN_KEY = 'cn.vault.celebrated.v1'; const VAULT_BOUGHT_KEY = 'cn.va
 const dayLoad = (k) => { try { const v = JSON.parse(localStorage.getItem(k) || '{}'); return v && v.day === localDateStr() ? v.list : null; } catch (e) { return null; } };
 const daySave = (k, list) => { try { localStorage.setItem(k, JSON.stringify({ day: localDateStr(), list })); } catch (e) { /* ignore */ } };
 const vaultBought = ref(dayLoad(VAULT_BOUGHT_KEY) || []);
-// Same day's points the home screen shows: size points in Coach, chip points otherwise. While a session gate exists, the bank is this session's points, so a new session starts the bank over.
-const dailyPoints = computed(() => (gpOn.value ? ((gpEarned.value && gpEarned.value.points) || 0) : (pointsAccumulated.value || 0)));
-const dayVaultPoints = computed(() => (sessionEarnedPts.value == null ? dailyPoints.value : sessionEarnedPts.value));
+// The vault bank is only this session's points. No saved Start baseline means 0:
+// the day's earlier total must not open an app before this session has earned it.
+const dayVaultPoints = computed(() => (sessionEarnedPts.value == null ? 0 : sessionEarnedPts.value));
 const vaultReport = ref(null);
 try { vaultReport.value = readSnapshot(localStorage); } catch (e) { /* private mode: hydrate fills it */ }
 const vaultReportText = computed(() => formatOwnerReport(vaultReport.value));
@@ -4744,28 +4778,13 @@ watch(nowTick, async () => {
 const keepSessionGoing = () => { const key = sessionGateKey.value; if (!key) return; endChoice.value = 'keep'; writeEndChoice(key, 'keep'); };
 const endSessionManual = async () => {
   const key = sessionId(eh.lock.value) || sessionGateKey.value;
-  skipAutoKey.value = key;
   if (key) { endChoice.value = 'end'; writeEndChoice(key, 'end'); }
   try { await eh.endSession(); await clingLock.clearGoalRelease(); }
   catch (e) { showNoteToast((e && e.message) || 'Could not end the session.', { error: true }); }
 };
+// The timer ending does not start a session. Start next session on the shutdown screen is the tap, and the server still enforces the 2-hour wait.
+const maybeAutoNext = () => false;
 let nextFlight = false;
-const maybeAutoNext = async () => {
-  if (nextFlight || ehStarting) return;
-  const l = eh.lock.value;
-  if (!l || !lockInToday.value) return;
-  if (l.dayKey && l.dayKey !== localDateStr()) return; // a new calendar day is the rollover path
-  const s = eh.session.value;
-  const plan = timerExpiry({ now: Date.now(), endMs: l.endMs, running: eh.running.value, canStart: !!(s && s.canStart), cooldownUntil: (eh.wait.value && eh.wait.value.untilMs) || (s && s.untilMs) || 0, sessionKey: sessionId(l), skipKey: skipAutoKey.value });
-  if (!plan.startNext) return;
-  nextFlight = true;
-  try {
-    await eh.startNextSession(l.hours || eh.hoursPref.value);
-    if (lockEnabled()) await startHardLock({ sessionBegin: true });
-    else await clingLock.clearGoalRelease();
-  } catch (e) { console.warn('auto next session', e && e.message); }
-  finally { nextFlight = false; }
-};
 const applyDayRollover = async () => {
   if (nextFlight || ehStarting || !eh.st.loaded) return;
   const l0 = eh.lock.value;
@@ -4777,13 +4796,10 @@ const applyDayRollover = async () => {
     const l = eh.lock.value;
     const today = today0;
     if (eh.running.value && l && l.dayKey && l.dayKey !== today) {
-      skipAutoKey.value = sessionId(l);
       try { await eh.endSession(); } catch (e) { console.warn('day rollover end', e && e.message); }
     }
     try { await fetchSelectedDayRoutine(); } catch (e) { /* the next start fetches again */ }
-    if (!lockInToday.value || eh.running.value || eh.phase.value !== 'ready') return;
-    const hours = validSessionHours(eh.hoursPref.value) ? eh.hoursPref.value : 8;
-    await confirmDayStart(hours, { lock: lockEnabled() });
+    // A new calendar day asks for Start. It does not confirm the hours or lock apps on its own.
   } finally { nextFlight = false; }
 };
 const DAY_SEEN_KEY = 'cn.session.daySeen.v1';

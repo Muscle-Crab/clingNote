@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import * as A from '../src/utils/audioSession.js';
 import { foregroundPlan, shouldRebuild } from '../src/utils/musicResume.js';
+import { skipLateSteps, crossfadeIn } from '../src/composables/useBackgroundAudio.js';
 
 const read = (p) => fs.readFileSync(new URL(p, import.meta.url), 'utf8');
 const plugin = {
@@ -79,9 +80,22 @@ FakeAudioContext.made = 0; FakeAudioContext.closes = 0; FakeAudioContext.suspend
 window.AudioContext = FakeAudioContext;
 const { createEngine } = await import('../src/composables/useBackgroundAudio.js');
 const player = createEngine();
+const late = skipLateSteps({ nextTime: 1, step: 4, now: 31, quantum: 0.4 });
+assert.ok(late.skipped >= 70, 'missed beats are skipped');
+assert.ok(late.nextTime >= 31, 'playback continues from now, not from the stalled clock');
+const fade = crossfadeIn(10, 1.2, 0.9);
+assert.equal(fade[fade.length - 1].time, 11.2, 'the fade locks the full level at the end of the ramp');
+assert.notEqual(fade[fade.length - 1].time, 10, 'the fade does not snap to full volume when the new track starts');
 await player.start('lofi', 0.5);
 assert.equal(player.state, 'running', 'Play resumes the audio context');
 assert.ok(FakeAudioContext.osc > 0, 'Play schedules audible notes');
+const playingNodes = FakeAudioContext.osc;
+await player.start('lofi', 0.5, { keepStep: true });
+assert.equal(FakeAudioContext.osc, playingNodes, 'a tap while this track is already playing does not rebuild the graph');
+const beforeStall = FakeAudioContext.osc;
+player.context.currentTime += 30;
+player.queueAhead(2);
+assert.ok(FakeAudioContext.osc - beforeStall < 80, 'a stalled audio clock does not dump the missed beats at once');
 assert.equal(FakeAudioContext.closes, 0, 'Play does not close the context');
 assert.equal(FakeAudioContext.made, 1, 'Play uses one context');
 const firstCtx = FakeAudioContext.made;

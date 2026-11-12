@@ -61,23 +61,28 @@ t('goal reached shows the end-or-continue prompt; keep leaves it running; end is
   assert.equal(endPrompt({ met: false, running: true, sessionKey: 'k' }).canEnd, true);
 });
 
-t('continue leaves the session until the timer; the timer then starts the next one; a manual end does not', () => {
+t('the timer ending does not start the next session; the user may tap Start once the wait allows it', () => {
   const running = timerExpiry({ now: 1000, endMs: 5000, running: true, canStart: true, sessionKey: 's', skipKey: '' });
   assert.equal(running.ended, false);
   assert.equal(running.startNext, false);
+  assert.equal(running.userStart, false);
   const due = timerExpiry({ now: 5000, endMs: 5000, running: false, canStart: true, sessionKey: 's', skipKey: '' });
   assert.equal(due.ended, true);
-  assert.equal(due.startNext, true);
+  assert.equal(due.startNext, false);
+  assert.equal(due.userStart, true);
   assert.equal(due.reason, 'timer');
   const endedByHand = timerExpiry({ now: 5000, endMs: 5000, running: false, canStart: true, sessionKey: 's', skipKey: 's' });
   assert.equal(endedByHand.startNext, false);
+  assert.equal(endedByHand.userStart, false);
   assert.equal(endedByHand.reason, 'manual');
   const wait = timerExpiry({ now: 5000, endMs: 5000, running: false, canStart: false, cooldownUntil: 9000, sessionKey: 's' });
   assert.equal(wait.startNext, false);
+  assert.equal(wait.userStart, false);
   assert.equal(wait.reason, 'cooldown');
   assert.equal(wait.waitUntil, 9000);
   const after = timerExpiry({ now: 9000, endMs: 5000, running: false, canStart: true, cooldownUntil: 9000, sessionKey: 's' });
-  assert.equal(after.startNext, true);
+  assert.equal(after.startNext, false);
+  assert.equal(after.userStart, true);
 });
 
 t('completed tasks stay complete on the next session of the same day', () => {
@@ -138,6 +143,10 @@ t('home, native shield, and the end action are wired', () => {
   assert.match(home, /keepSessionGoing/);
   assert.match(home, /maybeAutoNext/);
   assert.match(home, /applyDayRollover/);
+  const autoNext = home.slice(home.indexOf('const maybeAutoNext'), home.indexOf('let nextFlight'));
+  assert.equal(/startNextSession/.test(autoNext), false, 'the timer watch must not start a session');
+  const rollover = home.slice(home.indexOf('const applyDayRollover'), home.indexOf('const DAY_SEEN_KEY'));
+  assert.equal(/confirmDayStart/.test(rollover), false, 'a new day asks for Start and does not confirm it');
   assert.match(prompt, /data-test="session-end-prompt"/);
   assert.match(prompt, /data-test="session-end-keep"/);
   assert.match(prompt, /data-test="end-session-any"/);

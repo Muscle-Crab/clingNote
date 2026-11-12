@@ -21,15 +21,15 @@ export const promptChoice = (choice) => (choice === 'end'
 // The user can end a running session at any time, not only from the goal prompt.
 export const manualEndAllowed = ({ running = false } = {}) => !!running;
 
-// The timer reached its end. A manual end of this same session does not auto-start.
-// The existing cooldown (fewer than 8 tasks) still waits; the next session starts once the server allows it.
+// The timer reached its end. That never starts the next session. The user taps Start next session.
+// Fewer than 8 finished tasks still waits 2 hours before that tap is accepted. Eight or more: the tap works right away.
 export const timerExpiry = ({ now = 0, endMs = 0, running = false, canStart = false, cooldownUntil = 0, sessionKey = '', skipKey = '' } = {}) => {
   const ended = !running && Number(endMs) > 0 && Number(now) >= Number(endMs);
-  if (!ended) return { ended: false, startNext: false, reason: '' };
-  if (skipKey && sessionKey && skipKey === sessionKey) return { ended: true, startNext: false, reason: 'manual' };
-  if (Number(cooldownUntil) > Number(now)) return { ended: true, startNext: false, reason: 'cooldown', waitUntil: Number(cooldownUntil) };
-  if (!canStart) return { ended: true, startNext: false, reason: 'blocked' };
-  return { ended: true, startNext: true, reason: 'timer' };
+  if (!ended) return { ended: false, startNext: false, userStart: false, reason: '' };
+  if (skipKey && sessionKey && skipKey === sessionKey) return { ended: true, startNext: false, userStart: false, reason: 'manual' };
+  if (Number(cooldownUntil) > Number(now)) return { ended: true, startNext: false, userStart: false, reason: 'cooldown', waitUntil: Number(cooldownUntil) };
+  if (!canStart) return { ended: true, startNext: false, userStart: false, reason: 'blocked' };
+  return { ended: true, startNext: false, userStart: true, reason: 'timer' };
 };
 
 // A later session on the same calendar day keeps every completion. The new session's points
@@ -37,8 +37,17 @@ export const timerExpiry = ({ now = 0, endMs = 0, running = false, canStart = fa
 export const sameDayHandoff = (storage, { tasks = [], fromLock, toLock, dayPoints = 0, nextTarget = 0 } = {}) => {
   const kept = (tasks || []).map((t) => (t ? { ...t } : t));
   const from = beginSessionGate(storage, fromLock, 0, Math.max(0, Number(dayPoints) || 0));
-  const carried = sessionAward(dayPoints, from.earned);
   const to = beginSessionGate(storage, toLock, dayPoints, nextTarget);
+  if (!from || !to) {
+    return {
+      tasks: kept,
+      stillComplete: kept.filter((t) => t && t.completed).map((t) => t.title || t.id),
+      fromPoints: 0,
+      sessionPoints: 0,
+      unlocked: false,
+    };
+  }
+  const carried = sessionAward(dayPoints, from.earned);
   return {
     tasks: kept,
     stillComplete: kept.filter((t) => t && t.completed).map((t) => t.title || t.id),
@@ -49,7 +58,7 @@ export const sameDayHandoff = (storage, { tasks = [], fromLock, toLock, dayPoint
 };
 
 // New local day: completed one-time tasks leave, older completions reset, points go to 0,
-// locks are cleared, and a fresh session should start. Same day is a no-op.
+// locks are cleared, and the user is asked to start a fresh session. Same day is a no-op.
 export const dayRolloverReset = (tasks, dayIdx, now, prevDay, day) => {
   if (!day || day === prevDay) return { rolled: false, points: 0, tasks: tasks || [], locksReset: false, startFresh: false };
   const when = now instanceof Date ? now : new Date(now || Date.now());

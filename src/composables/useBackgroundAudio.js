@@ -19,6 +19,29 @@ const CHORDS = {
 // Closing it and constructing another one in the same turn leaves iOS silent.
 export const needsNewContext = (state) => !state || state === 'closed';
 
+// A stalled timer must not dump every missed beat at "now". That pile is the stutter and the overlap.
+// Skip the late steps and continue from the audio clock. A few dozen milliseconds still play.
+export const skipLateSteps = ({ nextTime = 0, step = 0, now = 0, quantum = 0 } = {}) => {
+  const q = Number(quantum) || 0;
+  let t = Number(nextTime) || 0;
+  let s = Math.max(0, Number(step) || 0);
+  if (!(q > 0) || !(now > t + 0.05)) return { nextTime: t, step: s, skipped: 0 };
+  const missed = Math.floor((now - t) / q);
+  s += missed;
+  t += missed * q;
+  if (t < now) t = now + 0.02;
+  return { nextTime: t, step: s, skipped: missed };
+};
+// The fade back in locks the end level at the end of the ramp. Locking it at the start snaps the gain and clicks.
+export const crossfadeIn = (t1, half, target) => {
+  const end = t1 + Math.max(0, Number(half) || 0);
+  return [
+    { op: 'set', value: 0.0001, time: t1 },
+    { op: 'ramp', value: target, time: end },
+    { op: 'set', value: target, time: end },
+  ];
+};
+
 export const STYLES = {
   'lofi-rain': { chords: 'night', bpm: 66, drums: true, comp: false, wave: 'triangle', cut: 1300, mel: 0.3, bed: 'rain' },
   'lofi-jazz': { chords: 'jazz', bpm: 82, drums: true, comp: true, wave: 'triangle', cut: 1900, mel: 0.45, bed: 'vinyl', bass: true },
@@ -39,7 +62,7 @@ export const createEngine = () => {
   const AC = typeof window !== 'undefined' && (window.AudioContext || window.webkitAudioContext);
   if (!AC) return null;
   let ctx = null; let master = null; let analyser = null; let timer = 0; let live = []; let track = 'lofi'; let volume = 0.5; let playing = false;
-  let nextTime = 0; let step = 0; let nextCrackle = 0; let gen = 0; let fadeTimer = 0; let onState = null;
+  let nextTime = 0; let step = 0; let nextCrackle = 0; let gen = 0; let fadeTimer = 0; let onState = null; let rebuiltAt = 0;
   const data = new Uint8Array(256);
 
   // Every oscillator and buffer source for the current track. A later track must stop these
@@ -91,10 +114,18 @@ export const createEngine = () => {
     while (nextCrackle < until) { burst(nextCrackle, 0.025 + Math.random() * 0.04, 0.05 + Math.random() * 0.12, 1500 + Math.random() * 1500, 7000); nextCrackle += 0.04 + Math.random() * (track === 'fireside' ? 0.5 : 2.2); }
   };
 
+  const beatOf = (id) => {
+    const st = STYLES[id];
+    if (st) return 60 / st.bpm;
+    const bpm = id === 'lofi' ? 74 : id === 'night' || id === 'lofi-night' ? 58 : 40;
+    return 60 / bpm;
+  };
   const schedule = (aheadSec = 1.2) => {
     if (!ctx || !playing) return;
     const horizon = ctx.currentTime + Math.max(0.2, Number(aheadSec) || 1.2);
     if (track === 'fireside') { if (nextCrackle < ctx.currentTime) nextCrackle = ctx.currentTime + 0.05; crackles(horizon); return; }
+    const caught = skipLateSteps({ nextTime, step, now: ctx.currentTime, quantum: beatOf(track) / 2 });
+    nextTime = caught.nextTime; step = caught.step;
     const st = STYLES[track];
     if (st) {
       const beat = 60 / st.bpm;
@@ -166,9 +197,22 @@ export const createEngine = () => {
     // Must be called from a user gesture (tap/click). Everything up to ctx.resume() runs synchronously so iOS
     // still sees the gesture (an await before resume() loses it). A closed/'interrupted' (iOS: call, Siri, other app) context is replaced.
     start(id, vol, opts = {}) {
-      cancelFade();
-      track = norm(id || track); volume = vol ?? volume; const my = ++gen;
+      const nextId = norm(id || track); volume = vol ?? volume;
       const keep = !!(opts && opts.keepStep) && step > 0;
+      const graphLive = !!(ctx && ctx.state !== 'closed' && live.length && nextTime > ctx.currentTime - 0.05);
+      // Already playing this track: resume the same graph. halt() here cut the notes on every tap.
+      if (keep && nextId === track && graphLive) {
+        cancelFade();
+        setMusicPlaying(true);
+        playing = true;
+        let resumed = null;
+        try { resumed = ctx.state !== 'running' ? ctx.resume() : null; } catch (e) { /* needs a gesture */ }
+        punchGain();
+        if (!timer) timer = setInterval(schedule, 250);
+        return Promise.resolve(resumed).catch(() => {});
+      }
+      cancelFade();
+      track = nextId; const my = ++gen;
       halt();
       if (needsNewContext(ctx && ctx.state)) {
         ctx = sharedAudioContext();
@@ -197,7 +241,13 @@ export const createEngine = () => {
     // Queue audible notes onto the audio clock before iOS freezes timers. No silent node is added.
     queueAhead(seconds = 90) { if (!playing || !ctx) return 0; const cap = Math.min(180, Math.max(1, Number(seconds) || 90)); schedule(cap); return cap; },
     // iOS drops the looping beds while the context is backgrounded. Rebuild them and keep the step.
-    rebuild() { if (!ctx || ctx.state !== 'running' || !playing) return false; cancelFade(); gen += 1; begin(step > 0); punchGain(); if (!timer) timer = setInterval(schedule, 250); return true; },
+    rebuild() {
+      if (!ctx || ctx.state !== 'running' || !playing) return false;
+      // resume() and the state event both call this. The second one must not tear the graph down again.
+      if (Date.now() - rebuiltAt < 100 && live.length && nextTime > ctx.currentTime) return true;
+      rebuiltAt = Date.now();
+      cancelFade(); gen += 1; begin(step > 0); punchGain(); if (!timer) timer = setInterval(schedule, 250); return true;
+    },
     set onStateChange(fn) { onState = fn; },
     setTrack(id) { cancelFade(); gen += 1; track = norm(id); if (playing && ctx) { begin(true); punchGain(); } },
     // Smooth change (auto-rotate): fade the mix down, swap the track, then put the gain back.
@@ -217,9 +267,10 @@ export const createEngine = () => {
         track = next; begin(true);
         const t1 = ctx.currentTime;
         master.gain.cancelScheduledValues(t1);
-        master.gain.setValueAtTime(0.0001, t1);
-        master.gain.linearRampToValueAtTime(target, t1 + half);
-        master.gain.setValueAtTime(target, t1);
+        for (const ev of crossfadeIn(t1, half, target)) {
+          if (ev.op === 'ramp') master.gain.linearRampToValueAtTime(ev.value, ev.time);
+          else master.gain.setValueAtTime(ev.value, ev.time);
+        }
       }, half * 1000);
     },
     setVolume(v) { volume = Math.max(0, Math.min(1, Number(v) || 0)); return punchGain(); },

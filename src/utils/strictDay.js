@@ -90,13 +90,27 @@ export const readSessionGate = (storage, lock) => {
   return { key, earned: Math.max(0, Number(saved.earned)), target: Math.max(0, Math.round(Number(saved.target) || 0)) };
 };
 // Written once, at a successful new session start. A second call for the same session keeps the first baseline and target.
+// A failed write returns null. Callers must not treat the day's points as this session when nothing was saved:
+// that missing baseline is what opened the vault before Start had a number to subtract.
 export const beginSessionGate = (storage, lock, dayEarned, target) => {
   const existing = readSessionGate(storage, lock);
   if (existing) return existing;
   const key = sessionId(lock);
+  if (!key || !storage || typeof storage.setItem !== 'function') return null;
   const row = { key, earned: Math.max(0, Number(dayEarned) || 0), target: Math.max(0, Math.round(Number(target) || 0)) };
-  if (key) { try { storage.setItem(SESSION_BASE_KEY, JSON.stringify(row)); } catch (e) { /* ignore */ } }
-  return row;
+  try { storage.setItem(SESSION_BASE_KEY, JSON.stringify(row)); } catch (e) { return null; }
+  return readSessionGate(storage, lock);
+};
+// A baseline of 0 saved before the task list arrived counts every earlier completion as this session
+// and opens the vault. Raise it to the points finished before Start. Never lower a real baseline.
+export const healSessionGate = (storage, lock, preStartEarned) => {
+  const row = readSessionGate(storage, lock);
+  const prior = Math.max(0, Math.round(Number(preStartEarned) || 0));
+  if (!row || !(prior > row.earned)) return row;
+  const key = sessionId(lock);
+  if (!key || !storage || typeof storage.setItem !== 'function') return row;
+  try { storage.setItem(SESSION_BASE_KEY, JSON.stringify({ ...row, earned: prior })); } catch (e) { return row; }
+  return readSessionGate(storage, lock) || row;
 };
 export const sessionShieldDecision = ({ enabled = true, running = false, now = Date.now(), endMs = 0, selectionCount = 1, unlockedToday = false, ...rest } = {}) => {
   if (!enabled || selectionCount <= 0 || unlockedToday || !running || !(Number(endMs) > now)) return { want: false, phase: 'off', untilMs: 0 };
