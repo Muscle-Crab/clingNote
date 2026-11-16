@@ -14,8 +14,10 @@ import { loadPrefs, loadCustomImage } from './utils/bgPrefs'
 import { applyBackgroundImage } from './utils/bgImage'
 import { interceptBlankLinks } from './utils/openExternal'
 import { initAudioSession } from './utils/audioSession'
+import { noteAppLaunch } from './utils/appReview'
 
 try { initAudioSession(); } catch (e) { /* iOS only: mix with other apps' audio */ }
+try { noteAppLaunch(); } catch (e) { /* rating-prompt first-launch stamp */ }
 
 
 // Saved home/header background picture (per device); default = the original forest art.

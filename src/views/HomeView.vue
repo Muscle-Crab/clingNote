@@ -1548,8 +1548,6 @@ widgetComplete.prior = async (taskId, dayName) => {
 };
 widgetComplete.tasks = () => (isToday(selectedDayIndex.value) ? selectedDayRoutine.value : []);
 let offWidget = null;
-// One-time App Store rating prompt, ~2s after landing here right after onboarding + sign-up (armed by OnboardingView.finish). No-op on web.
-onMounted(() => { const u = auth.currentUser; if (u) import('@/utils/appReview').then((m) => m.maybeRequestReview(u.uid, { stillOnHome: () => _proRouter.currentRoute.value.path === '/home' })).catch(() => {}); });
 onMounted(() => { if (isNativeIOS()) import('@/utils/widgetSync').then((m) => { offWidget = m.registerWidgetCompleter(widgetComplete); }).catch(() => {}); });
 onBeforeUnmount(() => { if (offWidget) offWidget(); });
 
@@ -4254,6 +4252,14 @@ const shieldFromCard = () => {
   return { earned, required, met: sessionUnlock({ sessionEarned: earned, sessionRequired: required }) };
 };
 const sessionMetNow = () => { const card = shieldFromCard(); return !!(card && card.met); };
+// Guideline 5.6.3: never request a rating on first launch, onboarding, or a home-load timer.
+// Only after a later positive moment (full 8-task session just met, or Boss vault app just unlocked).
+const offerAppReview = (reason) => {
+  const u = auth.currentUser;
+  if (!u) return;
+  import('@/utils/appReview').then((m) => m.maybeRequestReview(u.uid, { reason, onboardingComplete: true })).catch(() => {});
+};
+watch(() => sessionMetNow(), (met, was) => { if (met && was === false) offerAppReview('session_complete'); });
 const sessionRunning = computed(() => !!eh.running.value);
 const showEndPrompt = computed(() => endPrompt({ met: sessionMetNow(), running: sessionRunning.value, sessionKey: sessionGateKey.value, choice: endChoice.value }).show);
 watch(gpOn, (on) => { GP.setSizeMode(on); if (!on) GP.setQuietWindows([]); }, { immediate: true });
@@ -4635,6 +4641,7 @@ watch(() => (gpVault.value ? gpVault.value.items.filter((a) => a.open).map((a) =
   if (!fresh.length) return;
   daySave(VAULT_SEEN_KEY, [...new Set([...(dayLoad(VAULT_SEEN_KEY) || []), ...fresh.map((a) => a.id)])]);
   const c = unlockCelebration(fresh); if (c) celebrate({ ...c, robot: robotPng });
+  if (fresh.some((a) => a.boss)) offerAppReview('boss_unlock');
 });
 const vaultStart = async () => { const v = gpVault.value; const now = Date.now(); const plan = startPlan(v, now); if (!plan) return;
   const r = await clingLock.allowVaultApps(plan.ids, plan.untilMs);

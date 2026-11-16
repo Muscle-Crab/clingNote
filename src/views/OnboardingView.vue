@@ -127,7 +127,6 @@ import { ensureUserDoc, saveUserFields } from '@/utils/userDoc';
 import { isNativeIOS } from '@/utils/platform';
 import { requestNativePushPermission, getNativePushState } from '@/utils/nativePush';
 import PaywallPanel from '@/components/paywall/PaywallPanel.vue';
-import { markReviewPending } from '@/utils/appReview';
 import { markPaywallSeenLocal } from '@/utils/entryGuard';
 import { readCachedPlan, useEightHour } from '@/composables/useEightHour';
 import { requestWakePermissions, loadWake } from '@/composables/useWakeAlarm';
@@ -228,7 +227,6 @@ async function nextStep() {
   go(step.value + 1);
 }
 async function finish() { await persist({ onboardingComplete: true, onboardingCompletedAt: new Date() });
-  if (auth.currentUser) markReviewPending(auth.currentUser.uid); // one-time App Store rating prompt on the next /home landing (after this paywall closed)
   const from = String(route.query.from || ''); router.push(from.startsWith('/') && !from.startsWith('//') ? from : '/home'); }
 </script>
 
