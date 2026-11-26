@@ -62,7 +62,7 @@
         <DayTabs :days="tabDays" :selected-index="selectedDayIndex" :scheduled-counts="scheduledCounts" @select="handleDayTabClick" />
 
         <WakeAlarmPrompt v-if="isViewingToday" />
-        <EightHourCard v-if="lockInToday || eh.lock.value" :tasks="ehTasks" :start-error="ehStartError" @retry="syncAfterAuth" @start="openDayPrompt" :locked="!proNow && !eh.lock.value" @pro="gatePro(_proRouter, 'lockIn')" />
+        <EightHourCard v-if="lockInToday || eh.lock.value" :tasks="ehTasks" :start-error="ehStartError" @retry="syncAfterAuth" @start="openDayPrompt" :locked="!proNow && !eh.lock.value" @pro="gatePro(_proRouter, 'lockIn')" @give-up="giveUpSession" />
         <SessionEndPrompt v-if="isViewingToday" :running="sessionRunning" :prompt="showEndPrompt" :points="shownSessionPts" :goal="shownSessionTarget" @end="endSessionManual" @keep="keepSessionGoing" />
         <PlanDaySheet v-if="planOpen" :tasks="dayTasks" :busy="planBusy" :error="planError" @previewed="onPlanPreviewed" @confirm="onPlanConfirm" @close="planOpen = false" />
         <DayTemplatesSheet v-if="tplOpen" :templates="dayTemplates" :task-count="templateItemCount" :busy="tplBusy" :error="tplError" :note="tplNote" @apply="applyDayTemplate" @save="saveDayTemplate" @remove="removeDayTemplate" @close="tplOpen = false" />
@@ -384,6 +384,7 @@ import { sessionApps } from '@/utils/sessionApps';
 import { turnOffBlocked, TURN_OFF_BLOCKED_MSG } from '@/utils/appLockDebt';
 import { vaultView, startPlan, stopWindows, unlockCelebration, freshUnlocks, vaultTimerPlan, vaultSessionReset, releaseUntilMs } from '@/utils/pointsVault';
 import { decideShield, endedGoalMet } from '@/utils/sessionShield';
+import { releaseKeyOf, readRelease, writeRelease, releasedFor } from '@/utils/sessionRelease';
 import { adoptSentReport, replaceSnapshot, readSnapshot, writeSnapshot, reportFromRecord, SENT_REPORT_ROWS, sentReport, formatOwnerReport, parseOwnerReport, applyOwnerReport } from '@/utils/usageSnapshot';
 import { prepareVaultApps } from '@/utils/vaultNames';
 import robotPng from '@/assets/assistant-robot@2x.png';
@@ -4486,6 +4487,15 @@ const persistGoalRelease = async () => {
   if (ids.length) await clingLock.allowVaultApps(ids, untilMs);
   lockOn = null; hardLocked.value = false;
 };
+// Session ended by hand (End session / Give up): the same native release as a met goal (every shield down, kept after a
+// force-quit, cleared by the next session Begin or local midnight), without the goal check. The missed-goal hold is dropped.
+const persistEndRelease = async () => {
+  if (!lockAvailable()) return;
+  const rel = readRelease(localStorage, localDateStr()); if (!rel) return;
+  holdSig = ''; await clingLock.clearDebtHold().catch(() => {});
+  await clingLock.markGoalRelease({ day: localDateStr(), untilMs: releaseUntilMs(Date.now(), true), session: rel.key });
+  lockOn = null; hardLocked.value = false;
+};
 const syncAppLock = async () => {
   captureSessionGate();
   if (!lockAvailable()) return;
@@ -4509,12 +4519,14 @@ const syncAppLock = async () => {
     strictWant: sp ? sp.want : null, lock: eh.lock.value, card: shieldFromCard(), gate: captureSessionGate(),
     dayEarned: Math.max(0, Number(pointsAccumulated.value) || 0), debt: eh.appLockDebt.value, known: !!eh.debtKnown.value,
     focusLocked: lockedFocus(selectedDayRoutine.value || []), native: st,
+    released: releasedFor(readRelease(localStorage, localDateStr()), eh.lock.value, !!eh.running.value),
   });
   if (decision.debtCleared) { clearDebtLocal(decision.debtKey); debtPaidNative(decision.debtKey); eh.reportProgress(); }
   await syncDebtHold(decision.hold);
   const act = decision.action; const endMs = decision.endMs;
   hardLocked.value = !!decision.want;
-  if (decision.openNow) await persistGoalRelease();
+  if (decision.released) await persistEndRelease();
+  else if (decision.openNow) await persistGoalRelease();
   else if (act === 'start') {
     lockOn = endMs; const r = await clingLock.startLock(endMs, decision.focus ? 'ClingNote focus' : 'ClingNote lock-in');
     console.info('[clingLock] startLock', r && r.monitor);
@@ -4783,11 +4795,23 @@ watch(nowTick, async () => {
 });
 // Hard lock chosen at day start: pick apps once if needed, turn the lock on, the shield runs until the day ends (shouldShield/endMs).
 const keepSessionGoing = () => { const key = sessionGateKey.value; if (!key) return; endChoice.value = 'keep'; writeEndChoice(key, 'keep'); };
-const endSessionManual = async () => {
+// End session (under the card) and Give up (on the countdown card) both end the session early on the server, the same
+// record either way, then open the locked apps right away: release written for this session, shields dropped, synced.
+const endSessionManual = async ({ reason = 'end' } = {}) => {
   const key = sessionId(eh.lock.value) || sessionGateKey.value;
+  const relKey = releaseKeyOf(eh.lock.value);
   if (key) { endChoice.value = 'end'; writeEndChoice(key, 'end'); }
-  try { await eh.endSession(); await clingLock.clearGoalRelease(); }
-  catch (e) { showNoteToast((e && e.message) || 'Could not end the session.', { error: true }); }
+  try { await eh.endSession(); }
+  catch (e) { showNoteToast((e && e.message) || 'Could not end the session.', { error: true }); return false; }
+  if (relKey) writeRelease(localStorage, { key: relKey, day: localDateStr(), reason });
+  try { await persistEndRelease(); await syncAppLock(); } catch (e) { console.warn('[clingLock] end release', e && e.message); }
+  return true;
+};
+// Give up: one confirm, then exactly End session (same server end, same scoring, same unlock).
+const giveUpSession = async () => {
+  if (!eh.running.value) return false;
+  if (!window.confirm('Give up this session? It ends now and your apps open.')) return false;
+  return endSessionManual({ reason: 'give-up' });
 };
 // The timer ending does not start a session. Start next session on the shutdown screen is the tap, and the server still enforces the 2-hour wait.
 const maybeAutoNext = () => false;

@@ -35,7 +35,11 @@
     <template v-else-if="view === 'running'">
       <div class="eh-line eh-line--run">
         <span class="eh-lock" data-test="eh-lock" title="Locked: window, tasks, points and target cannot change" aria-label="Locked">🔒</span>
-        <p class="eh-clock" data-test="eh-countdown" role="timer">{{ countdown }}</p>
+        <!-- countdown + Give up under it (the empty space below the number, left of the meta column): no new block -->
+        <div class="eh-clockcol">
+          <p class="eh-clock" data-test="eh-countdown" role="timer">{{ countdown }}</p>
+          <button type="button" class="eh-quit" data-test="eh-give-up" @click="$emit('give-up')">Give up</button>
+        </div>
         <div class="eh-meta">
           <span data-test="eh-times">{{ starts }} →</span>
           <span class="eh-end" data-test="eh-ends"><span class="eh-end-k">Day ends</span><b>{{ ends }}</b></span>
@@ -84,7 +88,7 @@ import core from '../../../netlify/functions/lib/eightHourCore.js';
 // tasks = today's stored task array (all of it; hidden recurring copies are excluded by progressOf/countable logic)
 const PER = core.TASKS_PER_SESSION; const HEADS_UP = core.SESSION_HEADS_UP;
 const props = defineProps({ tasks: { type: Array, default: () => [] }, startError: { type: String, default: '' }, locked: { type: Boolean, default: false } });
-defineEmits(['retry', 'start', 'pro']);
+defineEmits(['retry', 'start', 'pro', 'give-up']);
 const eh = useEightHour();
 const { phase, phaseInfo, plan, lock, stats, reward, countdown } = eh;
 const starts = computed(() => eh.startsLabel.value);
@@ -157,6 +161,12 @@ const save = async () => {
 .eh-meta { min-width: 0; flex-shrink: 1; white-space: normal; text-align: right; } .eh-meta [data-test=eh-points], .eh-meta [data-test=eh-ends] { white-space: nowrap; }
 .eh-meta--end { flex-wrap: wrap; justify-content: flex-end; column-gap: 10px; }
 .eh-clock { flex-shrink: 0; }
+/* Give up: the meta column's muted text (size, color), left-aligned under the countdown. The visible text stays small;
+   padding + equal negative margin give it a 44px tap area without moving or crowding anything. */
+.eh-clockcol { display: flex; flex-direction: column; align-items: flex-start; flex-shrink: 0; }
+.eh-quit { font-family: inherit; font-size: .68rem; line-height: 1.25; font-weight: 500; color: var(--c-text-3, #9aa3b5); background: none; border: 0; cursor: pointer;
+  padding: 14px 10px; margin: -11px -10px -14px; min-height: 44px; text-decoration: underline; text-decoration-color: rgba(154,163,181,.45); text-underline-offset: 2px; -webkit-tap-highlight-color: transparent; }
+.eh-quit:active { color: var(--c-text, #e6e6e6); }
 .eh-end { display: flex; flex-direction: column; align-items: flex-end; margin: 0; min-width: 0; }
 .eh-end-k { font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #9fb7e0; line-height: 1.2; }
 .eh-end b { font-size: 1.2rem; font-weight: 800; color: #fff; line-height: 1.1; font-variant-numeric: tabular-nums; }

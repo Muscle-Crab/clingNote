@@ -36,13 +36,15 @@ let n = 0; const ok = (c, m) => { assert.ok(c, m); n++; };
   html = await render(at('2026-10-23T13:00:00Z'), { ...base, lock }, [T('a', true), T('b'), T('c', true)]); // 2h in
   ok(/06:00:00|05:59:5\d/.test(html), 'countdown shows 6h left');
   ok(/Day ends/.test(html) && /3:00 PM/.test(html), 'ends 3:00 PM'); ok(/3:00 PM/.test(html) && /7:00 AM/.test(html), 'start and end times'); ok(/50\/70 pts/.test(html), 'points / target as small text'); ok(!/tasks done|role="progressbar"|eh-bar/.test(html), 'compact strip: no tasks-done block and no bar (the progress card already shows it)'); ok(/eh-clock/.test(html), 'countdown number is the prominent element');
-  ok(/data-test="eh-lock"/.test(html), 'lock badge'); ok(!/type="time"|eh-stepper|<button/.test(html), 'no edit controls while running');
+  ok(/data-test="eh-lock"/.test(html), 'lock badge'); ok(!/type="time"|eh-stepper/.test(html), 'no edit controls while running');
+  ok((html.match(/<button/g) || []).length === 1 && /data-test="eh-give-up"[^>]*>Give up</.test(html), 'running: the only button is Give up, on the card');
+  ok(/class="eh-clockcol"><p class="eh-clock"[^]*?data-test="eh-give-up"[^]*?<\/div>/.test(html), 'Give up sits under the countdown inside the card (no new block)');
   // device clock far off: offset keeps the countdown on server time
   st.offset = 0; html = await render(at('2026-10-23T13:00:00Z'), { ...base, lock }, [T('a', true), T('b'), T('c', true)]); ok(/06:00:00|05:59:5\d/.test(html), 'server clock decides');
   html = await render(at('2026-10-23T20:00:00Z'), { ...base, lock, stats: { ...core.defaultStats(), streak: 1, lastDay: '2026-10-23', notice: 'Tomorrow is harder.' }, reward: 'Nice' }, [T('a', true), T('b', true), T('c', true)]);
   ok(/Goal met/.test(html) && /data-test="eh-reward"/.test(html) && /data-test="eh-notice"/.test(html), 'ended + met shows reward and notice');
   html = await render(at('2026-10-23T20:00:00Z'), { ...base, lock, stats: { ...core.defaultStats(), notice: 'Tomorrow is harder.' } }, [T('a', true), T('b'), T('c')]);
-  ok(/Goal missed/.test(html), 'ended + missed');
+  ok(/Goal missed/.test(html), 'ended + missed'); ok(!/eh-give-up/.test(html), 'no Give up once the session has ended');
   ok(/data-test="eh-start"/.test(html) && !/Tomorrow's wake/.test(html), 'ended: Start a new session right away, no "Tomorrow\'s wake"');
   ok(!/data-test="eh-notice"/.test(html), 'stale notice from an earlier day is hidden');
   html = await render(at('2026-10-23T13:00:00Z'), { ...base, lock, stats: { ...core.defaultStats(), lastDay: '2026-10-22', notice: 'You earned 0 of 30 points.' } }, [T('a'), T('b'), T('c')]);

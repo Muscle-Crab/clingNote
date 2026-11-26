@@ -47,8 +47,17 @@ const sessionKeyOf = (lock) => `${(lock && lock.dayKey) || ''}#${Number(lock && 
 export const decideShield = ({
   now = Date.now(), enabled = true, selectionCount = 0, unlockedToday = false, onBreak = false, friend = false,
   running = false, endMs = 0, strictWant = null, lock = null, card = null, gate = null, dayEarned = 0,
-  debt = null, known = false, focusLocked = null, native = {},
+  debt = null, known = false, focusLocked = null, native = {}, released = false,
 } = {}) => {
+  // Ended by hand (End session / Give up): every shield stays down and the missed-goal hold is dropped
+  // until the next session starts. The server still records the session as ended early.
+  if (released && !running) {
+    return {
+      openNow: true, endedMet: endedGoalMet(lock, now), released: true, want: false, focus: false, endMs: 0,
+      action: lockAction({ want: false, endMs: 0, st: native, now }), hold: { action: 'clear' },
+      debtCleared: false, debtKey: (debt && debt.sessionKey) || '',
+    };
+  }
   const endedMet = !running && endedGoalMet(lock, now);
   const baselineOpen = !!(gate && sessionUnlock({ dayEarned, earnedAtStart: gate.earned, sessionRequired: gate.target }));
   const openNow = endedMet || (card ? !!card.met : baselineOpen);
@@ -74,7 +83,7 @@ export const decideShield = ({
   const hold = debtHoldPlan({ debt: debtResult.cleared ? null : debt, live, known, now, enabled, selectionCount, unlockedToday, friend, onBreak });
   const action = lockAction({ want: !!(want || focusEnd), endMs: focusEnd || until, st: native, now });
   return {
-    openNow, endedMet, want: !!(want || focusEnd), focus: !!focusEnd, endMs: focusEnd || until, action, hold,
+    openNow, endedMet, released: false, want: !!(want || focusEnd), focus: !!focusEnd, endMs: focusEnd || until, action, hold,
     debtCleared: !!debtResult.cleared, debtKey: debtResult.sessionKey || (debt && debt.sessionKey) || '',
   };
 };

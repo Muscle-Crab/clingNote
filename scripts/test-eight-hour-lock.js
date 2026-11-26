@@ -100,7 +100,10 @@ lockMod.setLockSource(() => ({ lock: { dayName: 'Fri', startMs: start, endMs: en
   const card = read('src/components/home/EightHourCard.vue');
   await t('card exposes no edit controls while running', () => {
     const running = card.slice(card.indexOf('<!-- running'), card.indexOf('<!-- ended'));
-    assert.ok(!/<input|<button|@click|v-model/.test(running), 'running view is read-only');
+    // The one action allowed is Give up (ends the session early, never edits the plan, tasks, points or target).
+    const rest = running.replace(/<button type="button" class="eh-quit" data-test="eh-give-up" @click="\$emit\('give-up'\)">Give up<\/button>/, '');
+    assert.ok(rest !== running, 'Give up is on the running card');
+    assert.ok(!/<input|<button|@click|v-model/.test(rest), 'running view is read-only apart from Give up');
   });
 
   // ── Firestore rules (static) ──
