@@ -149,7 +149,9 @@ t('home, native shield, and the end action are wired', () => {
   assert.equal(/confirmDayStart/.test(rollover), false, 'a new day asks for Start and does not confirm it');
   assert.match(prompt, /data-test="session-end-prompt"/);
   assert.match(prompt, /data-test="session-end-keep"/);
-  assert.match(prompt, /data-test="end-session-any"/);
+  assert.equal(/data-test="end-session-any"/.test(prompt), false, 'no always-visible End session button under the card');
+  assert.match(prompt, /data-test="session-end-now"/);
+
   assert.match(shared, /enum GoalRelease/);
   assert.match(shared, /func liftIfLive/);
   assert.match(monitor, /GoalRelease\.liftIfLive\(\)/);

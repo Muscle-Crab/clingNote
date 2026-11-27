@@ -4799,7 +4799,7 @@ watch(nowTick, async () => {
 });
 // Hard lock chosen at day start: pick apps once if needed, turn the lock on, the shield runs until the day ends (shouldShield/endMs).
 const keepSessionGoing = () => { const key = sessionGateKey.value; if (!key) return; endChoice.value = 'keep'; writeEndChoice(key, 'keep'); };
-// End session (under the card) and Give up (on the countdown card) both end the session early on the server, the same
+// End session (the goal-reached prompt) and Give up (on the countdown card) both end the session early on the server, the same
 // record either way, then open the locked apps right away: release written for this session, shields dropped, synced.
 const endSessionManual = async ({ reason = 'end' } = {}) => {
   const key = sessionId(eh.lock.value) || sessionGateKey.value;
