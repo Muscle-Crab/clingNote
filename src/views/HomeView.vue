@@ -4689,6 +4689,10 @@ watch(() => [eh.running.value, eh.phase.value, eh.pendingBlocks.value.length, po
 // A new session lock (e.g. session 2 started from the shutdown card) or a settled shutdown: re-sync once its doc has landed.
 watch(() => { const l = eh.lock.value || {}; const sh = eh.shutdown && eh.shutdown.value; return `${l.index}:${l.startMs}:${l.endMs}:${isLoading.value}:${(todayTasksForTarget.value || []).length}:${sh ? sh.opensAtMs || 1 : 0}`; }, () => { captureSessionGate(); syncAppLock(); });
 onMounted(() => { setTimeout(syncAppLock, 1200); });
+// Shutdown-screen Give up writes the release and fires this so shields drop even if Chrome called persist itself.
+const onSessionReleased = () => { syncAppLock(); };
+onMounted(() => window.addEventListener('cn:session-released', onSessionReleased));
+onBeforeUnmount(() => window.removeEventListener('cn:session-released', onSessionReleased));
 watch(() => { const d = eh.appLockDebt.value; return d ? d.sessionKey : ''; }, () => { syncAppLock(); }); // missed-goal lock set / paid (server or cache)
 // Emergency unlock (assistant tool + sergeant menu): stops the shield for today and books the point penalty.
 const emergencyUnlock = async () => { if (!emergencyOn.value) return { summary: 'Emergency unlock is turned off in Settings.', penalty: 0, refused: true }; await clingLock.stopLock(); hardLocked.value = false; const day = localDateStr(); let pen = []; try { pen = JSON.parse(localStorage.getItem(PENALTY_KEY) || '[]'); } catch (e) { /* ignore */ }

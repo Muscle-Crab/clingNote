@@ -25,6 +25,7 @@
       </form>
       <p v-else-if="eh.wait.value" class="ehs-res miss" data-test="eh-next-wait">{{ eh.wait.value.text }}</p>
       <p v-if="sch.err" class="ehs-err" role="alert" data-test="eh-next-err">{{ sch.err }}</p>
+      <button type="button" class="eh-quit" data-test="eh-shut-give-up" @click="giveUpEnded">Give up</button>
       <nav class="ehs-links">
         <router-link :to="profileLink">Settings</router-link><router-link to="/support">Support</router-link><router-link to="/privacy-policy">Privacy</router-link><router-link to="/sub">Premium</router-link>
         <button type="button" @click="signOutNow" data-test="eh-shut-signout">Sign out</button>
@@ -54,6 +55,9 @@ import { scheduleLocal } from '@/utils/localNotify';
 import { homeDayFor } from '@/utils/homeDay';
 import { lockIn } from '@/utils/lockIn';
 import { clingLock, lockAvailable } from '@/native/clingNative';
+import { releaseKeyOf, readRelease, writeRelease, releasedFor } from '@/utils/sessionRelease';
+import { localDateStr } from '@/utils/streak';
+import { releaseUntilMs } from '@/utils/pointsVault';
 import { getTodayId } from '@/utils/dateTime';
 import { requirePro, loadUserDoc } from '@/composables/usePro';
 import { canUse } from '@/utils/pro';
@@ -88,7 +92,30 @@ const pill = computed(() => {
 });
 const shut = computed(() => eh.shutdown.value);
 const onPill = () => goCard();
-const shutVisible = computed(() => !!(uid.value && shut.value && SHUT_ROUTES.includes(route.name)));
+// Give up on this screen writes a release for the ended session and hides the overlay so the normal app is back.
+const releasedTick = ref(0);
+const endedLock = () => shutLock() || eh.lock.value;
+const releasedNow = computed(() => {
+  void releasedTick.value;
+  return releasedFor(readRelease(typeof localStorage === 'undefined' ? null : localStorage, localDateStr()), endedLock(), !!eh.running.value);
+});
+const shutVisible = computed(() => !!(uid.value && shut.value && SHUT_ROUTES.includes(route.name) && !releasedNow.value));
+// Session already ended here: open the apps (same persistEndRelease path as the card) and return to the app.
+// Never call endSession — that would re-settle the window and could double-record a missed goal.
+const giveUpEnded = async () => {
+  if (eh.running.value) return;
+  const key = releaseKeyOf(endedLock());
+  if (!key) return;
+  writeRelease(localStorage, { key, day: localDateStr(), reason: 'give-up' });
+  releasedTick.value += 1;
+  try {
+    if (lockAvailable()) {
+      await clingLock.clearDebtHold().catch(() => {});
+      await clingLock.markGoalRelease({ day: localDateStr(), untilMs: releaseUntilMs(Date.now(), true), session: key });
+    }
+  } catch (e) { console.warn('[clingLock] shut give-up', e && e.message); }
+  try { window.dispatchEvent(new CustomEvent('cn:session-released')); } catch (e) { /* ignore */ }
+};
 // ── session end: the only input is how long the next session lasts (5..12 h); it starts now ──
 // "Start next session": always offered once a session has ended (server decides: session.canStart; false only while one runs or is scheduled).
 // Goal met = points goal AND 8 tasks (eightHourCore.goalMissed).
@@ -183,6 +210,11 @@ watch(() => eh.lock.value && eh.running.value && `${eh.lock.value.dayKey}|${eh.l
 .ehs-err { color: #ffb4b4; font-size: 13px; }
 .ehs-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 14px; margin-top: 18px; font-size: 13px; }
 .ehs-links a, .ehs-links button { color: #9fb7e0; background: none; border: 0; padding: 4px; cursor: pointer; text-decoration: underline; font: inherit; }
+/* Same Give up button as the countdown card: rounded rect, padding, soft danger fill + coral label. */
+.eh-quit { font-family: inherit; font-size: .88rem; line-height: 1.2; font-weight: 700; color: var(--c-danger, #F87171);
+  background: var(--c-danger-soft, #2E1517); border: 1px solid rgba(248, 113, 113, 0.7); border-radius: 8px;
+  padding: 8px 14px; margin: 14px auto 4px; min-height: 36px; cursor: pointer; -webkit-tap-highlight-color: transparent; display: inline-block; }
+.eh-quit:active { background: #3a1a1c; color: #ffa0a0; }
 .ehc { position: fixed; left: 50%; top: calc(env(safe-area-inset-top) + 56px); transform: translateX(-50%); z-index: 9400; width: min(340px, 92vw);
   display: flex; flex-direction: column; gap: 2px; text-align: center; padding: 12px 14px; border-radius: 16px; background: linear-gradient(135deg, #1f3b2a, #12301f); border: 1px solid rgba(60,180,110,.5); color: #e6f6ec; box-shadow: 0 10px 30px rgba(0,0,0,.45); cursor: pointer; }
 .ehc--miss { background: linear-gradient(135deg, #3b1f1f, #301212); border-color: rgba(224,90,90,.5); color: #f6e6e6; }
