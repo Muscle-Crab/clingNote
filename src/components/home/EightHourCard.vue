@@ -149,24 +149,25 @@ const save = async () => {
 <style scoped>
 /* Compact strip (replaces the old big card). Sits between the day tabs and the progress card. */
 .eh { max-width: 100%; box-sizing: border-box; overflow-x: hidden; touch-action: pan-y; overscroll-behavior-x: none; background: var(--c-surface, #16181c); border: 1px solid var(--c-border, #2a2a2e); border-radius: 14px; padding: 6px 12px; margin: 6px 0; color: var(--c-text, #e6e6e6); }
-.eh--running { border-color: rgba(55,138,221,.55); padding: 4px 12px; }
+.eh--running { border-color: rgba(55,138,221,.55); padding: 8px 12px; }
 .eh-line { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; min-height: 30px; }
 .eh-line--run { justify-content: flex-start; gap: 10px; min-height: 40px; }
 .eh-title { font-size: .85rem; font-weight: 700; }
 .eh-lock { font-size: .9rem; opacity: .85; }
-.eh-clock { font-size: 1.75rem; line-height: 1; font-weight: 800; font-variant-numeric: tabular-nums; margin: 0; letter-spacing: .01em; }
+.eh-clock { font-size: 1.35rem; line-height: 1; font-weight: 800; font-variant-numeric: tabular-nums; margin: 0; letter-spacing: .01em; }
 .eh-meta { margin-left: auto; display: flex; flex-direction: column; align-items: flex-end; gap: 1px; font-size: .68rem; line-height: 1.25; color: var(--c-text-3, #9aa3b5); white-space: nowrap; }
 .eh-meta--end { flex-direction: row; gap: 10px; }
 /* large text: the meta column may shrink and wrap between items instead of being clipped by .eh's overflow-x: hidden */
 .eh-meta { min-width: 0; flex-shrink: 1; white-space: normal; text-align: right; } .eh-meta [data-test=eh-points], .eh-meta [data-test=eh-ends] { white-space: nowrap; }
 .eh-meta--end { flex-wrap: wrap; justify-content: flex-end; column-gap: 10px; }
 .eh-clock { flex-shrink: 0; }
-/* Give up: the meta column's muted text (size, color), left-aligned under the countdown. The visible text stays small;
-   padding + equal negative margin give it a 44px tap area without moving or crowding anything. */
-.eh-clockcol { display: flex; flex-direction: column; align-items: flex-start; flex-shrink: 0; }
-.eh-quit { font-family: inherit; font-size: .68rem; line-height: 1.25; font-weight: 500; color: var(--c-text-3, #9aa3b5); background: none; border: 0; cursor: pointer;
-  padding: 14px 10px; margin: -11px -10px -14px; min-height: 44px; text-decoration: underline; text-decoration-color: rgba(154,163,181,.45); text-underline-offset: 2px; -webkit-tap-highlight-color: transparent; }
-.eh-quit:active { color: var(--c-text, #e6e6e6); }
+/* Give up: a real tappable button under the smaller countdown, inside the card. Rounded rect, padding,
+   soft danger fill + border, contrasting coral label (not muted text). */
+.eh-clockcol { display: flex; flex-direction: column; align-items: flex-start; flex-shrink: 0; gap: 6px; }
+.eh-quit { font-family: inherit; font-size: .88rem; line-height: 1.2; font-weight: 700; color: var(--c-danger, #F87171);
+  background: var(--c-danger-soft, #2E1517); border: 1px solid rgba(248, 113, 113, 0.7); border-radius: 8px;
+  padding: 8px 14px; margin: 0; min-height: 36px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.eh-quit:active { background: #3a1a1c; color: #ffa0a0; }
 .eh-end { display: flex; flex-direction: column; align-items: flex-end; margin: 0; min-width: 0; }
 .eh-end-k { font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #9fb7e0; line-height: 1.2; }
 .eh-end b { font-size: 1.2rem; font-weight: 800; color: #fff; line-height: 1.1; font-variant-numeric: tabular-nums; }
