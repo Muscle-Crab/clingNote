@@ -41,8 +41,9 @@ const again = recheckDay(cleared, today, { keys: five, gate: true }); assert.equ
 const dropped = recheckDay({ ...cleared }, today, { keys: five, drop: ['a'], gate: false }); assert.equal(dropped.streak, 3);
 const pre = recheckDay({ streak: 1, lastCompletionDate: '2026-10-29', dayDate: today, dayDone: ['a', 'b', 'c', 'd', 'e'] }, today, { keys: ['b', 'c', 'd', 'e'], drop: ['a'], gate: true });
 assert.equal(pre.streak, 1); assert.deepEqual(pre.dayDone.sort(), ['b', 'c', 'd', 'e']);
-// HomeView wiring: reactive watchers + periodic + resume/visibility + toggle respects Start Day
+// HomeView wiring: reactive watchers + periodic + resume/visibility. Today's finished tasks count without the legacy Start Day clock.
 const hv = fs.readFileSync(new URL('../src/views/HomeView.vue', import.meta.url), 'utf8');
-for (const s of ["scheduleRecheck('gate')", "scheduleRecheck('day-start')", "scheduleRecheck('tasks')", "scheduleRecheck('new-day')", "scheduleRecheck('visible')", "scheduleRecheck('resume')", "recheckStreak('timer')", 'STREAK_RECHECK_MS = 45000', "App.addListener('resume', onRecheckResume)", 'clearInterval(streakTick)', 'completedAfterStart(task)']) assert.ok(hv.includes(s), s);
+for (const s of ["scheduleRecheck('gate')", "scheduleRecheck('day-start')", "scheduleRecheck('tasks')", "scheduleRecheck('new-day')", "scheduleRecheck('visible')", "scheduleRecheck('resume')", "recheckStreak('timer')", 'STREAK_RECHECK_MS = 45000', "App.addListener('resume', onRecheckResume)", 'clearInterval(streakTick)', 'todayDoneKeys(tasks, taskKey)']) assert.ok(hv.includes(s), s);
+assert.ok(!hv.includes('!daySession.value.started) return false'), 'a missing Start Day must not skip the done-today count');
 const ms = Number(hv.match(/STREAK_RECHECK_MS = (\d+)/)[1]); assert.ok(ms >= 30000 && ms <= 60000);
 console.log('test-b41-streak: ok');

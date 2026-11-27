@@ -277,7 +277,8 @@ router.beforeEach(async (to, from, next) => {
   if (proFeature && currentUser) { try { const d = await loadUserDoc(); if (d && !canUse(d, proFeature)) return next({ path: '/paywall', query: { feature: proFeature, from: to.fullPath } }); } catch (e) { /* read failure: don't block */ } }
 
   // Pro users (server flag or, on iOS, RevenueCat's entitlement) never see the upgrade screen.
-  if (to.path === '/paywall' && currentUser) { try { if (isPro(await loadUserDoc())) return next(to.query.from && String(to.query.from).startsWith('/') && to.query.from !== '/paywall' ? String(to.query.from) : '/home'); } catch (e) { /* show the paywall */ } }
+  // /paywall redirects to /onboarding?step=paywall, so the guard has to catch that step too or a paid user stays on the plans panel.
+  if ((to.path === '/paywall' && currentUser) || (currentUser && to.path === '/onboarding' && String(to.query.step || '') === 'paywall')) { try { if (isPro(await loadUserDoc())) return next(to.query.from && String(to.query.from).startsWith('/') && to.query.from !== '/paywall' ? String(to.query.from) : '/home'); } catch (e) { /* show the paywall */ } }
 
   // iOS app: no marketing landing page (hero image + 26MB demo video are website-only) -> straight to Login / Home
   if (isNative() && currentUser && to.path === '/' && homeFor() === '/manage') return next('/manage'); // last mode used was Manager mode

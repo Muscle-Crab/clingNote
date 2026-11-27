@@ -19,10 +19,17 @@ export const isOffDay = (offDates, day) => Array.isArray(offDates) && offDates.i
 export const offLine = (days) => (days.length <= 1 ? 'Day off. Your streak is safe. Rest well.' : `${days.length} days off. Your streak is safe until you're back.`);
 
 // Boss alarm: ring at the task's start time if it's still ahead today, else in `fallbackMin` minutes.
+// `now` may be a Date or a millisecond timestamp (Date.now()). A number has no getFullYear.
+const asDate = (now) => {
+  if (now instanceof Date && !isNaN(now.getTime())) return now;
+  const n = Number(now);
+  return new Date(Number.isFinite(n) ? n : Date.now());
+};
 export const alarmAtFor = (task, now = new Date(), fallbackMin = 30) => {
+  const base = asDate(now);
   const m = /^(\d{1,2}):(\d{2})$/.exec((task && task.startTime) || '');
-  if (m) { const d = new Date(now.getFullYear(), now.getMonth(), now.getDate(), +m[1], +m[2]); if (d.getTime() > now.getTime() + 60000) return d; }
-  return new Date(now.getTime() + fallbackMin * 60000);
+  if (m) { const d = new Date(base.getFullYear(), base.getMonth(), base.getDate(), +m[1], +m[2]); if (d.getTime() > base.getTime() + 60000) return d; }
+  return new Date(base.getTime() + fallbackMin * 60000);
 };
 export const alarmLine = (task, at) => `Alarm set for ${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}: ${task.title}. It rings until you start.`;
 

@@ -8,10 +8,11 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     var window: UIWindow?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        // Play WKWebView HTML/WebAudio clips through the speaker even when the silent switch is on.
+        // Foreground voice, effects, and focus music (while this app is on screen) mix with other apps
+        // and are not muted by the silent switch. The session stays inactive until one of those actually
+        // plays. There is no background-audio mode, so iOS suspends playback when the user leaves the app.
         do {
             try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [.mixWithOthers])
-            try AVAudioSession.sharedInstance().setActive(true)
         } catch { NSLog("ClingNote audio session setup failed: \(error)") }
         InstallAttribution.start()
         #if CLING_APP_LOCK
@@ -36,8 +37,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     }
 
     func applicationDidBecomeActive(_ application: UIApplication) {
-        // Coming back to the app: make sure the session is still mixable so the user's music (Spotify etc.) keeps playing.
+        // Coming back to the app: keep the session mixable, and reactivate it only if the user had started focus music.
         ClingVoicePlugin.mixWithOthers()
+        ClingVoicePlugin.reactivateIfUserMusic()
     }
 
     func applicationWillTerminate(_ application: UIApplication) {

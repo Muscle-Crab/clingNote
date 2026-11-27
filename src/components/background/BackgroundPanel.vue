@@ -41,7 +41,11 @@
         </div>
         <div class="bgp-play">
           <button type="button" class="bgp-playbtn" data-test="bg-play" :disabled="!bg.audioSupported" @click="bg.toggle()">{{ bg.playing.value ? '⏸ Pause music' : '▶ Play music' }}</button>
-          <label class="bgp-vol">🔈<input type="range" min="0" max="1" step="0.05" :value="bg.prefs.volume" aria-label="Volume" data-test="bg-volume" @input="bg.setVolume($event.target.value)" @pointerdown="volDown" @pointermove="volMove" @pointerup="volUp" @pointercancel="volUp" @touchstart.prevent="volTouch" @touchmove.prevent="volTouch" @wheel.prevent="volWheel" /></label>
+          <label class="bgp-vol">🔈
+            <span class="bgp-vol-hit" data-test="bg-volume-hit" @pointerdown="volDown" @touchstart="volDown" @pointermove="volMove" @wheel.prevent="volWheel">
+              <input type="range" min="0" max="1" step="0.05" :value="bg.prefs.volume" aria-label="Volume" data-test="bg-volume" @input="bg.setVolume($event.target.value)" />
+            </span>
+          </label>
         </div>
         <div class="bgp-rot" data-test="bg-rotate">
           <label class="bgp-rot-row"><span><b>🔀 Auto-rotate</b><small>Switch to a different track every {{ bg.prefs.rotateMins }} min, with a soft crossfade</small></span>
@@ -89,17 +93,41 @@ const reduced = typeof window !== 'undefined' && window.matchMedia ? window.matc
 let iv = 0;
 watch(() => props.open, (o) => { clearInterval(iv); if (o) iv = setInterval(() => { level.value = bg.level(); }, 400); });
 onBeforeUnmount(() => clearInterval(iv));
-// Volume slider: iOS WKWebView only moves a range when the thumb itself is grabbed and lets a slightly vertical drag scroll the panel.
-// Pointer capture + touch-action:none make a tap or drag anywhere on the track set the volume; the wheel nudges it on web.
+// The sheet scrolls, and iOS only drags a range input when the finger stays on its tiny thumb.
+// The tall track captures the pointer (finger, pen, or mouse) so the drag keeps setting the gain.
 import { volumeFromX, nudgeVolume } from '@/utils/bgPrefs';
 let volDragging = false;
-const volAt = (e) => bg.setVolume(volumeFromX(e.clientX, e.currentTarget.getBoundingClientRect()));
-// iOS WKWebView: pointer capture / preventDefault on a range input can kill the native drag, so touches are handled directly.
-const volTouch = (e) => { const t = e.touches && e.touches[0]; if (t) bg.setVolume(volumeFromX(t.clientX, e.currentTarget.getBoundingClientRect())); };
-const volDown = (e) => { if (e.pointerType !== 'pen') return; volDragging = true; e.currentTarget.setPointerCapture?.(e.pointerId); e.preventDefault(); volAt(e); };
-const volMove = (e) => { if (volDragging) { e.preventDefault(); volAt(e); } };
-const volUp = () => { volDragging = false; };
+let volEl = null;
+const pointX = (e) => (e.touches && e.touches[0] ? e.touches[0].clientX : e.clientX);
+const volAt = (e) => { const x = pointX(e); if (x == null || !volEl) return; bg.setVolume(volumeFromX(x, volEl.getBoundingClientRect())); };
+const endDrag = () => {
+  volDragging = false;
+  window.removeEventListener('pointermove', onWinMove);
+  window.removeEventListener('pointerup', endDrag);
+  window.removeEventListener('pointercancel', endDrag);
+  window.removeEventListener('touchmove', onWinTouch);
+  window.removeEventListener('touchend', endDrag);
+  window.removeEventListener('touchcancel', endDrag);
+};
+const onWinMove = (e) => { if (!volDragging) return; e.preventDefault(); volAt(e); };
+const onWinTouch = (e) => { if (!volDragging) return; e.preventDefault(); volAt(e); };
+const volDown = (e) => {
+  if (volDragging) return;
+  if (e.button != null && e.button !== 0) return;
+  volDragging = true;
+  volEl = e.currentTarget;
+  try { if (e.pointerId != null) e.currentTarget.setPointerCapture(e.pointerId); } catch (err) { /* the window listeners still follow the finger */ }
+  window.addEventListener('pointermove', onWinMove, { passive: false });
+  window.addEventListener('pointerup', endDrag);
+  window.addEventListener('pointercancel', endDrag);
+  window.addEventListener('touchmove', onWinTouch, { passive: false });
+  window.addEventListener('touchend', endDrag);
+  window.addEventListener('touchcancel', endDrag);
+  volAt(e);
+};
+const volMove = (e) => { if (!volDragging) return; onWinMove(e); };
 const volWheel = (e) => bg.setVolume(nudgeVolume(bg.prefs.volume, e.deltaY || -e.deltaX));
+onBeforeUnmount(endDrag);
 </script>
 
 <style>
@@ -134,8 +162,11 @@ const volWheel = (e) => bg.setVolume(nudgeVolume(bg.prefs.volume, e.deltaY || -e
 .bgp-play { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
 .bgp-playbtn { flex: 1; min-height: 48px; border: 0; border-radius: 12px; background: #4f6ff0; color: #fff; font-size: 1rem; font-weight: 600; cursor: pointer; }
 .bgp-playbtn:disabled { opacity: .5; }
-.bgp-vol { flex: 1; display: flex; align-items: center; gap: 6px; }
-.bgp-vol input { flex: 1; min-height: 44px; touch-action: none; }
+.bgp-vol { flex: 1; display: flex; align-items: center; gap: 8px; min-width: 0; }
+.bgp-vol-hit { flex: 1; min-width: 0; min-height: 44px; display: flex; align-items: center; touch-action: none; }
+.bgp-vol input { width: 100%; height: 44px; margin: 0; pointer-events: none; background: transparent; -webkit-appearance: none; appearance: none; }
+.bgp-vol input::-webkit-slider-runnable-track { height: 8px; border-radius: 999px; background: #2a2f3f; }
+.bgp-vol input::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 28px; height: 28px; margin-top: -10px; border-radius: 50%; background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.45); }
 .bgp-note { margin: 8px 0 0; font-size: .78rem; color: #9aa3b8; }
 .bgp-motion { padding: 8px 10px; border: 1px solid #3a4160; border-radius: 10px; background: #181c2c; color: #c9d2ee; }
 .bgp-motion p { margin: 0 0 6px; }

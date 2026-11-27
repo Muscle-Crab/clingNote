@@ -1,5 +1,6 @@
-// Lock-in (the 8-hour countdown lock + shutdown) is OPT-IN, stored per account on users/{uid}:
-//   lockInEnabled: true   -> Settings switch (Profile > Preferences). Missing/false = permanently off.
+// Lock-in (the 8-hour countdown lock + shutdown), stored per account on users/{uid}:
+//   lockInEnabled: true   -> Settings switch (Profile > Preferences). New accounts are created with true.
+//   Missing or false stays off, so an existing account that turned it off is not switched back on.
 //   wakeAutoLock: true   -> "Lock at wake-up" (B44, src/utils/wakeLock.js): apps lock at the wake time without Confirm.
 //   lockInSkipDate: 'YYYY-MM-DD' (the eight-hour dayKey) -> "Skip lock-in today" in the start-day prompt; that date only.
 // Server mirror: netlify/functions/eight-hour-day.js start() refuses with the same rule.

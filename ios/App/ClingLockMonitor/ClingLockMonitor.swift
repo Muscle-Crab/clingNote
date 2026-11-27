@@ -49,6 +49,7 @@ class ClingLockMonitor: DeviceActivityMonitor {
         UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: WakeLock.startedIdentifier, content: c, trigger: nil))
     }
     private func applyLockShield() {
+        if GoalRelease.liftIfLive() { return } // goal already met: do not put the shield back after a kill or a break
         if BreakState.isLive() { return } // a scheduled/wake block starting during a break shields at the break end (intervalDidEnd .clingBreak)
         if LockShared.defaults?.data(forKey: LockShared.selectionTokensKey) != nil { LockIn.shield(); return } // minus task-allowed apps
         guard let data = LockShared.defaults?.data(forKey: LockShared.selectionKey),

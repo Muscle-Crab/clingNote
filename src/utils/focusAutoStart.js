@@ -6,6 +6,7 @@
 // An auto-started session is LOCKED (task.focusLock = true): the timer can't be paused, another timer can't be started and Home
 // can't be left until the timer runs out, the task is completed, or the user explicitly ends focus early (confirm).
 import { widgetTaskId } from './widgetSnapshot.js';
+import { timerMillis } from './timerRing.js';
 
 export const AUTO_FOCUS_KEY = 'cn.focus.auto';          // '1' = auto-start on (per device: the iOS Focus is per device too)
 export const AUTO_FIRED_KEY = 'cn.focus.autoFired';     // [dayKey|taskId|HH:MM] already auto-started (never twice)
@@ -14,7 +15,7 @@ export const START_GRACE_MIN = 15;                      // a start time more tha
 export const FILTER_MAX_AGE_MS = 12 * 3600 * 1000;
 export const DEFAULT_MINUTES = 25;
 const HHMM = /^([01]\d|2[0-3]):([0-5]\d)$/;
-const ms = (v) => { if (v == null || v === '') return 0; const n = typeof v === 'number' ? v : new Date(v).getTime(); return Number.isFinite(n) ? n : 0; };
+const ms = timerMillis;
 export const toMin = (s) => { const m = HHMM.exec(String(s || '').trim()); return m ? Number(m[1]) * 60 + Number(m[2]) : null; };
 
 export const readAutoFocus = (store) => { try { return store.getItem(AUTO_FOCUS_KEY) === '1'; } catch (e) { return false; } };

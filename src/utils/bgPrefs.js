@@ -24,6 +24,16 @@ export const IMAGES = [
 export const IMAGE_IDS = [AUTO, ...IMAGES.map((i) => i.id), ...GRADIENT_IDS, 'custom'];
 export const DEFAULTS = Object.freeze({ anim: 'none', track: 'lofi', volume: 0.5, forceMotion: false, musicOn: false, image: 'auto', autoRotate: false, rotateMins: 20 });
 export const ROTATE_MINS = [10, 20, 30];
+const playingNow = (player) => !!(player && player.playing && (typeof player.playing === 'object' ? player.playing.value : player.playing));
+// Focus Mode and the Background sheet share one player. A pick switches the track in place
+// when music is already on, and starts it when it is not. Volume and pause stay on that player.
+export const pickFocusTrack = (player, id) => {
+  if (!player || typeof player.setTrack !== 'function' || !TRACKS.some((t) => t.id === id)) return player && player.prefs ? player.prefs.track : '';
+  const was = playingNow(player);
+  player.setTrack(id);
+  if (!was && typeof player.play === 'function') player.play();
+  return id;
+};
 const clamp01 = (n) => Math.min(1, Math.max(0, Number.isFinite(n) ? n : DEFAULTS.volume));
 export const sanitize = (p) => {
   const o = p && typeof p === 'object' ? p : {};

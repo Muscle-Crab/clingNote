@@ -34,6 +34,6 @@ console.log(`ok   robot voice: ${src.length} files clean, ${PHRASES.length} phra
   assert(/if \(!a \|\| my !== token \|\| !canPlayMp3\(a\)\)/.test(vo), 'playSrc guarded');
   assert(/function speakChunk[^\n]*\n\s*if \(!canPlayMp3\(el\(\)\)\)/.test(vo), 'speakChunk guarded');
   assert(/if \(a && canPlayMp3\(a\)\) \{ try \{ a\.muted = true/.test(vo), 'unlockVoice guarded');
-  assert(/x && canPlayMp3\(x\)/.test(readFileSync('src/composables/useNowPlaying.js', 'utf8')), 'now playing guarded');
+  assert(!/\.src\s*=/.test(readFileSync('src/composables/useNowPlaying.js', 'utf8')), 'now playing does not load an mp3');
   console.log('ok   robot voice: no media on engines without an MP3 decoder');
 }

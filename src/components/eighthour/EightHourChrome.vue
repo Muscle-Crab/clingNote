@@ -1,7 +1,7 @@
 <template>
   <!-- Persistent 8-hour countdown pill (centered in the top bar, below the notch / safe area), the hard-stop overlay and one transient celebration. -->
   <button v-if="pill" type="button" class="ehp" :class="['ehp--' + pill.kind, { 'ehp--tucked': tucked }]" :aria-hidden="tucked ? 'true' : null" :tabindex="tucked ? -1 : null" data-test="eh-pill" :aria-label="pill.aria" @click="onPill">
-    <span class="ehp-dot" aria-hidden="true"></span><span class="ehp-main" role="timer">{{ pill.main }}</span><span v-if="pill.sub" class="ehp-sub">{{ pill.sub }}</span>
+    <span class="ehp-dot" aria-hidden="true"></span><span class="ehp-main" role="timer">{{ pill.main }}</span><span v-if="pill.sub" class="ehp-sub">{{ pill.sub }}</span><span v-if="pill.ends" class="ehp-end" data-test="eh-pill-ends">{{ pill.ends }}</span>
   </button>
 
   <div v-if="warnVisible" class="ehw" :class="'ehw--' + warnMin" role="alert" data-test="eh-warning" :data-min="warnMin">
@@ -25,6 +25,7 @@
       </form>
       <p v-else-if="eh.wait.value" class="ehs-res miss" data-test="eh-next-wait">{{ eh.wait.value.text }}</p>
       <p v-if="sch.err" class="ehs-err" role="alert" data-test="eh-next-err">{{ sch.err }}</p>
+      <button type="button" class="eh-quit" data-test="eh-shut-give-up" @click="giveUpEnded">Give up</button>
       <nav class="ehs-links">
         <router-link :to="profileLink">Settings</router-link><router-link to="/support">Support</router-link><router-link to="/privacy-policy">Privacy</router-link><router-link to="/sub">Premium</router-link>
         <button type="button" @click="signOutNow" data-test="eh-shut-signout">Sign out</button>
@@ -49,12 +50,17 @@ import { localYMD } from '@/utils/localDate';
 import { recapText, breaksOn } from '@/utils/gamePlan';
 import { pillState, SHUT_ROUTES, PILL_ROUTES, SEEN_KEY } from '@/utils/eightHourChrome';
 import { speak } from '@/composables/useSpeech';
-import { hoursLabel, WARN_MINUTES, HOUR_OPTIONS } from '@/utils/eightHour';
+import { hoursLabel, WARN_MINUTES, SESSION_HOUR_OPTIONS } from '@/utils/eightHour';
 import { scheduleLocal } from '@/utils/localNotify';
 import { homeDayFor } from '@/utils/homeDay';
 import { lockIn } from '@/utils/lockIn';
 import { clingLock, lockAvailable } from '@/native/clingNative';
+import { releaseKeyOf, readRelease, writeRelease, releasedFor } from '@/utils/sessionRelease';
+import { localDateStr } from '@/utils/streak';
+import { releaseUntilMs } from '@/utils/pointsVault';
 import { getTodayId } from '@/utils/dateTime';
+import { requirePro, loadUserDoc } from '@/composables/usePro';
+import { canUse } from '@/utils/pro';
 
 const route = useRoute(); const router = useRouter();
 const eh = useEightHour();
@@ -81,12 +87,35 @@ const pill = computed(() => {
   const l = eh.lock.value; const hd = homeDayFor(getTodayId());
   return pillState({ wrapped: hd.wrapped, allDone: hd.allDone, lockInOn: lockIn.value.enabled, phase: eh.phase.value, running: eh.running.value, countdown: eh.countdown.value, startsLabel: eh.startsLabel.value, hasPlan: !!eh.plan.value,
     shut: !!eh.shutdown.value, untilLabel: eh.shutdown.value?.untilLabel, nextLabel: eh.nextBlock.value?.startLabel || '', earned: l ? l.earned || 0 : 0, target: l ? l.target || 0 : 0,
-    hours: eh.dayHours.value,
+    hours: eh.dayHours.value, endsLabel: eh.endsLabel.value,
     pace: l && eh.running.value ? paceOf({ earned: l.earned || 0, target: l.target || 0, startMs: l.startMs, endMs: l.endMs, nowMs: eh.nowMs() }) : null });
 });
 const shut = computed(() => eh.shutdown.value);
 const onPill = () => goCard();
-const shutVisible = computed(() => !!(uid.value && shut.value && SHUT_ROUTES.includes(route.name)));
+// Give up on this screen writes a release for the ended session and hides the overlay so the normal app is back.
+const releasedTick = ref(0);
+const endedLock = () => shutLock() || eh.lock.value;
+const releasedNow = computed(() => {
+  void releasedTick.value;
+  return releasedFor(readRelease(typeof localStorage === 'undefined' ? null : localStorage, localDateStr()), endedLock(), !!eh.running.value);
+});
+const shutVisible = computed(() => !!(uid.value && shut.value && SHUT_ROUTES.includes(route.name) && !releasedNow.value));
+// Session already ended here: open the apps (same persistEndRelease path as the card) and return to the app.
+// Never call endSession — that would re-settle the window and could double-record a missed goal.
+const giveUpEnded = async () => {
+  if (eh.running.value) return;
+  const key = releaseKeyOf(endedLock());
+  if (!key) return;
+  writeRelease(localStorage, { key, day: localDateStr(), reason: 'give-up' });
+  releasedTick.value += 1;
+  try {
+    if (lockAvailable()) {
+      await clingLock.clearDebtHold().catch(() => {});
+      await clingLock.markGoalRelease({ day: localDateStr(), untilMs: releaseUntilMs(Date.now(), true), session: key });
+    }
+  } catch (e) { console.warn('[clingLock] shut give-up', e && e.message); }
+  try { window.dispatchEvent(new CustomEvent('cn:session-released')); } catch (e) { /* ignore */ }
+};
 // ── session end: the only input is how long the next session lasts (5..12 h); it starts now ──
 // "Start next session": always offered once a session has ended (server decides: session.canStart; false only while one runs or is scheduled).
 // Goal met = points goal AND 8 tasks (eightHourCore.goalMissed).
@@ -95,14 +124,26 @@ const shutDone = computed(() => Number(shut.value && shut.value.session && shut.
 const shutMet = computed(() => !!(shut.value && shut.value.met) && shutDone.value >= PER_SESSION);
 const nextOk = computed(() => !!(eh.session.value && eh.session.value.canStart && !eh.st.data?.offline));
 const canPick = lockAvailable();
-const addApps = async () => { try { const a = await clingLock.requestAuthorization(); if (a.status === 'approved') await clingLock.pickApps(); } catch (e) { /* stays as is */ } };
-const doNextSession = async () => { sch.err = ''; try { await eh.startNextSession(sch.hours); } catch (e) { sch.err = e.message || 'Could not start the session'; } };
+const needsPro = (e) => !!(e && (e.status === 402 || /pro required/i.test(e.message || '')));
+const openLockPaywall = () => router.push({ path: '/paywall', query: { feature: 'lockIn', from: route.fullPath } });
+// Free accounts: Start next session / Add apps open the existing paywall (same path as Lock in on Home). A 402 from the server does too, so the red "Pro required" line is not the only way out.
+const addApps = async () => { if (!(await requirePro(router, 'lockIn'))) return; try { const a = await clingLock.requestAuthorization(); if (a.status === 'approved') await clingLock.pickApps(); } catch (e) { if (needsPro(e)) openLockPaywall(); } };
+const doNextSession = async () => { sch.err = ''; if (!(await requirePro(router, 'lockIn'))) return; try { await eh.startNextSession(sch.hours); } catch (e) { if (needsPro(e)) { openLockPaywall(); return; } sch.err = e.message || 'Could not start the session'; } };
+// The shutdown card is the only thing on screen. If this account cannot start a session, open the paywall once per ended session instead of leaving a dead "Pro required" label.
+let paywallFor = '';
+watch(shutVisible, async (on) => {
+  if (!on) return;
+  const d = await loadUserDoc(); if (canUse(d, 'lockIn')) return;
+  const l = eh.lock.value || {}; const key = `${l.dayKey || ''}:${l.index || 0}:${l.endMs || 0}`;
+  if (paywallFor === key) return; paywallFor = key; openLockPaywall();
+}, { immediate: true });
 // Day recap line: sessions done of chosen, breaks taken today (from the local break log; Home keeps it in sync with the account).
 const recap = computed(() => { const s = eh.session.value; if (!shut.value || !s || nextOk.value) return '';
   let log = []; try { log = JSON.parse(localStorage.getItem('cn.gp.breakLog') || '[]'); } catch (e) { /* none */ }
   const b = breaksOn(log, eh.lock.value?.dayKey || localYMD()); return recapText({ points: shut.value.earned, sessionsDone: s.done, sessions: s.of, breaks: b.count, breakMin: b.min }); });
-const NEXT_HOUR_OPTIONS = HOUR_OPTIONS.filter((h) => h >= 5 && h <= 12);
-const sch = reactive({ hours: Math.min(12, Math.max(5, eh.hoursPref.value || 8)), err: '' });
+const NEXT_HOUR_OPTIONS = SESSION_HOUR_OPTIONS; // whole hours 5..12; half-hour day-length prefs are rejected by the server
+const seedHours = Number(eh.hoursPref.value);
+const sch = reactive({ hours: SESSION_HOUR_OPTIONS.includes(seedHours) ? seedHours : 8, err: '' });
 const goCard = () => { router.push({ name: 'home' }).then(() => setTimeout(() => document.querySelector('[data-test="eight-hour-card"]')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 250)).catch(() => {}); };
 const signOutNow = async () => { try { await signOut(auth); } finally { router.push('/login'); } };
 
@@ -141,9 +182,9 @@ watch(() => eh.lock.value && eh.running.value && `${eh.lock.value.dayKey}|${eh.l
   border-radius: 12px; background: #3a2a06; border: 1px solid #d9a21b; color: #ffe7a8; font: 600 13px/1.3 system-ui, -apple-system, sans-serif; }
 .ehw--5 { background: #3d0d0d; border-color: #e05a5a; color: #ffd0d0; }
 .ehw span { flex: 1; } .ehw-x { min-width: 44px; min-height: 44px; border: 0; background: transparent; color: inherit; font-size: 16px; cursor: pointer; }
-.ehp { position: fixed; top: calc(env(safe-area-inset-top) + 14px); left: 50%; transform: translateX(-50%); z-index: 60; height: 28px; max-width: 46vw;
-  display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; border-radius: 999px; border: 1px solid rgba(55,138,221,.45); background: rgba(10,18,38,.92);
-  color: #e6e9ef; font: 700 12px/1 system-ui, -apple-system, sans-serif; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; cursor: pointer; }
+.ehp { position: fixed; top: calc(env(safe-area-inset-top) + 8px); left: 50%; transform: translateX(-50%); z-index: 60; min-height: 36px; height: auto; max-width: calc(100vw - 128px);
+  display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 2px 6px; padding: 5px 12px; border-radius: 16px; border: 1px solid rgba(55,138,221,.45); background: rgba(10,18,38,.92);
+  color: #e6e9ef; font: 700 13px/1.15 system-ui, -apple-system, sans-serif; font-variant-numeric: tabular-nums; cursor: pointer; }
 .ehp { transition: opacity .18s ease, transform .18s ease; }
 .ehp--tucked { opacity: 0; transform: translate(-50%, -140%); pointer-events: none; }
 .ehp-dot { width: 7px; height: 7px; border-radius: 50%; background: #378ADD; flex: none; }
@@ -151,7 +192,8 @@ watch(() => eh.lock.value && eh.running.value && `${eh.lock.value.dayKey}|${eh.l
 .ehp--risk { border-color: rgba(224,90,90,.7); } .ehp--risk .ehp-dot { background: #e05a5a; }
 .ehp--shut .ehp-dot, .ehp--before .ehp-dot { background: #8791a5; }
 .ehp--done { border-color: rgba(60,180,110,.55); } .ehp--done .ehp-dot { background: #3cb46e; }
-.ehp-sub { font-weight: 600; opacity: .7; overflow: hidden; text-overflow: ellipsis; }
+.ehp-sub { font-weight: 600; opacity: .85; }
+.ehp-end { flex: 1 0 100%; text-align: center; font-size: 15px; font-weight: 800; letter-spacing: .01em; color: #fff; line-height: 1.2; }
 @keyframes ehp-pulse { 50% { opacity: .35; } }
 .ehs { position: fixed; inset: 0; z-index: 9500; display: grid; place-items: center; padding: calc(env(safe-area-inset-top) + 16px) 16px calc(env(safe-area-inset-bottom) + 16px);
   background: rgba(4,8,18,.94); backdrop-filter: blur(6px); }
@@ -168,6 +210,11 @@ watch(() => eh.lock.value && eh.running.value && `${eh.lock.value.dayKey}|${eh.l
 .ehs-err { color: #ffb4b4; font-size: 13px; }
 .ehs-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 14px; margin-top: 18px; font-size: 13px; }
 .ehs-links a, .ehs-links button { color: #9fb7e0; background: none; border: 0; padding: 4px; cursor: pointer; text-decoration: underline; font: inherit; }
+/* Same Give up button as the countdown card: rounded rect, padding, soft danger fill + coral label. */
+.eh-quit { font-family: inherit; font-size: .88rem; line-height: 1.2; font-weight: 700; color: var(--c-danger, #F87171);
+  background: var(--c-danger-soft, #2E1517); border: 1px solid rgba(248, 113, 113, 0.7); border-radius: 8px;
+  padding: 8px 14px; margin: 14px auto 4px; min-height: 36px; cursor: pointer; -webkit-tap-highlight-color: transparent; display: inline-block; }
+.eh-quit:active { background: #3a1a1c; color: #ffa0a0; }
 .ehc { position: fixed; left: 50%; top: calc(env(safe-area-inset-top) + 56px); transform: translateX(-50%); z-index: 9400; width: min(340px, 92vw);
   display: flex; flex-direction: column; gap: 2px; text-align: center; padding: 12px 14px; border-radius: 16px; background: linear-gradient(135deg, #1f3b2a, #12301f); border: 1px solid rgba(60,180,110,.5); color: #e6f6ec; box-shadow: 0 10px 30px rgba(0,0,0,.45); cursor: pointer; }
 .ehc--miss { background: linear-gradient(135deg, #3b1f1f, #301212); border-color: rgba(224,90,90,.5); color: #f6e6e6; }

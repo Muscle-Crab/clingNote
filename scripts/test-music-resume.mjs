@@ -1,6 +1,8 @@
 import assert from 'assert';
 import { loadPrefs, savePrefs, KEY, tapAction, restoreFromBackup, DEFAULTS } from '../src/utils/bgPrefs.js';
+import { readFileSync } from 'fs';
 import { needsNewContext } from '../src/composables/useBackgroundAudio.js';
+import { foregroundPlan, shouldRebuild } from '../src/utils/musicResume.js';
 const mem = () => { const m = {}; return { getItem: (k) => (k in m ? m[k] : null), setItem: (k, v) => { m[k] = v; }, removeItem: (k) => { delete m[k]; } }; };
 // persistence: every music setting round-trips (simulated app close/reopen = fresh load from same storage)
 const st = mem(); const saved = { anim: 'rain', track: 'cafe-corner', volume: 0.35, forceMotion: false, musicOn: true, image: 'night', autoRotate: true, rotateMins: 30 };
@@ -14,7 +16,23 @@ assert.equal(restoreFromBackup(null, 'garbage'), null); assert.equal(restoreFrom
 assert.equal(tapAction(true, 'running'), 'pause');
 for (const s of ['suspended', 'interrupted', 'closed', 'none']) assert.equal(tapAction(true, s), 'play', 'stale "playing" + ' + s + ' -> tap starts audio');
 assert.equal(tapAction(false, 'running'), 'play');
-for (const s of [undefined, 'closed', 'interrupted']) assert.equal(needsNewContext(s), true, 'recreate on ' + s);
-for (const s of ['running', 'suspended']) assert.equal(needsNewContext(s), false, 'reuse on ' + s);
+for (const s of [undefined, 'closed']) assert.equal(needsNewContext(s), true, 'create when there is no live context (' + s + ')');
+for (const s of ['running', 'suspended', 'interrupted']) assert.equal(needsNewContext(s), false, 'Play resumes the same context on ' + s);
+assert.equal(foregroundPlan({ musicOn: false, state: 'interrupted' }), 'idle');
+assert.equal(foregroundPlan({ musicOn: true, state: 'interrupted' }), 'resume', 'iOS background state resumes the same context');
+assert.equal(foregroundPlan({ musicOn: true, state: 'suspended' }), 'resume');
+assert.equal(foregroundPlan({ musicOn: true, state: 'running' }), 'keep', 'a healthy context is not rebuilt on every foreground event');
+assert.equal(shouldRebuild('interrupted', 'running'), true);
+assert.equal(shouldRebuild('suspended', 'running'), true);
+assert.equal(shouldRebuild('running', 'running'), false);
+assert.equal(shouldRebuild('none', 'running'), false);
+assert.equal(foregroundPlan({ musicOn: true, state: 'closed' }), 'gesture', 'a dead context waits for a tap');
+assert.equal(foregroundPlan({ musicOn: true, state: 'none' }), 'gesture');
+const bg = readFileSync(new URL('../src/composables/useBackground.js', import.meta.url), 'utf8');
+const resumeFn = bg.slice(bg.indexOf('resumeIfWanted() {'), bg.indexOf('toggle()'));
+assert.match(resumeFn, /foregroundPlan\(/);
+assert.doesNotMatch(resumeFn, /api\.play\(/);
+assert.doesNotMatch(resumeFn, /engine\.start\(/);
+assert.match(bg, /keepStep: keep/);
 assert.ok(KEY);
 console.log('test-music-resume: ok');

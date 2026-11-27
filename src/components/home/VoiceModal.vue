@@ -173,7 +173,8 @@ const setType = (it, t) => {
 .vc-title-row .vc-title { flex: 1; }
 .vc-recur { white-space: nowrap; }
 .vc-row label { display: flex; gap: 4px; align-items: center; }
-.vc-in { border: 1px solid rgba(127,127,160,.4); border-radius: 8px; padding: 4px 6px; background: transparent; color: inherit; font-size: 14px; min-width: 0; }
+.vc-in { border: 1px solid rgba(127,127,160,.4); border-radius: 8px; padding: 4px 6px; background: transparent; color: inherit; font-size: 14px; min-width: 0; max-width: 100%; box-sizing: border-box; }
+.vc-in[type="date"], .vc-in[type="time"], .vc-in[type="datetime-local"] { display: block; width: 100%; -webkit-appearance: none; appearance: none; }
 .vc-num { width: 64px; }
 .vc-seg { display: inline-flex; border-radius: 9px; overflow: hidden; border: 1px solid rgba(127,127,160,.4); }
 .vc-seg button { background: none; border: 0; padding: 4px 8px; font-size: 12px; color: inherit; }

@@ -105,7 +105,8 @@ const summary = computed(() => {
 .sp-knob { position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: #f4f4f5; transition: transform .15s; }
 .sp-switch.on .sp-knob { transform: translateX(18px); background: #fff; }
 .sp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; }
-.sp-input { width: 100%; box-sizing: border-box; background: var(--c-surface-2, #232327); color: var(--c-text, #ededea); border: 1px solid var(--c-border, #2a2a2e); border-radius: var(--r, 3px); padding: .5rem .6rem; font: inherit; color-scheme: dark; }
+.sp-input { width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box; background: var(--c-surface-2, #232327); color: var(--c-text, #ededea); border: 1px solid var(--c-border, #2a2a2e); border-radius: var(--r, 3px); padding: .5rem .6rem; font: inherit; color-scheme: dark; }
+.sp-input[type="date"], .sp-input[type="time"] { display: block; -webkit-appearance: none; appearance: none; }
 .sp-num { width: 3.4rem; flex: 0 0 auto; }
 .sp-mode { min-width: 0; padding-left: .45rem; padding-right: 1.1rem; text-overflow: ellipsis; }
 .sp-seg { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)) minmax(max-content, 1.15fr); /* 'Every N' keeps its width on 320px phones */ border: 1px solid var(--c-border, #2a2a2e); border-radius: var(--r, 3px); overflow: hidden; }

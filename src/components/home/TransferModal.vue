@@ -13,33 +13,23 @@
             </option>
           </select>
         </div>
-        <div v-if="strict" class="field-group">
-          <label class="field-label" for="defer-reason">🗣️ Why didn't you do it today?</label>
-          <textarea id="defer-reason" v-model="reason" class="field-textarea" placeholder="Required. It goes in your procrastination log."></textarea>
-          <p v-if="carryCount >= 1" class="field-hint">This task was already carried once. Defer again and it's marked overdue, and your robot blocks new non-urgent tasks until it's done.</p>
-          <p v-if="!validReason(reason)" class="field-hint">Write a short reason (at least {{ MIN_REASON }} characters) to enable Transfer.</p>
-        </div>
       </div>
       <div class="modal-footer">
         <button @click="$emit('close')" class="btn-secondary">Cancel</button>
-        <button @click="$emit('transfer')" class="btn-primary" :disabled="strict && !validReason(reason)">Transfer</button>
+        <button @click="$emit('transfer')" class="btn-primary" data-test="transfer-confirm">Transfer</button>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { validReason, MIN_REASON } from '@/utils/strictBoss';
 const targetDay = defineModel('day');
-const reason = defineModel('reason');
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 // 'YYYY-MM-DD' -> 'Oct 18' (string math, no timezone shifts)
 const prettyDate = (d) => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(d || ''); return m ? `${MONTHS[Number(m[2]) - 1]} ${Number(m[3])}` : ''; };
 defineProps({
   days: { type: Array, required: true },
   selectedDayIndex: { type: Number, default: -1 },
-  strict: { type: Boolean, default: false },
-  carryCount: { type: Number, default: 0 },
 });
 defineEmits(['close', 'transfer']);
 </script>

@@ -4,6 +4,7 @@
 import { OAuthProvider, signInWithCredential, reauthenticateWithCredential } from 'firebase/auth';
 import { auth } from '@/firebaseConfig';
 import { isNativeIOS } from '@/utils/platform';
+import { sha256Hex } from '@/utils/sha256';
 
 export const APPLE_CLIENT_ID = 'app.clingnote.ios'; // = bundle ID (keep in sync with capacitor.config.json)
 const APPLE_REDIRECT = 'https://clingnote-463b4.firebaseapp.com/__/auth/handler';
@@ -16,16 +17,11 @@ const randomNonce = (len = 32) => {
   crypto.getRandomValues(bytes);
   return Array.from(bytes, (b) => chars[b % chars.length]).join('');
 };
-const sha256Hex = async (s) => {
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
-  return Array.from(new Uint8Array(buf), (b) => b.toString(16).padStart(2, '0')).join('');
-};
-
 // Shows the native Apple sheet. Returns { credential, authorizationCode, givenName, familyName, email }.
 export async function getAppleCredential() {
   const { SignInWithApple } = await import('@capacitor-community/apple-sign-in');
   const rawNonce = randomNonce();
-  const nonce = await sha256Hex(rawNonce); // Apple embeds this hash in the id token; Firebase checks it against rawNonce
+  const nonce = sha256Hex(rawNonce); // Apple embeds this hash in the id token; Firebase checks it against rawNonce
   const { response } = await SignInWithApple.authorize({
     clientId: APPLE_CLIENT_ID, redirectURI: APPLE_REDIRECT, scopes: 'email name', nonce,
   });

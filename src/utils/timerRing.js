@@ -13,7 +13,23 @@ export const RING_LIGHT = 48;
 export const WIDGET_STEP = 0.05;
 export const WIDGET_MAX_STEPS = 20;
 
-const ms = (v) => { if (v == null || v === '') return 0; const n = typeof v === 'number' ? v : new Date(v).getTime(); return Number.isFinite(n) ? n : 0; };
+// One clock for every surface. Numbers are milliseconds. Firestore Timestamps ({seconds} or toMillis)
+// are the same instant, not "missing", so a relaunch cannot fall through to the 30-minute estimate.
+export const timerMillis = (v) => {
+  if (v == null || v === '') return 0;
+  if (typeof v === 'number') return Number.isFinite(v) ? v : 0;
+  if (typeof v === 'object') {
+    try { if (typeof v.toMillis === 'function') { const n = Number(v.toMillis()); if (Number.isFinite(n)) return n; } } catch (e) { /* ignore */ }
+    const sec = v.seconds != null ? v.seconds : v._seconds;
+    if (sec != null && Number.isFinite(Number(sec))) {
+      const nano = Number(v.nanoseconds != null ? v.nanoseconds : v._nanoseconds) || 0;
+      return Number(sec) * 1000 + Math.floor(nano / 1e6);
+    }
+  }
+  const n = new Date(v).getTime();
+  return Number.isFinite(n) ? n : 0;
+};
+const ms = timerMillis;
 export const timerTimes = (t) => {
   const end = ms(t && t.timerEndTime);
   let start = ms(t && t.timerStartedAt);

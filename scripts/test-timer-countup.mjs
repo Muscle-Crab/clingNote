@@ -53,8 +53,8 @@ t('widget start = effective start (end - set duration), so pauses are excluded',
 t('Swift: lock screen / widget count up and never go stale', () => {
   const rd = (p) => fs.readFileSync(new URL(`../ios/App/${p}`, import.meta.url), 'utf8');
   const la = rd('ClingNoteWidget/FocusLiveActivity.swift'), w = rd('ClingNoteWidget/ClingNoteWidget.swift'), at = rd('Shared/FocusActivityAttributes.swift'), it = rd('Shared/FocusIntents.swift'), pl = rd('App/ClingNativePlugin.swift');
-  assert.match(la, /Text\(state\.endsAt\.addingTimeInterval\(-TimeInterval\(d\)\), style: \.timer\)/);
-  assert.match(w, /Text\(s, style: \.timer\)/); assert.doesNotMatch(w, /countsDown: true\)\.monospacedDigit/);
+  assert.match(la, /Text\(timerInterval: state\.endsAt\.addingTimeInterval\(-TimeInterval\(d\)\)\.\.\.Date\.distantFuture, countsDown: false\)/);
+  assert.match(w, /Text\(timerInterval: s\.\.\.Date\.distantFuture, countsDown: false\)/); assert.doesNotMatch(w, /countsDown: true\)\.monospacedDigit/);
   assert.match(at, /var durationSec: Int\? = nil/); assert.match(at, /s\.durationSec != nil \? nil/);
   assert.match(it, /s\.elapsedSec = max/); assert.match(pl, /durationSec:/);
   assert.doesNotMatch(pl, /staleDate: state\.paused \? nil : state\.endsAt/);

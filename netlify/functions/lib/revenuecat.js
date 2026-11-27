@@ -72,18 +72,21 @@ const defaultIo = () => {
   };
 };
 
-// Verify with RevenueCat and mirror into users/{uid}. Never creates a user doc. Returns { uid, isPro, plan, wrote }.
+// Verify with RevenueCat and mirror into users/{uid}. A missing doc is created (merge) when Apple says Pro,
+// so a new account is not stuck with a client entitlement the server cannot see. Returns { uid, isPro, plan, wrote }.
 const syncUid = async (uid, deps = {}) => {
   if (!UID_RE.test(uid || '')) return null;
   const io = deps.io || defaultIo();
+  const now = deps.now || new Date();
   const current = await io.read(uid);
-  if (!current) return null;
   const subscriber = await fetchSubscriber(uid, deps);
-  const update = entitlementUpdate(subscriber, deps.now || new Date());
-  const toWrite = decideWrite(current, update, deps.now || new Date());
+  const update = entitlementUpdate(subscriber, now);
+  let toWrite = decideWrite(current, update, now);
+  // Missing users/{uid}: merge-create it so assertPro can see Apple Pro. Do not clobber lockInEnabled on a doc that already exists.
+  if (!current && toWrite && toWrite.isPro) toWrite = { uid, lockInEnabled: true, createdAt: now, ...toWrite };
   if (toWrite) await io.write(uid, toWrite);
-  const eff = toWrite || current;
-  return { uid, isPro: toWrite ? toWrite.isPro : isProDoc(current, deps.now || new Date()), plan: eff.plan || null, wrote: !!toWrite };
+  const eff = toWrite || current || {};
+  return { uid, isPro: toWrite ? !!toWrite.isPro : isProDoc(current, now), plan: eff.plan || null, wrote: !!toWrite };
 };
 
 const safeEqual = (a, b) => { const x = Buffer.from(String(a)); const y = Buffer.from(String(b)); return x.length === y.length && crypto.timingSafeEqual(x, y); };

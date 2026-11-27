@@ -176,7 +176,7 @@ export const SIZE_LABEL = { s: 'Small', m: 'Medium', l: 'Large' };
 const sizeMode = ref(false); // reactive so cards re-score when Coach mode loads; on in Coach (strict) mode: chips + earned points use size points
 export const setSizeMode = (on) => { sizeMode.value = !!on; };
 export const sizeModeOn = () => sizeMode.value;
-const doneAt = (t) => { const v = t && t.completedAt; if (!v) return NaN; if (typeof v === 'number') return v; if (v.seconds) return v.seconds * 1000; return Date.parse(v); };
+const doneAt = (t) => { const v = t && t.completedAt; if (!v) return NaN; if (typeof v === 'number') return v; if (v.seconds) return v.seconds * 1000; if (v._seconds) return v._seconds * 1000; if (typeof v.toMillis === 'function') return v.toMillis(); return Date.parse(v); };
 // Earned today: completed tasks only; a task finished after the hard close earns 0 (no overtime). Breaks have no task, so cost nothing.
 export const earnedPoints = (tasks = [], { closeMs = 0, estMinutes = () => 0, penalty = 0 } = {}) => {
   let pts = 0; let after = 0;

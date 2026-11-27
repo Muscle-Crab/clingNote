@@ -4,6 +4,8 @@ import { db } from '@/firebaseConfig';
 import { taskKey } from '@/utils/taskPlanning';
 import { createKeyedQueue, applyTaskPatch } from '@/utils/taskPatch';
 import { assertPatchAllowed, assertDayUnlocked } from '@/utils/eightHourLock';
+import { dropUndefined } from '@/utils/firestoreSafe';
+import { identityCommit } from '@/utils/dayList';
 
 const dayRef = (userId, dayName) => doc(db, 'weeklyRoutines', `${userId}_${dayName}`);
 
@@ -24,10 +26,25 @@ export const patchStoredTask = (userId, dayName, task, fallbackIndex, patch) => 
     if (!snap.exists()) return false;
     const tasks = applyTaskPatch(snap.data().tasks, keyTask, fallbackIndex, patch);
     if (!tasks) return false;
-    await updateDoc(ref, { tasks, updatedAt: serverTimestamp() });
+    const stored = identityCommit(snap.data().tasks || [], tasks, { keepPoints: false });
+    await updateDoc(ref, { tasks: dropUndefined(stored), updatedAt: serverTimestamp() });
     return true;
   });
 };
+// Read the stored day, let mutate return the list it wants, then write slots so existing createdAt and points stay put.
+// A normal updateDoc (not a transaction) still queues while the device is briefly offline. Missing docs are created.
+export const commitDayTasks = (userId, dayName, mutate) => enqueue(`${userId}_${dayName}`, async () => {
+  const ref = dayRef(userId, dayName);
+  const snap = await getDoc(ref);
+  const live = snap.exists() ? [...(snap.data().tasks || [])] : [];
+  const desired = await mutate(live);
+  if (!Array.isArray(desired)) return live;
+  const next = identityCommit(live, desired);
+  const payload = { tasks: dropUndefined(next), updatedAt: serverTimestamp() };
+  if (snap.exists()) await updateDoc(ref, payload);
+  else await setDoc(ref, { ...payload, createdAt: serverTimestamp() });
+  return next;
+});
 
 // Copy unfinished tasks to another day as one-time tasks (no duplicates if carried twice).
 export const carryTasksToDay = async (userId, fromDayName, toDayName, tasks, dateStamp) => {

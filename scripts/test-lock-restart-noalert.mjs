@@ -16,11 +16,14 @@ const body = ext.slice(ext.indexOf('override func intervalDidEnd'), ext.indexOf(
 const firstGate = body.indexOf('isRealEnd'); const secondGate = body.indexOf('isRealEnd', firstGate + 1);
 assert(firstGate > 0 && firstGate < body.indexOf('stopMonitoring([activity])'), 'per-app branch gated');
 assert(secondGate > 0 && secondGate < body.indexOf('stopMonitoring([.clingLock])'), 'clingLock branch gated');
-// app writes state before stopping/restarting, so the extension reads the intended end
+// app writes state before stopping/restarting .clingLock, so the extension reads the intended end.
+// sessionBegin may stop .clingVault earlier, after VaultAllow.clearActive, so that applyShield does not keep yesterday's holes.
 const stopLock = plug.slice(plug.indexOf('func stopLock'), plug.indexOf('func setLockEndAlert'));
 assert(stopLock.indexOf('stateKey') < stopLock.indexOf('stopMonitoring'), 'stopLock saves state before stopMonitoring');
 const startLock = plug.slice(plug.indexOf('func startLock'), plug.indexOf('func stopLock'));
-assert(startLock.indexOf('stateKey') < startLock.indexOf('stopMonitoring'), 'startLock saves state before restart');
+assert(startLock.indexOf('stateKey') < startLock.indexOf('stopMonitoring([.clingLock])'), 'startLock saves state before restart');
+const vaultStop = startLock.indexOf('stopMonitoring([.clingVault])');
+assert(vaultStop < 0 || startLock.indexOf('VaultAllow.clearActive()') < vaultStop, 'sessionBegin clears the vault allowance before stopping its monitor');
 const lockApps = plug.slice(plug.indexOf('func lockApps'), plug.indexOf('func unlockApps'));
 assert(lockApps.indexOf('saveLocked') < lockApps.indexOf('stopMonitoring'), 'lockApps saves ends before restart');
 const unlockApps = plug.slice(plug.indexOf('func unlockApps'), plug.indexOf('static func applyShield'));

@@ -59,7 +59,8 @@ t('edit-task path uses the uid-prefixed day doc', () => {
 });
 await t('schedule/repeat/series errors are inline toasts, not alert()', () => {
   const v = require('fs').readFileSync(require('path').join(__dirname, '../src/views/HomeView.vue'), 'utf8');
-  for (const m of ['Pick a date after today.', 'Could not schedule this task', 'Could not update the repeat setting', 'Saved for this day, but the other repeating days could not be updated']) assert.ok(new RegExp(`showNoteToast\\('${m.replace(/[.]/g, '\\.')}`).test(v) && !new RegExp(`alert\\('${m.replace(/[.]/g, '\\.')}`).test(v), m);
+  for (const m of ['Pick a date after today.', 'Could not update the repeat setting', 'Saved for this day, but the other repeating days could not be updated']) assert.ok(new RegExp(`showNoteToast\\('${m.replace(/[.]/g, '\\.')}`).test(v) && !new RegExp(`alert\\('${m.replace(/[.]/g, '\\.')}`).test(v), m);
+  assert.ok(/scheduleExistingTask[\s\S]{0,900}writeFailureMessage\(/.test(v), 'scheduling an existing task reports the real write error');
 });
 console.log(`${n} passed`);
 })().catch((e) => { console.error(e); process.exit(1); });

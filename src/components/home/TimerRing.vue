@@ -15,22 +15,23 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { OVER_WARN } from '@/utils/localNotify';
 import { ringFraction, ringColor, ringDash, timerTimes, elapsedMs, overtimeMs, durationMs, fmtElapsed } from '@/utils/timerRing';
+import { bindWallClock } from '@/utils/timerClock';
 
 const props = defineProps({ task: { type: Object, required: true }, size: { type: Number, default: 28 } });
 const stroke = 3;
 const r = computed(() => (props.size - stroke) / 2);
 // Own clock (from the stored timestamps, so it survives re-render / app resume). rAF when motion is OK, else ~1 s steps.
 const now = ref(Date.now());
-let raf = 0, iv = 0, lastPaint = 0;
+let raf = 0, iv = 0, lastPaint = 0, unbindClock = () => {};
 const reduce = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const loop = (ts) => { if (ts - lastPaint > 100) { lastPaint = ts; now.value = Date.now(); } raf = window.requestAnimationFrame(loop); };
-const onVis = () => { now.value = Date.now(); };
+const tick = () => { now.value = Date.now(); };
 onMounted(() => {
   if (!reduce && window.requestAnimationFrame) raf = window.requestAnimationFrame(loop);
-  else iv = window.setInterval(() => { now.value = Date.now(); }, 1000);
-  document.addEventListener('visibilitychange', onVis);
+  else iv = window.setInterval(tick, 1000);
+  unbindClock = bindWallClock(tick);
 });
-onBeforeUnmount(() => { if (raf) window.cancelAnimationFrame(raf); if (iv) window.clearInterval(iv); document.removeEventListener('visibilitychange', onVis); });
+onBeforeUnmount(() => { if (raf) window.cancelAnimationFrame(raf); if (iv) window.clearInterval(iv); unbindClock(); });
 
 const paused = computed(() => !!timerTimes(props.task).paused);
 const frac = computed(() => ringFraction(props.task, now.value));

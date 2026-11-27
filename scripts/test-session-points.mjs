@@ -29,7 +29,7 @@ t('only points earned inside the session count', () => {
   const l = S.sessionsOf(gp, tasks, at(12)); assert.strictEqual(l[0].earned, 20); assert.strictEqual(l[0].met, false); assert.strictEqual(l[1].earned, 0);
 });
 t('game-plan line label', () => { const l = S.sessionsOf(gp, mk(1, 0), at(9)); assert.strictEqual(S.sessionLabel(S.currentSession(l, at(9))), 'Morning 20/40 pts');
-  assert.strictEqual(S.sessionLabel(S.currentSession(l, at(12))), 'Afternoon 0/50 pts'); assert(/label: gpSession\.value \? SP\.sessionLabel/.test(src('src/views/HomeView.vue'))); });
+  assert.strictEqual(S.sessionLabel(S.currentSession(l, at(12))), 'Afternoon 0/50 pts'); assert(/gpSession\.value \? SP\.sessionLabel/.test(src('src/views/HomeView.vue'))); });
 for (const [m1, m2] of [[true, true], [true, false], [false, true], [false, false]]) t(`combo morning ${m1 ? 'met' : 'missed'} / afternoon ${m2 ? 'met' : 'missed'}`, () => {
   const tasks = mk(m1 ? 2 : 1, m2 ? 2 : 1); const g = (now) => S.graceLock(S.sessionsOf(gp, tasks, now), now);
   assert.strictEqual(g(at(10, 59)).want, false); // during session 1: no grace yet
@@ -54,7 +54,7 @@ t('wiring: strictShield 2 h, server settle -> appLockDebt, eh shutdown, native c
   const sd = src('src/utils/strictDay.js'); assert(!/MISS_GRACE_MS/.test(sd) && !/phase: 'missed'/.test(sd));
   const fn = src('netlify/functions/eight-hour-day.js'); assert(/sessionGrace\(countable\(pruneStale/.test(fn) && /core\.debtAfterSettle\(doc\.appLockDebt/.test(fn) && /core\.debtCleared\(debt/.test(fn) && /graceUntilMs: Number\(l\.graceUntilMs\)/.test(fn));
   assert(/missed: false, opensAtMs: 0/.test(src('src/composables/useEightHour.js')));
-  const h = src('src/views/HomeView.vue'); assert(!/grace\.want && free/.test(h) && /debtShield\(\{ debt: eh\.appLockDebt\.value/.test(h) && /clingLock\.armDebtHold\(p\)/.test(h) && !/gpGraceSchedule/.test(h));
+  const h = src('src/views/HomeView.vue'); const sh = src('src/utils/sessionShield.js'); assert(!/grace\.want && free/.test(h) && /debtShield\(\{ debt/.test(sh) && /clingLock\.armDebtHold\(plan\)/.test(h) && !/gpGraceSchedule/.test(h));
   const sw = src('ios/App/App/ClingLockPlugin.swift'); assert(/name: "cancelScheduledLock"/.test(sw) && /stopMonitoring\(\[ScheduledLocks\.name\(key\)\]\)/.test(sw));
   assert(/name: "clearBreakOffer"/.test(sw) && /\(o\["v"\] as\? Int\) == 2/.test(sw) && /guard close > nowMs/.test(sw));
 });

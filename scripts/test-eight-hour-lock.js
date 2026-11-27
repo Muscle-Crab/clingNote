@@ -79,7 +79,8 @@ lockMod.setLockSource(() => ({ lock: { dayName: 'Fri', startMs: start, endMs: en
   const home = read('src/views/HomeView.vue');
   const body = (name) => { const i = home.search(new RegExp(`const ${name} = async`)); assert.ok(i >= 0, name); const j = home.indexOf('\nconst ', i + 10); return home.slice(i, j); };
   await t('every list-changing HomeView action checks the lock', () => {
-    for (const fn of ['deleteTask', 'markTaskAsWontDo', 'undoWontDo', 'scheduleExistingTask']) assert.ok(/blockIfLocked\(/.test(body(fn)), fn);
+    for (const fn of ['markTaskAsWontDo', 'undoWontDo', 'scheduleExistingTask']) assert.ok(/blockIfLocked\(/.test(body(fn)), fn);
+    assert.ok(!/blockIfLocked\(/.test(body('deleteTask')) && !/blockIfShut\(/.test(body('deleteTask')), 'delete is allowed in every session state');
     assert.ok(/blockIfLocked\(currentDayIndex\)\s*\|\|\s*blockIfLocked\(targetDayIndex\)/.test(body('transferTask')), 'transfer checks both days');
     assert.ok(!/isDayLocked\(/.test(body('setTaskRepeat')), 'repeat edits allowed during lock-in');
     assert.ok(!/blockIfLocked\(/.test(body('updateTask')), 'edits allowed while locked');
@@ -99,7 +100,10 @@ lockMod.setLockSource(() => ({ lock: { dayName: 'Fri', startMs: start, endMs: en
   const card = read('src/components/home/EightHourCard.vue');
   await t('card exposes no edit controls while running', () => {
     const running = card.slice(card.indexOf('<!-- running'), card.indexOf('<!-- ended'));
-    assert.ok(!/<input|<button|@click|v-model/.test(running), 'running view is read-only');
+    // The one action allowed is Give up (ends the session early, never edits the plan, tasks, points or target).
+    const rest = running.replace(/<button v-if="canGiveUp" type="button" class="eh-quit" data-test="eh-give-up" @click="\$emit\('give-up'\)">Give up<\/button>/, '');
+    assert.ok(rest !== running, 'Give up is on the running card');
+    assert.ok(!/<input|<button|@click|v-model/.test(rest), 'running view is read-only apart from Give up');
   });
 
   // ── Firestore rules (static) ──
@@ -108,7 +112,7 @@ lockMod.setLockSource(() => ({ lock: { dayName: 'Fri', startMs: start, endMs: en
     const m = rules.match(/match \/weeklyRoutines\/\{routineId\}\s*\{[\s\S]*?\n    \}/); assert.ok(m, 'weeklyRoutines block');
     const b = m[0];
     assert.ok(/allow create:[^;]*!dayFrozen\(eightHourLock\(/.test(b)); assert.ok(/allow delete:[^;]*!dayFrozen\(eightHourLock\(/.test(b));
-    assert.ok(/allow update:[^;]*!dayFrozen\(eightHourLock\([^;]*\|\| dayRunning\(eightHourLock\(/.test(b), 'running lock-in allows task updates; shutdown still freezes');
+    assert.ok(/allow update: if isAuthenticated\(\) && request\.auth\.uid == routineId\.split\('_'\)\[0\];/.test(b), 'task updates (move, edit, delete) are allowed for the owner');
   });
   await t('rules: lock helper checks day name and request.time against the server window', () => {
     const f = rules.match(/function eightHourLock\([\s\S]*?function dayFrozen[\s\S]*?\n    \}/)[0];

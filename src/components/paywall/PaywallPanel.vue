@@ -77,7 +77,15 @@ async function loadIap() { if (!ios) return; iapState.value = 'loading'; msg.val
     if (!iapPlans.value.length) iapState.value = 'empty';
     else { iapState.value = 'ready'; if (!iapFor(sel.value)) sel.value = (iapPlans.value[0] || {}).id || sel.value; } }
   catch (e) { console.warn('loadPlans failed', e?.message || e); iapState.value = 'error'; } }
-onMounted(loadIap);
+onMounted(async () => {
+  if (ios && auth.currentUser) { try { const { ensureIapUser } = await import('@/utils/iap'); await ensureIapUser(auth.currentUser); } catch (e) { /* plans still load */ } }
+  try {
+    const { loadUserDoc } = await import('@/composables/usePro');
+    const { isPro } = await import('@/utils/pro');
+    if (isPro(await loadUserDoc(true))) { emit('close'); return; }
+  } catch (e) { /* show the plans */ }
+  loadIap();
+});
 const iapFor = (id) => iapPlans.value.find((x) => x.id === id);
 // iOS shows ONLY store-provided, localised prices (never a hardcoded USD fallback); web keeps the Stripe price list.
 const shownPlans = computed(() => ios ? PLANS.filter((p) => iapFor(p.id)) : PLANS);
@@ -114,7 +122,7 @@ const demo = [{ t: 'Morning workout', d: true }, { t: 'Write project report', b:
 async function buy() { busy.value = true; msg.value = '';
   if (ios) { try { const { purchase } = await import('@/utils/iap'); const p = iapFor(sel.value);
       if (!p) msg.value = 'This plan is not available right now. Please try again later.';
-      else { const r = await purchase(auth.currentUser, p); if (r.ok) emit('close'); else if (!r.cancelled) msg.value = r.error || 'Purchase failed — please try again.'; } }
+      else { const r = await purchase(auth.currentUser, p); if (!r.ok) { if (!r.cancelled) msg.value = r.error || 'Purchase failed — please try again.'; } else if (r.syncError && !r.entitled) msg.value = r.syncError; else emit('close'); } }
     catch (e) { msg.value = 'Purchase failed — please try again.'; }
     busy.value = false; return; }
   const r = await startCheckout({ planId: sel.value, user: auth.currentUser }); busy.value = false;
@@ -123,7 +131,7 @@ async function restore() {
   if (!ios) { msg.value = 'Nothing to restore yet — purchases will sync to your account automatically.'; return; }
   busy.value = true; msg.value = '';
   try { const { restore: rest } = await import('@/utils/iap'); const r = await rest(auth.currentUser);
-    if (!r.ok) msg.value = r.error; else if (r.restored) { msg.value = 'Purchases restored. Welcome back to Pro!'; setTimeout(() => emit('close'), 900); } else msg.value = 'No previous purchases found for this Apple ID.'; }
+    if (!r.ok) msg.value = r.error; else if (r.restored || r.entitled) { msg.value = r.syncError || 'Purchases restored. Welcome back to Pro!'; setTimeout(() => emit('close'), 900); } else msg.value = 'No previous purchases found for this Apple ID.'; }
   catch (e) { msg.value = 'Restore failed — please try again.'; }
   busy.value = false; }
 </script>

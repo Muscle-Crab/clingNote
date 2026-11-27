@@ -26,32 +26,36 @@ t('estimates: computed on create, typed estimateMin never overwritten, stored va
 const tz = 'America/New_York'; const dayKey = '2026-10-23';
 const start = core.wakeInstant(dayKey, core.parseWake('07:00'), tz); const end = start + core.WINDOW_MS;
 const lock = { dayKey, dayName: 'Fri', startMs: start, endMs: end, wakeTime: '07:00', tz, earned: 40, target: 60 };
-t('shutUntil = next wake time; shut only after a started day ends; survives midnight', () => {
+t('shut flag lasts 14 days after the session end, not until the next wake', () => {
   const until = core.shutUntilMs(lock);
-  assert.strictEqual(until, core.wakeInstant('2026-10-24', core.parseWake('07:00'), tz));
+  assert.strictEqual(until, end + 14 * 24 * 3600000);
+  assert.notStrictEqual(until, core.wakeInstant('2026-10-24', core.parseWake('07:00'), tz));
   assert(!core.isShut(lock, end - 1)); assert(core.isShut(lock, end)); assert(core.isShut(lock, end + 6 * 3600000), 'still shut after midnight');
   assert(!core.isShut(lock, until)); assert(!core.isShut(null, end)); assert.strictEqual(core.nextDayKey('2026-12-31'), '2027-01-01');
+  assert.strictEqual(core.rulesShutUntilMs(lock), end, 'rules shutUntil is the session end, not the 14-day client flag');
 });
-t('guards: every task mutation refused while shut (add/edit/complete/timers), allowed again at wake', () => {
+t('guards: completions stay allowed while shut; the 14-day flag then lifts', () => {
   let now = end + 1000; lockMod.setLockSource(() => ({ lock, nowMs: now }));
   assert(lockMod.isShutdown());
-  assert.throws(() => lockMod.assertNotShut(), lockMod.isLockError);
-  assert.throws(() => lockMod.assertDayUnlocked('Sat', 'add'), lockMod.isLockError, 'any day, not only the locked one');
-  assert.throws(() => lockMod.assertPatchAllowed('Fri', { completed: true }), lockMod.isLockError, 'completion blocked');
-  assert.throws(() => lockMod.assertPatchAllowed('Sat', { timerStart: 1 }), lockMod.isLockError, 'timers blocked');
-  assert.throws(() => lockMod.assertTasksChangeAllowed('Fri', [], [{ title: 'x' }]), lockMod.isLockError);
+  lockMod.assertNotShut('Fri');
+  lockMod.assertDayUnlocked('Sat', 'add');
+  lockMod.assertPatchAllowed('Fri', { completed: true });
   now = core.shutUntilMs(lock); assert(!lockMod.isShutdown()); lockMod.assertPatchAllowed('Sat', { completed: true });
   lockMod.setLockSource(null); assert(!lockMod.isShutdown(), 'users who never started a day are never shut');
 });
 t('HomeView/useScheduledTasks/useEightHour wiring for the hard stop', () => {
   const h = read('src/views/HomeView.vue'); const c = (h.match(/if \(blockIfShut\(\)\) return/g) || []).length; assert(c >= 10, 'blockIfShut in task actions: ' + c);
+  const del = h.slice(h.indexOf('const deleteTask = async'), h.indexOf('const topIncompleteTaskIndex'));
+  assert(!/blockIfShut\(/.test(del) && !/blockIfLocked\(/.test(del), 'delete is not gated by the session');
   assert(/assertNotShut\(\)/.test(read('src/composables/useScheduledTasks.js')));
   const u = read('src/composables/useEightHour.js'); assert(/from '@\/utils\/ehLockCache'/.test(u) && /readLock\(/.test(u) && /shutdown/.test(u), 'cached lock keeps the stop across reloads (per-account cache since f4079de)');
-  const fn = read('netlify/functions/eight-hour-day.js'); assert(/shutUntil: ctx\.ts\(core\.shutUntilMs/.test(fn) && /core\.isShut\(/.test(fn));
+  const fn = read('netlify/functions/eight-hour-day.js'); assert(/shutUntil: ctx\.ts\(core\.rulesShutUntilMs/.test(fn) && /core\.isShut\(/.test(fn));
 });
-t('rules: shut day blocks weeklyRoutines writes (server time)', () => {
+t('rules: whole day doc stays frozen; task-list updates do not', () => {
   const r = read('firestore.rules'); assert(/function eightHourLock\(uid\)/.test(r));
-  assert(/function dayFrozen\(lk, dayName\)[\s\S]*?shutUntil > request\.time/.test(r)); assert(((r.match(/!dayFrozen\(eightHourLock\(/g) || []).length) >= 3);
+  assert(/function dayFrozen\(lk, dayName\)[\s\S]*?shutUntil > request\.time/.test(r));
+  assert.strictEqual((r.match(/!dayFrozen\(eightHourLock\(/g) || []).length, 2);
+  assert(/allow update: if isAuthenticated\(\) && request\.auth\.uid == routineId\.split\('_'\)\[0\];/.test(r));
 });
 
 t('settleDay: met => xp/coins/shield/badge; missed => coin penalty, shield saves streak at >=50%, warning after 3', () => {
@@ -64,6 +68,9 @@ t('settleDay: met => xp/coins/shield/badge; missed => coin penalty, shield saves
   s = core.settleDay(s, { dayKey: 'd3', earned: 10, target: 60 }); assert.strictEqual(s.streak, 0); assert.strictEqual(s.lastPenalty.streakLost, true);
   s = core.settleDay(s, { dayKey: 'd4', earned: 0, target: 60 }); assert(s.warning, 'boss warning after 3 misses'); assert(s.coins >= 0, 'never negative');
   s = core.settleDay(s, { dayKey: 'd5', earned: 99, target: 60 }); assert.strictEqual(s.warning, ''); assert.strictEqual(s.missRun, 0);
+  const kept = core.settleDay({ streak: 4, coins: 10 }, { dayKey: 'd6', earned: 10, target: 200, done: 8 });
+  assert.strictEqual(kept.streak, 5, '8 completed tasks keep the streak');
+  assert.strictEqual(core.settleDay({ streak: 4, coins: 10 }, { dayKey: 'd7', earned: 10, target: 200, done: 3 }).streak, 0);
   assert(s.log.length <= 14); assert.strictEqual(core.penaltyForMiss(10, 3), 3);
 });
 
@@ -84,6 +91,7 @@ t('celebrations: manager award first (voice line), then day result, each once', 
 });
 t('pill state: countdown + target running, "Starts X" before, hidden with no plan, Shut after', () => {
   assert.deepStrictEqual(chrome.pillState({ running: true, countdown: '03:00:00', earned: 10, target: 60, hasPlan: true }).sub, '10/60');
+  assert.strictEqual(chrome.pillState({ running: true, countdown: '03:00:00', earned: 10, target: 60, endsLabel: '3:44 PM' }).ends, 'Ends 3:44 PM');
   assert.strictEqual(chrome.pillState({ phase: 'before', startsLabel: '7:00 AM', hasPlan: true }).main, 'Starts 7:00 AM');
   assert.strictEqual(chrome.pillState({ phase: 'before', hasPlan: false }), null);
   assert.strictEqual(chrome.pillState({ shut: true, untilLabel: '7:00 AM' }).kind, 'shut');
@@ -97,7 +105,7 @@ t('pill state: countdown + target running, "Starts X" before, hidden with no pla
 });
 t('App/Card/Manager wiring', () => {
   assert(/<EightHourChrome \/>/.test(read('src/App.vue')));
-  const ch = read('src/components/eighthour/EightHourChrome.vue'); assert(/eh-shutdown/.test(ch) && /Come back tomorrow at/.test(ch) && /signOut/.test(ch) && /safe-area-inset-top/.test(ch));
+  const ch = read('src/components/eighthour/EightHourChrome.vue'); assert(/eh-shutdown/.test(ch) && /Start next session/.test(ch) && /signOut/.test(ch) && /safe-area-inset-top/.test(ch));
   const card = read('src/components/home/EightHourCard.vue'); assert(/eh-drain/.test(card) && /eh-history/.test(card) && /v-if="alert"/.test(card));
   const mv = read('src/views/ManagerView.vue'); assert(/managerAward/.test(mv) && /award\.eligible/.test(mv));
   assert(/data-test="est-chips"/.test(read('src/components/home/TaskCard.vue')));

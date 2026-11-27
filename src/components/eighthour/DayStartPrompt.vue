@@ -49,6 +49,7 @@ import { computed, ref, reactive, onBeforeUnmount } from 'vue';
 import { SESSION_HOUR_OPTIONS, BLOCK_HOUR_OPTIONS, hoursLabel, hoursMs, fmtClock, nextAt } from '@/utils/eightHour';
 import core from '../../../netlify/functions/lib/eightHourCore.js';
 import { appsLabel } from '@/utils/sessionApps';
+import { taskPoints } from '@/utils/sessionGoal';
 
 const props = defineProps({
   canLock: { type: Boolean, default: false }, /* iOS app lock available: offer the hard lock at day start */ initialHours: { type: Number, default: 8 }, nowMs: { type: Function, default: () => Date.now() }, tz: { type: String, default: '' }, busy: Boolean, error: { type: String, default: '' }, tasks: { type: Array, default: () => [] }, stats: { type: Object, default: () => ({}) }, earned: { type: Number, default: 0 }, apps: { type: Object, default: null } /* this session's picked app counts */ });
@@ -57,9 +58,16 @@ const lockApps = ref(true);
 const step = ref('pick');
 const seedH = Math.round(Number(props.initialHours)); const hours = ref(core.validSessionHours(seedH) ? seedH : 8);
 const idx = computed({ get: () => Math.max(0, SESSION_HOUR_OPTIONS.indexOf(hours.value)), set: (i) => { hours.value = SESSION_HOUR_OPTIONS[Math.min(SESSION_HOUR_OPTIONS.length - 1, Math.max(0, i))]; } });
-// Preview only (the server's AI / fallback sets and freezes the real goal at Begin): core.fallbackGoal(tasks now, hours).
-const countable = computed(() => (props.tasks || []).filter((t) => t && t.status !== 'pending' && t.status !== 'wontdo').length);
-const goalPreview = computed(() => core.fallbackGoal({ tasksBefore: countable.value, hours: hours.value, totalPoints: (props.tasks || []).reduce((a, t) => a + (Number(t && t.points) || 15), 0) }));
+// Same number the server freezes when AI is off: fallback, then the 8 × average-of-unfinished floor.
+const listed = computed(() => (props.tasks || []).filter((t) => t && t.title && t.status !== 'pending' && t.status !== 'wontdo' && !t.scheduledFuture && t.removed !== true));
+const openRows = computed(() => listed.value.filter((t) => !t.completed));
+const countable = computed(() => openRows.value.length);
+const goalPreview = computed(() => {
+  const pts = openRows.value.map((t) => Number(taskPoints(t)) || 0);
+  const total = pts.reduce((a, b) => a + b, 0);
+  if (!total) return 0;
+  return core.flooredGoal(core.fallbackGoal({ tasksBefore: listed.value.length, hours: hours.value, totalPoints: total }), pts, total);
+});
 // Step 2: on iOS the app picker opens (seeded with the last session's apps); the user keeps or edits it, then Begins.
 const next = () => { step.value = 'confirm'; if (props.canLock) emit('pick-apps'); };
 const tick = ref(0); const tickId = setInterval(() => { tick.value++; }, 15000); onBeforeUnmount(() => clearInterval(tickId));

@@ -17,14 +17,18 @@ t('window grows with points and tasks', () => { assert.ok(S.earnedWindowMin({ ea
 t('locked while working toward goal', () => { const r = S.strictShield({ ...common, now: base + H, goal: 60, earned: 10 }); assert.equal(r.phase, 'locked'); assert.equal(r.want, true); assert.equal(r.untilMs, dayEnd); assert.equal(S.MISS_GRACE_MS, undefined); }); // no 2 h miss grace: the lock runs to the end time
 t('missed: no strict clock-time lock after the end (appLockDebt holds it); met unlocks as before', () => { for (const now of [dayEnd + 60000, dayEnd + H, dayEnd + 3 * H]) { const m = S.strictShield({ ...common, now, goal: 60, earned: 10 }); assert.equal(m.want, false); assert.notEqual(m.phase, 'missed'); }
   assert.notEqual(S.strictShield({ ...common, now: dayEnd + H, goal: 60, earned: 60, tasksDone: 3, goalAt: base }).phase, 'missed'); });
-t('goal met: window banked (ready, still locked) until the user starts it', () => {
+t('goal met during the session opens the shield now', () => {
   const at = base + 3 * H; const r = S.strictShield({ ...common, now: at + 60 * 60000, goal: 50, earned: 50, tasksDone: 4, goalAt: at });
-  assert.equal(r.phase, 'ready'); assert.equal(r.want, true); assert.equal(r.windowMin, 50); assert.equal(r.untilMs, dayEnd); }); // fix/unlock-at-end: banked lock ends at the day end, not midnight
-t('user-started window unlocks, then relocks until the day end', () => {
-  const at = base + 3 * H; const a = S.strictShield({ ...common, now: at + 10 * 60000, goal: 50, earned: 50, tasksDone: 4, goalAt: base, claimedAt: at });
-  assert.equal(a.phase, 'earned'); assert.equal(a.want, false); assert.equal(a.unlockEndMs, at + 50 * 60000);
-  const b = S.strictShield({ ...common, now: at + 51 * 60000, goal: 50, earned: 50, tasksDone: 4, goalAt: base, claimedAt: at });
-  assert.equal(b.phase, 'relocked'); assert.equal(b.want, true); assert.equal(b.untilMs, dayEnd); assert.equal(S.strictShield({ ...common, now: dayEnd + 1000, goal: 50, earned: 50, tasksDone: 4, goalAt: base, claimedAt: at }).want, false); });
+  assert.equal(r.phase, 'open'); assert.equal(r.want, false); assert.equal(r.windowMin, 50);
+  assert.equal(S.checklistMayRelock(r), false);
+  assert.equal(S.dayThresholdOpen({ earned: 210, required: 185 }), true);
+  assert.equal(S.dayThresholdOpen({ earned: 184, required: 185 }), false); });
+t('crossing the threshold stays open for the rest of the session', () => {
+  const at = base + 3 * H; const a = S.strictShield({ ...common, now: at + 10 * 60000, goal: 185, earned: 210, tasksDone: 8, goalAt: base });
+  assert.equal(a.phase, 'open'); assert.equal(a.want, false);
+  const b = S.strictShield({ ...common, now: at + 51 * 60000, goal: 185, earned: 210, tasksDone: 8, goalAt: base, claimedAt: at });
+  assert.equal(b.phase, 'open'); assert.equal(b.want, false);
+  assert.equal(S.strictShield({ ...common, now: dayEnd + 1000, goal: 185, earned: 210, tasksDone: 8, goalAt: base }).want, false); });
 t('missed goal by end time: no 2 h strict lock', () => { const r = S.strictShield({ ...common, running: false, now: dayEnd + 60000, goal: 60, earned: 30 }); assert.equal(r.phase, 'off'); assert.equal(r.want, false); assert.ok(!/MISS_GRACE_MS/.test(fs.readFileSync(new URL('../src/utils/strictDay.js', import.meta.url), 'utf8'))); });
 t('emergency unlock / off day / no apps -> off', () => { for (const x of [{ unlockedToday: true }, { offDay: true }, { selectionCount: 0 }, { enabled: false }]) assert.equal(S.strictShield({ ...common, now: base + H, goal: 60, ...x }).phase, 'off'); });
 t('off day detection + wake auto-start', () => {

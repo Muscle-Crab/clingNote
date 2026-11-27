@@ -142,6 +142,7 @@ enum AppLocks {
     /// Drops expired entries, then shields exactly the still-locked tokens.
     static func apply(now: Double = Date().timeIntervalSince1970 * 1000) {
         if BreakState.isLive(now: now) { store.shield.applications = nil; return } // earned break: every app open until it ends
+        if GoalRelease.isLive(nowMs: now) { store.shield.applications = nil; return } // session goal met: stay open until the day rolls or a new session clears it
         var l = locked(); l = l.filter { $0.value == 0 || $0.value > now }; saveLocked(l)
         let tokens = Set(apps().filter { l[$0.id] != nil }.map { $0.token }).subtracting(TaskAllow.allowed(now: now)).subtracting(VaultAllow.allowed(now: now))
         store.shield.applications = tokens.isEmpty ? nil : tokens
@@ -170,35 +171,48 @@ enum AppLocks {
 @available(iOS 16.0, *)
 enum VaultCatalog {
     static let key = "lock.vaultCatalog"
+    static let namesKey = "lock.vaultNames" // encoded-token -> confirmed name. Never a report guess.
     struct Item: Codable { var id: String; var label: String; var token: ApplicationToken }
     static func apps() -> [Item] {
         guard let d = LockShared.defaults?.data(forKey: key), let a = try? JSONDecoder().decode([Item].self, from: d) else { return [] }
         return a
     }
     static func save(_ a: [Item]) { if let d = try? JSONEncoder().encode(a) { LockShared.defaults?.set(d, forKey: key) } }
-    /// Rebuild from the current selection and named apps. A token already in the catalog keeps its id.
+    static func realName(_ s: String) -> String { let t = s.trimmingCharacters(in: .whitespacesAndNewlines); return (t.isEmpty || t.lowercased() == "app") ? "" : t }
+    static func tokenKey(_ token: ApplicationToken) -> String { ((try? JSONEncoder().encode(token)) ?? Data()).base64EncodedString() }
+    static func names() -> [String: String] { (LockShared.defaults?.dictionary(forKey: namesKey) as? [String: String]) ?? [:] }
+    static func remember(_ token: ApplicationToken, _ label: String) {
+        let n = realName(label); if n.isEmpty { return }
+        var m = names(); m[tokenKey(token)] = n; LockShared.defaults?.set(m, forKey: namesKey)
+    }
+    /// Rebuild from the current selection and named apps. A token already in the catalog keeps its id and any real name.
     static func sync(selectionTokens: Set<ApplicationToken>, labeled: [LabeledApp]) -> [Item] {
-        let prev = apps()
+        let prev = apps(); let known = names()
         var next: [Item] = []
         var seen = Set<ApplicationToken>()
         func add(_ token: ApplicationToken, preferLabel: String, preferId: String?) {
             if seen.contains(token) { return }
             seen.insert(token)
-            let named = preferLabel.trimmingCharacters(in: .whitespacesAndNewlines)
-            if let e = prev.first(where: { $0.token == token }) {
+            let named = realName(preferLabel)
+            let remembered = realName(known[tokenKey(token)] ?? "")
+            if let e = prev.first(where: { $0.token == token || (preferId?.isEmpty == false && $0.id == preferId) }) {
                 var c = e
-                if !named.isEmpty && named != "App" { c.label = named }
+                let keep = named.isEmpty ? (realName(c.label).isEmpty ? remembered : realName(c.label)) : named
+                if !keep.isEmpty { c.label = keep; remember(token, keep) }
                 next.append(c)
                 return
             }
             let id = (preferId?.isEmpty == false) ? preferId! : UUID().uuidString
-            next.append(Item(id: id, label: named.isEmpty ? "App" : named, token: token))
+            let label = named.isEmpty ? (remembered.isEmpty ? "App" : remembered) : named
+            if realName(label).isEmpty == false { remember(token, label) }
+            next.append(Item(id: id, label: label, token: token))
         }
         for t in selectionTokens {
             let lab = labeled.first(where: { $0.token == t })
             add(t, preferLabel: lab?.label ?? "", preferId: lab?.id)
         }
         for l in labeled { add(l.token, preferLabel: l.label, preferId: l.id) }
+        next.sort { $0.id < $1.id }
         save(next)
         return next
     }
@@ -254,8 +268,8 @@ enum TaskAllow {
 
 /// Points vault (src/utils/pointsVault.js): apps the user opened with the day's points, for the shared app time bought with them
 /// (every 10 points = 5 min). Same shape as TaskAllow: App Group ["ids": [LabeledApp.id], "until": ms] + one DeviceActivity
-/// ("clingVault", >= 15 min window, start backdated) whose intervalDidEnd re-shields with the app closed. Never while a missed-goal
-/// hold is active (refused here and in JS). A live break already opens everything and is unaffected.
+/// ("clingVault", >= 15 min window, start backdated) whose intervalDidEnd re-shields with the app closed. A priced
+/// release stays open through a missed-goal hold; the next session's Begin clears it. A live break already opens everything.
 @available(iOS 16.0, *)
 extension DeviceActivityName { static let clingVault = Self("clingVault") }
 @available(iOS 16.0, *)
@@ -267,7 +281,7 @@ enum VaultAllow {
     }
     static func isLive(until: Double, nowMs: Double) -> Bool { until > nowMs }
     static func allowed(now: Double = Date().timeIntervalSince1970 * 1000) -> Set<ApplicationToken> {
-        guard let a = active(), isLive(until: a.until, nowMs: now), !DebtHold.isActive(nowMs: now) else { return [] }
+        guard let a = active(), isLive(until: a.until, nowMs: now) else { return [] }
         let ids = Set(a.ids)
         let tokens = AppLocks.apps().filter { ids.contains($0.id) }.map { $0.token } + VaultCatalog.apps().filter { ids.contains($0.id) }.map { $0.token }
         return Set(tokens)
@@ -287,6 +301,7 @@ enum VaultAllow {
 enum UsageLog {
     static let activity = DeviceActivityName("clingUsage")
     static let key = "usage.daily.v1"          // ["yyyy-MM-dd": [appId: minutes]]
+    static let reportKey = "vault.report.v1"   // owner-supplied report rows. Never written by threshold events.
     static let sigKey = "usage.sig.v1"
     static let thresholds = [15, 30, 60, 120, 240]
     static let keepDays = 14
@@ -323,11 +338,45 @@ enum UsageLog {
     }
 }
 
+/// Session goal met: every ClingNote shield stays down until local midnight or the next session Begin.
+/// App Group lock.goalRelease = { day, until, session }. The monitor honors it with the app killed.
+@available(iOS 16.0, *)
+enum GoalRelease {
+    static let key = "lock.goalRelease"
+    static func entry() -> (day: String, until: Double, session: String)? {
+        guard let d = LockShared.defaults?.dictionary(forKey: key) else { return nil }
+        let day = d["day"] as? String ?? ""
+        let until = (d["until"] as? Double) ?? Double((d["until"] as? Int) ?? 0)
+        let session = d["session"] as? String ?? ""
+        guard !day.isEmpty, until > 0 else { return nil }
+        return (day, until, session)
+    }
+    static func isLive(nowMs: Double = Date().timeIntervalSince1970 * 1000, today: String = WakeLock.ymd(Date())) -> Bool {
+        guard let e = entry() else { return false }
+        return e.day == today && e.until > nowMs
+    }
+    static func mark(day: String, untilMs: Double, session: String) {
+        LockShared.defaults?.set(["day": day, "until": untilMs, "session": session], forKey: key)
+    }
+    static func clear() { LockShared.defaults?.removeObject(forKey: key) }
+    /// True when the goal release is live: both shields are cleared and the caller must not put them back.
+    static func liftIfLive(nowMs: Double = Date().timeIntervalSince1970 * 1000) -> Bool {
+        guard isLive(nowMs: nowMs) else { return false }
+        let store = ManagedSettingsStore(named: .clingLock)
+        store.shield.applications = nil
+        store.shield.applicationCategories = nil
+        store.shield.webDomains = nil
+        AppLocks.store.shield.applications = nil
+        return true
+    }
+}
+
 /// Lock-in shield (store .clingLock) from the saved selection, minus the running task's allowed apps.
 @available(iOS 16.0, *)
 enum LockIn {
     static func shield() {
         let store = ManagedSettingsStore(named: .clingLock)
+        if GoalRelease.liftIfLive() { return }
         if BreakState.isLive() { store.shield.applications = nil; store.shield.applicationCategories = nil; store.shield.webDomains = nil; return }
         guard let d = LockShared.defaults?.data(forKey: LockShared.selectionTokensKey),
               let sel = try? JSONDecoder().decode(LockSelectionTokens.self, from: d) else { return }

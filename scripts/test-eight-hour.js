@@ -20,8 +20,14 @@ for (const iso of ['2026-10-23T04:30:00Z', '2026-10-23T10:59:59Z', '2026-10-23T1
   eq(q.phase, 'ready', iso); eq(q.startMs, at(iso)); eq(q.endMs - q.startMs, 8 * 3600e3); eq(q.index, 0);
 }
 let p;
-// UI end label: wake 7 => "Ends 3:00 PM"
+// UI end label: the session window is start + hours, not midnight. A later start moves the end.
+const start644 = at('2026-10-23T10:44:00Z'); // 6:44 AM EDT
+eq(c.sessionEndMs({ startMs: start644, hours: 8 }), start644 + 8 * 3600e3);
+eq(c.fmtClock(c.sessionEndMs({ startMs: start644, hours: 8 }), TZ), '2:44 PM');
+eq(c.sessionEndMs({ startMs: start644 + 3600e3, hours: 8 }), start644 + 9 * 3600e3, 'a new start moves the end');
+eq(c.fmtClock(c.sessionEndMs({ startMs: start644, hours: 8 }), TZ) === '12:00 AM', false);
 eq(c.fmtClock(at('2026-10-23T11:00:00Z') + c.WINDOW_MS, TZ), '3:00 PM');
+ok(require('fs').readFileSync(require('path').join(__dirname, '../src/composables/useEightHour.js'), 'utf8').includes('core.sessionEndMs'), 'the home end label uses sessionEndMs');
 
 // persistence across restarts / backgrounding: remaining time derives from the stored start, never from a restart
 const lock = { dayKey: '2026-10-23', startMs: at('2026-10-23T11:02:00Z'), endMs: at('2026-10-23T19:02:00Z') };

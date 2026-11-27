@@ -49,9 +49,13 @@ public class ClingLockPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "debtHoldStatus", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "allowVaultApps", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "endVaultApps", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "markGoalRelease", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "clearGoalRelease", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "vaultState", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "startUsage", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "vaultUsage", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "readVaultReport", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "saveVaultReport", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "celebrateVault", returnType: CAPPluginReturnPromise),
     ]
 
@@ -135,9 +139,11 @@ public class ClingLockPlugin: CAPPlugin, CAPBridgedPlugin {
         let untilMs = call.getDouble("untilMs") ?? 0
         let until = Date(timeIntervalSince1970: untilMs / 1000)
         guard until.timeIntervalSinceNow > 60 else { call.reject("untilMs must be > 1 min ahead"); return }
-        Self.applyShield()
         // Begin of a session: the selection it locks becomes the "last used" one that seeds the next session's picker.
         if call.getBool("sessionBegin") ?? false, let data = LockShared.defaults?.data(forKey: LockShared.selectionKey) { LockShared.defaults?.set(data, forKey: LockShared.lastUsedSelectionKey) }
+        // Same Begin drops any vault allowance first. applyShield subtracts VaultAllow, so a previous session's buys would stay open.
+        if call.getBool("sessionBegin") ?? false { VaultAllow.clearActive(); DeviceActivityCenter().stopMonitoring([.clingVault]); GoalRelease.clear() }
+        Self.applyShield()
         LockShared.defaults?.set(["locked": true, "until": untilMs, "label": call.getString("label") ?? ""], forKey: LockShared.stateKey)
         AppLocks.cleanupExpired()
         // DeviceActivity needs >= 15 min intervals and rejects > 1 week (intervalTooLong): arm the first <= 6.5-day segment of a chain
@@ -285,11 +291,16 @@ public class ClingLockPlugin: CAPPlugin, CAPBridgedPlugin {
     @objc func pickNamedApps(_ call: CAPPluginCall) {
         guard #available(iOS 16.0, *) else { call.reject("iOS 16 required"); return }
         let suggest = (call.getArray("suggest") as? [String]) ?? []
+        let fromSelection = call.getBool("selection") ?? false
         DispatchQueue.main.async {
-            var sel = FamilyActivitySelection(); sel.applicationTokens = Set(AppLocks.apps().map { $0.token })
+            var tokens = Set(AppLocks.apps().map { $0.token })
+            if fromSelection { tokens.formUnion(Self.loadSelection().applicationTokens) }
+            var sel = FamilyActivitySelection(); sel.applicationTokens = tokens
             let model = PickerModel(selection: sel)
+            let catalog = VaultCatalog.apps().filter { VaultCatalog.realName($0.label).isEmpty == false }.map { LabeledApp(id: $0.id, label: $0.label, token: $0.token) }
+            let existing = AppLocks.apps() + catalog.filter { c in !AppLocks.apps().contains { $0.token == c.token } }
             var host: UIViewController?
-            let view = NamedPickerView(model: model, existing: AppLocks.apps(), suggest: suggest) { result in
+            let view = NamedPickerView(model: model, existing: existing, suggest: suggest) { result in
                 host?.dismiss(animated: true)
                 guard let result = result else { call.resolve(["saved": false, "apps": Self.appsPayload()]); return }
                 let previous = AppLocks.apps()
@@ -505,13 +516,13 @@ public class ClingLockPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     // ---- points vault (VaultAllow / UsageLog in Shared/LockShared.swift; logic in src/utils/pointsVault.js) ----
-    /// Opens the given labeled apps (ids) until untilMs = the shared app time bought with points. >= 15 min DeviceActivity window
-    /// (backdated start); its intervalDidEnd re-shields with the app closed. Refused while a missed-goal hold is active.
+    /// Opens the given labeled apps (ids) until untilMs. >= 15 min DeviceActivity window (backdated start); its
+    /// intervalDidEnd re-shields with the app closed. A missed-goal hold does not block this: one app can be released
+    /// at its own price before the session goal, and it stays released until the next session Begin clears it.
     @objc func allowVaultApps(_ call: CAPPluginCall) {
         guard #available(iOS 16.0, *) else { call.resolve(["allowed": 0]); return }
         let ids = (call.getArray("ids") as? [String]) ?? []; let untilMs = call.getDouble("untilMs") ?? 0
         let nowMs = Date().timeIntervalSince1970 * 1000
-        if DebtHold.isActive(nowMs: nowMs) { call.resolve(["allowed": 0, "reason": "debt"]); return }
         guard !ids.isEmpty, untilMs > nowMs + 60_000 else { call.resolve(["allowed": 0]); return }
         VaultAllow.setActive(ids, until: untilMs)
         let until = Date(timeIntervalSince1970: untilMs / 1000)
@@ -526,6 +537,26 @@ public class ClingLockPlugin: CAPPlugin, CAPBridgedPlugin {
         TaskAllow.reapply()
         call.resolve(["allowed": ids.count, "untilMs": untilMs, "monitor": "ok"])
     }
+    /// Session goal met. Remember it in the App Group and drop every shield, including after a force-quit.
+    /// A new session Begin or the next local day clears it (GoalRelease.isLive).
+    @objc func markGoalRelease(_ call: CAPPluginCall) {
+        guard #available(iOS 16.0, *) else { call.resolve(["marked": false]); return }
+        let day = call.getString("day") ?? ""
+        let untilMs = call.getDouble("untilMs") ?? 0
+        let session = call.getString("session") ?? ""
+        let nowMs = Date().timeIntervalSince1970 * 1000
+        guard !day.isEmpty, untilMs > nowMs else { call.resolve(["marked": false]); return }
+        GoalRelease.mark(day: day, untilMs: untilMs, session: session)
+        _ = GoalRelease.liftIfLive(nowMs: nowMs)
+        LockShared.defaults?.set(["locked": false, "until": 0], forKey: LockShared.stateKey)
+        DeviceActivityCenter().stopMonitoring([.clingLock])
+        call.resolve(["marked": true, "untilMs": untilMs])
+    }
+    @objc func clearGoalRelease(_ call: CAPPluginCall) {
+        guard #available(iOS 16.0, *) else { call.resolve(["cleared": false]); return }
+        GoalRelease.clear()
+        call.resolve(["cleared": true])
+    }
     @objc func endVaultApps(_ call: CAPPluginCall) {
         guard #available(iOS 16.0, *) else { call.resolve(["ended": false]); return }
         let had = VaultAllow.active() != nil
@@ -538,7 +569,30 @@ public class ClingLockPlugin: CAPPlugin, CAPBridgedPlugin {
         let a = VaultAllow.active(); let nowMs = Date().timeIntervalSince1970 * 1000
         call.resolve(["ids": a?.ids ?? [], "untilMs": a?.until ?? 0, "live": a.map { VaultAllow.isLive(until: $0.until, nowMs: nowMs) } ?? false])
     }
+    /// Owner-supplied Screen Time rows. App Group vault.report.v1 only. Does not write usage.daily.v1 and does not read the iOS report.
+    @objc func readVaultReport(_ call: CAPPluginCall) {
+        guard #available(iOS 16.0, *) else { call.resolve(["rows": []]); return }
+        let d = LockShared.defaults?.dictionary(forKey: "vault.report.v1") ?? [:]
+        call.resolve(["adoptedAt": d["adoptedAt"] ?? "", "periodDays": d["periodDays"] ?? 0, "rows": d["rows"] ?? []])
+    }
+    @objc func saveVaultReport(_ call: CAPPluginCall) {
+        guard #available(iOS 16.0, *) else { call.resolve(["saved": false]); return }
+        var rows: [[String: Any]] = []
+        for item in call.getArray("rows") ?? [] {
+            guard let d = item as? [String: Any] else { continue }
+            let label = String(describing: d["label"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let minutes = (d["minutes"] as? NSNumber)?.intValue ?? Int(d["minutes"] as? Double ?? -1)
+            if label.isEmpty || label.lowercased() == "app" || minutes < 0 { continue }
+            rows.append(["label": label, "minutes": minutes])
+        }
+        var payload: [String: Any] = ["adoptedAt": call.getString("adoptedAt") ?? "", "rows": rows]
+        let days = call.getInt("periodDays") ?? 0
+        if days > 0 && days <= 366 { payload["periodDays"] = days }
+        LockShared.defaults?.set(payload, forKey: "vault.report.v1")
+        call.resolve(["saved": true, "count": rows.count])
+    }
     /// Starts / refreshes the daily "clingUsage" threshold monitor for the labeled apps (no-op when unchanged).
+    /// This records threshold buckets in usage.daily.v1. It does not read or replace the Screen Time report.
     @objc func startUsage(_ call: CAPPluginCall) {
         guard #available(iOS 16.0, *) else { call.resolve(["monitor": "unsupported"]); return }
         VaultCatalog.sync(selectionTokens: Self.loadSelection().applicationTokens, labeled: AppLocks.apps())
@@ -563,13 +617,16 @@ public class ClingLockPlugin: CAPPlugin, CAPBridgedPlugin {
     @available(iOS 16.0, *)
     static func iconBase64(_ id: String, _ token: ApplicationToken) -> String {
         if let hit = iconCache[id], !hit.isEmpty { return hit }
-        var b64 = ""
-        let draw = {
-            let r = ImageRenderer(content: Label(token).labelStyle(.iconOnly).frame(width: 48, height: 48))
-            r.scale = 2
-            if let data = r.uiImage?.pngData() { b64 = data.base64EncodedString() }
+        // ImageRenderer / Label / uiImage are MainActor-isolated. Being on the main thread is not enough for
+        // Swift 6; assumeIsolated is the sync assertion. Off the main thread, main.sync gets us there first.
+        let draw = { () -> String in
+            MainActor.assumeIsolated {
+                let r = ImageRenderer(content: Label(token).labelStyle(.iconOnly).frame(width: 48, height: 48))
+                r.scale = 2
+                return r.uiImage?.pngData()?.base64EncodedString() ?? ""
+            }
         }
-        if Thread.isMainThread { draw() } else { DispatchQueue.main.sync(execute: draw) }
+        let b64 = Thread.isMainThread ? draw() : DispatchQueue.main.sync(execute: draw)
         if !b64.isEmpty { iconCache[id] = b64 }
         return b64
     }

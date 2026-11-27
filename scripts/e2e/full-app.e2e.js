@@ -43,15 +43,20 @@ const step = async (name, fn) => { try { const v = await fn(); const ok = v !== 
   await step('timer locked once started (edit panel)', async () => { await p.keyboard.press('Escape').catch(() => {}); await sleep(500); await p.locator('[data-test=edit-btn]').first().click(); await sleep(800); await shot('5_lock'); return (await p.locator('[data-test=timer-lock-hint], [data-test=lock-hint]').count()) > 0; });
   await step('edit title', async () => { const f = p.locator('[data-test=edit-title]').first(); await f.fill('ZZTEST Wash the car edited'); await f.press('Enter'); await sleep(1500); await p.locator('[data-test=edit-btn]').first().click().catch(() => {}); await sleep(800); return (await p.locator('text=ZZTEST Wash the car edited').count()) > 0; });
   await step('complete task + streak counter', async () => { for (const c of await p.locator('button.task-check[aria-label="Mark done"]').all()) { await c.click().catch(() => {}); await sleep(1200); } await sleep(2000); await shot('6_done'); await dismiss(); return (await p.locator('[data-test=streak-count], [data-test=streak-today]').count()) > 0; });
-  await step('rating prompt fires once after onboarding, not on reload', async () => {
+  await step('rating prompt does not fire on a home landing (Guideline 5.6.3)', async () => {
     await p.addInitScript(() => window.addEventListener('cn:review-requested', () => localStorage.setItem('zz_rev', String(+(localStorage.getItem('zz_rev') || 0) + 1))));
     const uidNow = uid;
-    await p.evaluate((u) => { localStorage.removeItem('zz_rev'); localStorage.removeItem('cn_review_requested_' + u); localStorage.setItem('cn_review_pending_' + u, String(Date.now())); }, uidNow);
+    await p.evaluate((u) => {
+      localStorage.removeItem('zz_rev');
+      localStorage.removeItem('cn_review_requested_' + u);
+      localStorage.removeItem('cn_review_requested_' + u + '_1.0');
+      localStorage.setItem('cn_review_pending_' + u, String(Date.now()));
+    }, uidNow);
     await p.goto(B + '/home', { waitUntil: 'load' }); await sleep(4500);
     const first = await p.evaluate(() => localStorage.getItem('zz_rev'));
     await p.reload({ waitUntil: 'load' }); await sleep(4500);
     const after = await p.evaluate(() => localStorage.getItem('zz_rev'));
-    if (!uidNow) throw new Error('no uid'); if (first !== '1' || after !== '1') throw new Error(`fired ${first} then ${after}`); return true; });
+    if (!uidNow) throw new Error('no uid'); if (first || after) throw new Error(`prompt fired on home load: ${first} then ${after}`); return true; });
   await step('Profile has Rate ClingNote row', async () => { await p.goto(B + '/profile/' + uid, { waitUntil: 'load' }); await sleep(3000); await dismiss(); return (await p.locator('[data-test=rate-app]').count()) > 0; });
   const routes = ['/home', '/rankings', '/community', '/discipline', '/discipline/log', '/upcoming', '/addiction', '/about', '/pals', '/manage', '/paywall', '/pro/success', '/gate', '/support', '/terms', '/privacy-policy', '/chat', '/sub', '/landing', '/profile/' + uid, '/payment-success', '/no-such-page'];
   for (const r of routes) {

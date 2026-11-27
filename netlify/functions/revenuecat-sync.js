@@ -5,15 +5,16 @@ const { verifyUser } = require('./lib/notify');
 const { syncUid } = require('./lib/revenuecat');
 const { getAdmin } = require('./lib/firebaseAdmin');
 
+const json = (statusCode, body) => ({ statusCode, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 const handler = async (event, deps = {}) => {
-  if (event.httpMethod !== 'POST') return { statusCode: 405, body: JSON.stringify({ error: 'Method not allowed' }) };
+  if (event.httpMethod !== 'POST') return json(405, { error: 'Method not allowed' });
   try {
     const uid = await verifyUser(event.headers, deps.verify || ((t) => getAdmin().auth().verifyIdToken(t)));
     const r = await syncUid(uid, deps);
-    if (!r) return { statusCode: 404, body: JSON.stringify({ error: 'User not found' }) };
-    return { statusCode: 200, body: JSON.stringify({ isPro: r.isPro, plan: r.plan }) };
+    if (!r) return json(400, { error: 'Bad user id' });
+    return json(200, { isPro: r.isPro, plan: r.plan, wrote: !!r.wrote });
   } catch (e) {
-    return { statusCode: e.status || 500, body: JSON.stringify({ error: e.status ? e.message : 'Sync failed' }) };
+    return json(e.status || 500, { error: e.status ? e.message : 'Sync failed' });
   }
 };
 exports.handler = withCors((event) => handler(event));

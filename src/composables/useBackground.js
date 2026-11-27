@@ -1,7 +1,8 @@
 // Shared Background state: prefs (saved per device in localStorage) + music playback. Music never starts on its own.
 import { reactive, ref, watch, computed } from 'vue';
 import { msUntilNextPeriod } from '@/utils/daytimeBg';
-import { refreshOtherAudio, otherAudioBusy, setMusicContext } from '@/utils/audioSession';
+import { refreshOtherAudio, otherAudioBusy, setMusicContext, prepareForegroundPlayback } from '@/utils/audioSession';
+import { foregroundPlan, shouldRebuild } from '@/utils/musicResume';
 import { loadPrefs, savePrefs, sanitize, DEFAULTS, loadCustomImage, saveCustomImage, clearCustomImage, effectiveImage, TRACKS, pickNextTrack, tapAction, restoreFromBackup, KEY } from '@/utils/bgPrefs';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import { applyBackgroundImage, fileToBackgroundDataUrl } from '@/utils/bgImage';
@@ -64,7 +65,7 @@ if (typeof window !== 'undefined') {
 
 // A blip (confirm dialog, notification schedule, a sound effect) suspends the AudioContext. That is not a user pause.
 // Do not pause the Now Playing anchor here: pausing it deactivates the iOS session and the music stays silent.
-let resumeAt = 0;
+let resumeAt = 0; let resumeFlight = null; let resumedAt = 0; let heardState = 'none';
 const syncReal = () => {
   if (!prefs.musicOn) return;
   if (engine && engine.playing && engine.state === 'running') return;
@@ -73,7 +74,8 @@ const syncReal = () => {
   resumeAfterInterruption();
 };
 const onCtxState = (st) => {
-  if (st === 'running') { if (prefs.musicOn && engine && engine.playing && !playing.value) { playing.value = true; npStart(trackName(), lockHandlers()); armRotate(); } return; }
+  const prev = heardState; heardState = st || 'none';
+  if (st === 'running') { if (prefs.musicOn && engine && engine.playing && !playing.value) { playing.value = true; npStart(trackName(), lockHandlers()); armRotate(); } if (shouldRebuild(prev, st) && engine && engine.rebuild) engine.rebuild(); return; }
   setTimeout(syncReal, 400);
 };
 // Only the music's own pause button (or lock-screen pause) stops it. Anything else that took the audio (dictation, TTS,
@@ -81,12 +83,7 @@ const onCtxState = (st) => {
 export const resumeAfterInterruption = () => {
   if (!prefs.musicOn) return Promise.resolve('paused-by-user');
   if (playing.value && engine && engine.state === 'running') return Promise.resolve('running');
-  const st = engine ? engine.state : 'none';
-  const tryResume = st === 'suspended' ? Promise.race([engine.resume(), new Promise((r) => setTimeout(() => r('timeout'), 1200))]) : Promise.resolve(st);
-  return tryResume.then(() => {
-    if (engine && engine.state === 'running') { if (!playing.value) { playing.value = true; npStart(trackName(), lockHandlers()); armRotate(); } return 'resumed'; }
-    return Promise.resolve(api.play()).then(() => { if (!(engine && engine.state === 'running')) armTap(); return 'restarted'; });
-  });
+  return api.resumeIfWanted();
 };
 if (typeof window !== 'undefined') {
   window.addEventListener('cn:audio-restored', () => { setTimeout(() => { resumeAfterInterruption(); }, 250); });
@@ -94,6 +91,17 @@ if (typeof window !== 'undefined') {
     import('@/utils/clingVoice').then(({ ClingVoice }) => {
       ClingVoice.addListener('audioRestored', () => setTimeout(() => { resumeAfterInterruption(); }, 250));
       ClingVoice.addListener('audioInterruption', (e) => { if (e && e.type === 'ended') setTimeout(() => { resumeAfterInterruption(); }, 400); });
+      ClingVoice.addListener('remoteCommand', (e) => {
+        const a = e && e.action;
+        if (a === 'pause') api.pause({ fromLockScreen: true });
+        else if (a === 'next') api.next();
+        else if (a === 'toggle' && playing.value && engine && engine.state === 'running') api.pause({ fromLockScreen: true });
+        else if (a === 'play' || a === 'toggle') api.play();
+      });
+      ClingVoice.addListener('routeChange', (e) => {
+        if (e && e.headphonesRemoved) api.pause({ fromLockScreen: true });
+        else if (prefs.musicOn) resumeAfterInterruption();
+      });
     }).catch(() => {});
   }
 }
@@ -103,8 +111,16 @@ const armTap = () => {
   window.addEventListener('pointerdown', once, true); window.addEventListener('touchend', once, true);
 };
 if (typeof document !== 'undefined') {
-  const back = () => { if (document.visibilityState === 'visible') api.resumeIfWanted(); else if (engine && engine.state !== 'running') syncReal(); };
+  const back = () => {
+    if (document.visibilityState === 'visible') api.resumeIfWanted();
+    else if (prefs.musicOn && engine && engine.playing) engine.queueAhead(90);
+  };
   document.addEventListener('visibilitychange', back); window.addEventListener('pageshow', back);
+  import('@capacitor/app').then(({ App }) => {
+    if (!Capacitor.isNativePlatform()) return;
+    App.addListener('appStateChange', ({ isActive }) => { if (isActive) api.resumeIfWanted(); });
+    App.addListener('resume', () => api.resumeIfWanted());
+  }).catch(() => {});
 }
 
 const api = {
@@ -121,22 +137,40 @@ const api = {
       engine = engine || createEngine();
       if (!engine) { audioError.value = "This browser can't play audio."; return Promise.resolve(); }
       engine.onStateChange = onCtxState;
-      const p = engine.start(prefs.track, voSpeaking.value ? prefs.volume * DUCK : prefs.volume);
+      const keep = prefs.musicOn && engine.position() > 0;
+      const p = engine.start(prefs.track, voSpeaking.value ? prefs.volume * DUCK : prefs.volume, { keepStep: keep });
       npStart(trackName(), lockHandlers());
       playing.value = true; prefs.musicOn = true; persist(); armRotate();
       return p.then(() => { if (engine && engine.state !== 'running') setTimeout(syncReal, 600); });
     } catch (e) { console.error('Background audio failed:', e); audioError.value = 'Could not start audio. Tap play again.'; playing.value = false; return Promise.resolve(); }
   },
   async pause({ fromLockScreen = false } = {}) { stopRotate(); playing.value = false; prefs.musicOn = false; persist(); if (fromLockScreen) npPaused(trackName()); else npStop(); if (engine) await engine.stop(); },
-  // Returning to the app: if music was on when the user left, bring it back. iOS usually blocks audio until a tap,
-  // so the UI shows "Play" (not a stale "Pause") and the very next tap anywhere restarts the same track.
+  // Returning to the app: if music was on when the user left, resume the same context and keep the musical step.
+  // A new AudioContext is not created here. iOS rejects that outside a tap, which left the music silent.
   resumeIfWanted() {
-    if (!prefs.musicOn) return;
-    if (playing.value && engine && engine.state === 'running') return;
-    const tryNow = engine && engine.state === 'suspended' ? engine.resume() : Promise.resolve('none');
-    tryNow.then((st) => { if (st === 'running') { playing.value = true; armRotate(); } else { playing.value = false; stopRotate(); refreshOtherAudio().then((busy) => { if (!busy) armTap(); }); } });
+    if (!prefs.musicOn) return Promise.resolve('idle');
+    if (resumeFlight) return resumeFlight;
+    if (Date.now() - resumedAt < 800 && playing.value && engine && engine.state === 'running') return Promise.resolve('playing');
+    const finish = (how) => { resumeFlight = null; return how; };
+    resumeFlight = prepareForegroundPlayback().catch(() => false).then(() => {
+      const plan = foregroundPlan({ musicOn: true, state: engine ? engine.state : 'none' });
+      if (plan === 'gesture' || !engine) { refreshOtherAudio().then((busy) => { if (!busy) armTap(); }); return finish('needs-tap'); }
+      if (plan === 'keep') { resumedAt = Date.now(); return finish('playing'); }
+      const waited = Promise.race([engine.resume(), new Promise((r) => setTimeout(() => r('timeout'), 1200))]);
+      return waited.then(() => {
+        if (!(engine && engine.state === 'running')) { refreshOtherAudio().then((busy) => { if (!busy) armTap(); }); return finish('needs-tap'); }
+        engine.rebuild(); playing.value = true; resumedAt = Date.now(); npStart(trackName(), lockHandlers()); armRotate(); return finish('playing');
+      });
+    });
+    return resumeFlight;
   },
   toggle() { return tapAction(playing.value, engine ? engine.state : 'none') === 'pause' ? api.pause() : api.play(); },
+  next() {
+    const r = pickNextTrack(TRACKS.map((t) => t.id), prefs.track, rotBag); rotBag = r.bag;
+    prefs.track = r.next; persist();
+    if (engine && (playing.value || prefs.musicOn)) { engine.crossfadeTo(r.next); npTitle(trackName()); armRotate(); }
+    else api.play();
+  },
   setTrack(id) { Object.assign(prefs, sanitize({ ...prefs, track: id })); persist(); if (engine && playing.value) { engine.setTrack(prefs.track); npTitle(trackName()); armRotate(); } },
   setAutoRotate(on) { Object.assign(prefs, sanitize({ ...prefs, autoRotate: !!on })); persist(); armRotate(); },
   setRotateMins(m) { Object.assign(prefs, sanitize({ ...prefs, rotateMins: Number(m) })); persist(); armRotate(); },

@@ -17,8 +17,8 @@ export const loadScheduled = async (userId) => {
 };
 
 // Read-modify-write with a fresh read; fn(list) returns the new list.
-export const mutateScheduled = async (userId, fn) => {
-  assertNotShut(); // 8-hour hard stop: no scheduling until the next wake time
+export const mutateScheduled = async (userId, fn, opts = {}) => {
+  if (!opts.allowWhenShut) assertNotShut(); // scheduling stays gated; deleting a task is not
   const next = fn(await loadScheduled(userId));
   await save(userId, next);
   return next;

@@ -25,6 +25,7 @@ export const evaluatePhase = core.evaluatePhase;
 export const countdownParts = core.countdownParts;
 export const fmtCountdown = core.fmtCountdown;
 export const fmtClock = core.fmtClock;
+export const sessionEndMs = core.sessionEndMs;
 export const fmtWakeLabel = core.fmtWakeLabel;
 export const complexityFromMinutes = core.complexityFromMinutes;
 export const complexityFromText = core.complexityFromText;
