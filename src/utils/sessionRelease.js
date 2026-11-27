@@ -1,4 +1,4 @@
-// Ending a session by hand (End session on the goal-reached prompt, Give up on the countdown card, or Give up on the session-ended screen) opens the locked apps
+// Ending a session by hand (End session on the goal-reached prompt, or Give up on the running countdown card) opens the locked apps
 // for the gap until the next session Start. The record is this device's: { key, day, reason }. It only matches the
 // ended session it was written for, so a new Start (new startMs) or a new local day goes back to the normal shield rules.
 // Natively the same release is the App Group GoalRelease flag (drops every shield, honored with the app killed,

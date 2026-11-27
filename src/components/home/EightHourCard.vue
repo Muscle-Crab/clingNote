@@ -38,7 +38,7 @@
         <!-- countdown + Give up under it (the empty space below the number, left of the meta column): no new block -->
         <div class="eh-clockcol">
           <p class="eh-clock" data-test="eh-countdown" role="timer">{{ countdown }}</p>
-          <button type="button" class="eh-quit" data-test="eh-give-up" @click="$emit('give-up')">Give up</button>
+          <button v-if="canGiveUp" type="button" class="eh-quit" data-test="eh-give-up" @click="$emit('give-up')">Give up</button>
         </div>
         <div class="eh-meta">
           <span data-test="eh-times">{{ starts }} →</span>
@@ -137,6 +137,14 @@ const badges = computed(() => [
   ...(stats.value.badges || []).map((id) => ({ k: 'b' + id, ...badgeLabel(id), title: badgeLabel(id).name })),
 ]);
 const met = computed(() => (goalPts.value > 0 ? progress.value.earned >= goalPts.value : false));
+// Give up is only for an active, unfinished session: hide it once the points goal is met or every session task is done.
+const sessionComplete = computed(() => {
+  if (met.value) return true;
+  const d = Number(progress.value.done) || 0;
+  const tot = Number(progress.value.total) || 0;
+  return d >= PER || (tot > 0 && d >= tot);
+});
+const canGiveUp = computed(() => view.value === 'running' && !sessionComplete.value);
 
 const save = async () => {
   msg.value = '';

@@ -72,7 +72,8 @@ t('Home wiring: Give up on the card, one confirm, same end path, apps released',
   assert.match(home, /released: releasedFor\(readRelease\(localStorage, localDateStr\(\)\), eh\.lock\.value, !!eh\.running\.value\)/);
   assert.match(home, /if \(decision\.released\) await persistEndRelease\(\);/);
   const run = card.slice(card.indexOf("view === 'running'"), card.indexOf("view === 'ended'"));
-  assert.match(run, /class="eh-clockcol"[\s\S]*data-test="eh-give-up"[\s\S]*\$emit\('give-up'\)/);
+  assert.match(run, /class="eh-clockcol"[\s\S]*v-if="canGiveUp"[\s\S]*data-test="eh-give-up"[\s\S]*\$emit\('give-up'\)/);
+  assert.match(card, /const canGiveUp = computed\(\(\) => view\.value === 'running' && !sessionComplete\.value\)/);
   assert.match(card, /defineEmits\(\[[^\]]*'give-up'/);
 });
 
@@ -90,38 +91,15 @@ t('countdown card: smaller clock, Give up is a real contrasting button', () => {
   assert.equal(/text-decoration: underline/.test(quit), false, 'Give up is a button, not underlined text');
 });
 
-t('shutdown screen: Give up sits under the result and above the links, same button style', () => {
+t('Give up is only on an active unfinished session, never on the ended screen', () => {
   const ch = fs.readFileSync(new URL('../src/components/eighthour/EightHourChrome.vue', import.meta.url), 'utf8');
+  const card = fs.readFileSync(new URL('../src/components/home/EightHourCard.vue', import.meta.url), 'utf8');
   const shut = ch.slice(ch.indexOf('data-test="eh-shutdown"'), ch.indexOf('class="ehs-links"'));
-  const resultAt = shut.indexOf('data-test="eh-shut-result"');
-  const giveAt = shut.indexOf('data-test="eh-shut-give-up"');
-  const recapAt = shut.indexOf('data-test="eh-shut-recap"');
-  assert.ok(resultAt >= 0 && recapAt > resultAt && giveAt > recapAt, 'Give up is under the goal line (and recap) and above the links');
-  assert.match(ch, /class="eh-quit"[^>]*data-test="eh-shut-give-up"[^>]*@click="giveUpEnded"/);
-  const quit = (ch.match(/\.eh-quit \{[\s\S]*?\n\.eh-quit:active/) || [])[0] || '';
-  assert.match(quit, /font-size: \.88rem/);
-  assert.match(quit, /border-radius: 8px/);
-  assert.match(quit, /padding: 8px 14px/);
-  assert.match(quit, /background: var\(--c-danger-soft, #2E1517\)/);
-  assert.match(quit, /border: 1px solid rgba\(248, 113, 113, 0\.7\)/);
-  assert.match(quit, /color: var\(--c-danger, #F87171\)/);
-});
-
-t('shutdown Give up releases apps without ending the session again', () => {
-  const ch = fs.readFileSync(new URL('../src/components/eighthour/EightHourChrome.vue', import.meta.url), 'utf8');
-  const home = fs.readFileSync(new URL('../src/views/HomeView.vue', import.meta.url), 'utf8');
-  const fn = ch.slice(ch.indexOf('const giveUpEnded'), ch.indexOf('const PER_SESSION'));
-  assert.equal(/endSession/.test(fn), false, 'already-ended Give up must not call endSession (no double missed-goal record)');
-  assert.match(fn, /if \(eh\.running\.value\) return/);
-  assert.match(fn, /writeRelease\(/);
-  assert.match(fn, /reason: 'give-up'/);
-  assert.match(fn, /clearDebtHold/);
-  assert.match(fn, /markGoalRelease/);
-  assert.match(fn, /cn:session-released/);
-  assert.match(ch, /shutVisible = computed\(\(\) => !!\(uid\.value && shut\.value && SHUT_ROUTES\.includes\(route\.name\) && !releasedNow\.value\)\)/);
-  const hook = home.slice(home.indexOf("cn:session-released"), home.indexOf("cn:session-released") + 400);
-  assert.match(home, /addEventListener\('cn:session-released', onSessionReleased\)/);
-  assert.match(home, /const onSessionReleased = \(\) => \{ syncAppLock\(\); \}/);
+  assert.equal(/eh-shut-give-up|Give up/.test(shut), false, 'no Give up on the session-ended moon screen');
+  assert.equal(/giveUpEnded/.test(ch), false, 'ended-screen Give up handler is gone');
+  assert.match(card, /v-if="canGiveUp"/);
+  assert.match(card, /sessionComplete/);
+  assert.match(card, /met\.value/);
 });
 
 console.log(`test-give-up: ${n} passed`);

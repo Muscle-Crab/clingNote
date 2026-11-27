@@ -41,6 +41,12 @@ let n = 0; const ok = (c, m) => { assert.ok(c, m); n++; };
   ok(/class="eh-clockcol"><p class="eh-clock"[^]*?data-test="eh-give-up"[^]*?<\/div>/.test(html), 'Give up sits under the countdown inside the card (no new block)');
   // device clock far off: offset keeps the countdown on server time
   st.offset = 0; html = await render(at('2026-10-23T13:00:00Z'), { ...base, lock }, [T('a', true), T('b'), T('c', true)]); ok(/06:00:00|05:59:5\d/.test(html), 'server clock decides');
+  html = await render(at('2026-10-23T13:00:00Z'), { ...base, lock }, [T('a', true), T('b', true), T('c', true)]);
+  ok(/eh-clock/.test(html) && !/eh-give-up/.test(html), 'running but all tasks done: no Give up');
+  html = await render(at('2026-10-23T13:00:00Z'), { ...base, lock: { ...lock, target: 50 } }, [T('a', true), T('b'), T('c', true)]);
+  ok(/50\/50 pts/.test(html) && !/eh-give-up/.test(html), 'running but goal met: no Give up');
+  html = await render(at('2026-10-23T13:00:00Z'), { ...base, lock }, [T('a', true), T('b'), T('c', true)]);
+  ok(/eh-give-up/.test(html), 'running and unfinished: Give up is back');
   html = await render(at('2026-10-23T20:00:00Z'), { ...base, lock, stats: { ...core.defaultStats(), streak: 1, lastDay: '2026-10-23', notice: 'Tomorrow is harder.' }, reward: 'Nice' }, [T('a', true), T('b', true), T('c', true)]);
   ok(/Goal met/.test(html) && /data-test="eh-reward"/.test(html) && /data-test="eh-notice"/.test(html), 'ended + met shows reward and notice');
   html = await render(at('2026-10-23T20:00:00Z'), { ...base, lock, stats: { ...core.defaultStats(), notice: 'Tomorrow is harder.' } }, [T('a', true), T('b'), T('c')]);
